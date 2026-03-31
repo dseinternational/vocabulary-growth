@@ -1,0 +1,21 @@
+\usepackage{lipsum}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\definecolor{draftred}{RGB}{180,0,0}
+\pagestyle{fancy}
+\fancyhead[L]{ {\footnotesize {Report: Vocabulary growth in children with Down syndrome}}}
+\fancyhead[R]{\textbf{\textcolor{draftred}{DRAFT}}}
+\fancyfoot[L]{ {\ttfamily\footnotesize {{< meta date >}}} | {\ttfamily\footnotesize {{< var version >}}} | {\ttfamily\footnotesize {{< env GIT_SHA "dev" >}}} }%
+\fancyfoot[C]{}
+\fancyfoot[R]{\textbf{\thepage}}  
+
+% --- make chapter-opening pages use the same header/footer ---
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyhead[L]{ {\footnotesize {Report: Vocabulary growth in children with Down syndrome}}}%
+    \fancyhead[R]{\textbf{\textcolor{draftred}{DRAFT}}}%
+    \fancyfoot[L]{ {\ttfamily\footnotesize {{< meta date >}}} | {\ttfamily\footnotesize {{< var version >}}} | {\ttfamily\footnotesize {{< env GIT_SHA "dev" >}}} }%
+  \fancyfoot[R]{\textbf{\thepage}}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}

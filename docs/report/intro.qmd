@@ -1,0 +1,40 @@
+---
+title: "Introduction"
+abstract: "*All children with Down syndrome experience delays in language development. By quantifying typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 8 years. Here, we discuss the rationale for the study, our goals, and our empirical and statistical modelling approaches.*"
+---
+
+Children with Down syndrome experience difficulties learning language [@naessLanguageVerbalShortterm2011; @abbedutoLanguageDevelopmentSyndrome2020] and this adversely impacts many aspect of their lives. They learn the meanings of words and learn to say words more slowly than most other children [@naessDifferencesSimilaritiesPredictors2021]. Learning vocabulary is a foundational skill: it is important for learning broader language skills, including grammar, and for learning to read [@naessReadingSkillsChildren2012; @hulmeGrowthReadingSkills2012].
+
+Parents and practitioners working with people with Down syndrome report that past research has not focussed enough on practical issues that might make meaningful differences to their lives [@cristescuShapeResearchChange2024]. This has led to calls for researchers to makes it easier for families and educators to access evidence-based information to inform decisions related to real life issues [@cristescuShapeResearchChange2024].
+
+In our experience, families and educators are often interested in information about vocabulary development in children with Down syndrome. Common requests for information include the range of words understood or spoken at different ages, rates of word learning, and the range of ages at which a minimum number of words may be learned. Answers to questions about vocabulary development are of relevance to everyday teaching practice and early intervention. They may alleviate unwarranted concerns about slow progress and help to identify children experiencing additional or more complex difficulties. They can also inform teaching recommendations – for example, by estimating the range of ages within which most children are expected to attain specific skills.
+
+This study therefore aims to describe the development of vocabulary knowledge in children with Down syndrome with a focus on interpretable statistics that can inform teaching and support.
+
+## Vocabulary learning for children with Down syndrome
+
+Children with Down syndrome generally learn vocabulary more slowly than typically developing children [@abbedutoLanguageDevelopmentSyndrome2020]. They generally say fewer words than they understand and there are considerable differences between individuals that increase over time [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @galeoteAcquisitionProductiveVocabulary2008; @kaat-vandenosExpressiveVocabularyDevelopment2017; @zampiniVocabularyDevelopmentChildren2013; @deckersPredictorsReceptiveExpressive2019].
+
+Many children with Down syndrome produce their first spoken word later than typically developing infants, with some not saying their first words until after 24 months of age, though there is wide variability and some begin at around the same time. In comparison, 80% of typically developing children say 2 or more words by around 12 months and 90% say 7 or more words by around 18 months [@frankWordbankOpenRepository2017]. While some children with Down syndrome learn the first 10 spoken words between the ages of 19 and 38 months [@oliverLanguageDevelopmentChildren1994], over 80% of typically developing children reach this stage by 17 months [@frankWordbankOpenRepository2017].
+
+At a basic level, general cognitive delays may imply that children with Down syndrome need more exposures to a word to link it reliably to its meaning. Additionally, many children with Down syndrome experience recurrent or persistent hearing loss, especially in early childhood, which affects discrimination of speech sounds and makes it harder to distinguish similar‑sounding words (for example, "cat/hat/mat"). Even mild hearing loss may impede building accurate sound–meaning links. Anatomical differences (including a smaller oral cavity and larger tongue) may make articulation more difficult. Delays in babbling and moving from babble to clear word production may lead children with Down syndrome to rely on gestures for longer before attempting spoken words. Difficulties storing accurate sound patterns may affect both word learning and clear pronunciation. Verbal short-term memory is typically impaired relative to visuospatial short-term memory in Down syndrome. This may make it more difficult to hold new word forms in mind, repeat unfamiliar words or nonwords, and process longer utterances.
+
+### Relative disadvantage in expressive vocabulary development
+
+The extent to which expressive vocabulary lags behind receptive vocabulary disproportionately compared to typically developing children is not clear, and may depend on how vocabulary is measured, whether gestures are included, the age of the children and how groups are compared [@martingklusekjestigarribiabjLanguageCharacteristicsIndividuals2009; @abbedutoLanguageDevelopmentSyndrome2020]. One recent study involving 27 children with Down syndrome aged 12 to 39 months observed a pattern of spoken words relative to words understood that was similar to typically developing children, but dissimilar to children with Williams syndrome and children with fragile X syndrome [@dsouzaExplainingComprehensionProduction2026]. However, it remains unclear whether this similarity is observed across larger samples, nor if it persists as more vocabulary is learned.
+
+[**TODO**: complete]
+
+### Rates of word learning
+
+Word learning accelerates rapidly for many typically developing children between the ages of 18 and 24 months. It is unclear whether children with Down syndrome experience a similar acceleration, with some studies observing an acceleration among some children and not others, and any acceleration occurring later than for typically developing children though maybe at a similar mental age [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @zampiniVocabularyDevelopmentChildren2013; @abbedutoLanguageDevelopmentSyndrome2020].
+
+[**TODO**: complete]
+
+### Use of gestures and signs
+
+[**TODO**: complete]
+
+## Study aims and approach
+
+[**TODO**]

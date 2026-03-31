@@ -1,0 +1,56 @@
+---
+title: "Words understood by children with Down syndrome relative to age"
+abstract: "Summary --- *TODO*"
+---
+
+## Empirical model
+
+[TODO]
+
+## Causal model
+
+[TODO]
+
+## Statistical model
+
+TODO
+
+### Outcome distribution
+
+TODO
+
+### Mean structure
+
+TODO
+
+## Parameters and priors
+
+TODO
+
+## Estimation and computation
+
+TODO
+
+## Model checking
+
+TODO
+
+### Prior Predictive Checks
+
+TODO
+
+### Posterior Predictive Checks
+
+TODO
+
+## Results
+
+TODO
+
+## Sensitivity analyses
+
+TODO
+
+## Limitations
+
+TODO
