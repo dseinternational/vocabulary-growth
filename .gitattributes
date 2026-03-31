@@ -1,0 +1,29 @@
+# Normalise line endings to LF in the repository.
+# Windows checkouts will use CRLF; all other platforms use LF.
+* text=auto
+
+# Source and config — always LF
+*.py        text eol=lf
+*.qmd       text eol=lf
+*.md        text eol=lf
+*.bib       text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.toml      text eol=lf
+*.json      text eol=lf
+*.txt       text eol=lf
+*.csv       text eol=lf
+*.cff       text eol=lf
+*.tex       text eol=lf
+*.csl       text eol=lf
+*.ipynb     text eol=lf
+
+# Binary — do not modify
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.svg       binary
+*.pdf       binary
+*.docx      binary
+*.duckdb    binary

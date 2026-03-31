@@ -1,0 +1,69 @@
+---
+$schema: https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json
+version: '0.2'
+language: en-GB
+dictionaryDefinitions:
+    - name: en
+      path: './config/spellcheck/allow-en.txt'
+      addWords: true
+dictionaries:
+    - en
+ignorePaths:
+    - 'node_modules'
+    - 'config/**'
+patterns:
+  - name: qmd_frontmatter
+    pattern: |
+      /
+          ^---\r?\n
+          [\s\S]*?
+          \r?\n---
+      /gmx
+  - name: markdown_inline_code
+    pattern: |
+      /
+          `[^`\n]+`
+      /gmx
+  - name: markdown_bare_citation
+    pattern: |
+      /
+          @[a-zA-Z][\w:.-]*
+      /gmx
+  - name: markdown_citation
+    pattern: |
+      /
+          \[[^\[\]]*@[^\]]*\]
+      /gmx
+  - name: markdown_inline_math
+    pattern: |
+      /
+          \$[^$\n]+\$
+      /gmx
+  - name: markdown_display_math
+    pattern: |
+      /
+          ^\s*\$\$[^$\n]*
+          [\s\S]*?
+          ^\s*\$\$
+      /gmx
+  - name: markdown_code_block
+    pattern: |
+      /
+          ^(\s*`{3,}).*
+          [\s\S]*?
+          ^\1
+      /gmx
+  - name: qmd_curly_braces
+    pattern: |
+      /
+          \{[^}]*\}
+      /gmx
+ignoreRegExpList:
+    - qmd_frontmatter
+    - markdown_code_block
+    - markdown_inline_code
+    - markdown_bare_citation
+    - markdown_citation
+    - markdown_inline_math
+    - markdown_display_math
+    - qmd_curly_braces

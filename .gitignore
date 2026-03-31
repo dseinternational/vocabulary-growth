@@ -1,0 +1,153 @@
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+outputs/
+output/
+figures/
+_freeze/
+_temp/
+temp/
+tmp/
+
+*.ipynb
+
+*.log
+*.duckdb
+*.db
+
+/.quarto/
+**/*.quarto_ipynb
+
+
+# --------------------
+# Python
+# --------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.conda/
+.condarc
+.python-version
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+wheelhouse/
+MANIFEST
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.coverage.xml
+nosetests.xml
+pytest.xml
+*.cover
+.hypothesis/
+.tox/
+.nox/
+
+# Type checking / linting caches
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+# Bytecode / profiling
+*.pstats
+profile_default/
+*.prof
+
+# Node / npm / yarn / pnpm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Optional caches
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# --------------------
+# Visual Studio / MSBuild / VS Code
+# --------------------
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+
+# Build results
+[Bb]in/
+[Oo]bj/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+Debug/
+Release/
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# --------------------
+# JetBrains (PyCharm, IntelliJ, Rider, etc.)
+# --------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# JetBrains tooling
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/shelf/
+.idea/**/dataSources/
+.idea/**/dataSources.local.xml
+
+# --------------------
+# Misc
+# --------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Swap / backups
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+
+.env
+.env.*
+*.local

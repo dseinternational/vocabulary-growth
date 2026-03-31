@@ -1,0 +1,22 @@
+{
+  "name": "dse-vocab-growth",
+  "version": "0.1.0",
+  "description": "Models of vocabulary growth in children with Down syndrome",
+  "homepage": "https://github.com/dseinternational/vocabulary-growth#readme",
+  "bugs": {
+    "url": "https://github.com/dseinternational/vocabulary-growth/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dseinternational/vocabulary-growth.git"
+  },
+  "license": "AGPL-3.0-or-later",
+  "author": "Down Syndrome Education International",
+  "private": true,
+  "devDependencies": {
+    "cspell": "9.7.0"
+  },
+  "scripts": {
+    "spellcheck": "cspell --show-suggestions --show-context \"**/*.md\" \"docs/**/*.qmd\""
+  }
+}
