@@ -1,0 +1,281 @@
+---
+title: "Words spoken by children with Down syndrome relative to age"
+abstract: "*Our first model estimates trajectories of spoken word learning for children with Down syndrome. The model incorporates existing knowledge of development and vocabulary learning, including plausible distributions of word counts at different ages and variability in learning rates.* **TODO**"
+---
+
+Many things can influence a child's opportunities to learn spoken words. Given these opportunities, many other factors can affect how well a child learns new words and how easily they can say them. These include biological, social and educational factors, and their interactions. While age does not *directly* influence spoken words learned, it does influence many of these factors and therefore *indirectly* influences spoken word learning. In this study, our goal is  to estimate trajectories of word learning over time. We are not trying to disentangle the specific causal effects of different factors on word learning, but rather to capture the overall age-associated change in spoken vocabulary.
+
+The overall interaction of age with spoken word learning is therefore complex and likely to be nonlinear. Children may well learn words more quickly at some ages than others [@oliverLanguageDevelopmentChildren1994], and there may be periods of plateau or even regression.
+
+Both experience and existing research indicate substantial variability in vocabulary development among children with Down syndrome [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @galeoteAcquisitionProductiveVocabulary2008; @kaat-vandenosExpressiveVocabularyDevelopment2017; @zampiniVocabularyDevelopmentChildren2013; @deckersPredictorsReceptiveExpressive2019] and developmental trajectories more generally [@karmiloff-smithImportanceUnderstandingIndividual2016; @fidlerExploratoryBehaviorDevelopmental2019; @thedownsyndromecognitionprojectCapturingCognitiveBehavioral2021]. This variability appears to grow over time as children making more progress diverge from those making less progress. We therefore expect the variance in spoken word learning to increase with age, but not to increase indefinitely.
+
+## Model
+
+In our model (@fig-model-1-dag), $A$ represents age and $S$ represents words spoken. $O$ represents other (unmeasured) factors that influence spoken word learning and that are influenced by age (for example, word meanings learned, opportunities to hear spoken words, explicit teaching and therapy).
+
+```{dot}
+//| label: fig-model-1-dag
+//| fig-cap: "**A simple model of spoken word learning**. $A$: age; $O$: other unmeasured factors; $S$: words spoken."
+//| fig-width: 2.5
+//| fig-height: 0.85
+digraph SimpleDAG {
+    graph [size="2.5,0.85", ratio=fill, rankdir=LR]
+    edge [arrowsize=0.75]
+    node [shape=square]
+    O [shape=circle]
+
+    A -> O
+    O -> S    
+}
+```
+
+Our aim is to estimate the total age-associated change in spoken vocabulary. In this DAG, the causal effect of $A$ on $S$ is entirely mediated through $O$, and since $A$ is exogenous (it has no parents), there are no open backdoor paths from age to spoken vocabulary. We can therefore identify the total effect of age on words spoken by simply conditioning on age.
+
+We model spoken vocabulary as a count outcome bounded between 0 and $N_{\text{trials}}=800$ words. Let $y_i \in \{0,\dots,N_{\text{trials}}\}$ be the number of words spoken for observation $i$ at age $x_i$ months. We standardise age:
+
+$$
+z_i = \frac{x_i-\bar{x}}{s_x}
+$$
+
+### Outcome distribution
+
+The binomial distribution provides a model for data from a sequence of $n$ exchangeable trials where each trial gives rise to one of two possible outcomes [@spanosProbabilityTheoryStatistical2019, sec. 3.2; @gelmanBayesianDataAnalysis2013, sec. 2.1; @christensenLogLinearModelsLogistic2025, sec. 1.3].
+
+A Binomial likelihood may underestimate variability because it assumes exchangeable Bernoulli trials within each observation and no unmodelled heterogeneity between children (variance is determined by the mean) [@gelmanBayesianDataAnalysis2013]. To accommodate extra-binomial variation we use a Beta-Binomial likelihood, where the probability of success is not fixed, but assumed to follow a Beta distribution [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025]:
+
+Let $p_i = p(z_i)$,
+
+$$
+y_i \sim \mathrm{BetaBinomial}\!\left(N_{\text{trials}},\alpha_i,\beta_i\right),
+\qquad
+\alpha_i = p_i\,\kappa_i,
+\qquad
+\beta_i = (1-p_i)\,\kappa_i,
+$$
+
+where $p_i\in(0,1)$ is the latent mean probability (defined in the next section via the linear trend + GP on the logit scale) and $\kappa_i>0$ is a concentration parameter controlling dispersion. Smaller $\kappa_i$ implies greater dispersion (more heterogeneity), while larger $\kappa_i$ approaches the Binomial model.
+
+We allow the conditional distribution of spoken vocabulary counts to become more dispersed with age by modeling the beta-binomial concentration parameter $\kappa$ as a decreasing function of age. Because the outcome is bounded, this does not imply that raw count variance must increase monotonically at every age; rather, it allows greater heterogeneity around the mean trajectory on the latent probability scale:
+
+$$
+\kappa(z) = \kappa_{\min} + \exp\!\left(a_\kappa + b_\kappa z\right),
+\qquad b_\kappa < 0.
+$$
+
+This encodes two assumptions. First, that heterogeneity increases with age. As $b_\kappa<0$, $\exp(a_\kappa + b_\kappa z)$ decreases with age, $\kappa(z)$ decreases and dispersion increases. Second, that the rate of increase levels off. As $z\to\infty$, $\exp(a_\kappa + b_\kappa z)\to 0$ and $\kappa(z)\to\kappa_{\min}$, leading to a later-age plateau in dispersion.
+
+### Mean structure
+
+The latent mean trajectory is defined on the logit scale as a linear trend plus a Gaussian process (GP)  [@rasmussenGaussianProcessesMachine2008; @schulzTutorialGaussianProcess2018]:
+
+$$
+\begin{aligned}
+f(z) &= \beta_0 + \beta_1 z + g(z), \qquad
+p(z) = \sigma(f(z)) = \frac{1}{1 + e^{-f(z)}},\\
+g &\sim \mathcal{GP}\!\bigl(m(\cdot), \eta^2 k(\cdot,\cdot)\bigr).
+\end{aligned}
+$$
+
+where:
+
+- $\beta_0$: logit-scale intercept
+- $\beta_1$: logit-scale slope
+- $\eta$: marginal standard deviation (amplitude) of the GP
+- $k(\cdot,\cdot)$: unit-variance kernel governing smoothness
+- $m(\cdot)$: the prior expectation of $g$ at any input
+- $g \sim \mathcal{GP}(m(\cdot), \eta^2k(\cdot,\cdot))$: smooth nonlinear deviation from the linear developmental trend
+
+Rather than placing weakly interpretable priors directly on $\beta_0$ and $\beta_1$, we specify empirically-informed priors ($p_{24}$ and $p_{84}$) on the expected proportion of words spoken at two reference ages ($x_a=24$ and $x_b=84$ months). Define $z_a=(x_a-\bar{x})/s_x$ and $z_b=(x_b-\bar{x})/s_x$.
+
+$$
+\beta_1 = \frac{\text{logit}(p_{84})-\text{logit}(p_{24})}{z_b-z_a},
+\qquad
+\beta_0 = \text{logit}(p_{24})-\beta_1 z_a.
+$$
+
+This provides an interpretable baseline trajectory on the logit scale while allowing the GP to capture smooth deviations from the linear trend. (Prior distributions for $p_{24}$ and $p_{84}$ are detailed below.)
+
+The mean function $m : \mathbb{R} \to \mathbb{R}$ specifies the prior expectation of $g$ at any input:
+
+$$
+m(z) = \mathbb{E}[g(z)] = 0 \quad \text{for all } z.
+$$
+
+We choose a zero mean function because the linear trend $\beta_0 + \beta_1 z$ already captures the expected population trajectory. Any non-zero mean in $g$ would be confounded with the linear parameters. With $m(z) = 0$, the GP component $g(z)$ represents deviations from the linear baseline. We can therefore interpret positive values as indicating periods of faster-than-expected growth and negative values indicating slower growth or plateaus. Additionally, under the posterior, $\mathbb{E}[g(z) \mid \text{data}]$ will shrink toward zero in regions with sparse data, discouraging overfitting.
+
+The covariance kernel $k$ determines how similar deviations $g(z)$ and $g(z')$ are expected to be as a function of their age separation. We use a unit-variance radial basis function (RBF) kernel - also known as the exponentiated quadratic (EQ) or squared exponential kernel. A unit-variance kernel has a covariance function that specifies the correlation structure but has marginal variance 1. We define the exponentiated quadratic kernel without an amplitude term:
+
+$$
+k(z,z') = \exp\left(-\frac{(z-z')^2}{2\ell^2}\right).
+$$
+
+so that $k(z,z)=1$ for all $z$.
+
+We then introduce a separate amplitude parameter $\eta>0$ and scale the latent function so that $\eta$ controls the overall magnitude of departures from the linear mean trend on the logit scale:
+
+$$
+g_{\mathrm{unit}} \sim \mathcal{GP}(m(\cdot), k(\cdot,\cdot)),
+\qquad
+g(z)=\eta\,g_{\mathrm{unit}}(z)
+$$
+
+Equivalently, $g \sim \mathcal{GP}(m(\cdot), \eta^2k(\cdot,\cdot))$
+
+This separation is helpful both conceptually and computationally. Conceptually, it cleanly distinguishes two roles: the length-scale $\ell$ governs how quickly deviations vary with age (smoothness and local correlation), while $\eta$ governs how large those deviations are.
+
+Computationally, factoring out the amplitude tends to improve identifiability and sampling geometry because the model can learn correlation structure (via $\ell$) without simultaneously rescaling the covariance, and the prior on $\eta$ can be specified directly in interpretable units (logit-scale deviations). In the HSGP approximation (below), this structure also works naturally with the basis-function representation, where $g_{\mathrm{unit}}$ is generated using a unit-variance kernel and then rescaled by $\eta$. (Prior distributions for $\eta$ and $\ell$ are detailed below.)
+
+The RBF kernel is suited for modelling developmental trajectories because it encodes the belief that the latent age-ability relationship varies smoothly over time while remaining flexible about the precise functional form. In particular, draws from a zero-mean Gaussian process with an RBF kernel are very smooth, which matches the expectation that vocabulary growth is driven by continuous developmental change rather than abrupt discontinuities.
+
+The RBF kernel is also stationary, meaning $k(z,z')$ depends only on $∣z-z'|$ and not on absolute age. Practically, this assumes the _local_ smoothness of departures from the mean trend is similar at (say) 36 and 72 months, while allowing overall level and variability to differ through the mean function and the age-varying dispersion $\kappa(z)$. Importantly, the RBF kernel is a universal approximator in the sense that, with sufficient data, it can represent a wide range of continuous functions, which is helpful when the true shape of the trajectory is unknown.
+
+We assume observations are conditionally independent given the latent mean trajectory $p(z)$, dispersion $\kappa(z)$, and model parameters.
+
+### Parameters and priors
+
+#### Hilbert space Gaussian process (HSGP) approximation: basis size and boundary
+
+Exact GP inference requires computing the Cholesky decomposition of $\mathbf{K}$, which scales as $O(n^3)$ in time and $O(n^2)$ in memory. For our dataset with $n > 500$ observations, this is feasible but computationally expensive during MCMC sampling. We therefore use the Hilbert space Gaussian process (HSGP) approximation [@solinHilbertSpaceMethods2020; @riutort-mayolPracticalHilbertSpace2022]. The approximation quality depends on:
+
+- Basis size ($m$) --- more terms increase accuracy but add computational cost
+- Boundary ($c$) --- should exceed the range of observed $z$ values by a safety factor
+- Length-scale ($\ell$) --- shorter length-scales require more basis functions for accurate representation
+
+We select $m$ and $c$ following PyMC's hyperparameter recommendations [@abril-plaPyMCModernComprehensive2023, specifically `approx_hsgp_hyperparams`], which balance approximation error and computational feasibility for the specified range of $\ell$ [see also @riutort-mayolPracticalHilbertSpace2022].
+
+#### Length scale ($\ell$)
+
+The smoothness of the vocabulary growth curve is guided by the Gaussian process length-scale parameter $\ell$. We constrain this to represent changes occurring over 2–12 month periods. The prior is specified using a Beta distribution, $\ell_\text{unit} \sim \mathrm{Beta}(3, 3)$, which favours moderate smoothness (most prior mass falls between approximately 4 and 10 months), then linearly mapped to the target range:
+
+$$
+\ell = \ell_\text{min} + (\ell_\text{max} - \ell_\text{min}) × \ell_\text{unit}
+$$
+
+In addition to specifying a plausible range, this seems to offer better sampling geometry than direct priors on positive reals.
+
+#### Amplitude ($\eta$)
+
+The extent to which the function may vary from the trend is guided by the Gaussian process amplitude parameter $\eta$ (also called marginal standard deviation). $\eta$ is a scale parameter and so must be positive, and is defined on the logit scale (above). While constant on the logit scale, when translated back to word counts through the logistic function the effect of $\eta$ depends on $p$. The observed probability is obtained via the logistic link:
+
+$$
+p(z) = \sigma(f(z)) = \frac{1}{1 + e^{-f(z)}}
+$$
+
+where the sigmoid function compresses changes at the extremes. This implies that $\eta$ has the largest effect on counts when $p ≈ 0.5$ (around 400 words).
+
+This is logical, given our outcome is limited to a count of 0 to 800 words. The scope for variation close to floor or ceiling is expected to be less than at the mid-point. When starting to learn their first words, children do not suddenly learn many new words at once and the scope for individual variation is limited (a compressed developmental space). As children learn more words, they may vary more in how many new words they learn in a given period of time (increased developmental diversity). As they approach the limits of the checklists, there is less scope for large gains in word counts to be recorded (compressed outcome space).
+
+We specify a HalfNormal distribution with $\sigma=0.4$, weakly favouring moderate amplitudes without ruling out more pronounced nonlinear departures from the linear trend. At $p \approx 0.5$ (400 words), a 1-SD GP deviation of size $\eta$ corresponds to roughly $(N/4)\eta = 200\eta$ words; for $\eta \approx 0.5$, this is about 100 words.
+
+#### Slope
+
+We anchor the linear trend slope using two priors — the expected proportion of words spoken at 24 and 84 months.
+
+Previous research and professional experience suggest that many children with Down syndrome will be saying very few words at 24 months, but we allow substantial uncertainty up to ~100 words. We specify $p_{24} \sim \mathrm{Beta}(1, 15)$:
+
+![Prior distribution for lower slope anchor (spoken words at 24 months)](figures/VG01-age-spoken-ds/p_slope_low_dist.png){#fig-slope-low width="5in"}
+
+At 84 months, previous research and professional experience suggests a wide range of ability. We are less confident about how this may be distributed, but suspect some may still be saying few, if any, words, while a few will be saying 800 words, with most somewhere in between. We specify $p_{84} \sim \mathrm{Beta}(1.1, 1.1)$, which is approximately uniform:
+
+![Prior distribution for upper slope anchor (spoken words at 84 months)](figures/VG01-age-spoken-ds/p_slope_hi_dist.png){#fig-slope-hi width="5in"}
+
+#### Overdispersion ($\kappa$)
+
+In this analysis, a one-unit change in standardised age $z$ ($\Delta z=1$) corresponds to an increase of $s_x\approx 24$ months in age. We model concentration (above) as
+
+$$
+\kappa(z)=\kappa_{\min}+\exp(a_\kappa+b_\kappa z),
+$$
+
+so that
+
+$$
+\log\!\big(\kappa(z)-\kappa_{\min}\big)=a_\kappa+b_\kappa z.
+$$
+
+Therefore $b_\kappa$ is the log-multiplicative rate of change in the excess concentration $\kappa-\kappa_{\min}$ per 1 SD increase in age. For any $\Delta z$,
+
+$$
+\frac{\kappa(z+\Delta z)-\kappa_{\min}}{\kappa(z)-\kappa_{\min}}
+= \exp(b_\kappa \Delta z).
+$$
+
+Because we constrain $b_\kappa<0$, $\kappa(z)$ decreases with age (implying increasing heterogeneity), and the decline levels off as $\kappa(z)$ approaches $\kappa_{\min}$.
+
+We impose this monotone decline by setting $b_\kappa=-b_{\mathrm{mag}}$ with
+
+$$
+b_{\mathrm{mag}}\sim \mathrm{HalfNormal}(\sigma_b),\qquad \sigma_b=0.3.
+$$
+
+We place a log-normal prior on the minimum concentration, $\kappa_{\min} \sim \mathrm{LogNormal}(\mu = \log 5,\; \sigma = 0.6)$, centring prior mass around 5 while allowing substantial right-skew uncertainty:
+
+![Prior distribution for kappa_min](figures/VG01-age-spoken-ds/kappa_min_dist.png){#fig-kappa-min width="5in"}
+
+We place a normal prior on the log-scale intercept, $a_\kappa \sim \mathrm{Normal}(\mu = \log 8,\; \sigma = 1.0)$, which loosely centres the initial excess concentration around 8 while permitting a wide range:
+
+![Prior distribution for a_kappa](figures/VG01-age-spoken-ds/a_kappa_dist.png){#fig-a-kappa width="5in"}
+
+![Prior distribution for b_kappa_mag](figures/VG01-age-spoken-ds/b_kappa_mag_dist.png){#fig-b-kappa-mag width="5in"}
+
+Under this prior, a 'typical' magnitude for $b_{\mathrm{mag}}$ is on the order of $\sigma_b$, which corresponds to a multiplicative change of approximately
+
+$$
+\exp(-0.3)\approx 0.74
+$$
+
+in $\kappa-\kappa_{\min}$ per 1 SD of age (about 24 months). In other words, the prior centres mass on a gradual decline in $\kappa-\kappa_{\min}$ of roughly $1-0.74\approx 0.26$ (26%) per SD, while still allowing steeper declines if supported by the data.
+
+#### Summary of parameters and priors
+
+| Parameter | Description | Prior |
+|----|----------------|------------|
+| $p_{24}$ | Expected proportion of words spoken at 24 months | $\mathrm{Beta}(1, 15)$ |
+| $p_{84}$ | Expected proportion of words spoken at 84 months | $\mathrm{Beta}(1.1, 1.1)$ |
+| $\ell_\text{unit}$ | Unit length-scale (mapped to 2–12 months) | $\mathrm{Beta}(3, 3)$ |
+| $\eta$ | GP amplitude (logit scale) | $\mathrm{HalfNormal}(\sigma = 0.4)$ |
+| $\kappa_{\min}$ | Minimum concentration (dispersion floor) | $\mathrm{LogNormal}(\mu = \log 5, \sigma = 0.6)$ |
+| $a_\kappa$ | Log-scale intercept of $\kappa(z)$ | $\mathrm{Normal}(\mu = \log 8, \sigma = 1.0)$ |
+| $b_{\mathrm{mag}}$ | Magnitude of $\kappa$ decline rate | $\mathrm{HalfNormal}(\sigma = 0.3)$ |
+
+: Prior distributions for all model parameters. {#tbl-priors}
+
+
+## Model checks
+
+### Prior Predictive Checks
+
+Before fitting the model, we examined whether the priors generated plausible age-vocabulary curves. In particular, we looked for low counts at younger ages, increasing expected counts across childhood, smooth month-to-month change rather than abrupt oscillation, and wider between-child spread at later ages without implausible mass near impossible values. The prior predictive checks suggest that the priors are informative enough to encode basic developmental expectations while still allowing substantial uncertainty about the shape of the trajectory.
+
+**TODO**
+
+![Prior sample trajectories](figures/VG01-age-spoken-ds/prior_samples.png){#fig-prior-samples}
+
+![Prior predictions](figures/VG01-age-spoken-ds/prior_predictions.png){#fig-prior-predictions}
+
+![Prior predictive checks](figures/VG01-age-spoken-ds/prior_predictive_checks.png){#fig-prior-predictive-checks width="5in"}
+
+### Diagnostics
+
+**TODO**
+
+### Posterior Predictive Checks
+
+**TODO**
+
+## Results
+
+TODO
+
+## Sensitivity analyses
+
+TODO
+
+## Limitations
+
+TODO
+
+**TODO**:
+
+- Representativeness of sample - families experiencing more difficulties avoid? families with children doing well do not see a need for support groups? etc...
+

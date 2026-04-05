@@ -149,3 +149,14 @@ The posterior distribution of the estimated learning rate (estimated gain in spo
 Lower $\kappa$ values indicate greater overdispersion (greater between-child variability relative to the mean), while higher $\kappa$ values indicate less overdispersion (less between-child variability relative to the mean). The plot shows how the estimated dispersion parameter $\kappa$ changes with age, along with uncertainty intervals.
 
 ![posterior_kappa](posterior_kappa.svg){#fig-posterior-kappa .lightbox fig-align="left"}
+
+### Expected age to reach vocabulary milestones
+
+Using the posterior distribution of the latent mean trajectory, we estimate the age at which the expected number of words spoken first reaches key milestones (50, 100, 200, and 400 words). These distributions reflect uncertainty in the population-average trajectory, not individual-level variability.
+
+```{python}
+milestone_summary = pd.read_csv("milestone_age_summary.csv")
+milestone_summary
+```
+
+![milestone_age_distributions](milestone_age_distributions.svg){#fig-milestone-ages .lightbox fig-align="left"}
