@@ -10,6 +10,8 @@ dependencies:
   - pymc>=5.28.2,<6.0
   - pip
   - pip:
+      - azure-identity
+      - azure-storage-blob
       - duckdb>=1.5.1
       - graphviz
       - hatch
