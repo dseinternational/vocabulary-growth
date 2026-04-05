@@ -5,17 +5,35 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 """
 
 import argparse
+import os
+import subprocess
 from multiprocessing import freeze_support
 
 import dse_research_utils.environment.setup as setup
 from rich import print
 
 from vocab_growth.models import model_vg01, model_vg02, model_vg03, model_vg04
+from vocab_growth.storage import upload_to_blob_storage
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('model', type=str, default=None, help='Model id or all.')
-    parser.add_argument('--config', type=str, default='dev', help='Sampling configuration to use (e.g., dev[elopment], test, rep[orting])')
+    parser.add_argument("model", type=str, default=None, help="Model id or all.")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="dev",
+        help="Sampling configuration to use (e.g., dev[elopment], test, rep[orting])",
+    )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Render the Quarto model output after fitting",
+    )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        help="Upload model output to Azure Blob Storage using AzCopy",
+    )
 
     freeze_support()
 
@@ -23,14 +41,32 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.model == "vg01" or args.model == "all":
-        model_vg01.fit(args.config)
-    elif args.model == "vg02" or args.model == "all":
-        model_vg02.fit(args.config)
-    elif args.model == "vg03" or args.model == "all":
-        model_vg03.fit(args.config)
-    elif args.model == "vg04" or args.model == "all":
-        model_vg04.fit(args.config)
+    models = {
+        "vg01": model_vg01,
+        "vg02": model_vg02,
+        "vg03": model_vg03,
+        "vg04": model_vg04,
+    }
+
+    if args.model == "all":
+        to_fit = list(models.values())
+    elif args.model in models:
+        to_fit = [models[args.model]]
     else:
         print(f"Unknown model: {args.model}")
         exit(1)
+
+    contexts = [m.fit(args.config) for m in to_fit]
+
+    if args.render:
+        for context in contexts:
+            qmd_path = os.path.join(context.reporting.output_dir, "index.qmd")
+            print(f"\n[bold green]Rendering Quarto output: {qmd_path}[/bold green]")
+            subprocess.run(["quarto", "render", qmd_path], check=True)
+
+    if args.upload:
+        for context in contexts:
+            upload_to_blob_storage(
+                context.reporting.output_dir,
+                context.reporting.model_label,
+            )

@@ -151,3 +151,4 @@ Desktop.ini
 .env
 .env.*
 *.local
+.claude/settings.local.json

@@ -1,5 +1,7 @@
 # Agent Instructions
 
+> **Keep in sync:** This file, `CLAUDE.md`, and `.github/copilot-instructions.md` share the same content. When updating one, update all three.
+
 ## Project overview
 
 This project is an exploratory study of vocabulary development in children with Down syndrome that aims to characterise observed trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. The primary goal of the study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice. We evaluate and fit these models using Bayesian inference to estimate full probability distributions for parameters of interest, using an iterative workflow.
@@ -47,11 +49,13 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 ### Fit a model
 
 ```bash
-python scripts/fit_model.py <model_id> [--config <config>]
+python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload]
 ```
 
 - `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
+- `--render`: render the Quarto model output after fitting.
+- `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
 
 Output (traces, figures, summary tables) is written to `output/models/<model_name>/`.
 
