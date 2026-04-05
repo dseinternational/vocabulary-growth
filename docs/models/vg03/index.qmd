@@ -53,11 +53,11 @@ For full details and discussion, please refer to the technical report.
 
 ### Slope
 
-#### Low slope anchor (24 months)
+#### Low slope anchor (12 months)
 
 ![Slope prior distribution `p_slope_low_dist`](p_slope_low_dist.svg){#fig-slope-low .lightbox fig-align="left"}
 
-#### High slope anchor (84 months)
+#### High slope anchor (26 months)
 
 ![Slope prior distribution `p_slope_hi_dist`](p_slope_hi_dist.svg){#fig-slope-hi .lightbox fig-align="left"}
 

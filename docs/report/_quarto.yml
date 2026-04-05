@@ -1,0 +1,88 @@
+project:
+  type: book
+
+  output-dir: ../../output/report
+
+  preview:
+    port: 4200
+    browser: true
+    watch-inputs: true
+
+jupyter: python3
+
+execute:
+  freeze: true
+
+date: now
+
+toc: true
+number-sections: true
+number-depth: 3
+
+bibliography: references.bib
+csl: apa.csl
+
+language:
+  crossref-ch-prefix: "Section"
+
+book:
+  output-file: vocabulary-growth-report
+  title: "Vocabulary growth in children with Down syndrome"
+  author:
+    - name: Frank Buckley
+      orcid: 0000-0002-9708-2705
+      affiliations:
+        - name: Down Syndrome Education International
+          state: Cumbria
+          country: UK
+      roles: writing
+      corresponding: true
+    - name: Sue Buckley
+      orcid: 0000-0002-9044-3088
+      affiliations:
+        - name: Down Syndrome Education International
+          state: Cumbria
+          country: UK
+        - name: University of Portsmouth
+          city: Portsmouth
+          state: Hampshire
+          country: UK
+      roles: writing
+  chapters:
+    - index.qmd
+    - acknowledgements.qmd
+    - intro.qmd
+    - methods.qmd
+    - model-1-spoken.qmd
+    - model-2-understood.qmd
+    - model-3-spoken-td.qmd
+    - model-4-understood-td.qmd
+    - model-5-spoken-understood.qmd
+    - model-6-spoken-understood-td.qmd
+    - discussion.qmd
+    - glossary.qmd
+    - references.qmd
+
+format:
+  html:
+    code-fold: true
+    theme: default
+  docx:
+    reference-doc: ../template.docx
+  pdf:
+    documentclass: report
+    papersize: a4
+    colorlinks: true
+    link-citations: true
+    fontsize: 11pt
+    mainfont: "Source Sans 3"
+    sansfont: "Source Sans 3"
+    monofont: "Monaspace Neon"
+    monofontoptions: "Scale=0.8125"
+    linestretch: 1.25
+    geometry:
+      - top=25mm
+      - left=25mm
+      - right=25mm
+      - bottom=25mm
+    include-in-header: footer.tex
