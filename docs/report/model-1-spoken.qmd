@@ -1,17 +1,15 @@
 ---
 title: "Words spoken by children with Down syndrome relative to age"
-abstract: "*To estimate typical trajectories of spoken word learning, we specify a statistical model that incorporates prior knowledge of development and vocabulary learning for children with Down syndrome. We evaluate the model by examining the plausibility of model predictions. We then fit the model to the available data and confirm...* **TODO**"
+abstract: "*Our first model estimates trajectories of spoken word learning for children with Down syndrome. The model incorporates existing knowledge of development and vocabulary learning, including plausible distributions of word counts at different ages and variability in learning rates.* **TODO**"
 ---
 
-## Empirical model
-
-Many things can influence opportunities to learn spoken words. Given these opportunities, many other factors can affect how well a child learns new words and how easily they can say them. These include biological, social and educational factors, and their interactions. While age does not *directly* influence spoken words learned, it does influence many of these factors and therefore *indirectly* influences spoken word learning. In this study, our goal is simply to estimate typical trajectories of word learning with age. We are not trying to disentangle the specific causal effects of different factors on word learning, but rather to capture the overall age-associated change in spoken vocabulary.
+Many things can influence a child's opportunities to learn spoken words. Given these opportunities, many other factors can affect how well a child learns new words and how easily they can say them. These include biological, social and educational factors, and their interactions. While age does not *directly* influence spoken words learned, it does influence many of these factors and therefore *indirectly* influences spoken word learning. In this study, our goal is  to estimate trajectories of word learning over time. We are not trying to disentangle the specific causal effects of different factors on word learning, but rather to capture the overall age-associated change in spoken vocabulary.
 
 The overall interaction of age with spoken word learning is therefore complex and likely to be nonlinear. Children may well learn words more quickly at some ages than others [@oliverLanguageDevelopmentChildren1994], and there may be periods of plateau or even regression.
 
 Both experience and existing research indicate substantial variability in vocabulary development among children with Down syndrome [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @galeoteAcquisitionProductiveVocabulary2008; @kaat-vandenosExpressiveVocabularyDevelopment2017; @zampiniVocabularyDevelopmentChildren2013; @deckersPredictorsReceptiveExpressive2019] and developmental trajectories more generally [@karmiloff-smithImportanceUnderstandingIndividual2016; @fidlerExploratoryBehaviorDevelopmental2019; @thedownsyndromecognitionprojectCapturingCognitiveBehavioral2021]. This variability appears to grow over time as children making more progress diverge from those making less progress. We therefore expect the variance in spoken word learning to increase with age, but not to increase indefinitely.
 
-## Causal model
+## Model
 
 In our model (@fig-model-1-dag), $A$ represents age and $S$ represents words spoken. $O$ represents other (unmeasured) factors that influence spoken word learning and that are influenced by age (for example, word meanings learned, opportunities to hear spoken words, explicit teaching and therapy).
 
@@ -31,9 +29,7 @@ digraph SimpleDAG {
 }
 ```
 
-Our aim is to estimate the total age-associated change in spoken vocabulary. In this DAG, the causal effect of $A$ on $S$ is entirely mediated through $O$, and since $A$ is exogenous (it has no parents), there are no open backdoor paths from age to spoken vocabulary. We can therefore identify the total causal effect of age on words spoken by simply conditioning on age.
-
-## Statistical model
+Our aim is to estimate the total age-associated change in spoken vocabulary. In this DAG, the causal effect of $A$ on $S$ is entirely mediated through $O$, and since $A$ is exogenous (it has no parents), there are no open backdoor paths from age to spoken vocabulary. We can therefore identify the total effect of age on words spoken by simply conditioning on age.
 
 We model spoken vocabulary as a count outcome bounded between 0 and $N_{\text{trials}}=800$ words. Let $y_i \in \{0,\dots,N_{\text{trials}}\}$ be the number of words spoken for observation $i$ at age $x_i$ months. We standardise age:
 
@@ -59,7 +55,7 @@ $$
 
 where $p_i\in(0,1)$ is the latent mean probability (defined in the next section via the linear trend + GP on the logit scale) and $\kappa_i>0$ is a concentration parameter controlling dispersion. Smaller $\kappa_i$ implies greater dispersion (more heterogeneity), while larger $\kappa_i$ approaches the Binomial model.
 
-We expect heterogeneity to increase with age, but not to increase indefinitely. We therefore model $\kappa$ as a monotone decreasing function of standardised age that approaches a positive lower bound:
+We allow the conditional distribution of spoken vocabulary counts to become more dispersed with age by modeling the beta-binomial concentration parameter $\kappa$ as a decreasing function of age. Because the outcome is bounded, this does not imply that raw count variance must increase monotonically at every age; rather, it allows greater heterogeneity around the mean trajectory on the latent probability scale:
 
 $$
 \kappa(z) = \kappa_{\min} + \exp\!\left(a_\kappa + b_\kappa z\right),
@@ -165,9 +161,7 @@ $$
 p(z) = \sigma(f(z)) = \frac{1}{1 + e^{-f(z)}}
 $$
 
-where the sigmoid function compresses changes at the extremes. This implies that $\eta$ has the largest effect on counts when $p ≈ 0.5$ (around 400 words). For example:
-
-
+where the sigmoid function compresses changes at the extremes. This implies that $\eta$ has the largest effect on counts when $p ≈ 0.5$ (around 400 words).
 
 This is logical, given our outcome is limited to a count of 0 to 800 words. The scope for variation close to floor or ceiling is expected to be less than at the mid-point. When starting to learn their first words, children do not suddenly learn many new words at once and the scope for individual variation is limited (a compressed developmental space). As children learn more words, they may vary more in how many new words they learn in a given period of time (increased developmental diversity). As they approach the limits of the checklists, there is less scope for large gains in word counts to be recorded (compressed outcome space).
 
@@ -251,7 +245,9 @@ in $\kappa-\kappa_{\min}$ per 1 SD of age (about 24 months). In other words, the
 
 ### Prior Predictive Checks
 
-**TODO**: Does the model generate plausible developmental trajectories?
+Before fitting the model, we examined whether the priors generated plausible age-vocabulary curves. In particular, we looked for low counts at younger ages, increasing expected counts across childhood, smooth month-to-month change rather than abrupt oscillation, and wider between-child spread at later ages without implausible mass near impossible values. The prior predictive checks suggest that the priors are informative enough to encode basic developmental expectations while still allowing substantial uncertainty about the shape of the trajectory.
+
+**TODO**
 
 ![Prior sample trajectories](figures/VG01-age-spoken-ds/prior_samples.png){#fig-prior-samples}
 
@@ -261,15 +257,11 @@ in $\kappa-\kappa_{\min}$ per 1 SD of age (about 24 months). In other words, the
 
 ### Diagnostics
 
-We check rank-normalized split $\hat{R} < 1.01$ as an indicator of satisfactory chain convergence ([Vehtari et al., 2021](https://doi.org/10.48550/arXiv.1903.08008)) and require $\mathrm{ESS}_{\mathrm{tail}} \ge 10{,}000$ for reasonably stable estimates of 90% HDI limits ([Vehtari et al., 2021](https://doi.org/10.48550/arXiv.1903.08008); [Kruschke, 2021](https://doi.org/10.1038/s41562-021-01177-7)).
-
-For filled KDE pair plots, nearly circular contours suggest weak posterior dependence; elongated ellipses suggest stronger dependence (tilted up/right for positive association, down/right for negative). Curved ('banana-shaped') structure suggests nonlinear dependence (often due to parameterisation or constraints). Multiple separated blobs may indicate a multimodal posterior or poor mixing.
-
-On the diagonal, marginal densities that are narrow relative to the prior suggest the parameter is well identified by the data (given the model), whereas wide marginals suggest weaker identification. Heavy tails indicate that uncertainty is influenced by rare but plausible extreme values. Multimodality indicates multiple plausible regimes under the model (or, again, possible sampling problems).
+**TODO**
 
 ### Posterior Predictive Checks
 
-**TODO**: Does it reproduce: Mean trend, Variance, Ceiling effects, Tail behaviour
+**TODO**
 
 ## Results
 

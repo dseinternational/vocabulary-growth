@@ -3,15 +3,7 @@ title: "Words understood by children with Down syndrome relative to age"
 abstract: "Summary --- *TODO*"
 ---
 
-## Empirical model
-
-[TODO]
-
-## Causal model
-
-[TODO]
-
-## Statistical model
+## Model
 
 TODO
 

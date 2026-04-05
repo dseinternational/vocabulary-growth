@@ -24,7 +24,7 @@ csl: apa.csl
 
 language:
   crossref-ch-prefix: "Section"
-  
+
 book:
   output-file: vocabulary-growth-report
   title: "Vocabulary growth in children with Down syndrome"
@@ -37,6 +37,17 @@ book:
           country: UK
       roles: writing
       corresponding: true
+    - name: Sue Buckley
+      orcid: 0000-0002-9044-3088
+      affiliations:
+        - name: Down Syndrome Education International
+          state: Cumbria
+          country: UK
+        - name: University of Portsmouth
+          city: Portsmouth
+          state: Hampshire
+          country: UK
+      roles: writing
   chapters:
     - index.qmd
     - acknowledgements.qmd

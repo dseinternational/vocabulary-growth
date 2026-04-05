@@ -38,3 +38,97 @@ Word learning accelerates rapidly for many typically developing children between
 ## Study aims and approach
 
 [**TODO**]
+
+## Modelling and inference
+
+Statistical modelling and inference provide methods for defining mathematical models and evaluating them against data to determine evidence-based estimates of parameters of interest [@coxPrinciplesStatisticalInference2006; @gelmanBayesianDataAnalysis2013; @wakefieldBayesianFrequentistRegression2013; @farrellComputationalModelingCognition2018; @spanosProbabilityTheoryStatistical2019; @mcelreathStatisticalRethinkingBayesian2020; @gelmanRegressionOtherStories2020; @chanStatisticalModelingComputation2025]. These methods are essential for evaluating scientific theories and interpreting data. They can also offer more precise accounts of what we our theories mean than verbal explanations alone [@farrellComputationalModelingCognition2018, chapter 1].
+
+A statistical model is a set of assumptions that describes a process for generating data. These assumptions define relationships between parameters of interest and the data. A statistical model can be used to generate data sets that are consistent with these assumptions. Such simulations enable us check that the model behaves as intended [@farrellComputationalModelingCognition2018; @mcelreathStatisticalRethinkingBayesian2020]. Most statistical models will include one or more unknown parameters of interest. Statistical inference uses the model and the observed data to estimate unknown parameters, to test specific claims, to make predictions about future observations, and to estimate how uncertain our conclusions are.
+
+### Statistical models
+
+Statistical models do not provide explanations of how the world works, although they can be used to evaluate the predictions of models that do. A regression model can offer insights into statistical relationships between predictors and outcomes, but those relationships must be framed within an empirical model to understand their real word relevance. We can think of an empirical model as a model that explains real world phenomena and that can inform the specification of statistical models and process models that can be used to test these explanations.[^empiricalmodelling]
+
+[^empiricalmodelling]: For a perspective on empirical modelling as a process for "learning from data" using statistical models, see Spanos [-@spanosProbabilityTheoryStatistical2019, chapter 1]. For further discussion of empirical, process-based and statistical models, see  Van Oijen [-@vanoijenBayesianCompendium2024, chapter 1]. For further discussion of computational process models, see Farrell and Lewandowsky [-@farrellComputationalModelingCognition2018, chapter 1].
+
+For example, we might begin to explain word learning by suggesting that children learn the meanings of new words by hearing them spoken and recognising what they refer to. This explanation would suggest that over time, as children have more opportunities to hear spoken words, they will learn the meanings of more words. To evaluate this explanation, we can consider what we might expect to see if our explanation is correct (increasing counts of words understood as children get older). We can then develop statistical models to evaluate if observed data matches these expectations.
+
+Many statistical models may be consistent with a single empirical model. It is also possible that multiple empirical models may be consistent with a single statistical model. Therefore, when a statistical model that is consistent with an empirical model fits observed data, we cannot be certain that this empirical model is ‘the right one’ (there may be another, equally credible, explanation):
+
+> "Many models correspond to the same hypothesis, and many hypotheses correspond to a single model. This makes strict falsification impossible." [@mcelreathStatisticalRethinkingBayesian2020, page 4]
+
+The process of developing and evaluating models is therefore continual and iterative [@gelmanBayesianWorkflow2020]. Alternative models might seem to offer better explanations (for example, fit the data better). New observations may lead to new conclusions from existing models, leading to revised theories and then new models.
+
+### Inference
+
+There are different approaches to how to perform statistical inference. They differ in their philosophical and mathematical foundations, and in the types of conclusions they allow us to draw [@gelmanBayesianDataAnalysis2013; @wakefieldBayesianFrequentistRegression2013; @spanosProbabilityTheoryStatistical2019; @mcelreathStatisticalRethinkingBayesian2020].
+
+While Bayesian methods are currently uncommon in developmental Down syndrome research, Bayesian inference offers several advantages for estimating the parameters of interest in this study.
+
+#### Probability and uncertainty
+
+Bayesian inference starts from an intuitive view of probability as a way of expressing uncertainty about unknown quantities:
+
+> "Probability is nothing more than a standard way to describe uncertainty. When unknown or future events are assigned a small positive number near zero we think of them as being very unlikely to occur. Conversely when these events are assigned a number less than but near one we think of them as being very likely to occur." [@gillBayesianSocialScience2024, page 5]
+
+The Bayesian perspective recognises that we cannot know the full 'true' state of the world: our knowledge is always incomplete, and probability is therefore "relative, in part to this ignorance, in part to our knowledge" [@laplaceEssaiPhilosophiqueProbabilites1814]. When, on a partly cloudy day, we say "there is a 50% chance it will rain this afternoon," we mean, given what we currently know, that rain and no rain seem about equally plausible.
+
+A different approach -- frequentist inference, which has long been widely used in science and remains common in developmental Down syndrome research -- defines probability in terms of long-run relative frequency in repeated, comparable situations [@wakefieldBayesianFrequentistRegression2013, chapter 2]: "It refers to the limit of the relative frequency of the occurrence of an event by repeating the experiment that brings about the particular event" [@spanosProbabilityTheoryStatistical2019, section 10.3.1]. From this perspective, probability statements represent long-run expectations of methods -- "estimates should be correct on average (unbiasedness), confidence intervals should cover the true parameter value 95% of the time (coverage)" [@gelmanRegressionOtherStories2020, chapter 1]. For example, a forecast of "50% chance of rain this afternoon" can be interpreted as a calibration claim: across many past occasions when this same method resulted in a 50% rain forecast, it rained about half the time.
+
+The long-run frequency perspective may be useful in settings such as industrial quality control and experimental studies, where repeated measurements under comparable conditions may be feasible, and where controlling error rates is a central goal. However, many questions in social, educational and psychological research involve small samples, complex interactions between many influences on multiple outcomes of interest, and wide variety within the populations studied [@wagenmakersBayesianInferencePsychology2018].
+
+For this study, we believe that the Bayesian interpretation of probability permits us to make statements about our parameter estimates that will readily be understood correctly by a broad range of users of our research.
+
+#### Distributions for parameter estimates
+
+In Bayesian inference, we update our prior knowledge using the observed data (where this prior information comes from is discussed below): "Bayesian inference is about updating. The core operation is taking a distribution that represents the current state of knowledge about some phenomenon of interest and updating it with recently acquired information to produce a new distribution that is more informed... the result is a *distribution* not a point estimate, meaning that uncertainty is built-in to the results as shown by how peaked or flattened this posterior distribution appears." [@gillBayesianSocialScience2024, section 4.1]
+
+@fig-bayes-update-20 illustrates the process of Bayesian updating. For a distribution of yes/no outcomes, before seeing the data we are unsure of the true distribution but suspect all no or all yes outcomes to be less likely than intermediate values. We therefore specify a weakly informative prior distribution centered on $p = 0.5$ (blue). We observe (simulate from a Bernoulli distribution) 20 outcomes where 11 are yes (green). We use Bayes theorem to obtain the posterior distribution (orange). With only 20 observations, our sample is (unsurprisingly) not centered on the true mean ($p_\text{obs} = 0.55$, $p_\text{true} = 0.65$). Even with a small sample, this particular prior only has a small effect, slightly shifting and narrowing the posterior distribution which is primarily informed by the data ($p_\text{post} = 0.54$).
+
+![**Bayesian updating** ($n = 20$). Given a prior distribution (blue) and the observed data (green), we use Bayes theorem to obtain the posterior distribution (orange).](figures/bayes_update.png){#fig-bayes-update-20}
+
+@fig-bayes-update-100 illustrates the same process with the same prior and the same true mean, but now with 100 observations. With more data, the observed mean is closer to the true mean ($p_\text{obs} = 0.61$), and the posterior distribution is more concentrated around -- and closer to -- the observed mean ($p_\text{post} = 0.61$).
+
+![**Bayesian updating** ($n = 100$). As @fig-bayes-update-20, but with 100 observations: the posterior distribution is now more concentrated around the observed mean.](figures/bayes_update_2.png){#fig-bayes-update-100}
+
+In frequentist inference, uncertainty statements are grounded in how estimation procedures would behave across repeated samples from the same data-generating process. The resulting confidence intervals are not probability statements about where the true values lie, and they do not rank some parameter values as more plausible than others [@moreyFallacyPlacingConfidence2016]. Unfortunately, it appears that frequentist confidence intervals may often be misinterpreted [@hoekstraRobustMisinterpretationConfidence2014].
+
+In contrast, Bayesian inference gives us a posterior distribution, from which we can report summaries such as the mean or median alongside uncertainty intervals that can be interpreted as direct probabilistic statements about the parameter values. It enables us to make statements such as (hypothetically) "Given our model and the data, our best estimate is that a typical 36-month-old child with Down syndrome learns about 5 new words per month. There is a 90% probability (under this model) that the typical rate is between 2 and 7 words per month." This is not a statement about long-run frequencies of estimation procedures, but rather a statement about the plausibility of parameter values given our model and data.
+
+Statements like this are direct and intuitive, and they are the type of statements that families and practitioners -- and researchers -- are likely to find useful for informing expectations and decisions: "Bayesian models lead to more intuitive interpretations, the ones scientists tend to project onto statistical results" [@mcelreathStatisticalRethinkingBayesian2020, page 13]. Bayesian inference is logically coherent, internally consistent and suitable for complex models [@mcelreathStatisticalRethinkingBayesian2020; @bernardoBayesianStatistics2025; @wagenmakersBayesianInferencePsychology2018; @wagenmakersBayesianFrequentistInference2008]:
+
+> "The Bayesian paradigm is ideally suited to the type of data analysis performed by social scientists because it recognizes the mobility of population parameters, incorporates prior knowledge that researchers possess, and updates estimates as new data are observed. Because most empirical work in the social sciences is observational rather than experimental, subjects are rarely cooperative, and systematic effects are often more elusive than in other fields, the Bayesian approach to modeling uncertainty in parameter estimates provides a more robust and realistic picture of the data generating process." [@gillBayesianSocialScience2024, page 1]
+
+#### Incorporating existing knowledge
+
+Bayesian inference requires us to specify a distribution of prior plausibility for every parameter in our model (a prior distribution, or just "prior"). A prior is a mathematical way to summarise what we consider plausible about parameter values before analysing the current data. Priors can be informed by previous research or existing knowledge among people with relevant experience and expertise, or they can be weakly informative, expressing only broad constraints (for example, ruling out implausible values) when we have little reliable prior evidence:
+
+> "Prior to posterior inference is how scientific knowledge accumulates, and prior information abounds in the social sciences. We have hundreds of years of self-aware study of the human condition and human interactions, both qualitative and quantitatively. In fact it seems daft to ignore deep literature, common wisdom, recorded history, and researcher intuition when creating statistical models to understand social science phenomena. Prior specifications can come from previous studies, conflicting theories in a given literature, researcher experience, nonparametrics and other data-oriented sources, diagnostic objectives, expert judgments, and even previous posterior distributions." [@gillBayesianSocialScience2024, section 5]
+
+When a prior is well grounded, combining it with the data can produce estimates that are more stable and often more precise than estimates based on the data alone. This is especially helpful when datasets are small or noisy and when there is a substantial existing evidence base that can reasonably inform the analysis.
+
+The requirement to specify a prior has been criticised for being "subjective" rather than derived directly from the data at hand. However, all statistical analyses require assumptions, and these assumptions are often implicit and unacknowledged. By contrast, the assumptions of Bayesian inference are explicit and open to scrutiny. We can evaluate the sensitivity of our estimates to different priors, and we can use model checking to evaluate how well our models fit the data [@gelmanBayesianWorkflow2020].
+
+> "So where do priors come from? They are both engineering assumptions, chosen to help the machine learn, and scientific assumptions, chosen to reflect what we know about a phenomenon... Within Bayesian data analysis in the natural and social sciences, the prior is considered to be just part of the model. As such it should be chosen, evaluated, and revised just like all of the other components of the model... None of this should be understood to mean that any statistical analysis is not inherently subjective, because of course it is -- lots of little subjective decisions are involved in all parts of science. It's just that priors and Bayesian data analysis are no more inherently subjective than are likelihoods and the repeat sampling assumptions required for significance testing... The fact that statistical inference uses mathematics does not imply that there is only one reasonable or useful way to conduct an analysis." [@mcelreathStatisticalRethinkingBayesian2020, page 35]
+
+For this study, Bayesian inference permits us to use prior research and existing knowledge about vocabulary development in children with Down syndrome to inform the specification of priors for our models and improve the accuracy our estimates.
+
+#### Predictive samples
+
+When we have computed posterior distributions for parameters of interest, we can use these distributions to generate predictions about unobserved (future) observations. These predictions are called "posterior *predictive* distributions."
+
+Once we have inferred a posterior distribution for the model parameters, we can propagate that uncertainty forward to make predictions about unobserved (future) observations. We draw parameter values from the posterior and, for each draw, simulate a new observation from the model. This produces a distribution of plausible future outcomes that directly reflects both randomness in the data and uncertainty about the parameters. The result is called the "posterior *predictive* distribution".
+
+We can use the posterior predictive distribution to make statements about future observations that are directly interpretable as probabilities. For example, we can say "Based on our model and the data, we estimate that there is a 90% probability that a 36-month-old child with Down syndrome will understand between 0 (zero) and 142 words." This is a statement about the plausibility of future observations given our model and data.
+
+Again, for this study, we believe that generating posterior predictive samples enables us to make statements about predicted outcomes that will readily be understood correctly by a broad range of users of our research.
+
+#### Computation
+
+While Bayesian inference has a long history [@bayesLIIEssaySolving1763; @LaplaceMemoireProbabilite; @laplaceTheorieAnalytiqueProbabilites1820], it has not been widely adopted in practice until recent decades. One reason for this is that the mathematical computations required to perform Bayesian inference with all but the simplest models are often intractable. However, advances in sampling algorithms have made it possible to perform Bayesian inference efficiently even for complex models and large datasets [@metropolisEquationStateCalculations1953; @hastingsMonteCarloSampling1970; @hoffmanNoUTurnSamplerAdaptively2014].
+
+Today, these techniques are readily accessible through open-source software packages, including Stan and PyMC [@standevelopmentteamStanLanguageReference2026; @abril-plaPyMCModernComprehensive2023] with interfaces to multiple languages, including R and Python. Helped by these and similar tools and readily available computers, Bayesian modelling and inference is now increasingly used across many disciplines, including economics, political science, ecology and anthropology, biology, neuroscience, medicine, climate science, psychology and education research [@gillBayesianModelingInference2020; @mcelreathStatisticalRethinkingBayesian2020; @bonBeingBayesian2020s2023; @pfadtMethodologicalMetamorphosisRapid2025].
+
+#### Conclusions
+
+A goal of this study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice. Empirical and statistical modelling, together with Bayesian inference, allow us to provide accurate estimates of word learning trajectories, together with intuitive uncertainty statements, and to simulate predicted outcomes under these models for children with Down syndrome at different ages to provide relevant and practical insights for families and educators.

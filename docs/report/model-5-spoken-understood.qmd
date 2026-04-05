@@ -3,15 +3,7 @@ title: "Words spoken by children with Down syndrome relative to words understood
 abstract: "*TODO*"
 ---
 
-## Empirical model
-
-[TODO]
-
-## Causal model
-
-[TODO]
-
-## Statistical model
+## Model
 
 TODO
 

@@ -3,15 +3,7 @@ title: "Words spoken by typically developing children relative to words understo
 abstract: "Summary --- *TODO*"
 ---
 
-## Empirical model
-
-[TODO]
-
-## Causal model
-
-[TODO]
-
-## Statistical model
+## Model
 
 TODO
 
