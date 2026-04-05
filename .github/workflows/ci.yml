@@ -36,3 +36,34 @@ jobs:
 
       - name: Lint
         run: ruff check src/ scripts/
+
+  model-fit-tests:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash -el {0}
+        working-directory: vocabulary-growth
+    steps:
+      - name: Checkout vocabulary-growth
+        uses: actions/checkout@v6
+        with:
+          path: vocabulary-growth
+
+      - name: Checkout research (sibling dependency)
+        uses: actions/checkout@v6
+        with:
+          repository: dseinternational/research
+          path: research
+
+      - name: Setup Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: vocabulary-growth/environment.ci.yml
+          activate-environment: dse-vocab-growth
+          miniforge-version: latest
+
+      - name: Prepare data
+        run: python scripts/prepare_data.py
+
+      - name: Fit model VG01 (dev)
+        run: python scripts/fit_model.py vg01 --config dev
