@@ -17,7 +17,7 @@ In our model (@fig-model-1-dag), $A$ represents age and $S$ represents words spo
 
 ```{dot}
 //| label: fig-model-1-dag
-//| fig-cap: "**A simple model of spoken word learning**. $A$ represents age, $O$ represents other (unmeasured) factors that are influenced by age and influence word learning, and $S$ represents words spoken."
+//| fig-cap: "**A simple model of spoken word learning**. $A$: age; $O$: other unmeasured factors; $S$: words spoken."
 //| fig-width: 2.5
 //| fig-height: 0.85
 digraph SimpleDAG {
@@ -31,7 +31,7 @@ digraph SimpleDAG {
 }
 ```
 
-Our aim is to estimate total age-associated change in spoken vocabulary. We therefore treat age as exogenous and assume no unmeasured confounding of the $A \rightarrow S$ relationship; equivalently, there are no open backdoor paths from age to spoken vocabulary.
+Our aim is to estimate the total age-associated change in spoken vocabulary. In this DAG, the causal effect of $A$ on $S$ is entirely mediated through $O$, and since $A$ is exogenous (it has no parents), there are no open backdoor paths from age to spoken vocabulary. We can therefore identify the total causal effect of age on words spoken by simply conditioning on age.
 
 ## Statistical model
 
@@ -57,7 +57,7 @@ y_i \sim \mathrm{BetaBinomial}\!\left(N_{\text{trials}},\alpha_i,\beta_i\right),
 \beta_i = (1-p_i)\,\kappa_i,
 $$
 
-where $p_i\in(0,1)$ is the latent mean probability (produced by the linear trend + GP on the logit scale) and $\kappa_i>0$ is a concentration parameter controlling dispersion. Smaller $\kappa_i$ implies greater dispersion (more heterogeneity), while larger $\kappa_i$ approaches the Binomial model.
+where $p_i\in(0,1)$ is the latent mean probability (defined in the next section via the linear trend + GP on the logit scale) and $\kappa_i>0$ is a concentration parameter controlling dispersion. Smaller $\kappa_i$ implies greater dispersion (more heterogeneity), while larger $\kappa_i$ approaches the Binomial model.
 
 We expect heterogeneity to increase with age, but not to increase indefinitely. We therefore model $\kappa$ as a monotone decreasing function of standardised age that approaches a positive lower bound:
 
@@ -67,8 +67,6 @@ $$
 $$
 
 This encodes two assumptions. First, that heterogeneity increases with age. As $b_\kappa<0$, $\exp(a_\kappa + b_\kappa z)$ decreases with age, $\kappa(z)$ decreases and dispersion increases. Second, that the rate of increase levels off. As $z\to\infty$, $\exp(a_\kappa + b_\kappa z)\to 0$ and $\kappa(z)\to\kappa_{\min}$, leading to a later-age plateau in dispersion.
-
-We assume observations are conditionally independent given the latent mean trajectory $p(z)$, dispersion $\kappa(z)$, and model parameters.
 
 ### Mean structure
 
@@ -127,11 +125,15 @@ $$
 
 Equivalently, $g \sim \mathcal{GP}(m(\cdot), \eta^2k(\cdot,\cdot))$
 
-This separation is helpful both conceptually and computationally. Conceptually, it cleanly distinguishes two roles: the length-scale $\ell$ governs how quickly deviations vary with age (smoothness and local correlation), while $\eta$ governs how large those deviations are. Computationally, factoring out the amplitude tends to improve identifiability and sampling geometry because the model can learn correlation structure (via $\ell$) without simultaneously rescaling the covariance, and the prior on $\eta$ can be specified directly in interpretable units (logit-scale deviations). In the HSGP approximation (below), this structure also works naturally with the basis-function representation, where $g_{\mathrm{unit}}$ is generated using a unit-variance kernel and then rescaled by $\eta$. (Prior distributions for $\eta$ and $\ell$ are detailed below.)
+This separation is helpful both conceptually and computationally. Conceptually, it cleanly distinguishes two roles: the length-scale $\ell$ governs how quickly deviations vary with age (smoothness and local correlation), while $\eta$ governs how large those deviations are.
+
+Computationally, factoring out the amplitude tends to improve identifiability and sampling geometry because the model can learn correlation structure (via $\ell$) without simultaneously rescaling the covariance, and the prior on $\eta$ can be specified directly in interpretable units (logit-scale deviations). In the HSGP approximation (below), this structure also works naturally with the basis-function representation, where $g_{\mathrm{unit}}$ is generated using a unit-variance kernel and then rescaled by $\eta$. (Prior distributions for $\eta$ and $\ell$ are detailed below.)
 
 The RBF kernel is suited for modelling developmental trajectories because it encodes the belief that the latent age-ability relationship varies smoothly over time while remaining flexible about the precise functional form. In particular, draws from a zero-mean Gaussian process with an RBF kernel are very smooth, which matches the expectation that vocabulary growth is driven by continuous developmental change rather than abrupt discontinuities.
 
 The RBF kernel is also stationary, meaning $k(z,z')$ depends only on $∣z-z'|$ and not on absolute age. Practically, this assumes the _local_ smoothness of departures from the mean trend is similar at (say) 36 and 72 months, while allowing overall level and variability to differ through the mean function and the age-varying dispersion $\kappa(z)$. Importantly, the RBF kernel is a universal approximator in the sense that, with sufficient data, it can represent a wide range of continuous functions, which is helpful when the true shape of the trajectory is unknown.
+
+We assume observations are conditionally independent given the latent mean trajectory $p(z)$, dispersion $\kappa(z)$, and model parameters.
 
 ### Parameters and priors
 
@@ -147,7 +149,7 @@ We select $m$ and $c$ following PyMC's hyperparameter recommendations [@abril-pl
 
 #### Length scale ($\ell$)
 
-The smoothness of the vocabulary growth curve is guided by the Gaussian process length-scale parameter $\ell$. We constrain this to represent changes occurring over 2-12 month periods (above). The prior is specified using a Beta distribution ($\ell_\text{unit}$) that favours moderate smoothness (around 4-8 months), then linearly to define the target range:
+The smoothness of the vocabulary growth curve is guided by the Gaussian process length-scale parameter $\ell$. We constrain this to represent changes occurring over 2–12 month periods. The prior is specified using a Beta distribution, $\ell_\text{unit} \sim \mathrm{Beta}(3, 3)$, which favours moderate smoothness (most prior mass falls between approximately 4 and 10 months), then linearly mapped to the target range:
 
 $$
 \ell = \ell_\text{min} + (\ell_\text{max} - \ell_\text{min}) × \ell_\text{unit}
@@ -173,13 +175,13 @@ We specify a HalfNormal distribution with $\sigma=0.4$, weakly favouring moderat
 
 #### Slope
 
-We anchor the linear trend slope using two priors - words spoken at 24 and 84 months.
+We anchor the linear trend slope using two priors — the expected proportion of words spoken at 24 and 84 months.
 
-Previous research and professional experience suggest that many children with Down syndrome will be saying very few words at 24 months, but we allow substantial uncertainty up to ~100 words:
+Previous research and professional experience suggest that many children with Down syndrome will be saying very few words at 24 months, but we allow substantial uncertainty up to ~100 words. We specify $p_{24} \sim \mathrm{Beta}(1, 15)$:
 
 ![Prior distribution for lower slope anchor (spoken words at 24 months)](figures/VG01-age-spoken-ds/p_slope_low_dist.png){#fig-slope-low width="5in"}
 
-At 84 months, previous research and professional experience suggests a wide range of ability. We are less confident about how this may be distributed, but suspect some may still be saying few, if any, words, while a few will be saying 800 words, with most somewhere in between:
+At 84 months, previous research and professional experience suggests a wide range of ability. We are less confident about how this may be distributed, but suspect some may still be saying few, if any, words, while a few will be saying 800 words, with most somewhere in between. We specify $p_{84} \sim \mathrm{Beta}(1.1, 1.1)$, which is approximately uniform:
 
 ![Prior distribution for upper slope anchor (spoken words at 84 months)](figures/VG01-age-spoken-ds/p_slope_hi_dist.png){#fig-slope-hi width="5in"}
 
@@ -212,7 +214,11 @@ $$
 b_{\mathrm{mag}}\sim \mathrm{HalfNormal}(\sigma_b),\qquad \sigma_b=0.3.
 $$
 
+We place a log-normal prior on the minimum concentration, $\kappa_{\min} \sim \mathrm{LogNormal}(\mu = \log 5,\; \sigma = 0.6)$, centring prior mass around 5 while allowing substantial right-skew uncertainty:
+
 ![Prior distribution for kappa_min](figures/VG01-age-spoken-ds/kappa_min_dist.png){#fig-kappa-min width="5in"}
+
+We place a normal prior on the log-scale intercept, $a_\kappa \sim \mathrm{Normal}(\mu = \log 8,\; \sigma = 1.0)$, which loosely centres the initial excess concentration around 8 while permitting a wide range:
 
 ![Prior distribution for a_kappa](figures/VG01-age-spoken-ds/a_kappa_dist.png){#fig-a-kappa width="5in"}
 
@@ -225,6 +231,20 @@ $$
 $$
 
 in $\kappa-\kappa_{\min}$ per 1 SD of age (about 24 months). In other words, the prior centres mass on a gradual decline in $\kappa-\kappa_{\min}$ of roughly $1-0.74\approx 0.26$ (26%) per SD, while still allowing steeper declines if supported by the data.
+
+#### Summary of parameters and priors
+
+| Parameter | Description | Prior |
+|----|----------------|------------|
+| $p_{24}$ | Expected proportion of words spoken at 24 months | $\mathrm{Beta}(1, 15)$ |
+| $p_{84}$ | Expected proportion of words spoken at 84 months | $\mathrm{Beta}(1.1, 1.1)$ |
+| $\ell_\text{unit}$ | Unit length-scale (mapped to 2–12 months) | $\mathrm{Beta}(3, 3)$ |
+| $\eta$ | GP amplitude (logit scale) | $\mathrm{HalfNormal}(\sigma = 0.4)$ |
+| $\kappa_{\min}$ | Minimum concentration (dispersion floor) | $\mathrm{LogNormal}(\mu = \log 5, \sigma = 0.6)$ |
+| $a_\kappa$ | Log-scale intercept of $\kappa(z)$ | $\mathrm{Normal}(\mu = \log 8, \sigma = 1.0)$ |
+| $b_{\mathrm{mag}}$ | Magnitude of $\kappa$ decline rate | $\mathrm{HalfNormal}(\sigma = 0.3)$ |
+
+: Prior distributions for all model parameters. {#tbl-priors}
 
 
 ## Model checks
