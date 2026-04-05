@@ -17,7 +17,7 @@ In our model (@fig-model-1-dag), $A$ represents age and $S$ represents words spo
 
 ```{dot}
 //| label: fig-model-1-dag
-//| fig-cap: "**A directed acyclic graph (DAG) defining a causal model of spoken word learning**. $A$ represents age, $O$ represents other (unmeasured) factors that are influenced by age and influence word learning, and $S$ represents words spoken."
+//| fig-cap: "**A simple model of spoken word learning**. $A$ represents age, $O$ represents other (unmeasured) factors that are influenced by age and influence word learning, and $S$ represents words spoken."
 //| fig-width: 2.5
 //| fig-height: 0.85
 digraph SimpleDAG {
@@ -99,7 +99,7 @@ $$
 \beta_0 = \text{logit}(p_{24})-\beta_1 z_a.
 $$
 
-This yields an interpretable baseline trajectory on the logit scale while allowing the GP to capture smooth deviations from the linear trend. (Prior distributions for $p_{24}$ and $p_{84}$ are detailed below.)
+This provides an interpretable baseline trajectory on the logit scale while allowing the GP to capture smooth deviations from the linear trend. (Prior distributions for $p_{24}$ and $p_{84}$ are detailed below.)
 
 The mean function $m : \mathbb{R} \to \mathbb{R}$ specifies the prior expectation of $g$ at any input:
 
