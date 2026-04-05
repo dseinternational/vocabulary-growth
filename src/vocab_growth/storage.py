@@ -18,7 +18,9 @@ def upload_to_blob_storage(output_dir: str, model_label: str) -> None:
         print(
             "  export DSERESEARCH_BLOB_CONTAINER_URL='https://<account>.blob.core.windows.net/<container>'"
         )
-        return
+        raise RuntimeError(
+            "DSERESEARCH_BLOB_CONTAINER_URL environment variable is not set."
+        )
 
     source = output_dir.replace("\\", "/").rstrip("/") + "/*"
     destination = container_url.rstrip("/") + "/projects/vocabulary-growth/output/" + model_label + "/"
