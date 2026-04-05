@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--upload",
         action="store_true",
-        help="Upload model output to Azure Blob Storage using AzCopy",
+        help="Upload model output to Azure Blob Storage",
     )
 
     freeze_support()
