@@ -3,6 +3,7 @@
 
 import os
 import subprocess
+import uuid
 
 from rich import print
 
@@ -23,7 +24,8 @@ def upload_to_blob_storage(output_dir: str, model_label: str) -> None:
         )
 
     source = output_dir.replace("\\", "/").rstrip("/") + "/*"
-    destination = container_url.rstrip("/") + "/projects/vocabulary-growth/output/" + model_label + "/"
+    run_id = uuid.uuid7()
+    destination = container_url.rstrip("/") + "/projects/vocabulary-growth/output/" + str(run_id) + "/" + model_label + "/"
 
     print(f"\n[bold green]Uploading to Azure Blob Storage: {model_label}[/bold green]")
     print(f"  Source: {source}")
