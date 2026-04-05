@@ -22,6 +22,9 @@ number-depth: 3
 bibliography: references.bib
 csl: apa.csl
 
+language:
+  crossref-ch-prefix: "Section"
+  
 book:
   output-file: vocabulary-growth-report
   title: "Vocabulary growth in children with Down syndrome"
