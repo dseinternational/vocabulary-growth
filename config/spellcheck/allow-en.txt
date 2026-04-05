@@ -9,6 +9,7 @@ estimand
 HSGP
 hyperparameters
 judgments
+Jupytext
 Kruschke
 Kucharski
 Lewandowsky
@@ -24,6 +25,7 @@ Oijen
 overfitting
 parameterisation
 preliz
+pytest
 rankdir
 spanos
 Spiegelhalter
