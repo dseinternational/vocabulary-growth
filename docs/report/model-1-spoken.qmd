@@ -169,7 +169,7 @@ where the sigmoid function compresses changes at the extremes. This implies that
 
 This is logical, given our outcome is limited to a count of 0 to 800 words. The scope for variation close to floor or ceiling is expected to be less than at the mid-point. When starting to learn their first words, children do not suddenly learn many new words at once and the scope for individual variation is limited (a compressed developmental space). As children learn more words, they may vary more in how many new words they learn in a given period of time (increased developmental diversity). As they approach the limits of the checklists, there is less scope for large gains in word counts to be recorded (compressed outcome space).
 
-We specify a HalfNormal distribution, centred around 0.5 weakly favouring moderate amplitudes without ruling out more pronounced nonlinear departures from the linear trend. At $p \approx 0.5$ (400 words), a 1-SD GP deviation of size $\eta$ corresponds to roughly $(N/4)\eta = 200\eta$ words; for $\eta \approx 0.5$, this is about 100 words.
+We specify a HalfNormal distribution with $\sigma=0.4$, weakly favouring moderate amplitudes without ruling out more pronounced nonlinear departures from the linear trend. At $p \approx 0.5$ (400 words), a 1-SD GP deviation of size $\eta$ corresponds to roughly $(N/4)\eta = 200\eta$ words; for $\eta \approx 0.5$, this is about 100 words.
 
 #### Slope
 
