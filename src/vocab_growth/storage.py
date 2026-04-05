@@ -29,14 +29,20 @@ def upload_to_blob_storage(output_dir: str, model_label: str) -> None:
     print(f"  Source: {source}")
     print(f"  Destination: {destination}")
 
-    result = subprocess.run(
-        ["azcopy", "copy", source, destination, "--recursive"],
-        check=False,
-    )
-
-    if result.returncode != 0:
-        print(
-            f"[bold red]Warning: AzCopy upload failed for {model_label} (exit code {result.returncode})[/bold red]"
+    try:
+        subprocess.run(
+            ["azcopy", "copy", source, destination, "--recursive"],
+            check=True,
         )
+    except FileNotFoundError:
+        print(
+            "[bold red]Error: `azcopy` was not found. Please install AzCopy and ensure it is available on PATH.[/bold red]"
+        )
+        raise
+    except subprocess.CalledProcessError as error:
+        print(
+            f"[bold red]Error: AzCopy upload failed for {model_label} (exit code {error.returncode}).[/bold red]"
+        )
+        raise
     else:
         print(f"[bold green]Upload complete: {model_label}[/bold green]")
