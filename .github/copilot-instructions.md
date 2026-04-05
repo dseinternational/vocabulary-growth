@@ -2,11 +2,7 @@
 
 ## Project overview
 
-This project is an exploratory study of vocabulary development in children with Down
-syndrome that aims to characterise observed trajectories of word learning, spoken and gestured
-production, and relationships between words understood and produced. The primary goal of the study
-is to provide interpretable statistics that can accurately inform expectations, intervention and teaching
-practice. We evaluate and fit these models using Bayesian inference to estimate full probability distributions for parameters of interest, using an iterative workflow.
+This project is an exploratory study of vocabulary development in children with Down syndrome that aims to characterise observed trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. The primary goal of the study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice. We evaluate and fit these models using Bayesian inference to estimate full probability distributions for parameters of interest, using an iterative workflow.
 
 The Python package `vocab_growth` (in `src/vocab_growth/`) defines a series of PyMC models that are fitted to vocabulary assessment data aggregated from multiple international studies. Reports are authored in Quarto (`.qmd`).
 
