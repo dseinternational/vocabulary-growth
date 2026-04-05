@@ -11,6 +11,8 @@ dependencies:
   - pip
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu130
+      - azure-identity
+      - azure-storage-blob
       - dcor
       - duckdb>=1.5.1
       - formulaic
