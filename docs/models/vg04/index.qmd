@@ -19,7 +19,7 @@ format:
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
 
-If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+If the model was not fitted in "reporting" mode, the results will be more approximate than when additional sampling has been performed.
 :::
 
 This model examines how age (a proxy for things that happen over time) influences words understood ($A \rightarrow U$).
