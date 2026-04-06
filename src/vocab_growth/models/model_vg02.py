@@ -936,7 +936,7 @@ def fit(config: str) -> ModelFitContext:
         "\n[green]============================================================[/green]"
     )
     print(
-        "[bold green]Fitting Model VG02: Influence of age on words understood (A → U)[/bold green]"
+        "[bold green]Fitting Model VG02: Influence of age on words understood (A -> U)[/bold green]"
     )
     print("[green]============================================================[/green]")
     print()
