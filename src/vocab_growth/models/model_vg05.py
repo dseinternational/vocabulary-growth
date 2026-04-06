@@ -826,7 +826,7 @@ def configure_model(context: ModelFitContext):
     )
     print(f"[bold yellow]eta_q_dist:[/bold yellow] {eta_q_dist.summary(mass=context.reporting.hdi)}")
 
-    p_slope_low_q_dist = pz.Beta(alpha=1.0, beta=15)
+    p_slope_low_q_dist = pz.Beta(alpha=2, beta=5)
     context.plots["p_slope_low_q_dist"] = plot_dist.plot_distribution(
         p_slope_low_q_dist, context.reporting.output_dir, "p_slope_low_q_dist"
     )
@@ -1096,9 +1096,13 @@ def diagnostics(context: ModelFitContext):
 
     context.set_trace(trace)
 
-    loocv = az.loo(context.trace)
-    context.set_loocv(loocv)
-    print(loocv)
+    loocv_s = az.loo(context.trace, var_name="y_s_obs")
+    loocv_u = az.loo(context.trace, var_name="y_u_obs")
+    context._loocv = {"y_s_obs": loocv_s, "y_u_obs": loocv_u}
+    print("LOO-CV (words spoken):")
+    print(loocv_s)
+    print("\nLOO-CV (words understood):")
+    print(loocv_u)
 
 
 def sample_posterior_predictive(context: ModelFitContext):
@@ -1218,7 +1222,7 @@ def posterior_summary(context: ModelFitContext):
 
     # Production rate summary
     q_query_median = np.median(samples.q_query, axis=1)
-    q_query_hdi = az.hdi(samples.q_query, hdi_prob=hdi_prob)
+    q_query_hdi = az.hdi(samples.q_query.T, hdi_prob=hdi_prob)
 
     summary_q = pd.DataFrame(
         {
@@ -1305,9 +1309,9 @@ def plot_production_rate(
     q_plot = samples.q_plot
 
     q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot, hdi_prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot, hdi_prob=0.75)
-    q_hdi_50 = az.hdi(q_plot, hdi_prob=0.50)
+    q_hdi = az.hdi(q_plot.T, hdi_prob=hdi_prob)
+    q_hdi_75 = az.hdi(q_plot.T, hdi_prob=0.75)
+    q_hdi_50 = az.hdi(q_plot.T, hdi_prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1350,8 +1354,8 @@ def plot_comprehension_production_gap(
     gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
 
     gap_median = np.median(gap, axis=1)
-    gap_hdi = az.hdi(gap, hdi_prob=hdi_prob)
-    gap_hdi_50 = az.hdi(gap, hdi_prob=0.50)
+    gap_hdi = az.hdi(gap.T, hdi_prob=hdi_prob)
+    gap_hdi_50 = az.hdi(gap.T, hdi_prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1442,7 +1446,7 @@ def fit(config: str) -> ModelFitContext:
     )
     print(
         "[bold green]Fitting Model VG05: Joint model of words understood and spoken"
-        " (A → U, A → S, U → S)[/bold green]"
+        " (A -> U, A -> S, U -> S)[/bold green]"
     )
     print("[green]============================================================[/green]")
     print()
