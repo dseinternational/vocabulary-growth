@@ -29,6 +29,11 @@ if __name__ == "__main__":
         type=str,
         help="Model id (vg01, vg02, vg03, vg04, vg05) or 'all'.",
     )
+    parser.add_argument(
+        "--include-traces",
+        action="store_true",
+        help="Include trace files (.nc) in the upload (excluded by default).",
+    )
 
     args = parser.parse_args()
 
@@ -51,4 +56,6 @@ if __name__ == "__main__":
             print("Run fit_model.py first to generate model output.")
             exit(1)
 
-        upload_to_blob_storage(output_dir, model_label)
+        upload_to_blob_storage(
+            output_dir, model_label, include_traces=args.include_traces
+        )

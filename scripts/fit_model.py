@@ -40,6 +40,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Upload model output to Azure Blob Storage",
     )
+    parser.add_argument(
+        "--include-traces",
+        action="store_true",
+        help="Include trace files (.nc) in the upload (excluded by default).",
+    )
 
     freeze_support()
 
@@ -76,4 +81,5 @@ if __name__ == "__main__":
             upload_to_blob_storage(
                 context.reporting.output_dir,
                 context.reporting.model_label,
+                include_traces=args.include_traces,
             )
