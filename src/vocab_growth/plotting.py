@@ -242,14 +242,10 @@ def plot_posterior_predictive_pmf(
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
     for _a, j in zip(X_query, idxs, strict=True):
-        draws = y_plot[j, :].astype(int)
+        draws = np.clip(y_plot[j, :].astype(int), x_lo, x_hi)
 
         # Empirical PMF on common support
-        counts = (
-            np.bincount(draws - x_lo, minlength=len(k))
-            if x_lo > 0
-            else np.bincount(draws, minlength=len(k))
-        )
+        counts = np.bincount(draws - x_lo, minlength=len(k))
         pmf = counts[: len(k)] / counts.sum()
         # Step line (discrete PMF)
         plt.step(k, pmf, where="mid", lw=2, label=f"{X_plot[j]:.0f}m")
