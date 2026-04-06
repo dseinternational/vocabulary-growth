@@ -1542,6 +1542,7 @@ def fit(config: str) -> Vg05Context:
         n_trials=context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_count_distributions_u",
+        x_label="Words understood (count)",
     )
 
     plotting.plot_posterior_predictive_pmf(
