@@ -221,7 +221,9 @@ def plot_posterior_predictive_pmf(
     n_trials: int,
     log_scale: bool = False,
     output_dir: str | None = None,
-    filename: str | None = None) -> Figure:
+    filename: str | None = None,
+    x_label: str = "Words spoken (count)",
+) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts as a PMF on a common support.
     """
@@ -252,7 +254,7 @@ def plot_posterior_predictive_pmf(
         # Step line (discrete PMF)
         plt.step(k, pmf, where="mid", lw=2, label=f"{X_plot[j]:.0f}m")
 
-    plt.xlabel("Words spoken (count)")
+    plt.xlabel(x_label)
     plt.ylabel("Posterior predictive probability")
     plt.title("Posterior predictive PMF at selected ages")
     plt.xlim(x_lo, x_hi)
@@ -276,7 +278,9 @@ def plot_posterior_predictive_cdf(
     y_plot: np.ndarray,
     n_trials: int,
     output_dir: str | None = None,
-    filename: str | None = None) -> Figure:
+    filename: str | None = None,
+    x_label: str = "Words spoken (count)",
+) -> Figure:
     draws_by_age = []
     plot_idx_by_age = []
 
@@ -301,7 +305,7 @@ def plot_posterior_predictive_cdf(
         cdf = np.searchsorted(draws_sorted, k, side="right") / draws_sorted.size
         plt.step(k, cdf, where="post", lw=2, label=f"{X_plot[j]:.0f}m")
 
-    plt.xlabel("Words spoken (count)")
+    plt.xlabel(x_label)
     plt.ylabel("Posterior predictive CDF  P(Y ≤ k)")
     plt.title("Posterior predictive CDFs at selected ages")
     plt.xlim(x_lo, x_hi)
@@ -400,6 +404,7 @@ def plot_posterior_predictive_median_trend(
     smooth_intervals: bool = True,
     output_dir: str | None = None,
     filename: str | None = None,
+    y_label: str = "Predicted spoken words",
 ):
     """
     Plot the posterior predictive distribution of counts as a function of age,
@@ -429,6 +434,8 @@ def plot_posterior_predictive_median_trend(
     smooth_intervals
         If True, smooth interval bounds as well as the median curve.
         If False, smooth only the median.
+    y_label
+        Label for the y-axis.
     """
     X_plot = np.asarray(X_plot).reshape(-1)
     y_plot = np.asarray(y_plot)
@@ -549,7 +556,7 @@ def plot_posterior_predictive_median_trend(
     )
 
     plt.xlabel("Age (months)")
-    plt.ylabel("Predicted spoken words")
+    plt.ylabel(y_label)
     plt.legend(loc="upper left", frameon=True)
     plt.ylim(-20, np.max(y_plot) + 50)
 
@@ -571,6 +578,7 @@ def plot_expected_learning_rate(
     savgol_window_length: int | None = None,
     savgol_polyorder: int = 3,
     smooth_intervals: bool = True,
+    y_label: str = "Estimated word score gain per month",
 ):
     """
     Plot the posterior distribution of the estimated learning rate
@@ -608,6 +616,8 @@ def plot_expected_learning_rate(
     smooth_intervals
         If True, smooth HDI bounds as well as the median curve.
         If False, smooth only the median.
+    y_label
+        Label for the y-axis.
 
     Returns
     -------
@@ -739,7 +749,7 @@ def plot_expected_learning_rate(
     )
 
     plt.xlabel("Age (months)")
-    plt.ylabel("Estimated word score gain per month")
+    plt.ylabel(y_label)
     plt.legend(loc="upper left", frameon=True)
 
     if filename is not None and output_dir is not None:
