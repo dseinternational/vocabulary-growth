@@ -1,0 +1,209 @@
+---
+title: "Model VG05: Joint model of words understood and spoken - children with Down syndrome"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-warning title="Warning: Preliminary model output"}
+
+This model output is preliminary and likely to change as the model evolves and further data are received.
+
+If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+:::
+
+This model jointly examines how age influences words understood and words spoken ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$), using a production-ratio reparameterization that enforces $p_S \leq p_U$ by construction.
+
+```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+```
+
+## Statistical model
+
+We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only one outcome is available are retained using separate observation indices.
+
+::: {.callout-note}
+
+For full details and discussion, please refer to the technical report.
+
+:::
+
+![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Priors
+
+### Understood trajectory
+
+![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.svg){#fig-ell-u .lightbox fig-align="left"}
+
+![Amplitude prior `eta_u_dist`](eta_u_dist.svg){#fig-eta-u .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.svg){#fig-slope-low-u .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.svg){#fig-slope-hi-u .lightbox fig-align="left"}
+
+### Production ratio
+
+![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.svg){#fig-ell-q .lightbox fig-align="left"}
+
+![Amplitude prior `eta_q_dist`](eta_q_dist.svg){#fig-eta-q .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.svg){#fig-slope-low-q .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.svg){#fig-slope-hi-q .lightbox fig-align="left"}
+
+### Dispersion / overdispersion -- understood
+
+![`kappa_min_u_dist`](kappa_min_u_dist.svg){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![`a_kappa_u_dist`](a_kappa_u_dist.svg){#fig-a-kappa-u .lightbox fig-align="left"}
+
+![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.svg){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+
+### Dispersion / overdispersion -- spoken
+
+![`kappa_min_s_dist`](kappa_min_s_dist.svg){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![`a_kappa_s_dist`](a_kappa_s_dist.svg){#fig-a-kappa-s .lightbox fig-align="left"}
+
+![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.svg){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+
+## Prior predictive checks
+
+### Prior samples -- words understood
+
+![Prior sample trajectories (understood)](prior_samples_u.svg){#fig-prior-samples-u .lightbox fig-align="left"}
+
+### Prior samples -- words spoken
+
+![Prior sample trajectories (spoken)](prior_samples_s.svg){#fig-prior-samples-s .lightbox fig-align="left"}
+
+### Prior samples -- production rate q(a)
+
+![Prior sample trajectories for production ratio q(a)](prior_samples_q.svg){#fig-prior-samples-q .lightbox fig-align="left"}
+
+## Data
+
+```{python}
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+## Diagnostics
+
+```{python}
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+diagnostics
+```
+
+![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![pair_plot](pair_plot.svg){#fig-pair .lightbox fig-align="left"}
+
+## Joint trajectory
+
+![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.svg){#fig-joint-trajectory .lightbox fig-align="left"}
+
+## Production ratio
+
+The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
+
+![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
+
+```{python}
+summary_q = pd.read_csv("posterior_summary_q.csv")
+summary_q
+```
+
+## Comprehension-production gap
+
+The expected difference in word counts between understanding and production.
+
+![Comprehension-production gap](comprehension_production_gap.svg){#fig-gap .lightbox fig-align="left"}
+
+## Posterior predictions -- words understood
+
+### Posterior summary table
+
+```{python}
+posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
+posterior_summary_u
+```
+
+### Posterior predictive PMF
+
+![posterior_predictive_pmf_u](posterior_predictive_pmf_u.svg){#fig-pmf-u .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![posterior_predictive_cdf_u](posterior_predictive_cdf_u.svg){#fig-cdf-u .lightbox fig-align="left"}
+
+### Count distributions by age
+
+![posterior_predictive_count_distributions_u](posterior_predictive_count_distributions_u.svg){#fig-count-dist-u .lightbox fig-align="left"}
+
+### Median trend
+
+![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.svg){#fig-trend-u .lightbox fig-align="left"}
+
+Smoothed:
+
+![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.svg){#fig-trend-u-smooth .lightbox fig-align="left"}
+
+### Learning rate
+
+![expected_learning_rate_u](expected_learning_rate_u.svg){#fig-rate-u .lightbox fig-align="left"}
+
+### Dispersion $\kappa$ -- understood
+
+![posterior_kappa_u](posterior_kappa_u.svg){#fig-kappa-u .lightbox fig-align="left"}
+
+## Posterior predictions -- words spoken
+
+### Posterior summary table
+
+```{python}
+posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
+posterior_summary_s
+```
+
+### Posterior predictive PMF
+
+![posterior_predictive_pmf_s](posterior_predictive_pmf_s.svg){#fig-pmf-s .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![posterior_predictive_cdf_s](posterior_predictive_cdf_s.svg){#fig-cdf-s .lightbox fig-align="left"}
+
+### Count distributions by age
+
+![posterior_predictive_count_distributions_s](posterior_predictive_count_distributions_s.svg){#fig-count-dist-s .lightbox fig-align="left"}
+
+### Median trend
+
+![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.svg){#fig-trend-s .lightbox fig-align="left"}
+
+Smoothed:
+
+![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.svg){#fig-trend-s-smooth .lightbox fig-align="left"}
+
+### Learning rate
+
+![expected_learning_rate_s](expected_learning_rate_s.svg){#fig-rate-s .lightbox fig-align="left"}
+
+### Dispersion $\kappa$ -- spoken
+
+![posterior_kappa_s](posterior_kappa_s.svg){#fig-kappa-s .lightbox fig-align="left"}

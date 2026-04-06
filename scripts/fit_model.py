@@ -12,7 +12,13 @@ from multiprocessing import freeze_support
 import dse_research_utils.environment.setup as setup
 from rich import print
 
-from vocab_growth.models import model_vg01, model_vg02, model_vg03, model_vg04
+from vocab_growth.models import (
+    model_vg01,
+    model_vg02,
+    model_vg03,
+    model_vg04,
+    model_vg05,
+)
 from vocab_growth.storage import upload_to_blob_storage
 
 if __name__ == "__main__":
@@ -34,6 +40,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Upload model output to Azure Blob Storage",
     )
+    parser.add_argument(
+        "--include-traces",
+        action="store_true",
+        help="Include trace files (.nc) in the upload (excluded by default).",
+    )
 
     freeze_support()
 
@@ -46,6 +57,7 @@ if __name__ == "__main__":
         "vg02": model_vg02,
         "vg03": model_vg03,
         "vg04": model_vg04,
+        "vg05": model_vg05,
     }
 
     if args.model == "all":
@@ -69,4 +81,5 @@ if __name__ == "__main__":
             upload_to_blob_storage(
                 context.reporting.output_dir,
                 context.reporting.model_label,
+                include_traces=args.include_traces,
             )

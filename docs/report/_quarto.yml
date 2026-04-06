@@ -16,6 +16,8 @@ execute:
 date: now
 
 toc: true
+toc-depth: 2
+
 number-sections: true
 number-depth: 3
 
