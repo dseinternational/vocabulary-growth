@@ -140,7 +140,7 @@ Smoothed:
 
 ### Estimated learning rate
 
-The posterior distribution of the estimated learning rate (estimated gain in understood words per month) across age. The is the derivative of the conditional expectation of the count given the latent function $f$. The posterior uncertainty bands show how that estimated rate varies across posterior draws of $f$.
+The posterior distribution of the estimated learning rate (estimated gain in understood words per month) across age. This is the derivative of the conditional expectation of the count given the latent function $f$. The posterior uncertainty bands show how that estimated rate varies across posterior draws of $f$.
 
 ![expected_learning_rate](expected_learning_rate.svg){#fig-expected-learning-rate .lightbox fig-align="left"}
 
