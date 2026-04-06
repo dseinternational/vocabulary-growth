@@ -153,3 +153,5 @@ Desktop.ini
 *.local
 .claude/settings.local.json
 /.claude
+
+/.quarto/
