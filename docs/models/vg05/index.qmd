@@ -22,7 +22,7 @@ This model output is preliminary and likely to change as the model evolves and f
 If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
 :::
 
-This model jointly examines how age influences words understood and words spoken ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$), using a production-given-comprehension reparameterization that enforces $p_S \leq p_U$ by construction.
+This model jointly examines how age influences words understood and words spoken ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$), using a production-ratio reparameterization that enforces $p_S \leq p_U$ by construction.
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -31,7 +31,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production-given-comprehension rate -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only one outcome is available are retained using separate observation indices.
+We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only one outcome is available are retained using separate observation indices.
 
 ::: {.callout-note}
 
@@ -53,7 +53,7 @@ For full details and discussion, please refer to the technical report.
 
 ![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.svg){#fig-slope-hi-u .lightbox fig-align="left"}
 
-### Production-given-comprehension rate
+### Production ratio
 
 ![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.svg){#fig-ell-q .lightbox fig-align="left"}
 
@@ -91,7 +91,7 @@ For full details and discussion, please refer to the technical report.
 
 ### Prior samples -- production rate q(a)
 
-![Prior sample trajectories for production-given-comprehension rate](prior_samples_q.svg){#fig-prior-samples-q .lightbox fig-align="left"}
+![Prior sample trajectories for production ratio q(a)](prior_samples_q.svg){#fig-prior-samples-q .lightbox fig-align="left"}
 
 ## Data
 
@@ -117,9 +117,9 @@ diagnostics
 
 ![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.svg){#fig-joint-trajectory .lightbox fig-align="left"}
 
-## Production-given-comprehension rate
+## Production ratio
 
-The production-given-comprehension rate $q(a) = P(\text{speaks} \mid \text{understands})$ represents the fraction of understood words that are spoken at each age.
+The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
 
 ![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
 
