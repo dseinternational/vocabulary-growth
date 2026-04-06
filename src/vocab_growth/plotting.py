@@ -404,7 +404,7 @@ def plot_posterior_predictive_median_trend(
     smooth_intervals: bool = True,
     output_dir: str | None = None,
     filename: str | None = None,
-    y_label: str = "Predicted spoken words",
+    y_label: str = "Predicted word count",
 ):
     """
     Plot the posterior predictive distribution of counts as a function of age,
