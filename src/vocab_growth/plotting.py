@@ -222,7 +222,7 @@ def plot_posterior_predictive_pmf(
     log_scale: bool = False,
     output_dir: str | None = None,
     filename: str | None = None,
-    x_label: str = "Words spoken (count)",
+    x_label: str = "Word count",
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts as a PMF on a common support.
