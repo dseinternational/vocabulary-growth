@@ -5,7 +5,7 @@
 Model VG05: Joint model of words understood and spoken (A → U, A → S, U → S)
 - children with Down syndrome
 
-Uses a production-given-comprehension reparameterization:
+Uses a production-ratio reparameterization:
     p_U(a) = sigmoid(f_U(a))
     q(a)   = sigmoid(h(a))       # fraction of understood words spoken
     p_S(a) = p_U(a) * q(a)       # enforces p_S <= p_U by construction
@@ -41,7 +41,7 @@ import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
-from vocab_growth.models.common import ModelFitContext
+from vocab_growth.models.common import BaseModelConfiguration, ModelFitContext
 
 EPSILON = math_constants.EPSILON
 
@@ -52,13 +52,8 @@ EPSILON = math_constants.EPSILON
 
 
 @dataclass
-class BivariateModelConfiguration:
+class BivariateModelConfiguration(BaseModelConfiguration):
     """Configuration for the bivariate (understood + spoken) model."""
-
-    slope_anchors: tuple[float, float]
-    """Reference ages (months) for the slope parameterisation."""
-    ell_months_range: tuple[int, int]
-    """Range of length-scales in months for the HSGP prior."""
 
     # Understood (U) trajectory priors
     p_slope_low_u_dist: Continuous
@@ -66,7 +61,7 @@ class BivariateModelConfiguration:
     ell_unit_u_dist: Continuous
     eta_u_dist: Continuous
 
-    # Production-given-comprehension rate (q) priors
+    # Production ratio (q) priors
     p_slope_low_q_dist: Continuous
     p_slope_hi_q_dist: Continuous
     ell_unit_q_dist: Continuous
@@ -81,21 +76,6 @@ class BivariateModelConfiguration:
     kappa_min_s_dist: Continuous
     a_kappa_s_dist: Continuous
     b_kappa_mag_s_dist: Continuous
-
-    n_plot: int
-    """Number of points for plotting the developmental trajectory."""
-    ages_query: list[int]
-    """Ages in months for querying the model."""
-
-    def __post_init__(self) -> None:
-        if len(self.slope_anchors) != 2:
-            raise ValueError("slope_anchors must be a tuple of two float values.")
-        if len(self.ell_months_range) != 2:
-            raise ValueError("ell_months_range must be a tuple of two int values.")
-        if self.n_plot <= 0:
-            raise ValueError("n_plot must be a positive integer.")
-        if not isinstance(self.ages_query, list) or len(self.ages_query) == 0:
-            raise ValueError("ages_query must be a non-empty list of integers.")
 
 
 @dataclass
@@ -158,6 +138,9 @@ class BivariateModelSamples:
     """Boolean array: True where spoken is observed, shape (n,)."""
 
 
+Vg05Context = ModelFitContext[BivariateModelConfiguration, BivariateModelSamples]
+
+
 # ============================================================
 # Data preparation
 # ============================================================
@@ -191,7 +174,9 @@ def prepare_model_data(
     n = len(analysis_df)
     n_u = int(analysis_df["understood"].notna().sum())
     n_s = int(analysis_df["spoken"].notna().sum())
-    n_both = int((analysis_df["understood"].notna() & analysis_df["spoken"].notna()).sum())
+    n_both = int(
+        (analysis_df["understood"].notna() & analysis_df["spoken"].notna()).sum()
+    )
 
     print(f"\n  Total observations:       {n}")
     print(f"  Understood observed:      {n_u}")
@@ -204,7 +189,9 @@ def prepare_model_data(
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_valid = analysis_df.loc[analysis_df["understood"].notna(), "understood"]
     y_obs_placeholder = np.zeros(n, dtype=int)
-    y_obs_placeholder[analysis_df["understood"].notna().values] = y_u_valid.values.astype(int)
+    y_obs_placeholder[analysis_df["understood"].notna().values] = (
+        y_u_valid.values.astype(int)
+    )
 
     bmd = model_data.BinomialModelData(
         X_obs=X_obs, y_obs=y_obs_placeholder, n_trials=n_trials
@@ -218,7 +205,7 @@ def prepare_model_data(
 # ============================================================
 
 
-def build_model(context: ModelFitContext):
+def build_model(context: Vg05Context):
     """Build the bivariate PyMC model."""
     config = context.model_config
 
@@ -236,12 +223,8 @@ def build_model(context: ModelFitContext):
     has_s = analysis_df["spoken"].notna().values
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(
-        analysis_df.loc[has_u, "understood"], dtype=int
-    )
-    y_s_observed = np.asarray(
-        analysis_df.loc[has_s, "spoken"], dtype=int
-    )
+    y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
+    y_s_observed = np.asarray(analysis_df.loc[has_s, "spoken"], dtype=int)
 
     idx_u = np.where(has_u)[0]
     idx_s = np.where(has_s)[0]
@@ -377,12 +360,10 @@ def build_model(context: ModelFitContext):
         g_unit_u = hsgp_u.prior("g_unit_u", X=X_all_z_data, dims="all_id")
         g_u = pm.Deterministic("g_u", eta_u * g_unit_u, dims=("all_id",))
 
-        f_u_all = pm.Deterministic(
-            "f_u_all", mean_trend_u + g_u, dims=("all_id",)
-        )
+        f_u_all = pm.Deterministic("f_u_all", mean_trend_u + g_u, dims=("all_id",))
 
         # ============================================================
-        # Production-given-comprehension rate: h(a) -> q(a) = sigmoid(h(a))
+        # Production ratio: h(a) -> q(a) = sigmoid(h(a))
         # ============================================================
 
         p_slope_low_q = config.p_slope_low_q_dist.to_pymc("p_slope_low_q")
@@ -411,9 +392,7 @@ def build_model(context: ModelFitContext):
         g_unit_q = hsgp_q.prior("g_unit_q", X=X_all_z_data, dims="all_id")
         g_q = pm.Deterministic("g_q", eta_q * g_unit_q, dims=("all_id",))
 
-        h_all = pm.Deterministic(
-            "h_all", mean_trend_q + g_q, dims=("all_id",)
-        )
+        h_all = pm.Deterministic("h_all", mean_trend_q + g_q, dims=("all_id",))
 
         # ============================================================
         # Derived quantities: p_U, q, p_S
@@ -422,12 +401,8 @@ def build_model(context: ModelFitContext):
         p_u_all = pm.Deterministic(
             "p_u_all", pm.math.sigmoid(f_u_all), dims=("all_id",)
         )
-        q_all = pm.Deterministic(
-            "q_all", pm.math.sigmoid(h_all), dims=("all_id",)
-        )
-        p_s_all = pm.Deterministic(
-            "p_s_all", p_u_all * q_all, dims=("all_id",)
-        )
+        q_all = pm.Deterministic("q_all", pm.math.sigmoid(h_all), dims=("all_id",))
+        p_s_all = pm.Deterministic("p_s_all", p_u_all * q_all, dims=("all_id",))
 
         # f_S derived for diagnostics/plotting
         p_s_all_clip = pm.math.clip(p_s_all, EPSILON, 1 - EPSILON)
@@ -440,22 +415,14 @@ def build_model(context: ModelFitContext):
         # ---- Slice into obs/plot/query ----
 
         # Understood
-        _ = pm.Deterministic(
-            "f_u_obs", f_u_all[i_obs0:i_obs1], dims=("obs_id",)
-        )
-        _ = pm.Deterministic(
-            "f_u_plot", f_u_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
+        _ = pm.Deterministic("f_u_obs", f_u_all[i_obs0:i_obs1], dims=("obs_id",))
+        _ = pm.Deterministic("f_u_plot", f_u_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic(
             "f_u_query", f_u_all[i_query0:i_query1], dims=("query_id",)
         )
 
-        p_u_obs = pm.Deterministic(
-            "p_u_obs", p_u_all[i_obs0:i_obs1], dims=("obs_id",)
-        )
-        _ = pm.Deterministic(
-            "p_u_plot", p_u_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
+        p_u_obs = pm.Deterministic("p_u_obs", p_u_all[i_obs0:i_obs1], dims=("obs_id",))
+        _ = pm.Deterministic("p_u_plot", p_u_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic(
             "p_u_query", p_u_all[i_query0:i_query1], dims=("query_id",)
         )
@@ -463,33 +430,21 @@ def build_model(context: ModelFitContext):
         # Production rate
         _ = pm.Deterministic("h_obs", h_all[i_obs0:i_obs1], dims=("obs_id",))
         _ = pm.Deterministic("h_plot", h_all[i_plot0:i_plot1], dims=("plot_id",))
-        _ = pm.Deterministic(
-            "h_query", h_all[i_query0:i_query1], dims=("query_id",)
-        )
+        _ = pm.Deterministic("h_query", h_all[i_query0:i_query1], dims=("query_id",))
 
         _ = pm.Deterministic("q_obs", q_all[i_obs0:i_obs1], dims=("obs_id",))
         _ = pm.Deterministic("q_plot", q_all[i_plot0:i_plot1], dims=("plot_id",))
-        _ = pm.Deterministic(
-            "q_query", q_all[i_query0:i_query1], dims=("query_id",)
-        )
+        _ = pm.Deterministic("q_query", q_all[i_query0:i_query1], dims=("query_id",))
 
         # Spoken (derived)
-        p_s_obs = pm.Deterministic(
-            "p_s_obs", p_s_all[i_obs0:i_obs1], dims=("obs_id",)
-        )
-        _ = pm.Deterministic(
-            "p_s_plot", p_s_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
+        p_s_obs = pm.Deterministic("p_s_obs", p_s_all[i_obs0:i_obs1], dims=("obs_id",))
+        _ = pm.Deterministic("p_s_plot", p_s_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic(
             "p_s_query", p_s_all[i_query0:i_query1], dims=("query_id",)
         )
 
-        _ = pm.Deterministic(
-            "f_s_obs", f_s_all[i_obs0:i_obs1], dims=("obs_id",)
-        )
-        _ = pm.Deterministic(
-            "f_s_plot", f_s_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
+        _ = pm.Deterministic("f_s_obs", f_s_all[i_obs0:i_obs1], dims=("obs_id",))
+        _ = pm.Deterministic("f_s_plot", f_s_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic(
             "f_s_query", f_s_all[i_query0:i_query1], dims=("query_id",)
         )
@@ -521,12 +476,8 @@ def build_model(context: ModelFitContext):
         kappa_u_obs = pm.Deterministic(
             "kappa_u_obs", kappa_u_of_z(z_obs), dims="obs_id"
         )
-        _ = pm.Deterministic(
-            "kappa_u_plot", kappa_u_of_z(z_plot), dims="plot_id"
-        )
-        _ = pm.Deterministic(
-            "kappa_u_query", kappa_u_of_z(z_query), dims="query_id"
-        )
+        _ = pm.Deterministic("kappa_u_plot", kappa_u_of_z(z_plot), dims="plot_id")
+        _ = pm.Deterministic("kappa_u_query", kappa_u_of_z(z_query), dims="query_id")
 
         # ============================================================
         # Kappa — spoken
@@ -543,12 +494,8 @@ def build_model(context: ModelFitContext):
         kappa_s_obs = pm.Deterministic(
             "kappa_s_obs", kappa_s_of_z(z_obs), dims="obs_id"
         )
-        _ = pm.Deterministic(
-            "kappa_s_plot", kappa_s_of_z(z_plot), dims="plot_id"
-        )
-        _ = pm.Deterministic(
-            "kappa_s_query", kappa_s_of_z(z_query), dims="query_id"
-        )
+        _ = pm.Deterministic("kappa_s_plot", kappa_s_of_z(z_plot), dims="plot_id")
+        _ = pm.Deterministic("kappa_s_query", kappa_s_of_z(z_query), dims="query_id")
 
         # ============================================================
         # Likelihoods — separate observation indices
@@ -686,9 +633,18 @@ def extract_model_samples(trace: InferenceData) -> BivariateModelSamples:
     kappa_s_plot = _extract_posterior(trace, "kappa_s_plot", "plot_id")
     kappa_s_query = _extract_posterior(trace, "kappa_s_query", "query_id")
 
-    # Observed data
-    y_u_obs = np.array(trace.observed_data["y_u_obs"].values, dtype=int)
-    y_s_obs = np.array(trace.observed_data["y_s_obs"].values, dtype=int)
+    # Observed data — expand to full obs_id length with NaN where unobserved
+    obs_u_mask = np.array(trace.constant_data["obs_u_mask"].values, dtype=bool)
+    obs_s_mask = np.array(trace.constant_data["obs_s_mask"].values, dtype=bool)
+    n_obs = len(obs_u_mask)
+
+    y_u_obs_raw = np.array(trace.observed_data["y_u_obs"].values, dtype=float)
+    y_u_obs = np.full(n_obs, np.nan)
+    y_u_obs[obs_u_mask] = y_u_obs_raw
+
+    y_s_obs_raw = np.array(trace.observed_data["y_s_obs"].values, dtype=float)
+    y_s_obs = np.full(n_obs, np.nan)
+    y_s_obs[obs_s_mask] = y_s_obs_raw
 
     # Posterior predictive
     y_u_plot = _extract_posterior_predictive(trace, "y_u_plot", "plot_id")
@@ -700,9 +656,6 @@ def extract_model_samples(trace: InferenceData) -> BivariateModelSamples:
     X_obs = np.array(trace.constant_data["X_obs"].values)
     X_plot = np.array(trace.constant_data["X_plot"].values)
     X_query = np.array(trace.constant_data["X_query"].values)
-
-    obs_u_mask = np.array(trace.constant_data["obs_u_mask"].values, dtype=bool)
-    obs_s_mask = np.array(trace.constant_data["obs_s_mask"].values, dtype=bool)
 
     # Standardised ages
     X_obs_z = _extract_posterior(trace, "z_obs", "obs_id")
@@ -754,7 +707,7 @@ def extract_model_samples(trace: InferenceData) -> BivariateModelSamples:
 # ============================================================
 
 
-def prepare_data(context: ModelFitContext):
+def prepare_data(context: Vg05Context):
     """Load and prepare data. Report descriptive statistics."""
     print(
         "\n[green]------------------------------------------------------------[/green]"
@@ -776,7 +729,7 @@ def prepare_data(context: ModelFitContext):
     )
 
 
-def configure_model(context: ModelFitContext):
+def configure_model(context: Vg05Context):
     """Configure priors and hyperparameters."""
     print(
         "\n[green]------------------------------------------------------------[/green]"
@@ -791,52 +744,68 @@ def configure_model(context: ModelFitContext):
     context.plots["ell_unit_u_dist"] = plot_dist.plot_distribution(
         ell_unit_u_dist, context.reporting.output_dir, "ell_unit_u_dist"
     )
-    print(f"[bold yellow]ell_unit_u_dist:[/bold yellow] {ell_unit_u_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]ell_unit_u_dist:[/bold yellow] {ell_unit_u_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     eta_u_dist = pz.HalfNormal(sigma=0.4)
     context.plots["eta_u_dist"] = plot_dist.plot_distribution(
         eta_u_dist, context.reporting.output_dir, "eta_u_dist"
     )
-    print(f"[bold yellow]eta_u_dist:[/bold yellow] {eta_u_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]eta_u_dist:[/bold yellow] {eta_u_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     # Slope priors for understood (from VG02)
     p_slope_low_u_dist = pz.Beta(alpha=1.0, beta=10)
     context.plots["p_slope_low_u_dist"] = plot_dist.plot_distribution(
         p_slope_low_u_dist, context.reporting.output_dir, "p_slope_low_u_dist"
     )
-    print(f"[bold yellow]p_slope_low_u_dist:[/bold yellow] {p_slope_low_u_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]p_slope_low_u_dist:[/bold yellow] {p_slope_low_u_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     p_slope_hi_u_dist = pz.Beta(alpha=1.1, beta=1.1)
     context.plots["p_slope_hi_u_dist"] = plot_dist.plot_distribution(
         p_slope_hi_u_dist, context.reporting.output_dir, "p_slope_hi_u_dist"
     )
-    print(f"[bold yellow]p_slope_hi_u_dist:[/bold yellow] {p_slope_hi_u_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]p_slope_hi_u_dist:[/bold yellow] {p_slope_hi_u_dist.summary(mass=context.reporting.hdi)}"
+    )
 
-    # --- Production-given-comprehension rate (q) priors ---
+    # --- Production ratio (q) priors ---
 
     ell_unit_q_dist = pz.Beta(alpha=3.0, beta=3.0)
     context.plots["ell_unit_q_dist"] = plot_dist.plot_distribution(
         ell_unit_q_dist, context.reporting.output_dir, "ell_unit_q_dist"
     )
-    print(f"[bold yellow]ell_unit_q_dist:[/bold yellow] {ell_unit_q_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]ell_unit_q_dist:[/bold yellow] {ell_unit_q_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     eta_q_dist = pz.HalfNormal(sigma=0.4)
     context.plots["eta_q_dist"] = plot_dist.plot_distribution(
         eta_q_dist, context.reporting.output_dir, "eta_q_dist"
     )
-    print(f"[bold yellow]eta_q_dist:[/bold yellow] {eta_q_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]eta_q_dist:[/bold yellow] {eta_q_dist.summary(mass=context.reporting.hdi)}"
+    )
 
-    p_slope_low_q_dist = pz.Beta(alpha=2, beta=5)
+    p_slope_low_q_dist = pz.Beta(alpha=1.0, beta=1.2)
     context.plots["p_slope_low_q_dist"] = plot_dist.plot_distribution(
         p_slope_low_q_dist, context.reporting.output_dir, "p_slope_low_q_dist"
     )
-    print(f"[bold yellow]p_slope_low_q_dist:[/bold yellow] {p_slope_low_q_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]p_slope_low_q_dist:[/bold yellow] {p_slope_low_q_dist.summary(mass=context.reporting.hdi)}"
+    )
 
-    p_slope_hi_q_dist = pz.Beta(alpha=1.1, beta=1.1)
+    p_slope_hi_q_dist = pz.Beta(alpha=1.2, beta=1.0)
     context.plots["p_slope_hi_q_dist"] = plot_dist.plot_distribution(
         p_slope_hi_q_dist, context.reporting.output_dir, "p_slope_hi_q_dist"
     )
-    print(f"[bold yellow]p_slope_hi_q_dist:[/bold yellow] {p_slope_hi_q_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]p_slope_hi_q_dist:[/bold yellow] {p_slope_hi_q_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     # --- Kappa priors — understood ---
 
@@ -844,19 +813,25 @@ def configure_model(context: ModelFitContext):
     context.plots["kappa_min_u_dist"] = plot_dist.plot_distribution(
         kappa_min_u_dist, context.reporting.output_dir, "kappa_min_u_dist"
     )
-    print(f"[bold yellow]kappa_min_u_dist:[/bold yellow] {kappa_min_u_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]kappa_min_u_dist:[/bold yellow] {kappa_min_u_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     a_kappa_u_dist = pz.Normal(mu=np.log(8.0), sigma=1.0)
     context.plots["a_kappa_u_dist"] = plot_dist.plot_distribution(
         a_kappa_u_dist, context.reporting.output_dir, "a_kappa_u_dist"
     )
-    print(f"[bold yellow]a_kappa_u_dist:[/bold yellow] {a_kappa_u_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]a_kappa_u_dist:[/bold yellow] {a_kappa_u_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     b_kappa_mag_u_dist = pz.HalfNormal(sigma=0.3)
     context.plots["b_kappa_mag_u_dist"] = plot_dist.plot_distribution(
         b_kappa_mag_u_dist, context.reporting.output_dir, "b_kappa_mag_u_dist"
     )
-    print(f"[bold yellow]b_kappa_mag_u_dist:[/bold yellow] {b_kappa_mag_u_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]b_kappa_mag_u_dist:[/bold yellow] {b_kappa_mag_u_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     # --- Kappa priors — spoken ---
 
@@ -864,19 +839,25 @@ def configure_model(context: ModelFitContext):
     context.plots["kappa_min_s_dist"] = plot_dist.plot_distribution(
         kappa_min_s_dist, context.reporting.output_dir, "kappa_min_s_dist"
     )
-    print(f"[bold yellow]kappa_min_s_dist:[/bold yellow] {kappa_min_s_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]kappa_min_s_dist:[/bold yellow] {kappa_min_s_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     a_kappa_s_dist = pz.Normal(mu=np.log(8.0), sigma=1.0)
     context.plots["a_kappa_s_dist"] = plot_dist.plot_distribution(
         a_kappa_s_dist, context.reporting.output_dir, "a_kappa_s_dist"
     )
-    print(f"[bold yellow]a_kappa_s_dist:[/bold yellow] {a_kappa_s_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]a_kappa_s_dist:[/bold yellow] {a_kappa_s_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     b_kappa_mag_s_dist = pz.HalfNormal(sigma=0.3)
     context.plots["b_kappa_mag_s_dist"] = plot_dist.plot_distribution(
         b_kappa_mag_s_dist, context.reporting.output_dir, "b_kappa_mag_s_dist"
     )
-    print(f"[bold yellow]b_kappa_mag_s_dist:[/bold yellow] {b_kappa_mag_s_dist.summary(mass=context.reporting.hdi)}")
+    print(
+        f"[bold yellow]b_kappa_mag_s_dist:[/bold yellow] {b_kappa_mag_s_dist.summary(mass=context.reporting.hdi)}"
+    )
 
     # --- Configuration object ---
 
@@ -911,7 +892,7 @@ def configure_model(context: ModelFitContext):
     context.set_model_config(config)
 
 
-def prior_predictive_checks(context: ModelFitContext):
+def prior_predictive_checks(context: Vg05Context):
     """Run prior predictive checks."""
     print(
         "\n[green]------------------------------------------------------------[/green]"
@@ -982,22 +963,19 @@ def prior_predictive_checks(context: ModelFitContext):
     X_plot_vals = prior_samples.constant_data["X_plot"].values
     n_curves = min(500, q_plot_samples.shape[1])
     for i in range(n_curves):
-        ax.plot(X_plot_vals, q_plot_samples.values[:, i], alpha=0.01, color="C2")
+        ax.plot(X_plot_vals, q_plot_samples.values[:, i], alpha=0.01)
     ax.set_xlabel("Age (months)")
-    ax.set_ylabel("q(a) = P(speaks | understands)")
+    ax.set_ylabel("q(a) = p_S(a) / p_U(a)")
     ax.set_ylim(0, 1)
-    ax.set_title("Prior samples: production-given-comprehension rate")
     fig.savefig(
         os.path.join(context.reporting.output_dir, "prior_samples_q.png"), dpi=300
     )
-    fig.savefig(
-        os.path.join(context.reporting.output_dir, "prior_samples_q.svg")
-    )
+    fig.savefig(os.path.join(context.reporting.output_dir, "prior_samples_q.svg"))
     context.plots["prior_samples_q"] = fig
     plt.close()
 
 
-def sample(context: ModelFitContext):
+def sample(context: Vg05Context):
     """Draw samples from the posterior using MCMC."""
     print(
         "\n[green]------------------------------------------------------------[/green]"
@@ -1027,7 +1005,7 @@ def sample(context: ModelFitContext):
     print("[bold green]Posterior sampling completed.[/bold green]")
 
 
-def diagnostics(context: ModelFitContext):
+def diagnostics(context: Vg05Context):
     """Run diagnostics on the posterior samples."""
     print(
         "\n[green]------------------------------------------------------------[/green]"
@@ -1098,14 +1076,14 @@ def diagnostics(context: ModelFitContext):
 
     loocv_s = az.loo(context.trace, var_name="y_s_obs")
     loocv_u = az.loo(context.trace, var_name="y_u_obs")
-    context._loocv = {"y_s_obs": loocv_s, "y_u_obs": loocv_u}
+    context.set_loocv({"y_s_obs": loocv_s, "y_u_obs": loocv_u})
     print("LOO-CV (words spoken):")
     print(loocv_s)
     print("\nLOO-CV (words understood):")
     print(loocv_u)
 
 
-def sample_posterior_predictive(context: ModelFitContext):
+def sample_posterior_predictive(context: Vg05Context):
     """Sample from the posterior predictive distribution."""
     print(
         "\n[green]------------------------------------------------------------[/green]"
@@ -1167,8 +1145,12 @@ def sample_posterior_predictive(context: ModelFitContext):
         trace = pm.sample_posterior_predictive(
             context.trace,
             var_names=[
-                "y_u_plot", "y_u_query", "y_u_obs",
-                "y_s_plot", "y_s_query", "y_s_obs",
+                "y_u_plot",
+                "y_u_query",
+                "y_u_obs",
+                "y_s_plot",
+                "y_s_query",
+                "y_s_obs",
             ],
             extend_inferencedata=True,
             random_seed=context.sampling.random_seed,
@@ -1182,7 +1164,7 @@ def sample_posterior_predictive(context: ModelFitContext):
     context.set_model_samples(sample_data)
 
 
-def posterior_summary(context: ModelFitContext):
+def posterior_summary(context: Vg05Context):
     """Compute and store the posterior summary tables at query ages."""
     samples = context.model_samples
     n_trials = context.model_data.n_trials
@@ -1279,12 +1261,12 @@ def plot_joint_trajectory(
 
     # Observed data
     X_obs = samples.X_obs
-    if samples.obs_u_mask.any():
-        obs_u_ages = X_obs[samples.obs_u_mask]
-        ax.scatter(obs_u_ages, samples.y_u_obs, s=10, alpha=0.2, color="C0")
-    if samples.obs_s_mask.any():
-        obs_s_ages = X_obs[samples.obs_s_mask]
-        ax.scatter(obs_s_ages, samples.y_s_obs, s=10, alpha=0.2, color="C1")
+    u_mask = ~np.isnan(samples.y_u_obs)
+    if u_mask.any():
+        ax.scatter(X_obs[u_mask], samples.y_u_obs[u_mask], s=10, alpha=0.2, color="C0")
+    s_mask = ~np.isnan(samples.y_s_obs)
+    if s_mask.any():
+        ax.scatter(X_obs[s_mask], samples.y_s_obs[s_mask], s=10, alpha=0.2, color="C1")
 
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Word count")
@@ -1304,7 +1286,7 @@ def plot_production_rate(
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot the posterior of q(a) = P(speaks | understands) over age."""
+    """Plot the posterior of the production ratio q(a) = p_S(a) / p_U(a) over age."""
     X_plot = samples.X_plot
     q_plot = samples.q_plot
 
@@ -1316,24 +1298,33 @@ def plot_production_rate(
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     ax.fill_between(
-        X_plot, q_hdi[:, 0], q_hdi[:, 1],
-        alpha=0.20, label=f"{int(hdi_prob * 100)}% HDI",
+        X_plot,
+        q_hdi[:, 0],
+        q_hdi[:, 1],
+        alpha=0.20,
+        label=f"{int(hdi_prob * 100)}% HDI",
     )
     ax.fill_between(
-        X_plot, q_hdi_75[:, 0], q_hdi_75[:, 1],
-        alpha=0.25, label="75% HDI",
+        X_plot,
+        q_hdi_75[:, 0],
+        q_hdi_75[:, 1],
+        alpha=0.25,
+        label="75% HDI",
     )
     ax.fill_between(
-        X_plot, q_hdi_50[:, 0], q_hdi_50[:, 1],
-        alpha=0.30, label="50% HDI",
+        X_plot,
+        q_hdi_50[:, 0],
+        q_hdi_50[:, 1],
+        alpha=0.30,
+        label="50% HDI",
     )
     ax.plot(X_plot, q_median, lw=3, label="Median q(a)")
 
     ax.set_xlabel("Age (months)")
-    ax.set_ylabel("q(a) = P(speaks | understands)")
+    ax.set_ylabel("q(a) = p_S(a) / p_U(a)")
     ax.set_ylim(0, 1)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Production-given-comprehension rate")
+    ax.set_title("Production ratio q(a)")
 
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
@@ -1360,12 +1351,18 @@ def plot_comprehension_production_gap(
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     ax.fill_between(
-        X_plot, gap_hdi[:, 0], gap_hdi[:, 1],
-        alpha=0.20, label=f"{int(hdi_prob * 100)}% HDI",
+        X_plot,
+        gap_hdi[:, 0],
+        gap_hdi[:, 1],
+        alpha=0.20,
+        label=f"{int(hdi_prob * 100)}% HDI",
     )
     ax.fill_between(
-        X_plot, gap_hdi_50[:, 0], gap_hdi_50[:, 1],
-        alpha=0.30, label="50% HDI",
+        X_plot,
+        gap_hdi_50[:, 0],
+        gap_hdi_50[:, 1],
+        alpha=0.30,
+        label="50% HDI",
     )
     ax.plot(X_plot, gap_median, lw=3, label="Median gap")
 
@@ -1386,7 +1383,7 @@ def plot_comprehension_production_gap(
 # ============================================================
 
 
-def report(context: ModelFitContext):
+def report(context: Vg05Context):
     """Copy output artefacts to the report directory."""
 
     REPORT_OUTPUT_DIR = os.path.join(
@@ -1440,7 +1437,7 @@ def report(context: ModelFitContext):
 # ============================================================
 
 
-def fit(config: str) -> ModelFitContext:
+def fit(config: str) -> Vg05Context:
     print(
         "\n[green]============================================================[/green]"
     )
@@ -1467,7 +1464,7 @@ def fit(config: str) -> ModelFitContext:
     print()
     package_metadata.report_package_versions(package_list)
 
-    context = ModelFitContext(
+    context: Vg05Context = ModelFitContext(
         reporting=reporting.ReportingConfiguration(
             model_name="VG05",
             config_name="age-understood-spoken-ds",
@@ -1505,31 +1502,37 @@ def fit(config: str) -> ModelFitContext:
 
     # ---- Joint trajectory plot ----
 
-    plot_joint_trajectory(
+    fig = plot_joint_trajectory(
         samples,
         n_trials=context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="joint_trajectory",
     )
+    context.plots["joint_trajectory"] = fig
+    plt.close(fig)
 
     # ---- Production rate q(a) ----
 
-    plot_production_rate(
+    fig = plot_production_rate(
         samples,
         hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
         filename="production_rate",
     )
+    context.plots["production_rate"] = fig
+    plt.close(fig)
 
     # ---- Comprehension-production gap ----
 
-    plot_comprehension_production_gap(
+    fig = plot_comprehension_production_gap(
         samples,
         n_trials=context.model_data.n_trials,
         hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
         filename="comprehension_production_gap",
     )
+    context.plots["comprehension_production_gap"] = fig
+    plt.close(fig)
 
     # ---- Per-outcome plots: understood ----
 
@@ -1542,7 +1545,9 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_posterior_predictive_pmf(
-        samples.X_query, samples.X_plot, samples.y_u_plot,
+        samples.X_query,
+        samples.X_plot,
+        samples.y_u_plot,
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_pmf_u",
@@ -1550,7 +1555,9 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_posterior_predictive_cdf(
-        samples.X_query, samples.X_plot, samples.y_u_plot,
+        samples.X_query,
+        samples.X_plot,
+        samples.y_u_plot,
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_cdf_u",
@@ -1558,24 +1565,32 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot, samples.y_u_plot,
-        analysis_df.loc[has_u, "age"], analysis_df.loc[has_u, "understood"],
+        samples.X_plot,
+        samples.y_u_plot,
+        analysis_df.loc[has_u, "age"],
+        analysis_df.loc[has_u, "understood"],
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_median_trend_u",
         y_label="Predicted words understood",
     )
 
     plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot, samples.y_u_plot,
-        analysis_df.loc[has_u, "age"], analysis_df.loc[has_u, "understood"],
-        smooth=True, savgol_window_length=15, savgol_polyorder=3, smooth_intervals=True,
+        samples.X_plot,
+        samples.y_u_plot,
+        analysis_df.loc[has_u, "age"],
+        analysis_df.loc[has_u, "understood"],
+        smooth=True,
+        savgol_window_length=15,
+        savgol_polyorder=3,
+        smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_median_trend_u_smoothed",
         y_label="Predicted words understood",
     )
 
     plotting.plot_expected_learning_rate(
-        samples.X_plot, samples.f_u_plot,
+        samples.X_plot,
+        samples.f_u_plot,
         n_trials=context.model_data.n_trials,
         hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
@@ -1584,18 +1599,24 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_expected_learning_rate(
-        samples.X_plot, samples.f_u_plot,
+        samples.X_plot,
+        samples.f_u_plot,
         n_trials=context.model_data.n_trials,
         hdi_prob=context.reporting.hdi,
-        smooth=True, savgol_window_length=15, savgol_polyorder=3, smooth_intervals=True,
+        smooth=True,
+        savgol_window_length=15,
+        savgol_polyorder=3,
+        smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate_u_smoothed",
         y_label="Estimated understood word gain per month",
     )
 
     plotting.plot_posterior_kappa(
-        samples.X_plot, samples.kappa_u_plot,
-        samples.X_query, samples.kappa_u_query,
+        samples.X_plot,
+        samples.kappa_u_plot,
+        samples.X_query,
+        samples.kappa_u_query,
         n_trials=context.model_data.n_trials,
         hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
@@ -1613,7 +1634,9 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_posterior_predictive_pmf(
-        samples.X_query, samples.X_plot, samples.y_s_plot,
+        samples.X_query,
+        samples.X_plot,
+        samples.y_s_plot,
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_pmf_s",
@@ -1621,7 +1644,9 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_posterior_predictive_cdf(
-        samples.X_query, samples.X_plot, samples.y_s_plot,
+        samples.X_query,
+        samples.X_plot,
+        samples.y_s_plot,
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_cdf_s",
@@ -1629,24 +1654,32 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot, samples.y_s_plot,
-        analysis_df.loc[has_s, "age"], analysis_df.loc[has_s, "spoken"],
+        samples.X_plot,
+        samples.y_s_plot,
+        analysis_df.loc[has_s, "age"],
+        analysis_df.loc[has_s, "spoken"],
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_median_trend_s",
         y_label="Predicted words spoken",
     )
 
     plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot, samples.y_s_plot,
-        analysis_df.loc[has_s, "age"], analysis_df.loc[has_s, "spoken"],
-        smooth=True, savgol_window_length=15, savgol_polyorder=3, smooth_intervals=True,
+        samples.X_plot,
+        samples.y_s_plot,
+        analysis_df.loc[has_s, "age"],
+        analysis_df.loc[has_s, "spoken"],
+        smooth=True,
+        savgol_window_length=15,
+        savgol_polyorder=3,
+        smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_median_trend_s_smoothed",
         y_label="Predicted words spoken",
     )
 
     plotting.plot_expected_learning_rate(
-        samples.X_plot, samples.f_s_plot,
+        samples.X_plot,
+        samples.f_s_plot,
         n_trials=context.model_data.n_trials,
         hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
@@ -1655,18 +1688,24 @@ def fit(config: str) -> ModelFitContext:
     )
 
     plotting.plot_expected_learning_rate(
-        samples.X_plot, samples.f_s_plot,
+        samples.X_plot,
+        samples.f_s_plot,
         n_trials=context.model_data.n_trials,
         hdi_prob=context.reporting.hdi,
-        smooth=True, savgol_window_length=15, savgol_polyorder=3, smooth_intervals=True,
+        smooth=True,
+        savgol_window_length=15,
+        savgol_polyorder=3,
+        smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate_s_smoothed",
         y_label="Estimated spoken word gain per month",
     )
 
     plotting.plot_posterior_kappa(
-        samples.X_plot, samples.kappa_s_plot,
-        samples.X_query, samples.kappa_s_query,
+        samples.X_plot,
+        samples.kappa_s_plot,
+        samples.X_query,
+        samples.kappa_s_query,
         n_trials=context.model_data.n_trials,
         hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
