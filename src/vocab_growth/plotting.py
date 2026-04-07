@@ -124,9 +124,11 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     hdi_prob: float = 0.89,
     eti_prob: float | None = None,
     output_dir: str | None = None,
-    filename: str | None = None) -> Figure:
+    filename: str | None = None,
+    x_label: str = "Words spoken",
+) -> Figure:
     """
-    For each query age, plot the posterior predictive distribution of counts (words spoken), as a histogram.
+    For each query age, plot the posterior predictive distribution of counts, as a histogram.
     """
     bins = np.arange(0, n_trials + bin_width + 1, bin_width)
     centres = (bins[:-1] + bins[1:]) / 2
@@ -204,7 +206,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
         axes[k].axis("off")
 
     for ax in axes[max(0, len(axes) - plot_cols) :]:
-        ax.set_xlabel(f"Words spoken (bins of {bin_width})")
+        ax.set_xlabel(f"{x_label} (bins of {bin_width})")
 
     fig.suptitle("Posterior predictive distributions at query ages", y=1.02)
 

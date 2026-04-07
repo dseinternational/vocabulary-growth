@@ -1378,6 +1378,57 @@ def plot_comprehension_production_gap(
     return fig
 
 
+def plot_understood_vs_spoken(
+    samples: BivariateModelSamples,
+    n_trials: int,
+    hdi_prob: float = 0.90,
+    output_dir: str | None = None,
+    filename: str | None = None,
+):
+    """Plot posterior expected words understood (x) vs words spoken (y)."""
+    E_u = samples.p_u_plot * n_trials  # (n_plot, n_samples)
+    E_s = samples.p_s_plot * n_trials
+
+    E_u_median = np.median(E_u, axis=1)
+    E_s_median = np.median(E_s, axis=1)
+
+    E_s_hdi = az.hdi(E_s.T, hdi_prob=hdi_prob)
+    E_s_hdi_50 = az.hdi(E_s.T, hdi_prob=0.50)
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+
+    ax.fill_between(
+        E_u_median,
+        E_s_hdi[:, 0],
+        E_s_hdi[:, 1],
+        alpha=0.20,
+        label=f"{int(hdi_prob * 100)}% HDI",
+    )
+    ax.fill_between(
+        E_u_median,
+        E_s_hdi_50[:, 0],
+        E_s_hdi_50[:, 1],
+        alpha=0.30,
+        label="50% HDI",
+    )
+    ax.plot(E_u_median, E_s_median, lw=3, label="Median")
+
+    # Reference line: understood = spoken
+    limit = max(E_u_median.max(), E_s_median.max()) * 1.05
+    ax.plot([0, limit], [0, limit], ls="--", lw=1, color="grey", label="y = x")
+
+    ax.set_xlabel("E[words understood]")
+    ax.set_ylabel("E[words spoken]")
+    ax.set_title("Expected words understood vs spoken")
+    ax.legend(loc="upper left", frameon=True)
+
+    if output_dir is not None and filename is not None:
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+
+    return fig
+
+
 # ============================================================
 # Report
 # ============================================================
@@ -1532,6 +1583,18 @@ def fit(config: str) -> Vg05Context:
         filename="comprehension_production_gap",
     )
     context.plots["comprehension_production_gap"] = fig
+    plt.close(fig)
+
+    # ---- Understood vs spoken ----
+
+    fig = plot_understood_vs_spoken(
+        samples,
+        n_trials=context.model_data.n_trials,
+        hdi_prob=context.reporting.hdi,
+        output_dir=context.reporting.output_dir,
+        filename="understood_vs_spoken",
+    )
+    context.plots["understood_vs_spoken"] = fig
     plt.close(fig)
 
     # ---- Per-outcome plots: understood ----
