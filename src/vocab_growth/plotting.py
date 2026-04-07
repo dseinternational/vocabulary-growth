@@ -125,7 +125,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     eti_prob: float | None = None,
     output_dir: str | None = None,
     filename: str | None = None,
-    x_label: str = "Words spoken",
+    x_label: str = "Word count",
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts, as a histogram.

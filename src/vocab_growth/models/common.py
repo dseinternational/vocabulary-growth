@@ -967,7 +967,7 @@ def posterior_summary(context: ModelFitContext):
     )
 
 
-def run_standard_plots(context: ModelFitContext):
+def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word count"):
     """
     Run the standard set of posterior predictive plots for single-outcome models.
     """
@@ -975,8 +975,10 @@ def run_standard_plots(context: ModelFitContext):
         X_query=context.model_samples.X_query,
         y_query=context.model_samples.y_query,
         n_trials=context.model_data.n_trials,
+        hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_count_distributions",
+        x_label=outcome_label,
     )
 
     plotting.plot_posterior_predictive_pmf(
@@ -1165,7 +1167,7 @@ def fit_single_outcome_model(
 
     posterior_summary(context)
 
-    run_standard_plots(context)
+    run_standard_plots(context, outcome_label=outcome_label)
 
     report(context)
 
