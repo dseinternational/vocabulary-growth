@@ -3,11 +3,7 @@
 > [!WARNING]
 > This is work in progress. All data and models are preliminary.
 
-This repository hosts an exploratory study of vocabulary development in children with Down
-syndrome that aims to characterise observed trajectories of word learning, spoken and gestured
-production, and relationships between words understood and produced. The primary goal of the study
-is to provide interpretable statistics that can accurately inform expectations, intervention and teaching
-practice.
+This repository hosts an exploratory study of vocabulary development in children with Down syndrome that aims to characterise observed trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. The primary goal of the study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice.
 
 ## Getting started
 
