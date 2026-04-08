@@ -25,12 +25,12 @@ vocab_us_02_df = pd.read_csv("./data/vocab_data_us_02.csv")
 vocab_to_merge = vocab_uk_01_df[["subject_id", "age", "understood", "spoken"]].copy()
 vocab_to_merge["study"] = 1
 
-edg_to_merge = (
-    vocab_uk_02_df[["subject_id", "age_in_months", "understood", "vocabusay"]]
-    .rename(columns={"age_in_months": "age", "vocabusay": "spoken"})
+edg_early_read_to_merge = (
+    vocab_uk_02_df[["subject_id", "age", "comprehension", "spoken"]]
+    .rename(columns={"comprehension": "understood"})
     .copy()
 )
-edg_to_merge["study"] = 2
+edg_early_read_to_merge["study"] = 2
 
 ireland_t1_to_merge = (
     vocab_ie_01_df[
@@ -85,7 +85,7 @@ vocab_us_02_to_merge["study"] = 8
 merged_df = pd.concat(
     [
         vocab_to_merge,
-        edg_to_merge,
+        edg_early_read_to_merge,
         ireland_t1_to_merge,
         ireland_t2_to_merge,
         vocab_uk_03_to_merge,
@@ -197,13 +197,17 @@ con.execute(
                WHEN vuk2.gender = 0 THEN 'M'
                WHEN vuk2.gender = 1 THEN 'F'
                ELSE NULL
-               END            as sex,
-           vuk2.age_in_months as age,
-           vuk2.understood,
-           vuk2.vocabusay     as spoken,
-           vuk2.vocabusign    as signed,
-           vuk2.says_or_signs as produced,
-           800                as survey_vocab_max
+           END            as sex,
+           vuk2.age age,
+           vuk2.comprehension as understood,
+           vuk2.spoken,
+           vuk2.signed,
+           vuk2.production as produced,
+           CASE
+               WHEN vuk2.form = 'DSE' THEN 800
+               WHEN vuk2.form = 'Oxford_CDI' THEN 428
+               ELSE NULL
+           END                as survey_vocab_max
     FROM vocab_uk_02 as vuk2
     UNION
     SELECT 'ie_01'                                                   as study,
