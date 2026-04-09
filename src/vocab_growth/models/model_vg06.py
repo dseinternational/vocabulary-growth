@@ -41,7 +41,7 @@ from rich.pretty import pprint
 import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
-from vocab_growth.models.common import BaseModelConfiguration, ModelFitContext
+from vocab_growth.models.common import BaseModelConfiguration, ModelFitContext, get_hsgp_hyperparams
 
 EPSILON = math_constants.EPSILON
 
@@ -567,32 +567,6 @@ def build_model(context: Vg06Context):
     )
 
     context.set_model(model_pm, variables)
-
-
-# ============================================================
-# HSGP hyperparameters
-# ============================================================
-
-
-def get_hsgp_hyperparams(X_obs_z, ell_range_z):
-    """Compute HSGP basis size and boundary factor."""
-    x_min = float(np.min(X_obs_z))
-    x_max = float(np.max(X_obs_z))
-
-    ell_low_z = ell_range_z[0]
-    ell_high_z = ell_range_z[1]
-
-    m, c = pm.gp.hsgp_approx.approx_hsgp_hyperparams(
-        x_range=[x_min, x_max],
-        lengthscale_range=[ell_low_z, ell_high_z],
-        cov_func="expquad",
-    )
-
-    S = max(abs(x_min), abs(x_max))
-    L = [S * c]
-    M = [m]
-
-    return L, M
 
 
 # ============================================================

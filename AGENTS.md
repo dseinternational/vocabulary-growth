@@ -77,7 +77,7 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 - Models use **PyMC** with the **nutpie** sampler and **HSGP** (Hilbert-Space Gaussian Process) approximations for scalable nonparametric mean functions.
 - The likelihood is **Beta-Binomial** with age-varying dispersion.
 
-The four models differ in which outcome and population they target:
+The six models differ in which outcome and population they target:
 
 | Model | Outcome          | Population           |
 | ----- | ---------------- | -------------------- |
