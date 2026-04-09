@@ -18,6 +18,7 @@ from vocab_growth.models import (
     model_vg03,
     model_vg04,
     model_vg05,
+    model_vg06,
 )
 from vocab_growth.storage import upload_to_blob_storage
 
@@ -58,6 +59,7 @@ if __name__ == "__main__":
         "vg03": model_vg03,
         "vg04": model_vg04,
         "vg05": model_vg05,
+        "vg06": model_vg06,
     }
 
     if args.model == "all":

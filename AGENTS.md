@@ -52,7 +52,7 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload]
 ```
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, or `all`.
+- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg06`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after fitting.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
@@ -77,7 +77,7 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 - Models use **PyMC** with the **nutpie** sampler and **HSGP** (Hilbert-Space Gaussian Process) approximations for scalable nonparametric mean functions.
 - The likelihood is **Beta-Binomial** with age-varying dispersion.
 
-The four models differ in which outcome and population they target:
+The six models differ in which outcome and population they target:
 
 | Model | Outcome          | Population           |
 | ----- | ---------------- | -------------------- |
@@ -85,6 +85,8 @@ The four models differ in which outcome and population they target:
 | VG02  | Words understood | Down syndrome        |
 | VG03  | Words spoken     | Typically developing |
 | VG04  | Words understood | Typically developing |
+| VG05  | Words understood + spoken (joint) | Down syndrome |
+| VG06  | Words understood + spoken (joint) | Typically developing |
 
 ### Shared utilities (`dse_research_utils`)
 
