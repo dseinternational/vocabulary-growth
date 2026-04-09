@@ -25,6 +25,5 @@ dependencies:
       - seaborn>=0.13.2
       - setuptools>=82.0.1
       - xarray
-      - zarr
       - -e ../research/src/python
       - -e ./
