@@ -18,6 +18,7 @@ MODEL_CONFIGS = {
     "vg03": ("VG03", "age-spoken-td"),
     "vg04": ("VG04", "age-understood-td"),
     "vg05": ("VG05", "age-understood-spoken-ds"),
+    "vg06": ("VG06", "age-understood-spoken-td"),
 }
 
 if __name__ == "__main__":
@@ -27,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "model",
         type=str,
-        help="Model id (vg01, vg02, vg03, vg04, vg05) or 'all'.",
+        help="Model id (vg01, vg02, vg03, vg04, vg05, vg06) or 'all'.",
     )
     parser.add_argument(
         "--include-traces",
