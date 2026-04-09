@@ -41,7 +41,11 @@ from rich.pretty import pprint
 import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
-from vocab_growth.models.common import BaseModelConfiguration, ModelFitContext, get_hsgp_hyperparams
+from vocab_growth.models.common import (
+    BaseModelConfiguration,
+    ModelFitContext,
+    get_hsgp_hyperparams,
+)
 
 EPSILON = math_constants.EPSILON
 
