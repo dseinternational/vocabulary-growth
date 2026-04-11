@@ -1306,9 +1306,9 @@ def plot_production_rate_predictive(
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot the posterior predictive production ratio y_S / y_U with 50% and 75% HDI bands."""
+    """Plot the model-implied production ratio p_S / p_U with 50% and 75% HDI bands."""
     X_plot = samples.X_plot
-    ratio_plot = samples.y_s_plot / np.maximum(samples.y_u_plot, 1)
+    ratio_plot = samples.p_s_plot / np.maximum(samples.p_u_plot, EPSILON)
 
     ratio_median = np.median(ratio_plot, axis=1)
     ratio_hdi_75 = az.hdi(ratio_plot.T, hdi_prob=0.75)
