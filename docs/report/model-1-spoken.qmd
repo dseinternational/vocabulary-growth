@@ -145,7 +145,7 @@ We select $m$ and $c$ following PyMC's hyperparameter recommendations [@abril-pl
 
 #### Length scale ($\ell$)
 
-The smoothness of the vocabulary growth curve is guided by the Gaussian process length-scale parameter $\ell$. We constrain this to represent changes occurring over 2–12 month periods. The prior is specified using a Beta distribution, $\ell_\text{unit} \sim \mathrm{Beta}(3, 3)$, which favours moderate smoothness (most prior mass falls between approximately 4 and 10 months), then linearly mapped to the target range:
+The smoothness of the vocabulary growth curve is guided by the Gaussian process length-scale parameter $\ell$. We constrain this to represent changes occurring over 6–18 month periods. The prior is specified using a Beta distribution, $\ell_\text{unit} \sim \mathrm{Beta}(3, 3)$, which favours moderate smoothness (most prior mass falls between approximately 8 and 16 months), then linearly mapped to the target range:
 
 $$
 \ell = \ell_\text{min} + (\ell_\text{max} - \ell_\text{min}) × \ell_\text{unit}
@@ -232,7 +232,7 @@ in $\kappa-\kappa_{\min}$ per 1 SD of age (about 24 months). In other words, the
 |----|----------------|------------|
 | $p_{24}$ | Expected proportion of words spoken at 24 months | $\mathrm{Beta}(1, 15)$ |
 | $p_{84}$ | Expected proportion of words spoken at 84 months | $\mathrm{Beta}(1.1, 1.1)$ |
-| $\ell_\text{unit}$ | Unit length-scale (mapped to 2–12 months) | $\mathrm{Beta}(3, 3)$ |
+| $\ell_\text{unit}$ | Unit length-scale (mapped to 6–18 months) | $\mathrm{Beta}(3, 3)$ |
 | $\eta$ | GP amplitude (logit scale) | $\mathrm{HalfNormal}(\sigma = 0.4)$ |
 | $\kappa_{\min}$ | Minimum concentration (dispersion floor) | $\mathrm{LogNormal}(\mu = \log 5, \sigma = 0.6)$ |
 | $a_\kappa$ | Log-scale intercept of $\kappa(z)$ | $\mathrm{Normal}(\mu = \log 8, \sigma = 1.0)$ |

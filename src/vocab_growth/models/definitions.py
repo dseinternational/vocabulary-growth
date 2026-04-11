@@ -98,7 +98,7 @@ class UnivariateModelDefinition:
     ell_unit_alpha: float = 3.0
     ell_unit_beta: float = 3.0
     eta_sigma: float = 0.4
-    ell_months_range: tuple[int, int] = (2, 12)
+    ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     kappa: KappaPriorParams = field(default_factory=KappaPriorParams)
 
@@ -159,7 +159,7 @@ class BivariateModelDefinition:
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
     eta_q_sigma: float = 0.4
-    ell_months_range: tuple[int, int] = (2, 12)
+    ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
     kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
