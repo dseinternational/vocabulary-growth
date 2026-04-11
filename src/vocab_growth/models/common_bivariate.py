@@ -1306,13 +1306,31 @@ def plot_production_rate_predictive(
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot the model-implied production ratio p_S / p_U with 50% and 75% HDI bands."""
-    X_plot = samples.X_plot
-    ratio_plot = samples.p_s_plot / np.maximum(samples.p_u_plot, EPSILON)
+    """Plot posterior predictive spoken/understood count ratio with 50% and 75% HDI bands.
 
-    ratio_median = np.median(ratio_plot, axis=1)
-    ratio_hdi_75 = az.hdi(ratio_plot.T, hdi_prob=0.75)
-    ratio_hdi_50 = az.hdi(ratio_plot.T, hdi_prob=0.50)
+    Uses posterior predictive counts (y_s / y_u). Samples where y_u == 0 are
+    excluded per age point before computing summary statistics.
+    """
+    X_plot = samples.X_plot
+    y_u = samples.y_u_plot  # (n_plot, n_samples)
+    y_s = samples.y_s_plot
+
+    n_ages = y_u.shape[0]
+    ratio_median = np.empty(n_ages)
+    ratio_hdi_75 = np.empty((n_ages, 2))
+    ratio_hdi_50 = np.empty((n_ages, 2))
+
+    for i in range(n_ages):
+        mask = y_u[i] > 0
+        if mask.sum() < 10:
+            ratio_median[i] = np.nan
+            ratio_hdi_75[i] = np.nan
+            ratio_hdi_50[i] = np.nan
+            continue
+        ratio_i = y_s[i, mask] / y_u[i, mask]
+        ratio_median[i] = np.median(ratio_i)
+        ratio_hdi_75[i] = az.hdi(ratio_i, hdi_prob=0.75)
+        ratio_hdi_50[i] = az.hdi(ratio_i, hdi_prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1333,9 +1351,11 @@ def plot_production_rate_predictive(
     ax.plot(X_plot, ratio_median, lw=3, label="Median")
 
     ax.set_xlabel("Age (months)")
-    ax.set_ylabel("Spoken / understood ratio")
-    ax.set_ylim(0, 1)
+    ax.set_ylabel("Words spoken / words understood")
+    ax.set_ylim(0, 1.05)
+    ax.axhline(1.0, ls=":", lw=1, color="grey", alpha=0.5)
     ax.legend(loc="upper left", frameon=True)
+    ax.set_title("Posterior predictive production ratio")
 
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
@@ -1392,45 +1412,27 @@ def plot_comprehension_production_gap(
 def plot_understood_vs_spoken(
     samples: BivariateModelSamples,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    n_draws: int = 200,
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot posterior expected words understood (x) vs words spoken (y)."""
+    """Plot posterior expected words understood (x) vs words spoken (y) as spaghetti curves."""
     E_u = samples.p_u_plot * n_trials  # (n_plot, n_samples)
     E_s = samples.p_s_plot * n_trials
+
+    n_available = E_u.shape[1]
+    n_draws = min(n_draws, n_available)
+    idx = np.random.default_rng(42).choice(n_available, size=n_draws, replace=False)
 
     E_u_median = np.median(E_u, axis=1)
     E_s_median = np.median(E_s, axis=1)
 
-    E_s_hdi = az.hdi(E_s.T, hdi_prob=hdi_prob)
-    E_s_hdi_75 = az.hdi(E_s.T, hdi_prob=0.75)
-    E_s_hdi_50 = az.hdi(E_s.T, hdi_prob=0.50)
-
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    ax.fill_between(
-        E_u_median,
-        E_s_hdi[:, 0],
-        E_s_hdi[:, 1],
-        alpha=0.15,
-        label=f"{int(hdi_prob * 100)}% HDI",
-    )
-    ax.fill_between(
-        E_u_median,
-        E_s_hdi_75[:, 0],
-        E_s_hdi_75[:, 1],
-        alpha=0.20,
-        label="75% HDI",
-    )
-    ax.fill_between(
-        E_u_median,
-        E_s_hdi_50[:, 0],
-        E_s_hdi_50[:, 1],
-        alpha=0.30,
-        label="50% HDI",
-    )
-    ax.plot(E_u_median, E_s_median, lw=3, label="Median")
+    for i in idx:
+        ax.plot(E_u[:, i], E_s[:, i], lw=0.3, alpha=0.15, color="C0")
+
+    ax.plot(E_u_median, E_s_median, lw=3, color="C0", label="Median")
 
     # Reference line: understood = spoken
     limit = max(E_u_median.max(), E_s_median.max()) * 1.05
@@ -1451,36 +1453,27 @@ def plot_understood_vs_spoken(
 def plot_understood_vs_spoken_predictive(
     samples: BivariateModelSamples,
     n_trials: int,
+    n_draws: int = 200,
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot posterior predictive words understood (x) vs words spoken (y) with HDI bands."""
+    """Plot posterior predictive words understood (x) vs words spoken (y) as spaghetti curves."""
     y_u = samples.y_u_plot  # (n_plot, n_samples)
     y_s = samples.y_s_plot
+
+    n_available = y_u.shape[1]
+    n_draws = min(n_draws, n_available)
+    idx = np.random.default_rng(42).choice(n_available, size=n_draws, replace=False)
 
     y_u_median = np.median(y_u, axis=1)
     y_s_median = np.median(y_s, axis=1)
 
-    y_s_hdi_75 = az.hdi(y_s.T, hdi_prob=0.75)
-    y_s_hdi_50 = az.hdi(y_s.T, hdi_prob=0.50)
-
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    ax.fill_between(
-        y_u_median,
-        y_s_hdi_75[:, 0],
-        y_s_hdi_75[:, 1],
-        alpha=0.20,
-        label="75% HDI",
-    )
-    ax.fill_between(
-        y_u_median,
-        y_s_hdi_50[:, 0],
-        y_s_hdi_50[:, 1],
-        alpha=0.30,
-        label="50% HDI",
-    )
-    ax.plot(y_u_median, y_s_median, lw=3, label="Median")
+    for i in idx:
+        ax.plot(y_u[:, i], y_s[:, i], lw=0.3, alpha=0.10, color="C0")
+
+    ax.plot(y_u_median, y_s_median, lw=3, color="C0", label="Median")
 
     # Reference line: understood = spoken
     limit = max(y_u_median.max(), y_s_median.max()) * 1.05
@@ -1620,7 +1613,6 @@ def fit_bivariate_model(
     fig = plot_understood_vs_spoken(
         samples,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
         filename="understood_vs_spoken",
     )
