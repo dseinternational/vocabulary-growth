@@ -117,11 +117,16 @@ diagnostics
 
 ![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.svg){#fig-joint-trajectory .lightbox fig-align="left"}
 
+![Joint posterior predictive trajectory with 50% and 75% HDI bands](joint_trajectory_hdi.svg){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
+
 ## Production ratio
 
 The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
+The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood word counts, so it should not be interpreted as the same quantity as $q(a)$.
 
 ![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
+
+![Posterior predictive spoken/understood count ratio](production_rate_predictive.svg){#fig-production-rate-predictive .lightbox fig-align="left"}
 
 ```{python}
 summary_q = pd.read_csv("posterior_summary_q.csv")
@@ -133,6 +138,12 @@ summary_q
 The expected difference in word counts between understanding and production.
 
 ![Comprehension-production gap](comprehension_production_gap.svg){#fig-gap .lightbox fig-align="left"}
+
+## Words understood vs words spoken
+
+![Expected words understood vs spoken](understood_vs_spoken.svg){#fig-understood-vs-spoken .lightbox fig-align="left"}
+
+![Posterior predictive words understood vs spoken](understood_vs_spoken_predictive.svg){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
 ## Posterior predictions -- words understood
 

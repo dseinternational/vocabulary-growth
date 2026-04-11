@@ -15,8 +15,10 @@ import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.metadata.packages as package_metadata
 import dse_research_utils.plot.diagnostics_mcmc as plot_diagnostics_mcmc
+import dse_research_utils.plot.distributions as plot_dist
 import dse_research_utils.plot.predictive as plot_predictive
 import dse_research_utils.plot.styles as plot_styles
+import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
 import dse_research_utils.statistics.models.reporting as reporting
@@ -24,6 +26,7 @@ import dse_research_utils.statistics.models.sampling as sampling
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import preliz as pz
 import pymc as pm
 from arviz import ELPDData, InferenceData
 from matplotlib.figure import Figure
@@ -31,9 +34,11 @@ from preliz.distributions.distributions import Continuous
 from rich import print
 from rich.pretty import pprint
 
+import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
+from vocab_growth.models.definitions import UnivariateModelDefinition
 
 
 @dataclass
@@ -679,34 +684,6 @@ def build_model(context: ModelFitContext):
     context.set_model(model, variables)
 
 
-def prepare_data(
-    context: ModelFitContext,
-    prepare_model_data_fn,
-    y_col: str,
-):
-    """
-    Load and prepare data. Report descriptive statistics.
-    """
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Prepare data[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
-    data, analysis_df, desc_stats = prepare_model_data_fn(
-        x_col="age", y_col=y_col,
-    )
-
-    context.set_model_data(data, analysis_df)
-    context.dataframes["descriptive_stats"] = desc_stats
-
-    desc_stats.to_csv(
-        os.path.join(context.reporting.output_dir, "descriptive_statistics.csv"),
-        index=True,
-    )
-
-
 def prior_predictive_checks(
     context: ModelFitContext,
     outcome_col: str,
@@ -1108,16 +1085,117 @@ def report(context: ModelFitContext):
     )
 
 
+def _plot_and_print_dist(context, dist, name):
+    """Plot a prior distribution and print its summary."""
+    context.plots[name] = plot_dist.plot_distribution(
+        dist, context.reporting.output_dir, name
+    )
+    print(
+        f"[bold yellow]{name}:[/bold yellow] {dist.summary(mass=context.reporting.hdi)}"
+    )
+
+
+def prepare_univariate_data(
+    context: ModelFitContext,
+    definition: UnivariateModelDefinition,
+):
+    """Load and prepare data for a univariate model from its definition."""
+    print(
+        "\n[green]------------------------------------------------------------[/green]"
+    )
+    print("[bold green]Prepare data[/bold green]")
+    print("[green]------------------------------------------------------------[/green]")
+    print()
+
+    y_col = definition.outcome.value
+    df = vocab_data_utils.load_data(
+        population=definition.population,
+        columns=["age", y_col],
+        sample_fraction=definition.sample_fraction,
+        random_seed=definition.random_seed,
+    )
+    analysis_df = df[["age", y_col]].dropna()
+
+    desc = descriptive_stats.describe_all(analysis_df, alpha=0.05)
+
+    print(
+        "\n[green]------------------------------------------------------------[/green]"
+    )
+    print("[bold green]Descriptive statistics[/bold green]")
+    print("[green]------------------------------------------------------------[/green]")
+
+    pprint(desc)
+
+    X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
+    y_obs = np.asarray(analysis_df[y_col], dtype=int)
+
+    data = model_data.BinomialModelData(
+        X_obs=X_obs, y_obs=y_obs, n_trials=definition.n_trials
+    )
+
+    context.set_model_data(data, analysis_df)
+    context.dataframes["descriptive_stats"] = desc
+
+    desc.to_csv(
+        os.path.join(context.reporting.output_dir, "descriptive_statistics.csv"),
+        index=True,
+    )
+
+
+def configure_univariate_priors(
+    context: ModelFitContext,
+    definition: UnivariateModelDefinition,
+):
+    """Configure priors and hyperparameters from a univariate model definition."""
+    print(
+        "\n[green]------------------------------------------------------------[/green]"
+    )
+    print("[bold green]Priors and hyperparameters[/bold green]")
+    print("[green]------------------------------------------------------------[/green]")
+    print()
+
+    ell_unit_dist = pz.Beta(alpha=definition.ell_unit_alpha, beta=definition.ell_unit_beta)
+    _plot_and_print_dist(context, ell_unit_dist, "ell_unit_dist")
+
+    eta_dist = pz.HalfNormal(sigma=definition.eta_sigma)
+    _plot_and_print_dist(context, eta_dist, "eta_dist")
+
+    p_slope_low_dist = pz.Beta(alpha=definition.p_slope_low_alpha, beta=definition.p_slope_low_beta)
+    _plot_and_print_dist(context, p_slope_low_dist, "p_slope_low_dist")
+
+    p_slope_hi_dist = pz.Beta(alpha=definition.p_slope_hi_alpha, beta=definition.p_slope_hi_beta)
+    _plot_and_print_dist(context, p_slope_hi_dist, "p_slope_hi_dist")
+
+    kp = definition.kappa
+    kappa_min_dist = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
+    _plot_and_print_dist(context, kappa_min_dist, "kappa_min_dist")
+
+    a_kappa_dist = pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma)
+    _plot_and_print_dist(context, a_kappa_dist, "a_kappa_dist")
+
+    b_kappa_mag_dist = pz.HalfNormal(sigma=kp.b_kappa_mag_sigma)
+    _plot_and_print_dist(context, b_kappa_mag_dist, "b_kappa_mag_dist")
+
+    config = ModelConfiguration(
+        slope_anchors=definition.slope_anchors,
+        ell_months_range=definition.ell_months_range,
+        p_slope_low_dist=p_slope_low_dist,
+        p_slope_hi_dist=p_slope_hi_dist,
+        ell_unit_dist=ell_unit_dist,
+        eta_dist=eta_dist,
+        kappa_min_dist=kappa_min_dist,
+        a_kappa_dist=a_kappa_dist,
+        b_kappa_mag_dist=b_kappa_mag_dist,
+        n_plot=definition.n_plot,
+        ages_query=definition.ages_query,
+    )
+
+    context.set_model_config(config)
+
+
 def fit_single_outcome_model(
     config: str,
-    *,
-    model_name: str,
-    config_name: str,
-    banner: str,
-    prepare_model_data_fn,
-    y_col: str,
-    outcome_label: str,
-    configure_model_fn,
+    definition: UnivariateModelDefinition,
 ) -> ModelFitContext:
     """
     Shared fit pipeline for single-outcome models (VG01-VG04).
@@ -1126,7 +1204,7 @@ def fit_single_outcome_model(
         "\n[green]============================================================[/green]"
     )
     print(
-        f"[bold green]{banner}[/bold green]"
+        f"[bold green]{definition.banner}[/bold green]"
     )
     print("[green]============================================================[/green]")
     print()
@@ -1138,8 +1216,8 @@ def fit_single_outcome_model(
 
     context = ModelFitContext(
         reporting=reporting.ReportingConfiguration(
-            model_name=model_name,
-            config_name=config_name,
+            model_name=definition.model_id,
+            config_name=definition.config_name,
             output_root_dir=local_env.OUTPUT_DIR,
             hdi=0.90,
         ),
@@ -1151,11 +1229,14 @@ def fit_single_outcome_model(
 
     os.makedirs(context.reporting.output_dir, exist_ok=True)
 
-    prepare_data(context, prepare_model_data_fn, y_col)
+    prepare_univariate_data(context, definition)
 
-    configure_model_fn(context)
+    configure_univariate_priors(context, definition)
 
     build_model(context)
+
+    y_col = definition.outcome.value
+    outcome_label = definition.outcome_label
 
     prior_predictive_checks(context, outcome_col=y_col, outcome_label=outcome_label)
 
