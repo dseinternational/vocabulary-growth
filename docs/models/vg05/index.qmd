@@ -122,10 +122,11 @@ diagnostics
 ## Production ratio
 
 The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
+The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood counts, so it should be interpreted separately from $q(a)$.
 
 ![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
 
-![Posterior predictive production ratio](production_rate_predictive.svg){#fig-production-rate-predictive .lightbox fig-align="left"}
+![Posterior predictive spoken/understood count ratio](production_rate_predictive.svg){#fig-production-rate-predictive .lightbox fig-align="left"}
 
 ```{python}
 summary_q = pd.read_csv("posterior_summary_q.csv")
