@@ -1301,6 +1301,61 @@ def plot_production_rate(
     return fig
 
 
+def plot_production_rate_by_understood(
+    samples: BivariateModelSamples,
+    n_trials: int,
+    hdi_prob: float = 0.90,
+    output_dir: str | None = None,
+    filename: str | None = None,
+):
+    """Plot production ratio q against expected words understood (median p_U * n_trials)."""
+    p_u_plot = samples.p_u_plot  # (n_plot, n_samples)
+    q_plot = samples.q_plot  # (n_plot, n_samples)
+
+    x_words = np.median(p_u_plot, axis=1) * n_trials
+    q_median = np.median(q_plot, axis=1)
+    q_hdi = az.hdi(q_plot.T, hdi_prob=hdi_prob)
+    q_hdi_75 = az.hdi(q_plot.T, hdi_prob=0.75)
+    q_hdi_50 = az.hdi(q_plot.T, hdi_prob=0.50)
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+
+    ax.fill_between(
+        x_words,
+        q_hdi[:, 0],
+        q_hdi[:, 1],
+        alpha=0.20,
+        label=f"{int(hdi_prob * 100)}% HDI",
+    )
+    ax.fill_between(
+        x_words,
+        q_hdi_75[:, 0],
+        q_hdi_75[:, 1],
+        alpha=0.25,
+        label="75% HDI",
+    )
+    ax.fill_between(
+        x_words,
+        q_hdi_50[:, 0],
+        q_hdi_50[:, 1],
+        alpha=0.30,
+        label="50% HDI",
+    )
+    ax.plot(x_words, q_median, lw=3, label="Median q")
+
+    ax.set_xlabel("Expected words understood")
+    ax.set_ylabel("q = p_S / p_U")
+    ax.set_ylim(0, 1)
+    ax.legend(loc="upper left", frameon=True)
+    ax.set_title("Production ratio by words understood")
+
+    if output_dir is not None and filename is not None:
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+
+    return fig
+
+
 def plot_production_rate_predictive(
     samples: BivariateModelSamples,
     output_dir: str | None = None,
@@ -1584,6 +1639,18 @@ def fit_bivariate_model(
         filename="production_rate",
     )
     context.plots["production_rate"] = fig
+    plt.close(fig)
+
+    # ---- Production rate by words understood ----
+
+    fig = plot_production_rate_by_understood(
+        samples,
+        n_trials=definition.n_trials,
+        hdi_prob=context.reporting.hdi,
+        output_dir=context.reporting.output_dir,
+        filename="production_rate_by_understood",
+    )
+    context.plots["production_rate_by_understood"] = fig
     plt.close(fig)
 
     # ---- Posterior predictive production rate ----

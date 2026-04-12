@@ -1,5 +1,5 @@
 ---
-title: "Model VG06: Joint model of words understood and spoken - typically developing children"
+title: "Model VG07: Joint model with study random intercepts - children with Down syndrome"
 
 date: last-modified
 date-format: "YYYY-MM-DD HH:mm:ss Z"
@@ -22,7 +22,7 @@ This model output is preliminary and likely to change as the model evolves and f
 If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
 :::
 
-This model jointly examines how age influences words understood and words spoken ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$) in typically developing children, using a production-ratio reparameterization that enforces $p_S \leq p_U$ by construction.
+This model extends VG05 by adding study-level random intercepts on both the understood trajectory and the production ratio, to account for systematic differences between contributing studies. The production-ratio reparameterization enforces $p_S \leq p_U$ by construction.
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -31,7 +31,12 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 690 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only one outcome is available are retained using separate observation indices.
+We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The model follows the same production-ratio reparameterization as VG05, but adds study-level random intercepts:
+
+$$f_U(a, s) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s]$$
+$$h(a, s) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s]$$
+
+where $\delta_U[s] \sim \text{Normal}(0, \tau_U)$ and $\delta_q[s] \sim \text{Normal}(0, \tau_q)$ are study-level random intercepts on the logit scale. Plot and query predictions use the population-level trajectory ($\delta = 0$).
 
 ::: {.callout-note}
 
@@ -49,9 +54,9 @@ For full details and discussion, please refer to the technical report.
 
 ![Amplitude prior `eta_u_dist`](eta_u_dist.svg){#fig-eta-u .lightbox fig-align="left"}
 
-![Low slope anchor (12 months) `p_slope_low_u_dist`](p_slope_low_u_dist.svg){#fig-slope-low-u .lightbox fig-align="left"}
+![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.svg){#fig-slope-low-u .lightbox fig-align="left"}
 
-![High slope anchor (26 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.svg){#fig-slope-hi-u .lightbox fig-align="left"}
+![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.svg){#fig-slope-hi-u .lightbox fig-align="left"}
 
 ### Production ratio
 
@@ -59,9 +64,9 @@ For full details and discussion, please refer to the technical report.
 
 ![Amplitude prior `eta_q_dist`](eta_q_dist.svg){#fig-eta-q .lightbox fig-align="left"}
 
-![Low slope anchor (12 months) `p_slope_low_q_dist`](p_slope_low_q_dist.svg){#fig-slope-low-q .lightbox fig-align="left"}
+![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.svg){#fig-slope-low-q .lightbox fig-align="left"}
 
-![High slope anchor (26 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.svg){#fig-slope-hi-q .lightbox fig-align="left"}
+![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.svg){#fig-slope-hi-q .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- understood
 
@@ -122,7 +127,7 @@ diagnostics
 ## Production ratio
 
 The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
-The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood word counts, so it should not be interpreted as the same quantity as $q(a)$.
+The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood counts, so it should be interpreted separately from $q(a)$.
 
 ![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
 

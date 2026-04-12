@@ -142,9 +142,9 @@ class BivariateModelDefinition:
 
     # -- Production ratio (q) slope priors --
     p_slope_low_q_alpha: float = 1.0
-    p_slope_low_q_beta: float = 1.2
-    p_slope_hi_q_alpha: float = 1.2
-    p_slope_hi_q_beta: float = 1.0
+    p_slope_low_q_beta: float = 1.5
+    p_slope_hi_q_alpha: float = 2.0
+    p_slope_hi_q_beta: float = 1.2
 
     # -- TD-specific data parameters --
     sample_fraction: float = 1.0
@@ -163,6 +163,14 @@ class BivariateModelDefinition:
     n_plot: int = 500
     kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
     kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
+
+    # -- Study-level random intercepts --
+    include_study_re: bool = False
+    """Whether to include study-level random intercepts."""
+    tau_u_sigma: float = 0.5
+    """HalfNormal scale for study intercept SD on understood (logit scale)."""
+    tau_q_sigma: float = 0.5
+    """HalfNormal scale for study intercept SD on production ratio (logit scale)."""
 
     @property
     def model_type(self) -> ModelType:
@@ -270,6 +278,26 @@ VG06 = BivariateModelDefinition(
     sample_fraction=0.1,
 )
 
+VG07 = BivariateModelDefinition(
+    model_id="VG07",
+    config_name="age-understood-spoken-ds-re",
+    banner=(
+        "Fitting Model VG07: Joint model with study random intercepts"
+        " (A -> U, A -> S, U -> S) - Down syndrome"
+    ),
+    population=Population.DOWN_SYNDROME,
+    n_trials=800,
+    slope_anchors=(24, 84),
+    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    p_slope_low_u_alpha=1.0,
+    p_slope_low_u_beta=10.0,
+    p_slope_hi_u_alpha=1.1,
+    p_slope_hi_u_beta=1.1,
+    include_study_re=True,
+    tau_u_sigma=0.5,
+    tau_q_sigma=0.5,
+)
+
 MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -277,4 +305,5 @@ MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] 
     "vg04": VG04,
     "vg05": VG05,
     "vg06": VG06,
+    "vg07": VG07,
 }

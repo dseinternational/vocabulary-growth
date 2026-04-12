@@ -126,6 +126,8 @@ The posterior predictive figure below instead shows the ratio of posterior predi
 
 ![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
 
+![Production ratio by words understood](production_rate_by_understood.svg){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
 ![Posterior predictive spoken/understood count ratio](production_rate_predictive.svg){#fig-production-rate-predictive .lightbox fig-align="left"}
 
 ```{python}
