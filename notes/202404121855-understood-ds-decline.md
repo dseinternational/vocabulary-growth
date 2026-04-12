@@ -80,7 +80,7 @@ The raw median understood score falls from approximately 280--300 to 144--240 ac
 
 ## Why the model fits a dip
 
-The GP (Gaussian process) component of the model has sufficient flexibility (lengthscale prior mapped to 6--18 months, amplitude `eta_sigma = 0.4` on the logit scale) to fit localised departures from the linear trend. With only 36 understood observations in the 50--60 month window -- and those observations drawn predominantly from lower-scoring studies -- the GP fits a dip to track the observed data. The model is doing exactly what it should: fitting the data it sees. The problem is that the data in this window is not representative of the same population mixture as the adjacent windows.
+The GP (Gaussian process) component of the model has sufficient flexibility (length-scale prior mapped to 6--18 months, amplitude `eta_sigma = 0.4` on the logit scale) to fit localised departures from the linear trend. With only 36 understood observations in the 50--60 month window -- and those observations drawn predominantly from lower-scoring studies -- the GP fits a dip to track the observed data. The model is doing exactly what it should: fitting the data it sees. The problem is that the data in this window is not representative of the same population mixture as the adjacent windows.
 
 ## Why this is not a real developmental phenomenon
 
@@ -101,7 +101,7 @@ The dip should be noted as a data limitation in model reports for VG02 and VG05.
 Several approaches could mitigate this artefact:
 
 - **Study-level random intercepts or effects**: Allowing the model to account for systematic differences between studies would reduce the impact of compositional shifts. This is the most principled solution but adds model complexity.
-- **GP hyperprior sensitivity**: Tightening `eta_sigma` (e.g., from 0.4 to 0.2) would reduce the GP's ability to fit localised dips. If the dip disappears with a tighter amplitude prior, that confirms it is noise-driven rather than signal. This is a useful diagnostic but not a fix.
+- **GP hyper-prior sensitivity**: Tightening `eta_sigma` (e.g., from 0.4 to 0.2) would reduce the GP's ability to fit localised dips. If the dip disappears with a tighter amplitude prior, that confirms it is noise-driven rather than signal. This is a useful diagnostic but not a fix.
 - **Monotonicity constraints**: Imposing a soft or hard constraint that expected comprehension is non-decreasing with age would prevent the dip. This encodes a strong domain assumption and should only be considered if scientifically justified.
 
 ### For data collection
