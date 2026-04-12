@@ -23,7 +23,7 @@ dependencies:
       - rich
       - scipy>=1.17.1
       - seaborn>=0.13.2
-      - setuptools>=82.0.1
+      - setuptools>=81.0.0
       - xarray
       - -e ../research/src/python
       - -e ./
