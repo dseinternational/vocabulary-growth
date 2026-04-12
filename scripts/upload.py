@@ -19,6 +19,7 @@ MODEL_CONFIGS = {
     "vg04": ("VG04", "age-understood-td"),
     "vg05": ("VG05", "age-understood-spoken-ds"),
     "vg06": ("VG06", "age-understood-spoken-td"),
+    "vg07": ("VG07", "age-understood-spoken-ds-re"),
 }
 
 if __name__ == "__main__":
