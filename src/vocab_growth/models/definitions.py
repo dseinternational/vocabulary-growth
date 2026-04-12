@@ -165,8 +165,6 @@ class BivariateModelDefinition:
     kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Study-level random intercepts --
-    include_study_re: bool = False
-    """Whether to include study-level random intercepts."""
     tau_u_sigma: float = 0.5
     """HalfNormal scale for study intercept SD on understood (logit scale)."""
     tau_q_sigma: float = 0.5
@@ -293,7 +291,6 @@ VG07 = BivariateModelDefinition(
     p_slope_low_u_beta=10.0,
     p_slope_hi_u_alpha=1.1,
     p_slope_hi_u_beta=1.1,
-    include_study_re=True,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
 )
