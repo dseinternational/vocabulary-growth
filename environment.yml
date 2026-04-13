@@ -6,14 +6,16 @@ dependencies:
   - arviz>=0.23.4,<1.0
   - numba>=0.64.0
   - numpy>=2.4.3
+  - numpyro>=0.20.1
   - nutpie>=0.16.8
-  - pymc>=5.28.2,<6.0
+  - pandoc
+  - pymc>=5.28.4,<6.0
+  - graphviz
   - pip
   - pip:
       - azure-identity
       - azure-storage-blob
       - duckdb>=1.5.1
-      - graphviz
       - hatch
       - ipython>=9.11.0
       - ipywidgets>=8.1.8
@@ -21,14 +23,12 @@ dependencies:
       - jupytext
       - matplotlib>=3.10.8
       - notebook>=7.5.5
-      - numpyro>=0.20.0
       - pandas-stubs
       - pandas>=3.0.1
-      - pandoc
       - preliz
       - pytest>=9.0.3
       - rich
-      - ruff>=0.15.5
+      - ruff>=0.15.10
       - scipy-stubs
       - scipy>=1.17.1
       - seaborn>=0.13.2

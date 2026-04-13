@@ -13,6 +13,11 @@ from matplotlib.figure import Figure
 from scipy.signal import savgol_filter
 
 
+def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
+    """Save a DataFrame as CSV alongside the corresponding plot."""
+    df.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
+
+
 def plot_eta_effect_sizes(
     eta_values=None,
     p_values=None,
@@ -44,6 +49,10 @@ def plot_eta_effect_sizes(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        csv_data = {"vocabulary_size": p_values * n_trials}
+        for eta in eta_values:
+            csv_data[f"effect_eta_{eta}"] = n_trials * p_values * (1 - p_values) * eta
+        _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
     return fig
 
@@ -213,6 +222,16 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     if filename is not None and output_dir is not None:
         plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        rows = []
+        for j, age in enumerate(X_query):
+            draws = y_query[j, :].astype(int)
+            med = np.median(draws)
+            hdi_bounds = az.hdi(draws, hdi_prob=hdi_prob)
+            row = {"age_months": age, "median": med, "hdi_lo": hdi_bounds[0], "hdi_hi": hdi_bounds[1]}
+            if eti_prob is not None:
+                row["eti_lo"], row["eti_hi"] = np.quantile(draws, [q_lo, q_hi])
+            rows.append(row)
+        _save_csv(pd.DataFrame(rows), output_dir, filename)
 
     return fig
 
@@ -265,6 +284,13 @@ def plot_posterior_predictive_pmf(
     if filename is not None and output_dir is not None:
         plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        csv_data = {"word_count": k}
+        for _a, j in zip(X_query, idxs, strict=True):
+            draws = np.clip(y_plot[j, :].astype(int), x_lo, x_hi)
+            counts = np.bincount(draws - x_lo, minlength=len(k))
+            pmf = counts[: len(k)] / counts.sum()
+            csv_data[f"pmf_{X_plot[j]:.0f}m"] = pmf
+        _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
     return plt.gcf()
 
@@ -313,6 +339,12 @@ def plot_posterior_predictive_cdf(
     if filename is not None and output_dir is not None:
         plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        csv_data = {"word_count": k}
+        for _a, j, draws in zip(X_query, plot_idx_by_age, draws_by_age, strict=True):
+            draws_sorted = np.sort(draws)
+            cdf = np.searchsorted(draws_sorted, k, side="right") / draws_sorted.size
+            csv_data[f"cdf_{X_plot[j]:.0f}m"] = cdf
+        _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
     return plt.gcf()
 
@@ -561,6 +593,16 @@ def plot_posterior_predictive_median_trend(
     if filename is not None and output_dir is not None:
         plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": X_plot,
+            "median": y_plot_samples_median,
+            "p05": predictive_interval_1[:, 0],
+            "p95": predictive_interval_1[:, 1],
+            "p25": predictive_interval_2[:, 0],
+            "p75": predictive_interval_2[:, 1],
+            "p375": predictive_interval_3[:, 0],
+            "p625": predictive_interval_3[:, 1],
+        }), output_dir, filename)
 
     return plt.gcf()
 
@@ -753,6 +795,16 @@ def plot_expected_learning_rate(
     if filename is not None and output_dir is not None:
         plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": x_plot_values,
+            "median_rate": median_rate,
+            "hdi_lo": hdi_rate[:, 0],
+            "hdi_hi": hdi_rate[:, 1],
+            "hdi75_lo": hdi_75_rate[:, 0],
+            "hdi75_hi": hdi_75_rate[:, 1],
+            "hdi50_lo": hdi_50_rate[:, 0],
+            "hdi50_hi": hdi_50_rate[:, 1],
+        }), output_dir, filename)
 
     return plt.gcf()
 
@@ -863,5 +915,6 @@ def plot_posterior_kappa(
     if filename is not None and output_dir is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(df_kappa_plot, output_dir, filename)
 
     return fig, df_kappa_plot, df_kappa_query

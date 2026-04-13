@@ -701,7 +701,8 @@ def prior_predictive_checks(
 
     with context.model:
         prior_samples = pm.sample_prior_predictive(
-            draws=2000, random_seed=context.sampling.random_seed
+            draws=1000,
+            random_seed=context.sampling.random_seed
         )
 
     # Sample prior functions

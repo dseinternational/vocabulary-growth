@@ -828,7 +828,9 @@ def prior_predictive_checks(context: BivariateContext):
 
     with context.model:
         prior_samples = pm.sample_prior_predictive(
-            draws=2000, random_seed=context.sampling.random_seed
+            draws=1000,
+            random_seed=context.sampling.random_seed,
+            compile_kwargs=dict(mode="FAST_COMPILE")
         )
 
     context.set_prior_samples(prior_samples)
@@ -1153,6 +1155,11 @@ def posterior_summary(context: BivariateContext):
 # ============================================================
 
 
+def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
+    """Save a DataFrame as CSV alongside the corresponding plot."""
+    df.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
+
+
 def plot_understood_spoken_trajectory(
     samples: BivariateModelSamples,
     n_trials: int,
@@ -1201,6 +1208,19 @@ def plot_understood_spoken_trajectory(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": X_plot,
+            "understood_median": y_u_median,
+            "understood_p05": y_u_90[:, 0],
+            "understood_p95": y_u_90[:, 1],
+            "understood_p25": y_u_50[:, 0],
+            "understood_p75": y_u_50[:, 1],
+            "spoken_median": y_s_median,
+            "spoken_p05": y_s_90[:, 0],
+            "spoken_p95": y_s_90[:, 1],
+            "spoken_p25": y_s_50[:, 0],
+            "spoken_p75": y_s_50[:, 1],
+        }), output_dir, filename)
 
     return fig
 
@@ -1244,6 +1264,19 @@ def plot_understood_spoken_trajectory_hdi(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": X_plot,
+            "understood_median": y_u_median,
+            "understood_hdi75_lo": y_u_hdi_75[:, 0],
+            "understood_hdi75_hi": y_u_hdi_75[:, 1],
+            "understood_hdi50_lo": y_u_hdi_50[:, 0],
+            "understood_hdi50_hi": y_u_hdi_50[:, 1],
+            "spoken_median": y_s_median,
+            "spoken_hdi75_lo": y_s_hdi_75[:, 0],
+            "spoken_hdi75_hi": y_s_hdi_75[:, 1],
+            "spoken_hdi50_lo": y_s_hdi_50[:, 0],
+            "spoken_hdi50_hi": y_s_hdi_50[:, 1],
+        }), output_dir, filename)
 
     return fig
 
@@ -1297,6 +1330,16 @@ def plot_production_rate(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": X_plot,
+            "q_median": q_median,
+            "hdi_lo": q_hdi[:, 0],
+            "hdi_hi": q_hdi[:, 1],
+            "hdi75_lo": q_hdi_75[:, 0],
+            "hdi75_hi": q_hdi_75[:, 1],
+            "hdi50_lo": q_hdi_50[:, 0],
+            "hdi50_hi": q_hdi_50[:, 1],
+        }), output_dir, filename)
 
     return fig
 
@@ -1352,6 +1395,16 @@ def plot_production_rate_by_understood(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "words_understood": x_words,
+            "q_median": q_median,
+            "hdi_lo": q_hdi[:, 0],
+            "hdi_hi": q_hdi[:, 1],
+            "hdi75_lo": q_hdi_75[:, 0],
+            "hdi75_hi": q_hdi_75[:, 1],
+            "hdi50_lo": q_hdi_50[:, 0],
+            "hdi50_hi": q_hdi_50[:, 1],
+        }), output_dir, filename)
 
     return fig
 
@@ -1415,6 +1468,14 @@ def plot_production_rate_predictive(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": X_plot,
+            "ratio_median": ratio_median,
+            "hdi75_lo": ratio_hdi_75[:, 0],
+            "hdi75_hi": ratio_hdi_75[:, 1],
+            "hdi50_lo": ratio_hdi_50[:, 0],
+            "hdi50_hi": ratio_hdi_50[:, 1],
+        }), output_dir, filename)
 
     return fig
 
@@ -1460,6 +1521,14 @@ def plot_comprehension_production_gap(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": X_plot,
+            "gap_median": gap_median,
+            "hdi_lo": gap_hdi[:, 0],
+            "hdi_hi": gap_hdi[:, 1],
+            "hdi50_lo": gap_hdi_50[:, 0],
+            "hdi50_hi": gap_hdi_50[:, 1],
+        }), output_dir, filename)
 
     return fig
 
@@ -1501,6 +1570,11 @@ def plot_understood_vs_spoken(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": samples.X_plot,
+            "understood_median": E_u_median,
+            "spoken_median": E_s_median,
+        }), output_dir, filename)
 
     return fig
 
@@ -1542,6 +1616,11 @@ def plot_understood_vs_spoken_predictive(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.DataFrame({
+            "age_months": samples.X_plot,
+            "understood_median": y_u_median,
+            "spoken_median": y_s_median,
+        }), output_dir, filename)
 
     return fig
 

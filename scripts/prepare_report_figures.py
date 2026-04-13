@@ -8,6 +8,7 @@ import os
 import dse_research_utils.environment.setup as setup
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from rich import print
 from scipy.stats import beta, binom
 
@@ -82,6 +83,12 @@ def plot_bayes_update(n, rng, true_p, alpha0, beta0, filename):
 
     fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.png"), dpi=300)
     fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.svg"))
+    pd.DataFrame({
+        "p": p_grid,
+        "prior_pdf": prior_pdf,
+        "likelihood_norm": likelihood_norm,
+        "posterior_pdf": post_pdf,
+    }).to_csv(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.csv"), index=False)
 
 
 def prepare_report_figures():
