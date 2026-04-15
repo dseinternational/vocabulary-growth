@@ -6,7 +6,7 @@ Date: 2026-04-12
 
 ## Motivation
 
-Models VG02 and VG05 both show an apparent decline in expected words understood between approximately 40 and 60 months for children with Down syndrome. Investigation (see `notes/understood-ds-decline.md`) established that this is a data composition artefact — a form of Simpson's paradox — rather than a real developmental phenomenon. Higher-scoring studies (1, 2, 6, 7) stop contributing understood data after ~50 months, while lower-scoring studies (3, 5) continue, pulling the observed distribution downward. The GP has sufficient flexibility to fit a localised dip to track this compositional shift.
+Models VG02 and VG05 both show an apparent decline in expected words understood between approximately 40 and 60 months for children with Down syndrome. Investigation (see `notes/202604121055-understood-ds-decline.md`) established that this is a data composition artefact — a form of Simpson's paradox — rather than a real developmental phenomenon. Higher-scoring studies (1, 2, 6, 7) stop contributing understood data after ~50 months, while lower-scoring studies (3, 5) continue, pulling the observed distribution downward. The GP has sufficient flexibility to fit a localised dip to track this compositional shift.
 
 A model with study-level random intercepts should absorb systematic differences between studies and produce a population-level trajectory that is less susceptible to this artefact.
 
