@@ -200,6 +200,12 @@ plt.scatter(
     label="US 02",
     alpha=0.5,
 )
+plt.scatter(
+    x=vocab_df[vocab_df["study"] == "uk_06"]["age"],
+    y=vocab_df[vocab_df["study"] == "uk_06"]["understood"],
+    label="UK 06",
+    alpha=0.5,
+)
 
 
 plt.legend(loc="upper left")
@@ -283,6 +289,12 @@ plt.scatter(
     label="US 02",
     alpha=0.5,
 )
+plt.scatter(
+    x=vocab_df[vocab_df["study"] == "uk_06"]["age"],
+    y=vocab_df[vocab_df["study"] == "uk_06"]["spoken"],
+    label="UK 06",
+    alpha=0.5,
+)
 
 regression_df = vocab_df[["age", "spoken"]].dropna()
 x = regression_df["age"]
@@ -330,6 +342,16 @@ plot_histogram(
     x_name="spoken",
     x_label="Words Spoken (under 2 years)",
     output_filename="histogram-words-spoken-under-2y",
+)
+
+plt.show()
+
+# %%
+plot_histogram(
+    data=under_2y_df,
+    x_name="understood",
+    x_label="Words Understood (under 2 years)",
+    output_filename="histogram-words-understood-under-2y",
 )
 
 plt.show()
