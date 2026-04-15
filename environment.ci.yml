@@ -4,7 +4,7 @@ channels:
 dependencies:
   - python=3.14
   - arviz>=0.23.4,<1.0
-  - graphviz
+  - graphviz>=14.1.2
   - numba>=0.64.0
   - numpy>=2.4.3
   - numpyro>=0.20.1
@@ -14,13 +14,13 @@ dependencies:
   - pip:
       - azure-identity
       - azure-storage-blob
-      - duckdb>=1.5.1
+      - duckdb>=1.5.2
       - hatch
       - jaxlib>=0.9.2
       - matplotlib>=3.10.8
       - pandas>=3.0.1
       - preliz
-      - rich
+      - rich>=15.0.0
       - scipy>=1.17.1
       - seaborn>=0.13.2
       - setuptools>=81.0.0
