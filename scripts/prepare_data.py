@@ -20,6 +20,7 @@ vocab_uk_03_df = pd.read_csv("./data/vocab_data_uk_03.csv")
 vocab_uk_04_df = pd.read_csv("./data/vocab_data_uk_04.csv")
 vocab_uk_05_df = pd.read_csv("./data/vocab_data_uk_05.csv")
 vocab_us_02_df = pd.read_csv("./data/vocab_data_us_02.csv")
+vocab_uk_06_df = pd.read_csv("./data/vocab_data_uk_06.csv")
 
 # Prepare the data for merging
 vocab_to_merge = vocab_uk_01_df[["subject_id", "age", "understood", "spoken"]].copy()
@@ -82,6 +83,10 @@ vocab_uk_05_to_merge["study"] = 7
 vocab_us_02_to_merge = vocab_us_02_df.copy()
 vocab_us_02_to_merge["study"] = 8
 
+vocab_uk_06_to_merge = vocab_uk_06_df.copy()
+vocab_uk_06_to_merge["study"] = 9
+
+
 merged_df = pd.concat(
     [
         vocab_to_merge,
@@ -93,6 +98,7 @@ merged_df = pd.concat(
         vocab_uk_04_to_merge,
         vocab_uk_05_to_merge,
         vocab_us_02_to_merge,
+        vocab_uk_06_to_merge,
     ],
     ignore_index=True,
 )
@@ -165,6 +171,14 @@ con.execute(
     SELECT * FROM vocab_us_02_df
     """
 )
+
+con.execute(
+    """
+    CREATE TABLE vocab_uk_06 AS
+    SELECT * FROM vocab_uk_06_df
+    """
+)
+
 
 wordbank_child_df = pd.read_csv(
     "./data/wordbank_administration_data_en.csv", low_memory=False
@@ -304,6 +318,18 @@ con.execute(
         vus02.spoken                     as produced,
         418                                 as survey_vocab_max
     FROM vocab_us_02 as vus02
+        UNION
+    SELECT 'uk_06'                           as study,
+        vuk06.subject_id,
+        NULL                                as sex,
+        vuk06.age,
+        vuk06.understood,
+        vuk06.spoken,
+        vuk06.signed                                as signed,
+        vuk06.spoken                      as produced,
+        800                                 as survey_vocab_max
+    FROM vocab_uk_06 as vuk06
+
     """
 )
 
