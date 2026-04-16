@@ -7,11 +7,9 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 import argparse
 import os
 import subprocess
-from multiprocessing import freeze_support
-
 import dse_research_utils.environment.setup as setup
+from multiprocessing import freeze_support
 from rich import print
-
 from vocab_growth.models import (
     model_vg01,
     model_vg02,
