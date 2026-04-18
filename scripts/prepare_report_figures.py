@@ -105,7 +105,6 @@ def prepare_report_figures():
 
 if __name__ == "__main__":
     setup.init_script()
-    np.random.seed(RANDOM_SEED)
 
     os.makedirs(local_env.REPORT_FIGS_DIR, exist_ok=True)
 

@@ -49,6 +49,7 @@ from vocab_growth.models.common import (
     report,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
+from vocab_growth.plotting import _save_csv
 
 EPSILON = math_constants.EPSILON
 
@@ -1155,11 +1156,6 @@ def posterior_summary(context: BivariateContext):
 # ============================================================
 
 
-def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
-    """Save a DataFrame as CSV alongside the corresponding plot."""
-    df.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
-
-
 def plot_understood_spoken_trajectory(
     samples: BivariateModelSamples,
     n_trials: int,
@@ -1626,62 +1622,121 @@ def plot_understood_vs_spoken_predictive(
 
 
 # ============================================================
-# Fit orchestration
+# Shared bivariate plotting pipeline
 # ============================================================
 
 
-def fit_bivariate_model(
-    config: str,
+def _run_bivariate_outcome_plots(
+    samples: BivariateModelSamples,
+    y_plot: np.ndarray,
+    y_query: np.ndarray,
+    f_plot: np.ndarray,
+    kappa_plot: np.ndarray,
+    kappa_query: np.ndarray,
+    x_obs: pd.Series,
+    y_obs: pd.Series,
+    n_trials: int,
+    hdi_prob: float,
+    output_dir: str,
+    suffix: str,
+    outcome_label: str,
+    y_label: str,
+):
+    """Run the standard per-outcome plotting pipeline for a bivariate model."""
+    plotting.plot_posterior_predictive_count_distributions_by_query_age(
+        X_query=samples.X_query,
+        y_query=y_query,
+        n_trials=n_trials,
+        output_dir=output_dir,
+        filename=f"posterior_predictive_count_distributions_{suffix}",
+        x_label=f"{outcome_label} (count)",
+    )
+
+    plotting.plot_posterior_predictive_pmf(
+        samples.X_query,
+        samples.X_plot,
+        y_plot,
+        n_trials,
+        output_dir=output_dir,
+        filename=f"posterior_predictive_pmf_{suffix}",
+        x_label=f"{outcome_label} (count)",
+    )
+
+    plotting.plot_posterior_predictive_cdf(
+        samples.X_query,
+        samples.X_plot,
+        y_plot,
+        n_trials,
+        output_dir=output_dir,
+        filename=f"posterior_predictive_cdf_{suffix}",
+        x_label=f"{outcome_label} (count)",
+    )
+
+    plotting.plot_posterior_predictive_median_trend(
+        samples.X_plot,
+        y_plot,
+        x_obs,
+        y_obs,
+        output_dir=output_dir,
+        filename=f"posterior_predictive_median_trend_{suffix}",
+        y_label=y_label,
+    )
+
+    plotting.plot_posterior_predictive_median_trend(
+        samples.X_plot,
+        y_plot,
+        x_obs,
+        y_obs,
+        smooth=True,
+        savgol_window_length=15,
+        savgol_polyorder=3,
+        smooth_intervals=True,
+        output_dir=output_dir,
+        filename=f"posterior_predictive_median_trend_{suffix}_smoothed",
+        y_label=y_label,
+    )
+
+    plotting.plot_expected_learning_rate(
+        samples.X_plot,
+        f_plot,
+        n_trials=n_trials,
+        hdi_prob=hdi_prob,
+        output_dir=output_dir,
+        filename=f"expected_learning_rate_{suffix}",
+        y_label=f"Estimated {outcome_label.lower()} gain per month",
+    )
+
+    plotting.plot_expected_learning_rate(
+        samples.X_plot,
+        f_plot,
+        n_trials=n_trials,
+        hdi_prob=hdi_prob,
+        smooth=True,
+        savgol_window_length=15,
+        savgol_polyorder=3,
+        smooth_intervals=True,
+        output_dir=output_dir,
+        filename=f"expected_learning_rate_{suffix}_smoothed",
+        y_label=f"Estimated {outcome_label.lower()} gain per month",
+    )
+
+    plotting.plot_posterior_kappa(
+        samples.X_plot,
+        kappa_plot,
+        samples.X_query,
+        kappa_query,
+        n_trials=n_trials,
+        hdi_prob=hdi_prob,
+        output_dir=output_dir,
+        filename=f"posterior_kappa_{suffix}",
+    )
+
+
+def _run_bivariate_joint_plots(
+    context: BivariateContext,
     definition: BivariateModelDefinition,
-) -> BivariateContext:
-    """
-    Shared fit pipeline for bivariate models (VG05-VG06).
-    """
-    print(
-        "\n[green]============================================================[/green]"
-    )
-    print(
-        f"[bold green]{definition.banner}[/bold green]"
-    )
-    print("[green]============================================================[/green]")
-    print()
-
-    env_info.report_environment_info()
-
-    print()
-    package_metadata.report_package_versions(PACKAGE_LIST)
-
-    context: BivariateContext = ModelFitContext(
-        reporting=reporting.ReportingConfiguration(
-            model_name=definition.model_id,
-            config_name=definition.config_name,
-            output_root_dir=local_env.OUTPUT_DIR,
-            hdi=0.90,
-        ),
-        sampling=sampling.get_sampling_configuration(config),
-    )
-
-    if os.path.exists(context.reporting.output_dir):
-        shutil.rmtree(context.reporting.output_dir)
-
-    os.makedirs(context.reporting.output_dir, exist_ok=True)
-
-    prepare_bivariate_data(context, definition)
-
-    configure_bivariate_priors(context, definition)
-
-    build_model(context)
-
-    prior_predictive_checks(context)
-
-    sample(context)
-
-    diagnostics(context)
-
-    sample_posterior_predictive(context)
-
-    posterior_summary(context)
-
+):
+    """Run the joint bivariate plots and per-outcome plots shared by VG05–VG07."""
     samples = context.model_samples
     analysis_df = context.analysis_df
     has_u = analysis_df["understood"].notna()
@@ -1778,182 +1833,101 @@ def fit_bivariate_model(
 
     # ---- Per-outcome plots: understood ----
 
-    plotting.plot_posterior_predictive_count_distributions_by_query_age(
-        X_query=samples.X_query,
+    _run_bivariate_outcome_plots(
+        samples=samples,
+        y_plot=samples.y_u_plot,
         y_query=samples.y_u_query,
+        f_plot=samples.f_u_plot,
+        kappa_plot=samples.kappa_u_plot,
+        kappa_query=samples.kappa_u_query,
+        x_obs=analysis_df.loc[has_u, "age"],
+        y_obs=analysis_df.loc[has_u, "understood"],
         n_trials=context.model_data.n_trials,
+        hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_count_distributions_u",
-        x_label="Words understood (count)",
-    )
-
-    plotting.plot_posterior_predictive_pmf(
-        samples.X_query,
-        samples.X_plot,
-        samples.y_u_plot,
-        context.model_data.n_trials,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_pmf_u",
-        x_label="Words understood (count)",
-    )
-
-    plotting.plot_posterior_predictive_cdf(
-        samples.X_query,
-        samples.X_plot,
-        samples.y_u_plot,
-        context.model_data.n_trials,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_cdf_u",
-        x_label="Words understood (count)",
-    )
-
-    plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot,
-        samples.y_u_plot,
-        analysis_df.loc[has_u, "age"],
-        analysis_df.loc[has_u, "understood"],
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_median_trend_u",
+        suffix="u",
+        outcome_label="Words understood",
         y_label="Predicted words understood",
-    )
-
-    plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot,
-        samples.y_u_plot,
-        analysis_df.loc[has_u, "age"],
-        analysis_df.loc[has_u, "understood"],
-        smooth=True,
-        savgol_window_length=15,
-        savgol_polyorder=3,
-        smooth_intervals=True,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_median_trend_u_smoothed",
-        y_label="Predicted words understood",
-    )
-
-    plotting.plot_expected_learning_rate(
-        samples.X_plot,
-        samples.f_u_plot,
-        n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
-        output_dir=context.reporting.output_dir,
-        filename="expected_learning_rate_u",
-        y_label="Estimated understood word gain per month",
-    )
-
-    plotting.plot_expected_learning_rate(
-        samples.X_plot,
-        samples.f_u_plot,
-        n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
-        smooth=True,
-        savgol_window_length=15,
-        savgol_polyorder=3,
-        smooth_intervals=True,
-        output_dir=context.reporting.output_dir,
-        filename="expected_learning_rate_u_smoothed",
-        y_label="Estimated understood word gain per month",
-    )
-
-    plotting.plot_posterior_kappa(
-        samples.X_plot,
-        samples.kappa_u_plot,
-        samples.X_query,
-        samples.kappa_u_query,
-        n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_kappa_u",
     )
 
     # ---- Per-outcome plots: spoken ----
 
-    plotting.plot_posterior_predictive_count_distributions_by_query_age(
-        X_query=samples.X_query,
+    _run_bivariate_outcome_plots(
+        samples=samples,
+        y_plot=samples.y_s_plot,
         y_query=samples.y_s_query,
+        f_plot=samples.f_s_plot,
+        kappa_plot=samples.kappa_s_plot,
+        kappa_query=samples.kappa_s_query,
+        x_obs=analysis_df.loc[has_s, "age"],
+        y_obs=analysis_df.loc[has_s, "spoken"],
         n_trials=context.model_data.n_trials,
+        hdi_prob=context.reporting.hdi,
         output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_count_distributions_s",
-    )
-
-    plotting.plot_posterior_predictive_pmf(
-        samples.X_query,
-        samples.X_plot,
-        samples.y_s_plot,
-        context.model_data.n_trials,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_pmf_s",
-        x_label="Words spoken (count)",
-    )
-
-    plotting.plot_posterior_predictive_cdf(
-        samples.X_query,
-        samples.X_plot,
-        samples.y_s_plot,
-        context.model_data.n_trials,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_cdf_s",
-        x_label="Words spoken (count)",
-    )
-
-    plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot,
-        samples.y_s_plot,
-        analysis_df.loc[has_s, "age"],
-        analysis_df.loc[has_s, "spoken"],
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_median_trend_s",
+        suffix="s",
+        outcome_label="Words spoken",
         y_label="Predicted words spoken",
     )
 
-    plotting.plot_posterior_predictive_median_trend(
-        samples.X_plot,
-        samples.y_s_plot,
-        analysis_df.loc[has_s, "age"],
-        analysis_df.loc[has_s, "spoken"],
-        smooth=True,
-        savgol_window_length=15,
-        savgol_polyorder=3,
-        smooth_intervals=True,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_predictive_median_trend_s_smoothed",
-        y_label="Predicted words spoken",
+
+# ============================================================
+# Fit orchestration
+# ============================================================
+
+
+def fit_bivariate_model(
+    config: str,
+    definition: BivariateModelDefinition,
+) -> BivariateContext:
+    """
+    Shared fit pipeline for bivariate models (VG05-VG06).
+    """
+    print(
+        "\n[green]============================================================[/green]"
+    )
+    print(
+        f"[bold green]{definition.banner}[/bold green]"
+    )
+    print("[green]============================================================[/green]")
+    print()
+
+    env_info.report_environment_info()
+
+    print()
+    package_metadata.report_package_versions(PACKAGE_LIST)
+
+    context: BivariateContext = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name=definition.model_id,
+            config_name=definition.config_name,
+            output_root_dir=local_env.OUTPUT_DIR,
+            hdi=0.90,
+        ),
+        sampling=sampling.get_sampling_configuration(config),
     )
 
-    plotting.plot_expected_learning_rate(
-        samples.X_plot,
-        samples.f_s_plot,
-        n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
-        output_dir=context.reporting.output_dir,
-        filename="expected_learning_rate_s",
-        y_label="Estimated spoken word gain per month",
-    )
+    if os.path.exists(context.reporting.output_dir):
+        shutil.rmtree(context.reporting.output_dir)
 
-    plotting.plot_expected_learning_rate(
-        samples.X_plot,
-        samples.f_s_plot,
-        n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
-        smooth=True,
-        savgol_window_length=15,
-        savgol_polyorder=3,
-        smooth_intervals=True,
-        output_dir=context.reporting.output_dir,
-        filename="expected_learning_rate_s_smoothed",
-        y_label="Estimated spoken word gain per month",
-    )
+    os.makedirs(context.reporting.output_dir, exist_ok=True)
 
-    plotting.plot_posterior_kappa(
-        samples.X_plot,
-        samples.kappa_s_plot,
-        samples.X_query,
-        samples.kappa_s_query,
-        n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
-        output_dir=context.reporting.output_dir,
-        filename="posterior_kappa_s",
-    )
+    prepare_bivariate_data(context, definition)
+
+    configure_bivariate_priors(context, definition)
+
+    build_model(context)
+
+    prior_predictive_checks(context)
+
+    sample(context)
+
+    diagnostics(context)
+
+    sample_posterior_predictive(context)
+
+    posterior_summary(context)
+
+    _run_bivariate_joint_plots(context, definition)
 
     report(context)
 

@@ -28,24 +28,23 @@ def load_combined_data(max_age_months=None):
     --------
         pd.DataFrame: The combined data as a DataFrame.
     """
+    age_limit = max_age_months if max_age_months is not None else 1200
 
-    con = duckdb.connect(VOCABULARY_DATA_PATH)
-
-    df = con.execute(
-        f"""
-        SELECT
-            study,
-            sex,
-            age,
-            understood,
-            spoken,
-            signed
-        FROM vocab_combined
-        WHERE age <= {max_age_months if max_age_months is not None else 1200}
-        """
-    ).df()
-
-    con.close()
+    with duckdb.connect(VOCABULARY_DATA_PATH) as con:
+        df = con.execute(
+            """
+            SELECT
+                study,
+                sex,
+                age,
+                understood,
+                spoken,
+                signed
+            FROM vocab_combined
+            WHERE age <= $1
+            """,
+            [age_limit],
+        ).df()
 
     return df
 
@@ -80,27 +79,26 @@ def load_data(
         return df[columns]
 
     # Typically developing — query wordbank_child directly
-    con = duckdb.connect(VOCABULARY_DATA_PATH)
-    td_df = (
-        con.execute(
+    with duckdb.connect(VOCABULARY_DATA_PATH) as con:
+        td_df = (
+            con.execute(
+                """
+            SELECT
+                form,
+                age,
+                comprehension                      as understood,
+                production                         as spoken,
+                typically_developing,
+                health_conditions
+            FROM wordbank_child
+            WHERE typically_developing = true
+                AND age < 31
+                AND health_conditions IS NULL
+                AND (form = 'Oxford CDI' OR form = 'WG' OR form = 'WS')
             """
-        SELECT
-            form,
-            age,
-            comprehension                      as understood,
-            production                         as spoken,
-            typically_developing,
-            health_conditions
-        FROM wordbank_child
-        WHERE typically_developing = true
-            AND age < 31
-            AND health_conditions IS NULL
-            AND (form = 'Oxford CDI' OR form = 'WG' OR form = 'WS')
-        """
+            )
+            .df()
         )
-        .df()
-    )
-    con.close()
 
     if sample_fraction < 1.0:
         td_df = (

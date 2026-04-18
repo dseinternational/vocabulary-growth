@@ -29,7 +29,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "model",
         type=str,
-        help="Model id (vg01, vg02, vg03, vg04, vg05, vg06) or 'all'.",
+        help="Model id (vg01, vg02, vg03, vg04, vg05, vg06, vg07) or 'all'.",
     )
     parser.add_argument(
         "--include-traces",
