@@ -4,23 +4,49 @@
 # run from repository root with `python scripts/prepare_data.py`
 
 import os
+import time
 
 import duckdb
 import pandas as pd
-from rich import print
 
-print("Preparing data...")
+from vocab_growth.reporting import (
+    console,
+    format_duration,
+    heading,
+    key_value_table,
+)
 
-# Load the datasets
-vocab_ie_01_df = pd.read_csv("./data/vocab_data_ie_01.csv")
-vocab_it_01_df = pd.read_csv("./data/vocab_data_it_01.csv")
-vocab_uk_01_df = pd.read_csv("./data/vocab_data_uk_01.csv")
-vocab_uk_02_df = pd.read_csv("./data/vocab_data_uk_02.csv")
-vocab_uk_03_df = pd.read_csv("./data/vocab_data_uk_03.csv")
-vocab_uk_04_df = pd.read_csv("./data/vocab_data_uk_04.csv")
-vocab_uk_05_df = pd.read_csv("./data/vocab_data_uk_05.csv")
-vocab_us_02_df = pd.read_csv("./data/vocab_data_us_02.csv")
-vocab_uk_06_df = pd.read_csv("./data/vocab_data_uk_06.csv")
+_started = time.perf_counter()
+heading("Preparing vocabulary data")
+
+_sources = {
+    "vocab_ie_01": "./data/vocab_data_ie_01.csv",
+    "vocab_it_01": "./data/vocab_data_it_01.csv",
+    "vocab_uk_01": "./data/vocab_data_uk_01.csv",
+    "vocab_uk_02": "./data/vocab_data_uk_02.csv",
+    "vocab_uk_03": "./data/vocab_data_uk_03.csv",
+    "vocab_uk_04": "./data/vocab_data_uk_04.csv",
+    "vocab_uk_05": "./data/vocab_data_uk_05.csv",
+    "vocab_us_02": "./data/vocab_data_us_02.csv",
+    "vocab_uk_06": "./data/vocab_data_uk_06.csv",
+}
+_loaded = {name: pd.read_csv(path) for name, path in _sources.items()}
+
+key_value_table(
+    "Loaded datasets",
+    [(name, f"{len(df):,} rows × {len(df.columns)} cols") for name, df in _loaded.items()],
+    value_header="Shape",
+)
+
+vocab_ie_01_df = _loaded["vocab_ie_01"]
+vocab_it_01_df = _loaded["vocab_it_01"]
+vocab_uk_01_df = _loaded["vocab_uk_01"]
+vocab_uk_02_df = _loaded["vocab_uk_02"]
+vocab_uk_03_df = _loaded["vocab_uk_03"]
+vocab_uk_04_df = _loaded["vocab_uk_04"]
+vocab_uk_05_df = _loaded["vocab_uk_05"]
+vocab_us_02_df = _loaded["vocab_us_02"]
+vocab_uk_06_df = _loaded["vocab_uk_06"]
 
 # Prepare the data for merging
 vocab_to_merge = vocab_uk_01_df[["subject_id", "age", "understood", "spoken"]].copy()
@@ -103,11 +129,14 @@ merged_df = pd.concat(
     ignore_index=True,
 )
 
-print("Saving merged dataset to CSV...")
+console.print(
+    f"[green]Merged dataset:[/green] {len(merged_df):,} rows × {len(merged_df.columns)} cols"
+)
+console.print("[green]Saving merged dataset to CSV…[/green]")
 
 merged_df.to_csv("./data/vocab_data_merged.csv", index=False)
 
-print("Creating DuckDB database and tables...")
+console.print("[green]Creating DuckDB database and tables…[/green]")
 
 db_path = "./data/vocabulary.duckdb"
 
@@ -335,4 +364,12 @@ con.execute(
 
 con.close()
 
-print("Data preparation complete.")
+key_value_table(
+    "Data preparation complete",
+    [
+        ("Merged CSV", "./data/vocab_data_merged.csv"),
+        ("DuckDB database", db_path),
+        ("Total merged rows", f"{len(merged_df):,}"),
+        ("Elapsed", format_duration(time.perf_counter() - _started)),
+    ],
+)

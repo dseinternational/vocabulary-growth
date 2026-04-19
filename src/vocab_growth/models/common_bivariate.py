@@ -13,6 +13,7 @@ Uses a production-ratio reparameterization:
 
 import os
 import shutil
+import time
 from dataclasses import dataclass
 
 import arviz as az
@@ -33,23 +34,33 @@ import preliz as pz
 import pymc as pm
 from arviz import InferenceData
 from preliz.distributions.distributions import Continuous
-from rich import print
-from rich.pretty import pprint
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
+import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.common import (
     PACKAGE_LIST,
     BaseModelConfiguration,
     ModelFitContext,
     _plot_and_print_dist,
+    _report_diagnostic_warnings,
     get_hsgp_hyperparams,
     report,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
 from vocab_growth.plotting import _save_csv
+from vocab_growth.reporting import (
+    config_table,
+    console,
+    dataframe_table,
+    heading,
+    key_value_table,
+    pipeline_summary,
+    run_banner,
+    section,
+)
 
 EPSILON = math_constants.EPSILON
 
@@ -159,13 +170,6 @@ def prepare_bivariate_data(
     definition: BivariateModelDefinition,
 ):
     """Load and prepare data for a bivariate model from its definition."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Prepare data[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     df = vocab_data_utils.load_data(
         population=definition.population,
         columns=["age", "understood", "spoken"],
@@ -182,14 +186,6 @@ def prepare_bivariate_data(
 
     desc = descriptive_stats.describe_all(analysis_df, alpha=0.05)
 
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Descriptive statistics[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-
-    pprint(desc)
-
     n = len(analysis_df)
     n_u = int(analysis_df["understood"].notna().sum())
     n_s = int(analysis_df["spoken"].notna().sum())
@@ -197,12 +193,18 @@ def prepare_bivariate_data(
         (analysis_df["understood"].notna() & analysis_df["spoken"].notna()).sum()
     )
 
-    print(f"\n  Total observations:       {n}")
-    print(f"  Understood observed:      {n_u}")
-    print(f"  Spoken observed:          {n_s}")
-    print(f"  Both observed:            {n_both}")
-    print(f"  Understood only:          {n_u - n_both}")
-    print(f"  Spoken only:              {n_s - n_both}")
+    key_value_table(
+        "Observation counts",
+        [
+            ("Total observations", n),
+            ("Understood observed", n_u),
+            ("Spoken observed", n_s),
+            ("Both observed", n_both),
+            ("Understood only", n_u - n_both),
+            ("Spoken only", n_s - n_both),
+        ],
+    )
+    dataframe_table(desc, title="Descriptive statistics")
 
     # Create a BinomialModelData for the context interface (using understood as primary)
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
@@ -235,13 +237,7 @@ def configure_bivariate_priors(
     definition: BivariateModelDefinition,
 ):
     """Configure priors and hyperparameters from a bivariate model definition."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Priors and hyperparameters[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
+    heading("Understood trajectory priors", style="bold cyan")
     # --- Understood (U) trajectory priors ---
 
     ell_unit_u_dist = pz.Beta(
@@ -264,6 +260,7 @@ def configure_bivariate_priors(
     _plot_and_print_dist(context, p_slope_hi_u_dist, "p_slope_hi_u_dist")
 
     # --- Production ratio (q) priors ---
+    heading("Production ratio priors", style="bold cyan")
 
     ell_unit_q_dist = pz.Beta(
         alpha=definition.ell_unit_q_alpha, beta=definition.ell_unit_q_beta
@@ -284,6 +281,7 @@ def configure_bivariate_priors(
     _plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
 
     # --- Kappa priors — understood ---
+    heading("Kappa priors — understood", style="bold cyan")
 
     kp_u = definition.kappa_u
     kappa_min_u_dist = pz.LogNormal(mu=kp_u.kappa_min_mu, sigma=kp_u.kappa_min_sigma)
@@ -296,6 +294,7 @@ def configure_bivariate_priors(
     _plot_and_print_dist(context, b_kappa_mag_u_dist, "b_kappa_mag_u_dist")
 
     # --- Kappa priors — spoken ---
+    heading("Kappa priors — spoken", style="bold cyan")
 
     kp_s = definition.kappa_s
     kappa_min_s_dist = pz.LogNormal(mu=kp_s.kappa_min_mu, sigma=kp_s.kappa_min_sigma)
@@ -346,13 +345,6 @@ def build_model(context: BivariateContext):
     """Build the bivariate PyMC model."""
     config = context.model_config
 
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Model definition and initialisation[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     analysis_df = context.analysis_df
 
     # Observation masks
@@ -371,11 +363,6 @@ def build_model(context: BivariateContext):
     n_s = len(y_s_observed)
     n_trials = context.model_data.n_trials
 
-    print(f"  Total observations:   {n}")
-    print(f"  Understood observed:  {n_u}")
-    print(f"  Spoken observed:      {n_s}")
-    print(f"  n_trials:             {n_trials}")
-
     # Validate
     if not np.all(y_u_observed >= 0):
         raise ValueError("y_u contains negative counts.")
@@ -393,7 +380,20 @@ def build_model(context: BivariateContext):
     if not np.isfinite(X_obs_std) or X_obs_std <= 0:
         raise ValueError("Age standard deviation must be positive.")
 
-    print(f"  Age (months) - mean: {X_obs_mean:.2f}, std: {X_obs_std:.2f}")
+    key_value_table(
+        "Build configuration",
+        [
+            ("Total observations", n),
+            ("Understood observed", n_u),
+            ("Spoken observed", n_s),
+            ("n_trials", n_trials),
+            ("Age mean (months)", X_obs_mean),
+            ("Age std (months)", X_obs_std),
+            ("Slope anchors (months)", config.slope_anchors),
+            ("Length-scale range (months)", config.ell_months_range),
+            ("Query ages (months)", config.ages_query),
+        ],
+    )
 
     X_obs_z = (X_obs - X_obs_mean) / X_obs_std
 
@@ -427,16 +427,21 @@ def build_model(context: BivariateContext):
 
     L, M = get_hsgp_hyperparams(X_obs_z, ell_range_z)
 
-    print(f"  HSGP basis size (m): {M}")
-    print(f"  HSGP L: {L}")
-
     # Slope anchors
     slope_age_a = float(config.slope_anchors[0])
     slope_age_b = float(config.slope_anchors[1])
     slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
     slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
 
-    print(f"  Slope anchors (z-scores): {slope_age_a_z:.2f}, {slope_age_b_z:.2f}")
+    key_value_table(
+        "Derived quantities",
+        [
+            ("HSGP basis size (m)", M),
+            ("HSGP boundary factor (L)", L),
+            ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
+            ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+        ],
+    )
 
     # Slice indices
     i_obs0, i_obs1 = 0, n
@@ -820,13 +825,6 @@ def extract_model_samples(trace: InferenceData) -> BivariateModelSamples:
 
 def prior_predictive_checks(context: BivariateContext):
     """Run prior predictive checks."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Prior predictive checks[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     with context.model:
         prior_samples = pm.sample_prior_predictive(
             draws=1000,
@@ -905,15 +903,7 @@ def prior_predictive_checks(context: BivariateContext):
 
 def sample(context: BivariateContext):
     """Draw samples from the posterior using MCMC."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Posterior sampling[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
-    print(context.sampling)
-    print()
+    config_table("Sampling configuration", context.sampling)
 
     with context.model:
         trace = pm.sample(
@@ -929,19 +919,9 @@ def sample(context: BivariateContext):
 
     context.set_trace(trace)
 
-    print()
-    print("[bold green]Posterior sampling completed.[/bold green]")
-
 
 def diagnostics(context: BivariateContext):
     """Run diagnostics on the posterior samples."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Diagnostics[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     var_names = [
         var.name for var in context.model.unobserved_RVs if var.size.eval() <= 2
     ]
@@ -953,7 +933,8 @@ def diagnostics(context: BivariateContext):
         os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True
     )
 
-    pprint(diagnostics_df)
+    dataframe_table(diagnostics_df, title="Posterior diagnostics")
+    _report_diagnostic_warnings(diagnostics_df)
 
     # KDE pair plot
     plot_diagnostics_mcmc.plot_kde_pair(
@@ -1005,21 +986,14 @@ def diagnostics(context: BivariateContext):
     loocv_s = az.loo(context.trace, var_name="y_s_obs")
     loocv_u = az.loo(context.trace, var_name="y_u_obs")
     context.set_loocv({"y_s_obs": loocv_s, "y_u_obs": loocv_u})
-    print("LOO-CV (words spoken):")
-    print(loocv_s)
-    print("\nLOO-CV (words understood):")
-    print(loocv_u)
+    heading("LOO-CV — words spoken", style="bold cyan")
+    console.print(loocv_s)
+    heading("LOO-CV — words understood", style="bold cyan")
+    console.print(loocv_u)
 
 
 def sample_posterior_predictive(context: BivariateContext):
     """Sample from the posterior predictive distribution."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Posterior predictions[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     n_trials = context.model_data.n_trials
 
     p_u_plot = context.model_variables["p_u_plot"]
@@ -1106,8 +1080,9 @@ def posterior_summary(context: BivariateContext):
         n_trials=n_trials,
         hdi_prob=hdi_prob,
     )
-    print("\n[bold green]Posterior summary — words understood[/bold green]")
-    pprint(summary_u)
+    dataframe_table(
+        summary_u, title="Posterior summary — words understood", show_index=False
+    )
     context.dataframes["posterior_summary_u"] = summary_u
     summary_u.to_csv(
         os.path.join(context.reporting.output_dir, "posterior_summary_u.csv"),
@@ -1122,8 +1097,9 @@ def posterior_summary(context: BivariateContext):
         n_trials=n_trials,
         hdi_prob=hdi_prob,
     )
-    print("\n[bold green]Posterior summary — words spoken[/bold green]")
-    pprint(summary_s)
+    dataframe_table(
+        summary_s, title="Posterior summary — words spoken", show_index=False
+    )
     context.dataframes["posterior_summary_s"] = summary_s
     summary_s.to_csv(
         os.path.join(context.reporting.output_dir, "posterior_summary_s.csv"),
@@ -1142,8 +1118,9 @@ def posterior_summary(context: BivariateContext):
             "q_hdi_hi": q_query_hdi[:, 1],
         }
     )
-    print("\n[bold green]Posterior summary — production rate q(a)[/bold green]")
-    pprint(summary_q)
+    dataframe_table(
+        summary_q, title="Posterior summary — production rate q(a)", show_index=False
+    )
     context.dataframes["posterior_summary_q"] = summary_q
     summary_q.to_csv(
         os.path.join(context.reporting.output_dir, "posterior_summary_q.csv"),
@@ -1882,18 +1859,11 @@ def fit_bivariate_model(
     """
     Shared fit pipeline for bivariate models (VG05-VG06).
     """
-    print(
-        "\n[green]============================================================[/green]"
-    )
-    print(
-        f"[bold green]{definition.banner}[/bold green]"
-    )
-    print("[green]============================================================[/green]")
-    print()
+    run_banner(definition.banner, subtitle=f"sampling config: {config}")
 
     env_info.report_environment_info()
 
-    print()
+    console.print()
     package_metadata.report_package_versions(PACKAGE_LIST)
 
     context: BivariateContext = ModelFitContext(
@@ -1911,24 +1881,45 @@ def fit_bivariate_model(
 
     os.makedirs(context.reporting.output_dir, exist_ok=True)
 
-    prepare_bivariate_data(context, definition)
+    timings = context.timings
+    run_started = time.perf_counter()
 
-    configure_bivariate_priors(context, definition)
+    with section("Prepare data", timings=timings):
+        prepare_bivariate_data(context, definition)
 
-    build_model(context)
+    with section("Priors and hyperparameters", timings=timings):
+        configure_bivariate_priors(context, definition)
 
-    prior_predictive_checks(context)
+    with section("Model definition and initialisation", timings=timings):
+        build_model(context)
 
-    sample(context)
+    with section("Prior predictive checks", timings=timings):
+        prior_predictive_checks(context)
 
-    diagnostics(context)
+    with section("Posterior sampling", timings=timings):
+        sample(context)
 
-    sample_posterior_predictive(context)
+    with section("Diagnostics", timings=timings):
+        diagnostics(context)
 
-    posterior_summary(context)
+    with section("Posterior predictions", timings=timings):
+        sample_posterior_predictive(context)
 
-    _run_bivariate_joint_plots(context, definition)
+    with section("Posterior summary", timings=timings):
+        posterior_summary(context)
 
-    report(context)
+    with section("Plots", timings=timings):
+        _run_bivariate_joint_plots(context, definition)
+
+    with section("Report", timings=timings):
+        report(context)
+
+    pipeline_summary(
+        f"Pipeline summary — {context.reporting.model_label}", timings
+    )
+    console.print(
+        f"[dim]Total wall time: "
+        f"{vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
+    )
 
     return context
