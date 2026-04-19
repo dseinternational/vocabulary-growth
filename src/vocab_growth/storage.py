@@ -3,12 +3,19 @@
 
 import mimetypes
 import os
+import time
 import uuid
 from urllib.parse import urlparse
 
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContentSettings
-from rich import print
+
+from vocab_growth.reporting import (
+    console,
+    format_duration,
+    heading,
+    key_value_table,
+)
 
 
 def upload_to_blob_storage(
@@ -23,11 +30,11 @@ def upload_to_blob_storage(
     """
     container_url = os.environ.get("DSERESEARCH_BLOB_CONTAINER_URL")
     if not container_url:
-        print(
+        console.print(
             "[bold red]Error: DSERESEARCH_BLOB_CONTAINER_URL environment variable is not set.[/bold red]"
         )
-        print("Set it to your Azure Blob container URL, e.g.:")
-        print(
+        console.print("Set it to your Azure Blob container URL, e.g.:")
+        console.print(
             "  export DSERESEARCH_BLOB_CONTAINER_URL='https://<account>.blob.core.windows.net/<container>'"
         )
         raise RuntimeError(
@@ -41,9 +48,16 @@ def upload_to_blob_storage(
     run_id = uuid.uuid7()
     blob_prefix = f"projects/vocabulary-growth/output/{run_id}/{model_label}"
 
-    print(f"\n[bold green]Uploading to Azure Blob Storage: {model_label}[/bold green]")
-    print(f"  Source: {output_dir}")
-    print(f"  Destination: {container_name}/{blob_prefix}/")
+    heading(f"Uploading {model_label} to Azure Blob Storage")
+    key_value_table(
+        "Upload target",
+        [
+            ("Source", output_dir),
+            ("Container", container_name),
+            ("Prefix", f"{blob_prefix}/"),
+            ("Include traces", include_traces),
+        ],
+    )
 
     credential = DefaultAzureCredential()
     blob_service_client = BlobServiceClient(account_url, credential=credential)
@@ -51,6 +65,8 @@ def upload_to_blob_storage(
 
     uploaded = 0
     skipped = 0
+    bytes_sent = 0
+    started = time.perf_counter()
     for root, _dirs, files in os.walk(output_dir):
         for filename in files:
             if not include_traces and filename.endswith(".nc"):
@@ -65,6 +81,7 @@ def upload_to_blob_storage(
             if content_type is None:
                 content_type = "application/octet-stream"
 
+            bytes_sent += os.path.getsize(local_path)
             with open(local_path, "rb") as f:
                 container_client.upload_blob(
                     blob_name,
@@ -74,6 +91,12 @@ def upload_to_blob_storage(
                 )
             uploaded += 1
 
-    if skipped:
-        print(f"[yellow]Skipped {skipped} trace file(s) (.nc)[/yellow]")
-    print(f"[bold green]Upload complete: {model_label} ({uploaded} files)[/bold green]")
+    key_value_table(
+        f"Upload complete — {model_label}",
+        [
+            ("Files uploaded", uploaded),
+            ("Files skipped (.nc)", skipped),
+            ("Bytes uploaded", f"{bytes_sent / 1_000_000:.1f} MB"),
+            ("Elapsed", format_duration(time.perf_counter() - started)),
+        ],
+    )

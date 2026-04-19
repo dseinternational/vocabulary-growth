@@ -19,20 +19,22 @@ Plot and query predictions use the population-level trajectory (delta=0).
 
 import os
 import shutil
+import time
 
 import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.metadata.packages as package_metadata
+import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
 import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pymc as pm
-from rich import print
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
+import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.common import (
     PACKAGE_LIST,
     ModelFitContext,
@@ -50,6 +52,14 @@ from vocab_growth.models.common_bivariate import (
     sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
+from vocab_growth.reporting import (
+    console,
+    dataframe_table,
+    key_value_table,
+    pipeline_summary,
+    run_banner,
+    section,
+)
 
 EPSILON = math_constants.EPSILON
 
@@ -66,16 +76,6 @@ def prepare_bivariate_re_data(
     definition: BivariateModelDefinition,
 ):
     """Load and prepare data for a bivariate model with study random effects."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Prepare data[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
-    import dse_research_utils.statistics.descriptive as descriptive_stats
-    from rich.pretty import pprint
-
     df = vocab_data_utils.load_data(
         population=definition.population,
         columns=["age", "understood", "spoken", "study"],
@@ -99,14 +99,6 @@ def prepare_bivariate_re_data(
         analysis_df[["age", "understood", "spoken"]], alpha=0.05
     )
 
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Descriptive statistics[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-
-    pprint(desc)
-
     n = len(analysis_df)
     n_u = int(analysis_df["understood"].notna().sum())
     n_s = int(analysis_df["spoken"].notna().sum())
@@ -115,13 +107,19 @@ def prepare_bivariate_re_data(
     )
     n_studies = len(unique_studies)
 
-    print(f"\n  Total observations:       {n}")
-    print(f"  Understood observed:      {n_u}")
-    print(f"  Spoken observed:          {n_s}")
-    print(f"  Both observed:            {n_both}")
-    print(f"  Understood only:          {n_u - n_both}")
-    print(f"  Spoken only:              {n_s - n_both}")
-    print(f"  Studies:                  {n_studies} {unique_studies}")
+    key_value_table(
+        "Observation counts",
+        [
+            ("Total observations", n),
+            ("Understood observed", n_u),
+            ("Spoken observed", n_s),
+            ("Both observed", n_both),
+            ("Understood only", n_u - n_both),
+            ("Spoken only", n_s - n_both),
+            ("Studies", f"{n_studies} ({', '.join(map(str, unique_studies))})"),
+        ],
+    )
+    dataframe_table(desc, title="Descriptive statistics")
 
     # Create a BinomialModelData for the context interface
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
@@ -156,13 +154,6 @@ def build_model_re(
     """Build the bivariate PyMC model with study-level random intercepts."""
     config = context.model_config
 
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Model definition and initialisation[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     analysis_df = context.analysis_df
 
     # Observation masks
@@ -183,12 +174,6 @@ def build_model_re(
     n_trials = context.model_data.n_trials
     n_studies = int(study_codes.max()) + 1
 
-    print(f"  Total observations:   {n}")
-    print(f"  Understood observed:  {n_u}")
-    print(f"  Spoken observed:      {n_s}")
-    print(f"  n_trials:             {n_trials}")
-    print(f"  n_studies:            {n_studies}")
-
     # Validate
     if not np.all(y_u_observed >= 0):
         raise ValueError("y_u contains negative counts.")
@@ -206,7 +191,21 @@ def build_model_re(
     if not np.isfinite(X_obs_std) or X_obs_std <= 0:
         raise ValueError("Age standard deviation must be positive.")
 
-    print(f"  Age (months) - mean: {X_obs_mean:.2f}, std: {X_obs_std:.2f}")
+    key_value_table(
+        "Build configuration",
+        [
+            ("Total observations", n),
+            ("Understood observed", n_u),
+            ("Spoken observed", n_s),
+            ("n_trials", n_trials),
+            ("n_studies", n_studies),
+            ("Age mean (months)", X_obs_mean),
+            ("Age std (months)", X_obs_std),
+            ("Slope anchors (months)", config.slope_anchors),
+            ("Length-scale range (months)", config.ell_months_range),
+            ("Query ages (months)", config.ages_query),
+        ],
+    )
 
     X_obs_z = (X_obs - X_obs_mean) / X_obs_std
 
@@ -240,16 +239,21 @@ def build_model_re(
 
     L, M = get_hsgp_hyperparams(X_obs_z, ell_range_z)
 
-    print(f"  HSGP basis size (m): {M}")
-    print(f"  HSGP L: {L}")
-
     # Slope anchors
     slope_age_a = float(config.slope_anchors[0])
     slope_age_b = float(config.slope_anchors[1])
     slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
     slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
 
-    print(f"  Slope anchors (z-scores): {slope_age_a_z:.2f}, {slope_age_b_z:.2f}")
+    key_value_table(
+        "Derived quantities",
+        [
+            ("HSGP basis size (m)", M),
+            ("HSGP boundary factor (L)", L),
+            ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
+            ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+        ],
+    )
 
     # Slice indices
     i_obs0, i_obs1 = 0, n
@@ -540,18 +544,11 @@ def fit_bivariate_re_model(
     """
     Fit pipeline for bivariate model with study random intercepts (VG07).
     """
-    print(
-        "\n[green]============================================================[/green]"
-    )
-    print(
-        f"[bold green]{definition.banner}[/bold green]"
-    )
-    print("[green]============================================================[/green]")
-    print()
+    run_banner(definition.banner, subtitle=f"sampling config: {config}")
 
     env_info.report_environment_info()
 
-    print()
+    console.print()
     package_metadata.report_package_versions(PACKAGE_LIST)
 
     context: BivariateREContext = ModelFitContext(
@@ -569,24 +566,45 @@ def fit_bivariate_re_model(
 
     os.makedirs(context.reporting.output_dir, exist_ok=True)
 
-    prepare_bivariate_re_data(context, definition)
+    timings = context.timings
+    run_started = time.perf_counter()
 
-    configure_bivariate_priors(context, definition)
+    with section("Prepare data", timings=timings):
+        prepare_bivariate_re_data(context, definition)
 
-    build_model_re(context, definition)
+    with section("Priors and hyperparameters", timings=timings):
+        configure_bivariate_priors(context, definition)
 
-    prior_predictive_checks(context)
+    with section("Model definition and initialisation", timings=timings):
+        build_model_re(context, definition)
 
-    sample(context)
+    with section("Prior predictive checks", timings=timings):
+        prior_predictive_checks(context)
 
-    diagnostics(context)
+    with section("Posterior sampling", timings=timings):
+        sample(context)
 
-    sample_posterior_predictive(context)
+    with section("Diagnostics", timings=timings):
+        diagnostics(context)
 
-    posterior_summary(context)
+    with section("Posterior predictions", timings=timings):
+        sample_posterior_predictive(context)
 
-    _run_bivariate_joint_plots(context, definition)
+    with section("Posterior summary", timings=timings):
+        posterior_summary(context)
 
-    report(context)
+    with section("Plots", timings=timings):
+        _run_bivariate_joint_plots(context, definition)
+
+    with section("Report", timings=timings):
+        report(context)
+
+    pipeline_summary(
+        f"Pipeline summary — {context.reporting.model_label}", timings
+    )
+    console.print(
+        f"[dim]Total wall time: "
+        f"{vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
+    )
 
     return context

@@ -7,10 +7,11 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 import argparse
 import os
 import subprocess
+import sys
+import time
 from multiprocessing import freeze_support
 
 import dse_research_utils.environment.setup as setup
-from rich import print
 
 from vocab_growth.models import (
     model_vg01,
@@ -20,6 +21,13 @@ from vocab_growth.models import (
     model_vg05,
     model_vg06,
     model_vg07,
+)
+from vocab_growth.reporting import (
+    console,
+    format_duration,
+    heading,
+    key_value_table,
+    pipeline_summary,
 )
 from vocab_growth.storage import upload_to_blob_storage
 
@@ -65,19 +73,36 @@ if __name__ == "__main__":
     }
 
     if args.model == "all":
-        to_fit = list(models.values())
+        selected = list(models.items())
     elif args.model in models:
-        to_fit = [models[args.model]]
+        selected = [(args.model, models[args.model])]
     else:
-        print(f"Unknown model: {args.model}")
-        exit(1)
+        console.print(f"[bold red]Unknown model: {args.model}[/bold red]")
+        sys.exit(1)
 
-    contexts = [m.fit(args.config) for m in to_fit]
+    key_value_table(
+        "Run plan",
+        [
+            ("Models to fit", ", ".join(name for name, _ in selected)),
+            ("Sampling config", args.config),
+            ("Render Quarto", args.render),
+            ("Upload to blob storage", args.upload),
+            ("Include traces in upload", args.include_traces),
+        ],
+    )
+
+    run_started = time.perf_counter()
+    per_model_timings: dict[str, float] = {}
+    contexts = []
+    for name, module in selected:
+        model_started = time.perf_counter()
+        contexts.append(module.fit(args.config))
+        per_model_timings[name] = time.perf_counter() - model_started
 
     if args.render:
         for context in contexts:
             qmd_path = os.path.join(context.reporting.output_dir, "index.qmd")
-            print(f"\n[bold green]Rendering Quarto output: {qmd_path}[/bold green]")
+            heading(f"Rendering Quarto output: {qmd_path}")
             subprocess.run(["quarto", "render", qmd_path], check=True)
 
     if args.upload:
@@ -87,3 +112,10 @@ if __name__ == "__main__":
                 context.reporting.model_label,
                 include_traces=args.include_traces,
             )
+
+    if len(selected) > 1:
+        pipeline_summary("Run summary — all models", per_model_timings)
+    console.print(
+        f"[dim]Total run wall time: "
+        f"{format_duration(time.perf_counter() - run_started)}[/dim]"
+    )

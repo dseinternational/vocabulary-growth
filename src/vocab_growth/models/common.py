@@ -7,6 +7,7 @@ Shared dataclasses and pipeline functions for the vocabulary growth model family
 
 import os
 import shutil
+import time
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
@@ -31,14 +32,23 @@ import pymc as pm
 from arviz import ELPDData, InferenceData
 from matplotlib.figure import Figure
 from preliz.distributions.distributions import Continuous
-from rich import print
-from rich.pretty import pprint
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
+import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.definitions import UnivariateModelDefinition
+from vocab_growth.reporting import (
+    config_table,
+    console,
+    dataframe_table,
+    heading,
+    key_value_table,
+    pipeline_summary,
+    run_banner,
+    section,
+)
 
 
 @dataclass
@@ -134,6 +144,7 @@ class ModelFitContext(Generic[C, S]):
     execution_context: str = field(default_factory=env_info.get_execution_context)
     plots: dict[str, Figure] = field(default_factory=dict)
     dataframes: dict[str, pd.DataFrame] = field(default_factory=dict)
+    timings: dict[str, float] = field(default_factory=dict)
     _model_data: model_data.BinomialModelData | None = None
     _analysis_df: pd.DataFrame | None = None
     _model_config: C | None = None
@@ -430,13 +441,6 @@ def build_model(context: ModelFitContext):
     """
     Builds vocabulary growth model.
     """
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Model definition and initialisation[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     n = len(context.model_data.y_obs)
 
     if context.model_data.X_obs.shape[0] != n:
@@ -446,25 +450,6 @@ def build_model(context: ModelFitContext):
     if not np.all(context.model_data.y_obs <= context.model_data.n_trials):
         raise ValueError("y_obs exceeds n_trials.")
 
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Building vocabulary growth model[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-
-    print(f"  Number of observations: {n}")
-    print(f"  Number of trials (n_trials): {context.model_data.n_trials}")
-    print(f"  Slope anchors (months): {context.model_config.slope_anchors}")
-    print(f"  Length-scale range (months): {context.model_config.ell_months_range}")
-    print(f"  Prior for p_slope_low: {context.model_config.p_slope_low_dist}")
-    print(f"  Prior for p_slope_hi: {context.model_config.p_slope_hi_dist}")
-    print(f"  Prior for ell_unit: {context.model_config.ell_unit_dist}")
-    print(f"  Prior for eta: {context.model_config.eta_dist}")
-    print(f"  Prior for kappa_min: {context.model_config.kappa_min_dist}")
-    print(f"  Prior for a_kappa: {context.model_config.a_kappa_dist}")
-    print(f"  Prior for b_kappa_mag: {context.model_config.b_kappa_mag_dist}")
-    print(f"  Number of plot points: {context.model_config.n_plot}")
-
     X_obs_median = float(np.median(context.model_data.X_obs))
     X_obs_mean = float(np.mean(context.model_data.X_obs))
     X_obs_std = float(np.std(context.model_data.X_obs, ddof=1))
@@ -472,8 +457,34 @@ def build_model(context: ModelFitContext):
     if not np.isfinite(X_obs_std) or X_obs_std <= 0:
         raise ValueError("Age standard deviation must be positive.")
 
-    print(
-        f"  Age (months) - median: {X_obs_median:.2f}, mean: {X_obs_mean:.2f}, std: {X_obs_std:.2f}"
+    key_value_table(
+        "Build configuration",
+        [
+            ("Number of observations", n),
+            ("Number of trials (n_trials)", context.model_data.n_trials),
+            ("Slope anchors (months)", context.model_config.slope_anchors),
+            ("Length-scale range (months)", context.model_config.ell_months_range),
+            ("Number of plot points", context.model_config.n_plot),
+            ("Query ages (months)", context.model_config.ages_query),
+            ("Age median (months)", X_obs_median),
+            ("Age mean (months)", X_obs_mean),
+            ("Age std (months)", X_obs_std),
+        ],
+    )
+
+    key_value_table(
+        "Priors",
+        [
+            ("p_slope_low", context.model_config.p_slope_low_dist),
+            ("p_slope_hi", context.model_config.p_slope_hi_dist),
+            ("ell_unit", context.model_config.ell_unit_dist),
+            ("eta", context.model_config.eta_dist),
+            ("kappa_min", context.model_config.kappa_min_dist),
+            ("a_kappa", context.model_config.a_kappa_dist),
+            ("b_kappa_mag", context.model_config.b_kappa_mag_dist),
+        ],
+        key_header="Parameter",
+        value_header="Distribution",
     )
 
     # Predictor standardised (z-score)
@@ -515,23 +526,24 @@ def build_model(context: ModelFitContext):
         ell_range_z,
     )
 
-    print(f"  HSGP basis size (m): {M}")
-    print(f"  HSGP L: {L}")
-
     slope_age_a = float(context.model_config.slope_anchors[0])
     slope_age_b = float(context.model_config.slope_anchors[1])
     slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
     slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
 
-    print(f"  Slope anchors (z-scores): {slope_age_a_z:.2f}, {slope_age_b_z:.2f}")
+    key_value_table(
+        "Derived quantities",
+        [
+            ("HSGP basis size (m)", M),
+            ("HSGP boundary factor (L)", L),
+            ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
+            ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+        ],
+    )
 
     i_obs0, i_obs1 = 0, X_obs_z.shape[0]
     i_plot0, i_plot1 = i_obs1, i_obs1 + X_plot_z.shape[0]
     i_query0, i_query1 = i_plot1, i_plot1 + X_query_z.shape[0]
-
-    print(
-        f"  Query points: {', '.join(map(str, context.model_config.ages_query))} (months)"
-    )
 
     coords = {
         "all_id": np.arange(n_all),
@@ -692,13 +704,6 @@ def prior_predictive_checks(
     """
     Run prior predictive checks: sample from the prior, and visualise the implied prior predictive distribution.
     """
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Prior predictive checks[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     with context.model:
         prior_samples = pm.sample_prior_predictive(
             draws=1000,
@@ -757,15 +762,7 @@ def sample(context: ModelFitContext):
     """
     Draw samples from the posterior using MCMC.
     """
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Posterior sampling[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
-    print(context.sampling)
-    print()
+    config_table("Sampling configuration", context.sampling)
 
     with context.model:
         trace = pm.sample(
@@ -781,22 +778,11 @@ def sample(context: ModelFitContext):
 
     context.set_trace(trace)
 
-    print()
-    print()
-    print("[bold green]Posterior sampling completed.[/bold green]")
-
 
 def diagnostics(context: ModelFitContext):
     """
     Run diagnostics on the posterior samples, including convergence diagnostics and posterior predictive checks.
     """
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Diagnostics[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     # Summary diagnostic statistics
 
     var_names = [
@@ -810,7 +796,8 @@ def diagnostics(context: ModelFitContext):
         os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True
     )
 
-    pprint(diagnostics_df)
+    dataframe_table(diagnostics_df, title="Posterior diagnostics")
+    _report_diagnostic_warnings(diagnostics_df)
 
     # Kernel density estimates (KDE) of the joint posterior, and marginals
 
@@ -864,20 +851,14 @@ def diagnostics(context: ModelFitContext):
 
     loocv = az.loo(context.trace)
     context.set_loocv(loocv)
-    print(loocv)
+    heading("LOO-CV", style="bold cyan")
+    console.print(loocv)
 
 
 def sample_posterior_predictive(context: ModelFitContext):
     """
     Sample from the posterior predictive distribution.
     """
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Posterior predictions[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     p_plot = context.model_variables["p_plot"]
     p_query = context.model_variables["p_query"]
     kappa_plot = context.model_variables["kappa_plot"]
@@ -936,7 +917,11 @@ def posterior_summary(context: ModelFitContext):
         hdi_prob=context.reporting.hdi,
     )
 
-    pprint(posterior_summary_df)
+    dataframe_table(
+        posterior_summary_df,
+        title="Posterior summary at query ages",
+        show_index=False,
+    )
 
     context.dataframes["posterior_summary"] = posterior_summary_df
 
@@ -1047,10 +1032,7 @@ def report(context: ModelFitContext):
 
     os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
 
-    print()
-    print(f"Output: {context.reporting.output_dir}")
-    print(f"Report output: {REPORT_OUTPUT_DIR}")
-
+    copied = 0
     for filename in os.listdir(context.reporting.output_dir):
         if not (
             filename.endswith(".png")
@@ -1061,6 +1043,7 @@ def report(context: ModelFitContext):
         source_file = os.path.join(context.reporting.output_dir, filename)
         dest_file = os.path.join(REPORT_OUTPUT_DIR, filename)
         shutil.copy(source_file, dest_file)
+        copied += 1
 
     model_output_md_source = os.path.join(
         local_env.DOCS_DIR, "models", context.reporting.model_name.lower(), "index.qmd"
@@ -1075,14 +1058,23 @@ def report(context: ModelFitContext):
             f"Source model output markdown file not found: {model_output_md_source}"
         )
 
-    print(f"[bold green]Report written to: {model_output_md_dest}[/bold green]")
-
-    print(
-        f"\n[bold yellow]To render, execute:[/bold yellow] [blue]quarto render {model_output_md_dest}[/blue]"
+    key_value_table(
+        "Artefacts",
+        [
+            ("Output directory", context.reporting.output_dir),
+            ("Report figures directory", REPORT_OUTPUT_DIR),
+            ("Figures / tables copied", copied),
+            ("Quarto document", model_output_md_dest),
+        ],
     )
 
-    print(
-        f"\n[bold yellow]For live preview (editing), execute:[/bold yellow] [blue]quarto preview {model_output_md_dest}[/blue]"
+    console.print(
+        f"\n[bold yellow]Render report:[/bold yellow]  "
+        f"[blue]quarto render {model_output_md_dest}[/blue]"
+    )
+    console.print(
+        f"[bold yellow]Live preview:[/bold yellow]   "
+        f"[blue]quarto preview {model_output_md_dest}[/blue]"
     )
 
 
@@ -1091,9 +1083,46 @@ def _plot_and_print_dist(context, dist, name):
     context.plots[name] = plot_dist.plot_distribution(
         dist, context.reporting.output_dir, name
     )
-    print(
-        f"[bold yellow]{name}:[/bold yellow] {dist.summary(mass=context.reporting.hdi)}"
-    )
+    summary = dist.summary(mass=context.reporting.hdi)
+    console.print(f"  [yellow]{name}[/yellow]: {summary}")
+
+
+_RHAT_WARN = 1.01
+_ESS_WARN = 400
+_DIAGNOSTIC_COLS = {"r_hat", "ess_bulk", "ess_tail"}
+
+
+def _report_diagnostic_warnings(diagnostics_df: pd.DataFrame) -> None:
+    """Flag MCMC convergence issues visible in the summary frame."""
+    cols = set(diagnostics_df.columns)
+    if not _DIAGNOSTIC_COLS.intersection(cols):
+        return
+
+    problems: list[str] = []
+    if "r_hat" in cols:
+        bad = diagnostics_df["r_hat"].dropna()
+        bad = bad[bad > _RHAT_WARN]
+        if len(bad):
+            problems.append(
+                f"{len(bad)} parameter(s) with r_hat > {_RHAT_WARN} (max {bad.max():.3f})"
+            )
+    for ess_col in ("ess_bulk", "ess_tail"):
+        if ess_col in cols:
+            bad = diagnostics_df[ess_col].dropna()
+            bad = bad[bad < _ESS_WARN]
+            if len(bad):
+                problems.append(
+                    f"{len(bad)} parameter(s) with {ess_col} < {_ESS_WARN} (min {bad.min():.0f})"
+                )
+
+    if problems:
+        console.print()
+        for line in problems:
+            console.print(f"[bold yellow]⚠ {line}[/bold yellow]")
+    else:
+        console.print(
+            "[green]✓ r_hat ≤ 1.01 and ESS ≥ 400 across reported parameters.[/green]"
+        )
 
 
 def prepare_univariate_data(
@@ -1101,13 +1130,6 @@ def prepare_univariate_data(
     definition: UnivariateModelDefinition,
 ):
     """Load and prepare data for a univariate model from its definition."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Prepare data[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     y_col = definition.outcome.value
     df = vocab_data_utils.load_data(
         population=definition.population,
@@ -1119,13 +1141,16 @@ def prepare_univariate_data(
 
     desc = descriptive_stats.describe_all(analysis_df, alpha=0.05)
 
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
+    key_value_table(
+        "Data",
+        [
+            ("Population", definition.population.name),
+            ("Outcome column", y_col),
+            ("Rows after NA drop", len(analysis_df)),
+            ("Sample fraction", definition.sample_fraction),
+        ],
     )
-    print("[bold green]Descriptive statistics[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-
-    pprint(desc)
+    dataframe_table(desc, title="Descriptive statistics")
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_obs = np.asarray(analysis_df[y_col], dtype=int)
@@ -1148,13 +1173,6 @@ def configure_univariate_priors(
     definition: UnivariateModelDefinition,
 ):
     """Configure priors and hyperparameters from a univariate model definition."""
-    print(
-        "\n[green]------------------------------------------------------------[/green]"
-    )
-    print("[bold green]Priors and hyperparameters[/bold green]")
-    print("[green]------------------------------------------------------------[/green]")
-    print()
-
     ell_unit_dist = pz.Beta(alpha=definition.ell_unit_alpha, beta=definition.ell_unit_beta)
     _plot_and_print_dist(context, ell_unit_dist, "ell_unit_dist")
 
@@ -1201,18 +1219,11 @@ def fit_single_outcome_model(
     """
     Shared fit pipeline for single-outcome models (VG01-VG04).
     """
-    print(
-        "\n[green]============================================================[/green]"
-    )
-    print(
-        f"[bold green]{definition.banner}[/bold green]"
-    )
-    print("[green]============================================================[/green]")
-    print()
+    run_banner(definition.banner, subtitle=f"sampling config: {config}")
 
     env_info.report_environment_info()
 
-    print()
+    console.print()
     package_metadata.report_package_versions(PACKAGE_LIST)
 
     context = ModelFitContext(
@@ -1230,27 +1241,50 @@ def fit_single_outcome_model(
 
     os.makedirs(context.reporting.output_dir, exist_ok=True)
 
-    prepare_univariate_data(context, definition)
-
-    configure_univariate_priors(context, definition)
-
-    build_model(context)
+    timings = context.timings
+    run_started = time.perf_counter()
 
     y_col = definition.outcome.value
     outcome_label = definition.outcome_label
 
-    prior_predictive_checks(context, outcome_col=y_col, outcome_label=outcome_label)
+    with section("Prepare data", timings=timings):
+        prepare_univariate_data(context, definition)
 
-    sample(context)
+    with section("Priors and hyperparameters", timings=timings):
+        configure_univariate_priors(context, definition)
 
-    diagnostics(context)
+    with section("Model definition and initialisation", timings=timings):
+        build_model(context)
 
-    sample_posterior_predictive(context)
+    with section("Prior predictive checks", timings=timings):
+        prior_predictive_checks(
+            context, outcome_col=y_col, outcome_label=outcome_label
+        )
 
-    posterior_summary(context)
+    with section("Posterior sampling", timings=timings):
+        sample(context)
 
-    run_standard_plots(context, outcome_label=outcome_label)
+    with section("Diagnostics", timings=timings):
+        diagnostics(context)
 
-    report(context)
+    with section("Posterior predictions", timings=timings):
+        sample_posterior_predictive(context)
+
+    with section("Posterior summary", timings=timings):
+        posterior_summary(context)
+
+    with section("Plots", timings=timings):
+        run_standard_plots(context, outcome_label=outcome_label)
+
+    with section("Report", timings=timings):
+        report(context)
+
+    pipeline_summary(
+        f"Pipeline summary — {context.reporting.model_label}", timings
+    )
+    console.print(
+        f"[dim]Total wall time: "
+        f"{vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
+    )
 
     return context
