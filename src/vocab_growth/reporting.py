@@ -2,66 +2,47 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Console reporting helpers for the vocab_growth pipelines.
+Console reporting shim for the ``vocab_growth`` pipelines.
 
-Provides a small set of rich-based primitives used by the fit pipelines to emit
-consistently formatted, easy-to-scan diagnostics while a model fit is running.
+Historically this module implemented a bespoke set of rich-based primitives
+(banner, heading, key/value table, dataframe table, pipeline summary,
+timed section, ...). Those primitives now live in
+:mod:`dse_research_utils.console` and are shared across DSE research
+projects. This module preserves the legacy public API — signatures, default
+column headers, early-return behaviour for empty inputs — so no caller has
+to change, and routes every call through the shared implementation.
 """
 
-from __future__ import annotations
-
-import time
 from collections.abc import Iterable, Mapping
 from contextlib import contextmanager
 from dataclasses import is_dataclass
 from typing import Any
 
 import pandas as pd
+from dse_research_utils.console.console import get_console, print_panel, print_table
+from dse_research_utils.console.format import format_duration as _format_duration
+from dse_research_utils.console.format import format_value as _format_value
+from dse_research_utils.console.sections import banner as _banner
+from dse_research_utils.console.sections import section_header as _section_header
+from dse_research_utils.console.sections import timed_section as _timed_section
+from dse_research_utils.console.summary import (
+    pipeline_summary as _pipeline_summary_table,
+)
+from dse_research_utils.console.tables import dataframe_table as _dataframe_table
+from dse_research_utils.console.tables import key_value_table as _key_value_table
 from rich.console import Console
-from rich.panel import Panel
-from rich.rule import Rule
-from rich.table import Table
-from rich.text import Text
 
-console = Console(highlight=False)
-
-
-def _format_value(value: Any) -> str:
-    if isinstance(value, float):
-        if abs(value) >= 1e4 or (value != 0 and abs(value) < 1e-3):
-            return f"{value:.3e}"
-        return f"{value:.4g}"
-    if isinstance(value, (list, tuple)):
-        return ", ".join(_format_value(v) for v in value)
-    return str(value)
-
-
-def _format_duration(seconds: float) -> str:
-    if seconds < 1:
-        return f"{seconds * 1000:.0f} ms"
-    if seconds < 60:
-        return f"{seconds:.2f} s"
-    minutes, secs = divmod(seconds, 60)
-    if minutes < 60:
-        return f"{int(minutes)}m {secs:04.1f}s"
-    hours, minutes = divmod(minutes, 60)
-    return f"{int(hours)}h {int(minutes):02d}m {secs:04.1f}s"
+console: Console = get_console()
 
 
 def run_banner(title: str, subtitle: str | None = None) -> None:
     """Top-of-run banner. Use once per model fit."""
-    body = Text(title, style="bold green", justify="center")
-    if subtitle:
-        body.append("\n")
-        body.append(subtitle, style="dim")
-    console.print()
-    console.print(Panel(body, border_style="green", expand=True))
+    _banner(title, subtitle)
 
 
 def heading(title: str, *, style: str = "bold green") -> None:
-    """Section heading without timing. Use for non-stage sub-sections."""
-    console.print()
-    console.print(Rule(Text(title, style=style), style=style))
+    """Section heading without timing."""
+    _section_header(title, style=style)
 
 
 @contextmanager
@@ -72,23 +53,9 @@ def section(
     key: str | None = None,
     style: str = "bold green",
 ):
-    """
-    Emit a section heading, run the block, and record its wall time.
-
-    If ``timings`` is provided, records elapsed seconds under ``key`` (defaulting
-    to ``title``). On exit, prints the stage duration so it is visible inline.
-    """
-    heading(title, style=style)
-    start = time.perf_counter()
-    try:
+    """Emit a section heading, run the block, and record its wall time."""
+    with _timed_section(title, timings=timings, key=key, style=style):
         yield
-    finally:
-        elapsed = time.perf_counter() - start
-        if timings is not None:
-            timings[key or title] = elapsed
-        console.print(
-            Text(f"  ✓ {title} — {_format_duration(elapsed)}", style="dim green")
-        )
 
 
 def key_value_table(
@@ -99,24 +66,13 @@ def key_value_table(
     value_header: str = "Value",
 ) -> None:
     """Render a two-column table of (name, value) pairs."""
-    items = pairs.items() if isinstance(pairs, Mapping) else list(pairs)
-
-    table = Table(
+    table = _key_value_table(
+        pairs,
         title=title,
-        title_style="bold",
-        title_justify="left",
-        show_header=True,
-        header_style="bold cyan",
-        expand=False,
-        pad_edge=False,
+        key_header=key_header,
+        value_header=value_header,
     )
-    table.add_column(key_header, style="cyan", no_wrap=True)
-    table.add_column(value_header, style="white")
-
-    for k, v in items:
-        table.add_row(str(k), _format_value(v))
-
-    console.print(table)
+    print_table(table)
 
 
 def dataframe_table(
@@ -127,60 +83,20 @@ def dataframe_table(
     float_format: str = ".4g",
     show_index: bool = True,
 ) -> None:
-    """
-    Render a pandas DataFrame as a rich Table.
-
-    Long frames are truncated to ``max_rows`` (head/tail split) with a note.
-    """
+    """Render a pandas DataFrame as a rich Table (prints; no return value)."""
+    precision = _precision_from_float_format(float_format)
     if df.empty:
-        console.print(Text(title or "(empty)", style="dim"))
+        console.print(_format_value(title) if title else "(empty)")
         return
-
-    truncated = False
-    display_df = df
-    if max_rows is not None and len(df) > max_rows:
-        half = max(1, max_rows // 2)
-        display_df = pd.concat([df.head(half), df.tail(max_rows - half)])
-        truncated = True
-
-    table = Table(
+    table = _dataframe_table(
+        df,
         title=title,
-        title_style="bold",
-        title_justify="left",
-        show_header=True,
-        header_style="bold cyan",
-        expand=False,
-        pad_edge=False,
+        max_rows=max_rows,
+        truncation="head_tail",
+        show_index=show_index,
+        precision=precision,
     )
-
-    if show_index:
-        index_name = df.index.name or ""
-        table.add_column(str(index_name), style="cyan", no_wrap=True)
-
-    for col in display_df.columns:
-        table.add_column(str(col), justify="right")
-
-    def _fmt(value: Any) -> str:
-        if pd.isna(value):
-            return "—"
-        if isinstance(value, float):
-            return format(value, float_format)
-        return str(value)
-
-    for idx, row in display_df.iterrows():
-        cells = [_fmt(row[c]) for c in display_df.columns]
-        if show_index:
-            cells = [str(idx)] + cells
-        table.add_row(*cells)
-
-    console.print(table)
-    if truncated:
-        console.print(
-            Text(
-                f"  … showing {max_rows} of {len(df)} rows (head/tail) …",
-                style="dim",
-            )
-        )
+    print_table(table)
 
 
 def config_table(title: str, config: Any) -> None:
@@ -204,40 +120,48 @@ def pipeline_summary(
     *,
     total_label: str = "Total",
 ) -> None:
-    """Render a summary table of per-stage timings."""
+    """Render a summary table of per-stage timings.
+
+    Mirrors the historical behaviour of emitting a blank line before the
+    table and returning silently when ``timings`` is empty.
+    """
     if not timings:
         return
-
-    total = sum(timings.values())
-
-    table = Table(
-        title=title,
-        title_style="bold green",
-        title_justify="left",
-        show_header=True,
-        header_style="bold cyan",
-        expand=False,
-        pad_edge=False,
-    )
-    table.add_column("Stage", style="cyan")
-    table.add_column("Duration", justify="right")
-    table.add_column("% total", justify="right", style="dim")
-
-    for stage, seconds in timings.items():
-        pct = (seconds / total * 100) if total > 0 else 0.0
-        table.add_row(stage, _format_duration(seconds), f"{pct:5.1f}%")
-
-    table.add_section()
-    table.add_row(
-        Text(total_label, style="bold"),
-        Text(_format_duration(total), style="bold"),
-        "",
-    )
-
+    table = _pipeline_summary_table(timings, title=title, total_label=total_label)
     console.print()
-    console.print(table)
+    print_table(table)
 
 
 def format_duration(seconds: float) -> str:
-    """Public alias for the internal duration formatter."""
+    """Public alias for the shared duration formatter."""
     return _format_duration(seconds)
+
+
+def _precision_from_float_format(float_format: str) -> int:
+    """Extract an integer precision from a legacy format spec like ``".4g"``."""
+    digits = "".join(ch for ch in float_format if ch.isdigit())
+    if digits:
+        try:
+            return int(digits)
+        except ValueError:
+            pass
+    return 4
+
+
+# Backwards-compatible re-exports of the private formatter names used by a
+# few callers and tests that reached into the module.
+__all__ = [
+    "_format_duration",
+    "_format_value",
+    "config_table",
+    "console",
+    "dataframe_table",
+    "format_duration",
+    "heading",
+    "key_value_table",
+    "pipeline_summary",
+    "print_panel",
+    "print_table",
+    "run_banner",
+    "section",
+]
