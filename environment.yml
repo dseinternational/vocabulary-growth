@@ -31,7 +31,7 @@ dependencies:
       - preliz
       - pytest>=9.0.3
       - rich>=15.0.0
-      - ruff>=0.15.10
+      - ruff>=0.15.11
       - scipy-stubs
       - scipy>=1.17.1
       - seaborn>=0.13.2
