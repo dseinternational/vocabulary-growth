@@ -109,7 +109,32 @@ descriptive_stats
 
 ```{python}
 diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
-diagnostics
+
+
+def _flag_red(v, threshold, *, above):
+    bad = v > threshold if above else v < threshold
+    return "color: #b00; font-weight: bold;" if bad else ""
+
+
+def _style_diagnostics(df):
+    styler = df.style.format(precision=3)
+    if "r_hat" in df.columns:
+        styler = styler.map(
+            lambda v: _flag_red(v, 1.01, above=True), subset=["r_hat"]
+        )
+    ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
+    if ess_cols:
+        styler = styler.map(
+            lambda v: _flag_red(v, 400, above=False), subset=ess_cols
+        )
+    styler.set_caption(
+        "Reported convergence diagnostics. Cells highlighted red flag "
+        "r̂ > 1.01 or ESS < 400."
+    )
+    return styler
+
+
+_style_diagnostics(diagnostics)
 ```
 
 ![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
