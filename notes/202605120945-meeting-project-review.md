@@ -34,6 +34,21 @@ This was drafted by digital assistants using LLMs that may make mistakes
 in ways that differ from other inference machines.
 :::
 
+## Executive summary for the meeting
+
+::: {.callout-important}
+**Decision to make:** use VG07 — the Down-syndrome joint model with
+study-level random intercepts — as the preferred model for reporting any
+current finding that involves understood words.
+:::
+
+| Reporting question | Current answer | Evidence to cite |
+| --- | --- | --- |
+| Which DS model should headline current findings? | **VG07**, not VG05, for understood and joint understood-spoken results. | VG07 removes the pooled-data dip in understood words, estimates substantial between-study variation (`τ_U ≈ 0.50`, `τ_q ≈ 0.66`), and improves LOO most clearly for understood words. |
+| What is the main developmental finding? | Vocabulary growth continues across the measured DS age range, but spoken production lags understanding for years. | In VG07, the typical DS trajectory rises from ~105 understood / 16 spoken words at 24 months to ~388 understood / 332 spoken words at 72 months. |
+| What is different from typical development? | The understanding-speaking gap is not just a chronological delay; it is larger even at matched comprehension. | A typical TD child reaches `q = 0.5` at ~121 understood words; a typical DS child reaches it at ~264 understood words. |
+| What caveat must travel with the findings? | Study composition and missing understood-word data matter. | Only 704 of 964 usable DS rows have understood-word observations; the 40-70 month DS window is the most sensitive region. |
+
 ## What this project is
 
 We are trying to describe, in plain numbers a family or teacher could use,
@@ -54,9 +69,9 @@ children.
 ## How we estimate things (plain-English version)
 
 For each model we ask the same kind of question: *given everything we
-already know about vocabulary development, and given the data from these
-800-odd children, what range of values is plausible for the typical number
-of words a child of a given age understands or says?*
+already know about vocabulary development, and given the DS and TD datasets
+just described, what range of values is plausible for the typical number of
+words a child of a given age understands or says?*
 
 Three ideas are worth flagging because they will come up in the meeting:
 
@@ -82,8 +97,9 @@ Three ideas are worth flagging because they will come up in the meeting:
 The mathematical engine underneath is PyMC + nutpie (a NUTS sampler). It
 runs many parallel Markov chains and produces samples from the posterior;
 diagnostics like R-hat (should be ≈1.0) and ESS (effective sample size,
-should be in the thousands) tell us those samples are trustworthy. All
-seven models pass these checks comfortably.
+should be in the thousands) tell us whether those samples are stable enough
+to report. All seven pass the R-hat/ESS checks comfortably; the only sampler
+warning in the reporting-quality run was one VG06 divergence.
 
 ## The seven models
 
@@ -108,7 +124,7 @@ and 1.
 VG07 is the most recent addition. It is identical to VG05 except that it
 gives each contributing study its own offset (a "random intercept") on both
 the understanding trajectory and the production ratio. This matters —
-explained in section 5 below.
+explained in the Simpson's-paradox section below.
 
 ## What we estimate (headline numbers)
 
@@ -186,6 +202,32 @@ VG07's posterior predictive output for understood words):
 These probabilities — *not* just averages — are what we want to put in
 front of families and clinicians, and they are a direct output of the
 Bayesian approach.
+
+### Milestone framing for families and clinicians
+
+The age-to-milestone outputs answer the question people are most likely to
+ask: *at about what age would children on different parts of the distribution
+reach a vocabulary size?* For VG07, the typical child reaches the following
+milestones:
+
+| Target words | Typical age to understand | Typical age to speak |
+| -----------: | :------------------------ | :------------------- |
+| 25           | 12 months                 | 31 months            |
+| 50           | 18 months                 | 37 months            |
+| 100          | 25 months                 | 44 months            |
+| 200          | 36 months                 | 58 months            |
+| 400          | 75 months                 | 89 months            |
+
+Report-ready wording:
+
+- "Understanding grows earlier and faster than spoken production. In the
+  current best DS model, the typical child reaches about 100 understood
+  words near 25 months, but 100 spoken words near 44 months."
+- "The median DS trajectory is still rising at the upper end of the current
+  data range; these estimates should not be read as a plateau in vocabulary
+  learning."
+- "Milestone ages are distributional expectations, not targets for an
+  individual child; the full predictive intervals remain wide."
 
 ## Beyond chronological delay: DS vs TD at matched comprehension
 
@@ -413,7 +455,8 @@ Ranked roughly by usefulness:
    words?"* Trivial to compute from the existing posterior predictive
    distributions.
 3. **Cross-model comparison artefacts as a first-class pipeline step.**
-   The DS-vs-TD overlay in §5 was produced by an ad-hoc script. Useful
+   The DS-vs-TD overlay in the matched-comprehension section was produced
+   by an ad-hoc script. Useful
    permanent overlays: VG01 vs VG03 (DS vs TD spoken by age), VG02 vs
    VG04 (DS vs TD understood by age), VG05 vs VG07 (where the
    Simpson's-paradox fix matters), and the matched-comprehension q
@@ -500,8 +543,8 @@ What this says:
 - **VG07's improvement is concentrated on the understood outcome**
   (`diff / dSE ≈ 1.5`, which is a clear though not overwhelming LOO
   preference). That is exactly where the Simpson's-paradox artefact
-  lived in §6, so the model is improving precisely the trajectory it
-  was designed to fix.
+  lived, so the model is improving precisely the trajectory it was
+  designed to fix.
 - **On the spoken outcome the two models are statistically
   indistinguishable** (`diff / dSE ≈ 0.3`). VG07's study random
   intercepts do not hurt the spoken fit — they simply don't help it,
@@ -515,7 +558,7 @@ VG07 adds 15 effective parameters (`p_loo` 36 vs 21 for the joint
 likelihood) — i.e. the study random intercepts that the data is
 clearly informing — and *still wins* on LOO even when LOO penalises
 complexity. That this comes mostly from the understood outcome
-(matching the §6 diagnosis) is a strong, defensible reason to prefer
+(matching the Simpson's-paradox diagnosis) is a strong, defensible reason to prefer
 VG07 for any DS quoted statistic where understanding is in scope.
 
 A **leave-one-study-out** test would more directly assess
