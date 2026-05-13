@@ -60,9 +60,24 @@ jobs:
       - name: Setup Conda
         uses: conda-incubator/setup-miniconda@v4
         with:
-          environment-file: vocabulary-growth/environment.yml
           activate-environment: dse-vocab-growth
           miniforge-version: latest
+
+      - name: Cache conda env
+        id: conda-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CONDA }}/envs/dse-vocab-growth
+          key: conda-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vocabulary-growth/environment.yml') }}
+
+      - name: Create env (cache miss)
+        if: steps.conda-cache.outputs.cache-hit != 'true'
+        run: conda env update -n dse-vocab-growth -f environment.yml
+
+      - name: Install editable packages
+        run: |
+          pip install -e ../research/src/python
+          pip install -e .
 
       - name: Prepare data
         run: python scripts/prepare_data.py
