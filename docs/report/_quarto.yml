@@ -55,12 +55,16 @@ book:
     - acknowledgements.qmd
     - intro.qmd
     - methods.qmd
-    - model-1-spoken.qmd
-    - model-2-understood.qmd
-    - model-3-spoken-td.qmd
-    - model-4-understood-td.qmd
-    - model-5-spoken-understood.qmd
-    - model-6-spoken-understood-td.qmd
+    - vg01.qmd
+    - vg02.qmd
+    - vg03.qmd
+    - vg04.qmd
+    - vg05.qmd
+    - vg06.qmd
+    - vg07.qmd
+    - vg08.qmd
+    - vg09.qmd
+    - model-comparison.qmd
     - discussion.qmd
     - glossary.qmd
     - references.qmd

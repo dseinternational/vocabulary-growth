@@ -1,6 +1,10 @@
 # Preface {.unnumbered}
 
-This technical report describes an exploratory study of vocabulary development in children with Down syndrome that aims to characterise observed trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. The primary goal of the study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice. 
+::: {.callout-note title="Report version"}
+This version of the report covers the model family **VG01 through VG09**, as fitted on 12–13 May 2026. The headline Down syndrome joint model is [**VG09**](vg09.qmd) (joint understood-and-spoken with study- and subject-level random intercepts on both the understood trajectory and the production ratio). The headline typically developing reference is [VG06](vg06.qmd).
+:::
+
+This technical report describes an exploratory study of vocabulary development in children with Down syndrome that aims to characterise observed trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. The primary goal of the study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice.
 
 The study develops statistical models consistent with empirical models of vocabulary learning. We evaluate and fit these models using Bayesian inference to estimate full probability distributions for parameters of interest [@gelmanBayesianDataAnalysis2013; @wagenmakersBayesianInferencePsychology2018; @mcelreathStatisticalRethinkingBayesian2020; @gelmanRegressionOtherStories2020], using an iterative workflow [@gelmanBayesianWorkflow2020]. This results in models that reflect empirical constraints and available evidence, and that provide more realistic and more precise estimates than are possible if we build models that ignore existing knowledge [@mcelreathStatisticalRethinkingBayesian2020; @gillBayesianSocialScience2024].
 
@@ -15,3 +19,15 @@ Scientific and statistical texts include many terms that are intended to have pr
 Discovery and learning are ongoing processes. One of the reasons for adopting the methods we have used in this study is to explore models that may have wider application and that may encourage further research. Models that accommodate nonlinear relationships between variables, considerable variability within the population, and that can reflect existing evidence are (we think) likely to help inform better statistical analyses in many areas of Down syndrome research.
 
 To that end, this study is not fixed in time. As new data becomes available, we anticipate updating our estimates and evolving our models. We will version the study as in software development – tagging releases in the study repository whenever we publish updated analyses. We hope that "version 1.0" is helpful and of interest to families, practitioners and researchers alike, and welcome feedback, collaboration, and contributions to future iterations.
+
+## What is new in this version
+
+This version of the report incorporates the model-family work completed in spring 2026:
+
+- **All seven of [VG01](vg01.qmd)–[VG07](vg07.qmd) were re-fitted at reporting quality** (six chains × 12 000 NUTS steps) on 12 May 2026, meeting the project's $\hat r \leq 1.01$ / ESS_bulk $\geq 400$ thresholds on every reported parameter. The only sampler warning across the run was a single [VG06](vg06.qmd) divergence.
+- **[VG07](vg07.qmd)** (study-level random intercepts) resolves the leftward-hook artefact identified in [VG02](vg02.qmd) and [VG05](vg05.qmd) — a data-composition Simpson's paradox in the 40–60-month understood window. See the [Simpson's paradox section of the model comparison chapter](model-comparison.qmd#sec-simpsons-paradox).
+- **[VG08](vg08.qmd)** (added 13 May 2026) adds subject-level random intercepts on the understood trajectory and partitions between-subject variability from residual Beta-Binomial dispersion.
+- **[VG09](vg09.qmd)** (added 13 May 2026) adds a parallel subject-level random intercept on the production ratio. Between-subject SD on the production-ratio logit ($\tau^{\text{subj}}_q \approx 1.20$) turns out to be the largest single variance component in the entire family. A K=5 leave-one-subject-out cross-validation ranks **VG09 > VG08 > VG07** with overwhelming statistical significance, and VG09 is now the recommended DS joint model — descriptive and predictive.
+- **A cross-check against @dsouzaExplainingComprehensionProduction2026** is included in the [model comparison chapter](model-comparison.qmd). The two analyses agree that Down syndrome does not show the unusually small comprehension–production gap seen in Williams syndrome; they disagree on the stronger reading that Down syndrome tracks typical development on the production-versus-comprehension trajectory, and we unpick why.
+
+The headline empirical findings, the methodological contribution, the practical implications for families and practitioners and the limitations are synthesised in the [discussion chapter](discussion.qmd).

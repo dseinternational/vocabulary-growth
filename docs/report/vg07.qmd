@@ -1,0 +1,79 @@
+---
+title: "VG07 — Joint model with study random intercepts: children with Down syndrome"
+abstract: "*VG07 extends the joint understood-and-spoken model (VG05) by adding study-level random intercepts on both the understood trajectory and the production ratio. This absorbs systematic between-study differences in measurement and reporting and resolves the apparent dip in words understood between 40 and 60 months observed under VG05.*"
+---
+
+```{python}
+# | echo: false
+import pandas as pd
+```
+
+## Overview
+
+VG07 is the first model in the family to include study-level random intercepts. The motivation comes from the data-composition artefact identified in VG02 and VG05: higher-scoring studies stop contributing understood-word data after roughly 50 months while lower-scoring studies continue, producing an apparent decline in the population trajectory that is not a real developmental phenomenon (see @sec-simpsons-paradox in the [model comparison chapter](model-comparison.qmd)).
+
+The model structure follows VG05 but adds a study-level offset on the logit of each component:
+
+$$f_U(a, s) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s]$$
+$$h(a, s) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s]$$
+
+with $\delta_U[s] \sim \mathrm{Normal}(0, \tau_U)$, $\delta_q[s] \sim \mathrm{Normal}(0, \tau_q)$, $\tau_U, \tau_q \sim \mathrm{HalfNormal}(0.5)$. Plot and query predictions use the population-level trajectory ($\delta = 0$). For the full shared specification see the [methods chapter](methods.qmd).
+
+## Results
+
+### Random-intercept variance components
+
+Under the rep-quality fit (12 May 2026):
+
+| Component | Posterior mean | 90% credible interval | ESS bulk |
+| :--- | ---: | :---: | ---: |
+| $\tau_U$ (understood, logit) | 0.50 | [0.30, 0.69] | > 36 000 |
+| $\tau_q$ (production ratio, logit) | 0.66 | [0.40, 0.91] | > 36 000 |
+
+Both random-intercept SDs are well identified. The estimated between-study spread is substantial, particularly for the production ratio — consistent with studies using different instruments and protocols for assessing spoken production.
+
+### Population trajectory
+
+Median values (population-level trajectory; $\delta = 0$), with 90% credible intervals for the typical trajectory:
+
+| Age (months) | Understood (median) | Spoken (median) | Production ratio (q) |
+| ---: | :--- | :--- | :--- |
+| 12 | 41 [28–55] | 1.6 [0.7–2.7] | 0.04 |
+| 24 | 105 [80–132] | 16 [9–22] | 0.15 |
+| 36 | 213 [170–258] | 64 [43–85] | 0.30 |
+| 48 | 280 [230–335] | 167 [127–208] | 0.60 |
+| 60 | 323 [265–383] | 251 [200–300] | 0.78 |
+| 72 | 388 [319–460] | 332 [274–391] | 0.87 |
+| 84 | 423 [337–515] | 381 [313–451] | 0.93 |
+
+### Resolution of the leftward-hook artefact
+
+In VG05 the median understood trajectory exhibited a localised decline between roughly 40 and 60 months — the "leftward hook" — and the corresponding learning-rate plot crossed below zero in this window. Under VG07 the trajectory is monotonically increasing and the learning rate remains positive throughout. The artefact resolved cleanly once between-study composition was modelled.
+
+This is the first concrete example, in this report, of a model-structural change that materially changes the answer to a substantive developmental question. We use it as a methodological motivating example in the [discussion](discussion.qmd) and devote a dedicated section to it in the [model comparison chapter](model-comparison.qmd).
+
+### Comparison with VG05 (LOO)
+
+Leave-one-out cross-validation scores VG07 against VG05 on identical DS held-out data, separately for the understood outcome, the spoken outcome, and the joint likelihood (see `output/comparisons/loo_compare_ds_bivariate_re_vs_no_re_*.csv`):
+
+| Held-out data | elpd_diff (VG07 − VG05) | dSE | diff / dSE | VG07 stacking weight |
+| :--- | ---: | ---: | ---: | ---: |
+| Understood only (n = 704) | +65.7 | 43.5 | 1.51 | 0.57 |
+| Spoken only (n = 949) | +24.7 | 81.3 | 0.30 | 0.51 |
+| Joint understood + spoken (n = 1 653) | +90.4 | 92.2 | 0.98 | 0.53 |
+
+VG07 wins overall and the improvement is concentrated on the understood outcome (`diff / dSE ≈ 1.5`) — exactly where the Simpson's-paradox artefact lived. On the spoken outcome the two models are statistically indistinguishable (`diff / dSE ≈ 0.3`), as expected because the spoken trajectory was not affected by the same compositional shift.
+
+### Diagnostics
+
+VG07 sampled at rep quality with 6 chains × 6 000 tuning + 6 000 draw NUTS steps, target_accept = 0.95: r̂_max = 1.001, ESS_bulk_min = 5 492 across reported parameters, zero divergences, 24 m 14 s wall time.
+
+## Status of VG07 in the family
+
+VG07 was the headline DS joint model from April through mid-May 2026. It was superseded as the headline model by VG08 (study + subject REs on understood) and then VG09 (study + subject REs on understood and `q`) following the 13 May 2026 K=5 leave-one-subject-out comparison (see [VG08](vg08.qmd), [VG09](vg09.qmd), and the [model comparison chapter](model-comparison.qmd)). VG07 remains an important reference because:
+
+- It is the simplest model in the family that resolves the Simpson's-paradox artefact.
+- Its variance components (`τ_U`, `τ_q`) provide the between-study baseline that VG08 and VG09 partition further.
+- It is what the LOO comparison against VG05 is computed on, and that comparison is the cleanest quantitative case for including study REs at all.
+
+For full per-model output (priors, prior-predictive checks, posterior summaries, posterior-predictive figures, joint trajectory, production-ratio plots) see the per-model report at `output/models/VG07-age-understood-spoken-ds-re/index.html`.

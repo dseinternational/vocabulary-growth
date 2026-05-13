@@ -1,0 +1,72 @@
+---
+title: "VG02 — Words understood by children with Down syndrome relative to age"
+abstract: "*VG02 estimates the trajectory of comprehension vocabulary for children with Down syndrome as a function of age, in isolation from words spoken. It is the simplest model of understood vocabulary in the family. The model exhibits a localised dip in the typical understood trajectory between approximately 40 and 60 months that turns out to be a data-composition artefact rather than a real developmental phenomenon. This artefact is the empirical motivation for the study-level random intercepts introduced in VG07.*"
+---
+
+```{python}
+# | echo: false
+import pandas as pd
+```
+
+## Framing
+
+Words understood — receptive vocabulary — is the count of items on the CDI checklist that a parent or assessor identifies the child as understanding. As with spoken vocabulary, age does not directly cause comprehension to grow; rather, age is a proxy for cumulative language exposure, cognitive development and explicit teaching, all of which drive comprehension. We therefore again model the *total* age-associated change in words understood, mediated through unmeasured factors. The causal framing is identical to that of [VG01](vg01.qmd).
+
+Down syndrome data on words understood is somewhat sparser than data on words spoken: 704 observations have an understood count compared to 949 with a spoken count, with 80 observations carrying spoken data only. This imbalance — and where in the age range it falls — is the central methodological issue for this model.
+
+## Model specification
+
+VG02 instantiates the shared model backbone described in the [methods chapter](methods.qmd) with `n_trials = 800`, slope anchors $(24, 84)$ months, and the model-specific slope-anchor priors below. The outcome is words understood; the dispersion structure $\kappa(z)$ and the latent mean trajectory $f(z) = \beta_0 + \beta_1 z + g(z)$ follow the family-wide form.
+
+### Slope-anchor priors
+
+Children with Down syndrome typically understand more words than they say at any given age. Slightly broader prior mass at 24 months is appropriate compared with the spoken-vocabulary prior:
+
+$$p_{24} \sim \mathrm{Beta}(1, 10), \qquad p_{84} \sim \mathrm{Beta}(1.1, 1.1).$$
+
+The $p_{24}$ prior centres more mass near the low-but-nonzero end than the equivalent VG01 spoken prior, reflecting that 24-month-old DS children typically understand more words than they say. The $p_{84}$ prior is again approximately uniform.
+
+The remaining priors follow the family-wide values in the [methods chapter](methods.qmd).
+
+## Results
+
+### Diagnostics
+
+VG02 sampled at rep quality (6 chains × 6 000 + 6 000 NUTS, target_accept = 0.95): r̂_max = 1.000, ESS_bulk_min = 10 806 across reported parameters, zero divergences, 12 m 22 s wall time. elpd_loo = −4 070.9 (n = 704 observations).
+
+### The 40–60-month dip
+
+The posterior median trajectory under VG02 shows a localised decline in the typical understood count between approximately 40 and 60 months:
+
+| Age (months) | Ey_median | Ey_hdi_lo | Ey_hdi_hi |
+| ---: | ---: | ---: | ---: |
+| 36 | 263 | 243 | 280 |
+| 42 | 287 | 264 | 310 |
+| 48 | 281 | 254 | 307 |
+| 54 | 272 | 240 | 304 |
+| 60 | 280 | 246 | 315 |
+| 66 | 327 | 287 | 366 |
+
+The learning-rate plot from the per-model output (`output/models/VG02-age-understood-ds/expected_learning_rate.svg`) shows the corresponding gain-per-month estimate briefly crossing below zero in this window. The same pattern appears in VG05 (the DS joint model) at near-identical magnitudes, confirming that the dip is in the understood data itself rather than something introduced by bivariate coupling.
+
+The investigation note `notes/202604121055-understood-ds-decline.md` traces this to a **data-composition artefact** — a form of Simpson's paradox — in which higher-scoring studies stop contributing understood data after roughly 50 months while lower-scoring studies continue. The full diagnosis and the resolution under VG07 (study-level random intercepts) are documented in the [Simpson's paradox section of the model comparison chapter](model-comparison.qmd#sec-simpsons-paradox).
+
+**Practical implication for this chapter:** the VG02 posterior is internally consistent and the trajectory is what it should be given the pooled data, but the 40–60-month understood numbers should not be read at face value. The headline DS understood numbers in this report come from VG07/VG08/VG09, which absorb the between-study variation that drives the dip.
+
+### Full posterior
+
+The full posterior summary table, the prior- and posterior-predictive figures, the smoothed median trend and the dispersion plots are in `output/models/VG02-age-understood-ds/`. The rendered per-model report is `output/models/VG02-age-understood-ds/index.html`.
+
+## Status of VG02 in the family
+
+VG02 is the simplest model of words understood in DS and the model that exposes the data-composition issue that motivates the random-intercept models. It has been superseded for reporting headline DS understood numbers by VG07/VG08/VG09. It remains useful as:
+
+- the canonical reference for the univariate understood likelihood;
+- the model whose dip provides the cleanest illustration of why study-level structure was added; and
+- a sanity check that the bivariate coupling in VG05 does not introduce or hide artefacts on the understood side (it does neither).
+
+## Limitations
+
+- **Compositional bias in the understood data.** As discussed above, the 40–60-month understood numbers reflect a pooled mix that changes systematically with age. VG02 cannot fix this; VG07 does.
+- **Missing understood data in the 40–60-month window.** 80 observations in this window carry spoken data only. These observations contribute to VG01 and VG05 (which model the spoken outcome) but not to VG02. Future data collection should prioritise complete understood + spoken pairs in this range.
+- **Univariate framing.** VG02 ignores the relationship between understood and spoken vocabulary, which is the most important developmental signal in the DS data.

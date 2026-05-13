@@ -1,7 +1,123 @@
 ---
 title: "Discussion"
-abstract: "Summary --- *TODO*"
+abstract: "*This chapter synthesises the headline empirical findings of the report, the methodological contribution made by the random-intercept models, the practical implications for families and practitioners, the limitations that should travel with the numbers, and a list of open questions and natural next steps for the project.*"
 ---
 
-TODO
+## Headline findings
 
+### Down syndrome vocabulary development under VG09
+
+The headline Down syndrome model in this report is [VG09](vg09.qmd) — the joint understood-and-spoken model with study-level and subject-level random intercepts on both the understood trajectory and the production ratio. Its population-level estimates describe the within-subject growth of a typical DS child as they age:
+
+| Age (months) | Understood (median) | Spoken (median) | Production ratio (q) |
+| ---: | :--- | :--- | :--- |
+| 12 | 20 [13–28] | 0.2 [0.1–0.4] | 0.01 |
+| 24 | 89 [67–113] | 7 [3–10] | 0.07 |
+| 36 | 186 [145–227] | 49 [28–71] | 0.26 |
+| 48 | 257 [207–309] | 168 [123–212] | 0.66 |
+| 60 | 344 [284–407] | 290 [235–346] | 0.85 |
+| 72 | 438 [365–512] | 389 [328–453] | 0.90 |
+| 84 | 509 [411–600] | 434 [358–510] | 0.87 |
+
+Three observations follow directly from the joint model:
+
+- **Vocabulary growth continues across the measured DS age range.** The median trajectory keeps climbing through 84 months. The estimates above should not be read as a plateau in word learning.
+- **Comprehension precedes production by years, not months.** A typical DS child reaches ~100 understood words near 25 months but ~100 spoken words near 44 months. The production-ratio column reads the same story from a different angle: $q$ rises from 0.01 at 12 months to 0.07 at 24 months, 0.66 at 48 months and 0.90 at 72 months.
+- **The receptive-productive gap is structural, not just chronological.** Under VG09 the production ratio in DS is shifted *in comprehension terms* — and the shift is remarkably constant across thresholds.
+
+### Down syndrome versus typically developing at matched comprehension
+
+The cleanest cross-population statement the model family supports is at *matched comprehension*. At every production-ratio threshold checked, DS children need close to **twice the comprehension vocabulary** that TD children do before reaching the same production rate:
+
+| Production ratio | Words understood — TD (VG06) | Words understood — DS (VG09) | DS / TD |
+| ---: | ---: | ---: | :--- |
+| 0.25 | 100 | 184 | ≈ 1.84× |
+| 0.50 | 121 | 226 | ≈ 1.87× |
+| 0.75 | 156 | 289 | ≈ 1.85× |
+| 0.90 | 225 | 413 | ≈ 1.84× |
+
+The constancy of the DS/TD ratio (~1.85×) across thresholds is the headline matched-comprehension finding. It reframes the typical clinical/parental expectation that the production lag in DS is a matter of timing. The model tells a stronger story: the gap is *structurally larger* in DS, but it does close given enough comprehension vocabulary. Both populations eventually converge above ~400 understood words.
+
+## The methodological contribution
+
+The empirical findings above depend on a piece of methodology that warrants its own discussion. Three structural choices distinguish VG09 from a naive joint model and each materially changes the numbers:
+
+1. **The Beta-Binomial likelihood with age-varying dispersion** allows the model to express increasing between-child heterogeneity at older ages while keeping the bounded count outcome well-defined.
+2. **Study-level random intercepts** (added in VG07) absorb the systematic between-study differences in measurement and reporting that produce the leftward-hook artefact in VG02/VG05. This is the empirical resolution of a classic Simpson's paradox: within each study, understanding keeps increasing with age; pooled across the changing mix of contributing studies, it appears to dip between 40 and 60 months.
+3. **Subject-level random intercepts** (added in VG08 and VG09) absorb the within-subject correlation produced by repeated measures, partitioning between-child heterogeneity from residual within-occasion measurement noise. The between-subject SD on the production-ratio logit ($\tau^{\text{subj}}_q \approx 1.20$) turns out to be the largest variance component in the entire family — VG07 and VG08 were absorbing it into the spoken-side Beta-Binomial dispersion.
+
+The cumulative effect is large and substantively important:
+
+- The population-level production ratio at low and middle understood-vocabulary levels under VG09 is *lower* than VG07 suggested (8% versus 14% at 24 months) — a typical young DS child speaks even fewer of the words they understand than the earlier model suggested.
+- The production ratio at high understood-vocabulary levels is *higher* than VG08 suggested (~0.87–0.90 above ~60 months versus ~0.79–0.84) — the apparent plateau in VG08 was its own Simpson's-paradox-on-q artefact.
+- The K=5 leave-one-subject-out cross-validation ranks VG09 above VG08 above VG07 with overwhelming significance (every pairwise diff/dSE above 5.7), confirming that the variance partitioning is doing genuine work rather than over-fitting.
+
+The methodological lesson generalises beyond this project. **Pooled cross-sectional or partially longitudinal datasets of clinical populations cannot be modelled as if observations were independent.** When multi-observation subjects exert disproportionate influence on the population trajectory, and when contributing studies differ systematically in measurement, the naive pooled estimate tracks observation density rather than child frequency — and the corresponding posterior mean shifts can be both substantively meaningful and easy to miss. The variance-partition framing is what makes those shifts visible.
+
+## Cross-syndrome comparison and the D'Souza et al. analysis
+
+@dsouzaExplainingComprehensionProduction2026 report a matched-comprehension comparison across typical development (n = 1 210), Williams syndrome (n = 67), Down syndrome (n = 27) and fragile X syndrome (n = 15). Their headline conclusion is that Williams syndrome shows a uniquely reduced comprehension–production gap, while Down syndrome, fragile X and typical development all show the canonical asymmetry.
+
+Our larger pooled DS sample tells a different story for DS specifically. At matched comprehension above ~150 understood words, DS sits substantially below the TD curve, and the gap widens with comprehension level rather than narrowing. The two analyses are reconcilable on the underlying scientific claim D'Souza et al.'s statistical test could actually support — *DS does not look like Williams syndrome* — but disagree on the stronger reading that DS tracks TD on the production-versus-comprehension trajectory, because their sign test cannot establish similarity in the first place, only a non-elevation. The full reanalysis is documented in the [cross-check section of the model comparison chapter](model-comparison.qmd).
+
+Three points are worth restating for the discussion:
+
+- **An exact one-sided sign test that fails to reject "DS sits above TD" is not evidence for "DS equals TD"** — it is the absence-of-evidence-versus-evidence-of-absence fallacy. The methodologically clean way to establish similarity is an equivalence test (e.g. TOST), which is not reported.
+- **The same 9-of-27 DS data, tested in the opposite direction**, give $p \approx 0.061$ — borderline, just outside conventional significance at $\alpha = 0.05$. The honest reading is that n = 27 simply does not have the resolution to discriminate "DS tracks TD" from "DS sits modestly below TD".
+- **The D'Souza sample is also age-truncated** at ~40 months and comprehension-truncated at ~150 understood words — exactly the range where our models agree with theirs. The DS/TD divergence we identify opens up *above* that range, which their sample barely covers.
+
+We expect a productive exchange here rather than a controversy. The larger DS data we have access to here lets us measure something their sample could not — but their reanalysis usefully establishes that the WS finding does not extend to DS or fragile X.
+
+## Practical implications for families and practitioners
+
+The Bayesian framing makes it natural to put **distributional statements** in front of families and clinicians rather than just summary statistics. For a 36-month-old DS child under VG07's posterior predictive distribution for understood words:
+
+- About 5 % are expected to understand fewer than 50 words.
+- About 17 % are expected to understand fewer than 100 words.
+- About 50 % are expected to understand 200 or more words.
+- About 7 % are expected to understand 400 or more words.
+
+These are the kinds of statement that support practical conversations: not "the typical child has X words" but "X% of children at this age have Y or more words". Under VG09 the same kind of statement is available with intervals that properly integrate over the subject-RE prior — i.e., the spread reflects the predictive distribution for an unseen child, not just the spread of the population mean.
+
+### Time-to-milestone framing
+
+The age-to-milestone outputs answer the question families are most likely to ask: *at about what age does a typical child reach a given vocabulary size?* From the VG07 inverse-CDF analysis (these numbers have not yet been re-quoted on VG09; the qualitative pattern is robust):
+
+| Target words | Typical age to understand | Typical age to speak |
+| ---: | :--- | :--- |
+| 25 | 12 months | 31 months |
+| 50 | 18 months | 37 months |
+| 100 | 25 months | 44 months |
+| 200 | 36 months | 58 months |
+| 400 | 75 months | 89 months |
+
+Three points to carry into family-facing communication:
+
+- *Understanding grows earlier and faster than spoken production.* In the current best DS model, the typical child reaches about 100 understood words near 25 months but 100 spoken words near 44 months.
+- *The median DS trajectory is still rising at the upper end of the current data range.* These milestone ages should not be read as a plateau in vocabulary learning.
+- *Milestone ages are distributional expectations, not targets for an individual child.* The full posterior predictive intervals remain wide and explicit individual-level uncertainty should be communicated alongside any single number.
+
+## Limitations
+
+The numbers quoted in this report come with several limitations that should travel with them.
+
+- **Sample composition.** The pooled DS dataset is drawn from ten contributing studies of varying recruitment strategies. Families experiencing additional difficulties may be under-represented (declining to participate, or not being approached); families with children making strong progress may also be under-represented if they perceive less need for research participation. Random intercepts cannot correct for selection bias in the underlying samples; they can only absorb measurement and reporting differences between samples.
+- **Missing understood data in the 40–70-month window.** 80 observations in this window carry spoken data only. This is a real coverage gap. VG07 and VG09 are robust to it because they model between-study heterogeneity, but a future data-collection effort targeted at completing understood + spoken pairs in this window would be the single highest-value intervention available to this project.
+- **Longitudinal recruitment bias.** Multi-observation subjects in the DS dataset are likely to be drawn disproportionately from higher-engaging families. VG08 and VG09 partition their *individual* deviation from the population mean into a subject random intercept, but the model still cannot detect a systematic shift between repeatedly observed and once-observed subjects if the population-level slope and intercept absorb it.
+- **No random-intercept TD reference.** VG06 is a pooled TD joint model without study or subject random intercepts. A symmetric random-intercept TD model has not been fitted, and the matched-comprehension reference quoted throughout this report therefore inherits any compositional structure in the Wordbank sample. The argument for a TD random-intercept extension is real and is listed as future work.
+- **Age-range mismatch in the matched-age comparison.** TD VG03/VG06 cover ~9–30 months; DS VG01/VG05/VG07/VG08/VG09 cover ~12–96 months. The overlap is therefore narrow, and the matched-age comparison should be read as a check rather than as the main inferential tool. The matched-comprehension comparison is more informative because it does not require an age match.
+- **Univariate VG01 and VG02 do not have random-intercept versions.** For consistency the univariate models should arguably be extended to study + subject RE versions; this has not been done.
+- **Posterior predictive distributions assume the model is correct.** The intervals quoted in this report reflect the uncertainty about the parameters *given the model*; they do not capture model misspecification. The iterative Bayesian workflow [@gelmanBayesianWorkflow2020] used to develop the model family — including the resolution of the leftward-hook artefact through VG07, the variance partitioning in VG08, and the symmetric VG09 extension on `q` — is the project's defence against model misspecification, but it is not a guarantee.
+
+## Open questions and future work
+
+Roughly in priority order for the project:
+
+1. **Re-quote the time-to-milestone (inverse-CDF) outputs on VG09.** The current numbers above are VG07's; the qualitative shape is robust but the headline DS model is now VG09 and the milestone table should be re-computed.
+2. **Address the 40–70-month understood coverage gap in future data collection.** 80 missing-understood observations, predominantly from Studies 1 and 5, are the most consequential single feature of the current dataset.
+3. **Fit a random-intercept TD reference model.** Symmetric in structure to VG07/VG08/VG09; tests whether the matched-comprehension TD curve is stable to compositional structure in the Wordbank sample.
+4. **Extend study + subject random intercepts to the univariate DS models VG01 and VG02.** For consistency; the same compositional shift drives the VG02 dip as drives the VG05 leftward hook.
+5. **Sensitivity check on the GP amplitude prior** ($\eta\_\sigma$). The investigation note suggested a tighter prior (0.4 → 0.2) as a diagnostic; useful even though VG09 is now the headline DS model.
+6. **Within-subject growth rates.** With subject REs in place, the model supports a quantitative analysis of how individual DS children's growth rates vary around the population trajectory. This is currently latent in the posterior and would be a natural addition to the per-model output catalogue.
+
+The first three items in particular are about closing methodological loops the random-intercept work has opened; the remainder concern extensions that the headline VG09 model has put within reach.

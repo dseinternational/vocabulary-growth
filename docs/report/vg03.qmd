@@ -1,0 +1,65 @@
+---
+title: "VG03 — Words spoken by typically developing children relative to age"
+abstract: "*VG03 estimates the spoken-vocabulary trajectory for typically developing children using a reproducible 10% sample of the Wordbank corpus. It is the typically developing counterpart of [VG01](vg01.qmd) and one of the two reference models against which the Down syndrome estimates are compared.*"
+---
+
+```{python}
+# | echo: false
+import pandas as pd
+```
+
+## Framing
+
+The typically developing reference models exist to anchor the Down syndrome estimates against well-documented expectations from the broader child-language literature. The Wordbank corpus [@frankWordbankOpenRepository2017] aggregates parent-report CDI data on tens of thousands of typically developing children and is the closest thing the field has to a reference distribution for early vocabulary development.
+
+VG03 models words spoken in TD children between roughly 9 and 30 months, the age range over which the relevant CDI instruments are validated. The model is otherwise identical in structure to [VG01](vg01.qmd) — see the [methods chapter](methods.qmd) for the shared specification.
+
+## Model specification
+
+VG03 instantiates the shared model backbone with:
+
+- `n_trials = 690` (the TD CDI checklist used in Wordbank is shorter than the DS list used in VG01–VG02)
+- slope anchors $(12, 26)$ months (chosen to span the TD validation range)
+- `sample_fraction = 0.1` with `random_seed = 47` (10 % reproducible sample of the available Wordbank rows for words spoken — 1 655 observations after subsampling)
+
+### Slope-anchor priors
+
+Many typically developing children say very few words at 12 months but the upper tail is wider than the 24-month equivalent in the DS data:
+
+$$p_{12} \sim \mathrm{Beta}(1, 15), \qquad p_{26} \sim \mathrm{Beta}(1.5, 1.1).$$
+
+The $p_{26}$ prior places noticeably more mass at higher proportions than the corresponding DS priors at 84 months — reflecting that by ~26 months a large fraction of TD children are using a substantial portion of the checklist.
+
+The remaining priors follow the family-wide values in the [methods chapter](methods.qmd).
+
+## Results
+
+### Diagnostics
+
+VG03 sampled at rep quality: r̂_max = 1.000, ESS_bulk_min = 8 388 across reported parameters (ESS_bulk_max = 51 091), zero divergences, 26 m 18 s wall time. elpd_loo = −8 852.4 (n = 1 655 observations).
+
+### Population trajectory
+
+Indicative typical values from the rep-quality run:
+
+| Age (months) | Spoken (median) |
+| ---: | :--- |
+| 9 | 3.5 [2.6–4.4] |
+| 12 | 12 [10–13] |
+| 18 | 86 [81–91] |
+| 24 | 269 [257–281] |
+| 30 | 441 [417–465] |
+
+The acceleration through the 12–24-month window — usually referred to as the "word spurt" — is clearly visible in the VG03 trajectory and serves as the empirical benchmark against which any acceleration (or its absence) in the DS data is compared.
+
+The full posterior summary table, prior- and posterior-predictive figures, smoothed median trend and dispersion plots are in `output/models/VG03-age-spoken-td/`. The rendered per-model report is `output/models/VG03-age-spoken-td/index.html`.
+
+## Status of VG03 in the family
+
+VG03 is the TD reference model for spoken vocabulary in the matched-age comparison `output/comparisons/ds_td_spoken_by_age.{png,svg}`. Together with [VG04](vg04.qmd) it provides the univariate TD baselines; the joint TD reference used for matched-comprehension comparisons against DS is [VG06](vg06.qmd).
+
+## Limitations
+
+- **Subsampling.** Using a 10 % Wordbank sample (rather than the full corpus) is a deliberate trade-off: full Wordbank is large enough that the model would be precision-limited only by the model structure, not by the data, and computation costs rise substantially with no commensurate scientific benefit. The reproducible seed makes the sample replicable but it is one particular 10 % subset — a sensitivity check at a different seed would be valuable but has not been run.
+- **Instrument and population mix in Wordbank.** Wordbank pools data from multiple CDIs across multiple language communities. The TD reference therefore represents an averaged TD trajectory rather than a single population; the comparison with DS should be read accordingly.
+- **Age range mismatch with DS.** TD VG03/VG06 cover ~9–30 months; DS VG01/VG05/VG07/VG08/VG09 cover ~12–96 months. The age windows for matched-age comparison overlap only over ~12–30 months. The matched-comprehension comparison documented in the [model comparison chapter](model-comparison.qmd) is therefore the more informative cross-population view.
