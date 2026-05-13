@@ -58,7 +58,7 @@ jobs:
           path: research
 
       - name: Setup Conda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
           environment-file: vocabulary-growth/environment.ci.yml
           activate-environment: dse-vocab-growth
