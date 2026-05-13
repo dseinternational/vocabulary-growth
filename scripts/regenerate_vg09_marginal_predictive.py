@@ -27,6 +27,7 @@ from __future__ import annotations
 import os
 
 import arviz as az
+import dse_research_utils.environment.setup as setup
 import numpy as np
 import pandas as pd
 from scipy.stats import betabinom
@@ -50,6 +51,8 @@ def _load_vg09_observed_counts() -> pd.DataFrame:
 
 
 def main() -> None:
+    setup.init_script()
+
     print(f"Loading VG09 trace from {VG09_DIR}/trace.nc …", flush=True)
     idata = az.from_netcdf(os.path.join(VG09_DIR, "trace.nc"))
 
