@@ -486,9 +486,11 @@ function of the comprehension trajectory.
 
 ### Production ratio against words understood
 
-![Production ratio `q` against words understood — DS (VG07, blue)
-versus TD (VG06, orange). Bands are 90% credible intervals for the
-typical trajectory. Dashed lines mark q = 0.5 and q = 0.9.
+![Production ratio `q` against words understood — DS (**VG09**,
+solid blue) versus TD (VG06, orange). The dashed blue line is the
+earlier VG07 curve (no subject REs) for reference. Bands are 90%
+credible intervals for the typical trajectory. Horizontal dashed
+lines mark q = 0.5 and q = 0.9.
 ](../output/comparisons/ds_td_q_vs_understood.png){#fig-q-overlay
 fig-align="center" width=85%}
 
@@ -498,25 +500,28 @@ right. At every milestone we checked, DS children need close to **twice
 the comprehension vocabulary** TD children do before reaching the same
 production ratio:
 
-| Production ratio | Words understood — TD | Words understood — DS | DS / TD |
-| ---------------: | :-------------------- | :-------------------- | :------ |
-| 0.25             | 100                   | 188                   | ≈ 1.9× |
-| 0.50             | 121                   | 264                   | ≈ 2.2× |
-| 0.75             | 156                   | 311                   | ≈ 2.0× |
-| 0.90             | 225                   | 407                   | ≈ 1.8× |
+| Production ratio | Words understood — TD (VG06) | Words understood — DS (VG09) | DS / TD | (DS — VG07, superseded) |
+| ---------------: | :--------------------------- | :--------------------------- | :------ | :----------------------- |
+| 0.25             | 100                          | 184                          | ≈ 1.84× | 188 |
+| 0.50             | 121                          | 226                          | ≈ 1.87× | 264 |
+| 0.75             | 156                          | 289                          | ≈ 1.85× | 311 |
+| 0.90             | 225                          | 413                          | ≈ 1.84× | 407 |
 
 What this means in plain terms:
 
 - A typical typically-developing child speaks about half the words they
   understand by the time they understand ~120 words. A typical DS child
-  reaches the same milestone at ~265 understood words.
+  reaches the same milestone at ~226 understood words under VG09.
 - The early production lag in DS is therefore not just *delayed in
   months* — it is *enlarged in comprehension terms*. Children with
-  Down syndrome accumulate roughly twice as much receptive vocabulary
-  before their spoken vocabulary catches up.
+  Down syndrome accumulate roughly **1.85× as much** receptive
+  vocabulary before their spoken vocabulary catches up at every
+  threshold checked — a striking constancy that VG07's wider range
+  (1.8–2.2×) obscured.
 - Both populations eventually converge: above ~400 understood words,
   DS and TD children both speak nearly all the words they understand
-  (q ≥ 0.9).
+  (q ≥ 0.9 for DS at ~413 understood words; TD reaches the same
+  threshold at ~225).
 
 This reframes the typical clinical/parent expectation that the gap is a
 matter of timing. The model tells a stronger story: the gap is
@@ -595,24 +600,25 @@ comprehension above ~150 understood words, VG07 (DS) sits
 substantially below VG06 (TD), and the gap widens with comprehension
 level, not narrows:
 
-| Understood | DS production rate (VG07) | DS production rate (VG08) | DS production rate (VG09) | TD production rate (VG06) |
-| ---------: | ------------------------: | ------------------------: | ------------------------: | ------------------------: |
-| ~50        | 0.06                      | 0.07                      | 0.04                      | —                         |
-| ~100       | 0.14                      | 0.15                      | 0.09                      | 0.22                      |
-| ~150       | 0.20                      | 0.21                      | 0.15                      | 0.50                      |
-| ~200       | 0.27                      | 0.35                      | 0.34                      | 0.83                      |
-| ~300       | 0.71                      | 0.72                      | 0.77                      | 0.95                      |
-| ~400       | 0.87                      | 0.84                      | 0.89                      | 0.99                      |
-| ~500       | 0.95                      | 0.78                      | 0.85                      | 0.99                      |
+| Understood | DS production rate (VG09) | DS production rate (VG07, superseded) | TD production rate (VG06) |
+| ---------: | ------------------------: | ------------------------------------: | ------------------------: |
+| ~50        | 0.04                      | 0.06                                  | 0.05                      |
+| ~100       | 0.08                      | 0.14                                  | 0.25                      |
+| ~150       | 0.15                      | 0.20                                  | 0.73                      |
+| ~200       | 0.33                      | 0.27                                  | 0.87                      |
+| ~300       | 0.78                      | 0.71                                  | 0.95                      |
+| ~400       | 0.90                      | 0.89                                  | 0.99                      |
+| ~500       | 0.88                      | 0.99                                  | 0.99                      |
 
-(Updated 13 May 2026 from VG07/VG08/VG09 rep-config posteriors. VG09's
-matched-comprehension `q` is the lowest of the three DS models at low
-understood (≤ 150 words) and the highest at the upper end — closer to
-VG07 there but with VG08's improved variance partition. The
-qualitative DS-vs-TD story is unchanged and sharpens slightly: above
-~150 understood words the DS production rate is substantially below
-TD under any of the DS models, and at low understood VG09 puts the
-gap *larger* than VG07/VG08 suggested.)
+(Updated 13 May 2026 from VG09 and VG06 rep-config posteriors using
+`production_rate_by_understood.csv` in each model's output directory.
+VG09 puts DS production *below* VG07's estimate at low and middle
+understood (≤ 150 words) — a typical DS child speaks even fewer of
+the words they understand than VG07 suggested — while reaching
+broadly similar values to VG07 at the upper end. The qualitative
+DS-vs-TD story sharpens: the gap at ~100 understood words is now
+~17 percentage points (8 % DS vs 25 % TD) rather than the
+~8 percentage points VG07 suggested.)
 
 The two findings are less contradictory than they first appear, and
 unpicking why exposes a real interpretive issue with D'Souza et al.'s

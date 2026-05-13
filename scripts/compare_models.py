@@ -10,7 +10,7 @@ Produces the following figures under `output/comparisons/`:
 - `vg05_vs_vg07_understood.{png,svg}` — Simpson's-paradox fix in VG07
 - `vg05_vs_vg07_spoken.{png,svg}` — sanity check that the fix preserves
   the spoken trajectory
-- `ds_td_q_vs_understood.{png,svg}` — q vs words understood (DS VG07 / TD
+- `ds_td_q_vs_understood.{png,svg}` — q vs words understood (DS VG09 / TD
   VG06) — the headline matched-comprehension comparison; the
   corresponding crossings CSV lives in this directory too.
 
@@ -128,8 +128,17 @@ def vg05_vs_vg07() -> None:
 
 
 def ds_td_q_vs_understood() -> None:
-    """Replicates the earlier compare_ds_td.py output."""
-    ds = pd.read_csv(
+    """DS-vs-TD matched-comprehension production-ratio overlay.
+
+    Headline DS model is VG09 (study + subject REs on both U and q).
+    VG07 is plotted as a dashed reference line so the shift from the
+    pre-subject-RE estimate is visible.
+    """
+    ds_vg09 = pd.read_csv(
+        os.path.join(MODELS_DIR, "VG09-age-understood-spoken-ds-re-subj-uq",
+                     "production_rate_by_understood.csv")
+    )
+    ds_vg07 = pd.read_csv(
         os.path.join(MODELS_DIR, "VG07-age-understood-spoken-ds-re",
                      "production_rate_by_understood.csv")
     )
@@ -141,28 +150,32 @@ def ds_td_q_vs_understood() -> None:
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(td["words_understood"], td["hdi_lo"], td["hdi_hi"],
                     color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 90% HDI")
-    ax.fill_between(ds["words_understood"], ds["hdi_lo"], ds["hdi_hi"],
+    ax.fill_between(ds_vg09["words_understood"], ds_vg09["hdi_lo"], ds_vg09["hdi_hi"],
                     color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 90% HDI")
     ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5,
             label="TD median q (VG06)")
-    ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5,
-            label="DS median q (VG07)")
+    ax.plot(ds_vg09["words_understood"], ds_vg09["q_median"], color=DS_COLOUR, lw=2.5,
+            label="DS median q (VG09)")
+    ax.plot(ds_vg07["words_understood"], ds_vg07["q_median"], color=DS_COLOUR,
+            lw=1.5, linestyle="--", alpha=0.7,
+            label="DS median q (VG07, no subject RE)")
 
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
 
-    ax.set_xlim(0, max(td["words_understood"].max(), ds["words_understood"].max()))
+    ax.set_xlim(0, max(td["words_understood"].max(),
+                       ds_vg09["words_understood"].max()))
     ax.set_ylim(0, 1)
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio against words understood — DS (VG07) vs TD (VG06)")
+    ax.set_title("Production ratio against words understood — DS (VG09) vs TD (VG06)")
     ax.legend(loc="lower right", frameon=True)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood.png"))
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood.svg"))
     plt.close(fig)
 
     rows = []
-    for pop, df in (("DS (VG07)", ds), ("TD (VG06)", td)):
+    for pop, df in (("DS (VG09)", ds_vg09), ("DS (VG07)", ds_vg07), ("TD (VG06)", td)):
         for thresh in (0.25, 0.5, 0.75, 0.90):
             rows.append({
                 "population": pop,
