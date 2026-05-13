@@ -14,7 +14,6 @@ dependencies:
   - pandas>=3.0.3
   - preliz
   - pymc>=5.28.4,<6.0
-  - pytorch>=2.10.0
   - scikit-learn>=1.8.0
   - xarray>=2026.4.0
   - pip
