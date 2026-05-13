@@ -76,13 +76,17 @@ def prepare_bivariate_re_data(
     definition: BivariateModelDefinition,
 ):
     """Load and prepare data for a bivariate model with study random effects."""
+    columns = ["age", "understood", "spoken", "study"]
+    if definition.use_subject_re_u:
+        columns = columns + ["subject_id"]
+
     df = vocab_data_utils.load_data(
         population=definition.population,
-        columns=["age", "understood", "spoken", "study"],
+        columns=columns,
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
     )
-    analysis_df = df[["age", "understood", "spoken", "study"]].copy()
+    analysis_df = df[columns].copy()
 
     # Keep rows where at least one outcome is observed (and age is present)
     analysis_df = analysis_df.dropna(subset=["age"])
@@ -94,6 +98,20 @@ def prepare_bivariate_re_data(
     unique_studies = sorted(analysis_df["study"].unique())
     study_map = {s: i for i, s in enumerate(unique_studies)}
     analysis_df["study_code"] = analysis_df["study"].map(study_map).astype(int)
+
+    # Create integer subject codes (unique across studies)
+    n_subjects: int | None = None
+    if definition.use_subject_re_u:
+        subj_keys = (
+            analysis_df["study"].astype(str)
+            + "::"
+            + analysis_df["subject_id"].astype(str)
+        )
+        analysis_df["subject_key"] = subj_keys
+        unique_subjects = sorted(subj_keys.unique())
+        subject_map = {s: i for i, s in enumerate(unique_subjects)}
+        analysis_df["subject_code"] = subj_keys.map(subject_map).astype(int)
+        n_subjects = len(unique_subjects)
 
     desc = descriptive_stats.describe_all(
         analysis_df[["age", "understood", "spoken"]], alpha=0.05
@@ -107,18 +125,23 @@ def prepare_bivariate_re_data(
     )
     n_studies = len(unique_studies)
 
-    key_value_table(
-        "Observation counts",
-        [
-            ("Total observations", n),
-            ("Understood observed", n_u),
-            ("Spoken observed", n_s),
-            ("Both observed", n_both),
-            ("Understood only", n_u - n_both),
-            ("Spoken only", n_s - n_both),
-            ("Studies", f"{n_studies} ({', '.join(map(str, unique_studies))})"),
-        ],
-    )
+    counts: list[tuple[str, object]] = [
+        ("Total observations", n),
+        ("Understood observed", n_u),
+        ("Spoken observed", n_s),
+        ("Both observed", n_both),
+        ("Understood only", n_u - n_both),
+        ("Spoken only", n_s - n_both),
+        ("Studies", f"{n_studies} ({', '.join(map(str, unique_studies))})"),
+    ]
+    if n_subjects is not None:
+        n_singletons = int(
+            (analysis_df.groupby("subject_code").size() == 1).sum()
+        )
+        counts.append(("Subjects", n_subjects))
+        counts.append(("Subjects with single observation", n_singletons))
+        counts.append(("Subjects with repeated observations", n_subjects - n_singletons))
+    key_value_table("Observation counts", counts)
     dataframe_table(desc, title="Descriptive statistics")
 
     # Create a BinomialModelData for the context interface
@@ -160,19 +183,44 @@ def build_model_re(
     has_u = analysis_df["understood"].notna().values
     has_s = analysis_df["spoken"].notna().values
 
+    # Optional held-out mask: rows where holdout==True remain in obs space (so
+    # f_u_obs, h_obs etc. are computed at their ages) but are excluded from the
+    # likelihood. Subject REs for held-out subjects are then drawn from the
+    # prior, which is exactly what we need for K-fold LOSO.
+    if "holdout" in analysis_df.columns:
+        holdout = analysis_df["holdout"].fillna(False).astype(bool).values
+    else:
+        holdout = np.zeros(len(analysis_df), dtype=bool)
+    has_u_train = has_u & ~holdout
+    has_s_train = has_s & ~holdout
+
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
-    y_s_observed = np.asarray(analysis_df.loc[has_s, "spoken"], dtype=int)
+    y_u_observed = np.asarray(
+        analysis_df.loc[has_u_train, "understood"], dtype=int
+    )
+    y_s_observed = np.asarray(
+        analysis_df.loc[has_s_train, "spoken"], dtype=int
+    )
     study_codes = np.asarray(analysis_df["study_code"], dtype=int)
 
-    idx_u = np.where(has_u)[0]
-    idx_s = np.where(has_s)[0]
+    idx_u = np.where(has_u_train)[0]
+    idx_s = np.where(has_s_train)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
     n_s = len(y_s_observed)
     n_trials = context.model_data.n_trials
     n_studies = int(study_codes.max()) + 1
+
+    use_subject_re_u = bool(definition.use_subject_re_u)
+    use_subject_re_q = bool(definition.use_subject_re_q)
+    use_subject_codes = use_subject_re_u or use_subject_re_q
+    if use_subject_codes:
+        subject_codes = np.asarray(analysis_df["subject_code"], dtype=int)
+        n_subjects = int(subject_codes.max()) + 1
+    else:
+        subject_codes = None
+        n_subjects = 0
 
     # Validate
     if not np.all(y_u_observed >= 0):
@@ -191,21 +239,25 @@ def build_model_re(
     if not np.isfinite(X_obs_std) or X_obs_std <= 0:
         raise ValueError("Age standard deviation must be positive.")
 
-    key_value_table(
-        "Build configuration",
+    build_cfg: list[tuple[str, object]] = [
+        ("Total observations", n),
+        ("Understood observed", n_u),
+        ("Spoken observed", n_s),
+        ("n_trials", n_trials),
+        ("n_studies", n_studies),
+    ]
+    if use_subject_codes:
+        build_cfg.append(("n_subjects", n_subjects))
+    build_cfg.extend(
         [
-            ("Total observations", n),
-            ("Understood observed", n_u),
-            ("Spoken observed", n_s),
-            ("n_trials", n_trials),
-            ("n_studies", n_studies),
             ("Age mean (months)", X_obs_mean),
             ("Age std (months)", X_obs_std),
             ("Slope anchors (months)", config.slope_anchors),
             ("Length-scale range (months)", config.ell_months_range),
             ("Query ages (months)", config.ages_query),
-        ],
+        ]
     )
+    key_value_table("Build configuration", build_cfg)
 
     X_obs_z = (X_obs - X_obs_mean) / X_obs_std
 
@@ -270,6 +322,8 @@ def build_model_re(
         "study_id": np.arange(n_studies),
         "x_dim": np.arange(1),
     }
+    if use_subject_codes:
+        coords["subject_id"] = np.arange(n_subjects)
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -286,6 +340,11 @@ def build_model_re(
         _ = pm.Data("obs_s_mask", has_s.astype(int), dims=("obs_id",))
 
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
+
+        if use_subject_codes:
+            subject_obs = pm.Data(
+                "subject_obs", subject_codes, dims=("obs_id",)
+            )
 
         # ============================================================
         # Understood (U) trajectory: f_U(a) -> p_U(a)
@@ -364,19 +423,51 @@ def build_model_re(
         delta_q = pm.Normal("delta_q", mu=0, sigma=tau_q, dims="study_id")
 
         # ============================================================
+        # Subject-level random intercepts (non-centered)
+        # ============================================================
+
+        if use_subject_re_u:
+            tau_subj_u = pm.HalfNormal(
+                "tau_subj_u", sigma=definition.tau_subj_u_sigma
+            )
+            delta_subj_u_raw = pm.Normal(
+                "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
+            )
+            delta_subj_u = pm.Deterministic(
+                "delta_subj_u", tau_subj_u * delta_subj_u_raw, dims="subject_id"
+            )
+            subject_shift_u = delta_subj_u[subject_obs]
+        else:
+            subject_shift_u = 0.0
+
+        if use_subject_re_q:
+            tau_subj_q = pm.HalfNormal(
+                "tau_subj_q", sigma=definition.tau_subj_q_sigma
+            )
+            delta_subj_q_raw = pm.Normal(
+                "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
+            )
+            delta_subj_q = pm.Deterministic(
+                "delta_subj_q", tau_subj_q * delta_subj_q_raw, dims="subject_id"
+            )
+            subject_shift_q = delta_subj_q[subject_obs]
+        else:
+            subject_shift_q = 0.0
+
+        # ============================================================
         # Observation-level quantities (with study effects)
         # ============================================================
 
-        # Understood — obs level includes study shift
-        f_u_obs_re = f_u_all[i_obs0:i_obs1] + delta_u[study_obs]
+        # Understood — obs level includes study shift (and optional subject shift)
+        f_u_obs_re = f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + subject_shift_u
         p_u_obs = pm.Deterministic(
             "p_u_obs", pm.math.sigmoid(f_u_obs_re), dims=("obs_id",)
         )
         # For diagnostics: population-level f at obs ages
         _ = pm.Deterministic("f_u_obs", f_u_all[i_obs0:i_obs1], dims=("obs_id",))
 
-        # Production ratio — obs level includes study shift
-        h_obs_re = h_all[i_obs0:i_obs1] + delta_q[study_obs]
+        # Production ratio — obs level includes study shift (and optional subject shift)
+        h_obs_re = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q
         q_obs = pm.Deterministic(
             "q_obs", pm.math.sigmoid(h_obs_re), dims=("obs_id",)
         )
@@ -588,7 +679,7 @@ def fit_bivariate_re_model(
         diagnostics(context)
 
     with section("Posterior predictions", timings=timings):
-        sample_posterior_predictive(context)
+        sample_posterior_predictive(context, definition)
 
     with section("Posterior summary", timings=timings):
         posterior_summary(context)

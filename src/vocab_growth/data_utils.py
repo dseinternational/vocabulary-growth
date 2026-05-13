@@ -35,6 +35,7 @@ def load_combined_data(max_age_months=None):
             """
             SELECT
                 study,
+                subject_id,
                 sex,
                 age,
                 understood,

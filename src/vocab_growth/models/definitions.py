@@ -170,6 +170,16 @@ class BivariateModelDefinition:
     tau_q_sigma: float = 0.5
     """HalfNormal scale for study intercept SD on production ratio (logit scale)."""
 
+    # -- Subject-level random intercepts --
+    use_subject_re_u: bool = False
+    """If True, add subject-level random intercepts on the understood trajectory."""
+    tau_subj_u_sigma: float = 0.5
+    """HalfNormal scale for subject intercept SD on understood (logit scale)."""
+    use_subject_re_q: bool = False
+    """If True, add subject-level random intercepts on the production ratio q."""
+    tau_subj_q_sigma: float = 0.5
+    """HalfNormal scale for subject intercept SD on q (logit scale)."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.BIVARIATE
@@ -295,6 +305,50 @@ VG07 = BivariateModelDefinition(
     tau_q_sigma=0.5,
 )
 
+VG08 = BivariateModelDefinition(
+    model_id="VG08",
+    config_name="age-understood-spoken-ds-re-subj",
+    banner=(
+        "Fitting Model VG08: Joint model with study + subject random intercepts on U"
+        " (A -> U, A -> S, U -> S) - Down syndrome"
+    ),
+    population=Population.DOWN_SYNDROME,
+    n_trials=800,
+    slope_anchors=(24, 84),
+    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    p_slope_low_u_alpha=1.0,
+    p_slope_low_u_beta=10.0,
+    p_slope_hi_u_alpha=1.1,
+    p_slope_hi_u_beta=1.1,
+    tau_u_sigma=0.5,
+    tau_q_sigma=0.5,
+    use_subject_re_u=True,
+    tau_subj_u_sigma=0.5,
+)
+
+VG09 = BivariateModelDefinition(
+    model_id="VG09",
+    config_name="age-understood-spoken-ds-re-subj-uq",
+    banner=(
+        "Fitting Model VG09: Joint model with study + subject random intercepts on U and q"
+        " (A -> U, A -> S, U -> S) - Down syndrome"
+    ),
+    population=Population.DOWN_SYNDROME,
+    n_trials=800,
+    slope_anchors=(24, 84),
+    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    p_slope_low_u_alpha=1.0,
+    p_slope_low_u_beta=10.0,
+    p_slope_hi_u_alpha=1.1,
+    p_slope_hi_u_beta=1.1,
+    tau_u_sigma=0.5,
+    tau_q_sigma=0.5,
+    use_subject_re_u=True,
+    tau_subj_u_sigma=0.5,
+    use_subject_re_q=True,
+    tau_subj_q_sigma=0.5,
+)
+
 MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -303,4 +357,6 @@ MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] 
     "vg05": VG05,
     "vg06": VG06,
     "vg07": VG07,
+    "vg08": VG08,
+    "vg09": VG09,
 }

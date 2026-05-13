@@ -992,8 +992,16 @@ def diagnostics(context: BivariateContext):
     console.print(loocv_u)
 
 
-def sample_posterior_predictive(context: BivariateContext):
-    """Sample from the posterior predictive distribution."""
+def sample_posterior_predictive(context: BivariateContext, definition=None):
+    """Sample from the posterior predictive distribution.
+
+    For models with subject-level random intercepts (use_subject_re_u and/or
+    use_subject_re_q), the y_*_plot / y_*_query nodes are constructed using
+    marginal probabilities that integrate over a freshly-sampled subject RE
+    drawn from the corresponding prior. This makes y_u_query etc. the
+    correct predictive distribution for an unseen DS child, rather than
+    the population-mean conditional distribution.
+    """
     n_trials = context.model_data.n_trials
 
     p_u_plot = context.model_variables["p_u_plot"]
@@ -1006,7 +1014,48 @@ def sample_posterior_predictive(context: BivariateContext):
     kappa_s_plot = context.model_variables["kappa_s_plot"]
     kappa_s_query = context.model_variables["kappa_s_query"]
 
+    use_subject_re_u = bool(getattr(definition, "use_subject_re_u", False))
+    use_subject_re_q = bool(getattr(definition, "use_subject_re_q", False))
+
     with context.model:
+        # Subject-marginalised probabilities if subject REs are present.
+        # delta_subj_*_marg_{plot,query} are auxiliary RVs sampled from the
+        # subject-RE prior during sample_posterior_predictive — they are not
+        # part of the likelihood and do not affect posterior sampling.
+        if use_subject_re_u:
+            tau_subj_u = context.model_variables["tau_subj_u"]
+            f_u_plot_var = context.model_variables["f_u_plot"]
+            f_u_query_var = context.model_variables["f_u_query"]
+            delta_u_plot_marg = pm.Normal(
+                "_delta_subj_u_plot_marg", mu=0.0, sigma=tau_subj_u, dims="plot_id"
+            )
+            delta_u_query_marg = pm.Normal(
+                "_delta_subj_u_query_marg", mu=0.0, sigma=tau_subj_u, dims="query_id"
+            )
+            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_plot_marg)
+            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_query_marg)
+
+        if use_subject_re_q:
+            tau_subj_q = context.model_variables["tau_subj_q"]
+            h_plot_var = context.model_variables["h_plot"]
+            h_query_var = context.model_variables["h_query"]
+            delta_q_plot_marg = pm.Normal(
+                "_delta_subj_q_plot_marg", mu=0.0, sigma=tau_subj_q, dims="plot_id"
+            )
+            delta_q_query_marg = pm.Normal(
+                "_delta_subj_q_query_marg", mu=0.0, sigma=tau_subj_q, dims="query_id"
+            )
+            q_plot_marg = pm.math.sigmoid(h_plot_var + delta_q_plot_marg)
+            q_query_marg = pm.math.sigmoid(h_query_var + delta_q_query_marg)
+            p_s_plot = p_u_plot * q_plot_marg
+            p_s_query = p_u_query * q_query_marg
+        elif use_subject_re_u:
+            # Marginal U but not q: rebuild p_s from new p_u and original q.
+            q_plot = context.model_variables["q_plot"]
+            q_query = context.model_variables["q_query"]
+            p_s_plot = p_u_plot * q_plot
+            p_s_query = p_u_query * q_query
+
         # Understood — plot
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
@@ -1903,7 +1952,7 @@ def fit_bivariate_model(
         diagnostics(context)
 
     with section("Posterior predictions", timings=timings):
-        sample_posterior_predictive(context)
+        sample_posterior_predictive(context, definition)
 
     with section("Posterior summary", timings=timings):
         posterior_summary(context)

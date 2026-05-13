@@ -1,0 +1,266 @@
+---
+title: "Model VG08: Joint model with study + subject random intercepts on understood - children with Down syndrome"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-warning title="Warning: Preliminary model output"}
+
+This model output is preliminary and likely to change as the model evolves and further data are received.
+
+If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+:::
+
+This model extends VG07 by adding subject-level random intercepts on the understood trajectory. The motivation is to partition between-child variability from within-child repeated-measures correlation: 288 of the 510 subjects in the combined Down-syndrome dataset are observed more than once, and treating those repeated observations as independent inflates the dispersion parameter and understates uncertainty around the population mean.
+
+```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+```
+
+## Statistical model
+
+We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The structure follows VG07 with an additional non-centered subject-level random intercept on the understood trajectory:
+
+$$f_U(a, s, i) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s] + \delta^{\text{subj}}_U[i]$$
+$$h(a, s) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s]$$
+
+where $\delta_U[s] \sim \text{Normal}(0, \tau_U)$ and $\delta_q[s] \sim \text{Normal}(0, \tau_q)$ are study-level random intercepts on the logit scale, and $\delta^{\text{subj}}_U[i] = \tau^{\text{subj}}_U \cdot z_i$ with $z_i \sim \text{Normal}(0, 1)$ are non-centered subject-level random intercepts on the understood logit. Plot and query predictions use the population-level trajectory ($\delta = 0$ throughout).
+
+The subject random intercept is applied only to the understood outcome in this first iteration; the production ratio $q$ retains the study-only RE structure from VG07.
+
+::: {.callout-note}
+
+For full details and discussion, please refer to the technical report.
+
+:::
+
+![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Priors
+
+### Understood trajectory
+
+![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.svg){#fig-ell-u .lightbox fig-align="left"}
+
+![Amplitude prior `eta_u_dist`](eta_u_dist.svg){#fig-eta-u .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.svg){#fig-slope-low-u .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.svg){#fig-slope-hi-u .lightbox fig-align="left"}
+
+### Production ratio
+
+![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.svg){#fig-ell-q .lightbox fig-align="left"}
+
+![Amplitude prior `eta_q_dist`](eta_q_dist.svg){#fig-eta-q .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.svg){#fig-slope-low-q .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.svg){#fig-slope-hi-q .lightbox fig-align="left"}
+
+### Dispersion / overdispersion -- understood
+
+![`kappa_min_u_dist`](kappa_min_u_dist.svg){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![`a_kappa_u_dist`](a_kappa_u_dist.svg){#fig-a-kappa-u .lightbox fig-align="left"}
+
+![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.svg){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+
+### Dispersion / overdispersion -- spoken
+
+![`kappa_min_s_dist`](kappa_min_s_dist.svg){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![`a_kappa_s_dist`](a_kappa_s_dist.svg){#fig-a-kappa-s .lightbox fig-align="left"}
+
+![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.svg){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+
+## Prior predictive checks
+
+### Prior samples -- words understood
+
+![Prior sample trajectories (understood)](prior_samples_u.svg){#fig-prior-samples-u .lightbox fig-align="left"}
+
+### Prior samples -- words spoken
+
+![Prior sample trajectories (spoken)](prior_samples_s.svg){#fig-prior-samples-s .lightbox fig-align="left"}
+
+### Prior samples -- production rate q(a)
+
+![Prior sample trajectories for production ratio q(a)](prior_samples_q.svg){#fig-prior-samples-q .lightbox fig-align="left"}
+
+## Data
+
+```{python}
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+## Diagnostics
+
+```{python}
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+
+
+def _flag_red(v, threshold, *, above):
+    bad = v > threshold if above else v < threshold
+    return "color: #b00; font-weight: bold;" if bad else ""
+
+
+def _style_diagnostics(df):
+    styler = df.style.format(precision=3)
+    if "r_hat" in df.columns:
+        styler = styler.map(
+            lambda v: _flag_red(v, 1.01, above=True), subset=["r_hat"]
+        )
+    ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
+    if ess_cols:
+        styler = styler.map(
+            lambda v: _flag_red(v, 400, above=False), subset=ess_cols
+        )
+    styler.set_caption(
+        "Reported convergence diagnostics. Cells highlighted red flag "
+        "r̂ > 1.01 or ESS < 400."
+    )
+    return styler
+
+
+_style_diagnostics(diagnostics)
+```
+
+![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![pair_plot](pair_plot.svg){#fig-pair .lightbox fig-align="left"}
+
+## Joint trajectory
+
+![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.svg){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Joint posterior predictive trajectory with 50% and 75% HDI bands](joint_trajectory_hdi.svg){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
+
+## Production ratio
+
+The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
+The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood counts, so it should be interpreted separately from $q(a)$.
+
+![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
+
+![Production ratio by words understood](production_rate_by_understood.svg){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+![Posterior predictive spoken/understood count ratio](production_rate_predictive.svg){#fig-production-rate-predictive .lightbox fig-align="left"}
+
+```{python}
+summary_q = pd.read_csv("posterior_summary_q.csv")
+summary_q
+```
+
+## Comprehension-production gap
+
+The expected difference in word counts between understanding and production.
+
+![Comprehension-production gap](comprehension_production_gap.svg){#fig-gap .lightbox fig-align="left"}
+
+## Words understood vs words spoken
+
+![Expected words understood vs spoken](understood_vs_spoken.svg){#fig-understood-vs-spoken .lightbox fig-align="left"}
+
+![Posterior predictive words understood vs spoken](understood_vs_spoken_predictive.svg){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+
+## Posterior predictions -- words understood
+
+::: {.callout-note title="Subject-marginalised posterior predictive"}
+
+The count distributions, PMF/CDF, median-trend plots and the `Y_*`
+and `P(Y<=k)` columns in the summary tables below integrate over a
+freshly-sampled subject random intercept drawn from
+`Normal(0, τ^{subj}_U)`. This is the correct predictive distribution
+for an unseen DS child. The latent probability columns (`p_median`,
+`Ey_median` etc.) describe the population-mean conditional
+probability and are unchanged.
+
+:::
+
+### Posterior summary table
+
+```{python}
+posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
+posterior_summary_u
+```
+
+### Posterior predictive PMF
+
+![posterior_predictive_pmf_u](posterior_predictive_pmf_u.svg){#fig-pmf-u .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![posterior_predictive_cdf_u](posterior_predictive_cdf_u.svg){#fig-cdf-u .lightbox fig-align="left"}
+
+### Count distributions by age
+
+![posterior_predictive_count_distributions_u](posterior_predictive_count_distributions_u.svg){#fig-count-dist-u .lightbox fig-align="left"}
+
+### Median trend
+
+![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.svg){#fig-trend-u .lightbox fig-align="left"}
+
+Smoothed:
+
+![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.svg){#fig-trend-u-smooth .lightbox fig-align="left"}
+
+### Learning rate
+
+![expected_learning_rate_u](expected_learning_rate_u.svg){#fig-rate-u .lightbox fig-align="left"}
+
+### Dispersion $\kappa$ -- understood
+
+![posterior_kappa_u](posterior_kappa_u.svg){#fig-kappa-u .lightbox fig-align="left"}
+
+## Posterior predictions -- words spoken
+
+### Posterior summary table
+
+```{python}
+posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
+posterior_summary_s
+```
+
+### Posterior predictive PMF
+
+![posterior_predictive_pmf_s](posterior_predictive_pmf_s.svg){#fig-pmf-s .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![posterior_predictive_cdf_s](posterior_predictive_cdf_s.svg){#fig-cdf-s .lightbox fig-align="left"}
+
+### Count distributions by age
+
+![posterior_predictive_count_distributions_s](posterior_predictive_count_distributions_s.svg){#fig-count-dist-s .lightbox fig-align="left"}
+
+### Median trend
+
+![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.svg){#fig-trend-s .lightbox fig-align="left"}
+
+Smoothed:
+
+![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.svg){#fig-trend-s-smooth .lightbox fig-align="left"}
+
+### Learning rate
+
+![expected_learning_rate_s](expected_learning_rate_s.svg){#fig-rate-s .lightbox fig-align="left"}
+
+### Dispersion $\kappa$ -- spoken
+
+![posterior_kappa_s](posterior_kappa_s.svg){#fig-kappa-s .lightbox fig-align="left"}
