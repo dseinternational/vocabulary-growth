@@ -12,6 +12,7 @@ dependencies:
   - nutpie>=0.16.8
   - pandas-stubs
   - pandas>=3.0.3
+  - preliz
   - pymc>=5.28.4,<6.0
   - pytorch>=2.10.0
   - scikit-learn>=1.8.0
@@ -28,7 +29,6 @@ dependencies:
       - matplotlib>=3.10.9
       - notebook>=7.5.6
       - orjson>=3.11.9
-      - preliz
       - pytest>=9.0.3
       - rich>=15.0.0
       - ruff>=0.15.12
