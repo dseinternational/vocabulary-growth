@@ -146,12 +146,13 @@ the direction supported by the structural argument, not a reporting
 accident.
 
 Open methodological questions remain: the non-monotone dip in `q`
-beyond ~72 months under VG09 and VG09B (absent in VG07), and whether
-the GP anchor should be applied symmetrically to the rest of the
-model family (VG05–VG08, and the univariate VG01–VG04). A separate
-strand of work — bringing signed/gestured vocabulary into the model
-family — is also scoped below. These are all reflected in [Next
-steps](#next-steps).
+beyond ~72 months under VG09 and VG09B (absent in VG07), how much
+upper-age interpretation is shaped by finite checklist ceilings, and
+whether the GP anchor should be applied symmetrically to the rest of
+the model family (VG05–VG08, and the univariate VG01–VG04). A
+separate strand of work — bringing signed/gestured vocabulary into
+the model family — is also scoped below. These are all reflected in
+[Next steps](#next-steps).
 
 ## Data and methods
 
@@ -201,6 +202,16 @@ All models share the same statistical shape:
 - (in VG07 onward) random intercepts on the logit scale to absorb
   systematic study- and subject-level shifts that would otherwise
   contaminate the population trajectory.
+
+The outcomes are parent-reported counts from finite CDI /
+MacArthur-style vocabulary checklists. Model probabilities therefore
+refer to the probability that a *checklist word* is understood or
+spoken, and expected counts are expected words within the assessed
+inventory, not total lexical knowledge. As children approach the
+upper end of a form, additional words outside the checklist are
+unobserved, so apparent flattening, compressed uncertainty, or very
+high production ratios may partly reflect instrument ceiling rather
+than developmental saturation.
 
 Inference is by Hamiltonian Monte Carlo (PyMC + nutpie / NUTS). The
 *reporting* sampling configuration is 6 chains × (6,000 tune +
@@ -457,6 +468,10 @@ i.e. expected within-subject change as a typical DS child ages.
 Vocabulary counts here are model expectations on a 800-word total
 (`Ey_median`); 90 % HDIs (`Ey_hdi_lo`–`Ey_hdi_hi`) reflect the
 uncertainty in the typical DS trajectory, not individual-child spread.
+At older ages, especially beyond ~72 months, these should be read as
+within-checklist estimates. A child may continue learning words
+outside the assessed inventory even when the checklist-based
+understood or spoken count is approaching the form ceiling.
 
 | Age (mo) | Understood | 90 % HDI       | Spoken | 90 % HDI      | q (median) | 90 % HDI       |
 |---------:|-----------:|----------------|-------:|---------------|------------|----------------|
@@ -497,6 +512,13 @@ is steeper than VG07's in the middle of the comprehension range —
 i.e. production catches up over a narrower comprehension window once
 it starts catching up at all — but starts later. This sharpens the
 already-substantial DS–TD divergence above ~150 understood words.
+
+Here too, `q = p_S / p_U` means "the fraction of understood checklist
+words that are also spoken". Near the checklist ceiling, receptive
+vocabulary can no longer increase within the instrument even if a
+child continues to learn words outside it, so upper-range `q`
+estimates should be interpreted as within-inventory production
+ratios rather than ratios over the child's full vocabulary.
 
 ![VG09B: production rate against words understood (DS).
 ](../output/models/VG09B-age-understood-spoken-ds-re-subj-uq-anchored/production_rate_by_understood.png){#fig-vg09b-q-vs-u
@@ -894,10 +916,12 @@ separate observation conventions with their own `q_G` functions.
 3. **The non-monotone tail of `q` beyond ~72 months is the main
    interpretive question that remains.** It is shared by VG09 and
    VG09B, while VG07 remains monotone, so it cannot be attributed to
-   the A+D parameterisation fix. The most plausible mechanism is the
+   the A+D parameterisation fix. Plausible mechanisms include the
    wide subject-RE distribution interacting with sparse data at the
-   upper end of the age range (Jensen on the inverse-logit). This
-   needs a deliberate investigation rather than a parameter tweak.
+   upper end of the age range (Jensen on the inverse-logit), and
+   measurement compression as children approach the finite checklist
+   ceiling. This needs a deliberate investigation rather than a
+   parameter tweak.
 4. **The technical report needs updating for VG09B.** Commit
    `97023ac` already rewrote `docs/report/` into the `vgNN` chapter
    scheme and added chapters for VG07, VG08 and VG09. The remaining
@@ -931,8 +955,11 @@ Ranked roughly by priority.
    - tighten $\tau^{\text{subj}}_q$ (e.g. `HalfNormal(0.25)` instead of 0.5);
    - narrow the GP lengthscale prior so the GP cannot bend on
      decadal scales;
+   - quantify how close observations and posterior trajectories are
+     to the relevant CDI / MacArthur checklist ceilings;
    - restrict the query range to ages with substantive data and flag
-     the upper tail explicitly as extrapolation.
+     the upper tail explicitly as extrapolation and as within-checklist
+     rather than total-vocabulary estimation.
 5. **Update the technical report** (`docs/report/`):
    - add a VG09B chapter if the model is promoted, or document it as
      a named sensitivity / candidate model if not;
