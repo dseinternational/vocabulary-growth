@@ -74,10 +74,11 @@ No single study of DS vocabulary development is large enough to
 support stable, age-resolved estimates across the 12-to-90-month
 range. The project's distinctive contribution is to **bring together
 data from multiple international studies into one coherent
-statistical analysis**: 964 usable observations from 510 unique DS
+statistical analysis**: 964 age-valid rows from 510 unique DS
 subjects across **10 study labels** spanning the United Kingdom,
 Ireland, Italy, and the United States, harmonised into a single
-pooled dataset.
+pooled dataset. For the current joint understood + spoken models,
+950 of those rows carry at least one of the two modelled outcomes.
 
 That pooling is what unlocks the analysis. It also creates the
 central methodological problem the project has had to solve: studies
@@ -156,18 +157,22 @@ steps](#next-steps).
 
 ### Pooled dataset
 
-The DS analyses pool 964 usable observations from 510 unique subject
-IDs across 10 international study labels. The contributing studies
-span the United Kingdom, Ireland, Italy, and the United States, and
-were collected over roughly three decades. They use different CDI /
+The DS data source currently contains 964 age-valid rows from 510
+unique subject IDs across 10 international study labels in the
+DuckDB `vocab_combined` view. The contributing studies span the
+United Kingdom, Ireland, Italy, and the United States, and were
+collected over roughly three decades. They use different CDI /
 MacArthur forms and different study protocols, so the data
 preparation pipeline (`scripts/prepare_data.py`) harmonises columns
-into a common schema before merging into a DuckDB database with a
-unified `vocab_combined` view; all models load from that view via
+into a common schema before merging into a DuckDB database; all
+models load from that view via
 `vocab_growth.data_utils.load_combined_data()`.
 
-510 of the 964 rows come from 288 subjects with ≥ 2 observations
-(maximum 8 on a single subject). That strong within-subject
+For the bivariate DS models, 950 rows have at least one of
+`understood` or `spoken` observed (704 understood rows, 949 spoken
+rows, 703 complete understood + spoken pairs). 288 of the 510 DS
+subjects have ≥ 2 bivariate-analysis rows, contributing 728 of the
+950 rows (maximum 8 on a single subject). That strong within-subject
 repeated-measures structure — a direct consequence of pooling
 longitudinal cohorts — motivates the move to subject random
 intercepts in VG08 and VG09.
@@ -293,8 +298,9 @@ preference for VG07 over VG05 for any DS reporting that touches the
 ### VG08 — subject random intercepts on understood
 
 VG07 still treated each observation as if it came from an independent
-child. But 510 of 964 DS rows come from 288 subjects with ≥ 2
-observations. Longitudinal recruitment tends to over-represent
+child. But 288 of 510 DS subjects have ≥ 2 bivariate-analysis
+observations, contributing 728 of the 950 rows used by the joint DS
+models. Longitudinal recruitment tends to over-represent
 higher-engaging families, so those multi-observation subjects sit
 above the population mean — and contribute disproportionately to the
 likelihood.
@@ -377,10 +383,14 @@ change.
 
 ### Diagnostics: every flagged parameter cleared
 
-Anchoring the GP at `a_ref = 54` months removed the GP–intercept
-ridge entirely. Bulk ESS roughly doubled on the previously flagged
-parameters, and $\hat R$ dropped to $\le 1.009$ on every reported parameter
-(threshold: $\hat R \le 1.01$, $\text{ESS} \ge 400$).
+The VG09B A+D variant — tighter q-anchor priors plus a GP anchor at
+`a_ref = 54` months — cleared the reported VG09 diagnostic flags.
+Bulk ESS roughly doubled on the previously flagged parameters, and
+$\hat R$ dropped to $\le 1.009$ on every reported parameter (threshold:
+$\hat R \le 1.01$, $\text{ESS} \ge 400$). This is consistent with the
+structural diagnosis that VG09 had a GP-level intercept redundancy,
+but the diagnostic improvement should be attributed to the combined
+A+D change rather than to the GP anchor in isolation.
 
 | Parameter        | VG09 $\hat R$ | VG09 $\text{ESS}_{\text{bulk}}$ | VG09B $\hat R$ | VG09B $\text{ESS}_{\text{bulk}}$ |
 |------------------|---------|---------------|-----------|----------------|
@@ -577,23 +587,25 @@ Four patterns are worth flagging:
    expected from published CDI data for DS.
 2. **VG09 and VG09B both peak then dip.** VG09 peaks at ~0.90 at 72
    months and dips to ~0.88 at 90 months; VG09B peaks at ~0.84 at 72
-   months and dips to ~0.82 at 90 months. The non-monotone tail is a
-   consequence of adding subject REs on `q`: where data are sparse the
-   population mean is pulled toward the prior, and the
+   months and dips to ~0.82 at 90 months. The non-monotone tail
+   appears after adding subject REs on `q`: where data are sparse the
+   population mean can be pulled toward the prior, and the
    inverse-logit / Jensen interaction with the wide subject-RE
    distribution can bend the population curve downward. The dip is
    shared by VG09 and VG09B — i.e. it is not caused by the
-   GP–intercept ridge that VG09B was designed to fix.
+   GP–intercept ridge that VG09B was designed to fix. VG07 is the
+   monotone comparator.
 3. **At mid-ages (36–66 mo) VG09B sits roughly 10 percentage points
    below VG07 and 10–13 percentage points below VG09.** At 48 months,
    VG07 / VG09 / VG09B give 0.60 / 0.66 / 0.53. The VG09 → VG09B shift
-   is what the GP anchor was meant to do: in VG09 the unanchored `g_q`
-   carried ~1.5 logit units of constant level at the reference age
-   that the data could not distinguish from
+   is consistent with the A+D structural fix: in VG09 the unanchored
+   `g_q` carried ~1.5 logit units of constant level at the reference
+   age that the data could not distinguish from
    `intercept_q + slope_q · a_z(a_ref)`. Once the GP is forced through
    zero at 54 months, the linear trend uniquely defines the level
    there and the GP is restricted to genuine deviations from
-   linearity.
+   linearity; the tighter q-anchor priors also contribute to the
+   changed trajectory.
 4. **At very young ages (12–30 mo) VG07 is substantially higher than
    either VG09 or VG09B.** This is a side-effect of the subject REs on
    `q`: with a wide subject-level distribution in logit-`q` space, the
@@ -618,10 +630,10 @@ If VG09B replaces VG09 as the headline DS joint model, several
 quoted numbers in the meeting-review document
 (`notes/202605120945-meeting-project-review.md`) will move:
 
-- The typical DS (median) trajectory under VG09B is shifted slightly
-  upward at older ages compared with VG09 (Ey at 84 months: 506 vs
-  509 understood, 398 vs 434 spoken) and slightly downward at very
-  young ages.
+- The typical DS (median) trajectory under VG09B is very close to
+  VG09 for understood vocabulary and lower for spoken vocabulary at
+  older ages (Ey at 84 months: 506 vs 509 understood, 398 vs 434
+  spoken). It is also slightly lower at very young ages.
 - The matched-comprehension `q` table will shift downward by
   approximately 5–10 pp through the comprehension range that
   corresponds to mid-ages — i.e. the DS-vs-TD divergence becomes
@@ -648,33 +660,50 @@ in different rows of the merged dataset.
 
 ### What the data supports — and the semantic heterogeneity
 
-The merged DS dataset contains 101 rows with a non-null `signed`
-count, from 45 unique subjects across three studies (UK Studies 6
-and 7 at younger ages, 17–45 months; one study at 60–115 months).
-All 101 of those rows also carry both `understood` and `spoken`
-counts, so a joint analysis is mechanically feasible.
+The DuckDB `vocab_combined` view used by the model code contains 414
+age-valid rows with a non-null `signed` count, from 236 unique
+subjects across five study labels:
+
+| Study label | Signed rows | Unique subjects | Age range (mo) | Rows with signed > 0 | Rows with understood + spoken |
+|-------------|------------:|----------------:|----------------|---------------------:|------------------------------:|
+| `uk_01`     | 218         | 133             | 15–115         | 63                   | 29                            |
+| `uk_02`     |  95         |  58             | 19–56          | 95                   | 89                            |
+| `uk_04`     |  44         |  18             | 18–45          | 35                   | 44                            |
+| `uk_05`     |  46         |  16             | 17–36          | 37                   | 46                            |
+| `uk_06`     |  11         |  11             | 60–115         | 11                   | 11                            |
+
+The previous 101-row count sometimes quoted from the flattened
+`data/vocab_data_merged.csv` is not the right basis for modelling:
+that CSV merge drops the UK 01 and UK 02 signing columns before
+concatenation, leaving only Studies 6, 7 and 9. The DuckDB view is
+the authoritative source for fitted models.
+
+Of the 414 signed rows in the DuckDB view, 219 rows from 122 subjects
+also carry both `understood` and `spoken` counts, so a joint
+understood + spoken + signed analysis is mechanically feasible on
+that subset.
 
 The aggregate picture (ignoring the semantic issue for a moment)
-is:
+for those 219 complete rows is:
 
 | Age band (mo) | Rows | Rows with signed > 0 | Median signed | Median spoken | Median understood |
 |---------------|-----:|---------------------:|--------------:|--------------:|------------------:|
-| 0–24          | 33   | 19                   |   2           |   2           |  71               |
-| 24–36         | 54   | 50                   |  51           |  16           | 180               |
-| 36–48         |  3   |  3                   | 131           |  36           | 314               |
-| 48–60         |  1   |  1                   | 387           | 399           | 654               |
-| 60–72         |  4   |  4                   | 372           | 408           | 649               |
-| 72–84         |  2   |  2                   | 106           | 433           | 581               |
-| 84–120        |  4   |  4                   |  66           | 391           | 615               |
+| 0–24          | 42   | 21                   |   0.5         |   2           |  60               |
+| 24–36         | 90   | 80                   |  48.5         |  16           | 180.5             |
+| 36–48         | 49   | 36                   | 102           |  79           | 299               |
+| 48–60         | 26   | 26                   | 209           | 284           | 465               |
+| 60–72         |  5   |  5                   | 387           | 399           | 654               |
+| 72–84         |  3   |  3                   |  23           | 400           | 576               |
+| 84–120        |  4   |  4                   |  66           | 391           | 616               |
 
 Two row-level patterns:
 
 - In the 24–36-month window — where the bulk of the signing data
   sits — signed counts exceed spoken counts on the same row by about
-  3:1 (median 51 signed vs 16 spoken).
-- Across the full signing subset, 58 of 101 rows have
+  3:1 (median 48.5 signed vs 16 spoken).
+- Across the complete signing subset, 123 of 219 rows have
   `signed > spoken`; the average row-level share
-  `signed / (signed + spoken)` is ~0.60.
+  `signed / (signed + spoken)` is ~0.55.
 
 But these aggregate numbers conceal a **semantic mismatch** in how
 "signed" is coded by each contributing study. The shared data-prep
@@ -683,8 +712,8 @@ makes this explicit:
 
 | Source study               | What `signed` records                                                                                                                                                              | Construction                                                                                                                                                                                                                                                            |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| UK 01 (EDG, 1990s–2000s)   | **Signed-only** — words signed but *not* spoken. The original form codes each word with exactly one of `c` (comprehends), `v` (says), `s` (signs), so the categories are mutually exclusive at the per-word level. Merged dataset shows `signed = 0` for all UK 01 rows. | `signed = sum(noun*s, …, verb*s)`, where the `*s` columns count words with the "signs" code only. `produced = spoken + signed` is therefore the total expressive count.                                                                                                  |
-| UK 02 (EDG follow-on)      | **Total signed** — words signed, with or without also being spoken. The source has explicit `signed_only`, `signed_spoken`, `spoken_only` columns, but the merged dataset keeps only the aggregate `signed = signed_only + signed_spoken`.                              | Per-row totals from `signed_only` + `signed_spoken`; the decomposition is lost in the merge.                                                                                                                                                                            |
+| UK 01 (EDG, 1990s–2000s)   | **Signed-only** — words signed but *not* spoken. The original form codes each word with exactly one of `c` (comprehends), `v` (says), `s` (signs), so the categories are mutually exclusive at the per-word level. | `signed = sum(noun*s, …, verb*s)`, where the `*s` columns count words with the "signs" code only. `produced = spoken + signed` is therefore the total expressive count. The DuckDB view carries these signed counts; the flattened CSV does not. |
+| UK 02 (EDG follow-on)      | **Total signed** — words signed, with or without also being spoken. The source has explicit `signed_only`, `signed_spoken`, `spoken_only` columns, but the current DuckDB view keeps only the aggregate `signed = signed_only + signed_spoken`.                              | Per-row totals from `signed_only` + `signed_spoken`; the decomposition is present in the source CSV but lost in `vocab_combined`.                                                                                                                                                                            |
 | UK 04 (Mason-Apps; study 6) | Source column `signs`. Definition not documented in the prep code; provisionally treated as **total signed**. Provides 44 rows.                                                                                                                                          | `signed = round(signs)` directly from source.                                                                                                                                                                                                                            |
 | UK 05 (Seager; study 7)    | Source column `signed`. Definition not documented in the prep code; provisionally treated as **total signed**. Provides 46 rows.                                                                                                                                          | `signed = signed` direct copy.                                                                                                                                                                                                                                          |
 | UK 06 (RLI; study 9)       | **Total signed** — the SPSS column is `CheckUnderAndSign`, "(words) understood and signed". This counts words signed regardless of whether they are also spoken. Provides 11 rows.                                                                                       | `signed = CheckUnderAndSign` after a rename.                                                                                                                                                                                                                            |
@@ -696,13 +725,15 @@ the same scale**. The "signed-only" definition is a strict subset
 of the "total signed" definition; the difference is the
 "signed-and-spoken" overlap.
 
-A second limitation compounds the first: the rows with signing data
-do *not* carry `form_max_spoken` or `form_max_understood`
-denominators. The Beta-Binomial likelihood the current model family
-uses needs an inventory size `N` per row to define the success rate
-`p`. So even before we get to the semantic problem, we need to
-recover form-level inventory sizes for these studies during data
-preparation.
+A second limitation compounds the first: the current model family
+uses a single inventory size `N` per row to define the Beta-Binomial
+success rate. The DuckDB view currently carries `survey_vocab_max`
+for the signing rows (396/690 for UK 01, 800 for UK 02 and UK 06,
+and 418 for UK 04/05), but those denominators need to be checked and
+made explicit for a signing model. In particular, the UK 04/05
+denominator is still marked `TODO` in `scripts/prepare_data.py`, and
+the flattened CSV does not carry `form_max_spoken` /
+`form_max_understood` for the 101-row signing subset.
 
 ### What the semantic mismatch implies for modelling
 
@@ -730,12 +761,14 @@ are even *coherent* on the merged data.
 3. **The cleanest joint model needs decomposed counts at the
    per-row level.** What we ideally want is, per row,
    `n_understood_only`, `n_spoken_only`, `n_signed_only`,
-   `n_spoken_and_signed`, plus the inventory size. UK 02 has all of
-   these in the original source but the merge drops them. UK 01
-   has them implicitly (the per-word `*c/*v/*s` columns are
-   mutually exclusive, so the four-category decomposition is just
-   sums). UK 04, UK 05, UK 06 may or may not — we would need to
-   audit the underlying source data.
+   `n_spoken_and_signed`, plus the inventory size and the observation
+   convention. UK 02 has all of these in the original source but the
+   DuckDB view drops the decomposition. UK 01 has a mutually
+   exclusive instrument-specific decomposition (the per-word
+   `*c/*v/*s` columns), with no observed "spoken and signed" category
+   under that coding. UK 04, UK 05, UK 06 may or may not provide the
+   full decomposition — we would need to audit the underlying source
+   data.
 
 ### Implications for the candidate model structures
 
@@ -787,29 +820,30 @@ a first-class quantity rather than reading it off two parallel
 ratios.
 
 S3 is **the model the data actually wants**, *if* we re-derive the
-merged data to preserve the four-way decomposition. UK 01 EDG
-already provides it implicitly (`*c/*v/*s` codes are mutually
-exclusive at the per-word level); UK 02 records it explicitly
+merged data to preserve each study's modality decomposition. UK 01
+EDG provides a mutually exclusive coding (`*c/*v/*s` at the per-word
+level); UK 02 records the four-way decomposition explicitly
 (`signed_only`, `signed_spoken`, `spoken_only`, `understood_only`).
-The downstream merge throws this information away. Recovering it
-would let S3 fit *every* row where any modality is recorded, with
-honest semantics. Pursuing S3 is therefore primarily a data-prep
-investment rather than a likelihood-plumbing one.
+The current `vocab_combined` view throws away part of this
+information for UK 02 and does not flag the UK 01 convention.
+Recovering it would let S3 use the rows where modality is recorded
+with honest semantics and an explicit observation model. Pursuing S3
+is therefore primarily a data-preparation investment rather than a
+likelihood-plumbing one.
 
 ### Practical questions to resolve before fitting
 
 Four questions, in order:
 
 1. **Re-derive the merged dataset so signing semantics are
-   preserved.** UK 01 and UK 02 both encode the four-category
-   decomposition at the source-data level; the existing
-   `prepare_data.py` collapses it during the SQL merge. The first
-   concrete piece of work is to extend the merged schema to carry
-   `n_understood_only`, `n_spoken_only`, `n_signed_only`,
-   `n_signed_and_spoken` per row, plus a flag for which definition
-   `signed` follows for each study where only an aggregate is
-   available. Without this step, *no* signing model is on
-   interpretable footing.
+   preserved.** UK 01 and UK 02 encode useful modality information at
+   the source-data level, but the current flattened CSV drops their
+   signing columns and the DuckDB view drops UK 02's decomposition.
+   The first concrete piece of work is to extend the merged schema to
+   carry `n_understood_only`, `n_spoken_only`, `n_signed_only`,
+   `n_signed_and_spoken` where available, plus a flag for which
+   definition `signed` follows for each study. Without this step, a
+   pooled signing model is not on interpretable footing.
 2. **Audit UK 04, UK 05 source data.** For Studies 6 and 7 the
    prep code does not document whether the source `signs` /
    `signed` column is signed-only or total-signed. The answer
@@ -817,25 +851,29 @@ Four questions, in order:
    for those studies. This is a 1-hour question for someone with
    access to the raw files; it materially changes which rows we can
    pool.
-3. **Inventory denominators.** Recover the CDI / MacArthur form's
-   inventory size for Studies 6, 7, 9. Without an `N` per row, the
-   Beta-Binomial likelihood is undefined. This is a separate
-   data-preparation question from the semantic one.
+3. **Inventory denominators.** Verify and expose the CDI / MacArthur
+   inventory size for every signing row. The DuckDB view already has
+   `survey_vocab_max` for the current signing rows, but UK 04/05's
+   value of 418 is still marked as needing confirmation in
+   `scripts/prepare_data.py`, and a signing model should not depend
+   on implicit or ambiguous denominators.
 4. **Comparability across age bands.** Even after the semantic
-   fix, the signing data is concentrated in two non-overlapping age
-   windows (17–45 months from UK 04/05 and 60–115 months from UK 06).
-   The GP would have to interpolate across the 45–60-month gap with
-   very little data. Worth exploring whether the GP length-scale
-   prior needs special treatment for the signed outcome.
+   fix, age coverage is confounded with study and signing convention:
+   UK 01 spans 15–115 months under a signed-only convention, UK 02
+   spans 19–56 months with a decomposable total-signed convention,
+   UK 04/05 contribute younger rows, and UK 06 contributes only 11
+   older total-signed rows. Worth exploring whether the GP
+   length-scale prior or the reporting age range needs special
+   treatment for the signed outcome.
 
 The recommended first experiment, once these questions are
 resolved, is a **univariate "age → signed-only" Beta-Binomial
-model on UK 01 and UK 02 rows** (where the signed-only count is
-recoverable and the conceptual semantics are clearest). If that
-fits cleanly, S3 on the same rows is the natural second step.
-Bringing UK 04/05/06 in requires either knowing they share UK
-01/02's convention or accepting the cost of modelling them as a
-separate convention with its own `q_G` function.
+model on rows where signed-only counts are recoverable** — UK 01
+directly, and UK 02 after reintroducing its source `signed_only`
+column. If that fits cleanly, S3 on UK 01 + UK 02 is the natural
+second step. Bringing UK 04/05/06 in requires either knowing which
+convention they follow or accepting the cost of modelling them as
+separate observation conventions with their own `q_G` functions.
 
 ## Conclusions
 
@@ -846,24 +884,25 @@ separate convention with its own `q_G` function.
    delay; between-subject variation on the production ratio is the
    single largest source of heterogeneity in the family.
 2. **VG09B is a defensible candidate to replace VG09 as the headline
-   DS model.** Diagnostics are clean, the parameterisation is the
-   textbook fix for the GP–intercept ridge, and the variance
+   DS model.** Diagnostics are clean, the A+D parameterisation is a
+   principled response to the GP–intercept ridge, and the variance
    partition is essentially identical to VG09. The mid-age
-   production-ratio shift is in the direction supported by the
-   structural argument — VG09's higher mid-age `q` was partly an
-   artefact of the redundancy, not a fact about the data.
+   production-ratio shift is compatible with the structural argument,
+   but because VG09B changed both q-anchor priors and the GP anchor it
+   should be reported as the result of the combined A+D variant rather
+   than attributed to the GP anchor alone.
 3. **The non-monotone tail of `q` beyond ~72 months is the main
    interpretive question that remains.** It is shared by VG09 and
-   VG09B, so it cannot be attributed to the parameterisation fix.
-   The most plausible mechanism is the wide subject-RE distribution
-   interacting with sparse data at the upper end of the age range
-   (Jensen on the inverse-logit). This needs a deliberate
-   investigation rather than a parameter tweak.
-4. **The technical report needs updating.** The current technical
-   report (`docs/report/`) still uses the `model-N` chapter naming
-   and has no chapter for VG07, VG08, VG09 or VG09B; commit
-   `97023ac` rewrote the report for the VG07–VG09 family but does
-   not yet cover VG09B.
+   VG09B, while VG07 remains monotone, so it cannot be attributed to
+   the A+D parameterisation fix. The most plausible mechanism is the
+   wide subject-RE distribution interacting with sparse data at the
+   upper end of the age range (Jensen on the inverse-logit). This
+   needs a deliberate investigation rather than a parameter tweak.
+4. **The technical report needs updating for VG09B.** Commit
+   `97023ac` already rewrote `docs/report/` into the `vgNN` chapter
+   scheme and added chapters for VG07, VG08 and VG09. The remaining
+   report gap is VG09B and the downstream model-comparison /
+   discussion text if VG09B is promoted.
 
 ## Next steps
 
@@ -875,18 +914,19 @@ Ranked roughly by priority.
    technical report needs revising and the reported mid-age `q` values
    will move.
 2. **If promoting, apply the GP anchor symmetrically to the rest of
-   the family.** Specifically: `common_bivariate.py` (which underlies
-   VG05–VG08) and `common.py` (which underlies the univariate
-   VG01–VG04). Those models all have the same GP–intercept ridge in
-   principle; we just haven't seen it bite the diagnostics yet
-   because they have fewer overlapping global components on each
-   outcome. Consistency matters more than the marginal sampler win.
+   the family.** Specifically: `common.py` for the univariate
+   VG01–VG04 models, `common_bivariate.py` for VG05–VG06, and the
+   relevant VG07/VG08 definitions in `common_bivariate_re.py`. Those
+   models all have the same GP–intercept ridge in principle; we just
+   haven't seen it bite the diagnostics yet because they have fewer
+   overlapping global components on each outcome. Consistency matters
+   more than the marginal sampler win.
 3. **Re-run K-fold LOSO with VG09B.** The structural argument
    predicts it will land essentially where VG09 did, but the
    empirical check is outstanding. 15 refits at `test` config, ≈ 40
    minutes wall time.
 4. **Investigate the non-monotone q-tail.** This is independent of
-   the A+D fix and applies to VG07, VG09, and VG09B equally. Options
+   the A+D fix and is visible in VG09 and VG09B but not VG07. Options
    to consider:
    - tighten $\tau^{\text{subj}}_q$ (e.g. `HalfNormal(0.25)` instead of 0.5);
    - narrow the GP lengthscale prior so the GP cannot bend on
@@ -894,11 +934,12 @@ Ranked roughly by priority.
    - restrict the query range to ages with substantive data and flag
      the upper tail explicitly as extrapolation.
 5. **Update the technical report** (`docs/report/`):
-   - rename `model-N-*.qmd` chapters to the `vgNN` scheme used
-     everywhere else;
-   - add chapters for VG07, VG08, VG09 and (post-promotion) VG09B;
-   - finish the stub chapters (`methods`, `discussion`,
-     `glossary`).
+   - add a VG09B chapter if the model is promoted, or document it as
+     a named sensitivity / candidate model if not;
+   - update `model-comparison.qmd`, `discussion.qmd` and any copied
+     figures/tables so they do not mix VG09 and VG09B headline
+     numbers;
+   - re-render the report after the headline-model decision.
 6. **Address the missing-understood-data root cause in future data
    collection.** 80 observations in the 40–60-month window have
    spoken data without matching understood data, predominantly from
@@ -908,24 +949,28 @@ Ranked roughly by priority.
 7. **Open GitHub issues for the items above.** The project currently
    has zero open issues; planning lives in notes and PR descriptions.
    For decisions of this weight (replace VG09 with VG09B, propagate
-   the anchor to the rest of the family, technical-report rewrite)
+   the anchor to the rest of the family, VG09B report update)
    we want traceable tickets.
 8. **Scope a signing extension — starting with data preparation.**
-   The signing data in the merged dataset is *semantically
+   The signing data in `vocab_combined` is *semantically
    heterogeneous*: in some contributing studies `signed` is
    signed-but-not-spoken, in others it is signed-regardless. The
-   first concrete piece of work is to re-derive the merged dataset
-   so the four-way decomposition (`understood_only`, `spoken_only`,
-   `signed_only`, `signed_and_spoken`) is preserved per row — UK 01
-   and UK 02 already encode it at the source level. In parallel,
-   audit UK 04 / UK 05 / UK 06 source data to determine which
-   convention each follows, and recover form-level inventory
-   denominators for Studies 6, 7 and 9. *Only after these data-prep
-   steps are settled* are the modelling options scoped in
+   first concrete piece of work is to re-derive the merged schema so
+   the available modality decomposition (`understood_only`,
+   `spoken_only`, `signed_only`, `signed_and_spoken`) is preserved
+   per row and the signing convention is flagged. UK 01 and UK 02
+   carry the key source-level information, but the flattened CSV drops
+   their signing columns and the DuckDB view drops UK 02's
+   decomposition. In parallel, audit UK 04 / UK 05 / UK 06 source data
+   to determine which convention each follows, and verify the
+   form-level inventory denominators currently exposed as
+   `survey_vocab_max`. *Only after these data-prep steps are settled*
+   are the modelling options scoped in
    [Extending the model family](#extending-the-model-family-signed-vocabulary)
    worth coding. The recommended first model is then a univariate
-   "age → signed-only" Beta-Binomial on UK 01 + UK 02, where the
-   semantics are cleanest.
+   "age → signed-only" Beta-Binomial on rows where signed-only counts
+   are recoverable — UK 01 directly, and UK 02 after reintroducing its
+   source `signed_only` column.
 
 ## Pointers to source material
 
