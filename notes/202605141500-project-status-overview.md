@@ -45,25 +45,20 @@ who support children with Down syndrome (DS) routinely have to
 answer practical questions about vocabulary development: _"By what
 age would a typical child with DS understand 100 words? By what age
 would they say 100 words? My 3-year-old understands a lot but says
-very little — is that within the normal range?"_ The clinical and
+very little — is that within the expected range?"_ The clinical and
 educational decisions that follow — when to refer, what to expect,
 how to set goals, whether a child's progress is unusual — depend on
-having answers grounded in the data, expressed as probability
-distributions rather than single numbers, and queryable at any age
-or comprehension level.
+having reliable answers to these questions.
 
-This project produces those answers. Its goal is a set of
-_interpretable, defensible, queryable_ statistics that can inform
+This project aims to provide a set of _queryable_ statistics that can inform
 expectations, intervention and teaching practice for children with
-DS between roughly 12 months and 8 years of age:
+DS between roughly 12 months and 7 years of age:
 
 - how many words a typical child with DS _understands_ at each age,
 - how many a typical child with DS _says_ at each age, and
-- how those two grow together — captured through the _production
-  ratio_ `q = p_S / p_U`, the fraction of understood words that are
-  also produced.
+- how those two grow together
 
-The corresponding numbers are also estimated for typically
+Corresponding numbers are also estimated for typically
 developing (TD) children, mostly as a reference point — the
 qualitative _DS-vs-TD comparison_ is the part that matters most for
 clinical communication.
@@ -97,8 +92,7 @@ so the DS-vs-TD contrast is methodologically apples-to-apples.
 
 ### Why the answers are returned as probability distributions
 
-The product is a family of Bayesian statistical models. Inference
-returns a full posterior probability distribution over every
+Bayesian statistical inference returns a full posterior probability distribution over every
 quantity of interest, rather than a single number with a confidence
 interval. That probabilistic framing is what supports statements of
 the form _"there is an 80% chance a typical 3-year-old with Down
@@ -120,7 +114,7 @@ appear in this report.
 - Spoken production lags comprehension persistently — the gap is
   larger and longer-lasting in DS than in TD development, and it
   _grows_ with comprehension level through the early and middle
-  range before closing in the upper age range.
+  range before narrowing in the upper age range (although this may be attributable to measure ceiling).
 - Between-subject heterogeneity on the production-ratio
   `q = p_S / p_U` is the single largest source of variation in the
   model family ($\tau^{\text{subj}}_q \approx 1.19$ on the logit scale under VG09B),
@@ -128,7 +122,7 @@ appear in this report.
 
 ### Where the modelling currently stands
 
-The modelling has iterated through nine numbered specifications —
+The modelling has iterated through ten specifications —
 from a univariate "age → spoken" baseline (VG01) to a joint
 understood + spoken DS model with study and per-subject random
 effects on both trajectories (VG09) — and a tenth, **VG09B**, that
@@ -156,36 +150,26 @@ the model family — is also scoped below. These are all reflected in
 
 ## Data and methods
 
-### Pooled dataset
+### Datasets
 
 The DS data source currently contains 964 age-valid rows from 510
 unique subject IDs across 10 international study labels in the
 DuckDB `vocab_combined` view. The contributing studies span the
 United Kingdom, Ireland, Italy, and the United States, and were
 collected over roughly three decades. They use different CDI /
-MacArthur forms and different study protocols, so the data
-preparation pipeline (`scripts/prepare_data.py`) harmonises columns
-into a common schema before merging into a DuckDB database; all
-models load from that view via
-`vocab_growth.data_utils.load_combined_data()`.
+MacArthur forms and different study protocols.
 
 For the bivariate DS models, 950 rows have at least one of
 `understood` or `spoken` observed (704 understood rows, 949 spoken
 rows, 703 complete understood + spoken pairs). 288 of the 510 DS
 subjects have ≥ 2 bivariate-analysis rows, contributing 728 of the
-950 rows (maximum 8 on a single subject). That strong within-subject
-repeated-measures structure — a direct consequence of pooling
-longitudinal cohorts — motivates the move to subject random
+950 rows (maximum 8 on a single subject). That within-subject
+repeated-measures structure motivates the move to subject random
 intercepts in VG08 and VG09.
 
 The TD reference uses a reproducible 10% Wordbank sample (1,655
 observations), fitted with the same model family so the DS-vs-TD
 contrasts are methodologically consistent.
-
-Raw study data sit in `data/` as one CSV per study;
-`scripts/prepare_data.py` merges them into a DuckDB database with a
-unified `vocab_combined` view, which all models load via
-`vocab_growth.data_utils.load_combined_data()`.
 
 ### Modelling approach
 
@@ -253,9 +237,6 @@ dispersion priors, Beta-Binomial likelihood) are identical to VG09.
 
 ## Iteration through the family — what each step taught us
 
-This section is the project's intellectual narrative. Each model in
-the sequence was motivated by a specific weakness in its predecessor.
-
 ### VG01–VG06 — baseline trajectories
 
 The univariate DS models (VG01 spoken, VG02 understood) and their TD
@@ -278,7 +259,7 @@ DS-vs-TD picture that survived all the subsequent refinements:
 
 VG05 also exposed a problem: an apparent dip in _understood_ words
 between roughly 40 and 60 months that the GP fitted in spite of being
-developmentally implausible.
+developmentally unlikely.
 
 ### The Simpson's-paradox finding — VG07 fixes the artefact
 
@@ -300,8 +281,7 @@ population-level understood trajectory becomes monotone-increasing
 across the whole age range. The leftward "hook" in
 understood-vs-spoken plots disappears.
 
-This is the project's single most important methodological finding to
-date: _what looked like a developmental decline was driven by which
+This leads us to conclude that _what looked like a developmental decline was driven by which
 studies contributed data at which ages._ It motivates the
 preference for VG07 over VG05 for any DS reporting that touches the
 40–70 month understood range.
@@ -505,7 +485,7 @@ fig-align="center" width=85%}
 
 ### Production rate against words understood
 
-For families and clinicians the comparison that matters most is at
+For families and clinicians an important comparison is
 _matched comprehension_: for a given vocabulary that a child
 understands, what fraction do they typically produce? VG09B's curve
 is steeper than VG07's in the middle of the comprehension range —
@@ -646,26 +626,6 @@ made to look like VG07" — it is "VG09 with the latent GP-level
 identifiability resolved", and the remaining difference between
 VG09B and VG07 is the genuine effect of adding subject REs on `q`.
 
-### Implications for reported numbers
-
-If VG09B replaces VG09 as the headline DS joint model, several
-quoted numbers in the meeting-review document
-(`notes/202605120945-meeting-project-review.md`) will move:
-
-- The typical DS (median) trajectory under VG09B is very close to
-  VG09 for understood vocabulary and lower for spoken vocabulary at
-  older ages (Ey at 84 months: 506 vs 509 understood, 398 vs 434
-  spoken). It is also slightly lower at very young ages.
-- The matched-comprehension `q` table will shift downward by
-  approximately 5–10 pp through the comprehension range that
-  corresponds to mid-ages — i.e. the DS-vs-TD divergence becomes
-  _larger_ under VG09B than under VG09 in that range, sharpening the
-  qualitative story already in the meeting note.
-- The K-fold LOSO numbers in this report are the VG09 numbers and
-  have not been re-run against VG09B. The structural argument
-  predicts they will not change much (the variance partition is
-  preserved) but the empirical check is outstanding.
-
 ## Extending the model family: signed vocabulary
 
 A natural next step is to bring _signed_ vocabulary into the model
@@ -676,9 +636,7 @@ repertoire or _replacing_ the words they would otherwise produce. A
 joint model that estimates the probability of a word being signed
 (as well as understood and spoken) at each age would let us answer
 that question directly. The problem is that the signing data we have
-is not semantically uniform across studies — the most important
-finding of this section is that _"signed"_ means something different
-in different rows of the merged dataset.
+is not semantically uniform across studies.
 
 ### What the data supports — and the semantic heterogeneity
 
@@ -758,9 +716,6 @@ the flattened CSV does not carry `form_max_spoken` /
 `form_max_understood` for the 101-row signing subset.
 
 ### What the semantic mismatch implies for modelling
-
-This is not a presentational nuisance; it determines which models
-are even _coherent_ on the merged data.
 
 1. **`signed + spoken` is not interpretable across studies.** For
    UK 01 EDG rows the sum equals total expressive vocabulary
