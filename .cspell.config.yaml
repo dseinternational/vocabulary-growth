@@ -2,12 +2,23 @@
 $schema: https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json
 version: '0.2'
 language: en-GB
+import:
+    - '@cspell/dict-it-it/cspell-ext.json'
 dictionaryDefinitions:
     - name: en
       path: './config/spellcheck/allow-en.txt'
       addWords: true
+    - name: it
+      path: './config/spellcheck/allow-it.txt'
+      addWords: true
 dictionaries:
     - en
+overrides:
+    - filename: '**/*-it.md'
+      language: 'it,en-GB'
+      dictionaries:
+          - en
+          - it
 ignorePaths:
     - 'node_modules'
     - 'config/**'
