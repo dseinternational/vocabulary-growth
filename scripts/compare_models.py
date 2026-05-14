@@ -17,6 +17,10 @@ Produces the following figures under `output/comparisons/`:
   overlay: VG07 (no subject REs), VG09 (subject REs on U and q,
   unanchored GP), VG09B (subject REs on U and q, GP anchored at the
   reference age).
+- `ds_td_q_by_age_vg09b.{png,svg}` — production ratio q(age) DS (VG09B)
+  vs TD (VG06). Visualises the chronological production lag.
+- `ds_td_q_vs_understood_vg09b.{png,svg}` — matched-comprehension q
+  overlay using VG09B for DS instead of VG09.
 
 CSVs of the underlying data are also written.
 
@@ -276,6 +280,118 @@ def vg07_vg09_vg09b_q_by_age() -> None:
     )
 
 
+def ds_td_q_by_age_vg09b() -> None:
+    """DS (VG09B) vs TD (VG06) production-ratio overlay against age.
+
+    Visualises the chronological production lag: at any given age the
+    DS curve sits well below the TD curve, and reaches the same
+    production-ratio milestones years later.
+    """
+    ds = pd.read_csv(
+        os.path.join(
+            MODELS_DIR,
+            "VG09B-age-understood-spoken-ds-re-subj-uq-anchored",
+            "posterior_summary_q.csv",
+        )
+    )
+    td = pd.read_csv(
+        os.path.join(MODELS_DIR, "VG06-age-understood-spoken-td",
+                     "posterior_summary_q.csv")
+    )
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    ax.fill_between(td["age_months"], td["q_hdi_lo"], td["q_hdi_hi"],
+                    color=TD_COLOUR, alpha=0.18, linewidth=0,
+                    label="TD 90% HDI")
+    ax.fill_between(ds["age_months"], ds["q_hdi_lo"], ds["q_hdi_hi"],
+                    color=DS_COLOUR, alpha=0.18, linewidth=0,
+                    label="DS 90% HDI")
+    ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5,
+            label="TD median q (VG06)")
+    ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5,
+            label="DS median q (VG09B)")
+    for thresh in (0.5, 0.9):
+        ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6,
+                   linestyle="--")
+    ax.set_xlim(min(ds["age_months"].min(), td["age_months"].min()),
+                max(ds["age_months"].max(), td["age_months"].max()))
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("Age (months)")
+    ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
+    ax.set_title("Production ratio by age — DS (VG09B) vs TD (VG06)")
+    ax.legend(loc="lower right", frameon=True)
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg09b.png"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg09b.svg"))
+    plt.close(fig)
+
+    merged = (
+        td[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]]
+        .rename(columns={"q_median": "td_median",
+                         "q_hdi_lo": "td_hdi_lo",
+                         "q_hdi_hi": "td_hdi_hi"})
+        .merge(
+            ds[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
+                columns={"q_median": "ds_median",
+                         "q_hdi_lo": "ds_hdi_lo",
+                         "q_hdi_hi": "ds_hdi_hi"}
+            ),
+            on="age_months", how="outer",
+        )
+        .sort_values("age_months")
+    )
+    merged.to_csv(
+        os.path.join(OUT_DIR, "ds_td_q_by_age_vg09b.csv"),
+        index=False,
+    )
+
+
+def ds_td_q_vs_understood_vg09b() -> None:
+    """DS (VG09B) vs TD (VG06) production-ratio against words understood.
+
+    Updated matched-comprehension overlay using VG09B as the headline
+    DS joint model. Preserves the original VG09-based figure for
+    backward compatibility.
+    """
+    ds = pd.read_csv(
+        os.path.join(
+            MODELS_DIR,
+            "VG09B-age-understood-spoken-ds-re-subj-uq-anchored",
+            "production_rate_by_understood.csv",
+        )
+    )
+    td = pd.read_csv(
+        os.path.join(MODELS_DIR, "VG06-age-understood-spoken-td",
+                     "production_rate_by_understood.csv")
+    )
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    ax.fill_between(td["words_understood"], td["hdi_lo"], td["hdi_hi"],
+                    color=TD_COLOUR, alpha=0.18, linewidth=0,
+                    label="TD 90% HDI")
+    ax.fill_between(ds["words_understood"], ds["hdi_lo"], ds["hdi_hi"],
+                    color=DS_COLOUR, alpha=0.18, linewidth=0,
+                    label="DS 90% HDI")
+    ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5,
+            label="TD median q (VG06)")
+    ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5,
+            label="DS median q (VG09B)")
+    for thresh in (0.5, 0.9):
+        ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6,
+                   linestyle="--")
+    ax.set_xlim(0, max(td["words_understood"].max(),
+                       ds["words_understood"].max()))
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("Expected words understood")
+    ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
+    ax.set_title(
+        "Production ratio against words understood — DS (VG09B) vs TD (VG06)"
+    )
+    ax.legend(loc="lower right", frameon=True)
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg09b.png"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg09b.svg"))
+    plt.close(fig)
+
+
 def main() -> None:
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -285,6 +401,8 @@ def main() -> None:
     vg05_vs_vg07()
     ds_td_q_vs_understood()
     vg07_vg09_vg09b_q_by_age()
+    ds_td_q_by_age_vg09b()
+    ds_td_q_vs_understood_vg09b()
 
     print(f"Comparisons written to: {OUT_DIR}")
 
