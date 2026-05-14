@@ -15,24 +15,24 @@ This investigation concludes that the decline is a **data composition artefact**
 ### VG05 posterior summary (words understood)
 
 | Age (months) | Ey_median | Ey_hdi_lo | Ey_hdi_hi |
-|:------------:|:---------:|:---------:|:---------:|
-| 36           | 259       | 241       | 277       |
-| 42           | 290       | 269       | 311       |
-| 48           | 284       | 260       | 309       |
-| 54           | 273       | 245       | 303       |
-| 60           | 285       | 254       | 316       |
-| 66           | 330       | 294       | 365       |
+| :----------: | :-------: | :-------: | :-------: |
+|      36      |    259    |    241    |    277    |
+|      42      |    290    |    269    |    311    |
+|      48      |    284    |    260    |    309    |
+|      54      |    273    |    245    |    303    |
+|      60      |    285    |    254    |    316    |
+|      66      |    330    |    294    |    365    |
 
 ### VG02 posterior summary (words understood)
 
 | Age (months) | Ey_median | Ey_hdi_lo | Ey_hdi_hi |
-|:------------:|:---------:|:---------:|:---------:|
-| 36           | 263       | 243       | 280       |
-| 42           | 287       | 264       | 310       |
-| 48           | 281       | 254       | 307       |
-| 54           | 272       | 240       | 304       |
-| 60           | 280       | 246       | 315       |
-| 66           | 327       | 287       | 366       |
+| :----------: | :-------: | :-------: | :-------: |
+|      36      |    263    |    243    |    280    |
+|      42      |    287    |    264    |    310    |
+|      48      |    281    |    254    |    307    |
+|      54      |    272    |    240    |    304    |
+|      60      |    280    |    246    |    315    |
+|      66      |    327    |    287    |    366    |
 
 The near-identical estimates across VG02 and VG05 confirm that the bivariate coupling to spoken data in VG05 is not driving the dip. The phenomenon is present in the understood data alone.
 
@@ -41,34 +41,34 @@ The near-identical estimates across VG02 and VG05 confirm that the bivariate cou
 ### Observation counts by age range
 
 | Age range | Total obs | Understood obs | Spoken obs | % with understood |
-|:---------:|:---------:|:--------------:|:----------:|:-----------------:|
-| 30--40    | 146       | 119            | 139        | 86%               |
-| 40--50    | 125       | 81             | 124        | 65%               |
-| 50--60    | 77        | 36             | 72         | 50%               |
-| 60--70    | 81        | 39             | 77         | 51%               |
+| :-------: | :-------: | :------------: | :--------: | :---------------: |
+|  30--40   |    146    |      119       |    139     |        86%        |
+|  40--50   |    125    |       81       |    124     |        65%        |
+|  50--60   |    77     |       36       |     72     |        50%        |
+|  60--70   |    81     |       39       |     77     |        51%        |
 
 Understood observations drop sharply from 119 (30--40 months) to 36 (50--60 months), while spoken observations remain relatively stable. 80 observations in the 40--60 month window have spoken data but no understood data, predominantly from Study 1 (48 obs) and Study 5 (32 obs).
 
 ### Study composition of understood observations
 
 | Study | 35--40 mo | 40--45 mo | 45--50 mo | 50--55 mo | 55--60 mo |
-|:-----:|:---------:|:---------:|:---------:|:---------:|:---------:|
-| 1     | 7         | 4         | 4         | 0         | 0         |
-| 2     | 10        | 3         | 13        | 1         | 0         |
-| 3     | 8         | 10        | 8         | 11        | 13        |
-| 5     | 26        | 19        | 13        | 4         | 7         |
-| 6     | 4         | 1         | 1         | 0         | 0         |
-| 7     | 2         | 0         | 0         | 0         | 0         |
-| 8     | 1         | 4         | 2         | 1         | 0         |
+| :---: | :-------: | :-------: | :-------: | :-------: | :-------: |
+|   1   |     7     |     4     |     4     |     0     |     0     |
+|   2   |    10     |     3     |    13     |     1     |     0     |
+|   3   |     8     |    10     |     8     |    11     |    13     |
+|   5   |    26     |    19     |    13     |     4     |     7     |
+|   6   |     4     |     1     |     1     |     0     |     0     |
+|   7   |     2     |     0     |     0     |     0     |     0     |
+|   8   |     1     |     4     |     2     |     1     |     0     |
 
 Studies 1, 2, 6, and 7 contribute understood data up to approximately 50 months and then drop out entirely. Studies 3 and 5 continue to contribute data beyond 50 months.
 
 ### Median understood scores by study and age bin
 
 | Age range | Study 2 median | Study 5 median | Study 3 median | Study 8 median |
-|:---------:|:--------------:|:--------------:|:--------------:|:--------------:|
-| 45--50 mo | 394 (n=13)     | 303 (n=13)     | 280 (n=8)      | 203 (n=2)      |
-| 50--55 mo | 242 (n=1)      | 240 (n=4)      | 144 (n=11)     | 108 (n=1)      |
+| :-------: | :------------: | :------------: | :------------: | :------------: |
+| 45--50 mo |   394 (n=13)   |   303 (n=13)   |   280 (n=8)    |   203 (n=2)    |
+| 50--55 mo |   242 (n=1)    |   240 (n=4)    |   144 (n=11)   |   108 (n=1)    |
 
 The key transition occurs between 45--50 and 50--55 months:
 

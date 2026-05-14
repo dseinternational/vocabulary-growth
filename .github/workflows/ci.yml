@@ -23,6 +23,9 @@ jobs:
       - name: Run spellcheck
         run: npm run spellcheck
 
+      - name: Check formatting
+        run: npm run format:check
+
   lint:
     runs-on: ubuntu-24.04
     steps:

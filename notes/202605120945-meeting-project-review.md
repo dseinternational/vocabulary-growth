@@ -52,19 +52,19 @@ held-out subjects' marginal predictive log-density) ranks the three
 models **VG09 > VG08 > VG07** with overwhelming statistical
 significance (paired diff/dSE of 9.8 for VG09 vs VG07, 5.7 for VG09
 vs VG08, 8.8 for VG08 vs VG07). VG09 is the best model both for
-*describing* the DS data we have AND for *predicting* a brand-new DS
+_describing_ the DS data we have AND for _predicting_ a brand-new DS
 child. The earlier non-K-fold marginal LOSO that suggested VG07 was
 better for unseen-child prediction was an artefact of PSIS-LOO
 instability on a thinned posterior — corrected below. **Use VG09 as
 the headline DS joint model.**
 :::
 
-| Reporting question | Current answer | Evidence to cite |
-| --- | --- | --- |
-| Which DS model should headline current findings? | **VG09** is the new candidate (previously VG07, then VG08). VG09 separates between-subject SD on understanding (`τ^{subj}_U ≈ 0.84`) AND on the production ratio (`τ^{subj}_q ≈ 1.20`) from between-study SD (`τ_U ≈ 0.52`, `τ_q ≈ 0.94`) and from Beta-Binomial dispersion. | Conditional LOSO ranks VG09 > VG08 > VG07 by +208 and +380 elpd respectively. The spoken-side mid-age dispersion factor climbs from `exp(1.40) ≈ 4.0` (VG07) → `exp(1.86) ≈ 6.4` (VG08) → `exp(3.32) ≈ 27.6` (VG09), i.e. ~7× reduction in residual overdispersion on production. |
-| What is the main developmental finding? | Vocabulary growth continues across the measured DS age range, but spoken production lags understanding for years. The within-subject growth curve under VG09 takes a typical DS child from ~20 understood / 0.2 spoken words at 12 months to ~438 understood / 389 spoken words at 72 months. | VG09 population-level posterior, study and subject REs = 0. |
-| What is different from typical development? | The understanding-speaking gap is not just a chronological delay; it is larger even at matched comprehension. Under VG09 the production ratio rises from ~0.04 at 100 understood words to ~0.85 at 300 understood words and ~0.88 at 500. TD reaches the same `q` levels at much lower comprehension thresholds. | VG09 matched-comprehension table below; VG09 mid-range `q` *lower* than VG07/VG08, sharpening the DS-vs-TD divergence at low understood. |
-| What caveat must travel with the findings? | Study composition, missing understood-word data, **within-subject repeated measures** AND **between-subject heterogeneity in production rate** all matter. Predictive intervals for an unseen individual DS child are properly constructed from VG09's subject-marginal posterior predictive distribution — the K-fold check confirms it generalises better than VG07/VG08, not worse. | 510 of 950 usable DS rows belong to 288 subjects with ≥2 observations. Between-subject SD on the production-ratio logit (`≈ 1.20`) is the single largest variance component in the model family. K-fold LOSO: VG09 = −8 414, VG07 = −8 753 (diff +339, paired SE 35). |
+| Reporting question                               | Current answer                                                                                                                                                                                                                                                                                                                                                                         | Evidence to cite                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Which DS model should headline current findings? | **VG09** is the new candidate (previously VG07, then VG08). VG09 separates between-subject SD on understanding (`τ^{subj}_U ≈ 0.84`) AND on the production ratio (`τ^{subj}_q ≈ 1.20`) from between-study SD (`τ_U ≈ 0.52`, `τ_q ≈ 0.94`) and from Beta-Binomial dispersion.                                                                                                           | Conditional LOSO ranks VG09 > VG08 > VG07 by +208 and +380 elpd respectively. The spoken-side mid-age dispersion factor climbs from `exp(1.40) ≈ 4.0` (VG07) → `exp(1.86) ≈ 6.4` (VG08) → `exp(3.32) ≈ 27.6` (VG09), i.e. ~7× reduction in residual overdispersion on production. |
+| What is the main developmental finding?          | Vocabulary growth continues across the measured DS age range, but spoken production lags understanding for years. The within-subject growth curve under VG09 takes a typical DS child from ~20 understood / 0.2 spoken words at 12 months to ~438 understood / 389 spoken words at 72 months.                                                                                          | VG09 population-level posterior, study and subject REs = 0.                                                                                                                                                                                                                       |
+| What is different from typical development?      | The understanding-speaking gap is not just a chronological delay; it is larger even at matched comprehension. Under VG09 the production ratio rises from ~0.04 at 100 understood words to ~0.85 at 300 understood words and ~0.88 at 500. TD reaches the same `q` levels at much lower comprehension thresholds.                                                                       | VG09 matched-comprehension table below; VG09 mid-range `q` _lower_ than VG07/VG08, sharpening the DS-vs-TD divergence at low understood.                                                                                                                                          |
+| What caveat must travel with the findings?       | Study composition, missing understood-word data, **within-subject repeated measures** AND **between-subject heterogeneity in production rate** all matter. Predictive intervals for an unseen individual DS child are properly constructed from VG09's subject-marginal posterior predictive distribution — the K-fold check confirms it generalises better than VG07/VG08, not worse. | 510 of 950 usable DS rows belong to 288 subjects with ≥2 observations. Between-subject SD on the production-ratio logit (`≈ 1.20`) is the single largest variance component in the model family. K-fold LOSO: VG09 = −8 414, VG07 = −8 753 (diff +339, paired SE 35).             |
 
 ## What this project is
 
@@ -85,31 +85,31 @@ children.
 
 ## How we estimate things (plain-English version)
 
-For each model we ask the same kind of question: *given everything we
+For each model we ask the same kind of question: _given everything we
 already know about vocabulary development, and given the DS and TD datasets
 just described, what range of values is plausible for the typical number of
-words a child of a given age understands or says?*
+words a child of a given age understands or says?_
 
 Three ideas are worth flagging because they will come up in the meeting:
 
 - **Bayesian inference.** Instead of returning a single number with a
   confidence interval, the model returns a probability distribution over
   every quantity it estimates. We can read it directly as
-  *"there's a 90% chance the typical 36-month-old with Down syndrome
-  understands between X and Y words"*. That phrasing is what most people
+  _"there's a 90% chance the typical 36-month-old with Down syndrome
+  understands between X and Y words"_. That phrasing is what most people
   assume a confidence interval means, but only Bayesian intervals actually
   support it.
 - **Priors.** Before looking at the data the model is given soft sanity
-  bounds on every quantity — e.g. *"a typical 12-month-old does not
-  understand 800 words"*. These priors are weak: the data does the heavy
+  bounds on every quantity — e.g. _"a typical 12-month-old does not
+  understand 800 words"_. These priors are weak: the data does the heavy
   lifting wherever the data is informative, and the priors only really
   matter where the data is sparse.
 - **Posterior predictive distributions.** Once the model is fitted we can
-  also simulate the kind of *individual* word counts we'd expect to see at
+  also simulate the kind of _individual_ word counts we'd expect to see at
   each age — not just the typical value but the spread around it. This is
-  what lets us say things like *"at 36 months, about half of children with
+  what lets us say things like _"at 36 months, about half of children with
   Down syndrome are expected to understand 100+ words and a quarter to
-  understand 200+"*.
+  understand 200+"_.
 
 The mathematical engine underneath is PyMC + nutpie (a NUTS sampler). It
 runs many parallel Markov chains and produces samples from the posterior;
@@ -120,17 +120,17 @@ warning in the reporting-quality run was one VG06 divergence.
 
 ## The nine models
 
-| ID   | Outcome                              | Population            |
-| ---- | ------------------------------------ | --------------------- |
-| VG01 | Words spoken                         | Down syndrome (DS)    |
-| VG02 | Words understood                     | DS                    |
-| VG03 | Words spoken                         | Typically developing  |
-| VG04 | Words understood                     | Typically developing  |
-| VG05 | Words understood **and** spoken (joint) | DS                |
-| VG06 | Words understood **and** spoken (joint) | Typically developing |
-| VG07 | Words understood and spoken (joint) **with study-level random intercepts** | DS |
-| VG08 | Words understood and spoken (joint) **with study + subject random intercepts on understood** | DS |
-| VG09 | Words understood and spoken (joint) **with study + subject random intercepts on understood AND on production ratio** | DS |
+| ID   | Outcome                                                                                                              | Population           |
+| ---- | -------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| VG01 | Words spoken                                                                                                         | Down syndrome (DS)   |
+| VG02 | Words understood                                                                                                     | DS                   |
+| VG03 | Words spoken                                                                                                         | Typically developing |
+| VG04 | Words understood                                                                                                     | Typically developing |
+| VG05 | Words understood **and** spoken (joint)                                                                              | DS                   |
+| VG06 | Words understood **and** spoken (joint)                                                                              | Typically developing |
+| VG07 | Words understood and spoken (joint) **with study-level random intercepts**                                           | DS                   |
+| VG08 | Words understood and spoken (joint) **with study + subject random intercepts on understood**                         | DS                   |
+| VG09 | Words understood and spoken (joint) **with study + subject random intercepts on understood AND on production ratio** | DS                   |
 
 All nine share the same statistical shape: a smooth (but flexible) average
 trajectory over age, plus a likelihood that allows for plenty of
@@ -161,7 +161,7 @@ symmetry: if between-subject differences justify a subject RE on
 understood, the same logic applies to how much of each child's
 understood vocabulary they actually produce. The result is striking
 — between-subject SD on `q` (`τ^{subj}_q ≈ 1.20`, 90 % HDI
-[1.06, 1.34]) is the *largest* variance component in the model
+[1.06, 1.34]) is the _largest_ variance component in the model
 family, larger than the between-subject SD on understood (0.84) and
 much larger than either study-level SD (0.52 on understood, 0.94 on
 `q`). VG08 was absorbing this into the spoken-side Beta-Binomial
@@ -189,13 +189,13 @@ trajectory in brackets:
 
 | Age (mo) | Understood (median) | Spoken (median) | Production ratio (spoken/understood) |
 | -------: | :------------------ | :-------------- | :----------------------------------- |
-| 12       | 41   [28–55]        | 1.6   [0.7–2.7] | 0.04 |
-| 24       | 105  [80–132]       | 16    [9–22]    | 0.15 |
-| 36       | 213  [170–258]      | 64   [43–85]    | 0.30 |
-| 48       | 280  [230–335]      | 167  [127–208]  | 0.60 |
-| 60       | 323  [265–383]      | 251  [200–300]  | 0.78 |
-| 72       | 388  [319–460]      | 332  [274–391]  | 0.87 |
-| 84       | 423  [337–515]      | 381  [313–451]  | 0.93 |
+|       12 | 41 [28–55]          | 1.6 [0.7–2.7]   | 0.04                                 |
+|       24 | 105 [80–132]        | 16 [9–22]       | 0.15                                 |
+|       36 | 213 [170–258]       | 64 [43–85]      | 0.30                                 |
+|       48 | 280 [230–335]       | 167 [127–208]   | 0.60                                 |
+|       60 | 323 [265–383]       | 251 [200–300]   | 0.78                                 |
+|       72 | 388 [319–460]       | 332 [274–391]   | 0.87                                 |
+|       84 | 423 [337–515]       | 381 [313–451]   | 0.93                                 |
 
 Between-study variation is substantial — `τ_U = 0.50`
 (90% CI 0.30–0.69) and `τ_q = 0.66` (0.40–0.91) on the logit scale,
@@ -223,10 +223,10 @@ Adding subject-level random intercepts on the understood logit (the only
 structural change between VG07 and VG08) reveals that VG07 was conflating
 three sources of variability:
 
-| Variance component (logit-SD, understood) | VG07 | VG08 |
-| ---: | ---: | ---: |
-| Between-study (`τ_U`)                | 0.50 | 0.51 |
-| Between-subject (`τ^{subj}_U`)       | —    | **0.78** |
+|    Variance component (logit-SD, understood) | VG07 |     VG08 |
+| -------------------------------------------: | ---: | -------: |
+|                        Between-study (`τ_U`) | 0.50 |     0.51 |
+|               Between-subject (`τ^{subj}_U`) |    — | **0.78** |
 | Beta-Binomial dispersion `a_κ` (mid-age log) | 1.75 | **2.93** |
 
 The study-level SD is essentially unchanged (so VG07's study REs were not
@@ -244,13 +244,13 @@ population-level trajectory (study and subject RE both set to zero):
 
 | Age (mo) | Understood (median) | Spoken (median) | Production ratio (q) |
 | -------: | :------------------ | :-------------- | :------------------- |
-| 12       | 25   [16–34]        | 0.5   [0.2–1.0] | 0.02 |
-| 24       | 91   [68–115]       | 13    [7–19]    | 0.14 |
-| 36       | 189  [148–231]      | 57    [37–79]   | 0.30 |
-| 48       | 259  [207–311]      | 163   [124–206] | 0.64 |
-| 60       | 345  [283–408]      | 272   [217–326] | 0.79 |
-| 72       | 435  [362–506]      | 361   [299–425] | 0.84 |
-| 84       | 511  [417–601]      | 398   [324–471] | 0.79 |
+|       12 | 25 [16–34]          | 0.5 [0.2–1.0]   | 0.02                 |
+|       24 | 91 [68–115]         | 13 [7–19]       | 0.14                 |
+|       36 | 189 [148–231]       | 57 [37–79]      | 0.30                 |
+|       48 | 259 [207–311]       | 163 [124–206]   | 0.64                 |
+|       60 | 345 [283–408]       | 272 [217–326]   | 0.79                 |
+|       72 | 435 [362–506]       | 361 [299–425]   | 0.84                 |
+|       84 | 511 [417–601]       | 398 [324–471]   | 0.79                 |
 
 Compared with the VG07 table above, the VG08 trajectory:
 
@@ -277,10 +277,10 @@ becomes "expected within-subject change as a typical DS child ages",
 which is the developmentally interesting quantity.
 
 The production-ratio plateau is the most consequential change for
-clinical communication. The VG07 reading — *q approaches 1.0 by the
-later school years* — implied DS children eventually speak essentially
-every word they understand. The VG08 reading — *q stalls at ~0.8 from
-about 60 months onward* — says that across the age range we sampled,
+clinical communication. The VG07 reading — _q approaches 1.0 by the
+later school years_ — implied DS children eventually speak essentially
+every word they understand. The VG08 reading — _q stalls at ~0.8 from
+about 60 months onward_ — says that across the age range we sampled,
 a typical DS child speaks roughly four-fifths of the words they
 understand, with the remaining receptive-productive gap persisting
 into the older ages.
@@ -291,14 +291,14 @@ Adding a second subject-level random intercept on the production ratio
 (VG09 vs VG08) reveals the largest single variance component in the
 family:
 
-| Variance component (logit-SD) | VG07 | VG08 | VG09 |
-| ---: | ---: | ---: | ---: |
-| Between-study (`τ_U`, understood)         | 0.50 | 0.51 | 0.52 |
-| Between-study (`τ_q`, q)                   | 0.66 | 0.74 | 0.94 |
-| Between-subject (`τ^{subj}_U`, understood)| —    | 0.78 | **0.84** |
-| Between-subject (`τ^{subj}_q`, q)         | —    | —    | **1.20** |
-| Spoken BB dispersion (`a_κ_S`, log)       | 1.40 | 1.86 | **3.32** |
-| Understood BB dispersion (`a_κ_U`, log)   | 1.75 | 2.93 | 3.10 |
+|              Variance component (logit-SD) | VG07 | VG08 |     VG09 |
+| -----------------------------------------: | ---: | ---: | -------: |
+|          Between-study (`τ_U`, understood) | 0.50 | 0.51 |     0.52 |
+|                   Between-study (`τ_q`, q) | 0.66 | 0.74 |     0.94 |
+| Between-subject (`τ^{subj}_U`, understood) |    — | 0.78 | **0.84** |
+|          Between-subject (`τ^{subj}_q`, q) |    — |    — | **1.20** |
+|        Spoken BB dispersion (`a_κ_S`, log) | 1.40 | 1.86 | **3.32** |
+|    Understood BB dispersion (`a_κ_U`, log) | 1.75 | 2.93 |     3.10 |
 
 Each successive model shrinks the residual Beta-Binomial dispersion
 (higher `a_κ` = less overdispersion) by reassigning that variability
@@ -317,17 +317,17 @@ zero):
 
 | Age (mo) | Understood (median) | Spoken (median) | Production ratio (q) |
 | -------: | :------------------ | :-------------- | :------------------- |
-| 12       | 20   [13–28]        | 0.2   [0.1–0.4] | 0.01 |
-| 24       | 89   [67–113]       | 7     [3–10]    | 0.07 |
-| 36       | 186  [145–227]      | 49    [28–71]   | 0.26 |
-| 48       | 257  [207–309]      | 168   [123–212] | 0.66 |
-| 60       | 344  [284–407]      | 290   [235–346] | 0.85 |
-| 72       | 438  [365–512]      | 389   [328–453] | 0.90 |
-| 84       | 509  [411–600]      | 434   [358–510] | 0.87 |
+|       12 | 20 [13–28]          | 0.2 [0.1–0.4]   | 0.01                 |
+|       24 | 89 [67–113]         | 7 [3–10]        | 0.07                 |
+|       36 | 186 [145–227]       | 49 [28–71]      | 0.26                 |
+|       48 | 257 [207–309]       | 168 [123–212]   | 0.66                 |
+|       60 | 344 [284–407]       | 290 [235–346]   | 0.85                 |
+|       72 | 438 [365–512]       | 389 [328–453]   | 0.90                 |
+|       84 | 509 [411–600]       | 434 [358–510]   | 0.87                 |
 
 Two things change relative to VG08:
 
-- The population-level `q` rises *higher* through the middle of the
+- The population-level `q` rises _higher_ through the middle of the
   age range (q ≈ 0.85 at 60 months, ~0.90 at 72 months) before
   settling around 0.87–0.90 in the older ages, rather than VG08's
   plateau around 0.79–0.84. The reason is the same Simpson's-paradox
@@ -335,7 +335,7 @@ Two things change relative to VG08:
   pulled toward observation density, which over-weighted children
   with high comprehension but lower-than-typical production. VG09's
   subject RE absorbs that variability.
-- The early-age `q` is *lower* than VG07/VG08 (0.07 at 24 months vs
+- The early-age `q` is _lower_ than VG07/VG08 (0.07 at 24 months vs
   0.14 for both VG07 and VG08). A typical young DS child speaks
   even fewer of the words they understand than the previous models
   suggested.
@@ -343,10 +343,10 @@ Two things change relative to VG08:
 Three leave-one-subject-out (LOSO) comparisons were run on 13 May
 2026, in increasing order of methodological rigour:
 
-| Quantity | VG07 | VG08 | VG09 |
-| --- | ---: | ---: | ---: |
-| Conditional LOSO elpd (RE at posterior estimate) | -8 740 | -8 360 | **-8 152** |
-| Marginal LOSO elpd (MC-integrated RE, PSIS on thinned posterior) | -14 151 | -15 975 | -22 565 |
+| Quantity                                                                     |       VG07 |       VG08 |       VG09 |
+| ---------------------------------------------------------------------------- | ---------: | ---------: | ---------: |
+| Conditional LOSO elpd (RE at posterior estimate)                             |     -8 740 |     -8 360 | **-8 152** |
+| Marginal LOSO elpd (MC-integrated RE, PSIS on thinned posterior)             |    -14 151 |    -15 975 |    -22 565 |
 | **K-fold LOSO elpd (K=5, refit per fold, RE drawn from prior at MCMC time)** | **-8 753** | **-8 524** | **-8 414** |
 
 (The K-fold row is the gold standard. SE on the totals: 252, 242, 236
@@ -365,12 +365,12 @@ The interpretation of each row:
   data to estimate their RE.
 - **Marginal LOSO** integrates the subject RE(s) over their priors
   by Monte Carlo, with the existing rep-config trace thinned 36-fold
-  to keep the integration tractable. It *appeared* to favour VG07
+  to keep the integration tractable. It _appeared_ to favour VG07
   decisively (VG09 -8 414 worse than VG07), and the v11 draft of this
   note recommended VG07 as the better predictive model on that
   basis. **That recommendation was wrong.** A sanity check exposed
   the problem: for VG07 (which has no subject RE) the marginal LOSO
-  *must* equal the conditional LOSO mathematically, but the
+  _must_ equal the conditional LOSO mathematically, but the
   recomputed pipeline returned −14 151 against the conditional −8 740.
   The 5,400-elpd discrepancy was driven by PSIS-LOO instability on
   the thinned posterior plus Monte Carlo noise in the Beta-Binomial
@@ -379,17 +379,17 @@ The interpretation of each row:
 - **K-fold LOSO** (the gold standard) refits each model on each of
   five training folds, with the held-out fold's observations excluded
   from the likelihood while their `obs_id` rows remain in the model
-  so f_U and h are computed at their ages. The subject REs for
+  so f*U and h are computed at their ages. The subject REs for
   held-out subjects are then unconstrained — MCMC samples them from
   their priors — and the trace's `p_u_obs` and `p_s_obs` at held-out
   rows are already the marginal predictive probabilities. Held-out
-  log-density is then `logsumexp_{c,d} log p(y | params_{c,d}, RE_{c,d}) − log(NK)`
+  log-density is then `logsumexp*{c,d} log p(y | params*{c,d}, RE*{c,d}) − log(NK)`
   per subject. **VG09 wins by +339 elpd over VG07 and +109 over
   VG08**, with strong statistical significance.
 
 The K-fold result also resolves the underlying theoretical question:
 adding subject REs and shrinking the Beta-Binomial dispersion does
-*not* compromise generalisation to an unseen DS child, because the
+_not_ compromise generalisation to an unseen DS child, because the
 priors on the subject REs (`τ^{subj}_U ≈ 0.84`, `τ^{subj}_q ≈ 1.20`)
 are wide enough to span the actual range of between-subject
 variability. The posterior predictive distribution for a held-out
@@ -422,14 +422,14 @@ default for all DS reporting, descriptive AND predictive.**
 
 | Age (mo) | Understood (median) | Spoken (median) | Production ratio |
 | -------: | :------------------ | :-------------- | :--------------- |
-|  9       |  49   [41–57]       |  3.5  [2.6–4.4] | 0.05 |
-| 12       |  83   [76–90]       | 12    [10–13]   | 0.14 |
-| 18       | 134  [126–143]      | 86   [81–91]    | 0.63 |
-| 24       | 276  [263–290]      | 269  [257–281]  | 0.95 |
-| 30       | 430  [404–456]      | 441  [417–465]  | 0.99 |
+|        9 | 49 [41–57]          | 3.5 [2.6–4.4]   | 0.05             |
+|       12 | 83 [76–90]          | 12 [10–13]      | 0.14             |
+|       18 | 134 [126–143]       | 86 [81–91]      | 0.63             |
+|       24 | 276 [263–290]       | 269 [257–281]   | 0.95             |
+|       30 | 430 [404–456]       | 441 [417–465]   | 0.99             |
 
-The contrast lets families see *what is different* about Down syndrome
-vocabulary development rather than just *what is delayed*: the
+The contrast lets families see _what is different_ about Down syndrome
+vocabulary development rather than just _what is delayed_: the
 understanding–speaking gap is qualitatively much larger and lasts much
 longer in DS, not simply shifted by a constant number of months.
 
@@ -444,24 +444,24 @@ VG07's posterior predictive output for understood words):
 - About 50% are expected to understand 200+ words.
 - About 7% are expected to understand 400+ words.
 
-These probabilities — *not* just averages — are what we want to put in
+These probabilities — _not_ just averages — are what we want to put in
 front of families and clinicians, and they are a direct output of the
 Bayesian approach.
 
 ### Milestone framing for families and clinicians
 
 The age-to-milestone outputs answer the question people are most likely to
-ask: *at about what age would children on different parts of the distribution
-reach a vocabulary size?* For VG07, the typical child reaches the following
+ask: _at about what age would children on different parts of the distribution
+reach a vocabulary size?_ For VG07, the typical child reaches the following
 milestones:
 
 | Target words | Typical age to understand | Typical age to speak |
 | -----------: | :------------------------ | :------------------- |
-| 25           | 12 months                 | 31 months            |
-| 50           | 18 months                 | 37 months            |
-| 100          | 25 months                 | 44 months            |
-| 200          | 36 months                 | 58 months            |
-| 400          | 75 months                 | 89 months            |
+|           25 | 12 months                 | 31 months            |
+|           50 | 18 months                 | 37 months            |
+|          100 | 25 months                 | 44 months            |
+|          200 | 36 months                 | 58 months            |
+|          400 | 75 months                 | 89 months            |
 
 Report-ready wording:
 
@@ -476,9 +476,9 @@ Report-ready wording:
 
 ## Beyond chronological delay: DS vs TD at matched comprehension
 
-Comparing the two populations at the *same age* makes Down syndrome look
+Comparing the two populations at the _same age_ makes Down syndrome look
 straightforwardly "delayed". That framing is incomplete. A more useful
-comparison is at *matched comprehension* — how does spoken production
+comparison is at _matched comprehension_ — how does spoken production
 look for DS and TD children when both are at the same level of words
 understood? The joint models (VG06, VG07) let us answer that directly,
 since they each estimate the production ratio `q = p_S / p_U` as a
@@ -494,26 +494,26 @@ lines mark q = 0.5 and q = 0.9.
 ](../output/comparisons/ds_td_q_vs_understood.png){#fig-q-overlay
 fig-align="center" width=85%}
 
-DS and TD share roughly the same *shape* — q rises smoothly from near
+DS and TD share roughly the same _shape_ — q rises smoothly from near
 zero to near one — but the DS curve is shifted substantially to the
 right. At every milestone we checked, DS children need close to **twice
 the comprehension vocabulary** TD children do before reaching the same
 production ratio:
 
 | Production ratio | Words understood — TD (VG06) | Words understood — DS (VG09) | DS / TD | (DS — VG07, superseded) |
-| ---------------: | :--------------------------- | :--------------------------- | :------ | :----------------------- |
-| 0.25             | 100                          | 184                          | ≈ 1.84× | 188 |
-| 0.50             | 121                          | 226                          | ≈ 1.87× | 264 |
-| 0.75             | 156                          | 289                          | ≈ 1.85× | 311 |
-| 0.90             | 225                          | 413                          | ≈ 1.84× | 407 |
+| ---------------: | :--------------------------- | :--------------------------- | :------ | :---------------------- |
+|             0.25 | 100                          | 184                          | ≈ 1.84× | 188                     |
+|             0.50 | 121                          | 226                          | ≈ 1.87× | 264                     |
+|             0.75 | 156                          | 289                          | ≈ 1.85× | 311                     |
+|             0.90 | 225                          | 413                          | ≈ 1.84× | 407                     |
 
 What this means in plain terms:
 
 - A typical typically-developing child speaks about half the words they
   understand by the time they understand ~120 words. A typical DS child
   reaches the same milestone at ~226 understood words under VG09.
-- The early production lag in DS is therefore not just *delayed in
-  months* — it is *enlarged in comprehension terms*. Children with
+- The early production lag in DS is therefore not just _delayed in
+  months_ — it is _enlarged in comprehension terms_. Children with
   Down syndrome accumulate roughly **1.85× as much** receptive
   vocabulary before their spoken vocabulary catches up at every
   threshold checked — a striking constancy that VG07's wider range
@@ -525,7 +525,7 @@ What this means in plain terms:
 
 This reframes the typical clinical/parent expectation that the gap is a
 matter of timing. The model tells a stronger story: the gap is
-*structurally larger* in DS, but it does close given enough comprehension
+_structurally larger_ in DS, but it does close given enough comprehension
 vocabulary. The data underlying the overlay are in
 `output/comparisons/ds_td_q_crossings.csv` and the figure source is
 `scripts/compare_models.py`.
@@ -540,17 +540,17 @@ comprehension, gives a model-derived answer:
 
 | Comprehension level | Population | Predicted understood (median) | 90% interval | Interval ÷ median |
 | ------------------: | :--------- | :---------------------------- | :----------- | ----------------: |
-|  ~80 words          | TD (12 mo) |  83  | [0, 188]  | 2.27 |
-|                     | DS (24 mo) | 105  | [0, 211]  | 2.01 |
-| ~280 words          | TD (24 mo) | 276  | [0, 520]  | 1.88 |
-|                     | DS (48 mo) | 280  | [55, 509] | 1.62 |
-| ~430 words          | TD (30 mo) | 430  | [156, 690]| 1.24 |
-|                     | DS (84 mo) | 423  | [98,  743]| 1.52 |
+|           ~80 words | TD (12 mo) | 83                            | [0, 188]     |              2.27 |
+|                     | DS (24 mo) | 105                           | [0, 211]     |              2.01 |
+|          ~280 words | TD (24 mo) | 276                           | [0, 520]     |              1.88 |
+|                     | DS (48 mo) | 280                           | [55, 509]    |              1.62 |
+|          ~430 words | TD (30 mo) | 430                           | [156, 690]   |              1.24 |
+|                     | DS (84 mo) | 423                           | [98, 743]    |              1.52 |
 
 Headline:
 
 - At **low and middle** comprehension levels the relative spread of
-  individual outcomes around the typical is *slightly tighter in DS*
+  individual outcomes around the typical is _slightly tighter in DS_
   than in TD (e.g. at ~280 understood words, the 90% interval is 1.62×
   the median in DS versus 1.88× in TD).
 - At **high** comprehension levels the pattern flips: DS shows somewhat
@@ -568,9 +568,9 @@ attributing to dispersion.
 
 Re-stating the comparison honestly therefore requires re-running the
 matched-comprehension intervals on VG08 (and the matching VG06 +
-subject-RE variant where data permits). The earlier reading — *"DS
+subject-RE variant where data permits). The earlier reading — _"DS
 spread is broadly comparable to TD; the gap, not the spread, is the
-qualitative difference"* — survives at low and middle comprehension
+qualitative difference"_ — survives at low and middle comprehension
 levels, where VG07 and VG08 agreed. At high comprehension levels the
 VG07-based finding of "wider relative DS spread at ~430 understood
 words (1.52× vs 1.24× TD)" is the part most likely to revise once
@@ -579,14 +579,14 @@ subjects with repeated visits, exactly where the subject RE has the
 largest effect.
 
 **Discussion point for the meeting:** retain the qualitative reading
-that *the gap, not the spread, is the larger qualitative difference*,
+that _the gap, not the spread, is the larger qualitative difference_,
 but flag that the VG08-based numerical comparison is still pending and
 the existing table above is from VG07.
 
 ### Cross-check against D'Souza et al. (2026, Williams syndrome)
 
-A recent paper (D'Souza, D'Souza, Mayor & Tovar, *Developmental
-Science* 2026, doi: 10.1111/desc.70115) reports a similar
+A recent paper (D'Souza, D'Souza, Mayor & Tovar, _Developmental
+Science_ 2026, doi: 10.1111/desc.70115) reports a similar
 matched-comprehension comparison across typical development
 (TD, n = 1,210), Williams syndrome (WS, n = 67), Down syndrome
 (DS, n = 27), and fragile X syndrome (FXS, n = 15). Their headline
@@ -602,17 +602,17 @@ level, not narrows:
 
 | Understood | DS production rate (VG09) | DS production rate (VG07, superseded) | TD production rate (VG06) |
 | ---------: | ------------------------: | ------------------------------------: | ------------------------: |
-| ~50        | 0.04                      | 0.06                                  | 0.05                      |
-| ~100       | 0.08                      | 0.14                                  | 0.25                      |
-| ~150       | 0.15                      | 0.20                                  | 0.73                      |
-| ~200       | 0.33                      | 0.27                                  | 0.87                      |
-| ~300       | 0.78                      | 0.71                                  | 0.95                      |
-| ~400       | 0.90                      | 0.89                                  | 0.99                      |
-| ~500       | 0.88                      | 0.99                                  | 0.99                      |
+|        ~50 |                      0.04 |                                  0.06 |                      0.05 |
+|       ~100 |                      0.08 |                                  0.14 |                      0.25 |
+|       ~150 |                      0.15 |                                  0.20 |                      0.73 |
+|       ~200 |                      0.33 |                                  0.27 |                      0.87 |
+|       ~300 |                      0.78 |                                  0.71 |                      0.95 |
+|       ~400 |                      0.90 |                                  0.89 |                      0.99 |
+|       ~500 |                      0.88 |                                  0.99 |                      0.99 |
 
 (Updated 13 May 2026 from VG09 and VG06 rep-config posteriors using
 `production_rate_by_understood.csv` in each model's output directory.
-VG09 puts DS production *below* VG07's estimate at low and middle
+VG09 puts DS production _below_ VG07's estimate at low and middle
 understood (≤ 150 words) — a typical DS child speaks even fewer of
 the words they understand than VG07 suggested — while reaching
 broadly similar values to VG07 at the upper end. The qualitative
@@ -639,8 +639,8 @@ The procedure (Section 2.1.4 of the paper) is:
 4. Run an **exact one-sided binomial sign test** against
    H₀: P(above) = 0.5, with alternative
    H₁: P(above) > 0.5. The paper's own words:
-   "*This test evaluated whether the median of the residuals … was
-   significantly greater than zero.*"
+   "_This test evaluated whether the median of the residuals … was
+   significantly greater than zero._"
 
 For DS they report 9 above, 18 below (n = 27), a proportion-above of
 0.33, 95% CI [0.186, 1.000], and p = 0.974. They conclude this
@@ -649,8 +649,8 @@ WS".
 
 The interpretive issue is in how that p = 0.974 then gets read.
 
-**What p = 0.974 actually means.** This is the probability, *under
-H₀ that DS production sits exactly on the TD curve*
+**What p = 0.974 actually means.** This is the probability, _under
+H₀ that DS production sits exactly on the TD curve_
 (i.e. P(above) = 0.5), of observing **9 or more** DS data points above
 the line. With only 9/27 above — far fewer than the 13–14 you'd
 expect under a 50/50 split — the test correctly fails to reject in
@@ -658,11 +658,12 @@ the direction of "WS-like elevation". That is the entirety of what
 the test establishes.
 
 **What it does not test.** It does not test whether DS production sits
-*at* the TD line, or *below* it. To see this, flip the alternative
+_at_ the TD line, or _below_ it. To see this, flip the alternative
 and ask: if H₁ were "DS sits below TD" (P(above) < 0.5), how
 significant is 9/27?
 
 For X ~ Binomial(27, 0.5),
+
 $$
 P(X \le 9) = \sum_{k=0}^{9} \binom{27}{k} 0.5^{27}
 = \frac{8{,}192{,}524}{134{,}217{,}728}
@@ -681,13 +682,13 @@ the two groups look alike.
 **Issue 1 — a null result is being read as evidence of similarity.**
 The paper enters the analysis with the canonical-DS-pattern claim
 already in place, citing Mason-Apps et al. (2020) in the Introduction:
-*"In DS, comprehension typically exceeds production … This pattern
+_"In DS, comprehension typically exceeds production … This pattern
 mirrors the canonical comprehension–production asymmetry observed in
-typical development."* The Figure 2 caption then explicitly groups DS
-with TD, and the Discussion states *"Unlike TD and other
+typical development."_ The Figure 2 caption then explicitly groups DS
+with TD, and the Discussion states _"Unlike TD and other
 neurodevelopmental groups, participants with WS exhibited a
 disproportionately higher production vocabulary given their level of
-comprehension."* The sign test is doing confirmatory work: it cannot
+comprehension."_ The sign test is doing confirmatory work: it cannot
 rule the prior claim out, and is treated as supporting it. But a
 failure to reject "DS is above TD" is not evidence for "DS equals TD"
 — it is the absence-of-evidence-vs-evidence-of-absence fallacy. The
@@ -698,11 +699,11 @@ reported one-sided 95% lower confidence bound on the proportion above
 the TD line is 0.186 — meaning the data is consistent with the true
 proportion-above being anywhere from ~19% (substantially below TD) up
 to 100% (substantially above TD). That confidence interval is far too
-wide to support *any* claim of similarity.
+wide to support _any_ claim of similarity.
 
 **Issue 2 — the test in the opposite direction is borderline, not
 clearly null.** With p ≈ 0.061 for "DS sits below TD", their data is
-*consistent with* DS being below the TD curve. It does not reach
+_consistent with_ DS being below the TD curve. It does not reach
 conventional significance at α = 0.05, so it cannot be claimed as a
 positive finding either. The honest reading is that with n = 27 they
 simply do not have the resolution to discriminate "DS tracks TD"
@@ -711,7 +712,7 @@ the latter, particularly above ~150 understood words.
 
 **Other reasons the test is weak in any direction:**
 
-- **Sign tests discard magnitude.** They ignore *how far* below the
+- **Sign tests discard magnitude.** They ignore _how far_ below the
   line each residual is. A Wilcoxon signed-rank test, or a paired
   comparison of residual magnitudes, would use more of the
   information in the same 27 observations.
@@ -729,10 +730,10 @@ the latter, particularly above ~150 understood words.
 1. **Their DS sample is small and age-truncated.** n = 27 DS children,
    all under 40 months; the comparator TD group is capped at 25
    months (the Oxford CDI age ceiling). Very few DS observations
-   exist above ~150 understood words. Our models *agree* with them
+   exist above ~150 understood words. Our models _agree_ with them
    in that range — the production ratio is roughly equal in both
    populations at ~100 understood words. The divergence opens up
-   *above* that range, which their sample barely covers.
+   _above_ that range, which their sample barely covers.
 2. **Their statistical test cannot resolve the question they
    answered.** As above: a non-significant one-sided sign test rules
    out a WS-like elevation, but cannot establish similarity to TD or
@@ -749,7 +750,7 @@ the latter, particularly above ~150 understood words.
    motor and phonological factors that DS comprehension is not:
    childhood apraxia of speech, oro-motor hypotonia, conductive
    hearing loss from recurrent otitis media, verbal short-term
-   memory weaknesses. These predict *larger*, not smaller,
+   memory weaknesses. These predict _larger_, not smaller,
    comprehension–production asymmetry in DS. None of the
    perturbations in their self-organising-map model (map size,
    input noise, neighbourhood disruption) speak to articulation.
@@ -777,7 +778,7 @@ to **which studies contribute data at which ages**, not to a real
 developmental phenomenon:
 
 - Higher-scoring studies (Studies 1, 2, 6, 7) stop contributing
-  *understood-word* data after roughly 50 months. Studies 3 and 5 keep
+  _understood-word_ data after roughly 50 months. Studies 3 and 5 keep
   contributing past that age and have systematically lower medians.
 - As a result the **mix of children** changes around 50 months, and the
   smooth trajectory in VG02/VG05 was tracking that compositional change
@@ -847,8 +848,7 @@ Reports:
 
 Ranked roughly by priority for the research narrative:
 
-1. ~~**Confirm VG07 at reporting-quality sampling.**~~ **Done 12 May
-   2026.** All seven models re-fitted at `rep` quality (6 chains ×
+1. ~~**Confirm VG07 at reporting-quality sampling.**~~ **Done 12 May 2026.** All seven models re-fitted at `rep` quality (6 chains ×
    12,000 NUTS steps each), all met the reporting thresholds, and all
    reports re-rendered and uploaded to Azure. The only sampler warning
    was a single VG06 divergence.
@@ -898,14 +898,14 @@ Ranked roughly by priority for the research narrative:
    a diagnostic check. Useful even now that VG09 is the headline DS
    model.
 10. **Sweep the open Dependabot PRs** (#18, #19). One contains an
-   `arviz` 0.23 → 1.0 major-version bump and a `setuptools` 81 → 82
-   change that **removes `pkg_resources`** — these need a deliberate
-   merge with a full fit-pipeline smoke-test, not an auto-merge.
+    `arviz` 0.23 → 1.0 major-version bump and a `setuptools` 81 → 82
+    change that **removes `pkg_resources`** — these need a deliberate
+    merge with a full fit-pipeline smoke-test, not an auto-merge.
 11. **Open GitHub issues for the items above.** Currently the project has
-   zero open issues — all planning lives in notes and PR descriptions.
-   For decisions of this weight (rep-quality re-fit, reporting policy,
-   extending RE to univariate models, VG08/VG09 model family) we want
-   traceable tickets.
+    zero open issues — all planning lives in notes and PR descriptions.
+    For decisions of this weight (rep-quality re-fit, reporting policy,
+    extending RE to univariate models, VG08/VG09 model family) we want
+    traceable tickets.
 
 ### Suggested enhancements to the model output pipeline
 
@@ -920,9 +920,9 @@ Ranked roughly by usefulness:
    (VG05 vs VG07 on the DS bivariate, VG02 vs VG05/VG07 marginal-u)
    would give a defensible numeric basis.
 2. **Time-to-milestone (inverse-CDF) outputs.** The current outputs
-   answer *"given an age, what's the word count?"* Families typically
-   ask the inverse — *"by what age will my child have 50/100/200
-   words?"* Trivial to compute from the existing posterior predictive
+   answer _"given an age, what's the word count?"_ Families typically
+   ask the inverse — _"by what age will my child have 50/100/200
+   words?"_ Trivial to compute from the existing posterior predictive
    distributions.
 3. **Cross-model comparison artefacts as a first-class pipeline step.**
    The DS-vs-TD overlay in the matched-comprehension section was produced
@@ -937,7 +937,7 @@ Ranked roughly by usefulness:
    make any future compositional artefact immediately diagnosable.
 5. **Study-level random-intercept summaries for VG07.** `δ_U[s]` and
    `δ_q[s]` are inside the trace but not summarised. A `study_effects`
-   CSV + forest plot would show *which* studies shift the population
+   CSV + forest plot would show _which_ studies shift the population
    trajectory and by how much.
 6. **Prior-vs-posterior overlay plots** for the headline parameters.
    Standard Bayesian-workflow figure showing how much each prior was
@@ -957,18 +957,18 @@ Ranked roughly by usefulness:
 
 ### Status of those enhancements
 
-| # | Item | Status | Output location |
-| --- | --- | --- | --- |
-| 1 | LOO | per-model + VG05 vs VG07 comparison | `output/comparisons/loo_*.csv`, `loo_compare_*.csv` |
-| 2 | Time-to-milestone | per-model CSV + plot | `output/models/<MODEL>/time_to_milestone*.{csv,png,svg}`, `output/comparisons/time_to_milestone_all.csv` |
-| 3 | Cross-model overlays | DS vs TD age, VG05 vs VG07, q-vs-comprehension | `output/comparisons/*_by_age.{png,svg}`, `vg05_vs_vg07_*.{png,svg}`, `ds_td_q_*.{png,svg}` |
-| 4 | Data coverage | understood + spoken pivots + heatmaps | `output/data/coverage_*.{csv,png,svg}` |
-| 5 | VG07 study effects | tau + delta CSV + forest plot | `output/models/VG07-age-understood-spoken-ds-re/study_effects.{csv,png,svg}` |
-| 6 | Prior-vs-posterior | per-model overlay panels | `output/models/<MODEL>/prior_vs_posterior.{png,svg}` |
-| 7 | Cross-model summary | one CSV with ESS / R-hat / divergences / wall time / LOO | `output/comparisons/model_summary.csv` |
-| 8 | Timing log JSON | parsed from latest rep log | `output/logs/run_summary.json` |
-| 9 | Diagnostics styling | Quarto Styler in `docs/models/vg*/index.qmd` flags r̂ > 1.01 / ESS < 400 | re-renders next time `--render` runs |
-| 10 | Prior-predictive checks (bivariate) | gap diagnosed (only univariates emit overlay vs observed) | follow-up: add `plot_prior_predictive_checks_bivariate` to `common_bivariate.py` |
+| #   | Item                                | Status                                                                  | Output location                                                                                          |
+| --- | ----------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | LOO                                 | per-model + VG05 vs VG07 comparison                                     | `output/comparisons/loo_*.csv`, `loo_compare_*.csv`                                                      |
+| 2   | Time-to-milestone                   | per-model CSV + plot                                                    | `output/models/<MODEL>/time_to_milestone*.{csv,png,svg}`, `output/comparisons/time_to_milestone_all.csv` |
+| 3   | Cross-model overlays                | DS vs TD age, VG05 vs VG07, q-vs-comprehension                          | `output/comparisons/*_by_age.{png,svg}`, `vg05_vs_vg07_*.{png,svg}`, `ds_td_q_*.{png,svg}`               |
+| 4   | Data coverage                       | understood + spoken pivots + heatmaps                                   | `output/data/coverage_*.{csv,png,svg}`                                                                   |
+| 5   | VG07 study effects                  | tau + delta CSV + forest plot                                           | `output/models/VG07-age-understood-spoken-ds-re/study_effects.{csv,png,svg}`                             |
+| 6   | Prior-vs-posterior                  | per-model overlay panels                                                | `output/models/<MODEL>/prior_vs_posterior.{png,svg}`                                                     |
+| 7   | Cross-model summary                 | one CSV with ESS / R-hat / divergences / wall time / LOO                | `output/comparisons/model_summary.csv`                                                                   |
+| 8   | Timing log JSON                     | parsed from latest rep log                                              | `output/logs/run_summary.json`                                                                           |
+| 9   | Diagnostics styling                 | Quarto Styler in `docs/models/vg*/index.qmd` flags r̂ > 1.01 / ESS < 400 | re-renders next time `--render` runs                                                                     |
+| 10  | Prior-predictive checks (bivariate) | gap diagnosed (only univariates emit overlay vs observed)               | follow-up: add `plot_prior_predictive_checks_bivariate` to `common_bivariate.py`                         |
 
 The scripts that produce these are all self-contained under
 `scripts/`: `loo_compare.py`, `time_to_milestone.py`, `compare_models.py`,
@@ -980,17 +980,17 @@ can be re-run independently of the main fit pipeline.
 
 From `output/comparisons/model_summary.csv`:
 
-| Model | n params | ESS bulk (min) | r̂ (max) | divergences | wall time | elpd_loo |
-| ----- | --: | --: | --: | --: | --: | --: |
-| VG01 | 11 | 11,518 | 1.001 | 0 | 12m 31s | -4,762 |
-| VG02 | 11 | 10,806 | 1.000 | 0 | 12m 22s | -4,071 |
-| VG03 | 11 |  8,388 | 1.000 | 0 | 26m 18s | -8,852 |
-| VG04 | 11 |  9,553 | 1.000 | 0 | 25m 04s | -9,926 |
-| VG05 | 22 | 10,362 | 1.001 | 0 | 24m 11s | -8,830 |
-| VG06 | 22 | 12,147 | 1.001 | 1 | 1h 02m 57s | -18,771 |
-| VG07 | 24 |  5,492 | 1.001 | 0 | 24m 14s | -8,740 |
-| VG08 | 26 + 510 (subj REs)         | 1,663 | 1.005 | 0 | 26m 39s | -8,360 (cond. LOSO) |
-| VG09 | 28 + 2×510 (subj REs U & q) | 1,841 | 1.002 | 0 | 18m 57s | **-8,152 (cond. LOSO)** |
+| Model |                    n params | ESS bulk (min) | r̂ (max) | divergences |  wall time |                elpd_loo |
+| ----- | --------------------------: | -------------: | ------: | ----------: | ---------: | ----------------------: |
+| VG01  |                          11 |         11,518 |   1.001 |           0 |    12m 31s |                  -4,762 |
+| VG02  |                          11 |         10,806 |   1.000 |           0 |    12m 22s |                  -4,071 |
+| VG03  |                          11 |          8,388 |   1.000 |           0 |    26m 18s |                  -8,852 |
+| VG04  |                          11 |          9,553 |   1.000 |           0 |    25m 04s |                  -9,926 |
+| VG05  |                          22 |         10,362 |   1.001 |           0 |    24m 11s |                  -8,830 |
+| VG06  |                          22 |         12,147 |   1.001 |           1 | 1h 02m 57s |                 -18,771 |
+| VG07  |                          24 |          5,492 |   1.001 |           0 |    24m 14s |                  -8,740 |
+| VG08  |         26 + 510 (subj REs) |          1,663 |   1.005 |           0 |    26m 39s |     -8,360 (cond. LOSO) |
+| VG09  | 28 + 2×510 (subj REs U & q) |          1,841 |   1.002 |           0 |    18m 57s | **-8,152 (cond. LOSO)** |
 
 (VG08 and VG09 fitted 13 May 2026 with the same rep sampling
 configuration. The elpd columns for VG08/VG09 are the conditional
@@ -1009,11 +1009,11 @@ separately for the understood outcome, the spoken outcome, and the
 joint likelihood. VG07 is preferred in all three, but the size and
 significance of the improvement differ in a revealing way:
 
-| Held-out data | elpd_diff (VG07 − VG05) | dSE | diff / dSE | VG07 stacking weight |
-| --- | --: | --: | --: | --: |
-| Understood only (n = 704)            | **+65.7** | 43.5 | **1.51** | 0.57 |
-| Spoken only (n = 949)                | +24.7     | 81.3 | 0.30     | 0.51 |
-| Joint understood + spoken (n = 1,653) | +90.4    | 92.2 | 0.98     | 0.53 |
+| Held-out data                         | elpd_diff (VG07 − VG05) |  dSE | diff / dSE | VG07 stacking weight |
+| ------------------------------------- | ----------------------: | ---: | ---------: | -------------------: |
+| Understood only (n = 704)             |               **+65.7** | 43.5 |   **1.51** |                 0.57 |
+| Spoken only (n = 949)                 |                   +24.7 | 81.3 |       0.30 |                 0.51 |
+| Joint understood + spoken (n = 1,653) |                   +90.4 | 92.2 |       0.98 |                 0.53 |
 
 What this says:
 
@@ -1033,13 +1033,13 @@ What this says:
 
 VG07 adds 15 effective parameters (`p_loo` 36 vs 21 for the joint
 likelihood) — i.e. the study random intercepts that the data is
-clearly informing — and *still wins* on LOO even when LOO penalises
+clearly informing — and _still wins_ on LOO even when LOO penalises
 complexity. That this comes mostly from the understood outcome
 (matching the Simpson's-paradox diagnosis) is a strong, defensible reason to prefer
 VG07 for any DS quoted statistic where understanding is in scope.
 
 A **leave-one-study-out** test would more directly assess
-generalisation to a *new* study — worth running as a follow-up. The
+generalisation to a _new_ study — worth running as a follow-up. The
 full per-outcome CSVs are under
 `output/comparisons/loo_compare_ds_bivariate_re_vs_no_re_*.csv`.
 

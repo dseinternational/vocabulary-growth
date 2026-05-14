@@ -36,19 +36,19 @@ Plot and query predictions use the population-level trajectory ($\delta = 0$), n
 
 ### New files
 
-| File | Purpose |
-|------|---------|
-| `src/vocab_growth/models/model_vg07.py` | Model module (thin wrapper) |
+| File                                             | Purpose                               |
+| ------------------------------------------------ | ------------------------------------- |
+| `src/vocab_growth/models/model_vg07.py`          | Model module (thin wrapper)           |
 | `src/vocab_growth/models/common_bivariate_re.py` | Pipeline with study random intercepts |
-| `docs/models/vg07/index.qmd` | Quarto report template |
+| `docs/models/vg07/index.qmd`                     | Quarto report template                |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
+| File                                     | Change                                                                                                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/vocab_growth/models/definitions.py` | Added `include_study_re`, `tau_u_sigma`, `tau_q_sigma` fields to `BivariateModelDefinition` (with defaults that preserve VG05/VG06 behaviour); added VG07 instance and registry entry |
-| `scripts/fit_model.py` | Added VG07 import and dispatch |
-| `scripts/upload.py` | Added VG07 config |
+| `scripts/fit_model.py`                   | Added VG07 import and dispatch                                                                                                                                                        |
+| `scripts/upload.py`                      | Added VG07 config                                                                                                                                                                     |
 
 ### Architecture
 
@@ -95,15 +95,15 @@ Models VG06 (TD, bivariate) and VG07 (DS with study RE, bivariate) were fitted u
 **VG07 (Down syndrome with study RE, 12--90 months):** The production ratio rises much more slowly. At 24 months DS children speak only ~14% of words understood (vs 95% for TD). The curve reaches 50% around 45 months and does not approach 90% until ~72 months. HDI bands are substantially wider, especially beyond 60 months. The trajectory is smoother than VG05 -- the study random intercepts have absorbed between-study variation.
 
 | Age (months) | VG06 q_median | VG07 q_median | VG05 q_median |
-|:------------:|:-------------:|:-------------:|:-------------:|
-| 12           | 0.14          | 0.04          | 0.09          |
-| 18           | 0.63          | 0.08          | 0.16          |
-| 24           | 0.95          | 0.14          | 0.20          |
-| 30           | 0.99          | 0.20          | 0.19          |
-| 42           | --            | 0.43          | 0.36          |
-| 54           | --            | 0.73          | 0.69          |
-| 72           | --            | 0.90          | 0.80          |
-| 90           | --            | 0.97          | 0.88          |
+| :----------: | :-----------: | :-----------: | :-----------: |
+|      12      |     0.14      |     0.04      |     0.09      |
+|      18      |     0.63      |     0.08      |     0.16      |
+|      24      |     0.95      |     0.14      |     0.20      |
+|      30      |     0.99      |     0.20      |     0.19      |
+|      42      |      --       |     0.43      |     0.36      |
+|      54      |      --       |     0.73      |     0.69      |
+|      72      |      --       |     0.90      |     0.80      |
+|      90      |      --       |     0.97      |     0.88      |
 
 ### Production ratio by words understood
 
@@ -116,11 +116,11 @@ Models VG06 (TD, bivariate) and VG07 (DS with study RE, bivariate) were fitted u
 The comprehension dip at 40--60 months identified in VG05 is substantially reduced in VG07. The understood trajectory is now monotonically increasing:
 
 | Age (months) | VG05 Ey_median | VG07 Ey_median | Change |
-|:------------:|:--------------:|:--------------:|:------:|
-| 42           | 290            | 235            | -55    |
-| 48           | 284            | 246            | -38    |
-| 54           | 273            | 255            | -18    |
-| 60           | 285            | 279            | -6     |
+| :----------: | :------------: | :------------: | :----: |
+|      42      |      290       |      235       |  -55   |
+|      48      |      284       |      246       |  -38   |
+|      54      |      273       |      255       |  -18   |
+|      60      |      285       |      279       |   -6   |
 
 VG07 estimates are lower overall -- the random intercepts absorb the fact that higher-scoring studies dominate earlier ages -- but the trajectory no longer shows a decline. The learning rate stays positive throughout, though it does slow between 40--55 months.
 

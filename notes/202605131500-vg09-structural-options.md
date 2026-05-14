@@ -12,14 +12,14 @@ See `notes/202605131400-vg09-sampler-diagnostics.md` for the diagnostic investig
 
 The `q` trajectory in VG09 is built as four additive components on the logit scale (`common_bivariate_re.py`):
 
-```
+```text
 h(a, s, i) = intercept_q + slope_q · a_z   ← linear mean trend
            + eta_q · g_unit_q(a)            ← HSGP correction
            + delta_q,study[s]               ← study random intercept
            + delta_q,subj[i]                ← subject random intercept   (new in VG09)
 ```
 
-`intercept_q` and `slope_q` are deterministic from two anchor-Beta probabilities at ages 24 and 84 months (`p_slope_low_q`, `p_slope_hi_q`). Three of the four components carry a global level: the linear trend, the GP, and each RE family. The data identify the *sum*; the decomposition is only weakly constrained by the priors.
+`intercept_q` and `slope_q` are deterministic from two anchor-Beta probabilities at ages 24 and 84 months (`p_slope_low_q`, `p_slope_hi_q`). Three of the four components carry a global level: the linear trend, the GP, and each RE family. The data identify the _sum_; the decomposition is only weakly constrained by the priors.
 
 This is why the flagged parameters cluster on exactly the components that overlap (anchor probabilities, `eta_q`, and `intercept_u` / `p_slope_hi_u` on the analogous u-side). Tighter `target_accept` cannot help because the geometry is a ridge, not a step-size problem.
 
@@ -29,10 +29,10 @@ This is why the flagged parameters cluster on exactly the components that overla
 
 Current priors are essentially diffuse:
 
-| Anchor                       | Current prior | Empirical posterior (VG07 rep) | Proposed prior     |
-|------------------------------|---------------|--------------------------------|--------------------|
-| `p_slope_low_q` (at 24 mo)   | Beta(1, 1.5)  | ~0.10–0.15                     | Beta(3, 22) — mean 0.12, sd 0.06 |
-| `p_slope_hi_q`  (at 84 mo)   | Beta(2, 1.2)  | ~0.85–0.95                     | Beta(20, 4) — mean 0.83, sd 0.08 |
+| Anchor                     | Current prior | Empirical posterior (VG07 rep) | Proposed prior                   |
+| -------------------------- | ------------- | ------------------------------ | -------------------------------- |
+| `p_slope_low_q` (at 24 mo) | Beta(1, 1.5)  | ~0.10–0.15                     | Beta(3, 22) — mean 0.12, sd 0.06 |
+| `p_slope_hi_q` (at 84 mo)  | Beta(2, 1.2)  | ~0.85–0.95                     | Beta(20, 4) — mean 0.83, sd 0.08 |
 
 **Pros:** one-line change in `definitions.py`; weakly informative; defensible because VG07 has no subject REs on q so its posterior is not subject to the redundancy being addressed.
 **Cons:** narrows the ridge but does not remove it. Reviewers may question the use of a previous model's posterior to set the prior.
@@ -55,7 +55,7 @@ Current priors are essentially diffuse:
 
 Replace `g_q = eta_q · g_unit_q` with `g_q = eta_q · (g_unit_q − g_unit_q(a_ref))`, where `a_ref` is a reference age (e.g. 48 months — the midpoint of the DS query range). This forces every posterior draw of the GP to pass through zero at `a_ref`, so the linear trend uniquely defines the level there and the GP can only describe deviations.
 
-> **Note on the relationship to the current HSGP.** The existing GPs (univariate models in `common.py`, bivariate models in `common_bivariate.py`) use PyMC's `HSGP`, which is a *zero-mean Gaussian process in prior expectation* — i.e. `E[g(a)] = 0` averaged over draws. That is **not** the same as `g(a_ref) = 0` for each draw. For any single posterior draw, the GP function carries an arbitrary constant component which trades off freely with `intercept_q`. The zero-mean prior centres the trade-off; it does not remove the ridge. Option D would be a stronger, per-draw constraint that no other GP in the codebase currently has.
+> **Note on the relationship to the current HSGP.** The existing GPs (univariate models in `common.py`, bivariate models in `common_bivariate.py`) use PyMC's `HSGP`, which is a _zero-mean Gaussian process in prior expectation_ — i.e. `E[g(a)] = 0` averaged over draws. That is **not** the same as `g(a_ref) = 0` for each draw. For any single posterior draw, the GP function carries an arbitrary constant component which trades off freely with `intercept_q`. The zero-mean prior centres the trade-off; it does not remove the ridge. Option D would be a stronger, per-draw constraint that no other GP in the codebase currently has.
 
 **Pros:** the cleanest structural fix for the GP ↔ intercept redundancy. Doesn't require strong priors. Standard trick in additive models. Would also tighten the analogous understood-side issue if applied symmetrically to `g_u`.
 **Cons:** modest change in `common_bivariate_re.py` (and parallel changes in `common_bivariate.py` if applied to VG05–VG08). `g_q` becomes a deviation field, not the GP itself — slight reinterpretation when reporting. Does not address the subject-RE ↔ intercept redundancy.

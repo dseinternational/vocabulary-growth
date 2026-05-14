@@ -22,11 +22,11 @@ Clean. `r_hat ≤ 1.01` and `ess_tail ≥ 400` across all reported parameters. S
 
 A one-off rerun with `target_accept=0.99` and `tune=8000` (draws kept at 6000) was launched to test whether marginal r-hat reflected step-size adaptation issues. Sampling took 22m 44s — about 2.3× longer — for **no meaningful improvement**:
 
-| Metric                       | Original `rep`   | `target_accept=0.99, tune=8000` |
-|------------------------------|------------------|---------------------------------|
-| `r_hat > 1.01`               | 6 (max 1.019)    | 5 (max 1.020)                   |
-| `ess_tail < 400`             | 1 (min 394)      | 2 (min 358)                     |
-| Posterior sampling wall time | 9m 46s           | 22m 44s                         |
+| Metric                       | Original `rep` | `target_accept=0.99, tune=8000` |
+| ---------------------------- | -------------- | ------------------------------- |
+| `r_hat > 1.01`               | 6 (max 1.019)  | 5 (max 1.020)                   |
+| `ess_tail < 400`             | 1 (min 394)    | 2 (min 358)                     |
+| Posterior sampling wall time | 9m 46s         | 22m 44s                         |
 
 The flagged parameters and their values were essentially unchanged. `ess_tail` shifted marginally in the wrong direction (within MC noise).
 
@@ -34,14 +34,14 @@ The flagged parameters and their values were essentially unchanged. `ess_tail` s
 
 All flagged parameters are global hyperparameters of the trajectory mean functions, dominated by the production-ratio (`q`) side:
 
-| Parameter        | `r_hat` | `ess_bulk` | `ess_tail` |
-|------------------|---------|------------|------------|
-| `slope_q`        | 1.020   | 430        | 460        |
-| `p_slope_hi_q`   | 1.012   | 431        | 397        |
-| `p_slope_low_q`  | 1.013   | 1008       | 2252       |
-| `eta_q`          | 1.010   | 483        | 358        |
-| `intercept_u`    | 1.012   | 759        | 1066       |
-| `p_slope_hi_u`   | 1.014   | 628        | 2373       |
+| Parameter       | `r_hat` | `ess_bulk` | `ess_tail` |
+| --------------- | ------- | ---------- | ---------- |
+| `slope_q`       | 1.020   | 430        | 460        |
+| `p_slope_hi_q`  | 1.012   | 431        | 397        |
+| `p_slope_low_q` | 1.013   | 1008       | 2252       |
+| `eta_q`         | 1.010   | 483        | 358        |
+| `intercept_u`   | 1.012   | 759        | 1066       |
+| `p_slope_hi_u`  | 1.014   | 628        | 2373       |
 
 Five of the six are q-trajectory hyperparameters. The two understood-side parameters (`intercept_u`, `p_slope_hi_u`) are the analogous mean-function anchors for the `u` trajectory.
 
@@ -62,7 +62,7 @@ Symptoms consistent with this diagnosis:
 - The marginal r-hat values are stable across reruns (max 1.019 → 1.020); they are at the edge of acceptable but consistently so.
 - ESS is bulk-low rather than tail-low for most flagged parameters, which is typical of slow exploration along ridges in correlated posteriors.
 
-## What this does *not* affect
+## What this does _not_ affect
 
 The reported derived quantities — `q_query`, `p_u_query`, `p_s_query`, expected learning rates, the joint trajectory and HDI bands — are functions of the full posterior over `h_all` and `f_u_all`. These quantities are well-identified even when their decomposition into mean trend + GP + REs is not. Spot-checks of the posterior predictive plots and query tables against VG07/VG08 reporting-config runs do not show structural differences attributable to non-convergence.
 
