@@ -180,6 +180,15 @@ class BivariateModelDefinition:
     tau_subj_q_sigma: float = 0.5
     """HalfNormal scale for subject intercept SD on q (logit scale)."""
 
+    # -- GP anchor constraint (per-draw zero at reference age) --
+    anchor_g_u_at_ref: bool = False
+    """If True, constrain g_u to equal zero at the reference age for every draw."""
+    anchor_g_q_at_ref: bool = False
+    """If True, constrain g_q to equal zero at the reference age for every draw."""
+    gp_anchor_age_months: float | None = None
+    """Reference age (months) for the GP anchor constraint. If None, defaults to the
+    midpoint of slope_anchors."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.BIVARIATE
@@ -349,6 +358,38 @@ VG09 = BivariateModelDefinition(
     tau_subj_q_sigma=0.5,
 )
 
+VG09B = BivariateModelDefinition(
+    model_id="VG09B",
+    config_name="age-understood-spoken-ds-re-subj-uq-anchored",
+    banner=(
+        "Fitting Model VG09B: VG09 + tighter q anchor priors + GP anchored at"
+        " reference age (A -> U, A -> S, U -> S) - Down syndrome"
+    ),
+    population=Population.DOWN_SYNDROME,
+    n_trials=800,
+    slope_anchors=(24, 84),
+    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    p_slope_low_u_alpha=1.0,
+    p_slope_low_u_beta=10.0,
+    p_slope_hi_u_alpha=1.1,
+    p_slope_hi_u_beta=1.1,
+    # Tighter q-anchor priors (Option A) — informed by VG07 posterior
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
+    tau_u_sigma=0.5,
+    tau_q_sigma=0.5,
+    use_subject_re_u=True,
+    tau_subj_u_sigma=0.5,
+    use_subject_re_q=True,
+    tau_subj_q_sigma=0.5,
+    # GP anchor constraint (Option D) — applied symmetrically to both trajectories
+    anchor_g_u_at_ref=True,
+    anchor_g_q_at_ref=True,
+    gp_anchor_age_months=54.0,
+)
+
 MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -359,4 +400,5 @@ MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] 
     "vg07": VG07,
     "vg08": VG08,
     "vg09": VG09,
+    "vg09b": VG09B,
 }

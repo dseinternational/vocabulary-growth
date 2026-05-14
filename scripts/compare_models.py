@@ -13,6 +13,10 @@ Produces the following figures under `output/comparisons/`:
 - `ds_td_q_vs_understood.{png,svg}` — q vs words understood (DS VG09 / TD
   VG06) — the headline matched-comprehension comparison; the
   corresponding crossings CSV lives in this directory too.
+- `vg07_vg09_vg09b_q_by_age.{png,svg}` — production ratio q(age) three-way
+  overlay: VG07 (no subject REs), VG09 (subject REs on U and q,
+  unanchored GP), VG09B (subject REs on U and q, GP anchored at the
+  reference age).
 
 CSVs of the underlying data are also written.
 
@@ -191,6 +195,87 @@ def ds_td_q_vs_understood() -> None:
                               index=False)
 
 
+def vg07_vg09_vg09b_q_by_age() -> None:
+    """Three-way overlay of q(age) for VG07, VG09 and VG09B.
+
+    VG07 has no subject REs on q (the pre-redundancy baseline).
+    VG09 adds subject REs on U and q with an unanchored GP.
+    VG09B is VG09 with tighter q-anchor priors and the GP anchored
+    to zero at the reference age (see notes/202605131500-...).
+    """
+    vg07 = pd.read_csv(
+        os.path.join(MODELS_DIR, "VG07-age-understood-spoken-ds-re",
+                     "posterior_summary_q.csv")
+    )
+    vg09 = pd.read_csv(
+        os.path.join(MODELS_DIR, "VG09-age-understood-spoken-ds-re-subj-uq",
+                     "posterior_summary_q.csv")
+    )
+    vg09b = pd.read_csv(
+        os.path.join(
+            MODELS_DIR,
+            "VG09B-age-understood-spoken-ds-re-subj-uq-anchored",
+            "posterior_summary_q.csv",
+        )
+    )
+
+    series = [
+        ("VG07 (no subject RE on q)", vg07, plot_styles.COLOUR_PURPLE),
+        ("VG09 (subj REs, GP unanchored)", vg09, plot_styles.COLOUR_BLUE),
+        ("VG09B (subj REs, GP anchored at 54mo)", vg09b, plot_styles.COLOUR_GREEN),
+    ]
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    for label, df, colour in series:
+        ax.fill_between(
+            df["age_months"], df["q_hdi_lo"], df["q_hdi_hi"],
+            color=colour, alpha=0.15, linewidth=0,
+            label=f"{label} 90% HDI",
+        )
+        ax.plot(
+            df["age_months"], df["q_median"], color=colour, lw=2.5,
+            label=f"{label} median",
+        )
+    ax.axhline(0.5, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
+    ax.axhline(0.9, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
+    ax.set_xlabel("Age (months)")
+    ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
+    ax.set_ylim(0, 1)
+    ax.set_title(
+        "Production ratio q(age) — VG07 vs VG09 vs VG09B (DS, rep config)"
+    )
+    ax.legend(loc="lower right", frameon=True, fontsize="small")
+    fig.savefig(os.path.join(OUT_DIR, "vg07_vg09_vg09b_q_by_age.png"))
+    fig.savefig(os.path.join(OUT_DIR, "vg07_vg09_vg09b_q_by_age.svg"))
+    plt.close(fig)
+
+    merged = vg07[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
+        columns={"q_median": "vg07_median",
+                 "q_hdi_lo": "vg07_hdi_lo",
+                 "q_hdi_hi": "vg07_hdi_hi"}
+    )
+    merged = merged.merge(
+        vg09[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
+            columns={"q_median": "vg09_median",
+                     "q_hdi_lo": "vg09_hdi_lo",
+                     "q_hdi_hi": "vg09_hdi_hi"}
+        ),
+        on="age_months",
+    )
+    merged = merged.merge(
+        vg09b[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
+            columns={"q_median": "vg09b_median",
+                     "q_hdi_lo": "vg09b_hdi_lo",
+                     "q_hdi_hi": "vg09b_hdi_hi"}
+        ),
+        on="age_months",
+    )
+    merged.to_csv(
+        os.path.join(OUT_DIR, "vg07_vg09_vg09b_q_by_age.csv"),
+        index=False,
+    )
+
+
 def main() -> None:
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -199,6 +284,7 @@ def main() -> None:
     ds_td_understood_by_age()
     vg05_vs_vg07()
     ds_td_q_vs_understood()
+    vg07_vg09_vg09b_q_by_age()
 
     print(f"Comparisons written to: {OUT_DIR}")
 

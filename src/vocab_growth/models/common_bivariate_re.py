@@ -269,12 +269,28 @@ def build_model_re(
     X_query = np.array(config.ages_query).reshape(-1, 1)
     X_query_z = (X_query - X_obs_mean) / X_obs_std
 
-    # Stack all
-    X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
+    # Optional anchor point (Option D: per-draw zero of the GP at a reference age)
+    anchor_g_u = bool(definition.anchor_g_u_at_ref)
+    anchor_g_q = bool(definition.anchor_g_q_at_ref)
+    use_gp_anchor = anchor_g_u or anchor_g_q
+    if use_gp_anchor:
+        if definition.gp_anchor_age_months is not None:
+            anchor_age_months = float(definition.gp_anchor_age_months)
+        else:
+            anchor_age_months = (
+                float(config.slope_anchors[0]) + float(config.slope_anchors[1])
+            ) / 2.0
+        X_anchor = np.array([[anchor_age_months]], dtype=float)
+        X_anchor_z = (X_anchor - X_obs_mean) / X_obs_std
+        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z, X_anchor_z])
+    else:
+        anchor_age_months = None
+        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
 
     n_plot = X_plot_z.shape[0]
     n_query = X_query_z.shape[0]
     n_all = X_all_z.shape[0]
+    i_anchor = (n + n_plot + n_query) if use_gp_anchor else None
 
     # Length-scale bounds
     ell_low_months = float(config.ell_months_range[0])
@@ -297,15 +313,21 @@ def build_model_re(
     slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
     slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
 
-    key_value_table(
-        "Derived quantities",
-        [
-            ("HSGP basis size (m)", M),
-            ("HSGP boundary factor (L)", L),
-            ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
-            ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
-        ],
-    )
+    derived_rows: list[tuple[str, object]] = [
+        ("HSGP basis size (m)", M),
+        ("HSGP boundary factor (L)", L),
+        ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
+        ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+    ]
+    if use_gp_anchor:
+        derived_rows.append(
+            (
+                "GP anchor age (months)",
+                f"{anchor_age_months:g} (g_u anchored: {anchor_g_u}, "
+                f"g_q anchored: {anchor_g_q})",
+            )
+        )
+    key_value_table("Derived quantities", derived_rows)
 
     # Slice indices
     i_obs0, i_obs1 = 0, n
@@ -374,7 +396,11 @@ def build_model_re(
         cov_u = pm.gp.cov.ExpQuad(1, ls=ell_u)
         hsgp_u = pm.gp.HSGP(cov_func=cov_u, m=M, L=L)
         g_unit_u = hsgp_u.prior("g_unit_u", X=X_all_z_data, dims="all_id")
-        g_u = pm.Deterministic("g_u", eta_u * g_unit_u, dims=("all_id",))
+        if anchor_g_u:
+            g_unit_u_centred = g_unit_u - g_unit_u[i_anchor]
+        else:
+            g_unit_u_centred = g_unit_u
+        g_u = pm.Deterministic("g_u", eta_u * g_unit_u_centred, dims=("all_id",))
 
         # Population-level f_U (no study effect)
         f_u_all = pm.Deterministic("f_u_all", mean_trend_u + g_u, dims=("all_id",))
@@ -407,7 +433,11 @@ def build_model_re(
         cov_q = pm.gp.cov.ExpQuad(1, ls=ell_q)
         hsgp_q = pm.gp.HSGP(cov_func=cov_q, m=M, L=L)
         g_unit_q = hsgp_q.prior("g_unit_q", X=X_all_z_data, dims="all_id")
-        g_q = pm.Deterministic("g_q", eta_q * g_unit_q, dims=("all_id",))
+        if anchor_g_q:
+            g_unit_q_centred = g_unit_q - g_unit_q[i_anchor]
+        else:
+            g_unit_q_centred = g_unit_q
+        g_q = pm.Deterministic("g_q", eta_q * g_unit_q_centred, dims=("all_id",))
 
         # Population-level h (no study effect)
         h_all = pm.Deterministic("h_all", mean_trend_q + g_q, dims=("all_id",))
