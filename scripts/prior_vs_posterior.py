@@ -34,6 +34,9 @@ from vocab_growth.models.definitions import (
     VG05,
     VG06,
     VG07,
+    VG08,
+    VG09,
+    VG09B,
     BivariateModelDefinition,
     UnivariateModelDefinition,
 )
@@ -48,6 +51,9 @@ MODEL_LABELS = {
     "VG05": ("VG05-age-understood-spoken-ds", VG05),
     "VG06": ("VG06-age-understood-spoken-td", VG06),
     "VG07": ("VG07-age-understood-spoken-ds-re", VG07),
+    "VG08": ("VG08-age-understood-spoken-ds-re-subj", VG08),
+    "VG09": ("VG09-age-understood-spoken-ds-re-subj-uq", VG09),
+    "VG09B": ("VG09B-age-understood-spoken-ds-re-subj-uq-anchored", VG09B),
 }
 
 
@@ -79,6 +85,10 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
     if getattr(d, "tau_u_sigma", None) is not None:
         priors["tau_u"] = pz.HalfNormal(sigma=d.tau_u_sigma)
         priors["tau_q"] = pz.HalfNormal(sigma=d.tau_q_sigma)
+    if getattr(d, "use_subject_re_u", False):
+        priors["tau_subj_u"] = pz.HalfNormal(sigma=d.tau_subj_u_sigma)
+    if getattr(d, "use_subject_re_q", False):
+        priors["tau_subj_q"] = pz.HalfNormal(sigma=d.tau_subj_q_sigma)
     return priors
 
 

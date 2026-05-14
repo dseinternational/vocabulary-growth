@@ -77,7 +77,8 @@ def prepare_bivariate_re_data(
 ):
     """Load and prepare data for a bivariate model with study random effects."""
     columns = ["age", "understood", "spoken", "study"]
-    if definition.use_subject_re_u:
+    use_subject_codes = definition.use_subject_re_u or definition.use_subject_re_q
+    if use_subject_codes:
         columns = columns + ["subject_id"]
 
     df = vocab_data_utils.load_data(
@@ -101,7 +102,7 @@ def prepare_bivariate_re_data(
 
     # Create integer subject codes (unique across studies)
     n_subjects: int | None = None
-    if definition.use_subject_re_u:
+    if use_subject_codes:
         subj_keys = (
             analysis_df["study"].astype(str)
             + "::"

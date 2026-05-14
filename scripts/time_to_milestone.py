@@ -50,6 +50,9 @@ BIVARIATE = {
     "VG05": ("VG05-age-understood-spoken-ds", "DS"),
     "VG06": ("VG06-age-understood-spoken-td", "TD"),
     "VG07": ("VG07-age-understood-spoken-ds-re", "DS"),
+    "VG08": ("VG08-age-understood-spoken-ds-re-subj", "DS"),
+    "VG09": ("VG09-age-understood-spoken-ds-re-subj-uq", "DS"),
+    "VG09B": ("VG09B-age-understood-spoken-ds-re-subj-uq-anchored", "DS"),
 }
 
 
@@ -174,7 +177,8 @@ def main() -> None:
     merged_df = pd.DataFrame(merged)
     merged_df.to_csv(os.path.join(COMPARE_DIR, "time_to_milestone_all.csv"),
                      index=False)
-    print("Wrote per-model CSV+plot for all 7 models.")
+    n_models = len(UNIVARIATE) + len(BIVARIATE)
+    print(f"Wrote per-model CSV+plot for {n_models} models.")
     print(f"Combined: {os.path.join(COMPARE_DIR, 'time_to_milestone_all.csv')}")
 
 

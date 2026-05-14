@@ -40,6 +40,9 @@ MODELS = [
     ("VG05", "VG05-age-understood-spoken-ds"),
     ("VG06", "VG06-age-understood-spoken-td"),
     ("VG07", "VG07-age-understood-spoken-ds-re"),
+    ("VG08", "VG08-age-understood-spoken-ds-re-subj"),
+    ("VG09", "VG09-age-understood-spoken-ds-re-subj-uq"),
+    ("VG09B", "VG09B-age-understood-spoken-ds-re-subj-uq-anchored"),
 ]
 
 LOG_DIR = "output/logs"
@@ -63,7 +66,7 @@ def parse_log_timings(log_path: str) -> dict[str, Any]:
     # plain ASCII `|` does not appear). Accept either form.
     per_model = {}
     rows = re.findall(
-        r"[│|]\s*(vg0[1-9])\s*[│|]\s*([\dhms\. ]+?)\s*[│|]\s*([\d\.]+%)\s*[│|]",
+        r"[│|]\s*(vg0[1-9][a-z]?)\s*[│|]\s*([\dhms\. ]+?)\s*[│|]\s*([\d\.]+%)\s*[│|]",
         text,
     )
     for model_id, wall, pct in rows:
