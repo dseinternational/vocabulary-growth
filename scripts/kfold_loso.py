@@ -39,12 +39,12 @@ import shutil
 import time
 from dataclasses import dataclass
 
-import arviz as az
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pandas as pd
+import xarray as xr
 from scipy.special import logsumexp
 from scipy.stats import betabinom
 
@@ -145,7 +145,7 @@ def fit_fold(
     analysis_df_with_holdout: pd.DataFrame,
     sampling_cfg: sampling.SamplingConfiguration,
     label: str,
-) -> az.InferenceData:
+) -> xr.DataTree:
     """Run prepare → priors → build → sample on a holdout-marked analysis frame."""
     n = len(analysis_df_with_holdout)
     has_u = analysis_df_with_holdout["understood"].notna().values
@@ -188,7 +188,7 @@ def fit_fold(
 
 def holdout_subject_elpds(
     analysis_df: pd.DataFrame,
-    trace: az.InferenceData,
+    trace: xr.DataTree,
     holdout_subject_codes: np.ndarray,
 ) -> dict[int, float]:
     """Marginal predictive log-density per held-out subject."""

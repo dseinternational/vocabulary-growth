@@ -91,8 +91,8 @@ def load_analysis_frame() -> pd.DataFrame:
 # ============================================================
 
 def aggregate_to_subject(
-    idata: az.InferenceData, analysis_df: pd.DataFrame
-) -> az.InferenceData:
+    idata: xr.DataTree, analysis_df: pd.DataFrame
+) -> xr.DataTree:
     ll = idata.log_likelihood
     has_u = analysis_df["understood"].notna().values
     has_s = analysis_df["spoken"].notna().values
@@ -112,13 +112,13 @@ def aggregate_to_subject(
         dims=("chain", "draw", "subject_id"),
         coords={"subject_id": np.arange(n_subjects)},
     )
-    return az.InferenceData(
-        posterior=idata.posterior,
-        log_likelihood=xr.Dataset({"y_subj": obs_ll}),
-        observed_data=xr.Dataset(
+    return xr.DataTree.from_dict({
+        "posterior": idata.posterior,
+        "log_likelihood": xr.Dataset({"y_subj": obs_ll}),
+        "observed_data": xr.Dataset(
             {"y_subj": xr.DataArray(np.zeros(n_subjects), dims=("subject_id",))}
         ),
-    )
+    })
 
 
 # ============================================================
@@ -126,7 +126,7 @@ def aggregate_to_subject(
 # ============================================================
 
 def marginal_subject_loglik(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     analysis_df: pd.DataFrame,
     spec: ModelSpec,
     n_re_samples: int = 500,
@@ -242,12 +242,12 @@ def marginal_subject_loglik(
 
 
 def to_marginal_idata(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     analysis_df: pd.DataFrame,
     spec: ModelSpec,
     n_re_samples: int = 500,
     thin: int = 36,
-) -> az.InferenceData:
+) -> xr.DataTree:
     print(
         f"  computing marginal subject log-lik for {spec.short} "
         f"(thin={thin}, K={n_re_samples}) …",
@@ -258,9 +258,9 @@ def to_marginal_idata(
     )
     n_chain, n_draw, n_subjects = ll.shape
     post_thin = idata.posterior.isel(draw=slice(0, None, thin))
-    return az.InferenceData(
-        posterior=post_thin,
-        log_likelihood=xr.Dataset(
+    return xr.DataTree.from_dict({
+        "posterior": post_thin,
+        "log_likelihood": xr.Dataset(
             {
                 "y_subj": xr.DataArray(
                     ll,
@@ -269,10 +269,10 @@ def to_marginal_idata(
                 )
             }
         ),
-        observed_data=xr.Dataset(
+        "observed_data": xr.Dataset(
             {"y_subj": xr.DataArray(np.zeros(n_subjects), dims=("subject_id",))}
         ),
-    )
+    })
 
 
 def _summary_row(label: str, loo) -> dict:
@@ -294,8 +294,8 @@ def main() -> None:
     n_subjects = analysis_df["subject_code"].nunique()
     print(f"  {len(analysis_df)} observations / {n_subjects} subjects\n")
 
-    conditional_idatas: dict[str, az.InferenceData] = {}
-    marginal_idatas: dict[str, az.InferenceData] = {}
+    conditional_idatas: dict[str, xr.DataTree] = {}
+    marginal_idatas: dict[str, xr.DataTree] = {}
     summary_rows: list[dict] = []
 
     for spec in SPECS:
@@ -330,12 +330,12 @@ def main() -> None:
     # Pairwise comparisons.
     if len(conditional_idatas) >= 2:
         print("\n=== Conditional comparison ===")
-        df_cond = az.compare(conditional_idatas, ic="loo", var_name="y_subj")
+        df_cond = az.compare(conditional_idatas, var_name="y_subj")
         print(df_cond.to_string())
         df_cond.to_csv(os.path.join(OUT_DIR, "loso_compare_v2_conditional.csv"))
 
         print("\n=== Marginal comparison (honest one) ===")
-        df_marg = az.compare(marginal_idatas, ic="loo", var_name="y_subj")
+        df_marg = az.compare(marginal_idatas, var_name="y_subj")
         print(df_marg.to_string())
         df_marg.to_csv(os.path.join(OUT_DIR, "loso_compare_v2_marginal.csv"))
 

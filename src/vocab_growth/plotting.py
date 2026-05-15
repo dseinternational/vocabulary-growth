@@ -161,7 +161,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
         pmf_bins = counts / counts.sum()
 
         med = np.median(draws)
-        hdi = az.hdi(draws, hdi_prob=hdi_prob)  # (lo, hi)
+        hdi = az.hdi(draws, prob=hdi_prob)  # (lo, hi)
 
         if eti_prob is not None:
             eti_lo, eti_hi = np.quantile(draws, [q_lo, q_hi])
@@ -226,7 +226,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
         for j, age in enumerate(X_query):
             draws = y_query[j, :].astype(int)
             med = np.median(draws)
-            hdi_bounds = az.hdi(draws, hdi_prob=hdi_prob)
+            hdi_bounds = az.hdi(draws, prob=hdi_prob)
             row = {"age_months": age, "median": med, "hdi_lo": hdi_bounds[0], "hdi_hi": hdi_bounds[1]}
             if eti_prob is not None:
                 row["eti_lo"], row["eti_hi"] = np.quantile(draws, [q_lo, q_hi])
@@ -692,9 +692,9 @@ def plot_expected_learning_rate(
 
     # Posterior summaries across draws, per age point
     median_rate = np.median(rate, axis=0)
-    hdi_rate = az.hdi(rate, hdi_prob=hdi_prob)
-    hdi_75_rate = az.hdi(rate, hdi_prob=0.75)
-    hdi_50_rate = az.hdi(rate, hdi_prob=0.50)
+    hdi_rate = az.hdi(rate, prob=hdi_prob)
+    hdi_75_rate = az.hdi(rate, prob=0.75)
+    hdi_50_rate = az.hdi(rate, prob=0.50)
 
     # Optional smoothing for display
     median_rate_plot = _maybe_savgol(

@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import preliz as pz
 import pymc as pm
-from arviz import InferenceData
+import xarray as xr
 from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
@@ -713,7 +713,7 @@ def _extract_posterior_predictive(trace, name, dim_name):
     )
 
 
-def extract_model_samples(trace: InferenceData) -> BivariateModelSamples:
+def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     """Extract model samples into a structured format for plotting and reporting."""
 
     # Understood
@@ -926,7 +926,11 @@ def diagnostics(context: BivariateContext):
         var.name for var in context.model.unobserved_RVs if var.size.eval() <= 2
     ]
     diagnostics_df = az.summary(
-        context.trace, var_names=var_names, round_to=3, hdi_prob=context.reporting.hdi
+        context.trace,
+        var_names=var_names,
+        round_to=3,
+        ci_prob=context.reporting.hdi,
+        ci_kind="hdi",
     )
 
     diagnostics_df.to_csv(
@@ -1157,7 +1161,7 @@ def posterior_summary(context: BivariateContext):
 
     # Production rate summary
     q_query_median = np.median(samples.q_query, axis=1)
-    q_query_hdi = az.hdi(samples.q_query.T, hdi_prob=hdi_prob)
+    q_query_hdi = az.hdi(samples.q_query.T, prob=hdi_prob)
 
     summary_q = pd.DataFrame(
         {
@@ -1258,13 +1262,13 @@ def plot_understood_spoken_trajectory_hdi(
 
     # Understood HDI bands
     y_u_median = np.median(samples.y_u_plot, axis=1)
-    y_u_hdi_75 = az.hdi(samples.y_u_plot.T, hdi_prob=0.75)
-    y_u_hdi_50 = az.hdi(samples.y_u_plot.T, hdi_prob=0.50)
+    y_u_hdi_75 = az.hdi(samples.y_u_plot.T, prob=0.75)
+    y_u_hdi_50 = az.hdi(samples.y_u_plot.T, prob=0.50)
 
     # Spoken HDI bands
     y_s_median = np.median(samples.y_s_plot, axis=1)
-    y_s_hdi_75 = az.hdi(samples.y_s_plot.T, hdi_prob=0.75)
-    y_s_hdi_50 = az.hdi(samples.y_s_plot.T, hdi_prob=0.50)
+    y_s_hdi_75 = az.hdi(samples.y_s_plot.T, prob=0.75)
+    y_s_hdi_50 = az.hdi(samples.y_s_plot.T, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1314,9 +1318,9 @@ def plot_production_rate(
     q_plot = samples.q_plot
 
     q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot.T, hdi_prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot.T, hdi_prob=0.75)
-    q_hdi_50 = az.hdi(q_plot.T, hdi_prob=0.50)
+    q_hdi = az.hdi(q_plot.T, prob=hdi_prob)
+    q_hdi_75 = az.hdi(q_plot.T, prob=0.75)
+    q_hdi_50 = az.hdi(q_plot.T, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1379,9 +1383,9 @@ def plot_production_rate_by_understood(
 
     x_words = np.median(p_u_plot, axis=1) * n_trials
     q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot.T, hdi_prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot.T, hdi_prob=0.75)
-    q_hdi_50 = az.hdi(q_plot.T, hdi_prob=0.50)
+    q_hdi = az.hdi(q_plot.T, prob=hdi_prob)
+    q_hdi_75 = az.hdi(q_plot.T, prob=0.75)
+    q_hdi_50 = az.hdi(q_plot.T, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1459,8 +1463,8 @@ def plot_production_rate_predictive(
             continue
         ratio_i = y_s[i, mask] / y_u[i, mask]
         ratio_median[i] = np.median(ratio_i)
-        ratio_hdi_75[i] = az.hdi(ratio_i, hdi_prob=0.75)
-        ratio_hdi_50[i] = az.hdi(ratio_i, hdi_prob=0.50)
+        ratio_hdi_75[i] = az.hdi(ratio_i, prob=0.75)
+        ratio_hdi_50[i] = az.hdi(ratio_i, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1514,8 +1518,8 @@ def plot_comprehension_production_gap(
     gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
 
     gap_median = np.median(gap, axis=1)
-    gap_hdi = az.hdi(gap.T, hdi_prob=hdi_prob)
-    gap_hdi_50 = az.hdi(gap.T, hdi_prob=0.50)
+    gap_hdi = az.hdi(gap.T, prob=hdi_prob)
+    gap_hdi_50 = az.hdi(gap.T, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 

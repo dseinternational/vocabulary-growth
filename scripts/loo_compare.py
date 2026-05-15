@@ -30,6 +30,7 @@ from dataclasses import dataclass
 import arviz as az
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 MODELS_DIR = "output/models"
 OUT_DIR = "output/comparisons"
@@ -80,7 +81,7 @@ def _loo_summary_row(label: str, loo) -> dict:
     }
 
 
-def _attach_joint_log_likelihood(idata: az.InferenceData) -> None:
+def _attach_joint_log_likelihood(idata: xr.DataTree) -> None:
     """For bivariate traces with `y_u_obs` and `y_s_obs`, attach a
     combined `y_joint` log-likelihood whose per-observation entry is the
     concatenation across the two outcomes. Required so az.loo can treat
@@ -99,7 +100,6 @@ def _attach_joint_log_likelihood(idata: az.InferenceData) -> None:
     s_renamed = s.rename({s_dim: "obs_joint"}).assign_coords(
         obs_joint=np.arange(u.sizes[u_dim], u.sizes[u_dim] + s.sizes[s_dim])
     )
-    import xarray as xr
     joint = xr.concat([u_renamed, s_renamed], dim="obs_joint")
     idata.log_likelihood = ll.assign({"y_joint": joint})
 
@@ -148,7 +148,7 @@ def per_model_loo() -> dict[str, list[dict]]:
 
 def compare_pair(
     tag: str,
-    members: list[tuple[str, az.InferenceData]],
+    members: list[tuple[str, xr.DataTree]],
     *,
     var_name: str | None = None,
 ) -> None:
