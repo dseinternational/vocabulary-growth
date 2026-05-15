@@ -29,13 +29,15 @@ from __future__ import annotations
 
 import os
 
-import arviz as az
 import numpy as np
-import pandas as pd
-
 from compare_ds_td_latency import (
-    DS_DIR, TD_DIR, N_TRIALS_DS, N_TRIALS_TD, N_GRID,
-    first_crossing_age, evaluate_at_ages, load_population_trajectory,
+    DS_DIR,
+    N_TRIALS_DS,
+    N_TRIALS_TD,
+    TD_DIR,
+    evaluate_at_ages,
+    first_crossing_age,
+    load_population_trajectory,
 )
 
 
@@ -86,7 +88,7 @@ def check_per_draw_roundtrip(ages: np.ndarray, U: np.ndarray, S: np.ndarray,
         print(f"    N={N:6.1f}  max |U(a_U)-N| = {dev_U:.2e}   "
               f"max |S(a_S)-N| = {dev_S:.2e}")
     if max_dev_U < 1e-6 and max_dev_S < 1e-6:
-        print(f"    PASS — crossings recover N to machine precision.\n")
+        print("    PASS — crossings recover N to machine precision.\n")
     else:
         print(f"    WARN — devs U={max_dev_U:.3e} S={max_dev_S:.3e}\n")
 

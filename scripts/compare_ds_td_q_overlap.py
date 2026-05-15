@@ -29,18 +29,21 @@ from __future__ import annotations
 
 import os
 
-import arviz as az
 import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.stats import gaussian_kde
-
 from compare_ds_td_latency import (
-    DS_DIR, TD_DIR, N_TRIALS_DS, N_TRIALS_TD,
-    first_crossing_age, evaluate_at_ages, hdi_from_samples,
-    load_population_trajectory, summarise_per_N,
+    DS_DIR,
+    N_TRIALS_DS,
+    N_TRIALS_TD,
+    TD_DIR,
+    evaluate_at_ages,
+    first_crossing_age,
+    load_population_trajectory,
+    summarise_per_N,
 )
+from scipy.stats import gaussian_kde
 
 OUT_DIR = "output/comparisons"
 
@@ -228,7 +231,7 @@ def main() -> None:
     if len(N_SLICES) == 1:
         axes = [axes]
     q_grid = np.linspace(0.0, 1.0, 401)
-    for ax, N in zip(axes, N_SLICES):
+    for ax, N in zip(axes, N_SLICES, strict=True):
         i = int(np.argmin(np.abs(N_GRID_Q - N)))
         for samples, colour, label in [
             (qU_ds[:, i], plot_styles.COLOUR_BLUE, "DS"),

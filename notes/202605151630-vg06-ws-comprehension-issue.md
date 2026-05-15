@@ -85,7 +85,7 @@ A form for which U==S is the norm rather than the exception cannot contribute in
 
 ## Artefacts produced during this work
 
-- `notes/202605151545-vg09b-reply-to-chris-draft.{md,docx}` — analysis writeup using corrected VG06 output.
+- `notes/202605151545-vg09b-reply-to-chris-draft.{md,docx}` — analysis write-up using corrected VG06 output.
 - `output/comparisons/ds_td_joint_trajectory.{png,svg}` — Figure 22 side-by-side, regenerated.
 - `output/comparisons/ds_td_comprehension_production_gap.{png,svg}` — Figure 27 side-by-side, regenerated.
 - `output/comparisons/ds_td_learn_to_say_latency.{png,svg}` — latency analysis, regenerated.
