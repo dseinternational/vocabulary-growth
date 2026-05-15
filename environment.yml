@@ -2,18 +2,18 @@ name: dse-vocab-growth
 channels:
   - conda-forge
 dependencies:
-  - python=3.14
+  - python=3.14.4
   - arviz>=0.23.4,<1.0
   - graphviz>=14.1.2
   - jax
-  - numba>=0.65.0
-  - numpy>=2.4.3
-  - numpyro>=0.20.1
+  - numba>=0.65.1
+  - numpy>=2.4.4
+  - numpyro>=0.21.0
   - nutpie>=0.16.8
   - pandas-stubs
-  - pandas>=3.0.1
+  - pandas>=3.0.3
+  - preliz
   - pymc>=5.28.4,<6.0
-  - pytorch>=2.10.0
   - scikit-learn>=1.8.0
   - xarray>=2026.4.0
   - pip
@@ -22,19 +22,18 @@ dependencies:
       - azure-storage-blob
       - duckdb>=1.5.2
       - hatch
-      - ipython>=9.11.0
+      - ipython>=9.13.0
       - ipywidgets>=8.1.8
       - jupytext
-      - matplotlib>=3.10.8
-      - notebook>=7.5.5
-      - orjson>=3.11.8
-      - preliz
+      - matplotlib>=3.10.9
+      - notebook>=7.5.6
+      - orjson>=3.11.9
       - pytest>=9.0.3
       - rich>=15.0.0
-      - ruff>=0.15.11
+      - ruff>=0.15.12
       - scipy-stubs
       - scipy>=1.17.1
       - seaborn>=0.13.2
-      - setuptools>=81.0.0
+      - setuptools>=82.0.1
       - -e ../research/src/python #  for now, for local development
       - -e ./
