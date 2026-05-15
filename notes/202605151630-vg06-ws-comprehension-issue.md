@@ -8,25 +8,25 @@ Date: 2026-05-15
 
 While reviewing VG09B output against VG06 for a DS-vs-TD comparison, we discovered that the `comprehension` column in Wordbank's CDI: Words & Sentences (WS) data is a production proxy, not an independent measurement. Including WS in models that learn a comprehension trajectory (VG04, VG06) had been telling those models, by data convention, that "U = S" for the majority of TD rows above 18 months. This invalidated all prior VG06-based claims about TD comprehension trajectory and the comprehension–production gap above ~18 months.
 
-VG06 has been refit with WS excluded; VG04 has *not* yet been refit. A careful review of the data handling code and a higher-density VG06 fit are the planned next steps.
+VG06 has been refit with WS excluded; VG04 has _not_ yet been refit. A careful review of the data handling code and a higher-density VG06 fit are the planned next steps.
 
 ## Empirical evidence
 
 Across the full English Wordbank export (`data/wordbank_administration_data_en.csv`, 39,551 rows), we counted rows by form where `comprehension == production`:
 
-| Form | n | U == S | U > S | U < S | Verdict |
-| --- | --- | --- | --- | --- | --- |
-| WG | 5,123 | 112 (2.2%) | 5,011 (97.8%) | 0 | **bivariate** |
-| Oxford CDI | 1,210 | 7 (0.6%) | 1,203 (99.4%) | 0 | **bivariate** |
-| WGShort | 547 | 22 (4.0%) | 525 (96.0%) | 0 | **bivariate** |
-| **WS** | **10,689** | **10,681 (99.93%)** | **8 (0.07%)** | 0 | **production-only** |
-| WSShort | 63 | 63 (100%) | 0 | 0 | production-only |
-| TEDS Twos | 11,129 | 11,129 (100%) | 0 | 0 | production-only |
-| TEDS Threes | 10,790 | 10,790 (100%) | 0 | 0 | production-only |
+| Form        | n          | U == S              | U > S         | U < S | Verdict             |
+| ----------- | ---------- | ------------------- | ------------- | ----- | ------------------- |
+| WG          | 5,123      | 112 (2.2%)          | 5,011 (97.8%) | 0     | **bivariate**       |
+| Oxford CDI  | 1,210      | 7 (0.6%)            | 1,203 (99.4%) | 0     | **bivariate**       |
+| WGShort     | 547        | 22 (4.0%)           | 525 (96.0%)   | 0     | **bivariate**       |
+| **WS**      | **10,689** | **10,681 (99.93%)** | **8 (0.07%)** | 0     | **production-only** |
+| WSShort     | 63         | 63 (100%)           | 0             | 0     | production-only     |
+| TEDS Twos   | 11,129     | 11,129 (100%)       | 0             | 0     | production-only     |
+| TEDS Threes | 10,790     | 10,790 (100%)       | 0             | 0     | production-only     |
 
 The 8 WS exceptions are all from a single dataset (`Armon-Lotem`, a Hebrew/bilingual-acquisition lab) and look like a non-standard administration. They do not represent genuine WS bivariate measurement.
 
-This is consistent with the underlying instrument design: CDI: Words & Sentences is canonically a *production-only* form. The Wordbank schema appears to have populated `comprehension` with the production value as a placeholder so the column is non-null for every row.
+This is consistent with the underlying instrument design: CDI: Words & Sentences is canonically a _production-only_ form. The Wordbank schema appears to have populated `comprehension` with the production value as a placeholder so the column is non-null for every row.
 
 ## Impact on prior VG06 runs
 
@@ -49,15 +49,15 @@ All downstream DS-vs-TD comparison scripts have been rerun (latency, q-overlap, 
 
 ## Models requiring attention
 
-| Model | Outcome(s) | Affected by WS issue? | Status |
-| --- | --- | --- | --- |
-| VG01 | DS spoken | n/a (DS) | unaffected |
-| VG02 | DS understood | n/a (DS) | unaffected |
-| VG03 | TD spoken | no — WS production is valid | data filter now narrower; refit optional, not corrective |
-| **VG04** | **TD understood** | **yes** | **needs refit** — data filter is now correct but model has not been re-run |
-| VG05 | DS bivariate | n/a (DS) | unaffected |
-| **VG06** | **TD bivariate** | **yes** | **refit completed 2026-05-15** |
-| VG07–VG09 | DS bivariate | n/a (DS) | unaffected |
+| Model     | Outcome(s)        | Affected by WS issue?       | Status                                                                     |
+| --------- | ----------------- | --------------------------- | -------------------------------------------------------------------------- |
+| VG01      | DS spoken         | n/a (DS)                    | unaffected                                                                 |
+| VG02      | DS understood     | n/a (DS)                    | unaffected                                                                 |
+| VG03      | TD spoken         | no — WS production is valid | data filter now narrower; refit optional, not corrective                   |
+| **VG04**  | **TD understood** | **yes**                     | **needs refit** — data filter is now correct but model has not been re-run |
+| VG05      | DS bivariate      | n/a (DS)                    | unaffected                                                                 |
+| **VG06**  | **TD bivariate**  | **yes**                     | **refit completed 2026-05-15**                                             |
+| VG07–VG09 | DS bivariate      | n/a (DS)                    | unaffected                                                                 |
 
 ## Reproducing the discovery
 
