@@ -82,7 +82,7 @@ def load_analysis_frame() -> pd.DataFrame:
 # Conditional LOSO — sum per-obs log_likelihoods within subjects
 # ============================================================
 
-def aggregate_to_subject(idata: az.InferenceData, analysis_df: pd.DataFrame) -> az.InferenceData:
+def aggregate_to_subject(idata: xr.DataTree, analysis_df: pd.DataFrame) -> xr.DataTree:
     """Build a new InferenceData whose log_likelihood is keyed by subject_id.
 
     Sums per-observation log-likelihoods across both outcomes within each
@@ -113,11 +113,11 @@ def aggregate_to_subject(idata: az.InferenceData, analysis_df: pd.DataFrame) -> 
         {"y_subj": xr.DataArray(np.zeros(n_subjects), dims=("subject_id",))}
     )
 
-    return az.InferenceData(
-        posterior=idata.posterior,
-        log_likelihood=log_lik_ds,
-        observed_data=observed,
-    )
+    return xr.DataTree.from_dict({
+        "posterior": idata.posterior,
+        "log_likelihood": log_lik_ds,
+        "observed_data": observed,
+    })
 
 
 # ============================================================
@@ -125,7 +125,7 @@ def aggregate_to_subject(idata: az.InferenceData, analysis_df: pd.DataFrame) -> 
 # ============================================================
 
 def marginal_subject_loglik_vg08(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     analysis_df: pd.DataFrame,
     n_re_samples: int = 500,
     thin: int = 36,
@@ -252,11 +252,11 @@ def marginal_subject_loglik_vg08(
 
 
 def vg08_marginal_idata(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     analysis_df: pd.DataFrame,
     n_re_samples: int = 500,
     thin: int = 36,
-) -> az.InferenceData:
+) -> xr.DataTree:
     print(
         f"  computing marginal subject log-likelihoods "
         f"(thin={thin}, K={n_re_samples}) …",
@@ -278,11 +278,11 @@ def vg08_marginal_idata(
     observed = xr.Dataset(
         {"y_subj": xr.DataArray(np.zeros(n_subjects), dims=("subject_id",))}
     )
-    return az.InferenceData(
-        posterior=post_thin,
-        log_likelihood=log_lik_ds,
-        observed_data=observed,
-    )
+    return xr.DataTree.from_dict({
+        "posterior": post_thin,
+        "log_likelihood": log_lik_ds,
+        "observed_data": observed,
+    })
 
 
 # ============================================================
@@ -343,7 +343,6 @@ def main() -> None:
     print("\n=== az.compare on LOSO (subject-level) ===")
     df_cond = az.compare(
         {"VG07": vg07_subj, "VG08_conditional": vg08_cond},
-        ic="loo",
         var_name="y_subj",
     )
     print("Conditional comparison:")
@@ -352,7 +351,6 @@ def main() -> None:
 
     df_marg = az.compare(
         {"VG07": vg07_subj, "VG08_marginal": vg08_marg},
-        ic="loo",
         var_name="y_subj",
     )
     print("\nMarginal comparison (the honest one):")

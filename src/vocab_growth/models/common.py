@@ -29,7 +29,8 @@ import numpy as np
 import pandas as pd
 import preliz as pz
 import pymc as pm
-from arviz import ELPDData, InferenceData
+import xarray as xr
+from arviz import ELPDData
 from matplotlib.figure import Figure
 from preliz.distributions.distributions import Continuous
 
@@ -150,8 +151,8 @@ class ModelFitContext(Generic[C, S]):
     _model_config: C | None = None
     _model: pm.Model | None = None
     _model_variables: dict | None = None
-    _prior_samples: InferenceData | None = None
-    _trace: InferenceData | None = None
+    _prior_samples: xr.DataTree | None = None
+    _trace: xr.DataTree | None = None
     _loocv: ELPDData | dict[str, ELPDData] | None = None
     _model_samples: S | None = None
 
@@ -206,20 +207,20 @@ class ModelFitContext(Generic[C, S]):
             raise ValueError("Model variables have not been set in the context.")
         return self._model_variables
 
-    def set_prior_samples(self, prior_samples: InferenceData):
+    def set_prior_samples(self, prior_samples: xr.DataTree):
         self._prior_samples = prior_samples
 
     @property
-    def prior_samples(self) -> InferenceData:
+    def prior_samples(self) -> xr.DataTree:
         if self._prior_samples is None:
             raise ValueError("Prior samples have not been set in the context.")
         return self._prior_samples
 
-    def set_trace(self, trace: InferenceData):
+    def set_trace(self, trace: xr.DataTree):
         self._trace = trace
 
     @property
-    def trace(self) -> InferenceData:
+    def trace(self) -> xr.DataTree:
         if self._trace is None:
             raise ValueError("Trace has not been set in the context.")
         return self._trace
@@ -299,7 +300,7 @@ def get_hsgp_hyperparams(
     return L, M
 
 
-def extract_model_samples(trace: InferenceData) -> ModelSamples:
+def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
     """
     Extract model samples into a structured format for plotting and reporting.
     """
@@ -789,7 +790,11 @@ def diagnostics(context: ModelFitContext):
         var.name for var in context.model.unobserved_RVs if var.size.eval() <= 2
     ]
     diagnostics_df = az.summary(
-        context.trace, var_names=var_names, round_to=3, hdi_prob=context.reporting.hdi
+        context.trace,
+        var_names=var_names,
+        round_to=3,
+        ci_prob=context.reporting.hdi,
+        ci_kind="hdi",
     )
 
     diagnostics_df.to_csv(

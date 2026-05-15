@@ -42,7 +42,7 @@ def study_labels() -> list[str]:
 
 
 def _summary_row(label: str, samples: np.ndarray) -> dict:
-    hdi = az.hdi(samples, hdi_prob=HDI_PROB)
+    hdi = az.hdi(samples, prob=HDI_PROB)
     return {
         "parameter": label,
         "mean": float(np.mean(samples)),
@@ -99,7 +99,7 @@ def main() -> None:
         for i in range(len(labels)):
             samples = samples_da.isel(study_id=i).values
             median = np.median(samples)
-            hdi = az.hdi(samples, hdi_prob=HDI_PROB)
+            hdi = az.hdi(samples, prob=HDI_PROB)
             ax.errorbar(
                 median, i,
                 xerr=[[median - hdi[0]], [hdi[1] - median]],
