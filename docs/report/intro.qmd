@@ -23,48 +23,21 @@ At a basic level, general cognitive delays may imply that children with Down syn
 
 The extent to which expressive vocabulary lags behind receptive vocabulary disproportionately compared to typically developing children is not clear, and may depend on how vocabulary is measured, whether gestures are included, the age of the children and how groups are compared [@martingklusekjestigarribiabjLanguageCharacteristicsIndividuals2009; @abbedutoLanguageDevelopmentSyndrome2020]. One recent study involving 27 children with Down syndrome aged 12 to 39 months observed a pattern of spoken words relative to words understood that was similar to typically developing children, but dissimilar to children with Williams syndrome and children with fragile X syndrome [@dsouzaExplainingComprehensionProduction2026]. However, it remains unclear whether this similarity is observed across larger samples, nor if it persists as more vocabulary is learned.
 
-In this report we look at this question with a larger pooled DS dataset (964 observations from 510 children) and the joint understood-and-spoken modelling family developed in [VG05](vg05.qmd)–[VG09](vg09.qmd). The headline DS joint model (VG09) puts the production ratio in DS at roughly half of the production ratio in TD at matched comprehension across most of the relevant range — a typical TD child speaks about half the words they understand at ~120 understood words, while a typical DS child reaches the same milestone at ~226 understood words. The DS/TD ratio at matched comprehension is remarkably constant at around 1.85× across every production-ratio threshold checked between 0.25 and 0.90.
-
-This contrast is more informative than a chronological-age contrast because it removes the trivial component — that DS children typically have smaller vocabularies than TD children at the same chronological age — and exposes the structural feature that the comprehension–production gap in DS is *enlarged* in comprehension terms, not just shifted in months. Both populations converge near $q = 1$ above ~400 understood words. The empirical details are documented in the [matched-comprehension section of the model comparison chapter](model-comparison.qmd#sec-matched-comprehension). The discrepancy between our reading and the D'Souza et al. reading — which is reconcilable on what their statistical test actually tests, but tells a different empirical story on the broader DS-versus-TD comparison — is unpicked in the same chapter and discussed further in the [discussion](discussion.qmd).
+[**TODO**: complete]
 
 ### Rates of word learning
 
 Word learning accelerates rapidly for many typically developing children between the ages of 18 and 24 months. It is unclear whether children with Down syndrome experience a similar acceleration, with some studies observing an acceleration among some children and not others, and any acceleration occurring later than for typically developing children though maybe at a similar mental age [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @zampiniVocabularyDevelopmentChildren2013; @abbedutoLanguageDevelopmentSyndrome2020].
 
-The Bayesian Beta-Binomial model family developed in this report estimates the full posterior distribution of the typical trajectory rather than a single curve, so we can read off both the expected rate of word learning at each age and the uncertainty around it. Under the headline DS model ([VG09](vg09.qmd)), the typical understood vocabulary grows from ~20 words at 12 months to ~89 at 24 months, ~186 at 36 months and ~257 at 48 months — i.e. roughly a fivefold increase between 12 and 24 months, and a further doubling between 24 and 36 months. The typical spoken vocabulary grows more slowly through the early ages (less than 10 words at 24 months) but accelerates from about 36 months and reaches ~390 words by 72 months. The medians under [VG09](vg09.qmd) are still rising at the upper end of the observed age range; the data do not show a plateau in word learning over the ages sampled.
-
-These rates are estimates of the *typical* trajectory — they describe expected within-subject change as a typical DS child ages, after the subject random intercepts in VG08/VG09 absorb the influence of which particular children happen to have been observed repeatedly. Per-child rates of word learning can be considerably faster or slower than the typical rate; the per-model posterior predictive distributions quantify this between-child spread explicitly.
+[**TODO**: complete]
 
 ### Use of gestures and signs
 
-Many children with Down syndrome use gestures and signs alongside, and often before, spoken words. The role of gestures in DS early language development has been studied repeatedly [@galeoteAcquisitionProductiveVocabulary2008; @zampiniVocabularyDevelopmentChildren2013] and clinical practice in many settings encourages the use of signs as a bridge to spoken communication. Within the DS pooled dataset used in this report, the contributing studies vary in whether they recorded gesture/sign vocabulary separately from spoken vocabulary, and gesture-vocabulary counts are not modelled as a distinct outcome in the current family. The "words spoken" outcome therefore reflects the contributing studies' definitions of spoken production; the report should not be read as making any claim about the developmental role of gestures and signs themselves.
-
-This is a deliberate scoping choice rather than a methodological position: the available data do not currently support a third joint outcome (gestures alongside understood and spoken) with anywhere near the coverage needed to fit a model in the same family. Future iterations of the project may revisit this question once the source datasets carry better-harmonised gesture and sign vocabulary information.
+[**TODO**: complete]
 
 ## Study aims and approach
 
-This study describes the development of vocabulary in children with Down syndrome between approximately 12 and 96 months of age, with a focus on producing interpretable statistics that can accurately inform expectations, intervention and teaching practice. Specifically, we set out to:
-
-1. **Estimate the typical trajectory of words understood and words spoken** as a function of age in children with Down syndrome, with credible intervals that reflect the uncertainty about the typical trajectory itself.
-2. **Estimate the relationship between words understood and words spoken**, both as a production ratio $q = p_S / p_U$ that varies with age, and as a comparison against typically developing children at matched levels of comprehension.
-3. **Quantify the variability between individual children** at each age, so that distributional statements — *what fraction of children at age X have at least Y words?* — can be made directly rather than approximated from a point estimate and a standard error.
-4. **Make the analysis fully reproducible and open**, with all model code, data preparation, prior specifications and posterior outputs available in a public repository so that the model family can be re-run, extended, or critiqued independently.
-
-### Data
-
-The Down syndrome analyses use 964 usable observations from 510 unique subjects across ten contributing studies, pooled into a single dataset via the project's data-preparation pipeline. 288 of the 510 subjects contribute more than one observation; the maximum is eight observations on a single subject. The typically developing reference uses a reproducible 10 % sample of the Wordbank corpus [@frankWordbankOpenRepository2017], yielding 1 655 observations spanning ~9–30 months. Data preparation, the per-study harmonisation, and the coverage tables are documented in the [methods chapter](methods.qmd).
-
-### Modelling framework
-
-We use Bayesian inference throughout. Each model is a hierarchical Beta-Binomial with an age-varying dispersion parameter, a logit-scale linear trend, a Hilbert-space Gaussian-process departure from that trend, and (in the most recent models) study-level and subject-level random intercepts. The joint understood-and-spoken models couple the two outcomes through a production-ratio reparameterisation that enforces $p_S \leq p_U$ by construction. The shared model specification is described in the [methods chapter](methods.qmd); the nine specific models in the family are documented in their own chapters ([VG01](vg01.qmd) through [VG09](vg09.qmd)).
-
-### Iterative model development
-
-The model family was developed iteratively, following the Bayesian-workflow framing of @gelmanBayesianWorkflow2020. Each successive model resolves a specific issue exposed by its predecessor: VG07 absorbs systematic between-study differences that produce a Simpson's-paradox artefact in VG02 and VG05; VG08 partitions between-subject heterogeneity out of the residual dispersion; VG09 adds a symmetric subject random intercept on the production ratio after VG08 reveals that production-ratio heterogeneity is the single largest variance component in the family. The iterative resolution of these issues is itself part of the contribution of this report and is documented across the per-model chapters and the [model comparison chapter](model-comparison.qmd).
-
-### Headline recommendation
-
-For Down syndrome reporting we recommend [VG09](vg09.qmd) as the headline joint model — descriptive *and* predictive — supported by the K=5 leave-one-subject-out cross-validation against VG07 and VG08. For typically developing reference quantities we use [VG06](vg06.qmd). The headline findings are summarised in the [discussion chapter](discussion.qmd).
+[**TODO**]
 
 ## Modelling and inference
 
