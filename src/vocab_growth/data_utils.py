@@ -35,6 +35,7 @@ def load_combined_data(max_age_months=None):
             """
             SELECT
                 study,
+                subject_id,
                 sex,
                 age,
                 understood,
@@ -94,7 +95,7 @@ def load_data(
             WHERE typically_developing = true
                 AND age < 31
                 AND health_conditions IS NULL
-                AND (form = 'Oxford CDI' OR form = 'WG' OR form = 'WS')
+                AND (form = 'Oxford CDI' OR form = 'WG')
             """
             )
             .df()

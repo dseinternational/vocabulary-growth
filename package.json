@@ -14,9 +14,13 @@
   "author": "Down Syndrome Education International",
   "private": true,
   "devDependencies": {
-    "cspell": "10.0.0"
+    "@cspell/dict-it-it": "3.1.6",
+    "cspell": "10.0.0",
+    "prettier": "3.8.3"
   },
   "scripts": {
-    "spellcheck": "cspell --show-suggestions --show-context \"**/*.md\" \"docs/**/*.qmd\""
+    "spellcheck": "cspell --show-suggestions --show-context \"**/*.md\" \"docs/**/*.qmd\"",
+    "format": "prettier --write \"**/*.md\"",
+    "format:check": "prettier --check \"**/*.md\""
   }
 }
