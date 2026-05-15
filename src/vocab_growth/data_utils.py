@@ -95,7 +95,7 @@ def load_data(
             WHERE typically_developing = true
                 AND age < 31
                 AND health_conditions IS NULL
-                AND (form = 'Oxford CDI' OR form = 'WG' OR form = 'WS')
+                AND (form = 'Oxford CDI' OR form = 'WG')
             """
             )
             .df()
