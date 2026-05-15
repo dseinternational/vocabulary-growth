@@ -806,12 +806,20 @@ def diagnostics(context: ModelFitContext):
 
     # Kernel density estimates (KDE) of the joint posterior, and marginals
 
-    plot_diagnostics_mcmc.plot_kde_pair(
-        context.trace,
-        var_names=var_names,
-        output_dir=context.reporting.output_dir,
-        filename="pair_plot",
-    )
+    max_subplots = az.rcParams.get("plot.max_subplots")
+    pair_plot_rc: dict[str, int] = {}
+    if isinstance(max_subplots, int):
+        required_subplots = len(var_names) ** 2
+        if required_subplots > max_subplots:
+            pair_plot_rc["plot.max_subplots"] = required_subplots
+
+    with az.rc_context(pair_plot_rc):
+        plot_diagnostics_mcmc.plot_kde_pair(
+            context.trace,
+            var_names=var_names,
+            output_dir=context.reporting.output_dir,
+            filename="pair_plot",
+        )
     context.plots["pair_plot"] = plt.gcf()
     plt.close()
 
