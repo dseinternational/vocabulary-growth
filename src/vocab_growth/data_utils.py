@@ -13,6 +13,12 @@ from vocab_growth.models.definitions import Population
 
 VOCABULARY_DATA_PATH = os.path.join(local_env.DATA_DIR, "vocabulary.duckdb")
 
+TD_BIVARIATE_FORMS = ("Oxford CDI", "WG")
+"""Wordbank TD forms with independent comprehension and production measures."""
+
+TD_SPOKEN_ONLY_FORMS = ("WS",)
+"""Wordbank TD forms that contribute production observations only."""
+
 
 def load_combined_data(max_age_months=None):
     """
@@ -79,7 +85,19 @@ def load_data(
         df = load_combined_data()
         return df[columns]
 
-    # Typically developing — query wordbank_child directly
+    # Typically developing — query wordbank_child directly.
+    #
+    # Wordbank's CDI: Words & Sentences (WS) rows contain valid production
+    # counts, but their comprehension column is a production proxy. Keep WG
+    # and Oxford CDI as bivariate observations, and include WS only when the
+    # requested model can use spoken observations.
+    needs_understood = "understood" in columns
+    needs_spoken = "spoken" in columns
+
+    td_forms = list(TD_BIVARIATE_FORMS)
+    if needs_spoken or not needs_understood:
+        td_forms.extend(TD_SPOKEN_ONLY_FORMS)
+
     with duckdb.connect(VOCABULARY_DATA_PATH) as con:
         td_df = (
             con.execute(
@@ -87,7 +105,10 @@ def load_data(
             SELECT
                 form,
                 age,
-                comprehension                      as understood,
+                CASE
+                    WHEN form IN ('Oxford CDI', 'WG') THEN comprehension
+                    ELSE NULL
+                END                                as understood,
                 production                         as spoken,
                 typically_developing,
                 health_conditions
@@ -95,8 +116,9 @@ def load_data(
             WHERE typically_developing = true
                 AND age < 31
                 AND health_conditions IS NULL
-                AND (form = 'Oxford CDI' OR form = 'WG')
-            """
+                AND form IN $1
+            """,
+                [td_forms],
             )
             .df()
         )
