@@ -7,33 +7,54 @@ import arviz as az
 import numpy as np
 
 
-def pair_plot_rc_params(trace, var_names: list[str]) -> dict[str, int]:
-    """Return temporary rcParams needed for plotting all pair-plot panels."""
+def capped_plot_var_names(
+    trace,
+    var_names: list[str],
+    *,
+    squared: bool = False,
+) -> list[str]:
+    """Return the first variables that fit within ArviZ's subplot limit."""
     max_subplots = az.rcParams.get("plot.max_subplots")
     if not isinstance(max_subplots, int):
-        return {}
+        return list(var_names)
 
-    required_subplots = pair_plot_required_subplots(trace, var_names)
-    if required_subplots <= max_subplots:
-        return {}
+    max_plot_items = max_subplots
+    if squared:
+        max_plot_items = int(np.floor(np.sqrt(max_subplots)))
 
-    return {"plot.max_subplots": required_subplots}
+    selected_var_names: list[str] = []
+    selected_plot_items = 0
+    for var_name in var_names:
+        plot_items = plot_variable_count(trace, var_name)
+        if selected_plot_items + plot_items <= max_plot_items:
+            selected_var_names.append(var_name)
+            selected_plot_items += plot_items
+
+    return selected_var_names
 
 
-def pair_plot_required_subplots(trace, var_names: list[str]) -> int:
+def plot_required_subplots(
+    trace,
+    var_names: list[str],
+    *,
+    squared: bool = False,
+) -> int:
+    n_plot_items = sum(plot_variable_count(trace, var_name) for var_name in var_names)
+    if squared:
+        return n_plot_items**2
+    return n_plot_items
+
+
+def plot_variable_count(trace, var_name: str) -> int:
     posterior = trace.posterior
     if hasattr(posterior, "dataset"):
         posterior = posterior.dataset
-    posterior = posterior[var_names]
+
     sample_dims = posterior.attrs.get("sample_dims", az.rcParams["data.sample_dims"])
     if isinstance(sample_dims, str):
         sample_dims = [sample_dims]
 
     sample_dims = set(sample_dims)
-    n_pairs = 0
-    for var_name in var_names:
-        variable = posterior[var_name]
-        plot_dims = [dim for dim in variable.dims if dim not in sample_dims]
-        n_pairs += int(np.prod([variable.sizes[dim] for dim in plot_dims]))
-
-    return n_pairs**2
+    variable = posterior[var_name]
+    plot_dims = [dim for dim in variable.dims if dim not in sample_dims]
+    return int(np.prod([variable.sizes[dim] for dim in plot_dims]))

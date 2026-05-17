@@ -40,7 +40,7 @@ import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.definitions import UnivariateModelDefinition
-from vocab_growth.models.diagnostics_utils import pair_plot_rc_params
+from vocab_growth.models.diagnostics_utils import capped_plot_var_names
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -807,41 +807,51 @@ def diagnostics(context: ModelFitContext):
 
     # Kernel density estimates (KDE) of the joint posterior, and marginals
 
-    with az.rc_context(pair_plot_rc_params(context.trace, var_names)):
+    pair_plot_var_names = capped_plot_var_names(
+        context.trace,
+        var_names,
+        squared=True,
+    )
+    if pair_plot_var_names:
         plot_diagnostics_mcmc.plot_kde_pair(
             context.trace,
-            var_names=var_names,
+            var_names=pair_plot_var_names,
             output_dir=context.reporting.output_dir,
             filename="pair_plot",
         )
-    context.plots["pair_plot"] = plt.gcf()
-    plt.close()
+        context.plots["pair_plot"] = plt.gcf()
+        plt.close()
 
     # Trace plot
 
     var_names_ext = var_names + ["kappa_obs"]
+    trace_var_names = capped_plot_var_names(context.trace, var_names_ext)
 
     az.plot_trace(
         context.trace,
-        combined=True,
-        var_names=var_names_ext,
+        var_names=trace_var_names,
     )
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     context.plots["trace_plot"] = plt.gcf()
     plt.close()
 
     # Energy transition distribution
-    az.plot_energy(context.trace, figsize=plot_styles.FIGSIZE_SM)
+    az.plot_energy(
+        context.trace,
+        figure_kwargs={"figsize": plot_styles.FIGSIZE_SM},
+    )
     plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
     context.plots["energy_plot"] = plt.gcf()
     plt.close()
 
     # Posterior densities
-    az.plot_posterior(
-        context.trace.posterior,
-        var_names=var_names,
+    posterior_var_names = capped_plot_var_names(context.trace, var_names)
+    az.plot_dist(
+        context.trace,
+        var_names=posterior_var_names,
         point_estimate="median",
-        hdi_prob=context.reporting.hdi,
+        ci_kind="hdi",
+        ci_prob=context.reporting.hdi,
     )
     plt.savefig(
         os.path.join(context.reporting.output_dir, "posterior_plot.png"), dpi=300
