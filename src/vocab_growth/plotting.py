@@ -9,6 +9,7 @@ import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import xarray as xr
 from matplotlib.figure import Figure
 from scipy.signal import savgol_filter
 
@@ -16,6 +17,12 @@ from scipy.signal import savgol_filter
 def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
     """Save a DataFrame as CSV alongside the corresponding plot."""
     df.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
+
+
+def _hdi_by_sample(values: np.ndarray, prob: float) -> np.ndarray:
+    """Compute HDI over posterior samples for each plot point."""
+    values_da = xr.DataArray(values, dims=("sample", "plot"))
+    return az.hdi(values_da, prob=prob, dim="sample").to_numpy()
 
 
 def plot_eta_effect_sizes(
@@ -692,9 +699,9 @@ def plot_expected_learning_rate(
 
     # Posterior summaries across draws, per age point
     median_rate = np.median(rate, axis=0)
-    hdi_rate = az.hdi(rate, prob=hdi_prob)
-    hdi_75_rate = az.hdi(rate, prob=0.75)
-    hdi_50_rate = az.hdi(rate, prob=0.50)
+    hdi_rate = _hdi_by_sample(rate, prob=hdi_prob)
+    hdi_75_rate = _hdi_by_sample(rate, prob=0.75)
+    hdi_50_rate = _hdi_by_sample(rate, prob=0.50)
 
     # Optional smoothing for display
     median_rate_plot = _maybe_savgol(
