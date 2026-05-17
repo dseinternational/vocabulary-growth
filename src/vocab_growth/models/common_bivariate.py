@@ -50,6 +50,7 @@ from vocab_growth.models.common import (
     report,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
+from vocab_growth.models.diagnostics_utils import pair_plot_rc_params
 from vocab_growth.plotting import _save_csv
 from vocab_growth.reporting import (
     config_table,
@@ -941,14 +942,7 @@ def diagnostics(context: BivariateContext):
     _report_diagnostic_warnings(diagnostics_df)
 
     # KDE pair plot
-    max_subplots = az.rcParams.get("plot.max_subplots")
-    pair_plot_rc: dict[str, int] = {}
-    if isinstance(max_subplots, int):
-        required_subplots = len(var_names) ** 2
-        if required_subplots > max_subplots:
-            pair_plot_rc["plot.max_subplots"] = required_subplots
-
-    with az.rc_context(pair_plot_rc):
+    with az.rc_context(pair_plot_rc_params(context.trace, var_names)):
         plot_diagnostics_mcmc.plot_kde_pair(
             context.trace,
             var_names=var_names,
