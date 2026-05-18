@@ -13,7 +13,7 @@ dependencies:
   - numba>=0.65.1
   - numpy>=2.4.5
   - numpyro>=0.21.0
-  - nutpie>=0.16.8
+  - nutpie>=0.16.10
   - pandas-stubs
   - pandas>=3.0.3
   - preliz
