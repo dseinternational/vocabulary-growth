@@ -4,9 +4,9 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "05:00"
-      timezone: "Europe/London"
+      interval: weekly
+      day: wednesday
+      time: "06:00"
     groups:
       python-dependencies:
         patterns:
@@ -15,9 +15,9 @@ updates:
   - package-ecosystem: "conda"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "05:00"
-      timezone: "Europe/London"
+      interval: weekly
+      day: wednesday
+      time: "06:00"
     groups:
       conda-dependencies:
         patterns:
@@ -26,9 +26,9 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "05:00"
-      timezone: "Europe/London"
+      interval: weekly
+      day: wednesday
+      time: "06:00"
     groups:
       npm-dependencies:
         patterns:
@@ -37,9 +37,9 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "05:00"
-      timezone: "Europe/London"
+      interval: weekly
+      day: wednesday
+      time: "06:00"
     groups:
       github-actions:
         patterns:
