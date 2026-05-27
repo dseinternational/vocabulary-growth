@@ -2,7 +2,7 @@ name: dse-vocab-growth
 channels:
   - conda-forge
 dependencies:
-  - python=3.14.4
+  - python=3.14.5
   - arviz>=1.1.0
   - arviz-base>=1.1.0
   - arviz-stats>=1.1.0
@@ -11,9 +11,9 @@ dependencies:
   - graphviz>=14.1.2
   - jax>=0.9.2
   - numba>=0.65.1
-  - numpy>=2.4.5
+  - numpy>=2.4.6
   - numpyro>=0.21.0
-  - nutpie>=0.16.8
+  - nutpie>=0.16.10
   - pandas-stubs
   - pandas>=3.0.3
   - preliz
@@ -24,7 +24,7 @@ dependencies:
   - pip:
       - azure-identity
       - azure-storage-blob
-      - duckdb>=1.5.2
+      - duckdb>=1.5.3
       - hatch
       - ipython>=9.13.0
       - ipywidgets>=8.1.8
@@ -34,7 +34,7 @@ dependencies:
       - orjson>=3.11.9
       - pytest>=9.0.3
       - rich>=15.0.0
-      - ruff>=0.15.13
+      - ruff>=0.15.14
       - scipy-stubs
       - scipy>=1.17.1
       - seaborn>=0.13.2
