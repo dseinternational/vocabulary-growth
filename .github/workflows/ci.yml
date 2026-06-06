@@ -50,12 +50,12 @@ jobs:
         working-directory: vocabulary-growth
     steps:
       - name: Checkout vocabulary-growth
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.3
         with:
           path: vocabulary-growth
 
       - name: Checkout research (sibling dependency)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.3
         with:
           repository: dseinternational/research
           path: research
