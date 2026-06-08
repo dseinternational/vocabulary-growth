@@ -234,11 +234,8 @@ VG03 = UnivariateModelDefinition(
     banner="Fitting Model VG03: Influence of age on words spoken (A -> S)",
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.SPOKEN,
-    # Restricted to instruments that measure comprehension and production
-    # independently (WG, Oxford CDI); WS is production-only in Wordbank and
-    # excluded. Few WG/Oxford observations are near their respective inventory
-    # ceilings, so treating all counts as out of a common 800-item reference
-    # gives an inventory-comparable scale with DS models.
+    # Common 800-item reference inventory for TD/DS comparisons. The TD
+    # loader uses WG and Oxford CDI production plus WS production-only rows.
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
@@ -258,11 +255,8 @@ VG04 = UnivariateModelDefinition(
     banner="Fitting Model VG04: Influence of age on words understood (A -> U)",
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.UNDERSTOOD,
-    # Restricted to instruments that measure comprehension and production
-    # independently (WG, Oxford CDI); WS is production-only in Wordbank and
-    # excluded. Few WG/Oxford observations are near their respective inventory
-    # ceilings, so treating all counts as out of a common 800-item reference
-    # gives an inventory-comparable scale with DS models.
+    # Common 800-item reference inventory for TD/DS comparisons. The TD
+    # loader excludes WS comprehension because it is a production proxy.
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
@@ -301,11 +295,12 @@ VG06 = BivariateModelDefinition(
         " (A -> U, A -> S, U -> S) - typically developing"
     ),
     population=Population.TYPICALLY_DEVELOPING,
-    # Restricted to instruments that measure comprehension and production
-    # independently (WG, Oxford CDI); WS is production-only in Wordbank and
-    # excluded. Few WG/Oxford observations are near their respective inventory
-    # ceilings, so treating all counts as out of a common 800-item reference
-    # gives an inventory-comparable scale with DS bivariate models.
+    # WG and Oxford CDI measure comprehension and production independently.
+    # WS is production-only in Wordbank, so the TD loader keeps it as a
+    # spoken-only observation. Few WG/Oxford observations are near their
+    # respective inventory ceilings, so treating all counts as out of a common
+    # 800-item reference gives an inventory-comparable scale with DS bivariate
+    # models.
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
@@ -313,9 +308,10 @@ VG06 = BivariateModelDefinition(
     p_slope_low_u_beta=20.0,
     p_slope_hi_u_alpha=1.5,
     p_slope_hi_u_beta=1.1,
-    # Bumped from 0.1: total bivariate pool shrank from 16,552 to 6,134
-    # after the WS exclusion; this keeps the effective training set
-    # (~1,500 rows) close to the previous VG06 fit.
+    # Bumped from 0.1: the understood/bivariate pool is 6,134 rows once WS is
+    # excluded from comprehension; this keeps the effective understood training
+    # set (~1,500 rows) close to the previous VG06 fit while letting WS
+    # contribute valid spoken-only observations.
     sample_fraction=0.25,
 )
 

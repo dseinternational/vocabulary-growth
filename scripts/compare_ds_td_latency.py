@@ -38,9 +38,9 @@ OUT_DIR = "output/comparisons"
 
 # n_trials is model-specific. See src/vocab_growth/models/definitions.py.
 # VG09B: 800-item DS inventory.
-# VG06:  was 690 (CDI:WS), now 800 — VG06 was refit on WG + Oxford CDI only
-#        (WS is production-only in Wordbank) and rescaled to an 800-item
-#        reference inventory for comparability with DS bivariate models.
+# VG06: 800-item TD reference inventory. WG and Oxford CDI contribute
+#       bivariate observations; WS is production-only in Wordbank and
+#       contributes spoken observations only.
 N_TRIALS_DS = 800
 N_TRIALS_TD = 800
 MIN_COVERAGE = 0.80  # require at least 80% of draws to have a valid crossing
