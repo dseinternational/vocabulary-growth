@@ -243,7 +243,10 @@ VG03 = UnivariateModelDefinition(
     p_slope_low_beta=15.0,
     p_slope_hi_alpha=1.5,
     p_slope_hi_beta=1.1,
-    sample_fraction=0.1,
+    # Bumped from 0.1: total TD pool shrank from 16,552 to 6,134
+    # after the WS exclusion; this keeps the effective training set
+    # (~1,500 rows) close to the previous VG03 fit.
+    sample_fraction=0.25,
 )
 
 VG04 = UnivariateModelDefinition(
@@ -261,7 +264,10 @@ VG04 = UnivariateModelDefinition(
     p_slope_low_beta=20.0,
     p_slope_hi_alpha=1.5,
     p_slope_hi_beta=1.1,
-    sample_fraction=0.1,
+    # Bumped from 0.1: total comprehension pool shrank from 16,552 to 6,134
+    # after the WS exclusion; this keeps the effective training set
+    # (~1,500 rows) close to the previous VG04 fit.
+    sample_fraction=0.25,
 )
 
 VG05 = BivariateModelDefinition(
