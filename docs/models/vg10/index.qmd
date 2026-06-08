@@ -1,5 +1,5 @@
 ---
-title: "Model VG09B: VG09 + tighter q anchor priors + GP anchored at reference age - children with Down syndrome"
+title: "Model VG10: VG09 + tighter q anchor priors + GP anchored at reference age - children with Down syndrome"
 
 date: last-modified
 date-format: "YYYY-MM-DD HH:mm:ss Z"
@@ -22,7 +22,7 @@ This model output is preliminary and likely to change as the model evolves and f
 If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
 :::
 
-VG09B is a structural variant of VG09 introduced to test whether the marginal `r_hat` / `ess_tail` issues observed on the q-trajectory hyperparameters under VG09 reflect a redundancy between the linear mean trend, the HSGP correction, and the subject random intercepts.
+VG10 is a structural variant of VG09 introduced to test whether the marginal `r_hat` / `ess_tail` issues observed on the q-trajectory hyperparameters under VG09 reflect a redundancy between the linear mean trend, the HSGP correction, and the subject random intercepts.
 
 Two changes relative to VG09:
 

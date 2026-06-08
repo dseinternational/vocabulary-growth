@@ -22,7 +22,7 @@ MODEL_CONFIGS = {
     "vg07": ("VG07", "age-understood-spoken-ds-re"),
     "vg08": ("VG08", "age-understood-spoken-ds-re-subj"),
     "vg09": ("VG09", "age-understood-spoken-ds-re-subj-uq"),
-    "vg09b": ("VG09B", "age-understood-spoken-ds-re-subj-uq-anchored"),
+    "vg10": ("VG10", "age-understood-spoken-ds-re-subj-uq-anchored"),
 }
 
 if __name__ == "__main__":
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "model",
         type=str,
-        help="Model id (vg01, vg02, vg03, vg04, vg05, vg06, vg07, vg08, vg09, vg09b) or 'all'.",
+        help="Model id (vg01, vg02, vg03, vg04, vg05, vg06, vg07, vg08, vg09, vg10) or 'all'.",
     )
     parser.add_argument(
         "--include-traces",

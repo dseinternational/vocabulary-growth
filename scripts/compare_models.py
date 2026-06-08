@@ -13,14 +13,14 @@ Produces the following figures under `output/comparisons/`:
 - `ds_td_q_vs_understood.{png,svg}` — q vs words understood (DS VG09 / TD
   VG06) — the headline matched-comprehension comparison; the
   corresponding crossings CSV lives in this directory too.
-- `vg07_vg09_vg09b_q_by_age.{png,svg}` — production ratio q(age) three-way
+- `vg07_vg09_vg10_q_by_age.{png,svg}` — production ratio q(age) three-way
   overlay: VG07 (no subject REs), VG09 (subject REs on U and q,
-  unanchored GP), VG09B (subject REs on U and q, GP anchored at the
+  unanchored GP), VG10 (subject REs on U and q, GP anchored at the
   reference age).
-- `ds_td_q_by_age_vg09b.{png,svg}` — production ratio q(age) DS (VG09B)
+- `ds_td_q_by_age_vg10.{png,svg}` — production ratio q(age) DS (VG10)
   vs TD (VG06). Visualises the chronological production lag.
-- `ds_td_q_vs_understood_vg09b.{png,svg}` — matched-comprehension q
-  overlay using VG09B for DS instead of VG09.
+- `ds_td_q_vs_understood_vg10.{png,svg}` — matched-comprehension q
+  overlay using VG10 for DS instead of VG09.
 
 CSVs of the underlying data are also written.
 
@@ -199,12 +199,12 @@ def ds_td_q_vs_understood() -> None:
                               index=False)
 
 
-def vg07_vg09_vg09b_q_by_age() -> None:
-    """Three-way overlay of q(age) for VG07, VG09 and VG09B.
+def vg07_vg09_vg10_q_by_age() -> None:
+    """Three-way overlay of q(age) for VG07, VG09 and VG10.
 
     VG07 has no subject REs on q (the pre-redundancy baseline).
     VG09 adds subject REs on U and q with an unanchored GP.
-    VG09B is VG09 with tighter q-anchor priors and the GP anchored
+    VG10 is VG09 with tighter q-anchor priors and the GP anchored
     to zero at the reference age (see notes/202605131500-...).
     """
     vg07 = pd.read_csv(
@@ -215,10 +215,10 @@ def vg07_vg09_vg09b_q_by_age() -> None:
         os.path.join(MODELS_DIR, "VG09-age-understood-spoken-ds-re-subj-uq",
                      "posterior_summary_q.csv")
     )
-    vg09b = pd.read_csv(
+    vg10 = pd.read_csv(
         os.path.join(
             MODELS_DIR,
-            "VG09B-age-understood-spoken-ds-re-subj-uq-anchored",
+            "VG10-age-understood-spoken-ds-re-subj-uq-anchored",
             "posterior_summary_q.csv",
         )
     )
@@ -226,7 +226,7 @@ def vg07_vg09_vg09b_q_by_age() -> None:
     series = [
         ("VG07 (no subject RE on q)", vg07, plot_styles.COLOUR_PURPLE),
         ("VG09 (subj REs, GP unanchored)", vg09, plot_styles.COLOUR_BLUE),
-        ("VG09B (subj REs, GP anchored at 54mo)", vg09b, plot_styles.COLOUR_GREEN),
+        ("VG10 (subj REs, GP anchored at 54mo)", vg10, plot_styles.COLOUR_GREEN),
     ]
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
@@ -246,11 +246,11 @@ def vg07_vg09_vg09b_q_by_age() -> None:
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
     ax.set_ylim(0, 1)
     ax.set_title(
-        "Production ratio q(age) — VG07 vs VG09 vs VG09B (DS, rep config)"
+        "Production ratio q(age) — VG07 vs VG09 vs VG10 (DS, rep config)"
     )
     ax.legend(loc="lower right", frameon=True, fontsize="small")
-    fig.savefig(os.path.join(OUT_DIR, "vg07_vg09_vg09b_q_by_age.png"))
-    fig.savefig(os.path.join(OUT_DIR, "vg07_vg09_vg09b_q_by_age.svg"))
+    fig.savefig(os.path.join(OUT_DIR, "vg07_vg09_vg10_q_by_age.png"))
+    fig.savefig(os.path.join(OUT_DIR, "vg07_vg09_vg10_q_by_age.svg"))
     plt.close(fig)
 
     merged = vg07[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
@@ -267,21 +267,21 @@ def vg07_vg09_vg09b_q_by_age() -> None:
         on="age_months",
     )
     merged = merged.merge(
-        vg09b[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
-            columns={"q_median": "vg09b_median",
-                     "q_hdi_lo": "vg09b_hdi_lo",
-                     "q_hdi_hi": "vg09b_hdi_hi"}
+        vg10[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
+            columns={"q_median": "vg10_median",
+                     "q_hdi_lo": "vg10_hdi_lo",
+                     "q_hdi_hi": "vg10_hdi_hi"}
         ),
         on="age_months",
     )
     merged.to_csv(
-        os.path.join(OUT_DIR, "vg07_vg09_vg09b_q_by_age.csv"),
+        os.path.join(OUT_DIR, "vg07_vg09_vg10_q_by_age.csv"),
         index=False,
     )
 
 
-def ds_td_q_by_age_vg09b() -> None:
-    """DS (VG09B) vs TD (VG06) production-ratio overlay against age.
+def ds_td_q_by_age_vg10() -> None:
+    """DS (VG10) vs TD (VG06) production-ratio overlay against age.
 
     Visualises the chronological production lag: at any given age the
     DS curve sits well below the TD curve, and reaches the same
@@ -290,7 +290,7 @@ def ds_td_q_by_age_vg09b() -> None:
     ds = pd.read_csv(
         os.path.join(
             MODELS_DIR,
-            "VG09B-age-understood-spoken-ds-re-subj-uq-anchored",
+            "VG10-age-understood-spoken-ds-re-subj-uq-anchored",
             "posterior_summary_q.csv",
         )
     )
@@ -309,7 +309,7 @@ def ds_td_q_by_age_vg09b() -> None:
     ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5,
             label="TD median q (VG06)")
     ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5,
-            label="DS median q (VG09B)")
+            label="DS median q (VG10)")
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6,
                    linestyle="--")
@@ -318,10 +318,10 @@ def ds_td_q_by_age_vg09b() -> None:
     ax.set_ylim(0, 1)
     ax.set_xlabel("Age (months)")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio by age — DS (VG09B) vs TD (VG06)")
+    ax.set_title("Production ratio by age — DS (VG10) vs TD (VG06)")
     ax.legend(loc="lower right", frameon=True)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg09b.png"))
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg09b.svg"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.png"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.svg"))
     plt.close(fig)
 
     merged = (
@@ -340,22 +340,22 @@ def ds_td_q_by_age_vg09b() -> None:
         .sort_values("age_months")
     )
     merged.to_csv(
-        os.path.join(OUT_DIR, "ds_td_q_by_age_vg09b.csv"),
+        os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.csv"),
         index=False,
     )
 
 
-def ds_td_q_vs_understood_vg09b() -> None:
-    """DS (VG09B) vs TD (VG06) production-ratio against words understood.
+def ds_td_q_vs_understood_vg10() -> None:
+    """DS (VG10) vs TD (VG06) production-ratio against words understood.
 
-    Updated matched-comprehension overlay using VG09B as the headline
+    Updated matched-comprehension overlay using VG10 as the headline
     DS joint model. Preserves the original VG09-based figure for
     backward compatibility.
     """
     ds = pd.read_csv(
         os.path.join(
             MODELS_DIR,
-            "VG09B-age-understood-spoken-ds-re-subj-uq-anchored",
+            "VG10-age-understood-spoken-ds-re-subj-uq-anchored",
             "production_rate_by_understood.csv",
         )
     )
@@ -374,7 +374,7 @@ def ds_td_q_vs_understood_vg09b() -> None:
     ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5,
             label="TD median q (VG06)")
     ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5,
-            label="DS median q (VG09B)")
+            label="DS median q (VG10)")
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6,
                    linestyle="--")
@@ -384,11 +384,11 @@ def ds_td_q_vs_understood_vg09b() -> None:
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
     ax.set_title(
-        "Production ratio against words understood — DS (VG09B) vs TD (VG06)"
+        "Production ratio against words understood — DS (VG10) vs TD (VG06)"
     )
     ax.legend(loc="lower right", frameon=True)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg09b.png"))
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg09b.svg"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.png"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.svg"))
     plt.close(fig)
 
 
@@ -400,9 +400,9 @@ def main() -> None:
     ds_td_understood_by_age()
     vg05_vs_vg07()
     ds_td_q_vs_understood()
-    vg07_vg09_vg09b_q_by_age()
-    ds_td_q_by_age_vg09b()
-    ds_td_q_vs_understood_vg09b()
+    vg07_vg09_vg10_q_by_age()
+    ds_td_q_by_age_vg10()
+    ds_td_q_vs_understood_vg10()
 
     print(f"Comparisons written to: {OUT_DIR}")
 

@@ -36,7 +36,7 @@ from vocab_growth.models.definitions import (
     VG07,
     VG08,
     VG09,
-    VG09B,
+    VG10,
     BivariateModelDefinition,
     UnivariateModelDefinition,
 )
@@ -53,7 +53,7 @@ MODEL_LABELS = {
     "VG07": ("VG07-age-understood-spoken-ds-re", VG07),
     "VG08": ("VG08-age-understood-spoken-ds-re-subj", VG08),
     "VG09": ("VG09-age-understood-spoken-ds-re-subj-uq", VG09),
-    "VG09B": ("VG09B-age-understood-spoken-ds-re-subj-uq-anchored", VG09B),
+    "VG10": ("VG10-age-understood-spoken-ds-re-subj-uq-anchored", VG10),
 }
 
 

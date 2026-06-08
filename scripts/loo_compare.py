@@ -48,7 +48,7 @@ BIVARIATE = {
     "VG07": "VG07-age-understood-spoken-ds-re",
     "VG08": "VG08-age-understood-spoken-ds-re-subj",
     "VG09": "VG09-age-understood-spoken-ds-re-subj-uq",
-    "VG09B": "VG09B-age-understood-spoken-ds-re-subj-uq-anchored",
+    "VG10": "VG10-age-understood-spoken-ds-re-subj-uq-anchored",
 }
 
 MODEL_LABELS = {**UNIVARIATE, **BIVARIATE}

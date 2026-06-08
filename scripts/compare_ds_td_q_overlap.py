@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Population-level posterior overlap of q(a) = S/U for DS (VG09B) and TD (VG06).
+Population-level posterior overlap of q(a) = S/U for DS (VG10) and TD (VG06).
 
 Two views:
 
@@ -177,7 +177,7 @@ def main() -> None:
     gs = fig.add_gridspec(2, 2, height_ratios=[3, 1], hspace=0.28, wspace=0.22)
 
     ax_qU = fig.add_subplot(gs[0, 0])
-    plot_overlay_panel(ax_qU, qU_ds_sum, "N", "DS (VG09B)", plot_styles.COLOUR_BLUE)
+    plot_overlay_panel(ax_qU, qU_ds_sum, "N", "DS (VG10)", plot_styles.COLOUR_BLUE)
     plot_overlay_panel(ax_qU, qU_td_sum, "N", "TD (VG06)", plot_styles.COLOUR_ORANGE)
     ax_qU.set_xscale("log")
     ax_qU.set_xlabel("Comprehension N (words)")
@@ -188,7 +188,7 @@ def main() -> None:
     ax_qU.set_ylim(0, 1.05)
 
     ax_qa = fig.add_subplot(gs[0, 1])
-    plot_overlay_panel(ax_qa, qa_ds_sum, "age_months", "DS (VG09B)", plot_styles.COLOUR_BLUE)
+    plot_overlay_panel(ax_qa, qa_ds_sum, "age_months", "DS (VG10)", plot_styles.COLOUR_BLUE)
     plot_overlay_panel(ax_qa, qa_td_sum, "age_months", "TD (VG06)", plot_styles.COLOUR_ORANGE)
     ax_qa.set_xlabel("Age (months)")
     ax_qa.set_ylabel("q(a) = E[S(a)] / E[U(a)]")
@@ -215,7 +215,7 @@ def main() -> None:
     ax_pa.grid(True, alpha=0.3)
 
     fig.suptitle(
-        "Posterior overlap of population q = S/U — DS (VG09B) vs TD (VG06)",
+        "Posterior overlap of population q = S/U — DS (VG10) vs TD (VG06)",
         fontsize=13,
     )
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_overlap.png"), dpi=300, bbox_inches="tight")

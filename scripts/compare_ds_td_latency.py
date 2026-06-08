@@ -3,7 +3,7 @@
 """
 Reframe the comprehension-production gap as a learn-to-say latency.
 
-For each population (DS via VG09B, TD via VG06) and each target vocabulary
+For each population (DS via VG10, TD via VG06) and each target vocabulary
 count N:
 
 - a_U(N) = first age at which the latent expected U(a) reaches N
@@ -32,12 +32,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-DS_DIR = "output/models/VG09B-age-understood-spoken-ds-re-subj-uq-anchored"
+DS_DIR = "output/models/VG10-age-understood-spoken-ds-re-subj-uq-anchored"
 TD_DIR = "output/models/VG06-age-understood-spoken-td"
 OUT_DIR = "output/comparisons"
 
 # n_trials is model-specific. See src/vocab_growth/models/definitions.py.
-# VG09B: 800-item DS inventory.
+# VG10: 800-item DS inventory.
 # VG06: 800-item TD reference inventory. WG and Oxford CDI contribute
 #       bivariate observations; WS is production-only in Wordbank and
 #       contributes spoken observations only.
@@ -211,7 +211,7 @@ def main() -> None:
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     ax = axes[0]
-    plot_population_panel(ax, da_ds, "DS (VG09B)", plot_styles.COLOUR_BLUE)
+    plot_population_panel(ax, da_ds, "DS (VG10)", plot_styles.COLOUR_BLUE)
     plot_population_panel(ax, da_td, "TD (VG06)", plot_styles.COLOUR_ORANGE)
     ax.set_xlabel("Vocabulary count N (words)")
     ax.set_ylabel(r"$\Delta A(N) = a_S(N) - a_U(N)$  (months)")
@@ -221,7 +221,7 @@ def main() -> None:
     ax.grid(True, which="both", alpha=0.3)
 
     ax = axes[1]
-    plot_population_panel(ax, extra_ds, "DS (VG09B)", plot_styles.COLOUR_BLUE)
+    plot_population_panel(ax, extra_ds, "DS (VG10)", plot_styles.COLOUR_BLUE)
     plot_population_panel(ax, extra_td, "TD (VG06)", plot_styles.COLOUR_ORANGE)
     ax.set_xlabel("Spoken count N (words)")
     ax.set_ylabel("Extra words understood when first saying N  (= U(a_S(N)) - N)")
@@ -231,7 +231,7 @@ def main() -> None:
     ax.grid(True, which="both", alpha=0.3)
 
     fig.suptitle(
-        "Modeling the gap as a learn-to-say latency — DS (VG09B) vs TD (VG06)",
+        "Modeling the gap as a learn-to-say latency — DS (VG10) vs TD (VG06)",
         fontsize=12,
     )
     fig.tight_layout()
