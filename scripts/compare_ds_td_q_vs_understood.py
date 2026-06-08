@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Overlay DS (VG09B) and TD (VG06) median production ratio q(U) = E[S]/E[U]
+Overlay DS (VG10) and TD (VG06) median production ratio q(U) = E[S]/E[U]
 as a function of words understood, with HDI bands. This is the bivariate
 equivalent of Figure 25 in each model's report (`production_rate_by_understood`),
 overlaid on a single axis.
@@ -10,7 +10,7 @@ Reads `production_rate_by_understood.csv` directly from each model's
 output directory.
 
 Output:
-- `output/comparisons/ds_td_q_vs_understood_vg09b.{png,svg}`
+- `output/comparisons/ds_td_q_vs_understood_vg10.{png,svg}`
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DS_DIR = "output/models/VG09B-age-understood-spoken-ds-re-subj-uq-anchored"
+DS_DIR = "output/models/VG10-age-understood-spoken-ds-re-subj-uq-anchored"
 TD_DIR = "output/models/VG06-age-understood-spoken-td"
 OUT_DIR = "output/comparisons"
 
@@ -56,16 +56,16 @@ def main() -> None:
     ax.fill_between(
         ds["words_understood"], ds["hdi_lo"], ds["hdi_hi"],
         color=ds_colour, alpha=0.15, linewidth=0,
-        label="DS (VG09B) 90% HDI",
+        label="DS (VG10) 90% HDI",
     )
     ax.fill_between(
         ds["words_understood"], ds["hdi50_lo"], ds["hdi50_hi"],
         color=ds_colour, alpha=0.30, linewidth=0,
-        label="DS (VG09B) 50% HDI",
+        label="DS (VG10) 50% HDI",
     )
     ax.plot(
         ds["words_understood"], ds["q_median"],
-        color=ds_colour, lw=2.5, label="DS (VG09B) median",
+        color=ds_colour, lw=2.5, label="DS (VG10) median",
     )
 
     for thresh in (0.5, 0.9):
@@ -76,20 +76,20 @@ def main() -> None:
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel(r"Production ratio  q = $E[S] / E[U]$")
     ax.set_title(
-        "Production ratio against words understood — DS (VG09B) vs TD (VG06)"
+        "Production ratio against words understood — DS (VG10) vs TD (VG06)"
     )
     ax.legend(loc="lower right", frameon=True, fontsize=10)
     ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg09b.png"), dpi=300)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg09b.svg"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.png"), dpi=300)
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.svg"))
     plt.close(fig)
 
     print(
         f"Saved:\n"
-        f"  {os.path.join(OUT_DIR, 'ds_td_q_vs_understood_vg09b.png')}\n"
-        f"  {os.path.join(OUT_DIR, 'ds_td_q_vs_understood_vg09b.svg')}"
+        f"  {os.path.join(OUT_DIR, 'ds_td_q_vs_understood_vg10.png')}\n"
+        f"  {os.path.join(OUT_DIR, 'ds_td_q_vs_understood_vg10.svg')}"
     )
     print(
         f"\nDS U range covered: {ds['words_understood'].min():.0f} – "

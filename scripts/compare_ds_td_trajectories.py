@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Side-by-side DS (VG09B) vs TD (VG06) comparison plots for the joint
+Side-by-side DS (VG10) vs TD (VG06) comparison plots for the joint
 trajectory (Figure 22 equivalent) and the comprehension-production gap
 (Figure 27 equivalent).
 
@@ -26,7 +26,7 @@ import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DS_DIR = "output/models/VG09B-age-understood-spoken-ds-re-subj-uq-anchored"
+DS_DIR = "output/models/VG10-age-understood-spoken-ds-re-subj-uq-anchored"
 TD_DIR = "output/models/VG06-age-understood-spoken-td"
 OUT_DIR = "output/comparisons"
 
@@ -101,7 +101,7 @@ def main() -> None:
 
     # ---- Joint trajectory: DS vs TD ----
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
-    plot_joint_panel(axes[0], ds_joint, "Down syndrome (VG09B)")
+    plot_joint_panel(axes[0], ds_joint, "Down syndrome (VG10)")
     plot_joint_panel(axes[1], td_joint, "Typically developing (VG06)")
     fig.suptitle(
         "Joint posterior predictive trajectory — words understood vs words spoken",
@@ -114,7 +114,7 @@ def main() -> None:
 
     # ---- Comprehension-production gap: DS vs TD ----
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    plot_gap_panel(axes[0], ds_gap, "Down syndrome (VG09B)")
+    plot_gap_panel(axes[0], ds_gap, "Down syndrome (VG10)")
     plot_gap_panel(axes[1], td_gap, "Typically developing (VG06)")
     fig.suptitle(
         "Comprehension-production gap — E[understood] - E[spoken]",

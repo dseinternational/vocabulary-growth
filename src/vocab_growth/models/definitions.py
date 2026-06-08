@@ -378,11 +378,11 @@ VG09 = BivariateModelDefinition(
     tau_subj_q_sigma=0.5,
 )
 
-VG09B = BivariateModelDefinition(
-    model_id="VG09B",
+VG10 = BivariateModelDefinition(
+    model_id="VG10",
     config_name="age-understood-spoken-ds-re-subj-uq-anchored",
     banner=(
-        "Fitting Model VG09B: VG09 + tighter q anchor priors + GP anchored at"
+        "Fitting Model VG10: VG09 + tighter q anchor priors + GP anchored at"
         " reference age (A -> U, A -> S, U -> S) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
@@ -420,5 +420,5 @@ MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] 
     "vg07": VG07,
     "vg08": VG08,
     "vg09": VG09,
-    "vg09b": VG09B,
+    "vg10": VG10,
 }

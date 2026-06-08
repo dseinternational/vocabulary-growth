@@ -61,7 +61,7 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload]
 ```
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg06`, `vg07`, `vg08`, `vg09`, or `all`.
+- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg06`, `vg07`, `vg08`, `vg09`, `vg10`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after fitting.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
@@ -88,17 +88,18 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 
 The models differ in which outcome, population, and structure they target:
 
-| Model | Outcome                           | Population           | Notes                                                                                     |
-| ----- | --------------------------------- | -------------------- | ----------------------------------------------------------------------------------------- |
-| VG01  | Words spoken                      | Down syndrome        |                                                                                           |
-| VG02  | Words understood                  | Down syndrome        |                                                                                           |
-| VG03  | Words spoken                      | Typically developing |                                                                                           |
-| VG04  | Words understood                  | Typically developing |                                                                                           |
-| VG05  | Words understood + spoken (joint) | Down syndrome        |                                                                                           |
-| VG06  | Words understood + spoken (joint) | Typically developing |                                                                                           |
-| VG07  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts                                                                   |
-| VG08  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood                         |
-| VG09  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood and on production ratio |
+| Model | Outcome                           | Population           | Notes                                                                                                                                              |
+| ----- | --------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VG01  | Words spoken                      | Down syndrome        |                                                                                                                                                    |
+| VG02  | Words understood                  | Down syndrome        |                                                                                                                                                    |
+| VG03  | Words spoken                      | Typically developing |                                                                                                                                                    |
+| VG04  | Words understood                  | Typically developing |                                                                                                                                                    |
+| VG05  | Words understood + spoken (joint) | Down syndrome        |                                                                                                                                                    |
+| VG06  | Words understood + spoken (joint) | Typically developing |                                                                                                                                                    |
+| VG07  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts                                                                                                                            |
+| VG08  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood                                                                                  |
+| VG09  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood and on production ratio                                                          |
+| VG10  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood and on production ratio + tighter q-anchor priors + GP anchored at reference age |
 
 ### Shared utilities (`dse_research_utils`)
 
