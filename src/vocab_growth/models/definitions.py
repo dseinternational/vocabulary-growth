@@ -234,14 +234,22 @@ VG03 = UnivariateModelDefinition(
     banner="Fitting Model VG03: Influence of age on words spoken (A -> S)",
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.SPOKEN,
-    n_trials=690,
+    # Restricted to instruments that measure comprehension and production
+    # independently (WG, Oxford CDI); WS is production-only in Wordbank and
+    # excluded. Few WG/Oxford observations are near their respective inventory
+    # ceilings, so treating all counts as out of a common 800-item reference
+    # gives an inventory-comparable scale with DS models.
+    n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
     p_slope_low_alpha=1.0,
     p_slope_low_beta=15.0,
     p_slope_hi_alpha=1.5,
     p_slope_hi_beta=1.1,
-    sample_fraction=0.1,
+    # Bumped from 0.1: total comprehension pool shrank from 16,552 to 6,134
+    # after the WS exclusion; this keeps the effective training set
+    # (~1,500 rows) close to the previous VG03 fit.
+    sample_fraction=0.25,
 )
 
 VG04 = UnivariateModelDefinition(
@@ -250,14 +258,22 @@ VG04 = UnivariateModelDefinition(
     banner="Fitting Model VG04: Influence of age on words understood (A -> U)",
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.UNDERSTOOD,
-    n_trials=690,
+    # Restricted to instruments that measure comprehension and production
+    # independently (WG, Oxford CDI); WS is production-only in Wordbank and
+    # excluded. Few WG/Oxford observations are near their respective inventory
+    # ceilings, so treating all counts as out of a common 800-item reference
+    # gives an inventory-comparable scale with DS models.
+    n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
     p_slope_low_alpha=1.0,
     p_slope_low_beta=20.0,
     p_slope_hi_alpha=1.5,
     p_slope_hi_beta=1.1,
-    sample_fraction=0.1,
+    # Bumped from 0.1: total comprehension pool shrank from 16,552 to 6,134
+    # after the WS exclusion; this keeps the effective training set
+    # (~1,500 rows) close to the previous VG04 fit.
+    sample_fraction=0.25,
 )
 
 VG05 = BivariateModelDefinition(
