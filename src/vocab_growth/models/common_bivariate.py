@@ -1173,7 +1173,7 @@ def posterior_summary(context: BivariateContext):
 
     # Production rate summary
     q_query_median = np.median(samples.q_query, axis=1)
-    q_query_hdi = az.hdi(samples.q_query.T, prob=hdi_prob)
+    q_query_hdi = az.hdi(samples.q_query, prob=hdi_prob)
 
     summary_q = pd.DataFrame(
         {
@@ -1274,13 +1274,13 @@ def plot_understood_spoken_trajectory_hdi(
 
     # Understood HDI bands
     y_u_median = np.median(samples.y_u_plot, axis=1)
-    y_u_hdi_75 = az.hdi(samples.y_u_plot.T, prob=0.75)
-    y_u_hdi_50 = az.hdi(samples.y_u_plot.T, prob=0.50)
+    y_u_hdi_75 = az.hdi(samples.y_u_plot, prob=0.75)
+    y_u_hdi_50 = az.hdi(samples.y_u_plot, prob=0.50)
 
     # Spoken HDI bands
     y_s_median = np.median(samples.y_s_plot, axis=1)
-    y_s_hdi_75 = az.hdi(samples.y_s_plot.T, prob=0.75)
-    y_s_hdi_50 = az.hdi(samples.y_s_plot.T, prob=0.50)
+    y_s_hdi_75 = az.hdi(samples.y_s_plot, prob=0.75)
+    y_s_hdi_50 = az.hdi(samples.y_s_plot, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1330,9 +1330,9 @@ def plot_production_rate(
     q_plot = samples.q_plot
 
     q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot.T, prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot.T, prob=0.75)
-    q_hdi_50 = az.hdi(q_plot.T, prob=0.50)
+    q_hdi = az.hdi(q_plot, prob=hdi_prob)
+    q_hdi_75 = az.hdi(q_plot, prob=0.75)
+    q_hdi_50 = az.hdi(q_plot, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1395,9 +1395,9 @@ def plot_production_rate_by_understood(
 
     x_words = np.median(p_u_plot, axis=1) * n_trials
     q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot.T, prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot.T, prob=0.75)
-    q_hdi_50 = az.hdi(q_plot.T, prob=0.50)
+    q_hdi = az.hdi(q_plot, prob=hdi_prob)
+    q_hdi_75 = az.hdi(q_plot, prob=0.75)
+    q_hdi_50 = az.hdi(q_plot, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1530,8 +1530,8 @@ def plot_comprehension_production_gap(
     gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
 
     gap_median = np.median(gap, axis=1)
-    gap_hdi = az.hdi(gap.T, prob=hdi_prob)
-    gap_hdi_50 = az.hdi(gap.T, prob=0.50)
+    gap_hdi = az.hdi(gap, prob=hdi_prob)
+    gap_hdi_50 = az.hdi(gap, prob=0.50)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
