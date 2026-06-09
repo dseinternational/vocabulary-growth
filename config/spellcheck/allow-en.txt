@@ -1,4 +1,5 @@
 apraxia
+Floccia
 approximator
 arrowsize
 ArviZ

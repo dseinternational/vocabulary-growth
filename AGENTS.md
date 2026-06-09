@@ -61,7 +61,7 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload]
 ```
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg06`, `vg07`, `vg08`, `vg09`, `vg10`, or `all`.
+- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg06`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after fitting.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
@@ -100,6 +100,9 @@ The models differ in which outcome, population, and structure they target:
 | VG08  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood                                                                                  |
 | VG09  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood and on production ratio                                                          |
 | VG10  | Words understood + spoken (joint) | Down syndrome        | Study random intercepts + subject random intercepts on understood and on production ratio + tighter q-anchor priors + GP anchored at reference age |
+| VG11  | Words spoken                      | Typically developing | Dataset-level study random intercepts + GP anchor at 19 months                                                                                     |
+| VG12  | Words understood                  | Typically developing | Dataset-level study random intercepts + GP anchor at 19 months                                                                                     |
+| VG13  | Words understood + spoken (joint) | Typically developing | Ages 8–18 months only; dataset-level study random intercepts + GP anchor at 13 months                                                              |
 
 ### Shared utilities (`dse_research_utils`)
 
