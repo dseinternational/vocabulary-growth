@@ -26,8 +26,10 @@ import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DS_DIR = "output/models/VG10-age-understood-spoken-ds-re-subj-uq-anchored"
-TD_DIR = "output/models/VG06-age-understood-spoken-td"
+from vocab_growth import comparison
+
+DS_DIR = comparison.model_dir("vg10")
+TD_DIR = comparison.model_dir("vg06")
 OUT_DIR = "output/comparisons"
 
 UNDERSTOOD_COLOUR = "C0"
