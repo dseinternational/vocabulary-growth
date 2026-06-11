@@ -227,7 +227,7 @@ con.execute(
            vuk1.subject_id,
            vuk1.sex,
            vuk1.age,
-           vuk1.understood,
+           CASE WHEN vuk1.survey = 'WG' THEN vuk1.understood_imputed ELSE NULL END as understood,
            vuk1.spoken,
            vuk1.signed,
            vuk1.produced,
