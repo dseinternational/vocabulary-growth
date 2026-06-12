@@ -103,8 +103,6 @@ class UnivariateModelDefinition:
     kappa: KappaPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Study-level random intercepts --
-    use_study_re: bool = False
-    """If True, add study-level random intercepts on the outcome trajectory."""
     tau_study_sigma: float = 0.5
     """HalfNormal scale for study intercept SD (logit scale)."""
 
@@ -447,7 +445,6 @@ VG11 = UnivariateModelDefinition(
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
     # Study-level random intercepts on the spoken trajectory
-    use_study_re=True,
     tau_study_sigma=0.5,
     # Anchor the GP at the midpoint of slope_anchors (19 months) to remove the
     # GP–intercept ridge that arises when study REs are present.
@@ -475,7 +472,6 @@ VG12 = UnivariateModelDefinition(
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
     # Study-level random intercepts on the understood trajectory
-    use_study_re=True,
     tau_study_sigma=0.5,
     # Anchor the GP at the midpoint of slope_anchors (19 months).
     anchor_g_at_ref=True,

@@ -112,7 +112,6 @@ def load_data(
                 """
             SELECT
                 form,
-                dataset_name,
                 dataset_name                       as study,
                 concat('id_', hex(hash(child_id))) as subject_id,
                 age,

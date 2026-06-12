@@ -31,7 +31,7 @@ import pandas as pd
 
 ## Statistical model
 
-We model words understood and words spoken as bounded count outcomes out of an 800-word reference inventory, restricted to children aged 8–18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP), with each GP anchored at 13 months to remove the GP–intercept ridge. Dataset-level study random intercepts (non-centred Normal) are added to both trajectories, absorbed at the observation level only. Plot and query predictions use the population-level trajectory. A Beta-Binomial likelihood with age-varying dispersion accounts for extra-binomial variability in both outcomes.
+We model words understood and words spoken as bounded count outcomes out of an 800-word reference inventory, restricted to children aged 8–18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP), with each GP anchored at 13 months to remove the GP–intercept ridge. Dataset-level study random intercepts (centred Normal) are added to both trajectories, absorbed at the observation level only. Plot and query predictions use the population-level trajectory. A Beta-Binomial likelihood with age-varying dispersion accounts for extra-binomial variability in both outcomes.
 
 ::: {.callout-note}
 
