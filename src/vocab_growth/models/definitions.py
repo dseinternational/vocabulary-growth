@@ -36,6 +36,7 @@ class ModelType(Enum):
     UNIVARIATE = "univariate"
     BIVARIATE = "bivariate"
     TRIVARIATE = "trivariate"
+    JOINT = "joint"
 
 
 # ============================================================
@@ -316,6 +317,87 @@ class TrivariateModelDefinition:
     @property
     def model_type(self) -> ModelType:
         return ModelType.TRIVARIATE
+
+
+# ============================================================
+# Joint sign/speech model definition (VG15, issue #49 Option 3)
+# ============================================================
+
+
+@dataclass
+class JointModelDefinition:
+    """Complete definition for the joint sign/speech model (VG15).
+
+    Extends the trivariate structure (understood + within-understood sign/speak
+    ratios r, q) with a scalar Plackett association `psi` (identified from the
+    uk_02 four-cell cross-tab) and study random intercepts on each latent
+    trajectory. The r/q/p_U prior specs are seeded from the (uk_06-included)
+    VG14 fit (same hump-capable signed-ratio spec).
+    """
+
+    model_id: str
+    config_name: str
+    banner: str
+    population: Population
+    n_trials: int
+    slope_anchors: tuple[float, float]
+    ages_query: list[int]
+
+    # -- Understood (U) slope priors (seeded from VG05/VG14) --
+    p_slope_low_u_alpha: float = 1.0
+    p_slope_low_u_beta: float = 10.0
+    p_slope_hi_u_alpha: float = 1.1
+    p_slope_hi_u_beta: float = 1.1
+
+    # -- Speak-given-understood (q) slope priors (bivariate defaults) --
+    p_slope_low_q_alpha: float = 1.0
+    p_slope_low_q_beta: float = 1.5
+    p_slope_hi_q_alpha: float = 2.0
+    p_slope_hi_q_beta: float = 1.2
+
+    # -- Sign-given-understood (r) slope priors (VG14 hump-capable spec) --
+    p_slope_low_sign_alpha: float = 15.0
+    p_slope_low_sign_beta: float = 90.0
+    p_slope_hi_sign_alpha: float = 15.0
+    p_slope_hi_sign_beta: float = 90.0
+
+    # -- Shared GP / amplitude priors (sign GP looser + shorter, per VG14) --
+    ell_unit_u_alpha: float = 3.0
+    ell_unit_u_beta: float = 3.0
+    eta_u_sigma: float = 0.4
+    ell_unit_q_alpha: float = 3.0
+    ell_unit_q_beta: float = 3.0
+    eta_q_sigma: float = 0.4
+    ell_unit_sign_alpha: float = 2.0
+    ell_unit_sign_beta: float = 5.0
+    eta_sign_sigma: float = 1.0
+    ell_months_range: tuple[int, int] = (6, 18)
+    n_plot: int = 500
+    kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
+
+    # -- Association (Plackett log odds-ratio) --
+    log_psi_mu: float = 0.3
+    """Normal mu for log psi. Weakly positive (uk_02 shows both > r·q) but spans
+    independence (psi = 1)."""
+    log_psi_sigma: float = 0.5
+
+    # -- Dirichlet-Multinomial concentration (log scale) --
+    log_conc_mu: float = 3.0
+    log_conc_sigma: float = 1.0
+
+    # -- Study random-intercept scales (VG07-VG10 pattern) --
+    tau_u_sigma: float = 0.5
+    tau_q_sigma: float = 0.5
+    tau_sign_sigma: float = 0.5
+
+    # -- Signed data inclusion (inherits VG14's decision) --
+    include_uk06: bool = True
+
+    @property
+    def model_type(self) -> ModelType:
+        return ModelType.JOINT
 
 
 # ============================================================
@@ -642,8 +724,28 @@ VG14 = TrivariateModelDefinition(
     # uk_06 signed included by default (include_uk06=True); kappa_sign default.
 )
 
+VG15 = JointModelDefinition(
+    model_id="VG15",
+    config_name="age-joint-signspeech-ds",
+    banner=(
+        "Fitting Model VG15: Joint sign/speech model with within-understood"
+        " association (psi) and study random intercepts - Down syndrome"
+    ),
+    population=Population.DOWN_SYNDROME,
+    n_trials=800,
+    slope_anchors=(24, 84),
+    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # r/q/p_U priors seeded from the (uk_06-included) VG14 fit (see dataclass
+    # defaults); psi ~ logNormal(0.3, 0.5) (weakly positive, spans independence);
+    # study random intercepts on f_U/g/h (tau_*=0.5).
+)
+
 MODEL_REGISTRY: dict[
-    str, UnivariateModelDefinition | BivariateModelDefinition | TrivariateModelDefinition
+    str,
+    UnivariateModelDefinition
+    | BivariateModelDefinition
+    | TrivariateModelDefinition
+    | JointModelDefinition,
 ] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -659,4 +761,5 @@ MODEL_REGISTRY: dict[
     "vg12": VG12,
     "vg13": VG13,
     "vg14": VG14,
+    "vg15": VG15,
 }
