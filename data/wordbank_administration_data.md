@@ -1,6 +1,10 @@
-# Wordbank By-Child Summary Data (English)
+# Wordbank By-Child Summary Data (All Languages)
 
-Downloaded from the [Wordbank website](https://wordbank.stanford.edu/data/?name=admin_data) on 5 Feb 2026.
+Downloaded from the [Wordbank website](https://wordbank.stanford.edu/data/?name=admin_data) on 15 June 2026.
+
+Language = All, Form = All, Health Conditions = All, Language Status = All.
+
+Queries currently restrict to the English variants (`English (American)`, `English (Australian)`, `English (British)`, `English (Irish)`); see `ENGLISH_LANGUAGES` in `src/vocab_growth/data_utils.py`.
 
 ## Fields
 

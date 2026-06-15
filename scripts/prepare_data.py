@@ -9,12 +9,17 @@ import time
 import duckdb
 import pandas as pd
 
+from vocab_growth.data_utils import ENGLISH_LANGUAGES
 from vocab_growth.reporting import (
     console,
     format_duration,
     heading,
     key_value_table,
 )
+
+# SQL list literal of English Wordbank ``language`` values. The Wordbank export
+# now contains all languages; the DS (Edgin) subset is restricted to English.
+_ENGLISH_SQL_LIST = ", ".join(f"'{lang}'" for lang in ENGLISH_LANGUAGES)
 
 _started = time.perf_counter()
 heading("Preparing vocabulary data")
@@ -210,7 +215,7 @@ con.execute(
 
 
 wordbank_child_df = pd.read_csv(
-    "./data/wordbank_administration_data_en.csv", low_memory=False
+    "./data/wordbank_administration_data.csv", low_memory=False
 )
 
 con.execute(
@@ -221,7 +226,7 @@ con.execute(
 )
 
 con.execute(
-    """
+    f"""
     CREATE VIEW vocab_combined AS
     SELECT 'uk_01' as study,
            vuk1.subject_id,
@@ -290,6 +295,7 @@ con.execute(
                END                            as survey_vocab_max
     FROM wordbank_child
     WHERE dataset_name = 'Edgin'
+      AND language IN ({_ENGLISH_SQL_LIST})
       AND lower(health_conditions) = 'down syndrome'
       AND production <= 100
     UNION
