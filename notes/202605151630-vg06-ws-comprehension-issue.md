@@ -12,7 +12,7 @@ VG06 has been refit with WS excluded; VG04 has _not_ yet been refit. A careful r
 
 ## Empirical evidence
 
-Across the full English Wordbank export (`data/wordbank_administration_data_en.csv`, 39,551 rows), we counted rows by form where `comprehension == production`:
+Across the full English Wordbank export (the English subset of `data/wordbank_administration_data.csv`, 39,551 rows), we counted rows by form where `comprehension == production`:
 
 | Form        | n          | U == S              | U > S         | U < S | Verdict             |
 | ----------- | ---------- | ------------------- | ------------- | ----- | ------------------- |
@@ -64,7 +64,11 @@ All downstream DS-vs-TD comparison scripts have been rerun (latency, q-overlap, 
 ```python
 import pandas as pd
 
-df = pd.read_csv("data/wordbank_administration_data_en.csv", low_memory=False)
+from vocab_growth.data_utils import ENGLISH_LANGUAGES
+
+# The export now contains all languages; restrict to English to reproduce the counts above.
+df = pd.read_csv("data/wordbank_administration_data.csv", low_memory=False)
+df = df[df["language"].isin(ENGLISH_LANGUAGES)]
 for form in df["form"].unique():
     f = df[df["form"] == form].dropna(subset=["comprehension", "production"])
     eq = (f["comprehension"] == f["production"]).sum()

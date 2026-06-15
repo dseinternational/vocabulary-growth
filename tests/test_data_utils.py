@@ -49,6 +49,31 @@ def test_td_spoken_data_includes_ws_and_bivariate_forms(tmp_path, monkeypatch):
     assert sorted(df["form"].to_list()) == ["Oxford CDI", "WG", "WS"]
 
 
+def test_td_load_data_defaults_to_english_only(tmp_path, monkeypatch):
+    db_path = _create_wordbank_db(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    df = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["language", "form", "age", "spoken"],
+    )
+
+    assert df["language"].unique().tolist() == ["English (British)"]
+
+
+def test_td_load_data_can_widen_languages(tmp_path, monkeypatch):
+    db_path = _create_wordbank_db(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    df = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["language", "form", "age", "spoken"],
+        languages=None,
+    )
+
+    assert "Norwegian" in df["language"].tolist()
+
+
 def _create_wordbank_db(tmp_path):
     db_path = tmp_path / "vocabulary.duckdb"
     with duckdb.connect(str(db_path)) as con:
@@ -56,6 +81,7 @@ def _create_wordbank_db(tmp_path):
             """
             CREATE TABLE wordbank_child (
                 form VARCHAR,
+                language VARCHAR,
                 dataset_name VARCHAR,
                 child_id VARCHAR,
                 age DOUBLE,
@@ -68,17 +94,19 @@ def _create_wordbank_db(tmp_path):
         )
         con.executemany(
             """
-            INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                ("WG",         "Fenson (2007)",   "c01", 12.0,  40,  12, True,  None),
-                ("Oxford CDI", "Hamilton (2000)", "c02", 24.0, 190,  80, True,  None),
-                ("WS",         "Fenson (2007)",   "c03", 28.0,  51,  51, True,  None),
-                ("WSShort",    "Fenson (2007)",   "c04", 22.0,  20,  20, True,  None),
-                ("TEDS Twos",  "Fenson (2007)",   "c05", 24.0,  75,  75, True,  None),
-                ("WG",         "Fenson (2007)",   "c06", 35.0, 100,  50, True,  None),
-                ("WG",         "Fenson (2007)",   "c07", 18.0,  60,  20, True,  "premature"),
-                ("WG",         "Fenson (2007)",   "c08", 18.0,  60,  20, False, None),
+                ("WG",         "English (British)",  "Fenson (2007)",   "c01", 12.0,  40,  12, True,  None),
+                ("Oxford CDI", "English (British)",  "Hamilton (2000)", "c02", 24.0, 190,  80, True,  None),
+                ("WS",         "English (British)",  "Fenson (2007)",   "c03", 28.0,  51,  51, True,  None),
+                ("WSShort",    "English (British)",  "Fenson (2007)",   "c04", 22.0,  20,  20, True,  None),
+                ("TEDS Twos",  "English (British)",  "Fenson (2007)",   "c05", 24.0,  75,  75, True,  None),
+                ("WG",         "English (British)",  "Fenson (2007)",   "c06", 35.0, 100,  50, True,  None),
+                ("WG",         "English (British)",  "Fenson (2007)",   "c07", 18.0,  60,  20, True,  "premature"),
+                ("WG",         "English (British)",  "Fenson (2007)",   "c08", 18.0,  60,  20, False, None),
+                # Non-English row that otherwise matches: excluded by the default English filter.
+                ("WG",         "Norwegian",           "Simonsen (2014)", "c09", 16.0,  55,  18, True,  None),
             ],
         )
     return db_path
