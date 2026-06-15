@@ -323,7 +323,7 @@ con.execute(
         vuk2013.spoken,
         vuk2013.signed,
         vuk2013.spoken                      as produced,
-        418                                 as survey_vocab_max -- TODO: confirm for Reading Communicative Development Inventories
+        418                                 as survey_vocab_max
     FROM vocab_uk_04 as vuk2013
         UNION
     SELECT 'uk_05'                           as study,
@@ -334,7 +334,7 @@ con.execute(
         vuk05.spoken,
         vuk05.signed,
         vuk05.spoken                      as produced,
-        418                                 as survey_vocab_max -- TODO: confirm for Reading Communicative Development Inventories
+        418                                 as survey_vocab_max
     FROM vocab_uk_05 as vuk05
         UNION
     SELECT 'us_02'                           as study,

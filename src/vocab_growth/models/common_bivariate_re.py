@@ -86,6 +86,7 @@ def prepare_bivariate_re_data(
         columns=columns,
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
+        max_age_months=definition.max_age_months,
     )
     analysis_df = df[columns].copy()
 

@@ -56,6 +56,8 @@ def _create_wordbank_db(tmp_path):
             """
             CREATE TABLE wordbank_child (
                 form VARCHAR,
+                dataset_name VARCHAR,
+                child_id VARCHAR,
                 age DOUBLE,
                 comprehension INTEGER,
                 production INTEGER,
@@ -66,17 +68,17 @@ def _create_wordbank_db(tmp_path):
         )
         con.executemany(
             """
-            INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                ("WG", 12.0, 40, 12, True, None),
-                ("Oxford CDI", 24.0, 190, 80, True, None),
-                ("WS", 28.0, 51, 51, True, None),
-                ("WSShort", 22.0, 20, 20, True, None),
-                ("TEDS Twos", 24.0, 75, 75, True, None),
-                ("WG", 35.0, 100, 50, True, None),
-                ("WG", 18.0, 60, 20, True, "premature"),
-                ("WG", 18.0, 60, 20, False, None),
+                ("WG",         "Fenson (2007)",   "c01", 12.0,  40,  12, True,  None),
+                ("Oxford CDI", "Hamilton (2000)", "c02", 24.0, 190,  80, True,  None),
+                ("WS",         "Fenson (2007)",   "c03", 28.0,  51,  51, True,  None),
+                ("WSShort",    "Fenson (2007)",   "c04", 22.0,  20,  20, True,  None),
+                ("TEDS Twos",  "Fenson (2007)",   "c05", 24.0,  75,  75, True,  None),
+                ("WG",         "Fenson (2007)",   "c06", 35.0, 100,  50, True,  None),
+                ("WG",         "Fenson (2007)",   "c07", 18.0,  60,  20, True,  "premature"),
+                ("WG",         "Fenson (2007)",   "c08", 18.0,  60,  20, False, None),
             ],
         )
     return db_path

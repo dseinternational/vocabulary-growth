@@ -102,6 +102,17 @@ class UnivariateModelDefinition:
     n_plot: int = 500
     kappa: KappaPriorParams = field(default_factory=KappaPriorParams)
 
+    # -- Study-level random intercepts --
+    tau_study_sigma: float = 0.5
+    """HalfNormal scale for study intercept SD (logit scale)."""
+
+    # -- GP anchor constraint (per-draw zero at reference age) --
+    anchor_g_at_ref: bool = False
+    """If True, constrain the GP to equal zero at the reference age for every draw."""
+    gp_anchor_age_months: float | None = None
+    """Reference age (months) for the GP anchor. If None, defaults to the midpoint of
+    slope_anchors."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.UNIVARIATE
@@ -188,6 +199,10 @@ class BivariateModelDefinition:
     gp_anchor_age_months: float | None = None
     """Reference age (months) for the GP anchor constraint. If None, defaults to the
     midpoint of slope_anchors."""
+
+    # -- Data age filtering --
+    max_age_months: int | None = None
+    """Upper bound on age (inclusive, months) for data loading. None = no limit."""
 
     @property
     def model_type(self) -> ModelType:
@@ -410,6 +425,92 @@ VG10 = BivariateModelDefinition(
     gp_anchor_age_months=54.0,
 )
 
+VG11 = UnivariateModelDefinition(
+    model_id="VG11",
+    config_name="age-spoken-td-re",
+    banner=(
+        "Fitting Model VG11: Words spoken (TD) with dataset-level study random intercepts"
+    ),
+    population=Population.TYPICALLY_DEVELOPING,
+    outcome=Outcome.SPOKEN,
+    # Common 800-item reference inventory for TD/DS comparisons.
+    n_trials=800,
+    slope_anchors=(12, 26),
+    ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    p_slope_low_alpha=1.0,
+    p_slope_low_beta=15.0,
+    p_slope_hi_alpha=1.5,
+    p_slope_hi_beta=1.1,
+    # Use all bivariate-capable rows (WG + Oxford CDI) plus WS production rows.
+    # Study REs absorb between-lab variation, so subsampling is not needed.
+    sample_fraction=1.0,
+    # Study-level random intercepts on the spoken trajectory
+    tau_study_sigma=0.5,
+    # Anchor the GP at the midpoint of slope_anchors (19 months) to remove the
+    # GP–intercept ridge that arises when study REs are present.
+    anchor_g_at_ref=True,
+    gp_anchor_age_months=19.0,
+)
+
+VG12 = UnivariateModelDefinition(
+    model_id="VG12",
+    config_name="age-understood-td-re",
+    banner=(
+        "Fitting Model VG12: Words understood (TD) with dataset-level study random intercepts"
+    ),
+    population=Population.TYPICALLY_DEVELOPING,
+    outcome=Outcome.UNDERSTOOD,
+    # Common 800-item reference inventory for TD/DS comparisons.
+    n_trials=800,
+    slope_anchors=(12, 26),
+    ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    p_slope_low_alpha=1.0,
+    p_slope_low_beta=20.0,
+    p_slope_hi_alpha=1.5,
+    p_slope_hi_beta=1.1,
+    # WG + Oxford CDI only (WS comprehension is a production proxy).
+    # Study REs absorb between-lab variation, so subsampling is not needed.
+    sample_fraction=1.0,
+    # Study-level random intercepts on the understood trajectory
+    tau_study_sigma=0.5,
+    # Anchor the GP at the midpoint of slope_anchors (19 months).
+    anchor_g_at_ref=True,
+    gp_anchor_age_months=19.0,
+)
+
+VG13 = BivariateModelDefinition(
+    model_id="VG13",
+    config_name="age-understood-spoken-td-re-young",
+    banner=(
+        "Fitting Model VG13: Joint words understood + spoken (TD, 8–18 months) "
+        "with dataset-level study random intercepts"
+    ),
+    population=Population.TYPICALLY_DEVELOPING,
+    # Common 800-item reference inventory. Counts from WG (ceiling 396) and
+    # Oxford CDI (ceiling 418) are comfortably below the 800-item scale in the
+    # 8–18 month window, so no distortion is introduced.
+    n_trials=800,
+    # Restrict to 8–18 months where WG/Oxford CDI data are dense and the WS
+    # bias (production proxy comprehension) is avoided entirely.
+    max_age_months=18,
+    slope_anchors=(10, 16),
+    ages_query=[8, 10, 12, 14, 16, 18],
+    p_slope_low_u_alpha=1.0,
+    p_slope_low_u_beta=15.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=2.0,
+    # Use all available bivariate rows in the 8–18 month window; study REs
+    # absorb between-lab variation so no subsampling is required.
+    sample_fraction=1.0,
+    # Dataset-level study random intercepts on both trajectories
+    tau_u_sigma=0.5,
+    tau_q_sigma=0.5,
+    # Anchor GPs at the midpoint of slope_anchors (13 months)
+    anchor_g_u_at_ref=True,
+    anchor_g_q_at_ref=True,
+    gp_anchor_age_months=13.0,
+)
+
 MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -421,4 +522,7 @@ MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] 
     "vg08": VG08,
     "vg09": VG09,
     "vg10": VG10,
+    "vg11": VG11,
+    "vg12": VG12,
+    "vg13": VG13,
 }

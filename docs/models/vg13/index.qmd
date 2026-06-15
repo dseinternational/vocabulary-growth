@@ -1,0 +1,108 @@
+---
+title: "Model VG13: Joint words understood + spoken (TD, 8–18 months) with study random intercepts"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-warning title="Warning: Preliminary model output"}
+
+This model output is preliminary and likely to change as the model evolves and further data are received.
+
+If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+:::
+
+This model fits a joint bivariate model of words understood and spoken in typically developing children aged 8–18 months. It extends VG06 with dataset-level study random intercepts and restricts the age range to 8–18 months, where Wordbank WG and Oxford CDI data are dense and cover multiple labs. Above 18 months only a single dataset (Floccia/Oxford CDI) contributes bivariate observations, making inference unreliable. The production-ratio reparameterisation enforces $p_S \leq p_U$ by construction.
+
+```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+```
+
+## Statistical model
+
+We model words understood and words spoken as bounded count outcomes out of an 800-word reference inventory, restricted to children aged 8–18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP), with each GP anchored at 13 months to remove the GP–intercept ridge. Dataset-level study random intercepts (centred Normal) are added to both trajectories, absorbed at the observation level only. Plot and query predictions use the population-level trajectory. A Beta-Binomial likelihood with age-varying dispersion accounts for extra-binomial variability in both outcomes.
+
+::: {.callout-note}
+
+For full details and discussion, please refer to the technical report.
+
+:::
+
+![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Data
+
+```{python}
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+## Diagnostics
+
+```{python}
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+
+
+def _flag_red(v, threshold, *, above):
+    bad = v > threshold if above else v < threshold
+    return "color: #b00; font-weight: bold;" if bad else ""
+
+
+def _style_diagnostics(df):
+    styler = df.style.format(precision=3)
+    if "r_hat" in df.columns:
+        styler = styler.map(
+            lambda v: _flag_red(v, 1.01, above=True), subset=["r_hat"]
+        )
+    ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
+    if ess_cols:
+        styler = styler.map(
+            lambda v: _flag_red(v, 400, above=False), subset=ess_cols
+        )
+    styler.set_caption(
+        "Reported convergence diagnostics. Cells highlighted red flag "
+        "r̂ > 1.01 or ESS < 400."
+    )
+    return styler
+
+
+_style_diagnostics(diagnostics)
+```
+
+![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![pair_plot](pair_plot.svg){#fig-pair .lightbox fig-align="left"}
+
+## Posterior predictions
+
+### Understood trajectory
+
+```{python}
+posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
+posterior_summary
+```
+
+### Joint trajectory
+
+![joint_trajectory](joint_trajectory.svg){#fig-joint-trajectory .lightbox fig-align="left"}
+
+### Production ratio $q$
+
+![production_ratio](production_ratio.svg){#fig-production-ratio .lightbox fig-align="left"}
+
+### Comprehension–production gap
+
+![comprehension_production_gap](comprehension_production_gap.svg){#fig-gap .lightbox fig-align="left"}

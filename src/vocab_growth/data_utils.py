@@ -61,6 +61,7 @@ def load_data(
     columns: list[str],
     sample_fraction: float = 1.0,
     random_seed: int = 47,
+    max_age_months: int | None = None,
 ) -> pd.DataFrame:
     """
     Load vocabulary data for the specified population.
@@ -71,10 +72,15 @@ def load_data(
         Which population to load data for.
     columns : list[str]
         Columns to select (e.g. ["age", "spoken"] or ["age", "understood", "spoken"]).
+        For DS the ``study`` and ``subject_id`` columns are available.
+        For TD the ``study`` column is aliased from ``dataset_name`` (the Wordbank
+        dataset/lab identifier), along with ``subject_id`` and ``form``.
     sample_fraction : float
         Fraction of data to subsample (TD only). 1.0 = no subsampling.
     random_seed : int
         Random seed for subsampling.
+    max_age_months : int | None
+        Upper bound on age (inclusive, months). None means no upper bound.
 
     Returns
     -------
@@ -82,7 +88,7 @@ def load_data(
         DataFrame with the requested columns.
     """
     if population == Population.DOWN_SYNDROME:
-        df = load_combined_data()
+        df = load_combined_data(max_age_months=max_age_months)
         return df[columns]
 
     # Typically developing — query wordbank_child directly.
@@ -98,12 +104,16 @@ def load_data(
     if needs_spoken or not needs_understood:
         td_forms.extend(TD_SPOKEN_ONLY_FORMS)
 
+    age_upper = max_age_months if max_age_months is not None else 30
+
     with duckdb.connect(VOCABULARY_DATA_PATH) as con:
         td_df = (
             con.execute(
                 """
             SELECT
                 form,
+                dataset_name                       as study,
+                concat('id_', hex(hash(child_id))) as subject_id,
                 age,
                 CASE
                     WHEN form IN ('Oxford CDI', 'WG') THEN comprehension
@@ -114,11 +124,11 @@ def load_data(
                 health_conditions
             FROM wordbank_child
             WHERE typically_developing = true
-                AND age < 31
+                AND age <= $2
                 AND health_conditions IS NULL
                 AND form IN $1
             """,
-                [td_forms],
+                [td_forms, age_upper],
             )
             .df()
         )

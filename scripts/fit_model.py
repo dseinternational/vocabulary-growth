@@ -24,6 +24,9 @@ from vocab_growth.models import (
     model_vg08,
     model_vg09,
     model_vg10,
+    model_vg11,
+    model_vg12,
+    model_vg13,
 )
 from vocab_growth.reporting import (
     console,
@@ -76,6 +79,9 @@ if __name__ == "__main__":
         "vg08": model_vg08,
         "vg09": model_vg09,
         "vg10": model_vg10,
+        "vg11": model_vg11,
+        "vg12": model_vg12,
+        "vg13": model_vg13,
     }
 
     if args.model == "all":

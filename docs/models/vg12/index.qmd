@@ -1,0 +1,181 @@
+---
+title: "Model VG12: Words understood (TD) with dataset-level study random intercepts"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-warning title="Warning: Preliminary model output"}
+
+This model output is preliminary and likely to change as the model evolves and further data are received.
+
+If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+:::
+
+This model examines how age influences words understood ($A \rightarrow U$) in typically developing children, extending VG04 with dataset-level study random intercepts to account for between-lab variation in the Wordbank data.
+
+```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+```
+
+## Statistical model
+
+We model the number of words understood as a bounded count outcome out of an 800-word reference inventory. The expected proportion of words understood is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend, a Gaussian process term (anchored at 19 months to remove the GP–intercept ridge), and a dataset-level study random intercept. Study intercepts are modelled with a non-centred Normal parameterisation and absorbed at the observation level only; plot and query predictions use the population-level trajectory. To account for extra variation between children, we use a Beta-Binomial likelihood with age-varying dispersion. Only Wordbank WG and Oxford CDI rows contribute understood observations; WS comprehension values are production proxies and are excluded.
+
+::: {.callout-note}
+
+For full details and discussion, please refer to the technical report.
+
+:::
+
+![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Priors
+
+### Lengthscale
+
+![Lengthscale prior distribution `ell_unit_dist`](ell_unit_dist.svg){#fig-lengthscale .lightbox fig-align="left"}
+
+### Amplitude
+
+![Amplitude prior distribution `eta_dist`](eta_dist.svg){#fig-amplitude .lightbox fig-align="left"}
+
+### Slope
+
+#### Low slope anchor (12 months)
+
+![Slope prior distribution `p_slope_low_dist`](p_slope_low_dist.svg){#fig-slope-low .lightbox fig-align="left"}
+
+#### High slope anchor (26 months)
+
+![Slope prior distribution `p_slope_hi_dist`](p_slope_hi_dist.svg){#fig-slope-hi .lightbox fig-align="left"}
+
+### Dispersion / overdispersion
+
+![Dispersion prior distribution `kappa_min_dist`](kappa_min_dist.svg){#fig-kappa-min .lightbox fig-align="left"}
+
+![Dispersion prior distribution `a_kappa_dist`](a_kappa_dist.svg){#fig-a-kappa .lightbox fig-align="left"}
+
+![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.svg){#fig-b-kappa-mag .lightbox fig-align="left"}
+
+## Prior predictive checks
+
+### Prior samples
+
+![Prior sample trajectories](prior_samples.svg){#fig-prior-samples .lightbox fig-align="left"}
+
+### Prior predictions
+
+![Prior predictions](prior_predictions.png){#fig-prior-predictions .lightbox fig-align="left"}
+
+### Prior predictive checks
+
+![Prior predictive checks](prior_predictive_checks.png){#fig-prior-predictive-checks .lightbox width=640 fig-align="left"}
+
+## Data
+
+```{python}
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+```{python}
+study_counts = pd.read_csv("study_counts.csv")
+study_counts
+```
+
+## Diagnostics
+
+```{python}
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+
+
+def _flag_red(v, threshold, *, above):
+    bad = v > threshold if above else v < threshold
+    return "color: #b00; font-weight: bold;" if bad else ""
+
+
+def _style_diagnostics(df):
+    styler = df.style.format(precision=3)
+    if "r_hat" in df.columns:
+        styler = styler.map(
+            lambda v: _flag_red(v, 1.01, above=True), subset=["r_hat"]
+        )
+    ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
+    if ess_cols:
+        styler = styler.map(
+            lambda v: _flag_red(v, 400, above=False), subset=ess_cols
+        )
+    styler.set_caption(
+        "Reported convergence diagnostics. Cells highlighted red flag "
+        "r̂ > 1.01 or ESS < 400."
+    )
+    return styler
+
+
+_style_diagnostics(diagnostics)
+```
+
+![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![pair_plot](pair_plot.svg){#fig-pair .lightbox fig-align="left"}
+
+## Posterior predictions
+
+### Posterior summary table for selected ages
+
+In this model, $p$ is the latent success probability -- the underlying proportion of the vocabulary checklist a child is expected to understand at a given age. $Ey$ is the expected value implied by the latent mean $p$. It reflects uncertainty in the mean developmental trajectory. $Y$ is a draw from the posterior predictive distribution. It reflects both uncertainty in the mean trajectory and extra-binomial variability (dispersion).
+
+```{python}
+posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
+posterior_summary
+```
+
+### Posterior predictive probability mass function (PMF) for word counts, by age
+
+The probability of observing a specific count of words understood for selected ages.
+
+![posterior_predictive_pmf](posterior_predictive_pmf.svg){#fig-posterior-predictive-pmf .lightbox fig-align="left"}
+
+### Posterior predictive cumulative distribution function (CDF) for word counts, by age
+
+The cumulative sum of the PMF: the probability that the count of words understood is less than or equal to a specified value for selected ages.
+
+![posterior_predictive_cdf](posterior_predictive_cdf.svg){#fig-posterior-predictive-cdf .lightbox fig-align="left"}
+
+### Posterior predictive probability distributions for word counts, by age
+
+![posterior_predictive_count_distributions](posterior_predictive_count_distributions.svg){#fig-posterior-predictive-count-distributions .lightbox fig-align="left"}
+
+### Posterior predictive median trend with uncertainty intervals
+
+![plot_posterior_predictive_median_trend](plot_posterior_predictive_median_trend.svg){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
+
+Smoothed:
+
+![plot_posterior_predictive_median_trend_smoothed](plot_posterior_predictive_median_trend_smoothed.svg){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
+
+### Estimated learning rate
+
+The posterior distribution of the estimated learning rate (estimated gain in understood words per month) across age.
+
+![expected_learning_rate](expected_learning_rate.svg){#fig-expected-learning-rate .lightbox fig-align="left"}
+
+### Posterior distribution for dispersion parameter $\kappa$
+
+Lower $\kappa$ values indicate greater overdispersion (greater between-child variability relative to the mean), while higher $\kappa$ values indicate less overdispersion (less between-child variability relative to the mean).
+
+![posterior_kappa](posterior_kappa.svg){#fig-posterior-kappa .lightbox fig-align="left"}
