@@ -13,9 +13,10 @@ Author: Ethan (with Claude Code). All numbers below are taken from the fitted ou
 > not the monotone decline reported below; `r(12)` is ~0.20, not 0.58. The fitted peak
 > age (~24–30 mo) and the recede are **study-confounded and not identifiable** here (the
 > 48–60 mo window is single-study uk_02; no study REs) — only the rise and the ~39-mo
-> crossover are robust; see the review note. Also: **uk_06 signed is now excluded** by
-> default (414 → 403 signed obs; different construct), and **`p_any` is an
-> independence-based upper bound** (~3.7 pp high vs the uk_02 observed union). The §2
+> crossover are robust; see the review note. Also: **uk_06 signed is now included** by
+> default (414 signed obs; a real signing count, not a comprehension measure — see
+> review note §3), and **`p_any` is an independence-based upper bound** (~3.7 pp high vs
+> the uk_02 observed union). The §2
 > data, §4 diagnostics shape, and §7–§8 are unchanged.
 
 > **Numbering note (read first).** Three earlier notes (`202606121200-kappa-variance-vg14-handoff.md`,

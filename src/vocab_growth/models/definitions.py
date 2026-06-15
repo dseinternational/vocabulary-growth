@@ -298,11 +298,13 @@ class TrivariateModelDefinition:
     kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Signed data inclusion --
-    include_uk06: bool = False
-    """If False (default), the uk_06 'signed' counts are dropped from the signed
-    likelihood. uk_06 records *understands-and-signs* (a comprehension-adjacent
-    construct, 11 obs at 60-115 mo) rather than signed production, so it is
-    excluded pending Frank/Sue sign-off. Set True to include it."""
+    include_uk06: bool = True
+    """If True (default), the uk_06 'signed' counts are included in the signed
+    likelihood. uk_06 records a real signing-production count (11 obs at 60-115
+    mo, often comparable to or exceeding spoken — signing implies understanding,
+    so 'understands-and-signs' is a sign), not a comprehension measure. The flag
+    is kept for reversibility; the open question is whether uk_06's signed counts
+    are coded comparably to uk_02/04/05 (no field dictionary), not the construct."""
 
     # -- Data age filtering --
     max_age_months: int | None = None
@@ -634,7 +636,7 @@ VG14 = TrivariateModelDefinition(
     # Spoken ratio q: bivariate defaults.
     # Signed ratio r: tight flat low-fraction anchors + loosened GP (eta_sign=1.0)
     #   so the GP carries the empirical rise-then-fall hump (see dataclass).
-    # uk_06 signed excluded by default (include_uk06=False); kappa_sign default.
+    # uk_06 signed included by default (include_uk06=True); kappa_sign default.
 )
 
 MODEL_REGISTRY: dict[

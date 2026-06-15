@@ -67,9 +67,13 @@ ratio Σ signed / Σ understood):
 | 48–60 mo |  26 | **uk_02 only** (all signers) |       0.50 |
 | 60+ mo   |   1 | uk_01                        |       0.02 |
 
+(Composition shown with uk_06 excluded, to isolate the 24–60 mo peak window;
+uk_06 adds 11 heavy older-age signers at 60+ mo — see §3. The peak-window
+argument below is uk_06-independent.)
+
 The population ratio is still rising at 48–60 mo and only collapses when the
-sample switches from uk_02 (ends ~56 mo, heavy signers) to uk_01 (near-zero
-signers). The apparent "peak then recede" is largely a between-study boundary,
+sample switches from uk_02 (ends ~56 mo, heavy signers) to uk_01/uk_06 — and once
+uk_06's older signers are included, even the post-60 mo recede weakens (§3). The apparent "peak then recede" is largely a between-study boundary,
 not a within-child developmental recede. VG14 has no study random effects (it
 mirrors VG05), so the age curve absorbs this composition and cannot separate
 "this age signs more" from "uk_02 children sign more."
@@ -107,15 +111,37 @@ upper bound**, and a validation plot (`p_any_validation.svg`) overlays the model
 in `p_any_validation_gap.csv`. VG15 (the uk_02 multinomial) is what properly
 identifies the association.
 
-## 3. uk_06 signed is the wrong construct (Task D)
+## 3. uk_06 signed is now INCLUDED (revised decision)
 
-uk_06's `signed` column records **understands-and-signs** (a comprehension-adjacent
-measure; 2026-06-12 audit), not signed production — and it is 11 observations at
-60–115 months, outside the signing window. It is now **excluded from the signed
-likelihood by default** (`TrivariateModelDefinition.include_uk06=False`); its
-understood/spoken counts are retained. This drops the signed observation count from
-414 to 403. **Pending Frank/Sue sign-off** on the uk_04/uk_05 `signs` definition
-and the uk_06 exclusion; set `include_uk06=True` to put it back.
+`uk_06`'s `signed` is a **real signing-production count** (11 obs, 60–115 mo,
+often comparable to or exceeding spoken — e.g. ~387 signs at 60 mo). Signing
+implies understanding, so "understands-and-signs" is itself a sign, not a
+comprehension-adjacent construct. It is therefore **included in the signed
+likelihood by default** (`TrivariateModelDefinition.include_uk06=True`, 414 signed
+obs; the flag is kept for reversibility). The remaining open question for
+Frank/Sue is **coding comparability** — are uk_06's signed counts coded the same
+way as uk_02/04/05? uk_06 has no field dictionary, and its `imitated` column
+sometimes exceeds `understood`, which warrants a check — but this is a
+data-quality question, not a construct mismatch.
+
+### Sensitivity: uk_06 in vs out
+
+uk_06 are heavy older-age signers, so including them raises the old-age signed
+estimate and weakens the post-peak recede (rep medians):
+
+| Age (mo) | r(a) uk_06 out | r(a) uk_06 in | signed count out → in |
+| -------: | -------------: | ------------: | --------------------: |
+|       60 |          0.103 |         0.142 |               33 → 46 |
+|       72 |          0.043 |         0.065 |               19 → 26 |
+|       90 |          0.030 |         0.043 |               14 → 21 |
+
+The young/mid shape is essentially unchanged — **peak ~0.46 at ~30 mo, crossover
+at ~39 mo, rise to ~0.45–0.5 by age 2–3 all hold** — so including uk_06 does not
+move the headline; it only lifts the old-age tail (substantively interesting and
+consistent with DSE's signing emphasis: some children keep signing into school
+age). Both fits are clean (0 divergences / 36 000, r̂ ≤ 1.001). The §1
+study-confound on the exact peak age is unaffected (uk_06 sits at 60+ mo, past
+the 48–60 mo window that drives the peak question).
 
 ## 4. Reporting (Task B)
 
