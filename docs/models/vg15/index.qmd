@@ -19,7 +19,7 @@ format:
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
 
-If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+If the model was not fitted in "reporting" mode, the results will be more approximate than when additional sampling has been performed.
 :::
 
 This model (issue #49, Option 3) estimates the **within-understood association** between signing and speaking — the overlap that VG14 assumed away — and adds **study random intercepts**, replacing VG14's independence-based `p_any` upper bound with a _data-identified_ total expressive vocabulary.

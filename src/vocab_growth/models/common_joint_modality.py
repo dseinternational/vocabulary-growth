@@ -190,10 +190,11 @@ JointContext = ModelFitContext[JointModelConfiguration, JointModelSamples]
 def _load_uk02_four_cell():
     """Load uk_02 rows, split into four-cell (cross-tab) and marginal-only rows.
 
-    Returns (four_cell_df, marginal_df). The four-cell rows are those whose four
-    cells reconcile with the signed/spoken margins and sum to a positive total
-    (cell-sum within a few words of comprehension); they identify psi. The rest
-    are marginal-only uk_02 rows (no cross-tab).
+    Returns (four_cell_df, marginal_df). The four-cell rows are those whose
+    signed and spoken margins reconcile with the cross-tab cells
+    (signed == signed_only + signed_spoken, spoken == spoken_only + signed_spoken)
+    and whose four cells sum to a positive total; they identify psi. The rest
+    are marginal-only uk_02 rows (no usable cross-tab).
     """
     path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_02.csv")
     raw = pd.read_csv(path)
@@ -461,8 +462,13 @@ def build_model(context: JointContext):
     for arr, nm in [(y_u, "understood"), (y_s, "spoken"), (y_sign, "signed")]:
         if arr.size and (arr.min() < 0 or arr.max() > n_trials):
             raise ValueError(f"{nm} outside [0, n_trials].")
-    if cell_counts.size and (cell_counts.min() < 0):
-        raise ValueError("negative four-cell count.")
+    if cell_counts.size:
+        if cell_counts.min() < 0:
+            raise ValueError("negative four-cell count.")
+        if not np.array_equal(cell_counts.sum(axis=1), cell_total):
+            raise ValueError("four-cell counts do not sum to cell_total.")
+        if cell_total.max() > n_trials:
+            raise ValueError(f"four-cell total exceeds n_trials ({n_trials}).")
 
     study_codes = np.asarray(df["study_code"], dtype=int)
     n_studies = int(study_codes.max()) + 1
@@ -882,7 +888,8 @@ def _run_joint_plots(context: JointContext):
     ind_med = np.median(s.p_any_indep_plot, axis=1) * n_trials
     ax.fill_between(X, id_hdi[:, 0], id_hdi[:, 1], alpha=0.20, color="C0")
     ax.plot(X, id_med, lw=3, color="C0", label="Data-identified p_any (median)")
-    ax.plot(X, ind_med, lw=2.5, ls="--", color="C3", label="Independence upper bound (r·q)")
+    ax.plot(X, ind_med, lw=2.5, ls="--", color="C3",
+            label="Independence upper bound (p_U·(1-(1-r)(1-q)))")
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Expected words produced (any modality)")
     ax.set_ylim(0, n_trials + 50)
