@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from vocab_growth import comparison
+from vocab_growth import environment as env
 
 DS_DIR = comparison.model_dir("vg10")
 TD_DIR = comparison.model_dir("vg06")
@@ -29,6 +30,7 @@ OUT_DIR = "output/comparisons"
 
 
 def main() -> None:
+    env.preflight_disk(2.0, OUT_DIR, label="DS/TD q-vs-understood outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
 

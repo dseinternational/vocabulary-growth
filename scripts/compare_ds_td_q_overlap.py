@@ -35,6 +35,7 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 
 from vocab_growth import comparison
+from vocab_growth import environment as env
 from vocab_growth.comparison import (
     compute_q_at_age,
     compute_q_at_U,
@@ -66,6 +67,7 @@ MIN_COVERAGE = 0.80
 
 
 def main() -> None:
+    env.preflight_disk(2.0, OUT_DIR, label="DS/TD q-overlap outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
     rng = np.random.default_rng(0)

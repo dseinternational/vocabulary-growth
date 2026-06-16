@@ -33,6 +33,7 @@ import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from vocab_growth import environment as env
 from vocab_growth.comparison import invert_curve
 
 MODELS_DIR = "output/models"
@@ -45,6 +46,8 @@ UNIVARIATE = {
     "VG02": ("VG02-age-understood-ds", "understood", "DS"),
     "VG03": ("VG03-age-spoken-td", "spoken", "TD"),
     "VG04": ("VG04-age-understood-td", "understood", "TD"),
+    "VG11": ("VG11-age-spoken-td-re", "spoken", "TD"),
+    "VG12": ("VG12-age-understood-td-re", "understood", "TD"),
 }
 
 BIVARIATE = {
@@ -54,6 +57,7 @@ BIVARIATE = {
     "VG08": ("VG08-age-understood-spoken-ds-re-subj", "DS"),
     "VG09": ("VG09-age-understood-spoken-ds-re-subj-uq", "DS"),
     "VG10": ("VG10-age-understood-spoken-ds-re-subj-uq-anchored", "DS"),
+    "VG13": ("VG13-age-understood-spoken-td-re-young", "TD"),
 }
 
 
@@ -92,7 +96,11 @@ def plot_milestone(df: pd.DataFrame, title: str, out_base: str) -> None:
 def process_univariate(short: str, label: str, outcome: str, pop: str,
                        merged_rows: list[dict]) -> None:
     model_dir = os.path.join(MODELS_DIR, label)
-    summary = pd.read_csv(os.path.join(model_dir, "posterior_summary.csv"))
+    summary_path = os.path.join(model_dir, "posterior_summary.csv")
+    if not os.path.exists(summary_path):
+        print(f"  skip {short}: not fitted yet ({summary_path} absent)")
+        return
+    summary = pd.read_csv(summary_path)
     inv = invert_curve(summary, TARGETS)
     inv.insert(0, "outcome", outcome)
     inv.insert(0, "population", pop)
@@ -110,7 +118,11 @@ def process_bivariate(short: str, label: str, pop: str,
                       merged_rows: list[dict]) -> None:
     model_dir = os.path.join(MODELS_DIR, label)
     for outcome, suffix in (("understood", "u"), ("spoken", "s")):
-        summary = pd.read_csv(os.path.join(model_dir, f"posterior_summary_{suffix}.csv"))
+        summary_path = os.path.join(model_dir, f"posterior_summary_{suffix}.csv")
+        if not os.path.exists(summary_path):
+            print(f"  skip {short} ({outcome}): not fitted yet ({summary_path} absent)")
+            continue
+        summary = pd.read_csv(summary_path)
         inv = invert_curve(summary, TARGETS)
         inv.insert(0, "outcome", outcome)
         inv.insert(0, "population", pop)
@@ -128,6 +140,7 @@ def process_bivariate(short: str, label: str, pop: str,
 
 
 def main() -> None:
+    env.preflight_disk(2.0, env.OUTPUT_DIR, label="milestone outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(COMPARE_DIR, exist_ok=True)
 
