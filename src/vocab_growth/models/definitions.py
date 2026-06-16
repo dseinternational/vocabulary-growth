@@ -261,17 +261,20 @@ class TrivariateModelDefinition:
     p_slope_hi_q_alpha: float = 2.0
     p_slope_hi_q_beta: float = 1.2
 
-    # -- Signed ratio (r) slope priors --
+    # -- Signed ratio (r) mean prior (intercept-only) --
     # The empirical signed/understood ratio is a *hump* (near zero < 24 mo, peak
-    # ~0.5 around 48-54 mo, receding after), not a monotone trend. The two
-    # anchors share a TIGHT, equal low-fraction prior so the logit-linear mean
-    # trend is pinned ~flat (it cannot co-opt the real old-age fade into a
-    # monotone decline that then extrapolates upward below 24 mo); the loosened
-    # signed GP (eta_sign, below) is left to carry the entire rise-then-fall.
-    p_slope_low_sign_alpha: float = 15.0
-    p_slope_low_sign_beta: float = 90.0
-    p_slope_hi_sign_alpha: float = 15.0
-    p_slope_hi_sign_beta: float = 90.0
+    # in the preschool years, receding after), not a monotone trend. The signed
+    # mean trend is INTERCEPT-ONLY (no age slope) — this structurally removes the
+    # original "free slope tilts down and extrapolates to a spurious ~58% signed
+    # at 12 mo" failure mode, so the level no longer needs a tight prior. A single
+    # weakly-informative intercept (logit scale) lets the data set the signed
+    # level and old-age tail; the GP (eta_sign, below) carries the rise-then-fall.
+    intercept_sign_mu: float = math.log(0.15 / 0.85)
+    """Normal mu for the signed-ratio intercept (logit scale, ~0.15)."""
+    intercept_sign_sigma: float = 0.75
+    """Normal sigma for the signed-ratio intercept (logit scale). Wide enough to
+    span a broad signed level once combined with the GP; calibrated against the
+    prior-predictive r(a) band (broad, not piling at 0 or 1)."""
 
     # -- Shared GP / amplitude priors --
     ell_unit_u_alpha: float = 3.0
@@ -634,8 +637,8 @@ VG14 = TrivariateModelDefinition(
     p_slope_hi_u_alpha=1.1,
     p_slope_hi_u_beta=1.1,
     # Spoken ratio q: bivariate defaults.
-    # Signed ratio r: tight flat low-fraction anchors + loosened GP (eta_sign=1.0)
-    #   so the GP carries the empirical rise-then-fall hump (see dataclass).
+    # Signed ratio r: intercept-only mean (data-set level) + loosened GP
+    #   (eta_sign=1.0) carrying the rise-then-fall hump (see dataclass).
     # uk_06 signed included by default (include_uk06=True); kappa_sign default.
 )
 

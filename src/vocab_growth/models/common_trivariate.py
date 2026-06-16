@@ -110,9 +110,8 @@ class TrivariateModelConfiguration(BaseModelConfiguration):
     ell_unit_q_dist: Continuous
     eta_q_dist: Continuous
 
-    # Signed ratio (r) priors
-    p_slope_low_sign_dist: Continuous
-    p_slope_hi_sign_dist: Continuous
+    # Signed ratio (r) priors — intercept-only mean (no age slope)
+    intercept_sign_dist: Continuous
     ell_unit_sign_dist: Continuous
     eta_sign_dist: Continuous
 
@@ -360,15 +359,12 @@ def configure_trivariate_priors(
     eta_sign_dist = pz.HalfNormal(sigma=definition.eta_sign_sigma)
     _plot_and_print_dist(context, eta_sign_dist, "eta_sign_dist")
 
-    p_slope_low_sign_dist = pz.Beta(
-        alpha=definition.p_slope_low_sign_alpha, beta=definition.p_slope_low_sign_beta
+    # Intercept-only signed mean (no age slope): a single weakly-informative
+    # intercept on the logit scale lets the data set the signed level / tail.
+    intercept_sign_dist = pz.Normal(
+        mu=definition.intercept_sign_mu, sigma=definition.intercept_sign_sigma
     )
-    _plot_and_print_dist(context, p_slope_low_sign_dist, "p_slope_low_sign_dist")
-
-    p_slope_hi_sign_dist = pz.Beta(
-        alpha=definition.p_slope_hi_sign_alpha, beta=definition.p_slope_hi_sign_beta
-    )
-    _plot_and_print_dist(context, p_slope_hi_sign_dist, "p_slope_hi_sign_dist")
+    _plot_and_print_dist(context, intercept_sign_dist, "intercept_sign_dist")
 
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
@@ -426,9 +422,8 @@ def configure_trivariate_priors(
         p_slope_hi_q_dist=p_slope_hi_q_dist,
         ell_unit_q_dist=ell_unit_q_dist,
         eta_q_dist=eta_q_dist,
-        # Signed rate
-        p_slope_low_sign_dist=p_slope_low_sign_dist,
-        p_slope_hi_sign_dist=p_slope_hi_sign_dist,
+        # Signed rate (intercept-only mean)
+        intercept_sign_dist=intercept_sign_dist,
         ell_unit_sign_dist=ell_unit_sign_dist,
         eta_sign_dist=eta_sign_dist,
         # Kappa — understood
@@ -669,19 +664,12 @@ def build_model(context: TrivariateContext):
         # Signed ratio: g_sign(a) -> r(a) = sigmoid(g_sign(a))
         # ============================================================
 
-        p_slope_low_sign = config.p_slope_low_sign_dist.to_pymc("p_slope_low_sign")
-        p_slope_hi_sign = config.p_slope_hi_sign_dist.to_pymc("p_slope_hi_sign")
-
-        slope_sign = pm.Deterministic(
-            "slope_sign",
-            (pymc_utils.logit(p_slope_hi_sign) - pymc_utils.logit(p_slope_low_sign))
-            / (slope_age_b_z - slope_age_a_z),
-        )
-        intercept_sign = pm.Deterministic(
-            "intercept_sign",
-            pymc_utils.logit(p_slope_low_sign) - slope_sign * slope_age_a_z,
-        )
-        mean_trend_sign = intercept_sign + slope_sign * X_all_z_data[:, 0]
+        # Intercept-only mean (no age slope): structurally prevents a free slope
+        # from extrapolating the signed ratio below the data floor (< ~18 mo),
+        # while a wide intercept prior lets the data set the level. The GP carries
+        # the age-varying (rise-then-fall) shape.
+        intercept_sign = config.intercept_sign_dist.to_pymc("intercept_sign")
+        mean_trend_sign = intercept_sign
 
         # GP for signed rate
         ell_unit_sign = config.ell_unit_sign_dist.to_pymc("ell_unit_sign")
