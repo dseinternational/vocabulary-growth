@@ -7,6 +7,7 @@ Shared dataclasses and pipeline functions for the vocabulary growth model family
 
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
@@ -774,6 +775,10 @@ def sample(context: ModelFitContext):
             cores=context.sampling.cores,
             target_accept=context.sampling.target_accept,
             nuts_sampler="nutpie",
+            # rich progress bar segfaults under nutpie's worker threads when
+            # stdout is not a TTY (redirected/backgrounded); keep it for
+            # interactive terminals only.
+            progressbar=sys.stdout.isatty(),
             return_inferencedata=True,
             random_seed=context.sampling.random_seed,
         )
@@ -910,6 +915,7 @@ def sample_posterior_predictive(context: ModelFitContext):
             context.trace,
             var_names=["y_plot", "y_query", "y_obs"],
             extend_inferencedata=True,
+            progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
         )
 
