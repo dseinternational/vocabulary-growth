@@ -19,7 +19,7 @@ format:
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
 
-If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+If the model was not fitted in "reporting" mode, the results will be more approximate than when additional sampling has been performed.
 :::
 
 This model adds **signing** as a third production modality alongside speaking. It jointly examines how age influences words understood, words spoken and words signed ($A \rightarrow U$, $A \rightarrow S$, $A \rightarrow \text{Sign}$; $U \rightarrow S$, $U \rightarrow \text{Sign}$), using a production-ratio reparameterization that enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction.
