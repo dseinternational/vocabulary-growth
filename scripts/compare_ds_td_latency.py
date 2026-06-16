@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth import comparison
+from vocab_growth import environment as env
 
 # Re-exported for backward compatibility with verify_ds_td_latency.py and
 # compare_ds_td_q_overlap.py, which import these names from this module.
@@ -66,6 +67,7 @@ N_GRID = np.array(
 
 
 def main() -> None:
+    env.preflight_disk(2.0, OUT_DIR, label="DS/TD latency outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
 

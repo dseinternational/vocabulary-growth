@@ -13,6 +13,7 @@ from multiprocessing import freeze_support
 
 import dse_research_utils.environment.setup as setup
 
+from vocab_growth import environment as env
 from vocab_growth.models import (
     model_vg01,
     model_vg02,
@@ -105,6 +106,15 @@ if __name__ == "__main__":
             ("Upload to blob storage", args.upload),
             ("Include traces in upload", args.include_traces),
         ],
+    )
+
+    # Disk preflight: reporting-config traces are >10 GB each, so fail fast
+    # before a multi-hour sample if the volume can't hold the output.
+    heavy = args.config in {"rep", "rep-lite"}
+    env.preflight_disk(
+        (20.0 if heavy else 2.0) * len(selected),
+        env.OUTPUT_DIR,
+        label=f"{len(selected)} fit(s) [{args.config}]",
     )
 
     run_started = time.perf_counter()

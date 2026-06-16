@@ -17,12 +17,15 @@ import os
 import dse_research_utils.plot.styles as plot_styles
 from compare_models import OUT_DIR, ds_td_q_vs_understood
 
+from vocab_growth import environment as env
+
 
 def _main() -> None:
     print(
         "[deprecated] compare_ds_td.py is superseded by compare_models.py; "
         "delegating to compare_models.ds_td_q_vs_understood().",
     )
+    env.preflight_disk(2.0, OUT_DIR, label="DS/TD q-vs-understood outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
     ds_td_q_vs_understood()
