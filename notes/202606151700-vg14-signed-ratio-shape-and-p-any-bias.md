@@ -154,8 +154,9 @@ prose describes the result as a hump (signing rises then yields to speech), not
 
 Re-fitted at `--config rep` (6 chains × 6000 draws) after the changes above.
 Diagnostics are clean: **0 divergences / 36 000**, max r̂ = 1.001, min ESS ≈ 6.5k.
-Signed-block posteriors: `eta_sign` 1.15 (the loosened GP is used), `ell_sign`
-≈ 10 mo, anchors pinned flat at 0.16 / 0.12 (the tight prior held).
+(The signed mean here used the tight flat-anchor parameterisation; it is
+**superseded by §6's intercept-only refit** — the r(a) shape, peak and crossover
+below are unchanged, only the signed-mean parameterisation differs.)
 
 `r(a)` is now a **hump**, not a monotone decline:
 
@@ -186,3 +187,49 @@ independence over-states the union by **3.7 pp** within `uk_02` (0.608 vs observ
 
 Key figures: `signed_rate.svg` (hump, extrapolation shaded < 18 / > 54 mo),
 `sign_speech_crossover.svg`, `p_any_validation.svg`.
+
+## 6. Signed mean was prior-dominated → intercept-only refit (current)
+
+The flat-anchor signed mean (§1) did its job — it killed the original spurious
+"~58% signed at 12 mo" slope-extrapolation — but it was **too strict**: the two
+anchor priors (`Beta(15,90) ≈ 0.143 ± 0.034`) were prior-dominated (posterior sd
+≈ prior sd, ~0.16/0.12 — the data wasn't moving them), so the signed **level**
+was set by the prior, not the data. By contrast the understood/spoken anchors all
+moved a lot and shrank, confirming the strictness was isolated to the signed mean.
+
+**Fix:** make the signed mean **intercept-only** (drop the age slope entirely —
+that was the actual failure mode) and replace the two tight anchors with one
+weakly-informative intercept, `intercept_sign ~ Normal(logit(0.15), 0.75)` on the
+logit scale. The slope can no longer extrapolate, so a wide level prior is safe.
+The signed GP (`eta_sign`, `ell_unit_sign`) is unchanged. Understood/spoken,
+kappa, sampler and `include_uk06=True` are untouched.
+
+**Result (rep, uk_06 included, intercept-only):** clean (0 divergences / 36 000,
+r̂ ≤ 1.001, min ESS ≈ 7.6k).
+
+| quantity                   | flat-anchor                  | intercept-only                 |
+| -------------------------- | ---------------------------- | ------------------------------ |
+| signed level prior sd      | ~0.034 (probability)         | 0.75 (logit)                   |
+| `intercept_sign` posterior | (pinned) 0.16 / 0.12 anchors | mean −1.84 ≈ 0.14, **sd 0.44** |
+| `eta_sign`                 | 1.15                         | 1.06                           |
+| r peak                     | 0.46 @ ~30 mo                | 0.47 @ ~30 mo                  |
+| crossover                  | ~39 mo                       | ~39 mo                         |
+| r(90) tail                 | 0.043                        | 0.043                          |
+
+The intercept posterior sd (0.44) is now **meaningfully below its prior sd
+(0.75)** — the data is speaking, where before it wasn't. `eta_sign` dropped
+slightly (the free level carries some of what the GP was lifting) and is not
+pinned. **Substantively the curve is unchanged**: the freed level lands at ~0.14
+(≈ the old pinned level), and — contrary to the hypothesis that uk_06's heavy
+older signers would lift the tail — the old-age tail stays low (r(90) ≈ 0.04).
+The aggregate 60–115 mo marginal is dominated by uk_01's many near-zero older
+signers, which outweigh uk_06's 11 heavy ones, so the data genuinely supports a
+low old-age population tail. The change is therefore a **methodological
+correction** (level now data-informed, honest wider uncertainty), not a new
+substantive result.
+
+**Peak still does not relocate** and is not expected to: looser priors give
+honest wider uncertainty, not a later peak. The late window is essentially one
+study and VG14 has no study random effects, so the peak age remains
+study-confounded. The real peak-identifiability fix is **study random
+intercepts (VG15)**, not prior tuning.

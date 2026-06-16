@@ -87,15 +87,13 @@ For full details and discussion, please refer to the technical report.
 
 ### Signed ratio
 
-The empirical signed fraction of understood words is a **hump** — near zero below ~24 months, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean trend is therefore pinned approximately **flat** (tight, equal low-fraction anchor priors, so the logit-linear trend cannot co-opt the real old-age fade into a monotone decline), and the GP is given a **looser amplitude** (`eta_sign`) and a **shorter lengthscale** than the spoken ratio so it can carry the rise-then-fall shape itself.
+The empirical signed fraction of understood words is a **hump** — near zero below ~24 months, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean trend is **intercept-only** (no age slope): this structurally prevents a free slope from extrapolating the ratio below the data floor (< ~18 months), so the level no longer needs a tight prior. A single weakly-informative intercept (`intercept_sign`, logit scale) lets the data set the signed level and old-age tail, while the GP — given a **looser amplitude** (`eta_sign`) and a **shorter lengthscale** than the spoken ratio — carries the rise-then-fall shape.
 
 ![Lengthscale prior `ell_unit_sign_dist`](ell_unit_sign_dist.svg){#fig-ell-sign .lightbox fig-align="left"}
 
 ![Amplitude prior `eta_sign_dist`](eta_sign_dist.svg){#fig-eta-sign .lightbox fig-align="left"}
 
-![Flat-anchor prior (24 months) `p_slope_low_sign_dist`](p_slope_low_sign_dist.svg){#fig-slope-low-sign .lightbox fig-align="left"}
-
-![Flat-anchor prior (84 months) `p_slope_hi_sign_dist` — tight and equal to the 24-month anchor, pinning the signed mean trend flat](p_slope_hi_sign_dist.svg){#fig-slope-hi-sign .lightbox fig-align="left"}
+![Signed-ratio mean intercept prior `intercept_sign_dist` (logit scale, intercept-only mean)](intercept_sign_dist.svg){#fig-intercept-sign .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- understood
 
