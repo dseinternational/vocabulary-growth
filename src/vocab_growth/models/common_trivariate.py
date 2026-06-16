@@ -78,9 +78,9 @@ from vocab_growth.reporting import (
 
 EPSILON = math_constants.EPSILON
 
-# Study identifier (in the merged `vocab_combined` view) whose `signed` column
-# records understands-and-signs rather than signed production; excluded from the
-# signed likelihood by default (see TrivariateModelDefinition.include_uk06).
+# Study identifier (in the merged `vocab_combined` view) for the uk_06 dataset.
+# The `include_uk06` flag controls whether uk_06's `signed` counts are included in
+# the signed likelihood (useful for sensitivity checks / coding comparability).
 UK06_STUDY_ID = "uk_06"
 
 # Age window (months) over which signing production is actually observed in the
