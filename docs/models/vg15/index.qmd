@@ -1,0 +1,151 @@
+---
+title: "Model VG15: Joint sign/speech model with within-understood association - children with Down syndrome"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-warning title="Warning: Preliminary model output"}
+
+This model output is preliminary and likely to change as the model evolves and further data are received.
+
+If the model was not fitted in "reporting" mode, the results will be more approximate than when additional sampling has been performed.
+:::
+
+This model (issue #49, Option 3) estimates the **within-understood association** between signing and speaking — the overlap that VG14 assumed away — and adds **study random intercepts**, replacing VG14's independence-based `p_any` upper bound with a _data-identified_ total expressive vocabulary.
+
+```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+```
+
+## Statistical model
+
+For each understood word, a child may sign it, speak it, both, or neither. We model the within-understood marginals and their association jointly, out of 800 checklist words:
+
+$$
+p_U(a) = \text{sigmoid}(f_U(a)), \quad r(a) = P(\text{sign}\mid\text{understood}) = \text{sigmoid}(g(a)), \quad q(a) = P(\text{speak}\mid\text{understood}) = \text{sigmoid}(h(a)),
+$$
+
+$f_U$ and $h$ are a linear trend plus an HSGP on the logit scale; the signed mean $g$ is **intercept-only** plus an HSGP (matching VG14 — a free age slope would extrapolate the signed ratio below the data floor, so the GP alone carries the rise-then-fall hump). A single scalar **Plackett odds ratio** $\psi$ links sign and speech within understood words:
+
+$$
+\pi_\text{both} = C(r, q; \psi), \quad \pi_\text{sign-only} = r - \pi_\text{both}, \quad \pi_\text{speak-only} = q - \pi_\text{both}, \quad \pi_\text{neither} = 1 - r - q + \pi_\text{both}.
+$$
+
+$\psi = 1$ is independence ($\pi_\text{both} = r\,q$, the VG14 assumption); $\psi > 1$ is positive association (a word is signed and spoken together more often than independence predicts). The **data-identified total expressive vocabulary** is
+
+$$
+p_\text{any}(a) = p_U(a)\,\bigl(r(a) + q(a) - \pi_\text{both}(a)\bigr),
+$$
+
+which sits _below_ VG14's independence upper bound $p_U(1-(1-r)(1-q))$ whenever $\psi>1$.
+
+**Study random intercepts** ($\delta_u, \delta_q, \delta_\text{sign} \sim \text{Normal}(0,\tau)$ per study, the VG07–VG10 pattern) sit on $f_U$, $g$, $h$ at the observation level, so the reported age curves (population level) are separated from study composition — which made VG14's signed peak unidentifiable.
+
+### Likelihoods
+
+- **understood** (all DS studies): $\text{BetaBinomial}(800, p_U, \kappa_U)$.
+- **spoken / signed marginals** (uk_01/04/05/06 + uk_02 marginal-only rows): $\text{BetaBinomial}(800, p_U q, \kappa_S)$ and $\text{BetaBinomial}(800, p_U r, \kappa_\text{sign})$.
+- **uk_02 four cells** (the only cross-tab source): $\text{DirichletMultinomial}(\text{total}, \text{conc}\cdot[\pi_\text{neither}, \pi_\text{sign-only}, \pi_\text{speak-only}, \pi_\text{both}])$. **This is what identifies $\psi$.**
+
+::: {.callout-important title="psi rests almost entirely on uk_02 — descriptive / exploratory"}
+
+The association $\psi$ is identified by the ~60 uk_02 rows with the four-cell cross-tab (19–56 months). It is a **single scalar** (the data do not support an age-varying association at this sample size) and is **descriptive/exploratory**. The four-cell composition outside ~19–56 months, and $p_\text{any}$ there, lean on the marginal trajectories plus scalar-$\psi$ extrapolation. uk_06 contributes marginal signed/spoken counts only (no cross-tab).
+
+:::
+
+![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Priors
+
+### Trajectories (understood / spoken-ratio / signed-ratio)
+
+![`p_slope_low_u_dist`](p_slope_low_u_dist.svg){.lightbox fig-align="left" width=380}
+![`eta_u_dist`](eta_u_dist.svg){.lightbox fig-align="left" width=380}
+![`intercept_sign_dist` (signed mean is intercept-only)](intercept_sign_dist.svg){.lightbox fig-align="left" width=380}
+![`eta_sign_dist`](eta_sign_dist.svg){.lightbox fig-align="left" width=380}
+
+### Association and concentration
+
+![Plackett log odds-ratio prior `log_psi_dist`](log_psi_dist.svg){#fig-log-psi .lightbox fig-align="left" width=380}
+![Dirichlet-Multinomial log-concentration prior `log_conc_dist`](log_conc_dist.svg){#fig-log-conc .lightbox fig-align="left" width=380}
+
+## Prior predictive checks
+
+![Prior r(a) = P(sign | understood)](prior_samples_r.svg){#fig-prior-r .lightbox fig-align="left"}
+
+![Prior q(a) = P(speak | understood)](prior_samples_q.svg){#fig-prior-q .lightbox fig-align="left"}
+
+## Data
+
+```{python}
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+## Diagnostics
+
+```{python}
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+diagnostics
+```
+
+![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+## Association psi
+
+The posterior of the sign-speech odds ratio $\psi$, with the independence reference $\psi = 1$.
+
+![Association psi posterior](psi_posterior.svg){#fig-psi .lightbox fig-align="left"}
+
+```{python}
+summary_psi = pd.read_csv("posterior_summary_psi.csv")
+summary_psi
+```
+
+## Within-understood composition
+
+The four mutually-exclusive states of an understood word (sign-only, sign+speech, speak-only, neither) as fractions of understood vocabulary over age — words migrating from sign into speech.
+
+![Four-cell composition trajectory](four_cell_composition.svg){#fig-composition .lightbox fig-align="left"}
+
+## Total expressive vocabulary (data-identified)
+
+The data-identified $p_\text{any}$ against VG14's independence upper bound. With $\psi > 1$ the identified total sits below the bound (the gap is the association VG14 ignored).
+
+![Data-identified p_any vs independence bound](p_any_identified_vs_bound.svg){#fig-p-any .lightbox fig-align="left"}
+
+```{python}
+summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
+summary_p_any
+```
+
+## Signed vs spoken ratio (study REs marginalised)
+
+The population sign and speak ratios with study composition absorbed by the random intercepts. Compare the signed peak/recede with VG14, where it was study-confounded.
+
+![Signed vs spoken ratio](signed_vs_spoken_rate.svg){#fig-rates .lightbox fig-align="left"}
+
+```{python}
+summary_r = pd.read_csv("posterior_summary_r.csv")
+summary_r
+```
+
+## uk_02 four-cell posterior predictive check
+
+Observed vs predicted totals for the four within-understood cells (uk_02), checking the Dirichlet-Multinomial fit that identifies $\psi$.
+
+![uk_02 four-cell PPC](uk02_cell_ppc.svg){#fig-ppc .lightbox fig-align="left"}
