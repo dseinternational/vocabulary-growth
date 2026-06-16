@@ -240,9 +240,8 @@ def prepare_trivariate_data(
         max_age_months=definition.max_age_months,
     )
 
-    # Drop uk_06 'signed' from the signed likelihood unless explicitly included:
-    # it records understands-and-signs (a comprehension-adjacent construct), not
-    # signed production. Its understood/spoken counts are retained.
+    # Optionally drop uk_06 `signed` from the signed likelihood (sensitivity / coding
+    # comparability check). When dropped, uk_06's understood/spoken counts are retained.
     n_uk06_dropped = 0
     if not definition.include_uk06:
         uk06_signed = (df["study"] == UK06_STUDY_ID) & df["signed"].notna()
