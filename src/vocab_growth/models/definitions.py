@@ -35,6 +35,7 @@ class ModelType(Enum):
 
     UNIVARIATE = "univariate"
     BIVARIATE = "bivariate"
+    TRIVARIATE = "trivariate"
 
 
 # ============================================================
@@ -207,6 +208,111 @@ class BivariateModelDefinition:
     @property
     def model_type(self) -> ModelType:
         return ModelType.BIVARIATE
+
+
+# ============================================================
+# Trivariate model definition
+# ============================================================
+
+
+@dataclass
+class TrivariateModelDefinition:
+    """Complete definition for a joint understood + spoken + signed model (VG14).
+
+    Extends the bivariate (understood + spoken) structure with a third
+    production-ratio curve for signing:
+
+        p_U(a)    = sigmoid(f_U(a))
+        q(a)      = sigmoid(h(a))        # fraction of understood words spoken
+        r(a)      = sigmoid(g_sign(a))   # fraction of understood words signed
+        p_S(a)    = p_U(a) * q(a)
+        p_Sign(a) = p_U(a) * r(a)
+
+    Signing is only present in the Down syndrome datasets, so this model is
+    DS-only and carries no typically-developing data parameters. It is a
+    self-contained copy-and-extend of ``BivariateModelDefinition`` (kept
+    isolated; the random-intercept / GP-anchor options are intentionally
+    omitted, mirroring the plain VG05 specification).
+    """
+
+    model_id: str
+    """Model identifier, e.g. 'VG14'."""
+    config_name: str
+    """Configuration name, e.g. 'age-understood-spoken-signed-ds'."""
+    banner: str
+    """Banner text printed at fit start."""
+    population: Population
+    n_trials: int
+    """Number of words on the vocabulary checklist."""
+    slope_anchors: tuple[float, float]
+    """Reference ages (months) for the slope parameterisation."""
+    ages_query: list[int]
+    """Ages (months) at which to query the posterior."""
+
+    # -- Understood (U) trajectory slope priors --
+    p_slope_low_u_alpha: float
+    p_slope_low_u_beta: float
+    p_slope_hi_u_alpha: float
+    p_slope_hi_u_beta: float
+
+    # -- Production ratio (q) slope priors --
+    p_slope_low_q_alpha: float = 1.0
+    p_slope_low_q_beta: float = 1.5
+    p_slope_hi_q_alpha: float = 2.0
+    p_slope_hi_q_beta: float = 1.2
+
+    # -- Signed ratio (r) slope priors --
+    # The empirical signed/understood ratio is a *hump* (near zero < 24 mo, peak
+    # ~0.5 around 48-54 mo, receding after), not a monotone trend. The two
+    # anchors share a TIGHT, equal low-fraction prior so the logit-linear mean
+    # trend is pinned ~flat (it cannot co-opt the real old-age fade into a
+    # monotone decline that then extrapolates upward below 24 mo); the loosened
+    # signed GP (eta_sign, below) is left to carry the entire rise-then-fall.
+    p_slope_low_sign_alpha: float = 15.0
+    p_slope_low_sign_beta: float = 90.0
+    p_slope_hi_sign_alpha: float = 15.0
+    p_slope_hi_sign_beta: float = 90.0
+
+    # -- Shared GP / amplitude priors --
+    ell_unit_u_alpha: float = 3.0
+    ell_unit_u_beta: float = 3.0
+    eta_u_sigma: float = 0.4
+    ell_unit_q_alpha: float = 3.0
+    ell_unit_q_beta: float = 3.0
+    eta_q_sigma: float = 0.4
+    # Signed GP favours a shorter lengthscale (~9 mo) than U/q so the signing
+    # peak can stand apart from the post-60 mo collapse to near-zero, rather than
+    # being smoothed into a monotone decline. (Shorter still only adds wiggle
+    # without moving the population peak past ~30 mo: the late-preschool data
+    # spike is too sparse/overdispersed to pull the population ratio there.)
+    ell_unit_sign_alpha: float = 2.0
+    ell_unit_sign_beta: float = 5.0
+    eta_sign_sigma: float = 1.0
+    """HalfNormal scale for the signed-ratio GP amplitude. Loosened well above
+    the spoken-ratio level so the GP has the amplitude to bend the (flat-mean)
+    signed ratio into the empirical rise-then-fall hump on the logit scale."""
+    ell_months_range: tuple[int, int] = (6, 18)
+    n_plot: int = 500
+    kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
+
+    # -- Signed data inclusion --
+    include_uk06: bool = True
+    """If True (default), the uk_06 'signed' counts are included in the signed
+    likelihood. uk_06 records a real signing-production count (11 obs at 60-115
+    mo, often comparable to or exceeding spoken — signing implies understanding,
+    so 'understands-and-signs' is a sign), not a comprehension measure. The flag
+    is kept for reversibility; the open question is whether uk_06's signed counts
+    are coded comparably to uk_02/04/05 (no field dictionary), not the construct."""
+
+    # -- Data age filtering --
+    max_age_months: int | None = None
+    """Upper bound on age (inclusive, months) for data loading. None = no limit."""
+
+    @property
+    def model_type(self) -> ModelType:
+        return ModelType.TRIVARIATE
 
 
 # ============================================================
@@ -511,7 +617,31 @@ VG13 = BivariateModelDefinition(
     gp_anchor_age_months=13.0,
 )
 
-MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] = {
+VG14 = TrivariateModelDefinition(
+    model_id="VG14",
+    config_name="age-understood-spoken-signed-ds",
+    banner=(
+        "Fitting Model VG14: Trivariate model of words understood, spoken and"
+        " signed (A -> U, A -> S, A -> Sign; U -> S, U -> Sign)"
+    ),
+    population=Population.DOWN_SYNDROME,
+    n_trials=800,
+    slope_anchors=(24, 84),
+    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # Understood trajectory: reuse VG05's understood slope priors.
+    p_slope_low_u_alpha=1.0,
+    p_slope_low_u_beta=10.0,
+    p_slope_hi_u_alpha=1.1,
+    p_slope_hi_u_beta=1.1,
+    # Spoken ratio q: bivariate defaults.
+    # Signed ratio r: tight flat low-fraction anchors + loosened GP (eta_sign=1.0)
+    #   so the GP carries the empirical rise-then-fall hump (see dataclass).
+    # uk_06 signed included by default (include_uk06=True); kappa_sign default.
+)
+
+MODEL_REGISTRY: dict[
+    str, UnivariateModelDefinition | BivariateModelDefinition | TrivariateModelDefinition
+] = {
     "vg01": VG01,
     "vg02": VG02,
     "vg03": VG03,
@@ -525,4 +655,5 @@ MODEL_REGISTRY: dict[str, UnivariateModelDefinition | BivariateModelDefinition] 
     "vg11": VG11,
     "vg12": VG12,
     "vg13": VG13,
+    "vg14": VG14,
 }

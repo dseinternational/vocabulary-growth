@@ -27,6 +27,7 @@ from vocab_growth.models import (
     model_vg11,
     model_vg12,
     model_vg13,
+    model_vg14,
 )
 from vocab_growth.reporting import (
     console,
@@ -82,6 +83,7 @@ if __name__ == "__main__":
         "vg11": model_vg11,
         "vg12": model_vg12,
         "vg13": model_vg13,
+        "vg14": model_vg14,
     }
 
     if args.model == "all":

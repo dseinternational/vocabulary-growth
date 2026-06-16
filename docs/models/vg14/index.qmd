@@ -1,0 +1,366 @@
+---
+title: "Model VG14: Trivariate model of words understood, spoken and signed - children with Down syndrome"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-warning title="Warning: Preliminary model output"}
+
+This model output is preliminary and likely to change as the model evolves and further data are received.
+
+If the model was not fitted in "reporting" mode, the results will be more approximate than when additional sampling has been performed.
+:::
+
+This model adds **signing** as a third production modality alongside speaking. It jointly examines how age influences words understood, words spoken and words signed ($A \rightarrow U$, $A \rightarrow S$, $A \rightarrow \text{Sign}$; $U \rightarrow S$, $U \rightarrow \text{Sign}$), using a production-ratio reparameterization that enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction.
+
+```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+```
+
+## Statistical model
+
+We jointly model words understood, words spoken and words signed as bounded count outcomes out of 800 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale.
+
+The two expressive modalities are derived as fractions of the understood vocabulary:
+
+$$
+p_S(a) = p_U(a) \cdot q(a), \qquad p_\text{Sign}(a) = p_U(a) \cdot r(a),
+$$
+
+where $q(a) = \text{sigmoid}(h(a))$ is the **production ratio** (the fraction of understood words that are spoken at age $a$) and $r(a) = \text{sigmoid}(g_\text{sign}(a))$ is the **signed ratio** (the fraction of understood words that are signed). Since $q(a), r(a) \in (0, 1)$, this enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction. Each of $f_U(a)$, $h(a)$ and $g_\text{sign}(a)$ has its own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only some outcomes are available are retained using separate observation indices.
+
+### Total expressive vocabulary
+
+We report a derived total-expressive quantity — the probability a word is produced in **any** modality (spoken or signed):
+
+$$
+p_\text{any}(a) = p_U(a) \cdot \bigl(1 - (1 - r(a))(1 - q(a))\bigr).
+$$
+
+::: {.callout-important title="p_any is an independence-based upper bound"}
+
+This formula assumes signing and speaking are **conditionally independent given age** (the Option 1 limitation of issue #49). The signed and spoken blocks share the understood trajectory $p_U(a)$ but are otherwise modelled independently. In reality a word is often signed *before* it is spoken, so the two are **positively associated**: in the only source with the four-cell breakdown (`uk_02`), words produced in both modalities are observed more often than independence predicts (0.18 vs $r \cdot q$ 0.14 over 20–56 months). Because positive association reduces the union, $p_\text{any}$ as computed here **over-states** the true total expressive vocabulary — it is an **upper bound** (≈ 4 percentage points high against the `uk_02` observed union; see the validation below). VG14 therefore gives a first, lightweight read on the sign→speech hand-off; the planned VG15 model relaxes the independence assumption using the `uk_02` four-cell (sign-only / sign+speech / speech-only / neither) breakdown to identify the within-understood signed–spoken association directly.
+
+:::
+
+::: {.callout-note}
+
+For full details and discussion, please refer to the technical report.
+
+:::
+
+![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Priors
+
+### Understood trajectory
+
+![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.svg){#fig-ell-u .lightbox fig-align="left"}
+
+![Amplitude prior `eta_u_dist`](eta_u_dist.svg){#fig-eta-u .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.svg){#fig-slope-low-u .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.svg){#fig-slope-hi-u .lightbox fig-align="left"}
+
+### Production ratio (spoken)
+
+![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.svg){#fig-ell-q .lightbox fig-align="left"}
+
+![Amplitude prior `eta_q_dist`](eta_q_dist.svg){#fig-eta-q .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.svg){#fig-slope-low-q .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.svg){#fig-slope-hi-q .lightbox fig-align="left"}
+
+### Signed ratio
+
+The empirical signed fraction of understood words is a **hump** — near zero below ~24 months, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean trend is therefore pinned approximately **flat** (tight, equal low-fraction anchor priors, so the logit-linear trend cannot co-opt the real old-age fade into a monotone decline), and the GP is given a **looser amplitude** (`eta_sign`) and a **shorter lengthscale** than the spoken ratio so it can carry the rise-then-fall shape itself.
+
+![Lengthscale prior `ell_unit_sign_dist`](ell_unit_sign_dist.svg){#fig-ell-sign .lightbox fig-align="left"}
+
+![Amplitude prior `eta_sign_dist`](eta_sign_dist.svg){#fig-eta-sign .lightbox fig-align="left"}
+
+![Flat-anchor prior (24 months) `p_slope_low_sign_dist`](p_slope_low_sign_dist.svg){#fig-slope-low-sign .lightbox fig-align="left"}
+
+![Flat-anchor prior (84 months) `p_slope_hi_sign_dist` — tight and equal to the 24-month anchor, pinning the signed mean trend flat](p_slope_hi_sign_dist.svg){#fig-slope-hi-sign .lightbox fig-align="left"}
+
+### Dispersion / overdispersion -- understood
+
+![`kappa_min_u_dist`](kappa_min_u_dist.svg){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![`a_kappa_u_dist`](a_kappa_u_dist.svg){#fig-a-kappa-u .lightbox fig-align="left"}
+
+![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.svg){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+
+### Dispersion / overdispersion -- spoken
+
+![`kappa_min_s_dist`](kappa_min_s_dist.svg){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![`a_kappa_s_dist`](a_kappa_s_dist.svg){#fig-a-kappa-s .lightbox fig-align="left"}
+
+![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.svg){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+
+### Dispersion / overdispersion -- signed
+
+![`kappa_min_sign_dist`](kappa_min_sign_dist.svg){#fig-kappa-min-sign .lightbox fig-align="left"}
+
+![`a_kappa_sign_dist`](a_kappa_sign_dist.svg){#fig-a-kappa-sign .lightbox fig-align="left"}
+
+![`b_kappa_mag_sign_dist`](b_kappa_mag_sign_dist.svg){#fig-b-kappa-mag-sign .lightbox fig-align="left"}
+
+## Prior predictive checks
+
+### Prior samples -- words understood
+
+![Prior sample trajectories (understood)](prior_samples_u.svg){#fig-prior-samples-u .lightbox fig-align="left"}
+
+### Prior samples -- words spoken
+
+![Prior sample trajectories (spoken)](prior_samples_s.svg){#fig-prior-samples-s .lightbox fig-align="left"}
+
+### Prior samples -- words signed
+
+![Prior sample trajectories (signed)](prior_samples_sign.svg){#fig-prior-samples-sign .lightbox fig-align="left"}
+
+### Prior samples -- production rate q(a)
+
+![Prior sample trajectories for production ratio q(a)](prior_samples_q.svg){#fig-prior-samples-q .lightbox fig-align="left"}
+
+### Prior samples -- signed rate r(a)
+
+![Prior sample trajectories for signed ratio r(a)](prior_samples_r.svg){#fig-prior-samples-r .lightbox fig-align="left"}
+
+## Data
+
+```{python}
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+## Diagnostics
+
+```{python}
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+
+
+def _flag_red(v, threshold, *, above):
+    bad = v > threshold if above else v < threshold
+    return "color: #b00; font-weight: bold;" if bad else ""
+
+
+def _style_diagnostics(df):
+    styler = df.style.format(precision=3)
+    if "r_hat" in df.columns:
+        styler = styler.map(
+            lambda v: _flag_red(v, 1.01, above=True), subset=["r_hat"]
+        )
+    ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
+    if ess_cols:
+        styler = styler.map(
+            lambda v: _flag_red(v, 400, above=False), subset=ess_cols
+        )
+    styler.set_caption(
+        "Reported convergence diagnostics. Cells highlighted red flag "
+        "r̂ > 1.01 or ESS < 400."
+    )
+    return styler
+
+
+_style_diagnostics(diagnostics)
+```
+
+![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![pair_plot](pair_plot.svg){#fig-pair .lightbox fig-align="left"}
+
+## Joint trajectory
+
+![Joint posterior predictive trajectory for words understood, spoken and signed](joint_trajectory.svg){#fig-joint-trajectory .lightbox fig-align="left"}
+
+## Total expressive vocabulary
+
+The expected vocabulary by modality, including the derived total-expressive quantity $p_\text{any}(a)$. As noted above, $p_\text{any}$ assumes signing and speaking are conditionally independent given age, so it is an **upper bound** on the true total expressive vocabulary (the sign–speech association is positive).
+
+![Expected vocabulary by modality (understood, spoken, signed, total expressive)](modality_trajectories.svg){#fig-modality .lightbox fig-align="left"}
+
+```{python}
+summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
+summary_p_any
+```
+
+### Validation against uk_02 four-cell union
+
+`uk_02` is the only source that records each understood word as sign-only, sign+speech, speech-only, or understood-only, so we can test the independence assumption directly. Building the independence union $1-(1-r)(1-q)$ from `uk_02`'s **own** observed sign and speech fractions gives 0.608, versus the **observed** union of 0.571 over 20–56 months — independence over-states the total by ~3.7 percentage points (the dashed line above the observed points), because signing and speaking are positively associated. VG14's own $p_\text{any} / p_U$ (the band) lands closer to the observed union (~1.2 pp above) only because the model's in-window signed ratio is lower than `uk_02`'s, partly cancelling the bias. Both gaps are recorded in `p_any_validation_gap.csv`. VG15 will identify the association directly.
+
+![p_any (independence upper bound) vs uk_02 observed union](p_any_validation.svg){#fig-p-any-validation .lightbox fig-align="left"}
+
+```{python}
+p_any_gap = pd.read_csv("p_any_validation_gap.csv")
+p_any_gap
+```
+
+## Production ratio (spoken)
+
+The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
+
+![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
+
+```{python}
+summary_q = pd.read_csv("posterior_summary_q.csv")
+summary_q
+```
+
+## Signed ratio
+
+The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ is the fraction of understood words that are signed at each age. The robust, headline finding is that signing **rises from near zero in infancy to a substantial fraction — about 0.4–0.5 of understood words — by age 2–3**: children sign words they understand but cannot yet say. Signing is a *bridge*, not a 12-month-dominant modality (the baseline fit's monotone decline from 0.58 was an artefact).
+
+::: {.callout-warning title="The peak age and the decline are study-confounded — not a precise developmental fact"}
+
+The fitted curve peaks at ~24–30 months and then declines, but **the peak age and the recede are not identifiable from these data with this model.** Signing production is only observed from ~18 months, and the data thin out after ~54 months (the curve is shaded outside that window as extrapolation). Critically, the 48–60-month window — where the empirical ratio looks highest — is **entirely from a single study (`uk_02`), whose children are heavy signers**; the population ratio is still _rising_ there, and only collapses once the sample switches to `uk_01` (near-zero signers) after ~56 months. The apparent "peak then recede" is therefore largely a between-study boundary, not a within-child developmental recede. VG14 has **no study random effects** (it mirrors VG05), so the age curve cannot separate "this age signs more" from "`uk_02` children sign more." The proper fix, if peak timing matters, is study random intercepts on the signed block (the VG07–VG10 pattern) or the planned VG15 — not more tuning or data exclusion.
+
+:::
+
+![Signed rate r(a)](signed_rate.svg){#fig-signed-rate .lightbox fig-align="left"}
+
+```{python}
+summary_r = pd.read_csv("posterior_summary_r.csv")
+summary_r
+```
+
+## Sign → speech hand-off
+
+The signed ratio $r(a)$ against the spoken ratio $q(a)$ on a single axis. The robust result is the **crossover at ~39 months**: early on a larger share of understood words is signed than spoken, and by the late preschool years the rising spoken fraction overtakes the signed fraction — the sign-to-speech hand-off. (As above, the exact signed peak and the post-peak decline are study-confounded and should not be read as a precise developmental month; ages outside the ~18–54-month signing-data window are shaded as extrapolation.)
+
+![Signed ratio r(a) vs production ratio q(a)](sign_speech_crossover.svg){#fig-crossover .lightbox fig-align="left"}
+
+## Comprehension-production gap
+
+The expected difference in word counts between understanding and speaking.
+
+![Comprehension-production gap](comprehension_production_gap.svg){#fig-gap .lightbox fig-align="left"}
+
+## Posterior predictions -- words understood
+
+### Posterior summary table
+
+```{python}
+posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
+posterior_summary_u
+```
+
+### Posterior predictive PMF
+
+![posterior_predictive_pmf_u](posterior_predictive_pmf_u.svg){#fig-pmf-u .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![posterior_predictive_cdf_u](posterior_predictive_cdf_u.svg){#fig-cdf-u .lightbox fig-align="left"}
+
+### Count distributions by age
+
+![posterior_predictive_count_distributions_u](posterior_predictive_count_distributions_u.svg){#fig-count-dist-u .lightbox fig-align="left"}
+
+### Median trend
+
+![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.svg){#fig-trend-u .lightbox fig-align="left"}
+
+Smoothed:
+
+![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.svg){#fig-trend-u-smooth .lightbox fig-align="left"}
+
+### Learning rate
+
+![expected_learning_rate_u](expected_learning_rate_u.svg){#fig-rate-u .lightbox fig-align="left"}
+
+### Dispersion $\kappa$ -- understood
+
+![posterior_kappa_u](posterior_kappa_u.svg){#fig-kappa-u .lightbox fig-align="left"}
+
+## Posterior predictions -- words spoken
+
+### Posterior summary table
+
+```{python}
+posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
+posterior_summary_s
+```
+
+### Posterior predictive PMF
+
+![posterior_predictive_pmf_s](posterior_predictive_pmf_s.svg){#fig-pmf-s .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![posterior_predictive_cdf_s](posterior_predictive_cdf_s.svg){#fig-cdf-s .lightbox fig-align="left"}
+
+### Count distributions by age
+
+![posterior_predictive_count_distributions_s](posterior_predictive_count_distributions_s.svg){#fig-count-dist-s .lightbox fig-align="left"}
+
+### Median trend
+
+![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.svg){#fig-trend-s .lightbox fig-align="left"}
+
+Smoothed:
+
+![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.svg){#fig-trend-s-smooth .lightbox fig-align="left"}
+
+### Learning rate
+
+![expected_learning_rate_s](expected_learning_rate_s.svg){#fig-rate-s .lightbox fig-align="left"}
+
+### Dispersion $\kappa$ -- spoken
+
+![posterior_kappa_s](posterior_kappa_s.svg){#fig-kappa-s .lightbox fig-align="left"}
+
+## Posterior predictions -- words signed
+
+### Posterior summary table
+
+```{python}
+posterior_summary_sign = pd.read_csv("posterior_summary_sign.csv")
+posterior_summary_sign
+```
+
+### Posterior predictive PMF
+
+![posterior_predictive_pmf_sign](posterior_predictive_pmf_sign.svg){#fig-pmf-sign .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![posterior_predictive_cdf_sign](posterior_predictive_cdf_sign.svg){#fig-cdf-sign .lightbox fig-align="left"}
+
+### Count distributions by age
+
+![posterior_predictive_count_distributions_sign](posterior_predictive_count_distributions_sign.svg){#fig-count-dist-sign .lightbox fig-align="left"}
+
+### Median trend
+
+![posterior_predictive_median_trend_sign](posterior_predictive_median_trend_sign.svg){#fig-trend-sign .lightbox fig-align="left"}
+
+Smoothed:
+
+![posterior_predictive_median_trend_sign_smoothed](posterior_predictive_median_trend_sign_smoothed.svg){#fig-trend-sign-smooth .lightbox fig-align="left"}
+
+### Learning rate
+
+![expected_learning_rate_sign](expected_learning_rate_sign.svg){#fig-rate-sign .lightbox fig-align="left"}
+
+### Dispersion $\kappa$ -- signed
+
+![posterior_kappa_sign](posterior_kappa_sign.svg){#fig-kappa-sign .lightbox fig-align="left"}
