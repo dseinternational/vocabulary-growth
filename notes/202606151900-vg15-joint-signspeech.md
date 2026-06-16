@@ -43,9 +43,10 @@ marginal signed only (no cross-tab).
 
 ## 3. Model + priors
 
-- `p_U`, `r = P(sign|understood)`, `q = P(speak|understood)`: linear trend + HSGP
-  on logit scale; signed ratio reuses VG14's hump-capable spec (flat-pinned mean,
-  loose+short GP). Priors seeded from VG14.
+- `p_U`, `r = P(sign|understood)`, `q = P(speak|understood)`: HSGP on the logit
+  scale. `p_U`/`q` have a linear trend; the signed mean `r` is **intercept-only**
+  (no age slope, matching VG14 — see §6), with a loose+short GP carrying the hump.
+  Priors seeded from VG14.
 - `psi`: `log psi ~ Normal(0.3, 0.5)` — weakly positive (uk_02 shows both 0.18 >
   r·q 0.14) but spanning independence `psi = 1`.
 - Dirichlet-Multinomial concentration: `log conc ~ Normal(3.0, 1.0)`.
@@ -65,7 +66,10 @@ marginal signed only (no cross-tab).
 
 Fitted at `--config rep` (6 chains × 6000 draws). **Clean: 0 divergences /
 36 000, max r̂ = 1.001, min ESS ≈ 5.3k** (dev had 2/1000 divergences; they clear
-at `target_accept = 0.95`).
+at `target_accept = 0.95`). _(This section is the flat-anchor signed-mean fit; the
+current model is the intercept-only refit in §6 — ψ, the four-cell composition and
+`p_any` are substantively the same; only the signed-mean parameterisation
+differs.)_
 
 **Association.** `psi` median **1.78**, 90% HDI **[1.21, 2.44]**, **P(psi > 1) =
 0.997** — a clear positive within-understood sign-speech association. Words a
@@ -102,3 +106,37 @@ the preschool years.
 
 Key figures: `psi_posterior.svg`, `four_cell_composition.svg`,
 `p_any_identified_vs_bound.svg`, `signed_vs_spoken_rate.svg`, `uk02_cell_ppc.svg`.
+
+## 6. Signed marginal mean was prior-dominated → intercept-only refit (current)
+
+VG15 inherited VG14's tight `Beta(15,90)` signed anchors, and — exactly as in
+VG14 — they were **prior-dominated**: posterior sd ≈ prior sd (`p_slope_low_sign`
+0.169 ± 0.036, `p_slope_hi_sign` 0.129 ± 0.030, both ≈ the 0.034 prior sd), so
+the signed grand-mean **level** was set by the prior, not the data, while the
+spoken anchors were data-informed. Applied the same fix as VG14 (PR #52
+`da5750a`): the signed marginal mean is now **intercept-only** (drop the age
+slope — the actual extrapolation failure mode) with one weakly-informative
+intercept `intercept_sign ~ Normal(logit(0.15), 0.75)`. The **study random
+intercepts are untouched** (`tau_sign` is the largest RE in the model, ~0.95);
+with the REs handling between-study level, freeing the grand-mean intercept is
+even more clearly correct.
+
+**Result (rep, intercept-only):** clean — **2 / 36 000 divergences** (0.006%, a
+documented near-zero rate), max r̂ = 1.001, min ESS ≈ 6.1k.
+
+| quantity                   | flat-anchor                  | intercept-only                 |
+| -------------------------- | ---------------------------- | ------------------------------ |
+| `intercept_sign` posterior | (pinned) 0.17 / 0.13 anchors | mean −1.59 ≈ 0.17, **sd 0.48** |
+| `eta_sign`                 | ~1.0                         | 0.81                           |
+| `tau_sign` (study RE)      | ~0.95                        | 0.95 (unchanged)               |
+| ψ median [90% HDI]         | 1.82 [1.26, 2.51]            | 1.78 [1.19, 2.42]              |
+| P(ψ > 1)                   | 0.997                        | 0.997                          |
+
+The intercept posterior sd (0.48) is now meaningfully below its prior sd (0.75) —
+the data is speaking. `eta_sign` dropped (the free intercept carries level the GP
+was lifting) and is not pinned. **ψ, the four-cell composition and the
+data-identified `p_any` (still below the independence bound) are substantively
+unchanged** — this is a level/uncertainty correction, not a re-estimation of the
+association. The peak does **not** relocate; as throughout, study REs (not prior
+tuning) are the lever for the signed level/peak. The signed specs of VG14
+(trivariate) and VG15 (joint) are now consistently intercept-only.

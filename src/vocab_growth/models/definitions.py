@@ -355,11 +355,15 @@ class JointModelDefinition:
     p_slope_hi_q_alpha: float = 2.0
     p_slope_hi_q_beta: float = 1.2
 
-    # -- Sign-given-understood (r) slope priors (VG14 hump-capable spec) --
-    p_slope_low_sign_alpha: float = 15.0
-    p_slope_low_sign_beta: float = 90.0
-    p_slope_hi_sign_alpha: float = 15.0
-    p_slope_hi_sign_beta: float = 90.0
+    # -- Sign-given-understood (r) mean prior (intercept-only, matching VG14) --
+    # The signed mean is intercept-only (no age slope): a free slope would
+    # extrapolate below the data floor (< ~18 mo). A single weakly-informative
+    # intercept lets the data set the grand-mean level; the study REs carry
+    # between-study level differences and the GP carries the rise-then-fall hump.
+    intercept_sign_mu: float = math.log(0.15 / 0.85)
+    """Normal mu for the signed-ratio intercept (logit scale, ~0.15)."""
+    intercept_sign_sigma: float = 0.75
+    """Normal sigma for the signed-ratio intercept (logit scale)."""
 
     # -- Shared GP / amplitude priors (sign GP looser + shorter, per VG14) --
     ell_unit_u_alpha: float = 3.0

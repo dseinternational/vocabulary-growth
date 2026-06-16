@@ -118,9 +118,8 @@ class JointModelConfiguration(BaseModelConfiguration):
     ell_unit_q_dist: Continuous
     eta_q_dist: Continuous
 
-    # Sign-given-understood ratio (r) priors
-    p_slope_low_sign_dist: Continuous
-    p_slope_hi_sign_dist: Continuous
+    # Sign-given-understood ratio (r) priors — intercept-only mean (no age slope)
+    intercept_sign_dist: Continuous
     ell_unit_sign_dist: Continuous
     eta_sign_dist: Continuous
 
@@ -345,8 +344,12 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
     heading("Sign-given-understood (r) priors", style="bold cyan")
     ell_unit_sign_dist = beta(definition.ell_unit_sign_alpha, definition.ell_unit_sign_beta, "ell_unit_sign_dist")
     eta_sign_dist = halfnormal(definition.eta_sign_sigma, "eta_sign_dist")
-    p_slope_low_sign_dist = beta(definition.p_slope_low_sign_alpha, definition.p_slope_low_sign_beta, "p_slope_low_sign_dist")
-    p_slope_hi_sign_dist = beta(definition.p_slope_hi_sign_alpha, definition.p_slope_hi_sign_beta, "p_slope_hi_sign_dist")
+    # Intercept-only signed mean (no age slope): one weakly-informative intercept
+    # on the logit scale; the study REs carry between-study level, the GP the hump.
+    intercept_sign_dist = pz.Normal(
+        mu=definition.intercept_sign_mu, sigma=definition.intercept_sign_sigma
+    )
+    _plot_and_print_dist(context, intercept_sign_dist, "intercept_sign_dist")
 
     def kappa_block(kp, suffix):
         heading(f"Kappa priors — {suffix}", style="bold cyan")
@@ -381,8 +384,7 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         p_slope_hi_q_dist=p_slope_hi_q_dist,
         ell_unit_q_dist=ell_unit_q_dist,
         eta_q_dist=eta_q_dist,
-        p_slope_low_sign_dist=p_slope_low_sign_dist,
-        p_slope_hi_sign_dist=p_slope_hi_sign_dist,
+        intercept_sign_dist=intercept_sign_dist,
         ell_unit_sign_dist=ell_unit_sign_dist,
         eta_sign_dist=eta_sign_dist,
         kappa_min_u_dist=kappa_min_u_dist,
@@ -541,6 +543,25 @@ def build_model(context: JointContext):
         g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
         return mean_trend + eta * g_unit  # plain tensor (n_all,)
 
+    def intercept_and_gp(cfg_intercept, cfg_ell, cfg_eta, suffix, X_all_z_data):
+        """Intercept-only mean (no age slope) + HSGP deviation; full-grid latent.
+
+        Used for the signed ratio: a free age slope would extrapolate the ratio
+        below the data floor (< ~18 mo), so the mean is intercept-only and the GP
+        carries the age-varying (rise-then-fall) shape. The study random
+        intercept is added at observation level by the caller.
+        """
+        intercept = cfg_intercept.to_pymc(f"intercept_{suffix}")
+        ell_unit = cfg_ell.to_pymc(f"ell_unit_{suffix}")
+        ell = pm.Deterministic(
+            f"ell_{suffix}", ell_low_z + (ell_high_z - ell_low_z) * ell_unit
+        )
+        eta = cfg_eta.to_pymc(f"eta_{suffix}")
+        cov = pm.gp.cov.ExpQuad(1, ls=ell)
+        hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
+        g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
+        return intercept + eta * g_unit  # plain tensor (n_all,)
+
     with pm.Model(coords=coords) as model_pm:
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
@@ -556,8 +577,10 @@ def build_model(context: JointContext):
             config.p_slope_low_q_dist, config.p_slope_hi_q_dist,
             config.ell_unit_q_dist, config.eta_q_dist, "q", X_all_z_data
         )
-        g_all = trend_and_gp(
-            config.p_slope_low_sign_dist, config.p_slope_hi_sign_dist,
+        # Signed marginal: intercept-only mean (no age slope) + GP hump; the
+        # study random intercept delta_sign is added at obs level below.
+        g_all = intercept_and_gp(
+            config.intercept_sign_dist,
             config.ell_unit_sign_dist, config.eta_sign_dist, "sign", X_all_z_data
         )
 

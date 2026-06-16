@@ -37,7 +37,7 @@ $$
 p_U(a) = \text{sigmoid}(f_U(a)), \quad r(a) = P(\text{sign}\mid\text{understood}) = \text{sigmoid}(g(a)), \quad q(a) = P(\text{speak}\mid\text{understood}) = \text{sigmoid}(h(a)),
 $$
 
-each a linear trend plus an HSGP on the logit scale (the signed ratio reuses VG14's hump-capable spec). A single scalar **Plackett odds ratio** $\psi$ links sign and speech within understood words:
+$f_U$ and $h$ are a linear trend plus an HSGP on the logit scale; the signed mean $g$ is **intercept-only** plus an HSGP (matching VG14 — a free age slope would extrapolate the signed ratio below the data floor, so the GP alone carries the rise-then-fall hump). A single scalar **Plackett odds ratio** $\psi$ links sign and speech within understood words:
 
 $$
 \pi_\text{both} = C(r, q; \psi), \quad \pi_\text{sign-only} = r - \pi_\text{both}, \quad \pi_\text{speak-only} = q - \pi_\text{both}, \quad \pi_\text{neither} = 1 - r - q + \pi_\text{both}.
@@ -73,7 +73,7 @@ The association $\psi$ is identified by the ~60 uk_02 rows with the four-cell cr
 
 ![`p_slope_low_u_dist`](p_slope_low_u_dist.svg){.lightbox fig-align="left" width=380}
 ![`eta_u_dist`](eta_u_dist.svg){.lightbox fig-align="left" width=380}
-![`p_slope_low_sign_dist`](p_slope_low_sign_dist.svg){.lightbox fig-align="left" width=380}
+![`intercept_sign_dist` (signed mean is intercept-only)](intercept_sign_dist.svg){.lightbox fig-align="left" width=380}
 ![`eta_sign_dist`](eta_sign_dist.svg){.lightbox fig-align="left" width=380}
 
 ### Association and concentration
