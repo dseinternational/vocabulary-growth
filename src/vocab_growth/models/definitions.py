@@ -338,9 +338,11 @@ class JointModelDefinition:
 
     Extends the trivariate structure (understood + within-understood sign/speak
     ratios r, q) with a scalar Plackett association `psi` (identified from the
-    uk_02 four-cell cross-tab) and study random intercepts on each latent
-    trajectory. The r/q/p_U prior specs are seeded from the (uk_06-included)
-    VG14 fit (same hump-capable signed-ratio spec).
+    uk_02 four-cell cross-tab), study and subject random intercepts on each
+    latent trajectory, and VG10's GP-anchor stabilisation. Subject REs apply to
+    the marginal likelihoods only (the four-cell DM keeps study-level rates).
+    The r/q/p_U prior specs are seeded from the (uk_06-included) VG14 fit (same
+    hump-capable signed-ratio spec).
     """
 
     model_id: str
@@ -403,6 +405,23 @@ class JointModelDefinition:
     tau_u_sigma: float = 0.5
     tau_q_sigma: float = 0.5
     tau_sign_sigma: float = 0.5
+
+    # -- Subject random-intercept scales (VG10 pattern; obs-level on the marginal
+    #    likelihoods only — the four-cell DM keeps study-level rates so psi stays
+    #    identified). Removes within-child pseudoreplication in the understood median. --
+    use_subject_re_u: bool = False
+    tau_subj_u_sigma: float = 0.5
+    use_subject_re_q: bool = False
+    tau_subj_q_sigma: float = 0.5
+    use_subject_re_sign: bool = False
+    tau_subj_sign_sigma: float = 0.5
+
+    # -- GP anchor (per-draw zero at reference age; VG10 ridge fix) --
+    anchor_g_u_at_ref: bool = False
+    anchor_g_q_at_ref: bool = False
+    gp_anchor_age_months: float | None = None
+    """Reference age (months) for the GP anchor. If None, defaults to the midpoint
+    of slope_anchors."""
 
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk06: bool = True
@@ -759,6 +778,24 @@ VG15 = JointModelDefinition(
     # r/q/p_U priors seeded from the (uk_06-included) VG14 fit (see dataclass
     # defaults); psi ~ logNormal(0.3, 0.5) (weakly positive, spans independence);
     # study random intercepts on f_U/g/h (tau_*=0.5).
+    # Tighter q-anchor priors (VG10) to help clear the subject-RE + HSGP ridge.
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
+    # Subject random intercepts on all three curves (issue #59) — remove the
+    # within-child pseudoreplication shoulder in the understood median.
+    use_subject_re_u=True,
+    tau_subj_u_sigma=0.5,
+    use_subject_re_q=True,
+    tau_subj_q_sigma=0.5,
+    use_subject_re_sign=True,
+    tau_subj_sign_sigma=0.5,
+    # GP anchor on U and q at the slope-anchor midpoint (54 mo) to remove the
+    # GP-intercept ridge; sign GP left unanchored (intercept-only mean + hump).
+    anchor_g_u_at_ref=True,
+    anchor_g_q_at_ref=True,
+    gp_anchor_age_months=54.0,
 )
 
 MODEL_REGISTRY: dict[

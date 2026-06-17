@@ -12,9 +12,12 @@ VG15 extends the trivariate VG14 with two things VG14 assumed away:
     (sign-only / sign+speech / speech-only / understood-only). This replaces
     VG14's independence-based ``p_any`` upper bound with a *data-identified*
     total expressive vocabulary.
-2.  STUDY random intercepts on each latent trajectory (the VG07-VG10 pattern),
-    so the age curve is separated from study composition (which made VG14's
-    signed peak unidentifiable).
+2.  STUDY and SUBJECT random intercepts on each latent trajectory (VG07-VG10
+    pattern) plus VG10's GP anchor. Study REs separate the age curve from study
+    composition (which made VG14's signed peak unidentifiable); subject REs
+    (marginal likelihoods only — the four-cell DM keeps study-level rates so psi
+    stays identified) absorb within-child clustering that otherwise bends the
+    understood median into a spurious 42-60 mo plateau.
 
 Latent scale (all out of N = 800 checklist words):
 
@@ -143,6 +146,21 @@ class JointModelConfiguration(BaseModelConfiguration):
     tau_q_sigma: float
     tau_sign_sigma: float
 
+    # Subject random-intercept flags + scales (issue #59). Applied at the
+    # observation level to the MARGINAL likelihoods only; the four-cell DM keeps
+    # study-level rates. Defaults preserve the original study-RE-only behaviour.
+    use_subject_re_u: bool = False
+    use_subject_re_q: bool = False
+    use_subject_re_sign: bool = False
+    tau_subj_u_sigma: float = 0.5
+    tau_subj_q_sigma: float = 0.5
+    tau_subj_sign_sigma: float = 0.5
+
+    # GP anchor (per-draw zero at the reference age; VG10 ridge fix)
+    anchor_g_u_at_ref: bool = False
+    anchor_g_q_at_ref: bool = False
+    gp_anchor_age_months: float | None = None
+
 
 @dataclass
 class JointModelSamples:
@@ -220,9 +238,17 @@ def prepare_joint_data(
     merged view). uk_02 is taken from its raw CSV and split into four-cell rows
     (Dirichlet-Multinomial) and marginal-only rows (marginal likelihoods).
     """
+    use_subject = (
+        definition.use_subject_re_u
+        or definition.use_subject_re_q
+        or definition.use_subject_re_sign
+    )
+    merged_columns = ["study", "age", "understood", "spoken", "signed"]
+    if use_subject:
+        merged_columns.append("subject_id")
     merged = vocab_data_utils.load_data(
         population=definition.population,
-        columns=["study", "age", "understood", "spoken", "signed"],
+        columns=merged_columns,
     )
     other = merged[merged["study"] != UK02_STUDY_ID].copy()
 
@@ -270,24 +296,49 @@ def prepare_joint_data(
     study_map = {s: i for i, s in enumerate(unique_studies)}
     analysis_df["study_code"] = analysis_df["study"].map(study_map).astype(int)
 
+    # Integer subject codes, unique across studies (issue #59). uk_02 four-cell /
+    # marginal rows are aggregate cross-tabs with no child id; they get unique
+    # singleton codes so their subject RE draws from the prior with no pooling
+    # (harmless — matches existing singleton behaviour).
+    n_subjects: int | None = None
+    if use_subject:
+        if "subject_id" not in analysis_df.columns:
+            analysis_df["subject_id"] = np.nan
+        sid = analysis_df["subject_id"]
+        row_ids = analysis_df.index.to_series().astype(str)
+        real_key = analysis_df["study"].astype(str) + "::" + sid.astype(str)
+        singleton_key = analysis_df["study"].astype(str) + "::__row" + row_ids
+        analysis_df["subject_key"] = real_key.where(sid.notna(), singleton_key)
+        unique_subjects = sorted(analysis_df["subject_key"].unique())
+        subject_map = {s: i for i, s in enumerate(unique_subjects)}
+        analysis_df["subject_code"] = (
+            analysis_df["subject_key"].map(subject_map).astype(int)
+        )
+        n_subjects = len(unique_subjects)
+
     n = len(analysis_df)
     n_u = int(analysis_df["understood"].notna().sum())
     n_s = int(analysis_df["spoken"].notna().sum())
     n_sign = int(analysis_df["signed"].notna().sum())
     n_cells = int(analysis_df["signed_spoken"].notna().sum())
 
-    key_value_table(
-        "Observation counts",
-        [
-            ("Total observations", n),
-            ("Studies", f"{len(unique_studies)} ({', '.join(unique_studies)})"),
-            ("Understood observed", n_u),
-            ("Spoken observed (marginal)", n_s),
-            ("Signed observed (marginal)", n_sign),
-            ("uk_02 four-cell rows (DM)", n_cells),
-            ("include_uk06", include_uk06),
-        ],
-    )
+    obs_rows = [
+        ("Total observations", n),
+        ("Studies", f"{len(unique_studies)} ({', '.join(unique_studies)})"),
+        ("Understood observed", n_u),
+        ("Spoken observed (marginal)", n_s),
+        ("Signed observed (marginal)", n_sign),
+        ("uk_02 four-cell rows (DM)", n_cells),
+        ("include_uk06", include_uk06),
+    ]
+    if n_subjects is not None:
+        n_singletons = int((analysis_df.groupby("subject_code").size() == 1).sum())
+        obs_rows.append(("Subjects", n_subjects))
+        obs_rows.append(("Subjects with single observation", n_singletons))
+        obs_rows.append(
+            ("Subjects with repeated observations", n_subjects - n_singletons)
+        )
+    key_value_table("Observation counts", obs_rows)
 
     desc = descriptive_stats.describe_all(
         analysis_df[["age", "understood", "spoken", "signed"]], alpha=0.05
@@ -402,6 +453,15 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         tau_u_sigma=definition.tau_u_sigma,
         tau_q_sigma=definition.tau_q_sigma,
         tau_sign_sigma=definition.tau_sign_sigma,
+        use_subject_re_u=definition.use_subject_re_u,
+        use_subject_re_q=definition.use_subject_re_q,
+        use_subject_re_sign=definition.use_subject_re_sign,
+        tau_subj_u_sigma=definition.tau_subj_u_sigma,
+        tau_subj_q_sigma=definition.tau_subj_q_sigma,
+        tau_subj_sign_sigma=definition.tau_subj_sign_sigma,
+        anchor_g_u_at_ref=definition.anchor_g_u_at_ref,
+        anchor_g_q_at_ref=definition.anchor_g_q_at_ref,
+        gp_anchor_age_months=definition.gp_anchor_age_months,
     )
     context.set_model_config(config)
 
@@ -473,6 +533,10 @@ def build_model(context: JointContext):
     study_codes = np.asarray(df["study_code"], dtype=int)
     n_studies = int(study_codes.max()) + 1
 
+    use_subject = "subject_code" in df.columns
+    subject_codes = np.asarray(df["subject_code"], dtype=int) if use_subject else None
+    n_subjects = (int(subject_codes.max()) + 1) if use_subject else 0
+
     X_obs = np.asarray(df["age"], dtype=float).reshape(-1, 1)
     n = len(X_obs)
     X_mean = float(np.mean(X_obs))
@@ -486,6 +550,23 @@ def build_model(context: JointContext):
     X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
     n_plot = X_plot_z.shape[0]
     n_query = X_query_z.shape[0]
+
+    # GP anchor (issue #59 / VG10): append a reference-age row; the HSGP
+    # correction for the anchored curves is centred to zero there per draw,
+    # removing the GP-intercept ridge that the study + subject REs introduce.
+    anchor_g_u = bool(config.anchor_g_u_at_ref)
+    anchor_g_q = bool(config.anchor_g_q_at_ref)
+    use_gp_anchor = anchor_g_u or anchor_g_q
+    if use_gp_anchor:
+        if config.gp_anchor_age_months is not None:
+            anchor_age_months = float(config.gp_anchor_age_months)
+        else:
+            anchor_age_months = (
+                float(config.slope_anchors[0]) + float(config.slope_anchors[1])
+            ) / 2.0
+        X_anchor_z = (np.array([[anchor_age_months]], dtype=float) - X_mean) / X_std
+        X_all_z = np.vstack([X_all_z, X_anchor_z])
+    i_anchor = (n + n_plot + n_query) if use_gp_anchor else None
     n_all = X_all_z.shape[0]
 
     ell_low_z = float(config.ell_months_range[0]) / X_std
@@ -526,9 +607,16 @@ def build_model(context: JointContext):
         "cell_id": CELL_NAMES,
         "x_dim": np.arange(1),
     }
+    if use_subject:
+        coords["subject_id"] = np.arange(n_subjects)
 
-    def trend_and_gp(cfg_low, cfg_hi, cfg_ell, cfg_eta, suffix, X_all_z_data):
-        """Build a logit-linear trend + HSGP deviation; return the full-grid latent."""
+    def trend_and_gp(cfg_low, cfg_hi, cfg_ell, cfg_eta, suffix, X_all_z_data, anchor=False):
+        """Build a logit-linear trend + HSGP deviation; return the full-grid latent.
+
+        If ``anchor`` is set, the HSGP deviation is centred to zero at the anchor
+        row (``i_anchor``) per draw before scaling, pinning the GP correction at
+        the reference age (VG10 ridge fix).
+        """
         p_lo = cfg_low.to_pymc(f"p_slope_low_{suffix}")
         p_hi = cfg_hi.to_pymc(f"p_slope_hi_{suffix}")
         slope = pm.Deterministic(
@@ -547,6 +635,8 @@ def build_model(context: JointContext):
         cov = pm.gp.cov.ExpQuad(1, ls=ell)
         hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
         g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
+        if anchor:
+            g_unit = g_unit - g_unit[i_anchor]
         return mean_trend + eta * g_unit  # plain tensor (n_all,)
 
     def intercept_and_gp(cfg_intercept, cfg_ell, cfg_eta, suffix, X_all_z_data):
@@ -573,15 +663,19 @@ def build_model(context: JointContext):
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
+        if use_subject:
+            subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
 
         # Latent full-grid trajectories (plain tensors).
         f_u_all = trend_and_gp(
             config.p_slope_low_u_dist, config.p_slope_hi_u_dist,
-            config.ell_unit_u_dist, config.eta_u_dist, "u", X_all_z_data
+            config.ell_unit_u_dist, config.eta_u_dist, "u", X_all_z_data,
+            anchor=anchor_g_u,
         )
         h_all = trend_and_gp(
             config.p_slope_low_q_dist, config.p_slope_hi_q_dist,
-            config.ell_unit_q_dist, config.eta_q_dist, "q", X_all_z_data
+            config.ell_unit_q_dist, config.eta_q_dist, "q", X_all_z_data,
+            anchor=anchor_g_q,
         )
         # Signed marginal: intercept-only mean (no age slope) + GP hump; the
         # study random intercept delta_sign is added at obs level below.
@@ -604,16 +698,57 @@ def build_model(context: JointContext):
             "delta_sign", tau_sign * pm.Normal("z_sign", 0.0, 1.0, dims="study_id"), dims="study_id"
         )
 
+        # Subject random intercepts (non-centred), obs level — applied to the
+        # MARGINAL Beta-Binomials only (the four-cell DM keeps study-level rates
+        # so the within-understood association psi stays identified).
+        if config.use_subject_re_u:
+            tau_subj_u = pm.HalfNormal("tau_subj_u", sigma=config.tau_subj_u_sigma)
+            delta_subj_u = pm.Deterministic(
+                "delta_subj_u",
+                tau_subj_u * pm.Normal("z_subj_u", 0.0, 1.0, dims="subject_id"),
+                dims="subject_id",
+            )
+            subject_shift_u = delta_subj_u[subject_obs]
+        else:
+            subject_shift_u = 0.0
+        if config.use_subject_re_q:
+            tau_subj_q = pm.HalfNormal("tau_subj_q", sigma=config.tau_subj_q_sigma)
+            delta_subj_q = pm.Deterministic(
+                "delta_subj_q",
+                tau_subj_q * pm.Normal("z_subj_q", 0.0, 1.0, dims="subject_id"),
+                dims="subject_id",
+            )
+            subject_shift_q = delta_subj_q[subject_obs]
+        else:
+            subject_shift_q = 0.0
+        if config.use_subject_re_sign:
+            tau_subj_sign = pm.HalfNormal(
+                "tau_subj_sign", sigma=config.tau_subj_sign_sigma
+            )
+            delta_subj_sign = pm.Deterministic(
+                "delta_subj_sign",
+                tau_subj_sign * pm.Normal("z_subj_sign", 0.0, 1.0, dims="subject_id"),
+                dims="subject_id",
+            )
+            subject_shift_sign = delta_subj_sign[subject_obs]
+        else:
+            subject_shift_sign = 0.0
+
         # Standardised observed ages (used by the age-varying kappa functions).
         z_obs = pm.Deterministic("z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims="obs_id")
 
-        # --- obs-level latents WITH study shift ---
+        # --- obs-level latents WITH study shift (study-only rates; the four-cell
+        #     DM below uses q_obs / r_obs so psi stays identified) ---
         f_u_obs = f_u_all[i_obs0:i_obs1] + delta_u[study_obs]
         h_obs = h_all[i_obs0:i_obs1] + delta_q[study_obs]
         g_obs = g_all[i_obs0:i_obs1] + delta_sign[study_obs]
-        p_u_obs = pm.math.sigmoid(f_u_obs)
         q_obs = pm.math.sigmoid(h_obs)
         r_obs = pm.math.sigmoid(g_obs)
+
+        # --- subject-shifted obs rates: used by the MARGINAL likelihoods only ---
+        p_u_obs_m = pm.math.sigmoid(f_u_obs + subject_shift_u)
+        q_obs_m = pm.math.sigmoid(h_obs + subject_shift_q)
+        r_obs_m = pm.math.sigmoid(g_obs + subject_shift_sign)
 
         # --- population-level latents (no study shift), plot + query ---
         p_u_plot = pm.Deterministic("p_u_plot", pm.math.sigmoid(f_u_all[i_plot0:i_plot1]), dims="plot_id")
@@ -648,20 +783,20 @@ def build_model(context: JointContext):
         # ============================================================
         # Likelihoods
         # ============================================================
-        # Understood (all studies)
-        p_u_sel = pm.math.clip(p_u_obs[idx_u], EPSILON, 1 - EPSILON)
+        # Understood (all studies) — subject-shifted rate
+        p_u_sel = pm.math.clip(p_u_obs_m[idx_u], EPSILON, 1 - EPSILON)
         k_u = kappa_u_obs[idx_u]
         pm.BetaBinomial("y_u_obs", n=n_trials, alpha=p_u_sel * k_u, beta=(1 - p_u_sel) * k_u,
                         observed=y_u, dims="obs_u_id")
 
-        # Spoken marginal (p_U * q)
-        p_s_sel = pm.math.clip((p_u_obs * q_obs)[idx_s], EPSILON, 1 - EPSILON)
+        # Spoken marginal (p_U * q) — subject-shifted rates
+        p_s_sel = pm.math.clip((p_u_obs_m * q_obs_m)[idx_s], EPSILON, 1 - EPSILON)
         k_s = kappa_s_obs[idx_s]
         pm.BetaBinomial("y_s_obs", n=n_trials, alpha=p_s_sel * k_s, beta=(1 - p_s_sel) * k_s,
                         observed=y_s, dims="obs_s_id")
 
-        # Signed marginal (p_U * r)
-        p_sign_sel = pm.math.clip((p_u_obs * r_obs)[idx_sign], EPSILON, 1 - EPSILON)
+        # Signed marginal (p_U * r) — subject-shifted rates
+        p_sign_sel = pm.math.clip((p_u_obs_m * r_obs_m)[idx_sign], EPSILON, 1 - EPSILON)
         k_sign = kappa_sign_obs[idx_sign]
         pm.BetaBinomial("y_sign_obs", n=n_trials, alpha=p_sign_sel * k_sign, beta=(1 - p_sign_sel) * k_sign,
                         observed=y_sign, dims="obs_sign_id")

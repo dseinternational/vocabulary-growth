@@ -22,7 +22,7 @@ This model output is preliminary and likely to change as the model evolves and f
 If the model was not fitted in "reporting" mode, the results will be more approximate than when additional sampling has been performed.
 :::
 
-This model (issue #49, Option 3) estimates the **within-understood association** between signing and speaking — the overlap that VG14 assumed away — and adds **study random intercepts**, replacing VG14's independence-based `p_any` upper bound with a _data-identified_ total expressive vocabulary.
+This model (issue #49, Option 3) estimates the **within-understood association** between signing and speaking — the overlap that VG14 assumed away — and adds **study and subject random intercepts** (with VG10's GP anchor for stability), replacing VG14's independence-based `p_any` upper bound with a _data-identified_ total expressive vocabulary.
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -52,6 +52,8 @@ $$
 which sits _below_ VG14's independence upper bound $p_U(1-(1-r)(1-q))$ whenever $\psi>1$.
 
 **Study random intercepts** ($\delta_u, \delta_q, \delta_\text{sign} \sim \text{Normal}(0,\tau)$ per study, the VG07–VG10 pattern) sit on $f_U$, $g$, $h$ at the observation level, so the reported age curves (population level) are separated from study composition — which made VG14's signed peak unidentifiable.
+
+**Subject random intercepts** (VG10 pattern, issue #59) likewise sit on all three curves at the observation level, absorbing within-child clustering (repeated visits per child) that otherwise bends the understood population median into a spurious 42–60 month plateau. They are applied to the **marginal** Beta-Binomial likelihoods only; the uk_02 four-cell Dirichlet-Multinomial keeps study-level rates so $\psi$ stays identified. To keep the extra structure identified, the HSGP corrections for $f_U$ and $h$ are **anchored** to zero at a reference age (54 months) per draw, and the $q$-anchor priors are tightened (the VG10 stabilisation package).
 
 ### Likelihoods
 

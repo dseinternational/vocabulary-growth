@@ -16,9 +16,11 @@ random effects). VG15 fixes both:
    understood words, identified from uk_02's four-cell cross-tab. This yields a
    **data-identified** `p_any = p_U·(r + q − pi_both)` instead of an upper bound,
    plus the four-cell composition trajectory (sign-only → both → speak-only).
-2. **Study random intercepts** on `f_U`, `g` (sign), `h` (speak) — the VG07-VG10
-   pattern — so the reported (population) age curves are separated from study
-   composition.
+2. **Study and subject random intercepts** on `f_U`, `g` (sign), `h` (speak) —
+   the VG07-VG10 pattern, with VG10's GP anchor for stability — so the reported
+   (population) age curves are separated from study composition and within-child
+   clustering. (Subject REs + anchor added in issue #59; see §7. The §5/§6
+   results below are the earlier study-RE-only fit.)
 
 Built in a new isolated engine `common_joint_modality.py` (does not import or
 modify the bivariate / trivariate engines; VG01-VG14 untouched). Same
@@ -140,3 +142,37 @@ unchanged** — this is a level/uncertainty correction, not a re-estimation of t
 association. The peak does **not** relocate; as throughout, study REs (not prior
 tuning) are the lever for the signed level/peak. The signed specs of VG14
 (trivariate) and VG15 (joint) are now consistently intercept-only.
+
+## 7. Subject random intercepts + VG10 stabilisation (issue #59, 2026-06-17)
+
+Study REs alone left a within-child pseudoreplication artefact: the understood
+population median showed a spurious ~42–60 mo plateau (VG14 worst; VG07 — the
+study-RE-only proxy — a residual shoulder; VG10, with subject REs, smooth). Added
+**subject random intercepts** on `f_U`, `q` and `r` (non-centred, observation
+level) plus VG10's stabilisation — GP anchor on `f_U`/`q` at 54 mo and tighter
+q-anchor priors (`p_slope_low_q ~ Beta(3,22)`, `p_slope_hi_q ~ Beta(20,4)`).
+
+**Design point (keeps ψ identified):** subject REs are applied to the **marginal**
+Beta-Binomial likelihoods only. The uk_02 four-cell rows are aggregate cross-tabs
+with no child id, so the four-cell Dirichlet-Multinomial keeps the study-level
+rates `q_obs`/`r_obs`. Rows without a real subject id (uk_02 aggregate rows) get
+singleton subject codes (prior-drawn, no pooling, harmless).
+
+**Subject coverage:** 581 subjects, 335 single-observation, **246 with repeated
+observations** — enough repeated structure for the subject REs to bite.
+
+**Dev fit (2 chains × 500):** clean run, ψ ≈ 1.77 (unchanged), four-cell machinery
+intact. **Headline outcome achieved — the understood-median plateau is gone:**
+growth stays **+6.4 to +9.3 words/mo across 42–60 mo** (smooth, near-monotone;
+VG14 went flat/negative there). Convergence at dev is borderline (max r̂ ≈ 1.06,
+min ESS ≈ 53, concentrated in the understood linear-trend anchors `slope_u` /
+`p_slope_hi_u` — the usual GP/trend/RE ridge under short tuning).
+
+**Test fit (4 chains × 2000 tune, ~4 min, 0 divergences):** convergence tightens
+to **max r̂ 1.017** — only the three understood linear-trend anchors (`slope_u` /
+`intercept_u` / `p_slope_low_u`) sit marginally above 1.01 (≤ 1.017, min ESS ≈
+467), while ψ (r̂ 1.000, ESS 18.6k) and all `tau_subj_*` (r̂ ≤ 1.003, ESS ≈ 2k)
+are clean. Plateau removal holds (+6.9–7.8 words/mo across 42–60 mo). Those trend
+anchors are the slowest-mixing globals and should clear ≤ 1.01 at rep (6 chains ×
+6000 tune, `target_accept = 0.95` — the study-RE-only fit hit max r̂ 1.001). Rep
+fit + report render to follow (heavy, over 10 GB trace).
