@@ -76,7 +76,7 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.definitions import JointModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.plotting import _save_csv
+from vocab_growth.plotting import _save_csv, plot_prior_samples_ratio
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -727,15 +727,13 @@ def prior_predictive_checks(context: JointContext):
     for var, ylab, fname in [("r_plot", "r(a) = P(sign | understood)", "prior_samples_r"),
                              ("q_plot", "q(a) = P(speak | understood)", "prior_samples_q")]:
         s = prior.prior[var].stack(sample=("chain", "draw")).transpose("plot_id", "sample")
-        fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-        Xp = prior.constant_data["X_plot"].values
-        for i in range(min(400, s.shape[1])):
-            ax.plot(Xp, s.values[:, i], alpha=0.02)
-        ax.set_xlabel("Age (months)")
-        ax.set_ylabel(ylab)
-        ax.set_ylim(0, 1)
-        fig.savefig(os.path.join(context.reporting.output_dir, f"{fname}.png"), dpi=300)
-        fig.savefig(os.path.join(context.reporting.output_dir, f"{fname}.svg"))
+        fig = plot_prior_samples_ratio(
+            prior.constant_data["X_plot"].values,
+            s.values,
+            y_label=ylab,
+            filename=fname,
+            output_dir=context.reporting.output_dir,
+        )
         plt.close(fig)
 
 
@@ -760,10 +758,10 @@ def diagnostics(context: JointContext):
     dataframe_table(diag, title="Posterior diagnostics")
     _report_diagnostic_warnings(diag)
     tv = capped_plot_var_names(context.trace, var_names + ["psi", "conc"])
-    az.plot_trace(context.trace, var_names=tv)
+    az.plot_trace(context.trace, var_names=tv, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     plt.close()
-    az.plot_energy(context.trace, figure_kwargs={"figsize": plot_styles.FIGSIZE_SM})
+    az.plot_energy(context.trace, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
     plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
     plt.close()
 

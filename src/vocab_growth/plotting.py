@@ -95,6 +95,57 @@ def plot_prior_samples(
     return fig
 
 
+def plot_prior_samples_ratio(
+    x: np.ndarray,
+    ratio_samples: np.ndarray,
+    *,
+    y_label: str,
+    filename: str | None = None,
+    output_dir: str | None = None,
+    colour: str = plot_styles.COLOUR_ORANGE,
+    alpha: float = 0.1,
+    lw: float = 1.0,
+    n_curves: int = 500,
+    ylim: tuple[float, float] | None = (0.0, 1.0),
+    x_label: str = "Age (months)",
+) -> Figure:
+    """
+    Plot prior-sample curves for a production/signed ratio (q or r) in [0, 1].
+
+    All curves share a single colour at a legible alpha — unlike matplotlib's
+    default colour cycle at near-zero alpha, which renders the curves a faint,
+    multi-coloured wash. Matches the single-colour convention of
+    ``plot_prior_samples`` (the observed-data scatter elsewhere is blue, so the
+    curves default to orange to contrast).
+
+    Parameters
+    ----------
+    x
+        Plotting grid (e.g. age in months), shape ``(n_plot,)``.
+    ratio_samples
+        Prior-sample ratio curves, shape ``(n_plot, n_samples)``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    n = min(n_curves, ratio_samples.shape[1])
+    for i in range(n):
+        ax.plot(x, ratio_samples[:, i], c=colour, alpha=alpha, lw=lw)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+
+    if filename is not None and output_dir is not None:
+        os.makedirs(output_dir, exist_ok=True)
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+
+    return fig
+
+
 def plot_prior_predictions(
     x: np.ndarray,
     y_pred: np.ndarray,
