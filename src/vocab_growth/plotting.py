@@ -160,7 +160,10 @@ def plot_prior_predictions(
 
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
-    for i in np.random.randint(0, y_pred.shape[1], 500):
+    # Seeded so the scatter of sampled prior-predictive draws is reproducible
+    # (matches the seeded RNG used by the other spaghetti/scatter plots).
+    rng = np.random.default_rng(42)
+    for i in rng.integers(0, y_pred.shape[1], 500):
         plt.scatter(x, y_pred[:, i], color=plot_styles.COLOUR_ORANGE, alpha=0.01, s=12)
 
     plt.scatter(

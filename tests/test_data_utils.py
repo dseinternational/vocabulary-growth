@@ -74,6 +74,43 @@ def test_td_load_data_can_widen_languages(tmp_path, monkeypatch):
     assert "Norwegian" in df["language"].tolist()
 
 
+def _study_frame():
+    # Studies A (3 rows), B (1 row), C (5 rows); index intentionally non-trivial.
+    studies = ["A", "A", "A", "B", "C", "C", "C", "C", "C"]
+    return pd.DataFrame({"study": studies, "age": range(len(studies))})
+
+
+def test_filter_studies_none_keeps_all_and_resets_index():
+    df = _study_frame().iloc[::-1]  # shuffle the index
+    out, dropped = data_utils.filter_studies_by_min_obs(df, None)
+    assert dropped == []
+    assert len(out) == len(df)
+    assert list(out.index) == list(range(len(df)))  # index reset
+
+
+def test_filter_studies_zero_is_noop():
+    df = _study_frame()
+    out, dropped = data_utils.filter_studies_by_min_obs(df, 0)
+    assert dropped == []
+    assert len(out) == len(df)
+
+
+def test_filter_studies_drops_small_studies():
+    df = _study_frame()
+    out, dropped = data_utils.filter_studies_by_min_obs(df, 3)
+    # B has a single observation -> dropped; A (3) and C (5) retained.
+    assert dropped == ["B"]
+    assert set(out["study"]) == {"A", "C"}
+    assert len(out) == 8
+    assert list(out.index) == list(range(8))  # index reset
+
+
+def test_filter_studies_dropped_list_is_sorted():
+    df = pd.DataFrame({"study": ["z", "a", "a", "m"], "age": [1, 2, 3, 4]})
+    _out, dropped = data_utils.filter_studies_by_min_obs(df, 2)
+    assert dropped == ["m", "z"]  # both singletons, sorted
+
+
 def _create_wordbank_db(tmp_path):
     db_path = tmp_path / "vocabulary.duckdb"
     with duckdb.connect(str(db_path)) as con:

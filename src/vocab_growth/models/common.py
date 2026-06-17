@@ -302,6 +302,26 @@ def get_hsgp_hyperparams(
     return L, M
 
 
+def render_model_graph(model: pm.Model, output_dir: str) -> None:
+    """Render the model DAG to ``gp_model_graph.svg`` in ``output_dir``.
+
+    Best-effort: if the graphviz ``dot`` executable is not installed the render
+    is skipped with a warning rather than aborting the fit, so the pipeline runs
+    on machines without graphviz. The model-diagram figure is a non-essential
+    reporting artefact (a missing SVG only shows as a broken figure in the
+    optional Quarto report).
+    """
+    try:
+        digraph = pymc_utils.model_to_graphviz(model)
+        digraph.render(
+            filename=os.path.join(output_dir, "gp_model_graph"),
+            format="svg",
+            cleanup=True,
+        )
+    except Exception as exc:  # e.g. graphviz 'dot' not on PATH — non-fatal
+        console.print(f"[yellow]Skipped model graph: {exc}[/yellow]")
+
+
 def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
     """
     Extract model samples into a structured format for plotting and reporting.
@@ -688,13 +708,7 @@ def build_model(context: ModelFitContext):
 
     pymc_utils.report_model_summary(model)
 
-    digraph = pymc_utils.model_to_graphviz(model)
-
-    digraph.render(
-        filename=os.path.join(context.reporting.output_dir, "gp_model_graph"),
-        format="svg",
-        cleanup=True,
-    )
+    render_model_graph(model, context.reporting.output_dir)
 
     context.set_model(model, variables)
 

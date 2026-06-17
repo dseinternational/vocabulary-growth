@@ -26,6 +26,7 @@ some duplication is intentional, to keep the signed logic fully isolated.
 
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass
 
@@ -60,6 +61,7 @@ from vocab_growth.models.common import (
     _plot_and_print_dist,
     _report_diagnostic_warnings,
     get_hsgp_hyperparams,
+    render_model_graph,
     report,
 )
 from vocab_growth.models.definitions import TrivariateModelDefinition
@@ -910,12 +912,7 @@ def build_model(context: TrivariateContext):
 
     pymc_utils.report_model_summary(model_pm)
 
-    digraph = pymc_utils.model_to_graphviz(model_pm)
-    digraph.render(
-        filename=os.path.join(context.reporting.output_dir, "gp_model_graph"),
-        format="svg",
-        cleanup=True,
-    )
+    render_model_graph(model_pm, context.reporting.output_dir)
 
     context.set_model(model_pm, variables)
 
@@ -1220,6 +1217,10 @@ def sample(context: TrivariateContext):
             cores=context.sampling.cores,
             target_accept=context.sampling.target_accept,
             nuts_sampler="nutpie",
+            # The rich progress bar segfaults under nutpie's worker threads when
+            # stdout is not a TTY (redirected/backgrounded); keep it for
+            # interactive terminals only. (Matches common.py.)
+            progressbar=sys.stdout.isatty(),
             return_inferencedata=True,
             random_seed=context.sampling.random_seed,
         )
@@ -1410,6 +1411,7 @@ def sample_posterior_predictive(context: TrivariateContext, definition=None):
                 "y_sign_obs",
             ],
             extend_inferencedata=True,
+            progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
         )
 
@@ -1939,6 +1941,7 @@ def _run_trivariate_outcome_plots(
         X_query=samples.X_query,
         y_query=y_query,
         n_trials=n_trials,
+        hdi_prob=hdi_prob,
         output_dir=output_dir,
         filename=f"posterior_predictive_count_distributions_{suffix}",
         x_label=f"{outcome_label} (count)",

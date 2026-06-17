@@ -42,6 +42,7 @@ VG14 memory discipline.
 
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass
 
@@ -72,6 +73,7 @@ from vocab_growth.models.common import (
     _plot_and_print_dist,
     _report_diagnostic_warnings,
     get_hsgp_hyperparams,
+    render_model_graph,
     report,
 )
 from vocab_growth.models.definitions import JointModelDefinition
@@ -190,18 +192,27 @@ JointContext = ModelFitContext[JointModelConfiguration, JointModelSamples]
 def _load_uk02_four_cell():
     """Load uk_02 rows, split into four-cell (cross-tab) and marginal-only rows.
 
-    Returns (four_cell_df, marginal_df). The four-cell rows are those whose
-    signed and spoken margins reconcile with the cross-tab cells
-    (signed == signed_only + signed_spoken, spoken == spoken_only + signed_spoken)
-    and whose four cells sum to a positive total; they identify psi. The rest
-    are marginal-only uk_02 rows (no usable cross-tab).
+    Returns (four_cell_df, marginal_df). The four-cell rows are those that have
+    all four cell counts recorded, whose signed and spoken margins reconcile
+    with the cross-tab cells (signed == signed_only + signed_spoken,
+    spoken == spoken_only + signed_spoken) and whose four cells sum to a
+    positive total; they identify psi. The rest are marginal-only uk_02 rows
+    (no usable cross-tab).
+
+    A row missing any cell — in particular ``understood_only`` (some uk_02 rows
+    record a produced sign/speech cross-tab but no comprehension total) — cannot
+    form the within-understood four-way composition, so it is routed to the
+    marginal-only set, where its recorded spoken/signed margins still inform the
+    model. (Without this guard a NaN cell casts to a negative integer and trips
+    the four-cell count validation in ``build_model``.)
     """
     path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_02.csv")
     raw = pd.read_csv(path)
     cells = ["understood_only", "signed_only", "spoken_only", "signed_spoken"]
     raw["cell_total"] = raw[cells].sum(axis=1)
     reconciles = (
-        (raw["signed"] == raw["signed_only"] + raw["signed_spoken"])
+        raw[cells].notna().all(axis=1)
+        & (raw["signed"] == raw["signed_only"] + raw["signed_spoken"])
         & (raw["spoken"] == raw["spoken_only"] + raw["signed_spoken"])
         & (raw["cell_total"] > 0)
     )
@@ -831,14 +842,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
 
     pymc_utils.report_model_summary(model_pm)
     variables = pymc_utils.get_variables_dict(model_pm)
-    try:
-        digraph = pymc_utils.model_to_graphviz(model_pm)
-        digraph.render(
-            filename=os.path.join(context.reporting.output_dir, "gp_model_graph"),
-            format="svg", cleanup=True,
-        )
-    except Exception as exc:  # graphviz 'dot' not on PATH — non-fatal
-        console.print(f"[yellow]Skipped model graph: {exc}[/yellow]")
+    render_model_graph(model_pm, context.reporting.output_dir)
 
     context.set_model(model_pm, variables)
 
@@ -877,6 +881,9 @@ def sample(context: JointContext):
             chains=context.sampling.chains, cores=context.sampling.cores,
             target_accept=context.sampling.target_accept,
             nuts_sampler="nutpie", return_inferencedata=True,
+            # The rich progress bar segfaults under nutpie's worker threads when
+            # stdout is not a TTY (redirected/backgrounded); interactive only.
+            progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
         )
     context.set_trace(trace)
@@ -907,6 +914,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
     with context.model:
         trace = pm.sample_posterior_predictive(
             context.trace, var_names=["cells_obs"], extend_inferencedata=True,
+            progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
         )
     context.set_trace(trace)
