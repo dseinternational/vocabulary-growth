@@ -43,6 +43,7 @@ from vocab_growth.models.common import (
     get_hsgp_hyperparams,
     posterior_summary,
     prior_predictive_checks,
+    render_model_graph,
     report,
     run_standard_plots,
     sample,
@@ -423,12 +424,7 @@ def build_univariate_re_model(
 
     pymc_utils.report_model_summary(model_pm)
 
-    digraph = pymc_utils.model_to_graphviz(model_pm)
-    digraph.render(
-        filename=os.path.join(context.reporting.output_dir, "gp_model_graph"),
-        format="svg",
-        cleanup=True,
-    )
+    render_model_graph(model_pm, context.reporting.output_dir)
 
     context.set_model(model_pm, variables)
 
