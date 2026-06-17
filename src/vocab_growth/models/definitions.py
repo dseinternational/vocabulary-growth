@@ -341,6 +341,12 @@ class JointModelDefinition:
     uk_02 four-cell cross-tab) and study random intercepts on each latent
     trajectory. The r/q/p_U prior specs are seeded from the (uk_06-included)
     VG14 fit (same hump-capable signed-ratio spec).
+
+    Optionally (flag-gated, defaults off) also carries subject-level random
+    intercepts on each trajectory (`use_subject_re_u/q/sign`) and VG10's
+    per-draw GP anchor at a reference age (`anchor_g_u/q/sign_at_ref` +
+    `gp_anchor_age_months`), which together remove the GP<->intercept
+    redundancy once subject REs add another level-carrying term.
     """
 
     model_id: str
@@ -403,6 +409,33 @@ class JointModelDefinition:
     tau_u_sigma: float = 0.5
     tau_q_sigma: float = 0.5
     tau_sign_sigma: float = 0.5
+
+    # -- Subject-level random intercepts (VG08-VG10 pattern, issue #59) --
+    use_subject_re_u: bool = False
+    """If True, add subject-level random intercepts on the understood trajectory."""
+    tau_subj_u_sigma: float = 0.5
+    """HalfNormal scale for the subject intercept SD on understood (logit scale)."""
+    use_subject_re_q: bool = False
+    """If True, add subject-level random intercepts on the speak ratio q."""
+    tau_subj_q_sigma: float = 0.5
+    """HalfNormal scale for the subject intercept SD on q (logit scale)."""
+    use_subject_re_sign: bool = False
+    """If True, add subject-level random intercepts on the sign ratio r. Signing is
+    the sparsest modality, so this is gated: inspect tau_subj_sign and fall back to
+    study-RE-only on r (set False) if it pins near its prior with poor diagnostics."""
+    tau_subj_sign_sigma: float = 0.5
+    """HalfNormal scale for the subject intercept SD on r (logit scale)."""
+
+    # -- GP anchor constraint (Option D: per-draw zero at reference age) --
+    anchor_g_u_at_ref: bool = False
+    """If True, constrain g_u to equal zero at the reference age for every draw."""
+    anchor_g_q_at_ref: bool = False
+    """If True, constrain g_q to equal zero at the reference age for every draw."""
+    anchor_g_sign_at_ref: bool = False
+    """If True, constrain g_sign to equal zero at the reference age for every draw."""
+    gp_anchor_age_months: float | None = None
+    """Reference age (months) for the GP anchor. If None, defaults to the midpoint
+    of slope_anchors."""
 
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk06: bool = True
@@ -750,7 +783,8 @@ VG15 = JointModelDefinition(
     config_name="age-joint-signspeech-ds",
     banner=(
         "Fitting Model VG15: Joint sign/speech model with within-understood"
-        " association (psi) and study random intercepts - Down syndrome"
+        " association (psi), study + subject random intercepts, and GP anchoring"
+        " - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
     n_trials=800,
@@ -759,6 +793,42 @@ VG15 = JointModelDefinition(
     # r/q/p_U priors seeded from the (uk_06-included) VG14 fit (see dataclass
     # defaults); psi ~ logNormal(0.3, 0.5) (weakly positive, spans independence);
     # study random intercepts on f_U/g/h (tau_*=0.5).
+    #
+    # Issue #59 — subject random intercepts throughout + VG10 stabilisation:
+    # Option A (ported from VG10): tighter q anchor priors, informed by the VG07
+    # posterior (mean ~0.12 at 24 mo, ~0.83 at 84 mo). The u anchors are left
+    # unchanged, matching VG10. The signed mean is intercept-only, so there is no
+    # signed slope anchor to tighten; intercept_sign_sigma is left at 0.75 — it is
+    # already data-informed (posterior sd ~0.48 < prior in #54's freeing fix), and
+    # Option D (below) removes the GP<->intercept ridge without re-tightening the
+    # freed level.
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
+    # Subject random intercepts on all three trajectories. Signed data has more
+    # repeated-subject structure than first feared (substantial repeats across
+    # uk_01/02/04/05), so the sign-subject RE is strongly data-identified — its
+    # scale sits *well above* the HalfNormal(0.5) prior (dev posterior tau_subj_sign
+    # ~1.4, tight), reflecting large between-child variation in signing, and it
+    # improves out-of-sample fit. Kept at 0.5 (porting VG10); use_subject_re_sign
+    # gates a one-line fallback to study-RE-only if a future fit misbehaves. Note:
+    # the four-cell DM is fed population+study marginals only, so this RE does not
+    # pull the headline association psi (see the engine comment + the #59 note).
+    use_subject_re_u=True,
+    tau_subj_u_sigma=0.5,
+    use_subject_re_q=True,
+    tau_subj_q_sigma=0.5,
+    use_subject_re_sign=True,
+    tau_subj_sign_sigma=0.5,
+    # Option D (ported from VG10): per-draw GP anchor at the reference age
+    # (54 mo = midpoint of the (24, 84) anchors), applied to all three GPs to
+    # remove the GP<->intercept redundancy that worsens once subject REs add
+    # another level-carrying term to each predictor.
+    anchor_g_u_at_ref=True,
+    anchor_g_q_at_ref=True,
+    anchor_g_sign_at_ref=True,
+    gp_anchor_age_months=54.0,
 )
 
 MODEL_REGISTRY: dict[
