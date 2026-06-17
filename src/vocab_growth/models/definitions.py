@@ -107,6 +107,10 @@ class UnivariateModelDefinition:
     # -- Study-level random intercepts --
     tau_study_sigma: float = 0.5
     """HalfNormal scale for study intercept SD (logit scale)."""
+    min_study_observations: int | None = None
+    """Drop studies with fewer than this many observations before fitting study
+    intercepts (None = keep all). Trims tiny, near-unidentified study intercepts
+    that add parameters without informing the estimates."""
 
     # -- GP anchor constraint (per-draw zero at reference age) --
     anchor_g_at_ref: bool = False
@@ -182,6 +186,10 @@ class BivariateModelDefinition:
     """HalfNormal scale for study intercept SD on understood (logit scale)."""
     tau_q_sigma: float = 0.5
     """HalfNormal scale for study intercept SD on production ratio (logit scale)."""
+    min_study_observations: int | None = None
+    """Drop studies with fewer than this many observations before fitting study
+    intercepts (None = keep all). Trims tiny, near-unidentified study intercepts
+    that add parameters without informing the estimates."""
 
     # -- Subject-level random intercepts --
     use_subject_re_u: bool = False
@@ -674,6 +682,9 @@ VG11 = UnivariateModelDefinition(
     sample_fraction=1.0,
     # Study-level random intercepts on the spoken trajectory
     tau_study_sigma=0.5,
+    # Drop datasets with <200 observations (issue #55): roughly halves the study
+    # count while retaining >97% of observations.
+    min_study_observations=200,
     # Anchor the GP at the midpoint of slope_anchors (19 months) to remove the
     # GP–intercept ridge that arises when study REs are present.
     anchor_g_at_ref=True,
@@ -701,6 +712,9 @@ VG12 = UnivariateModelDefinition(
     sample_fraction=1.0,
     # Study-level random intercepts on the understood trajectory
     tau_study_sigma=0.5,
+    # Drop datasets with <200 observations (issue #55): roughly halves the study
+    # count while retaining >97% of observations.
+    min_study_observations=200,
     # Anchor the GP at the midpoint of slope_anchors (19 months).
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
@@ -733,6 +747,9 @@ VG13 = BivariateModelDefinition(
     # Dataset-level study random intercepts on both trajectories
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
+    # Drop datasets with <200 observations (issue #55): roughly halves the study
+    # count while retaining >97% of observations.
+    min_study_observations=200,
     # Anchor GPs at the midpoint of slope_anchors (13 months)
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,

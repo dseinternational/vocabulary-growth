@@ -33,6 +33,43 @@ set (or ``None`` for all languages) to the loaders to widen the scope later.
 """
 
 
+def filter_studies_by_min_obs(
+    df: pd.DataFrame,
+    min_obs: int | None,
+    study_col: str = "study",
+) -> tuple[pd.DataFrame, list[str]]:
+    """Drop studies (datasets) with fewer than ``min_obs`` observations.
+
+    Used by the study-random-intercept models (e.g. VG11/VG12/VG13) to trim
+    tiny studies that would otherwise each add a near-unidentified intercept
+    without materially informing the estimates.
+
+    Parameters
+    ----------
+    df
+        Analysis frame (one row per observation), already filtered to the rows
+        that inform the model.
+    min_obs
+        Minimum observations a study must have to be kept. ``None`` or ``0``
+        keeps every study.
+    study_col
+        Column identifying the study/dataset grouping.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, list[str]]
+        The filtered frame (index reset) and the sorted list of dropped study
+        labels.
+    """
+    if not min_obs:
+        return df.reset_index(drop=True), []
+    sizes = df.groupby(study_col).size()
+    keep = sizes[sizes >= min_obs].index
+    dropped = sorted(set(sizes.index) - set(keep))
+    filtered = df[df[study_col].isin(keep)].reset_index(drop=True)
+    return filtered, dropped
+
+
 def load_combined_data(max_age_months=None):
     """
     Load the combined data from the DuckDB database.
