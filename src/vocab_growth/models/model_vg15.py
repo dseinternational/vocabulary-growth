@@ -6,10 +6,12 @@ Model VG15: Joint sign/speech model (issue #49 Option 3) - children with Down
 syndrome.
 
 Estimates the within-understood sign-speech association (a scalar Plackett odds
-ratio, identified from the uk_02 four-cell cross-tab) and adds study random
-intercepts, replacing VG14's independence-based p_any upper bound with a
-data-identified total expressive vocabulary. See ``common_joint_modality`` for
-the engine.
+ratio, identified from the uk_02 four-cell cross-tab) and adds study *and*
+subject random intercepts on all three latent trajectories (understood, speak
+ratio q, sign ratio r), together with VG10's stabilisation package (tighter
+q-anchor priors + a per-draw GP anchor at the reference age). It replaces VG14's
+independence-based p_any upper bound with a data-identified total expressive
+vocabulary. See ``common_joint_modality`` for the engine.
 """
 
 from vocab_growth.models.common_joint_modality import (

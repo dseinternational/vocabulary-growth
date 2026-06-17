@@ -333,6 +333,12 @@ class JointModelDefinition:
     uk_02 four-cell cross-tab) and study random intercepts on each latent
     trajectory. The r/q/p_U prior specs are seeded from the (uk_06-included)
     VG14 fit (same hump-capable signed-ratio spec).
+
+    Optionally (flag-gated, defaults off) also carries subject-level random
+    intercepts on each trajectory (`use_subject_re_u/q/sign`) and VG10's
+    per-draw GP anchor at a reference age (`anchor_g_u/q/sign_at_ref` +
+    `gp_anchor_age_months`), which together remove the GP<->intercept
+    redundancy once subject REs add another level-carrying term.
     """
 
     model_id: str
@@ -760,7 +766,8 @@ VG15 = JointModelDefinition(
     config_name="age-joint-signspeech-ds",
     banner=(
         "Fitting Model VG15: Joint sign/speech model with within-understood"
-        " association (psi) and study random intercepts - Down syndrome"
+        " association (psi), study + subject random intercepts, and GP anchoring"
+        " - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
     n_trials=800,
