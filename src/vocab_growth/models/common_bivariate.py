@@ -886,20 +886,15 @@ def prior_predictive_checks(context: BivariateContext):
         .transpose("plot_id", "sample")
     )
 
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    X_plot_vals = prior_samples.constant_data["X_plot"].values
-    n_curves = min(500, q_plot_samples.shape[1])
-    for i in range(n_curves):
-        ax.plot(X_plot_vals, q_plot_samples.values[:, i], alpha=0.01)
-    ax.set_xlabel("Age (months)")
-    ax.set_ylabel("q(a) = p_S(a) / p_U(a)")
-    ax.set_ylim(0, 1)
-    fig.savefig(
-        os.path.join(context.reporting.output_dir, "prior_samples_q.png"), dpi=300
+    fig = plotting.plot_prior_samples_ratio(
+        prior_samples.constant_data["X_plot"].values,
+        q_plot_samples.values,
+        y_label="q(a) = p_S(a) / p_U(a)",
+        filename="prior_samples_q",
+        output_dir=context.reporting.output_dir,
     )
-    fig.savefig(os.path.join(context.reporting.output_dir, "prior_samples_q.svg"))
     context.plots["prior_samples_q"] = fig
-    plt.close()
+    plt.close(fig)
 
 
 def sample(context: BivariateContext):
@@ -964,6 +959,7 @@ def diagnostics(context: BivariateContext):
     az.plot_trace(
         context.trace,
         var_names=trace_var_names,
+        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
     )
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     context.plots["trace_plot"] = plt.gcf()
@@ -972,7 +968,7 @@ def diagnostics(context: BivariateContext):
     # Energy plot
     az.plot_energy(
         context.trace,
-        figure_kwargs={"figsize": plot_styles.FIGSIZE_SM},
+        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
     )
     plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
     context.plots["energy_plot"] = plt.gcf()

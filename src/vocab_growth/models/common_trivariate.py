@@ -1115,18 +1115,15 @@ def _plot_ratio_prior_samples(context, prior_samples, var_name, y_label, filenam
         .stack(sample=("chain", "draw"))
         .transpose("plot_id", "sample")
     )
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    X_plot_vals = prior_samples.constant_data["X_plot"].values
-    n_curves = min(500, ratio_samples.shape[1])
-    for i in range(n_curves):
-        ax.plot(X_plot_vals, ratio_samples.values[:, i], alpha=0.01)
-    ax.set_xlabel("Age (months)")
-    ax.set_ylabel(y_label)
-    ax.set_ylim(0, 1)
-    fig.savefig(os.path.join(context.reporting.output_dir, f"{filename}.png"), dpi=300)
-    fig.savefig(os.path.join(context.reporting.output_dir, f"{filename}.svg"))
+    fig = plotting.plot_prior_samples_ratio(
+        prior_samples.constant_data["X_plot"].values,
+        ratio_samples.values,
+        y_label=y_label,
+        filename=filename,
+        output_dir=context.reporting.output_dir,
+    )
     context.plots[filename] = fig
-    plt.close()
+    plt.close(fig)
 
 
 def prior_predictive_checks(context: TrivariateContext):
@@ -1273,6 +1270,7 @@ def diagnostics(context: TrivariateContext):
     az.plot_trace(
         context.trace,
         var_names=trace_var_names,
+        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
     )
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     context.plots["trace_plot"] = plt.gcf()
@@ -1281,7 +1279,7 @@ def diagnostics(context: TrivariateContext):
     # Energy plot
     az.plot_energy(
         context.trace,
-        figure_kwargs={"figsize": plot_styles.FIGSIZE_SM},
+        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
     )
     plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
     context.plots["energy_plot"] = plt.gcf()

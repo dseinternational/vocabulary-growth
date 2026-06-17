@@ -835,6 +835,7 @@ def diagnostics(context: ModelFitContext):
     az.plot_trace(
         context.trace,
         var_names=trace_var_names,
+        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
     )
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     context.plots["trace_plot"] = plt.gcf()
@@ -843,7 +844,7 @@ def diagnostics(context: ModelFitContext):
     # Energy transition distribution
     az.plot_energy(
         context.trace,
-        figure_kwargs={"figsize": plot_styles.FIGSIZE_SM},
+        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
     )
     plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
     context.plots["energy_plot"] = plt.gcf()
