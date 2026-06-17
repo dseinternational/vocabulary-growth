@@ -173,6 +173,11 @@ to **max r̂ 1.017** — only the three understood linear-trend anchors (`slope_
 `intercept_u` / `p_slope_low_u`) sit marginally above 1.01 (≤ 1.017, min ESS ≈
 467), while ψ (r̂ 1.000, ESS 18.6k) and all `tau_subj_*` (r̂ ≤ 1.003, ESS ≈ 2k)
 are clean. Plateau removal holds (+6.9–7.8 words/mo across 42–60 mo). Those trend
-anchors are the slowest-mixing globals and should clear ≤ 1.01 at rep (6 chains ×
-6000 tune, `target_accept = 0.95` — the study-RE-only fit hit max r̂ 1.001). Rep
-fit + report render to follow (heavy, over 10 GB trace).
+anchors are the slowest-mixing globals and should clear ≤ 1.01 at rep.
+
+**Rep fit (6 chains × 6000 tune/draw, `target_accept = 0.95`, ~14 min, 4.0 GB
+trace):** fully clean — **max r̂ 1.0047 (0/40 over 1.01), 0 / 36 000 divergences,
+min ESS ≈ 1.3k**; ψ 1.76 (r̂ 1.000, ESS 63k), `tau_subj_*` r̂ ≤ 1.001 (ESS ≈
+6k). The understood linear-trend anchors that were marginal at test cleared
+(`slope_u` r̂ 1.005). Plateau removal holds (+6.9–7.7 words/mo, 42–60 mo). Report
+renders. **All #59 acceptance criteria met.**
