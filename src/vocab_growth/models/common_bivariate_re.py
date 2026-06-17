@@ -95,6 +95,9 @@ def prepare_bivariate_re_data(
     has_u = analysis_df["understood"].notna()
     has_s = analysis_df["spoken"].notna()
     analysis_df = analysis_df[has_u | has_s].reset_index(drop=True)
+    analysis_df, dropped_studies = vocab_data_utils.filter_studies_by_min_obs(
+        analysis_df, definition.min_study_observations
+    )
 
     # Create integer study codes
     unique_studies = sorted(analysis_df["study"].unique())
@@ -136,6 +139,13 @@ def prepare_bivariate_re_data(
         ("Spoken only", n_s - n_both),
         ("Studies", f"{n_studies} ({', '.join(map(str, unique_studies))})"),
     ]
+    if definition.min_study_observations:
+        counts.append(
+            (
+                f"Studies dropped (<{definition.min_study_observations} obs)",
+                ", ".join(dropped_studies) if dropped_studies else "none",
+            )
+        )
     if n_subjects is not None:
         n_singletons = int(
             (analysis_df.groupby("subject_code").size() == 1).sum()

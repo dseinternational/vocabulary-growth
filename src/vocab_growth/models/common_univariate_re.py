@@ -90,6 +90,9 @@ def prepare_univariate_re_data(
         random_seed=definition.random_seed,
     )
     analysis_df = df[columns].dropna(subset=["age", y_col]).reset_index(drop=True)
+    analysis_df, dropped_studies = vocab_data_utils.filter_studies_by_min_obs(
+        analysis_df, definition.min_study_observations
+    )
 
     # Integer study codes (sorted for reproducibility)
     unique_studies = sorted(analysis_df["study"].unique())
@@ -107,16 +110,21 @@ def prepare_univariate_re_data(
         .sort_values("study")
     )
 
-    key_value_table(
-        "Data",
-        [
-            ("Population", definition.population.name),
-            ("Outcome column", y_col),
-            ("Total observations", len(analysis_df)),
-            ("Sample fraction", definition.sample_fraction),
-            ("Studies", f"{n_studies} ({', '.join(map(str, unique_studies))})"),
-        ],
-    )
+    data_rows = [
+        ("Population", definition.population.name),
+        ("Outcome column", y_col),
+        ("Total observations", len(analysis_df)),
+        ("Sample fraction", definition.sample_fraction),
+        ("Studies", f"{n_studies} ({', '.join(map(str, unique_studies))})"),
+    ]
+    if definition.min_study_observations:
+        data_rows.append(
+            (
+                f"Studies dropped (<{definition.min_study_observations} obs)",
+                ", ".join(dropped_studies) if dropped_studies else "none",
+            )
+        )
+    key_value_table("Data", data_rows)
     dataframe_table(study_counts, title="Observations per study")
     dataframe_table(desc, title="Descriptive statistics")
 
