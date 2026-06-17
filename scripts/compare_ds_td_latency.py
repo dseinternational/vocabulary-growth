@@ -3,7 +3,7 @@
 """
 Reframe the comprehension-production gap as a learn-to-say latency.
 
-For each population (DS via VG10, TD via VG06) and each target vocabulary
+For each population (DS via VG10, TD via VG13) and each target vocabulary
 count N:
 
 - a_U(N) = first age at which the latent expected U(a) reaches N
@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth import comparison
+from vocab_growth import environment as env
 
 # Re-exported for backward compatibility with verify_ds_td_latency.py and
 # compare_ds_td_q_overlap.py, which import these names from this module.
@@ -49,7 +50,9 @@ from vocab_growth.comparison import (  # noqa: F401
 )
 
 DS_KEY = "vg10"
-TD_KEY = "vg06"
+# Repointed off the deleted non-RE VG06 trace to the RE TD joint (VG13, 8-18 mo).
+# Note: superseded by compare_ds_td_re.py; requires a fitted VG13 trace.
+TD_KEY = "vg13"
 
 DS_DIR = comparison.model_dir(DS_KEY)
 TD_DIR = comparison.model_dir(TD_KEY)
@@ -66,6 +69,7 @@ N_GRID = np.array(
 
 
 def main() -> None:
+    env.preflight_disk(2.0, OUT_DIR, label="DS/TD latency outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -94,7 +98,7 @@ def main() -> None:
 
     ax = axes[0]
     comparison.plot_summary_band(ax, da_ds, "N", "DS (VG10)", plot_styles.COLOUR_BLUE, min_coverage=MIN_COVERAGE)
-    comparison.plot_summary_band(ax, da_td, "N", "TD (VG06)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
+    comparison.plot_summary_band(ax, da_td, "N", "TD (VG13)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
     ax.set_xlabel("Vocabulary count N (words)")
     ax.set_ylabel(r"$\Delta A(N) = a_S(N) - a_U(N)$  (months)")
     ax.set_title("Age lag between understanding and saying N words")
@@ -104,7 +108,7 @@ def main() -> None:
 
     ax = axes[1]
     comparison.plot_summary_band(ax, extra_ds, "N", "DS (VG10)", plot_styles.COLOUR_BLUE, min_coverage=MIN_COVERAGE)
-    comparison.plot_summary_band(ax, extra_td, "N", "TD (VG06)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
+    comparison.plot_summary_band(ax, extra_td, "N", "TD (VG13)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
     ax.set_xlabel("Spoken count N (words)")
     ax.set_ylabel("Extra words understood when first saying N  (= U(a_S(N)) - N)")
     ax.set_title("Vocabulary lag at production-matched points")
@@ -113,7 +117,7 @@ def main() -> None:
     ax.grid(True, which="both", alpha=0.3)
 
     fig.suptitle(
-        "Modeling the gap as a learn-to-say latency — DS (VG10) vs TD (VG06)",
+        "Modeling the gap as a learn-to-say latency — DS (VG10) vs TD (VG13)",
         fontsize=12,
     )
     fig.tight_layout()

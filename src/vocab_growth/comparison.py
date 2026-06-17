@@ -40,7 +40,7 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth import environment as env
-from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
 DEFAULT_MILESTONES = (25, 50, 100, 200, 400)
 DEFAULT_MIN_COVERAGE = 0.80
@@ -363,3 +363,154 @@ def plot_summary_band(
             color=colour, alpha=0.30, linewidth=0, label=f"{label} 50% HDI",
         )
     ax.plot(df_ok[x_col], df_ok["median"], color=colour, lw=2.5, label=f"{label} median")
+
+
+# ----------------------------------------------------------------------------
+# Cross-model population contrasts (separate-model, per-draw)
+# ----------------------------------------------------------------------------
+# These support contrasting a DS RE-model against a TD RE-model. Because the DS
+# and TD datasets are disjoint, the joint posterior factorises and any per-draw
+# pairing is valid, so a difference-of-draws gives an *exact* credible interval
+# for the contrast (no joint model required). All curves are read at the
+# population level (study/subject random effects excluded) so the estimand is
+# consistent on both sides. Contrasts are meaningful only over the age range
+# where both models have data; callers restrict to that overlap. A joint/stacked
+# model that makes the TD-DS gap a generative object is a separate exercise
+# (the reserved VG16), not provided here.
+
+
+def load_outcome_trajectory(
+    key: str, outcome: str = "spoken"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """Return ``(ages, p, kappa, n_trials)`` for one outcome's population curve.
+
+    Dispatches on model type so the same call works for univariate RE models
+    (VG11/VG12: ``p_plot`` / ``kappa_plot``) and bivariate RE models
+    (VG07-VG10: ``p_{s,u}_plot`` / ``kappa_{s,u}_plot``). ``p`` and ``kappa``
+    are ``(n_draw, n_age)`` over the model's own plot grid with random effects
+    excluded; ``ages`` is sorted ascending (months). ``outcome`` is
+    ``"spoken"`` or ``"understood"``.
+    """
+    d = MODEL_REGISTRY[key]
+    mt = d.model_type
+    if mt is ModelType.UNIVARIATE:
+        if d.outcome.value != outcome:
+            raise ValueError(
+                f"{key} is a '{d.outcome.value}' model; cannot serve '{outcome}'."
+            )
+        p_name, k_name = "p_plot", "kappa_plot"
+    elif mt is ModelType.BIVARIATE:
+        if outcome == "spoken":
+            p_name, k_name = "p_s_plot", "kappa_s_plot"
+        elif outcome == "understood":
+            p_name, k_name = "p_u_plot", "kappa_u_plot"
+        else:
+            raise ValueError(
+                f"outcome must be 'spoken' or 'understood', got {outcome!r}."
+            )
+    else:
+        raise ValueError(
+            f"{key}: model_type {mt} is not supported by load_outcome_trajectory."
+        )
+
+    d_idata = az.from_netcdf(trace_path(key))
+    post = _dataset(d_idata, "posterior")
+    cdata = _dataset(d_idata, "constant_data")
+    p = post[p_name].values  # (chain, draw, n_age)
+    k = post[k_name].values
+    n_chain, n_draw, n_age = p.shape
+    p = p.reshape(n_chain * n_draw, n_age)
+    k = k.reshape(n_chain * n_draw, n_age)
+    ages = np.asarray(cdata["X_plot"].values, dtype=float)
+    order = np.argsort(ages)
+    return ages[order], p[:, order], k[:, order], n_trials(key)
+
+
+def implied_sd_y(p: np.ndarray, kappa: np.ndarray, n: int) -> np.ndarray:
+    """Beta-Binomial implied SD of the word count Y (words).
+
+    For ``BetaBinomial(n, alpha=p*kappa, beta=(1-p)*kappa)`` the variance is
+    ``n*p*(1-p)*(kappa+n)/(kappa+1)``; this returns its square root. This is the
+    observable between-child spread at age ``a`` — closer to what clinicians see
+    than ``kappa`` itself, but note it also moves with the mean level ``p``.
+    """
+    var = n * p * (1.0 - p) * (kappa + n) / (kappa + 1.0)
+    return np.sqrt(var)
+
+
+def overdispersion_factor(kappa: np.ndarray, n: int) -> np.ndarray:
+    """Variance inflation vs a Binomial at the same mean: ``(kappa+n)/(kappa+1)``.
+
+    Mean-independent (a function of ``kappa`` and ``n`` only), so contrasting it
+    across populations isolates the pure concentration difference, unlike
+    :func:`implied_sd_y` which is confounded by where each population sits on the
+    mean-variance curve.
+    """
+    return (kappa + n) / (kappa + 1.0)
+
+
+def align_draws(
+    n_a: int, n_b: int, *, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Index arrays pairing two *independent* posteriors to a common draw count.
+
+    DS and TD models are fit to disjoint data, so the joint posterior factorises
+    and any pairing is valid; permute each and truncate to ``min(n_a, n_b)`` to
+    get an unbiased paired sample for per-draw contrasts.
+    """
+    n = min(n_a, n_b)
+    rng = np.random.default_rng(seed)
+    return rng.permutation(n_a)[:n], rng.permutation(n_b)[:n]
+
+
+def interp_draws(ages: np.ndarray, Y: np.ndarray, grid: np.ndarray) -> np.ndarray:
+    """Linear-interpolate each row of ``Y`` (n_draw, n_age) onto a shared ``grid``."""
+    out = np.empty((Y.shape[0], grid.size), dtype=float)
+    for i in range(Y.shape[0]):
+        out[i] = np.interp(grid, ages, Y[i])
+    return out
+
+
+def learning_rate(ages: np.ndarray, Y: np.ndarray) -> np.ndarray:
+    """Per-draw derivative ``dY/d(age)`` via central differences (shape of ``Y``)."""
+    return np.gradient(Y, ages, axis=1)
+
+
+def summarise_draws(
+    samples: np.ndarray,
+    grid: np.ndarray,
+    grid_name: str = "age_months",
+    *,
+    with_p_gt0: bool = False,
+) -> pd.DataFrame:
+    """Median + 50%/90% HDI per grid column (over axis 0), NaN-aware.
+
+    Adds ``coverage`` (fraction of non-NaN draws) and, when ``with_p_gt0``,
+    the posterior probability ``P(contrast > 0)``.
+    """
+    rows = []
+    n_draw = samples.shape[0]
+    for i, g in enumerate(grid):
+        col = samples[:, i]
+        valid = ~np.isnan(col)
+        n_valid = int(valid.sum())
+        row: dict[str, float] = {grid_name: float(g), "coverage": n_valid / n_draw}
+        if n_valid == 0:
+            row.update(
+                median=np.nan, hdi50_lo=np.nan, hdi50_hi=np.nan,
+                hdi90_lo=np.nan, hdi90_hi=np.nan,
+            )
+            if with_p_gt0:
+                row["p_gt0"] = np.nan
+        else:
+            c = col[valid]
+            l50, u50 = hdi_from_samples(c, 0.50)
+            l90, u90 = hdi_from_samples(c, 0.90)
+            row.update(
+                median=float(np.median(c)), hdi50_lo=l50, hdi50_hi=u50,
+                hdi90_lo=l90, hdi90_hi=u90,
+            )
+            if with_p_gt0:
+                row["p_gt0"] = float(np.mean(c > 0.0))
+        rows.append(row)
+    return pd.DataFrame(rows)
