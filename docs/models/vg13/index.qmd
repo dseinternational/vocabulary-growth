@@ -91,8 +91,8 @@ _style_diagnostics(diagnostics)
 ### Understood trajectory
 
 ```{python}
-posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
-posterior_summary
+posterior_summary_u = pd.read_csv("posterior_summary_u.csv", index_col=0)
+posterior_summary_u
 ```
 
 ### Joint trajectory

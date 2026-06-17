@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Population-level posterior overlap of q(a) = S/U for DS (VG10) and TD (VG06).
+Population-level posterior overlap of q(a) = S/U for DS (VG10) and TD (VG13).
 
 Two views:
 
@@ -45,7 +45,9 @@ from vocab_growth.comparison import (
 )
 
 DS_KEY = "vg10"
-TD_KEY = "vg06"
+# Repointed off the deleted non-RE VG06 trace to the RE TD joint (VG13, 8-18 mo).
+# Note: superseded by compare_ds_td_re.py; requires a fitted VG13 trace.
+TD_KEY = "vg13"
 DS_DIR = comparison.model_dir(DS_KEY)
 TD_DIR = comparison.model_dir(TD_KEY)
 N_TRIALS_DS = comparison.n_trials(DS_KEY)
@@ -106,7 +108,7 @@ def main() -> None:
 
     ax_qU = fig.add_subplot(gs[0, 0])
     comparison.plot_summary_band(ax_qU, qU_ds_sum, "N", "DS (VG10)", plot_styles.COLOUR_BLUE, min_coverage=MIN_COVERAGE)
-    comparison.plot_summary_band(ax_qU, qU_td_sum, "N", "TD (VG06)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
+    comparison.plot_summary_band(ax_qU, qU_td_sum, "N", "TD (VG13)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
     ax_qU.set_xscale("log")
     ax_qU.set_xlabel("Comprehension N (words)")
     ax_qU.set_ylabel("q(U=N) = E[S] / N")
@@ -117,7 +119,7 @@ def main() -> None:
 
     ax_qa = fig.add_subplot(gs[0, 1])
     comparison.plot_summary_band(ax_qa, qa_ds_sum, "age_months", "DS (VG10)", plot_styles.COLOUR_BLUE, min_coverage=MIN_COVERAGE)
-    comparison.plot_summary_band(ax_qa, qa_td_sum, "age_months", "TD (VG06)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
+    comparison.plot_summary_band(ax_qa, qa_td_sum, "age_months", "TD (VG13)", plot_styles.COLOUR_ORANGE, min_coverage=MIN_COVERAGE)
     ax_qa.set_xlabel("Age (months)")
     ax_qa.set_ylabel("q(a) = E[S(a)] / E[U(a)]")
     ax_qa.set_title("Production ratio at matched age")
@@ -142,7 +144,7 @@ def main() -> None:
     ax_pa.set_ylim(0, 1)
     ax_pa.grid(True, alpha=0.3)
 
-    fig.suptitle("Posterior overlap of population q = S/U — DS (VG10) vs TD (VG06)", fontsize=13)
+    fig.suptitle("Posterior overlap of population q = S/U — DS (VG10) vs TD (VG13)", fontsize=13)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_overlap.png"), dpi=300, bbox_inches="tight")
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_overlap.svg"), bbox_inches="tight")
     plt.close(fig)
