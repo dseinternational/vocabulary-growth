@@ -220,9 +220,20 @@ def prepare_joint_data(
     merged view). uk_02 is taken from its raw CSV and split into four-cell rows
     (Dirichlet-Multinomial) and marginal-only rows (marginal likelihoods).
     """
+    # Subject random intercepts (issue #59) need a per-child identifier in both
+    # data sources (the merged view and the raw uk_02 cross-tab CSV).
+    use_subject_codes = (
+        definition.use_subject_re_u
+        or definition.use_subject_re_q
+        or definition.use_subject_re_sign
+    )
+    merged_columns = ["study", "age", "understood", "spoken", "signed"]
+    if use_subject_codes:
+        merged_columns = merged_columns + ["subject_id"]
+
     merged = vocab_data_utils.load_data(
         population=definition.population,
-        columns=["study", "age", "understood", "spoken", "signed"],
+        columns=merged_columns,
     )
     other = merged[merged["study"] != UK02_STUDY_ID].copy()
 
@@ -231,31 +242,33 @@ def prepare_joint_data(
 
     # uk_02 four-cell rows: understood for the U likelihood; cells for the DM;
     # marginal spoken/signed set NaN (subsumed by the DM, avoids double counting).
-    four_df = pd.DataFrame(
-        {
-            "study": UK02_STUDY_ID,
-            "age": four["age"].to_numpy(dtype=float),
-            "understood": four["comprehension"].to_numpy(dtype=float),
-            "spoken": np.nan,
-            "signed": np.nan,
-            "understood_only": four["understood_only"].to_numpy(dtype=float),
-            "signed_only": four["signed_only"].to_numpy(dtype=float),
-            "spoken_only": four["spoken_only"].to_numpy(dtype=float),
-            "signed_spoken": four["signed_spoken"].to_numpy(dtype=float),
-            "cell_total": four["cell_total"].to_numpy(dtype=float),
-        }
-    )
+    four_cols = {
+        "study": UK02_STUDY_ID,
+        "age": four["age"].to_numpy(dtype=float),
+        "understood": four["comprehension"].to_numpy(dtype=float),
+        "spoken": np.nan,
+        "signed": np.nan,
+        "understood_only": four["understood_only"].to_numpy(dtype=float),
+        "signed_only": four["signed_only"].to_numpy(dtype=float),
+        "spoken_only": four["spoken_only"].to_numpy(dtype=float),
+        "signed_spoken": four["signed_spoken"].to_numpy(dtype=float),
+        "cell_total": four["cell_total"].to_numpy(dtype=float),
+    }
 
     # uk_02 marginal-only rows: ordinary marginals.
-    marg_df = pd.DataFrame(
-        {
-            "study": UK02_STUDY_ID,
-            "age": marg["age"].to_numpy(dtype=float),
-            "understood": marg["comprehension"].to_numpy(dtype=float),
-            "spoken": marg["spoken"].to_numpy(dtype=float),
-            "signed": marg["signed"].to_numpy(dtype=float),
-        }
-    )
+    marg_cols = {
+        "study": UK02_STUDY_ID,
+        "age": marg["age"].to_numpy(dtype=float),
+        "understood": marg["comprehension"].to_numpy(dtype=float),
+        "spoken": marg["spoken"].to_numpy(dtype=float),
+        "signed": marg["signed"].to_numpy(dtype=float),
+    }
+    if use_subject_codes:
+        four_cols["subject_id"] = four["subject_id"].to_numpy()
+        marg_cols["subject_id"] = marg["subject_id"].to_numpy()
+
+    four_df = pd.DataFrame(four_cols)
+    marg_df = pd.DataFrame(marg_cols)
 
     analysis_df = pd.concat([other, marg_df, four_df], ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
@@ -270,24 +283,44 @@ def prepare_joint_data(
     study_map = {s: i for i, s in enumerate(unique_studies)}
     analysis_df["study_code"] = analysis_df["study"].map(study_map).astype(int)
 
+    # Integer subject codes, namespaced by study so identifiers never collide.
+    n_subjects: int | None = None
+    if use_subject_codes:
+        subj_keys = (
+            analysis_df["study"].astype(str) + "::" + analysis_df["subject_id"].astype(str)
+        )
+        analysis_df["subject_key"] = subj_keys
+        unique_subjects = sorted(subj_keys.unique())
+        subject_map = {s: i for i, s in enumerate(unique_subjects)}
+        analysis_df["subject_code"] = subj_keys.map(subject_map).astype(int)
+        n_subjects = len(unique_subjects)
+
     n = len(analysis_df)
     n_u = int(analysis_df["understood"].notna().sum())
     n_s = int(analysis_df["spoken"].notna().sum())
     n_sign = int(analysis_df["signed"].notna().sum())
     n_cells = int(analysis_df["signed_spoken"].notna().sum())
 
-    key_value_table(
-        "Observation counts",
-        [
-            ("Total observations", n),
-            ("Studies", f"{len(unique_studies)} ({', '.join(unique_studies)})"),
-            ("Understood observed", n_u),
-            ("Spoken observed (marginal)", n_s),
-            ("Signed observed (marginal)", n_sign),
-            ("uk_02 four-cell rows (DM)", n_cells),
-            ("include_uk06", include_uk06),
-        ],
-    )
+    counts: list[tuple[str, object]] = [
+        ("Total observations", n),
+        ("Studies", f"{len(unique_studies)} ({', '.join(unique_studies)})"),
+        ("Understood observed", n_u),
+        ("Spoken observed (marginal)", n_s),
+        ("Signed observed (marginal)", n_sign),
+        ("uk_02 four-cell rows (DM)", n_cells),
+        ("include_uk06", include_uk06),
+    ]
+    if n_subjects is not None:
+        n_singletons = int((analysis_df.groupby("subject_code").size() == 1).sum())
+        # Subjects contributing at least one signed observation (the modality that
+        # most stresses subject-RE identification).
+        sign_subj = analysis_df.loc[analysis_df["signed"].notna(), "subject_code"]
+        n_sign_rep = int((sign_subj.value_counts() > 1).sum())
+        counts.append(("Subjects", n_subjects))
+        counts.append(("Subjects with single observation", n_singletons))
+        counts.append(("Subjects with repeated observations", n_subjects - n_singletons))
+        counts.append(("Subjects with repeated SIGNED observations", n_sign_rep))
+    key_value_table("Observation counts", counts)
 
     desc = descriptive_stats.describe_all(
         analysis_df[["age", "understood", "spoken", "signed"]], alpha=0.05
@@ -432,8 +465,8 @@ def _plackett_pi_both(r, q, psi):
 # ============================================================
 
 
-def build_model(context: JointContext):
-    """Build the joint sign/speech PyMC model with study random intercepts."""
+def build_model(context: JointContext, definition: JointModelDefinition):
+    """Build the joint sign/speech PyMC model with study + subject random intercepts."""
     config = context.model_config
     df = context.analysis_df
     n_trials = context.model_data.n_trials
@@ -443,20 +476,33 @@ def build_model(context: JointContext):
     has_sign = df["signed"].notna().values
     has_cells = df["signed_spoken"].notna().values
 
-    idx_u = np.where(has_u)[0]
-    idx_s = np.where(has_s)[0]
-    idx_sign = np.where(has_sign)[0]
-    idx_cells = np.where(has_cells)[0]
+    # Optional held-out rows (K-fold LOSO): kept in obs space so their latents are
+    # still computed, but excluded from every likelihood. A held-out subject's RE
+    # offset is then drawn from the population prior. No holdout column => standard
+    # fit (the posterior-predictive plot/query grids are population-level either way).
+    if "holdout" in df.columns:
+        holdout = df["holdout"].fillna(False).astype(bool).values
+    else:
+        holdout = np.zeros(len(df), dtype=bool)
+    has_u_t = has_u & ~holdout
+    has_s_t = has_s & ~holdout
+    has_sign_t = has_sign & ~holdout
+    has_cells_t = has_cells & ~holdout
 
-    y_u = np.asarray(df.loc[has_u, "understood"], dtype=int)
-    y_s = np.asarray(df.loc[has_s, "spoken"], dtype=int)
-    y_sign = np.asarray(df.loc[has_sign, "signed"], dtype=int)
+    idx_u = np.where(has_u_t)[0]
+    idx_s = np.where(has_s_t)[0]
+    idx_sign = np.where(has_sign_t)[0]
+    idx_cells = np.where(has_cells_t)[0]
+
+    y_u = np.asarray(df.loc[has_u_t, "understood"], dtype=int)
+    y_s = np.asarray(df.loc[has_s_t, "spoken"], dtype=int)
+    y_sign = np.asarray(df.loc[has_sign_t, "signed"], dtype=int)
 
     cell_counts = np.asarray(
-        df.loc[has_cells, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
+        df.loc[has_cells_t, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
         dtype=int,
     )
-    cell_total = np.asarray(df.loc[has_cells, "cell_total"], dtype=int)
+    cell_total = np.asarray(df.loc[has_cells_t, "cell_total"], dtype=int)
 
     # Validate
     for arr, nm in [(y_u, "understood"), (y_s, "spoken"), (y_sign, "signed")]:
@@ -473,6 +519,17 @@ def build_model(context: JointContext):
     study_codes = np.asarray(df["study_code"], dtype=int)
     n_studies = int(study_codes.max()) + 1
 
+    use_subject_re_u = bool(definition.use_subject_re_u)
+    use_subject_re_q = bool(definition.use_subject_re_q)
+    use_subject_re_sign = bool(definition.use_subject_re_sign)
+    use_subject_codes = use_subject_re_u or use_subject_re_q or use_subject_re_sign
+    if use_subject_codes:
+        subject_codes = np.asarray(df["subject_code"], dtype=int)
+        n_subjects = int(subject_codes.max()) + 1
+    else:
+        subject_codes = None
+        n_subjects = 0
+
     X_obs = np.asarray(df["age"], dtype=float).reshape(-1, 1)
     n = len(X_obs)
     X_mean = float(np.mean(X_obs))
@@ -483,9 +540,30 @@ def build_model(context: JointContext):
     X_plot_z = (X_plot - X_mean) / X_std
     X_query = np.array(config.ages_query).reshape(-1, 1)
     X_query_z = (X_query - X_mean) / X_std
-    X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
     n_plot = X_plot_z.shape[0]
     n_query = X_query_z.shape[0]
+
+    # Option D — per-draw GP anchor at a reference age. Append one extra grid row
+    # (the reference age) so each anchored GP can be centred to pass through zero
+    # there for every draw, removing the GP<->intercept level redundancy.
+    anchor_g_u = bool(definition.anchor_g_u_at_ref)
+    anchor_g_q = bool(definition.anchor_g_q_at_ref)
+    anchor_g_sign = bool(definition.anchor_g_sign_at_ref)
+    use_gp_anchor = anchor_g_u or anchor_g_q or anchor_g_sign
+    if use_gp_anchor:
+        if definition.gp_anchor_age_months is not None:
+            anchor_age_months = float(definition.gp_anchor_age_months)
+        else:
+            anchor_age_months = (
+                float(config.slope_anchors[0]) + float(config.slope_anchors[1])
+            ) / 2.0
+        X_anchor_z = (np.array([[anchor_age_months]], dtype=float) - X_mean) / X_std
+        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z, X_anchor_z])
+        i_anchor = n + n_plot + n_query
+    else:
+        anchor_age_months = None
+        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
+        i_anchor = None
     n_all = X_all_z.shape[0]
 
     ell_low_z = float(config.ell_months_range[0]) / X_std
@@ -497,17 +575,24 @@ def build_model(context: JointContext):
     sa_z = (sa - X_mean) / X_std
     sb_z = (sb - X_mean) / X_std
 
-    key_value_table(
-        "Build configuration",
-        [
-            ("Total observations", n),
-            ("Studies", n_studies),
-            ("Understood / spoken / signed / cells", f"{len(idx_u)} / {len(idx_s)} / {len(idx_sign)} / {len(idx_cells)}"),
-            ("n_trials", n_trials),
-            ("Age mean / std", (round(X_mean, 1), round(X_std, 1))),
-            ("HSGP m / L", (M, L)),
-        ],
-    )
+    build_cfg: list[tuple[str, object]] = [
+        ("Total observations", n),
+        ("Studies", n_studies),
+        ("Understood / spoken / signed / cells", f"{len(idx_u)} / {len(idx_s)} / {len(idx_sign)} / {len(idx_cells)}"),
+        ("n_trials", n_trials),
+        ("Age mean / std", (round(X_mean, 1), round(X_std, 1))),
+        ("HSGP m / L", (M, L)),
+    ]
+    if use_subject_codes:
+        build_cfg.append(
+            ("Subject REs (u/q/sign)", f"{use_subject_re_u} / {use_subject_re_q} / {use_subject_re_sign}")
+        )
+        build_cfg.append(("n_subjects", n_subjects))
+    if use_gp_anchor:
+        build_cfg.append(
+            ("GP anchor age (months)", f"{anchor_age_months:g} (u={anchor_g_u}, q={anchor_g_q}, sign={anchor_g_sign})")
+        )
+    key_value_table("Build configuration", build_cfg)
 
     i_obs0, i_obs1 = 0, n
     i_plot0, i_plot1 = n, n + n_plot
@@ -526,9 +611,16 @@ def build_model(context: JointContext):
         "cell_id": CELL_NAMES,
         "x_dim": np.arange(1),
     }
+    if use_subject_codes:
+        coords["subject_id"] = np.arange(n_subjects)
 
-    def trend_and_gp(cfg_low, cfg_hi, cfg_ell, cfg_eta, suffix, X_all_z_data):
-        """Build a logit-linear trend + HSGP deviation; return the full-grid latent."""
+    def trend_and_gp(cfg_low, cfg_hi, cfg_ell, cfg_eta, suffix, X_all_z_data, anchor_idx=None):
+        """Build a logit-linear trend + HSGP deviation; return the full-grid latent.
+
+        If ``anchor_idx`` is given (Option D), the GP is centred to pass through
+        zero at that grid row for every draw, so the linear trend alone sets the
+        level there and the GP only carries deviations.
+        """
         p_lo = cfg_low.to_pymc(f"p_slope_low_{suffix}")
         p_hi = cfg_hi.to_pymc(f"p_slope_hi_{suffix}")
         slope = pm.Deterministic(
@@ -547,15 +639,18 @@ def build_model(context: JointContext):
         cov = pm.gp.cov.ExpQuad(1, ls=ell)
         hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
         g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
+        if anchor_idx is not None:
+            g_unit = g_unit - g_unit[anchor_idx]
         return mean_trend + eta * g_unit  # plain tensor (n_all,)
 
-    def intercept_and_gp(cfg_intercept, cfg_ell, cfg_eta, suffix, X_all_z_data):
+    def intercept_and_gp(cfg_intercept, cfg_ell, cfg_eta, suffix, X_all_z_data, anchor_idx=None):
         """Intercept-only mean (no age slope) + HSGP deviation; full-grid latent.
 
         Used for the signed ratio: a free age slope would extrapolate the ratio
         below the data floor (< ~18 mo), so the mean is intercept-only and the GP
         carries the age-varying (rise-then-fall) shape. The study random
-        intercept is added at observation level by the caller.
+        intercept is added at observation level by the caller. If ``anchor_idx``
+        is given (Option D), the GP passes through zero at that grid row per draw.
         """
         intercept = cfg_intercept.to_pymc(f"intercept_{suffix}")
         ell_unit = cfg_ell.to_pymc(f"ell_unit_{suffix}")
@@ -566,6 +661,8 @@ def build_model(context: JointContext):
         cov = pm.gp.cov.ExpQuad(1, ls=ell)
         hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
         g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
+        if anchor_idx is not None:
+            g_unit = g_unit - g_unit[anchor_idx]
         return intercept + eta * g_unit  # plain tensor (n_all,)
 
     with pm.Model(coords=coords) as model_pm:
@@ -573,21 +670,27 @@ def build_model(context: JointContext):
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
+        if use_subject_codes:
+            subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
 
-        # Latent full-grid trajectories (plain tensors).
+        # Latent full-grid trajectories (plain tensors). Option D anchors each GP
+        # (per-draw zero at the reference age) when the matching flag is set.
         f_u_all = trend_and_gp(
             config.p_slope_low_u_dist, config.p_slope_hi_u_dist,
-            config.ell_unit_u_dist, config.eta_u_dist, "u", X_all_z_data
+            config.ell_unit_u_dist, config.eta_u_dist, "u", X_all_z_data,
+            anchor_idx=i_anchor if anchor_g_u else None,
         )
         h_all = trend_and_gp(
             config.p_slope_low_q_dist, config.p_slope_hi_q_dist,
-            config.ell_unit_q_dist, config.eta_q_dist, "q", X_all_z_data
+            config.ell_unit_q_dist, config.eta_q_dist, "q", X_all_z_data,
+            anchor_idx=i_anchor if anchor_g_q else None,
         )
         # Signed marginal: intercept-only mean (no age slope) + GP hump; the
         # study random intercept delta_sign is added at obs level below.
         g_all = intercept_and_gp(
             config.intercept_sign_dist,
-            config.ell_unit_sign_dist, config.eta_sign_dist, "sign", X_all_z_data
+            config.ell_unit_sign_dist, config.eta_sign_dist, "sign", X_all_z_data,
+            anchor_idx=i_anchor if anchor_g_sign else None,
         )
 
         # Study random intercepts (non-centred), applied at obs level only.
@@ -604,16 +707,43 @@ def build_model(context: JointContext):
             "delta_sign", tau_sign * pm.Normal("z_sign", 0.0, 1.0, dims="study_id"), dims="study_id"
         )
 
+        # Subject random intercepts (non-centred), applied at obs level only. Each
+        # is gated by its flag so the sign-RE can be dropped via config alone.
+        def subject_shift(flag, tau_sigma, suffix):
+            if not flag:
+                return 0.0
+            tau = pm.HalfNormal(f"tau_subj_{suffix}", sigma=tau_sigma)
+            z = pm.Normal(f"z_subj_{suffix}", 0.0, 1.0, dims="subject_id")
+            delta = pm.Deterministic(f"delta_subj_{suffix}", tau * z, dims="subject_id")
+            return delta[subject_obs]
+
+        subject_shift_u = subject_shift(use_subject_re_u, definition.tau_subj_u_sigma, "u")
+        subject_shift_q = subject_shift(use_subject_re_q, definition.tau_subj_q_sigma, "q")
+        subject_shift_sign = subject_shift(use_subject_re_sign, definition.tau_subj_sign_sigma, "sign")
+
         # Standardised observed ages (used by the age-varying kappa functions).
         z_obs = pm.Deterministic("z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims="obs_id")
 
-        # --- obs-level latents WITH study shift ---
-        f_u_obs = f_u_all[i_obs0:i_obs1] + delta_u[study_obs]
-        h_obs = h_all[i_obs0:i_obs1] + delta_q[study_obs]
-        g_obs = g_all[i_obs0:i_obs1] + delta_sign[study_obs]
+        # --- obs-level latents WITH study + subject shifts (marginal likelihoods) ---
+        f_u_obs = f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + subject_shift_u
+        h_obs = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q
+        g_obs = g_all[i_obs0:i_obs1] + delta_sign[study_obs] + subject_shift_sign
         p_u_obs = pm.math.sigmoid(f_u_obs)
         q_obs = pm.math.sigmoid(h_obs)
         r_obs = pm.math.sigmoid(g_obs)
+
+        # --- population+study marginals (NO subject shift) for the four-cell DM ---
+        # psi is identified from the ~62 uk_02 cross-tab rows (34 children, ~2 rows
+        # each). The per-child sign offset is co-identified with psi from those same
+        # rows, so letting it into the four-cell composition makes psi pivot on a
+        # thinly-identified RE (psi 1.78 -> ~2.8; the move is driven almost entirely
+        # by the sign subject RE — see notes/202606171200-vg15-subject-re-stabilisation).
+        # We therefore keep psi a *population-conditioned* within-understood
+        # association (comparable to the study-RE-only VG15) by feeding the DM the
+        # study-level marginals only; subject REs still enter every marginal
+        # likelihood. When subject REs are off these equal r_obs/q_obs exactly.
+        q_obs_pop = pm.math.sigmoid(h_all[i_obs0:i_obs1] + delta_q[study_obs])
+        r_obs_pop = pm.math.sigmoid(g_all[i_obs0:i_obs1] + delta_sign[study_obs])
 
         # --- population-level latents (no study shift), plot + query ---
         p_u_plot = pm.Deterministic("p_u_plot", pm.math.sigmoid(f_u_all[i_plot0:i_plot1]), dims="plot_id")
@@ -666,9 +796,11 @@ def build_model(context: JointContext):
         pm.BetaBinomial("y_sign_obs", n=n_trials, alpha=p_sign_sel * k_sign, beta=(1 - p_sign_sel) * k_sign,
                         observed=y_sign, dims="obs_sign_id")
 
-        # uk_02 four cells (Dirichlet-Multinomial), within-understood composition
-        r_c = pm.math.clip(r_obs[idx_cells], EPSILON, 1 - EPSILON)
-        q_c = pm.math.clip(q_obs[idx_cells], EPSILON, 1 - EPSILON)
+        # uk_02 four cells (Dirichlet-Multinomial), within-understood composition.
+        # Uses population+study marginals (r_obs_pop/q_obs_pop), so psi stays a
+        # population-conditioned association decoupled from the per-child sign RE.
+        r_c = pm.math.clip(r_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
+        q_c = pm.math.clip(q_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
         pi_both_c = _plackett_pi_both(r_c, q_c, psi)
         pi_sign_c = pm.math.maximum(r_c - pi_both_c, EPSILON)
         pi_speak_c = pm.math.maximum(q_c - pi_both_c, EPSILON)
@@ -1012,7 +1144,7 @@ def fit_joint_model(config: str, definition: JointModelDefinition) -> JointConte
     with section("Priors and hyperparameters", timings=timings):
         configure_joint_priors(context, definition)
     with section("Model definition and initialisation", timings=timings):
-        build_model(context)
+        build_model(context, definition)
     with section("Prior predictive checks", timings=timings):
         prior_predictive_checks(context)
     with section("Posterior sampling", timings=timings):
