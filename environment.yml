@@ -4,8 +4,11 @@ channels:
 dependencies:
   - python=3.14.6
   - arviz>=1.1.0
-  - arviz-base>=1.2.0
-  - arviz-stats>=1.2.0
+  # Hold arviz-base/arviz-stats at 1.x: arviz 1.1 caps arviz-base <1.2 and
+  # arviz-plots 1.1 caps arviz-stats <1.2. Bump together once arviz and
+  # arviz-plots ship 1.2 on conda-forge.
+  - arviz-base>=1.1.0
+  - arviz-stats>=1.1.0
   - arviz-plots>=1.1.0
   - h5netcdf
   - graphviz>=14.1.2
