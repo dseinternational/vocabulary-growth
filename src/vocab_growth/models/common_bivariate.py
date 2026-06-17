@@ -13,6 +13,7 @@ Uses a production-ratio reparameterization:
 
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass
 
@@ -47,6 +48,7 @@ from vocab_growth.models.common import (
     _plot_and_print_dist,
     _report_diagnostic_warnings,
     get_hsgp_hyperparams,
+    render_model_graph,
     report,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
@@ -540,20 +542,19 @@ def build_model(context: BivariateContext):
         # ============================================================
         # Derived quantities: p_U, q, p_S
         # ============================================================
+        # Full-grid (n_all,) quantities are kept as plain tensors rather than
+        # stored Deterministics: only their obs/plot/query slices below are
+        # extracted, so materialising the full grid for every posterior draw
+        # would waste a large amount of trace memory. (Matches the memory
+        # discipline in common_bivariate_re.py and common_trivariate.py.)
 
-        p_u_all = pm.Deterministic(
-            "p_u_all", pm.math.sigmoid(f_u_all), dims=("all_id",)
-        )
-        q_all = pm.Deterministic("q_all", pm.math.sigmoid(h_all), dims=("all_id",))
-        p_s_all = pm.Deterministic("p_s_all", p_u_all * q_all, dims=("all_id",))
+        p_u_all = pm.math.sigmoid(f_u_all)
+        q_all = pm.math.sigmoid(h_all)
+        p_s_all = p_u_all * q_all
 
         # f_S derived for diagnostics/plotting
         p_s_all_clip = pm.math.clip(p_s_all, EPSILON, 1 - EPSILON)
-        f_s_all = pm.Deterministic(
-            "f_s_all",
-            pm.math.log(p_s_all_clip) - pm.math.log(1 - p_s_all_clip),
-            dims=("all_id",),
-        )
+        f_s_all = pm.math.log(p_s_all_clip) - pm.math.log(1 - p_s_all_clip)
 
         # ---- Slice into obs/plot/query ----
 
@@ -678,12 +679,7 @@ def build_model(context: BivariateContext):
 
     pymc_utils.report_model_summary(model_pm)
 
-    digraph = pymc_utils.model_to_graphviz(model_pm)
-    digraph.render(
-        filename=os.path.join(context.reporting.output_dir, "gp_model_graph"),
-        format="svg",
-        cleanup=True,
-    )
+    render_model_graph(model_pm, context.reporting.output_dir)
 
     context.set_model(model_pm, variables)
 
@@ -909,6 +905,10 @@ def sample(context: BivariateContext):
             cores=context.sampling.cores,
             target_accept=context.sampling.target_accept,
             nuts_sampler="nutpie",
+            # The rich progress bar segfaults under nutpie's worker threads when
+            # stdout is not a TTY (redirected/backgrounded); keep it for
+            # interactive terminals only. (Matches common.py.)
+            progressbar=sys.stdout.isatty(),
             return_inferencedata=True,
             random_seed=context.sampling.random_seed,
         )
@@ -1116,6 +1116,7 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
                 "y_s_obs",
             ],
             extend_inferencedata=True,
+            progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
         )
 
@@ -1685,6 +1686,7 @@ def _run_bivariate_outcome_plots(
         X_query=samples.X_query,
         y_query=y_query,
         n_trials=n_trials,
+        hdi_prob=hdi_prob,
         output_dir=output_dir,
         filename=f"posterior_predictive_count_distributions_{suffix}",
         x_label=f"{outcome_label} (count)",

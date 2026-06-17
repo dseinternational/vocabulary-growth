@@ -39,6 +39,7 @@ from vocab_growth.models.common import (
     PACKAGE_LIST,
     ModelFitContext,
     get_hsgp_hyperparams,
+    render_model_graph,
     report,
 )
 from vocab_growth.models.common_bivariate import (
@@ -655,12 +656,7 @@ def build_model_re(
 
     pymc_utils.report_model_summary(model_pm)
 
-    digraph = pymc_utils.model_to_graphviz(model_pm)
-    digraph.render(
-        filename=os.path.join(context.reporting.output_dir, "gp_model_graph"),
-        format="svg",
-        cleanup=True,
-    )
+    render_model_graph(model_pm, context.reporting.output_dir)
 
     context.set_model(model_pm, variables)
 
