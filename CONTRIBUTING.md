@@ -8,12 +8,13 @@ We invite researchers and practitioners to share parent-reported vocabulary data
 
 The data should include:
 
+- **Instrument** (e.g. "MB-CDI Words and Gestures")
 - **Subject identifier** (required if multiple observations of any child)
 - **Age of child in months** (at the time the form was completed/updated)
 
 One or more of the following total counts at the time the form was completed/updated:
 
-- **Words understood but not produced**
+- **Words understood** (whether spoken or signed or not)
 - **Words spoken**
 - **Words signed but not spoken**
 - **Words signed and spoken**
