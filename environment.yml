@@ -3,10 +3,6 @@ channels:
   - conda-forge
 dependencies:
   - python=3.14.6
-  - arviz>=1.2
-  - arviz-base
-  - arviz-stats
-  - arviz-plots
   - h5netcdf
   - graphviz>=14.1.2
   - numba>=0.65.1
@@ -14,12 +10,15 @@ dependencies:
   - nutpie>=0.16.10
   - pandas-stubs
   - pandas>=3.0.3
-  - preliz>=0.27.0
   - pymc>=6.0.1
   - scikit-learn>=1.9.0
   - xarray>=2026.4.0
   - pip
   - pip:
+      - arviz>=1.2
+      - arviz-base
+      - arviz-stats
+      - arviz-plots
       - azure-identity
       - azure-storage-blob
       - duckdb>=1.5.3
@@ -30,6 +29,7 @@ dependencies:
       - matplotlib>=3.10.9,<3.11
       - notebook>=7.5.7
       - orjson>=3.11.9
+      - preliz>=0.27.0
       - pytest>=9.1.0
       - rich>=15.0.0
       - ruff>=0.15.17
