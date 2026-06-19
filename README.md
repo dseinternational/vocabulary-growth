@@ -47,7 +47,7 @@ We are interested in the proportion of words understood by children with Down sy
 
 We are interested in the extent to which word learning varies between individuals, and exploring the extent to which there is more or less variation among children with Down syndrome when compared to typically developing children.
 
-In the future, we hope to gather additional data to beging to explore possible predictors of differences in word learning between individuals.
+In the future, we hope to gather additional data to begin to explore possible predictors of differences in word learning between individuals.
 
 ### Open and replicable
 
