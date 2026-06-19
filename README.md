@@ -25,11 +25,13 @@ This is an iterative and exploratory study and we are continuing to receive addi
 
 #### 1. Reliable estimates of growth in vocabulary over time
 
-We are interested in learning how many words children with Down syndrome learn over time and the rates at which the they learn words at different ages.
+We are interested in understanding how many words children with Down syndrome learn over time and the rates at which the they learn words at different ages.
 
 ![Posterior predictive median trend of words understood by children with Down syndrome](./assets/images/examples/posterior_predictive_median_trend_s_smoothed.png)
 
-**Posterior predictive median trend of words understood by children with Down syndrome**. (All estimated are preliminary and subject to change as further data is received and models refined.)
+<div style="border-left:4px solid #ccc;padding-left:.75rem;">
+<b>Posterior predictive median trend of words understood by children with Down syndrome.</b> (⚠️ All estimated are preliminary and subject to change as further data is received and models refined.)
+</div>
 
 #### 2. Reliable estimates of the spread of vocabulary knowledge at specific ages
 
@@ -37,7 +39,9 @@ In additional to central growth trends, we are interested in understanding the r
 
 ![Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months](./assets/images/examples/understood-distributions-preliminary-example.png)
 
-**Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months**. (All estimated are preliminary and subject to change as further data is received and models refined.)
+<div style="border-left:4px solid #ccc;padding-left:.75rem;">
+<b>Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months.</b> (⚠️ All estimated are preliminary and subject to change as further data is received and models refined.)
+</div>
 
 #### 3. Reliable estimates of the proportions of words spoken over time
 
