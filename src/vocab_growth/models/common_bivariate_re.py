@@ -14,6 +14,10 @@ production ratio:
     delta_u[s] ~ Normal(0, tau_u)
     delta_q[s] ~ Normal(0, tau_q)
 
+The study intercepts are implemented non-centred (delta = tau * z,
+z ~ Normal(0, 1)) for HMC-friendly geometry; this is the same distribution as
+above (see issue #65).
+
 Plot and query predictions use the population-level trajectory (delta=0).
 """
 
@@ -459,11 +463,18 @@ def build_model_re(
         # Study-level random intercepts
         # ============================================================
 
+        # Non-centred (delta = tau * z, z ~ Normal(0, 1)) for HMC-friendly
+        # geometry with few studies — consistent with the subject REs below and
+        # the rest of the codebase. Mathematically identical to the centred form;
+        # the public names delta_u/delta_q/tau_u/tau_q are preserved (downstream
+        # scripts extract them by name from the trace). See issue #65.
         tau_u = pm.HalfNormal("tau_u", sigma=definition.tau_u_sigma)
-        delta_u = pm.Normal("delta_u", mu=0, sigma=tau_u, dims="study_id")
+        delta_u_raw = pm.Normal("delta_u_raw", mu=0.0, sigma=1.0, dims="study_id")
+        delta_u = pm.Deterministic("delta_u", tau_u * delta_u_raw, dims="study_id")
 
         tau_q = pm.HalfNormal("tau_q", sigma=definition.tau_q_sigma)
-        delta_q = pm.Normal("delta_q", mu=0, sigma=tau_q, dims="study_id")
+        delta_q_raw = pm.Normal("delta_q_raw", mu=0.0, sigma=1.0, dims="study_id")
+        delta_q = pm.Deterministic("delta_q", tau_q * delta_q_raw, dims="study_id")
 
         # ============================================================
         # Subject-level random intercepts (non-centered)
