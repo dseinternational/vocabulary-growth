@@ -29,8 +29,7 @@ We are interested in understanding how many words children with Down syndrome le
 
 ![Posterior predictive median trend of words understood by children with Down syndrome](./assets/images/examples/posterior_predictive_median_trend_s_smoothed.png)
 
-<p style="border-left:4px solid #ccc;padding-left:.75rem;"><b>Posterior predictive median trend of words understood by children with Down syndrome.</b> (⚠️ All estimates are preliminary and subject to change as further data is received and models refined.)
-</p>
+##### **Posterior predictive median trend of words understood by children with Down syndrome.** (All estimates are preliminary and subject to change as further data is received and models refined.)
 
 #### 2. Reliable estimates of the spread of vocabulary knowledge at specific ages
 
@@ -38,7 +37,7 @@ In additional to central growth trends, we are interested in understanding the r
 
 ![Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months](./assets/images/examples/understood-distributions-preliminary-example.png)
 
-<p style="border-left:4px solid #ccc;padding-left:.75rem;"><b>Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months.</b> (⚠️ All estimates are preliminary and subject to change as further data is received and models refined.)</p>
+##### **Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months. (All estimates are preliminary and subject to change as further data is received and models refined.)**
 
 #### 3. Reliable estimates of the proportions of words spoken over time
 
