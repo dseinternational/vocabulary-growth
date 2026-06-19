@@ -19,6 +19,36 @@ We are developing joint, hierarchical Bayesian models of words understood, words
 
 For children with Down syndrome, we are aggregating multiple datasets of parent-reported vocabulary achievement from multiple research groups and countries. For models of typical development, we are using MacArthur-Bates Communicative Development Inventory (MB-CDI) data from the [Wordbank database](https://wordbank.stanford.edu/).
 
+### Study outputs
+
+This is an iterative and exploratory study and we are continuing to receive additional data, so possible outputs are still evolving. Currently, these are some of the outputs we hope to deliver.
+
+#### 1. Reliable estimates of growth in vocabulary over time
+
+We are interested in understanding how many words children with Down syndrome learn over time and the rates at which the they learn words at different ages.
+
+<img src="./assets/images/examples/posterior_predictive_median_trend_s_smoothed.png" width=640 alt="Posterior predictive median trend of words understood by children with Down syndrome" />
+
+##### Posterior predictive median trend of words understood by children with Down syndrome. (All estimates are preliminary and subject to change as further data is received and models refined.)
+
+#### 2. Reliable estimates of the spread of vocabulary knowledge at specific ages
+
+In additional to central growth trends, we are interested in understanding the range of vocabulary learning at different ages.
+
+<img src="./assets/images/examples/understood-distributions-preliminary-example.png" width=640 alt="Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months" />
+
+##### Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months. (All estimates are preliminary and subject to change as further data is received and models refined.)
+
+#### 3. Reliable estimates of the proportions of words spoken over time
+
+We are interested in the proportion of words understood by children with Down syndrome that they can say, and how this changes over time. We are also interested in how this compares to typically developing children with similar total vocabularies.
+
+#### 4. Reliable estimates of the variation in word learning
+
+We are interested in the extent to which word learning varies between individuals, and exploring the extent to which there is more or less variation among children with Down syndrome when compared to typically developing children.
+
+In the future, we hope to gather additional data to begin to explore possible predictors of differences in word learning between individuals.
+
 ### Open and replicable
 
 We are developing, evaluating and iterating our models openly in this repository, where we share all source code and anonymised source data under permissive licenses.
