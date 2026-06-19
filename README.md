@@ -27,17 +27,17 @@ This is an iterative and exploratory study and we are continuing to receive addi
 
 We are interested in understanding how many words children with Down syndrome learn over time and the rates at which the they learn words at different ages.
 
-![Posterior predictive median trend of words understood by children with Down syndrome](./assets/images/examples/posterior_predictive_median_trend_s_smoothed.png)
+<img src="./assets/images/examples/posterior_predictive_median_trend_s_smoothed.png" width=640 alt="Posterior predictive median trend of words understood by children with Down syndrome" />
 
-##### **Posterior predictive median trend of words understood by children with Down syndrome.** (All estimates are preliminary and subject to change as further data is received and models refined.)
+##### Posterior predictive median trend of words understood by children with Down syndrome. (All estimates are preliminary and subject to change as further data is received and models refined.)
 
 #### 2. Reliable estimates of the spread of vocabulary knowledge at specific ages
 
 In additional to central growth trends, we are interested in understanding the range of vocabulary learning at different ages.
 
-![Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months](./assets/images/examples/understood-distributions-preliminary-example.png)
+<img src="./assets/images/examples/understood-distributions-preliminary-example.png" width=640 alt="Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months" />
 
-##### **Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months. (All estimates are preliminary and subject to change as further data is received and models refined.)**
+##### Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months. (All estimates are preliminary and subject to change as further data is received and models refined.)
 
 #### 3. Reliable estimates of the proportions of words spoken over time
 
