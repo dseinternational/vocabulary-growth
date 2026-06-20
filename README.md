@@ -51,7 +51,7 @@ In the future, we hope to gather additional data to begin to explore possible pr
 
 ### Open and replicable
 
-We are developing, evaluating and iterating our models openly in this repository, where we share all source code and anonymised source data under permissive licenses.
+We are developing, evaluating and iterating our models openly in this repository, where we share all source code and anonymised source data under open licenses.
 
 ### Future directions
 
