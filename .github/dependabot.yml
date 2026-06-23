@@ -1,46 +1,54 @@
 version: 2
 
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
+  - package-ecosystem: pip
+    directory: /
     schedule:
-      interval: weekly
-      day: wednesday
-      time: "06:00"
+      interval: daily
+      time: "05:00"
+      timezone: "Europe/London"
     groups:
       python-dependencies:
         patterns:
           - "*"
+    assignees:
+      - frankbuckley
 
-  - package-ecosystem: "conda"
-    directory: "/"
+  - package-ecosystem: conda
+    directory: /
     schedule:
-      interval: weekly
-      day: wednesday
-      time: "06:00"
+      interval: daily
+      time: "05:00"
+      timezone: "Europe/London"
     groups:
       conda-dependencies:
         patterns:
           - "*"
+    assignees:
+      - frankbuckley
 
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: npm
+    directory: /
     schedule:
-      interval: weekly
-      day: wednesday
-      time: "06:00"
+      interval: daily
+      time: "05:00"
+      timezone: "Europe/London"
     groups:
       npm-dependencies:
         patterns:
           - "*"
+    assignees:
+      - frankbuckley
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: weekly
-      day: wednesday
-      time: "06:00"
+      interval: daily
+      time: "05:00"
+      timezone: "Europe/London"
     groups:
       github-actions:
         patterns:
           - "*"
+    assignees:
+      - frankbuckley
