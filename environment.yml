@@ -10,7 +10,7 @@ dependencies:
   - h5netcdf
   - graphviz>=14.1.2
   - numba>=0.65.1
-  - numpy>=2.4.6
+  - numpy>=2.4.6,<2.5 # numba 0.65.1 requires numpy <2.5; lift cap when numba supports 2.5
   - nutpie>=0.16.10
   - pandas-stubs
   - pandas>=3.0.3
@@ -21,18 +21,18 @@ dependencies:
   - pip:
       - azure-identity
       - azure-storage-blob
-      - duckdb>=1.5.3
+      - duckdb>=1.5.4
       - hatch
       - ipython>=9.14.1
       - ipywidgets>=8.1.8
       - jupytext
       - matplotlib>=3.11.0
-      - notebook>=7.5.7
+      - notebook>=7.6.0
       - orjson>=3.11.9
       - preliz>=0.27.0
-      - pytest>=9.1.0
+      - pytest>=9.1.1
       - rich>=15.0.0
-      - ruff>=0.15.18
+      - ruff>=0.15.19
       - scipy-stubs
       - scipy>=1.18.0
       - seaborn>=0.13.2
