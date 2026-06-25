@@ -118,20 +118,28 @@ Quarto documents in `docs/models/vgNN/index.qmd` render model-specific reports. 
 
 ### AI tool attribution
 
-Content drafted or generated with the help of an LLM-based AI tool **must** carry a clearly visible label identifying the tool. Put the label at the very top of the content, using a GitHub-flavoured Markdown alert and substituting the actual tool and model that produced it:
+Content drafted or generated with the help of an LLM-based AI tool **must** carry a clearly visible label identifying the tool, placed at the top of the content. Substitute the actual tool and model that produced it — replace `Claude Code/Opus 4.8` with whichever assistant was used (for example, `GitHub Copilot`).
+
+For GitHub-rendered content — Markdown files, pull request and issue descriptions, and comments on pull requests and issues — use a GitHub-flavoured Markdown alert:
 
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
+For Quarto documents (`.qmd`), GitHub alert syntax does not render, so use a Quarto callout block instead:
+
+```
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+```
+
 This requirement applies to:
 
-- Document drafts (Markdown, Quarto `.qmd`, and similar)
+- Document drafts (Markdown and Quarto `.qmd`)
 - Pull request descriptions
 - Issue descriptions
 - Comments on pull requests
 - Comments on issues
-
-Replace `Claude Code/Opus 4.8` with whichever assistant was used (for example, `GitHub Copilot`).
 
 ### File headers
 
