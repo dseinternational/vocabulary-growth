@@ -3,6 +3,7 @@ Floccia
 approximator
 arrowsize
 ArviZ
+callout
 centered
 color
 Counterintuitively
