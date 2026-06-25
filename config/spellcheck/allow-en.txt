@@ -21,6 +21,7 @@ Kruschke
 Kucharski
 lengthscale
 Lewandowsky
+LLM
 logit
 LOSO
 MCMC
