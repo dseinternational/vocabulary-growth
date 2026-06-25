@@ -120,7 +120,7 @@ Quarto documents in `docs/models/vgNN/index.qmd` render model-specific reports. 
 
 Content drafted or generated with the help of an LLM-based AI tool **must** carry a clearly visible label identifying the tool. Put the label at the very top of the content, using a GitHub-flavoured Markdown alert and substituting the actual tool and model that produced it:
 
-> [!WARNING]
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
 This requirement applies to:
