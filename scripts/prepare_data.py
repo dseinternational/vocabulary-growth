@@ -26,6 +26,7 @@ heading("Preparing vocabulary data")
 
 _sources = {
     "vocab_ie_01": "./data/vocab_data_ie_01.csv",
+    "vocab_ie_02": "./data/vocab_data_ie_02.csv",
     "vocab_it_01": "./data/vocab_data_it_01.csv",
     "vocab_uk_01": "./data/vocab_data_uk_01.csv",
     "vocab_uk_02": "./data/vocab_data_uk_02.csv",
@@ -44,6 +45,7 @@ key_value_table(
 )
 
 vocab_ie_01_df = _loaded["vocab_ie_01"]
+vocab_ie_02_df = _loaded["vocab_ie_02"]
 vocab_it_01_df = _loaded["vocab_it_01"]
 vocab_uk_01_df = _loaded["vocab_uk_01"]
 vocab_uk_02_df = _loaded["vocab_uk_02"]
@@ -117,6 +119,18 @@ vocab_us_02_to_merge["study"] = 8
 vocab_uk_06_to_merge = vocab_uk_06_df.copy()
 vocab_uk_06_to_merge["study"] = 9
 
+# Ireland 2 (ie_02): a longitudinal Down syndrome dataset already in long format
+# (one row per timepoint t1/t2), carrying understood/spoken/signed counts. The
+# instruments measure English vocabulary, so non-English-speaking children are
+# excluded (english_speaking == 'yes'). Both recruitment groups are pooled as DS.
+ireland_2_to_merge = (
+    vocab_ie_02_df.loc[
+        vocab_ie_02_df["english_speaking"] == "yes",
+        ["subject_id", "age", "understood", "spoken"],
+    ].copy()
+)
+ireland_2_to_merge["study"] = 10
+
 
 merged_df = pd.concat(
     [
@@ -130,6 +144,7 @@ merged_df = pd.concat(
         vocab_uk_05_to_merge,
         vocab_us_02_to_merge,
         vocab_uk_06_to_merge,
+        ireland_2_to_merge,
     ],
     ignore_index=True,
 )
@@ -210,6 +225,13 @@ con.execute(
     """
     CREATE TABLE vocab_uk_06 AS
     SELECT * FROM vocab_uk_06_df
+    """
+)
+
+con.execute(
+    """
+    CREATE TABLE vocab_ie_02 AS
+    SELECT * FROM vocab_ie_02_df
     """
 )
 
@@ -364,6 +386,18 @@ con.execute(
         vuk06.spoken                      as produced,
         800                                 as survey_vocab_max
     FROM vocab_uk_06 as vuk06
+        UNION
+    SELECT 'ie_02'                           as study,
+        vie2.subject_id,
+        NULL                                as sex,
+        vie2.age,
+        vie2.understood,
+        vie2.spoken,
+        vie2.signed                         as signed,
+        vie2.spoken                         as produced,
+        800                                 as survey_vocab_max
+    FROM vocab_ie_02 as vie2
+    WHERE vie2.english_speaking = 'yes'
 
     """
 )
