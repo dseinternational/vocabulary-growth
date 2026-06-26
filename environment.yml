@@ -10,7 +10,7 @@ dependencies:
   - h5netcdf
   - graphviz>=14.1.2
   - numba>=0.65.1
-  - numpy>=2.4.6,<2.6.0 # numba 0.65.1 requires numpy <2.5; lift cap when numba supports 2.5
+  - numpy>=2.4.6,<2.5 # numba 0.65.1 requires numpy <2.5; lift cap when numba supports 2.5
   - nutpie>=0.16.10
   - pandas-stubs
   - pandas>=3.0.3
