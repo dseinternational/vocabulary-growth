@@ -1,0 +1,9 @@
+<!--
+Transcluded scope-and-caveats note for the signing findings.
+Included via {{< include _caveats-signing.qmd >}} in both the signing findings
+chapter and the signing lineage chapter. Edit here only.
+-->
+
+::: {.callout-important title="The association is descriptive and exploratory"}
+**TODO**: the within-understood association $\psi$ (and therefore the data-identified $p_{\text{any}}$) rests on the ~60 uk\_02 four-cell rows (~34 children, ≈19–56 months). It is a single scalar — the data do not support an age-varying association at this sample size — and is **descriptive / exploratory**. The four-cell composition and $p_{\text{any}}$ outside that age window lean on the marginal trajectories plus scalar-$\psi$ extrapolation. Signing data exist only for the Down syndrome datasets, so there is no typically-developing comparison.
+:::

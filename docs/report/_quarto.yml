@@ -16,7 +16,7 @@ execute:
 date: now
 
 toc: true
-toc-depth: 2
+toc-depth: 3
 
 number-sections: true
 number-depth: 3
@@ -53,15 +53,39 @@ book:
   chapters:
     - index.qmd
     - acknowledgements.qmd
-    - intro.qmd
-    - methods.qmd
-    - model-1-spoken.qmd
-    - model-2-understood.qmd
-    - model-3-spoken-td.qmd
-    - model-4-understood-td.qmd
-    - model-5-spoken-understood.qmd
-    - model-6-spoken-understood-td.qmd
+    - part: "Background and aims"
+      chapters:
+        - intro.qmd
+        - primer.qmd
+    - part: "Methods"
+      chapters:
+        - methods-data.qmd
+        - methods-framework.qmd
+        - methods-workflow.qmd
+    - part: "Model development and selection"
+      chapters:
+        - lineage-ds.qmd
+        - lineage-signing.qmd
+    - part: "Vocabulary growth in children with Down syndrome"
+      chapters:
+        - findings-ds.qmd
+    - part: "Signing and total expressive vocabulary"
+      chapters:
+        - findings-signing.qmd
+    - part: "Comparison with typically developing children"
+      chapters:
+        - comparison-td.qmd
+    - part: "Synthesis and practical reference"
+      chapters:
+        - synthesis.qmd
+        - practical-reference.qmd
     - discussion.qmd
+    - part: "Appendices"
+      chapters:
+        - appendix-register.qmd
+        - appendix-specs.qmd
+        - appendix-reference-tables.qmd
+        - appendix-repro.qmd
     - glossary.qmd
     - references.qmd
 

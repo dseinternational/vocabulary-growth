@@ -1,0 +1,41 @@
+---
+title: "Appendix A — Model register and lineage map"
+abstract: "*A complete register of the fifteen models, their populations, outcomes, structure and status, generated from the canonical model definitions so it cannot drift from the code; together with the development lineages and the supersession map that answer 'why fifteen models' and 'which estimate to trust'.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: the single canonical answer to "why 15 models" and "which estimate do I
+trust". The register table should be GENERATED from src/vocab_growth/models/
+definitions.py (id, population, outcome set, added structure, slope anchors,
+ages_query, key non-default priors, status, where presented) so prose and code
+cannot diverge. Status taxonomy defined once here and enforced everywhere.
+-->
+
+## Status taxonomy {#sec-register}
+
+- **Model of record** — the authoritative model for a question; the only models the findings draw numbers from. (VG10, VG15; TD references VG11/VG12/VG13.)
+- **Development step** — a model on the path to a model of record, presented in the lineage chapters and Appendix B for its methodological role; never sources a finding. (VG05, VG07, VG08, VG09; VG14.)
+- **TD reference** — typically-developing models used for comparison. (VG11, VG12, VG13.)
+- **Superseded precursor** — replaced by a later model and retained for completeness only. (VG03, VG04, VG06.)
+
+## Model register
+
+**TODO**: generated table of all fifteen models from `definitions.py` — `model_id`, population, outcome set, added structure, slope anchors, `ages_query`, key non-default priors, status, and the part/appendix where presented. Generate programmatically (do not hand-maintain).
+
+## Lineage diagrams
+
+**TODO**: two annotated diagrams — the Down syndrome joint spine (VG05 → VG07 → VG08 → VG09 → VG10) and the signing line (VG14 → VG15). Cross-reference @tbl-lineage-ds and @tbl-lineage-signing.
+
+## Supersession map
+
+**TODO**: the explicit map —
+
+- VG10 supersedes VG05, VG07, VG08, VG09 (DS joint understood+spoken).
+- VG15 supersedes VG14 (signing).
+- VG11, VG12, VG13 supersede VG03, VG04, VG06 (TD), with the caveat that VG13 covers 8–18 months only, so VG06 remains the only wider-age TD joint model (see the open question in the report front matter / Discussion).
+
+Each supersession is justified by tabulated model comparison plus an identified structural issue (@sec-supersedes).

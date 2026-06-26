@@ -1,0 +1,34 @@
+---
+title: "Vocabulary growth in children with Down syndrome"
+abstract: "*The headline findings for children with Down syndrome: how many words are understood and spoken at each age, how fast vocabulary grows, the gap between understanding and saying, and how much children differ. All estimates are drawn from the model of record (VG10), reported at six-monthly ages from 12 to 90 months.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: the core findings-first payload for DS. Numbers come ONLY from the model
+of record (VG10; VG01/VG02 as univariate cross-checks), pulled from fitted output
+via embedded Python cells (freeze:true) and lifted from the single consolidated
+table in Appendix C so prose and tables cannot diverge. Each section names the
+model + posterior summary behind each number and links to Appendix B2.
+-->
+
+## How many words at each age {#sec-findings-ds}
+
+**TODO**: expected words understood and spoken across 12–90 months (VG10), with credible intervals (typical child) and posterior-predictive ranges (individual children). Lift rows from Appendix C; embed the trajectory figure from VG10 output.
+
+## How fast children learn
+
+**TODO**: rate of learning (words/month) by age; any acceleration or plateau in the trajectory and what the GP component (@sec-mean) reveals about its shape.
+
+## Understanding versus saying: the comprehension–production gap
+
+**TODO**: the production ratio $q(a)$ (@sec-ratios) and the understood-minus-spoken gap over age — by how much comprehension leads production and how that lead changes with age.
+
+## How much children differ
+
+**TODO**: between-child variability via the age-varying dispersion $\kappa(z)$ (@sec-kappa) and the subject random effects (@sec-randomeffects); how the spread across individual children widens with age.
+
+{{< include _caveats-ds.qmd >}}

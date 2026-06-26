@@ -1,0 +1,57 @@
+---
+title: "Comparison with typically developing children"
+abstract: "*How vocabulary growth in children with Down syndrome compares with typically developing children. We present two complementary views: trajectories aligned by chronological age, which show the developmental time lag; and relationships aligned by words understood, which ask whether the structure of word learning — in particular how production tracks comprehension — differs beyond that lag. Down syndrome estimates come from the models of record (VG10; VG01/VG02); typically developing estimates from the TD reference models (VG11/VG12/VG13).*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: the DS-vs-TD chapter — the report's most fragile scientific claim, so it
+is deliberately separate and hedged in ONE place. Same-outcome pairings draw only
+on models of record (VG10 vs VG11/VG12/VG13); VG03/VG04/VG06 are superseded
+precursors (Appendix B4). AUTHOR EMPHASIS: the chronological-age view is reported,
+but the words-understood-aligned comparison is the primary interest — it probes
+structural differences beyond a simple time lag.
+-->
+
+## Comparison protocol and its limits {#sec-comparison-td}
+
+**TODO**: the single home for all comparability hedging. Document:
+
+- the age windows compared (DS 12–90 months; TD 9–30 months; the young TD joint window 8–18 months) and that they overlap only partly;
+- what "words out of 800" means across populations given different native checklist ceilings (@sec-data);
+- the differing slope-anchor reference ages (DS 24/84 vs TD 12/26 months) and why that does not affect the comparison of fitted curves;
+- which comparisons are age-aligned vs vocabulary-aligned, and what each can and cannot support.
+
+## Aligned by chronological age
+
+The conventional view: the developmental time lag at matched ages.
+
+### Words spoken — DS (VG10) vs TD (VG11)
+
+**TODO**: overlay the spoken trajectories; report the lag.
+
+### Words understood — DS (VG10) vs TD (VG12)
+
+**TODO**: overlay the understood trajectories; report the lag.
+
+### The comprehension–production gap — DS (VG10) vs TD (VG13)
+
+**TODO**: compare the gap / production ratio at matched ages, noting VG13's 8–18 month window limits this to young ages.
+
+## Aligned by words understood {#sec-comparison-vocab}
+
+The question of primary interest: setting age aside, does production track comprehension *the same way* in the two groups — or is there a **structural difference beyond the time lag**?
+
+**TODO**: plot the production ratio $q$ (@sec-ratios) and words spoken **as a function of words understood** (not age) for DS (VG10) and TD (VG13/VG06) on common axes.
+
+- If the curves **overlay**, the difference between groups is consistent with a developmental time lag: at a given vocabulary size, children produce the same fraction of what they understand.
+- If they **diverge**, there is a structural difference in the comprehension→production mapping itself — e.g. a wider or narrower understood-to-spoken gap in Down syndrome at matched comprehension levels.
+
+**TODO**: state the comparison cleanly with credible bands, and flag the data-support limits (TD coverage is densest at small vocabularies; VG13 spans 8–18 months only — see the protocol above). Note the relevant per-model figures already produced (e.g. production-ratio-by-understood, understood-vs-spoken) and that this chapter curates them rather than re-deriving.
+
+## What we can and cannot conclude
+
+**TODO**: summarise the defensible claims from each view, separating the chronological-age lag (well supported) from the vocabulary-aligned structural question (the more exploratory, more interesting claim), and what additional data would sharpen it.

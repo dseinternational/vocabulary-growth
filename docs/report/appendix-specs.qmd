@@ -1,0 +1,74 @@
+---
+title: "Appendix B — Model specifications and diagnostics"
+abstract: "*Full, reportable specifications and validation for every model, written as deltas from the shared engine: each entry states only its outcome set, population, reference ages, the specific anchor priors, which extension mechanisms are switched on, and its prior-predictive, diagnostic and posterior-predictive evidence. VG01 is given in full as the worked exemplar; the remaining models are stated as short deltas.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: per-model reportable detail, as DELTAS from methods-framework.qmd. Each
+entry: one sentence "this model instantiates @sec-mean / @sec-anchors / ... with
+…", then a compact table of only its NON-DEFAULT fields, then only the prior rows
+that differ from @tbl-core-priors, then prior predictive / diagnostics / posterior
+predictive. Organised to mirror the model families. Pull diagnostics/figures from
+fitted output (the same artefacts the docs/models/vgNN dashboards read).
+-->
+
+# B1 — Down syndrome univariate baselines {#sec-appendix-b1}
+
+## VG01 — Words spoken (worked exemplar) {#sec-appendix-vg01}
+
+VG01 instantiates the shared engine (@sec-betabinomial, @sec-kappa, @sec-mean, @sec-anchors, @sec-hsgp) for a single outcome — words spoken by children with Down syndrome — out of $N_{\text{trials}} = 800$ words, with reference ages $x_a = 24$ and $x_b = 84$ months and no extension mechanisms. It is presented in full here as the worked exemplar; later entries cite these sections rather than repeating them.
+
+### Model-specific priors
+
+Anchoring the linear trend (@sec-anchors) at 24 and 84 months. Previous research and professional experience suggest many children with Down syndrome say very few words at 24 months, with substantial uncertainty up to ~100 words, and a wide range of ability by 84 months:
+
+| Parameter | Description | Prior |
+|----|----------------|------------|
+| $p_{24}$ | Expected proportion of words spoken at 24 months | $\mathrm{Beta}(1, 15)$ |
+| $p_{84}$ | Expected proportion of words spoken at 84 months | $\mathrm{Beta}(1.1, 1.1)$ (≈ uniform) |
+
+: VG01 slope-anchor priors (all other priors per @tbl-core-priors). {#tbl-vg01-priors}
+
+![Prior for the lower slope anchor (spoken words at 24 months)](figures/VG01-age-spoken-ds/p_slope_low_dist.png){#fig-vg01-slope-low width="5in"}
+
+![Prior for the upper slope anchor (spoken words at 84 months)](figures/VG01-age-spoken-ds/p_slope_hi_dist.png){#fig-vg01-slope-hi width="5in"}
+
+<!-- worked kappa example: with s_x ≈ 24 months a 'typical' b_mag ≈ 0.3 implies a
+~26% decline in excess concentration per SD of age. Move the full narrative
+(old model-1 lines 182-227) here. -->
+
+### Prior predictive checks
+
+**TODO**: VG01 prior predictive narrative + figures (`prior_samples`, `prior_predictions`, `prior_predictive_checks`), moved from the old model-1 chapter.
+
+### Diagnostics
+
+**TODO**: VG01 convergence diagnostics ($\hat{R}$, ESS, divergences, energy) per @sec-supersedes rubric.
+
+### Posterior predictive checks
+
+**TODO**: VG01 posterior predictive checks.
+
+### Results
+
+**TODO**: VG01 posterior trajectory and age-indexed summaries (cross-check against the joint model of record VG10).
+
+## VG02 — Words understood (delta)
+
+**TODO**: delta from VG01 — outcome = understood; anchor priors $p_{24} \sim \mathrm{Beta}(1, 10)$, $p_{84} \sim \mathrm{Beta}(1.1, 1.1)$; everything else per @sec-appendix-vg01.
+
+# B2 — Down syndrome joint development {#sec-appendix-b2}
+
+**TODO**: VG05, VG07, VG08, VG09, VG10 — each a delta giving only its added structure (@sec-ratios, @sec-randomeffects, @sec-gpanchor), non-default priors, and per-step diagnostics summarised in @tbl-lineage-ds. VG10 is the model of record (full diagnostics + posterior predictive incl. the GP-anchor check).
+
+# B3 — Down syndrome signing {#sec-appendix-b3}
+
+**TODO**: VG14 (superseded development step) and VG15 (model of record) — deltas covering the signed ratio (@sec-ratios), the association and four-cell likelihood (@sec-association), study/subject REs, the $\psi$ prior/posterior, and the four-cell posterior predictive check. Include the `include_uk06` in-vs-out **sensitivity analysis** here (not a headline branch), given the open coding-comparability question.
+
+# B4 — Typically developing reference models {#sec-appendix-b4}
+
+**TODO**: VG03, VG04, VG06 (superseded precursors) and VG11, VG12, VG13 (TD references) — deltas documenting the TD-specific reference ages (12/26 months; VG13 10/16), the move from 25% subsampling to study REs + `min_study_observations` trimming, the 8–18 month restriction in VG13, and the WS production-proxy handling (@sec-ws-proxy).

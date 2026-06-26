@@ -1,0 +1,34 @@
+---
+title: "Cross-model synthesis"
+abstract: "*Drawing the findings together across the comparison dimensions: words understood and spoken in Down syndrome and how they compare with typically developing children, the comprehension–production gap and its growth, the place of signing in early expressive development, and what the iterative model development added. A summary table records which model is authoritative for which question.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: consolidate for the "what do we actually know" reader. CURATE figures
+already produced for the findings chapters (cross-reference or re-embed via a
+single shared cell); do NOT re-derive. Numbers come from Appendix C.
+-->
+
+## What we found
+
+**TODO**: synthesise across dimensions — DS understood vs spoken; the comprehension–production gap and its growth with age; DS vs TD by chronological age and by words understood (@sec-comparison-vocab); signing's place in expressive development and total expressive vocabulary.
+
+## The lesson from adding hierarchy
+
+**TODO**: one consolidated statement of what the random effects, GP anchoring and association added to the population estimates (cross-reference @tbl-lineage-ds, @tbl-lineage-signing), rather than repeating the per-step detail.
+
+## Which model is authoritative for which question
+
+**TODO**: the summary table.
+
+| Question | Authoritative model | Findings | Specification |
+|---|---|---|---|
+| DS understood & spoken, the gap | VG10 | @sec-findings-ds | Appendix B2 |
+| DS signing, association, total expressive | VG15 | @sec-findings-signing | Appendix B3 |
+| TD spoken / understood / joint | VG11 / VG12 / VG13 | @sec-comparison-td | Appendix B4 |
+
+: Authoritative model by question. {#tbl-authoritative}

@@ -1,0 +1,40 @@
+---
+title: "Developing the Down syndrome joint model (VG05 → VG10)"
+abstract: "*This chapter narrates how the Down syndrome joint understood-and-spoken model was developed, from the baseline joint model (VG05) to the model of record (VG10). Each step adds one piece of structure to solve a specific, identified problem; the development table records what was added, why, and its out-of-sample effect, so the choice of headline model is transparent rather than asserted.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: tell the iterative-workflow story at one-table-row-per-step cost — never
+15 repeated math chapters. Cite the engine by anchor (@sec-mean etc.); do NOT
+re-derive. Per-step diagnostics live in Appendix B2; this chapter carries the
+narrative, the development table, and the net-effect figure. Every supersession
+claim carries its model-comparison statistic inline (@sec-supersedes).
+-->
+
+## From baseline to model of record {#sec-lineage-ds}
+
+**TODO**: one-paragraph orientation — all steps share the engine of @sec-mean and @sec-ratios; only the listed structure changes. VG10 is the model of record; VG05/07/08/09 are development steps (Appendix B2).
+
+| Step | Added structure | Problem it addressed | Out-of-sample effect (LOO/ELPD) |
+|---|---|---|---|
+| **VG05** | Joint $U + q$ baseline (@sec-ratios) | Estimate understood and spoken jointly with $p_S \le p_U$ | — (baseline) |
+| **VG07** | + study random intercepts (@sec-randomeffects) | Between-study composition confounds the population curve | **TODO** |
+| **VG08** | + subject random intercepts on $U$ | Repeated measurements on a child treated as independent | **TODO** |
+| **VG09** | + subject random intercepts on $q$ | Same, for the production ratio | **TODO** |
+| **VG10** | + tighter $q$ anchors (from VG07 posterior) + GP anchored at 54 mo (@sec-gpanchor) | GP↔intercept level redundancy once subject REs are present | **TODO** |
+
+: The Down syndrome joint-model development lineage. Full per-step priors and diagnostics in Appendix B2. {#tbl-lineage-ds}
+
+**TODO**: prose for each step, with the inline ELPD difference (± SE) and the named structural issue, per @sec-supersedes.
+
+## Does adding hierarchy move the population curve?
+
+**TODO**: the net-effect figure — population understood/spoken curves from VG05 through VG10 overlaid — showing whether the added hierarchy shifts or merely sharpens the headline trajectory. Pull from fitted output via an embedded Python cell.
+
+## Supersession
+
+**TODO**: plain-language statement that VG10 supersedes VG05/VG07/VG08/VG09 (model-comparison evidence above + the structural arguments), and that the findings (Part on DS growth) draw only on VG10. Link to Appendix A's supersession map.

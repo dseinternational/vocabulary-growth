@@ -1,0 +1,47 @@
+---
+title: "What we estimated and how to read the estimates"
+abstract: "*A short, mostly non-technical guide to the quantities this report estimates and how to read them. It defines the recurring measures — words understood, spoken and signed, the production and sign ratios, the within-understood association, and total expressive vocabulary — and explains how to read a posterior median with a credible interval and a posterior-predictive range. It also names the models whose estimates the findings draw on, with links to their full specifications.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: results-first on-ramp for the practitioner/researcher reader, sitting
+after the Introduction and before Methods. Math-light: define the quantities and
+how to read the uncertainty summaries, then forward-link to the models of record
+and the glossary. The full maths lives in methods-framework.qmd.
+-->
+
+## The quantities we report
+
+**TODO**: define, in plain terms, each recurring quantity (with a forward link to its formal definition):
+
+- **Words understood / spoken / signed** — counts out of a common 800-item checklist (@sec-betabinomial).
+- **Production ratio $q(a)$** — the fraction of understood words a child also says (@sec-ratios).
+- **Sign ratio $r(a)$** — the fraction of understood words a child also signs (@sec-ratios).
+- **Within-understood association $\psi$** — whether signing and speaking a given understood word go together more than chance (@sec-association).
+- **Total expressive vocabulary $p_{\text{any}}$** — words a child produces by speech or sign (@sec-association).
+- **Rate of learning** — words gained per month, from the slope of the trajectory.
+
+## How to read the estimates
+
+**TODO**: explain, with a worked example, the difference between
+
+- a **posterior median with a credible interval** (our uncertainty about the *typical* child's value), and
+- a **posterior-predictive range** (the spread we expect across *individual* children at a given age).
+
+Emphasise that credible intervals are direct probability statements about the quantity, given model and data (the rationale is in the Introduction).
+
+## Models of record at a glance
+
+**TODO**: a short table naming the models the findings draw on and what each is authoritative for, each linking to its full specification in Appendix B:
+
+| Question | Model of record | Where |
+|---|---|---|
+| DS words understood & spoken, and the gap | VG10 | @sec-findings-ds, Appendix B2 |
+| DS signing, association and total expressive | VG15 | @sec-findings-signing, Appendix B3 |
+| TD reference (spoken / understood / joint) | VG11 / VG12 / VG13 | @sec-comparison-td, Appendix B4 |
+
+See @sec-register <!-- appendix-register --> for the full model register and the supersession map, and the glossary for precise definitions.

@@ -1,0 +1,54 @@
+---
+title: "Data and measurement"
+abstract: "*This chapter describes the studies and instruments contributing data, how counts from different vocabulary checklists are harmonised onto a common 800-item reference scale, how words understood, spoken and signed are coded, and the data-handling decisions (age windows, instrument-specific exclusions, study trimming) that the models depend on.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: fills the old methods.qmd "Data sources" stub. Single home for: which
+studies/instruments contribute data; the data pipeline; the 800-item common
+reference inventory and harmonisation; understood/spoken/signed coding; the
+uk_02 four-cell cross-tab and uk_06 signed counts; age windows; the
+WS-as-production-proxy handling; subsampling vs study-RE / min_study_observations
+decisions; one combined descriptive-statistics table.
+Referenced from @sec-betabinomial and @sec-association in methods-framework.qmd.
+-->
+
+## Contributing studies and instruments {#sec-data}
+
+**TODO**: enumerate the contributing studies and the instruments behind them.
+
+- Down syndrome datasets: uk\_01, uk\_02, uk\_04, uk\_05, uk\_06 (and ie\_02).
+- Typically developing datasets: Wordbank Words & Gestures (WG), Words & Sentences (WS), and the Oxford CDI.
+- Which instruments measure comprehension and production independently, and which are production-only.
+
+## The data pipeline
+
+**TODO**: `scripts/prepare_data.py` merges per-study CSVs into a DuckDB database and the unified `vocab_combined` view; models load via `vocab_growth.data_utils.load_combined_data()`. (Cross-reference Appendix D for full reproduction steps.)
+
+## The common 800-item reference inventory
+
+**TODO**: explain harmonisation onto a common 800-item reference scale ($N_{\text{trials}} = 800$ in @sec-betabinomial); why this gives an inventory-comparable scale across DS and TD instruments even where native checklist ceilings differ (e.g. WG ≈ 396, Oxford CDI ≈ 418 items).
+
+## Coding of words understood, spoken and signed
+
+**TODO**: define the three measured quantities and how each instrument records them.
+
+### The Words & Sentences comprehension issue {#sec-ws-proxy}
+
+**TODO**: WS records production only; treating its "comprehension" as a true comprehension measure makes it a *production proxy* that biases understood counts upward. Document the handling — WS kept as a spoken-only observation, WS comprehension excluded — and why VG13 restricts to 8–18 months to avoid this bias entirely. (This is the data-quality fact behind the VG06 → VG13 supersession; see @sec-lineage-ds <!-- lineage --> and Appendix A.)
+
+### Signing data and the four-cell cross-tab {#sec-signing-data}
+
+**TODO**: signing is recorded only in the Down syndrome datasets (so the signing models are DS-only). uk\_02 is the only source with a four-cell within-understood cross-tabulation (sign-only / speak-only / both / neither), which identifies the association $\psi$ (@sec-association). Document the `include_uk06` decision: uk\_06 contributes real signing-*production* counts (≈11 observations at 60–115 months, often comparable to or exceeding spoken), included by default; the open question is coding comparability with uk\_02/04/05, treated as a sensitivity analysis in Appendix B3.
+
+## Age windows, subsampling and study trimming
+
+**TODO**: per-population age ranges (DS 12–90 months; TD 9–30 months; the young TD joint window 8–18 months). Why later models replace 25% subsampling (VG03/04/06) with study random intercepts (@sec-randomeffects) plus `min_study_observations` trimming (drop datasets < 200 observations), retaining > 97% of observations.
+
+## Descriptive statistics
+
+**TODO**: one combined descriptive-statistics table (observations, children, ages, counts) across all contributing datasets, generated from the prepared data.

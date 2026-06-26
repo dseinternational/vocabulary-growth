@@ -1,0 +1,32 @@
+---
+title: "Appendix C — Reference tables: expected counts and rates at six-monthly ages"
+abstract: "*The single, programmatically generated source of every age-indexed deliverable in this report: posterior expected words understood, spoken, signed and produced in total, with credible intervals and posterior-predictive ranges, plus expected rates of learning, at the canonical six-monthly query ages. Body chapters lift their numbers from here so that prose, tables, figures and the forthcoming lay summary cannot diverge.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: the ONE machine-generated source of all age-count and rate deliverables,
+produced from fitted output at the canonical ages_query ages. Body chapters
+(findings-ds, findings-signing, practical-reference, synthesis) and the planned
+lay summary all lift rows from here via includes/cross-references. Nothing here is
+hand-entered.
+-->
+
+## Down syndrome — expected word counts {#sec-reference-tables}
+
+**TODO**: generated tables at ages 12–90 months (6-monthly): words understood and spoken (VG10), words signed and total expressive $p_{\text{any}}$ (VG15, exploratory). Median, credible interval, and individual-child posterior-predictive range per age.
+
+## Typically developing — expected word counts
+
+**TODO**: generated tables at ages 9–30 months (VG11/VG12) and 8–18 months (VG13).
+
+## Rates of word learning
+
+**TODO**: generated words-per-month tables by age for the headline DS outcomes (and TD references where supported).
+
+## Notes on age-support reconciliation
+
+**TODO**: document the differing age supports across populations (DS 12–90; TD 9–30; VG13 8–18) and how rows are aligned for the cross-population comparison (@sec-comparison-td).

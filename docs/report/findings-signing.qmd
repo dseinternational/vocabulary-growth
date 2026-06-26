@@ -1,0 +1,33 @@
+---
+title: "Signing and total expressive vocabulary"
+abstract: "*Signing findings for children with Down syndrome, drawn from the joint sign/speech model of record (VG15): the proportion of understood words that are signed and how it rises then recedes with age, the migration of words from sign into speech, the within-understood association between signing and speaking, and the data-identified total expressive vocabulary. Signing data exist only for the Down syndrome datasets, so there is no typically-developing comparison.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: DS-only signing findings from VG15 (VG14 referenced only as the
+superseded development step, Appendix B3). p_any is retained in the deliverables
+(author decision) with an explicit exploratory label and uncertainty band — see
+the transcluded caveat. Numbers pulled from VG15 output / Appendix C.
+-->
+
+## The sign-given-understood trajectory r(a) {#sec-findings-signing}
+
+**TODO**: the sign ratio $r(a)$ (@sec-ratios) — the rise-then-fall hump (near zero before ~24 months, a preschool peak, receding after), with study composition absorbed by the random intercepts (@sec-randomeffects). Embed the signed-vs-spoken ratio figure from VG15.
+
+## Words migrating from sign to speech
+
+**TODO**: the four-cell within-understood composition (sign-only / both / speak-only / neither) over age (@sec-association) — words moving from signed into spoken as children develop.
+
+## How sign and speech go together: the association ψ
+
+**TODO**: the posterior of the Plackett odds ratio $\psi$ against the independence reference $\psi = 1$ (@sec-association). State plainly what positive association means and keep it framed as descriptive/exploratory (see caveat).
+
+## Total expressive vocabulary
+
+**TODO**: the data-identified $p_{\text{any}}(a)$ (@sec-association) against VG14's independence upper bound — the gap is the association VG14 ignored. Present $p_{\text{any}}$ with its uncertainty band and an explicit exploratory label; it is retained in the consolidated deliverables (Appendix C) pending further data.
+
+{{< include _caveats-signing.qmd >}}

@@ -15,3 +15,17 @@ Scientific and statistical texts include many terms that are intended to have pr
 Discovery and learning are ongoing processes. One of the reasons for adopting the methods we have used in this study is to explore models that may have wider application and that may encourage further research. Models that accommodate nonlinear relationships between variables, considerable variability within the population, and that can reflect existing evidence are (we think) likely to help inform better statistical analyses in many areas of Down syndrome research.
 
 To that end, this study is not fixed in time. As new data becomes available, we anticipate updating our estimates and evolving our models. We will version the study as in software development – tagging releases in the study repository whenever we publish updated analyses. We hope that "version 1.0" is helpful and of interest to families, practitioners and researchers alike, and welcome feedback, collaboration, and contributions to future iterations.
+
+## How to read this report {.unnumbered}
+
+<!-- TODO: finalise wording. This router commits the technical report to a
+practitioner-to-researcher audience; the least-technical readers are served by
+the separate lay summary report. -->
+
+This is a technical report. It is written for readers from practitioner to researcher; readers who would prefer a shorter, less technical overview are served by the companion summary report [TODO: link].
+
+- **If you want the findings**, the primer (*What we estimated and how to read the estimates*) defines the quantities in plain terms; the findings parts then report vocabulary growth in children with Down syndrome, signing and total expressive vocabulary, and the comparison with typically developing children. The practical reference gives expected word counts and learning rates at six-monthly ages.
+- **If you want the methods**, the *Methods* part derives the shared statistical engine once and is the reference for all the mathematics; *Model development and selection* explains how the models were built and which are authoritative.
+- **For full per-model detail**, the appendices give each model's specification and diagnostics (as deltas from the Methods engine), the model register, the complete reference tables, and reproduction instructions.
+
+Two related artefacts are distinct from this report. The companion **summary report** [TODO: link] is the shorter, lay-oriented account. The per-model **dashboards** in `docs/models/` are preliminary, automatically generated outputs that track the latest fits; this report is the curated, citable document (see @sec-register and Appendix D).

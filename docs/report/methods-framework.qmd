@@ -1,0 +1,211 @@
+---
+title: "The shared statistical engine"
+abstract: "*Every model in this report is built from one statistical engine: a Beta-Binomial likelihood with age-varying dispersion, a latent mean trajectory defined on the logit scale as a linear trend plus a Gaussian process, and an interpretable two-reference-age slope parameterisation. This chapter derives that engine once, and defines the reusable extension mechanisms — production ratios, study and subject random intercepts, Gaussian-process anchoring, and the within-understood association — that the individual models switch on or off. Later chapters and the model appendices refer back to the numbered sections here rather than re-deriving the mathematics.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: single source of truth for all reused mathematics. Every model
+appendix (Appendix B) is written as a *delta* from this chapter: it states only
+its outcome set, population, anchor ages, which extension mechanisms are switched
+on, and the prior-table rows that differ from @tbl-core-priors below.
+
+CONTRIBUTION RULE: any equation a model chapter needs must be a cross-reference
+into this chapter (e.g. "@sec-mean"). A genuine variant of the core maths must
+EXTEND this chapter (add a new #sec- anchor), never be silently redefined in a
+chapter or appendix.
+
+This file holds the shared maths MOVED here from the old model-1-spoken.qmd
+(lines 40-241), generalised from the VG01 univariate-spoken-DS case to arbitrary
+(x_a, x_b) anchors and an arbitrary modelled count. VG01-specific motivation,
+priors and results now live in Appendix B1.
+-->
+
+## What we estimate and identification {#sec-identification}
+
+Our goal is to estimate the **total age-associated change** in a vocabulary outcome — not to disentangle the specific causal pathways through which age acts. Many factors influence a child's opportunities to learn and produce words (word meanings already learned, exposure, explicit teaching and therapy, hearing, and so on). Age does not act on the outcome directly, but it influences these mediating factors and therefore acts on the outcome indirectly.
+
+In the simple causal model below, $A$ is age, $O$ collects the unmeasured mediating factors, and $Y$ is the vocabulary outcome. Because the effect of $A$ on $Y$ is entirely mediated through $O$, and $A$ is exogenous (it has no parents), there are no open backdoor paths. We can therefore identify the total effect of age on the outcome by conditioning on age alone.
+
+```{dot}
+//| label: fig-core-dag
+//| fig-cap: "**The shared identification argument.** $A$: age; $O$: other unmeasured factors; $Y$: the vocabulary outcome. Conditioning on age identifies the total age-associated change."
+//| fig-width: 2.5
+//| fig-height: 0.85
+digraph CoreDAG {
+    graph [size="2.5,0.85", ratio=fill, rankdir=LR]
+    edge [arrowsize=0.75]
+    node [shape=square]
+    O [shape=circle]
+    A -> O
+    O -> Y
+}
+```
+
+<!-- TODO: note the joint-model extension of this DAG (A -> U -> S, A -> U -> Sign)
+once @sec-ratios is read; that is the only structural change to the argument. -->
+
+## The outcome: a Beta-Binomial count {#sec-betabinomial}
+
+We model each vocabulary outcome as a count bounded between $0$ and $N_{\text{trials}}$ words, where $N_{\text{trials}}$ is the number of words on the reference checklist (a common 800-item reference inventory throughout this report; see @sec-data <!-- methods-data -->). For observation $i$ at age $x_i$ months we standardise age,
+
+$$
+z_i = \frac{x_i - \bar{x}}{s_x},
+$$
+
+so that a one-unit change in $z$ corresponds to $s_x$ months (this scale differs by population and model — see the relevant appendix).
+
+A Binomial likelihood would assume exchangeable Bernoulli trials within each observation and no unmodelled heterogeneity between children, so its variance is fixed by its mean and it tends to *underdisperse* relative to real vocabulary data. To accommodate extra-binomial variation we use a **Beta-Binomial** likelihood, in which the per-observation success probability is itself Beta-distributed [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025]. With latent mean $p_i = p(z_i)$ and concentration $\kappa_i > 0$,
+
+$$
+y_i \sim \mathrm{BetaBinomial}\!\left(N_{\text{trials}},\,\alpha_i,\,\beta_i\right),
+\qquad
+\alpha_i = p_i\,\kappa_i,
+\qquad
+\beta_i = (1-p_i)\,\kappa_i .
+$$
+
+Smaller $\kappa_i$ implies greater dispersion (more between-child heterogeneity at a given age); larger $\kappa_i$ approaches the Binomial. Observations are assumed conditionally independent given the latent mean $p(z)$, the dispersion $\kappa(z)$, and the model parameters.
+
+### Age-varying dispersion {#sec-kappa}
+
+Both experience and existing research indicate that variability in vocabulary among children grows over time as children making more progress diverge from those making less. We therefore let the conditional distribution become more dispersed with age by modelling the concentration as a decreasing function of age,
+
+$$
+\kappa(z) = \kappa_{\min} + \exp\!\left(a_\kappa + b_\kappa z\right),
+\qquad b_\kappa < 0 .
+$$
+
+This encodes two assumptions. First, heterogeneity **increases** with age: because $b_\kappa < 0$, $\exp(a_\kappa + b_\kappa z)$ decreases, so $\kappa(z)$ decreases and dispersion increases. Second, the increase **levels off**: as $z \to \infty$, $\kappa(z) \to \kappa_{\min}$, giving a later-age plateau in dispersion. (Because the outcome is bounded, this does not require raw count variance to increase monotonically at every age — it allows greater heterogeneity around the mean trajectory on the latent scale.) We impose the monotone decline by setting $b_\kappa = -b_{\mathrm{mag}}$ with $b_{\mathrm{mag}} > 0$.
+
+## The mean trajectory {#sec-mean}
+
+The latent mean trajectory is defined on the logit scale as a linear trend plus a zero-mean Gaussian process (GP) [@rasmussenGaussianProcessesMachine2008; @schulzTutorialGaussianProcess2018]:
+
+$$
+\begin{aligned}
+f(z) &= \beta_0 + \beta_1 z + g(z), \qquad
+p(z) = \sigma\!\left(f(z)\right) = \frac{1}{1 + e^{-f(z)}},\\
+g(z) &= \eta\, g_{\mathrm{unit}}(z), \qquad
+g_{\mathrm{unit}} \sim \mathcal{GP}\!\left(0,\, k(\cdot,\cdot)\right).
+\end{aligned}
+$$
+
+The linear trend $\beta_0 + \beta_1 z$ carries the expected population trajectory; the GP $g$ captures smooth deviations from it. We use a zero mean function for $g$ because any non-zero mean would be confounded with the linear parameters — so positive $g(z)$ indicates faster-than-expected growth and negative $g(z)$ a slowdown or plateau, and under the posterior $g$ shrinks toward zero where data are sparse.
+
+We use a unit-variance radial basis function (exponentiated-quadratic) kernel,
+
+$$
+k(z,z') = \exp\!\left(-\frac{(z-z')^2}{2\ell^2}\right),
+\qquad k(z,z) = 1,
+$$
+
+and factor out a separate amplitude $\eta > 0$. This cleanly separates two roles: the length-scale $\ell$ governs how quickly deviations vary with age (smoothness), while $\eta$ governs how large they are. The kernel is stationary (local smoothness is similar at, say, 36 and 72 months) and a universal approximator, which suits developmental trajectories whose precise shape is unknown.
+
+### Interpretable slope anchors {#sec-anchors}
+
+Rather than placing weakly interpretable priors directly on $\beta_0$ and $\beta_1$, we parameterise the linear trend through the expected proportion of words at **two reference ages** $x_a < x_b$. With $z_a = (x_a - \bar{x})/s_x$ and $z_b = (x_b - \bar{x})/s_x$, and priors placed on $p_{x_a}$ and $p_{x_b}$,
+
+$$
+\beta_1 = \frac{\operatorname{logit}(p_{x_b}) - \operatorname{logit}(p_{x_a})}{z_b - z_a},
+\qquad
+\beta_0 = \operatorname{logit}(p_{x_a}) - \beta_1 z_a .
+$$
+
+This gives an interpretable baseline on the logit scale while the GP captures smooth departures. The reference ages and the priors on $p_{x_a}, p_{x_b}$ are **model-specific** (e.g. 24 and 84 months for the Down syndrome models; 12 and 26 months for the typically developing models) and are tabulated in each model's appendix.
+
+### HSGP approximation {#sec-hsgp}
+
+Exact GP inference requires an $O(n^3)$ Cholesky factorisation. With several hundred observations per model this is feasible but costly inside MCMC, so we use the **Hilbert-space GP (HSGP)** approximation [@solinHilbertSpaceMethods2020; @riutort-mayolPracticalHilbertSpace2022], a finite basis-function representation that generates $g_{\mathrm{unit}}$ from a unit-variance kernel and then rescales by $\eta$. Approximation quality depends on the basis size $m$ (accuracy vs cost), the boundary factor $c$ (must exceed the range of observed $z$), and the length-scale $\ell$ (shorter scales need more basis functions). We select $m$ and $c$ following PyMC's `approx_hsgp_hyperparams` recommendations for the specified range of $\ell$ [@abril-plaPyMCModernComprehensive2023; @riutort-mayolPracticalHilbertSpace2022].
+
+## Shared default priors {#sec-core-priors}
+
+The following priors are held **constant across all models** (they are the shared defaults in `definitions.py`). Model-specific priors — the slope anchors $p_{x_a}, p_{x_b}$, and any random-effect, GP-anchor or association settings — are given in each appendix as deltas from this table.
+
+| Parameter | Description | Prior |
+|----|----------------|------------|
+| $\ell_\text{unit}$ | Unit length-scale, mapped linearly to 6–18 months | $\mathrm{Beta}(3, 3)$ |
+| $\eta$ | GP amplitude (logit scale) | $\mathrm{HalfNormal}(\sigma = 0.4)$ |
+| $\kappa_{\min}$ | Minimum concentration (dispersion floor) | $\mathrm{LogNormal}(\mu = \log 5,\ \sigma = 0.6)$ |
+| $a_\kappa$ | Log-scale intercept of $\kappa(z)$ | $\mathrm{Normal}(\mu = \log 8,\ \sigma = 1.0)$ |
+| $b_{\mathrm{mag}}$ | Magnitude of the $\kappa$ decline rate ($b_\kappa = -b_{\mathrm{mag}}$) | $\mathrm{HalfNormal}(\sigma = 0.3)$ |
+
+: Shared default prior distributions, identical across all models. {#tbl-core-priors}
+
+The length-scale is mapped from the unit interval onto a 6–18 month range, $\ell = \ell_{\min} + (\ell_{\max} - \ell_{\min})\,\ell_\text{unit}$, which favours changes over 6–18 month periods and offers better sampling geometry than a direct prior on the positive reals. The amplitude $\eta$ is constant on the logit scale but, through the logistic link, has its largest effect on counts near $p \approx 0.5$ (about 400 of 800 words) and least effect near the floor or ceiling — matching the expectation that there is least scope for variation when a child is just starting out or near the checklist limit.
+
+<!-- TODO: move the VG01 prior-predictive narrative and the kappa worked example
+(old model-1 lines 182-227) into Appendix B1 as the worked exemplar; keep this
+table as the canonical shared-defaults reference. -->
+
+## Extension mechanisms
+
+The models differ only in which of the following mechanisms they switch on. Each maps directly onto a field (or flag) in `definitions.py`.
+
+### Joint outcomes and production ratios {#sec-ratios}
+
+The joint models estimate words **understood** and the conditional probability that an understood word is also produced. With $p_U(a) = \sigma(f_U(a))$ for understanding, define the **production ratio**
+
+$$
+q(a) = P(\text{speak} \mid \text{understood}) = \sigma(h(a)),
+\qquad
+p_S(a) = p_U(a)\,q(a),
+$$
+
+where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-mean). Because $q(a) \in (0,1)$, this enforces $p_S \le p_U$ by construction. The trivariate models add a **sign ratio**
+
+$$
+r(a) = P(\text{sign} \mid \text{understood}) = \sigma(g_{\text{sign}}(a)),
+\qquad
+p_{\text{Sign}}(a) = p_U(a)\,r(a) .
+$$
+
+The signed mean $g_{\text{sign}}$ is **intercept-only** (no age slope) plus a GP: a free age slope extrapolates the signed ratio below the data floor at young ages, so the GP alone carries the empirical rise-then-fall hump. Each marginal outcome has its own Beta-Binomial likelihood with its own age-varying dispersion (@sec-betabinomial, @sec-kappa).
+
+### Study and subject random intercepts {#sec-randomeffects}
+
+To separate the population age curves from differences in study composition and from repeated measurements on the same child, we add random intercepts on the logit-scale predictors at the observation level. For a predictor $f_\bullet \in \{f_U, h, g_{\text{sign}}\}$,
+
+$$
+f_\bullet(z_i) \;\to\; f_\bullet(z_i) + \delta^{\text{study}}_{\bullet,\,s(i)} + \delta^{\text{subj}}_{\bullet,\,j(i)},
+\qquad
+\delta_\bullet \sim \mathrm{Normal}(0, \tau_\bullet),\ \ \tau_\bullet \sim \mathrm{HalfNormal}(0.5),
+$$
+
+implemented non-centred, where $s(i)$ and $j(i)$ index the study and subject of observation $i$. Study intercepts absorb between-lab/between-study level differences; subject intercepts stop within-child repeated measurements being treated as independent. **The reported population curves set every random effect to zero**, so their interpretation is unchanged. Tiny studies can be trimmed before fitting (`min_study_observations`) to avoid near-unidentified intercepts.
+
+### Gaussian-process anchoring {#sec-gpanchor}
+
+Once a random intercept and the linear/intercept term and the GP can each carry the global level, that level becomes redundant and sampling geometry degrades (a GP↔intercept ridge). We remove the redundancy by constraining each GP to pass through zero at a reference age $a_{\text{ref}}$ **for every posterior draw**,
+
+$$
+\tilde{g}(z) = \eta\left(g_{\mathrm{unit}}(z) - g_{\mathrm{unit}}(z_{\text{ref}})\right),
+$$
+
+so the level is owned solely by the linear/intercept term and the random effects, while the GP carries only the *shape* of departures around $a_{\text{ref}}$. The reference age $a_{\text{ref}}$ (`gp_anchor_age_months`) is model-specific.
+
+### Within-understood sign–speech association {#sec-association}
+
+For each understood word a child may sign it, speak it, both, or neither. The trivariate marginals $r$ and $q$ (@sec-ratios) leave the **overlap** unidentified; the joint model adds a single scalar **Plackett odds ratio** $\psi$ linking sign and speech within understood words via the copula $C(r, q; \psi)$:
+
+$$
+\pi_{\text{both}} = C(r, q; \psi),\quad
+\pi_{\text{sign-only}} = r - \pi_{\text{both}},\quad
+\pi_{\text{speak-only}} = q - \pi_{\text{both}},\quad
+\pi_{\text{neither}} = 1 - r - q + \pi_{\text{both}} .
+$$
+
+$\psi = 1$ is independence ($\pi_{\text{both}} = r\,q$); $\psi > 1$ means a word is signed and spoken together more often than independence predicts. The four cells are fitted with a Dirichlet-Multinomial likelihood, identified from the four-cell cross-tabulation (the uk\_02 data; see @sec-data <!-- methods-data -->). The association yields a **data-identified total expressive vocabulary**
+
+$$
+p_{\text{any}}(a) = p_U(a)\left(r(a) + q(a) - \pi_{\text{both}}(a)\right),
+$$
+
+which sits below an independence-based upper bound whenever $\psi > 1$.
+
+::: {.callout-important}
+$\psi$ is a **single scalar**, identified from a small four-cell cross-tab, and is treated as **descriptive / exploratory** throughout this report. See @sec-findings-signing <!-- findings-signing --> for its scope and caveats.
+:::

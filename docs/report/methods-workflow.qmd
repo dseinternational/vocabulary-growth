@@ -1,0 +1,51 @@
+---
+title: "Bayesian workflow and model validation"
+abstract: "*This chapter describes the iterative Bayesian workflow used to develop, fit and validate the models: the fitting pipeline and sampling configurations, the validation checks every model is held to (prior predictive, convergence diagnostics, posterior predictive), and the formal basis on which one model is said to supersede another — tabulated out-of-sample model comparison together with identified structural issues.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+<!--
+PURPOSE: the validation/reporting rubric every appendix reuses, plus the model-
+comparison standard the lineage chapters cite. Keep the *rationale* for Bayesian
+inference in intro.qmd (Part I); this chapter is the operational workflow.
+-->
+
+## The iterative workflow
+
+**TODO**: summarise the Bayesian workflow [@gelmanBayesianWorkflow2020] as applied here — build simple, check, extend, compare — and forward-reference the two development lineages (@sec-lineage-ds, @sec-lineage-signing) that instantiate it.
+
+## Fitting pipeline and sampling configurations
+
+**TODO**: PyMC with the nutpie sampler; the `fit(config)` pipeline stages (data prep → build → prior predictive → MCMC → diagnostics → posterior predictive → summary → plots → report); the `dev` / `test` / `rep` sampling configurations and which results in this report are `rep`-quality. (Full reproduction in Appendix D.)
+
+## Validation checks
+
+Every model in this report is held to the same checks; the per-model evidence is in Appendix B.
+
+### Prior predictive checks
+
+**TODO**: what we require of the priors before fitting (plausible age–vocabulary curves: low counts young, smooth change, widening spread with age, no mass on impossible values).
+
+### Convergence diagnostics
+
+**TODO**: $\hat{R}$, bulk/tail ESS, divergences, and energy (BFMI). State the reporting thresholds used throughout ($\hat{R} \le 1.01$, ESS $\ge 400$) and that `rep` fits are reported as clean.
+
+### Posterior predictive checks
+
+**TODO**: how fitted models are checked against observed counts (PMF/CDF overlays, count distributions by age, the four-cell PPC for the signing model).
+
+## Model comparison and what "supersedes" means {#sec-supersedes}
+
+A later model is said to **supersede** an earlier one only on two combined grounds, reported together:
+
+1. **Tabulated out-of-sample comparison** — LOO / expected log pointwise predictive density (ELPD), reported as a comparison table with standard errors of the difference, so the improvement is quantified rather than asserted.
+2. **Identified structural issue** — a concrete, named modelling problem in the earlier model that the later one resolves (e.g. study composition confounding a population curve; a GP↔intercept identifiability ridge; an independence assumption that is not data-identified).
+
+**TODO**: present the master model-comparison table here (or cross-reference the per-lineage tables in Part III), and define the status taxonomy used throughout — *model of record*, *development step*, *TD reference*, *superseded* — enforced as a rule that superseded models never source a number in the findings (see Appendix A for the full register).
+
+## Provenance and reproducibility
+
+**TODO**: the per-render provenance stamp (model id + git revision + sampling configuration, generated rather than hand-written) carried by every result chapter; `freeze: true` for pinned editions; the relationship to the live per-fit dashboards in `docs/models/vgNN`. (Full detail in Appendix D.)
