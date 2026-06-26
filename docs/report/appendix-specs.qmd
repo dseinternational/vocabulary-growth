@@ -71,4 +71,9 @@ Anchoring the linear trend (@sec-anchors) at 24 and 84 months. Previous research
 
 # B4 — Typically developing reference models {#sec-appendix-b4}
 
-**TODO**: VG03, VG04, VG06 (superseded precursors) and VG11, VG12, VG13 (TD references) — deltas documenting the TD-specific reference ages (12/26 months; VG13 10/16), the move from 25% subsampling to study REs + `min_study_observations` trimming, the 8–18 month restriction in VG13, and the WS production-proxy handling (@sec-ws-proxy).
+**TODO**: deltas for the typically-developing models, documenting the TD-specific reference ages (12/26 months; VG13 10/16), the move from 25% subsampling to study REs + `min_study_observations` trimming, and the WS production-proxy handling (@sec-ws-proxy).
+
+- **Models of record:** VG11 (words spoken, wide age range) and VG13 (joint understood+spoken, young 8–18 month window — the only valid TD understood/gap source).
+- **Superseded precursors:** VG03 (→ VG11) and VG04 (→ VG13, young window).
+- **Restricted:** VG12 (TD understood, 9–30 months) — wide-age understood is invalid (@sec-ws-proxy), so VG12 is restricted to the young window and superseded there by VG13; documented here for completeness, not used as a source.
+- **Excluded (invalid):** VG06 (TD joint, wider age range) is **not included** — see @sec-excluded. Its specification is omitted because it is not used anywhere in the report.

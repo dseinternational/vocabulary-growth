@@ -1,6 +1,6 @@
 ---
 title: "Comparison with typically developing children"
-abstract: "*How vocabulary growth in children with Down syndrome compares with typically developing children. We present two complementary views: trajectories aligned by chronological age, which show the developmental time lag; and relationships aligned by words understood, which ask whether the structure of word learning — in particular how production tracks comprehension — differs beyond that lag. Down syndrome estimates come from the models of record (VG10; VG01/VG02); typically developing estimates from the TD reference models (VG11/VG12/VG13).*"
+abstract: "*How vocabulary growth in children with Down syndrome compares with typically developing children. We present two complementary views: trajectories aligned by chronological age, which show the developmental time lag; and relationships aligned by words understood, which ask whether the structure of word learning — in particular how production tracks comprehension — differs beyond that lag. Down syndrome estimates come from the models of record (VG10; VG01/VG02). Typically developing comprehension cannot be validly measured across the wider age range, so the only wide-age TD comparison is of words spoken (VG11); TD understood and the comprehension–production gap are compared only in the young window (VG13).*"
 ---
 
 ::: {.callout-note}
@@ -9,18 +9,22 @@ Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
 <!--
 PURPOSE: the DS-vs-TD chapter — the report's most fragile scientific claim, so it
-is deliberately separate and hedged in ONE place. Same-outcome pairings draw only
-on models of record (VG10 vs VG11/VG12/VG13); VG03/VG04/VG06 are superseded
-precursors (Appendix B4). AUTHOR EMPHASIS: the chronological-age view is reported,
-but the words-understood-aligned comparison is the primary interest — it probes
-structural differences beyond a simple time lag.
+is deliberately separate and hedged in ONE place. CONSTRAINT (author decision):
+TD comprehension is not validly measured across the wider age range (@sec-ws-proxy),
+so the only valid wide-age TD outcome is words SPOKEN (VG11); TD understood and the
+gap are reported only in the young window (VG13). VG06 is excluded as invalid and
+VG12 is restricted to the young window — neither sources a comparison here.
+AUTHOR EMPHASIS: the chronological-age view is reported, but the
+words-understood-aligned comparison is the primary interest — it probes structural
+differences beyond a simple time lag.
 -->
 
 ## Comparison protocol and its limits {#sec-comparison-td}
 
 **TODO**: the single home for all comparability hedging. Document:
 
-- the age windows compared (DS 12–90 months; TD 9–30 months; the young TD joint window 8–18 months) and that they overlap only partly;
+- the validity constraint up front: TD comprehension cannot be validly measured across the wider age range (@sec-ws-proxy), so **wide-age TD comparison is limited to words spoken** (VG11), and TD understood and the comprehension–production gap are compared **only in the young window** (~8–18 months, VG13);
+- the age windows compared (DS 12–90 months; TD spoken 9–30 months; TD understood/gap 8–18 months) and that they overlap only partly;
 - what "words out of 800" means across populations given different native checklist ceilings (@sec-data);
 - the differing slope-anchor reference ages (DS 24/84 vs TD 12/26 months) and why that does not affect the comparison of fitted curves;
 - which comparisons are age-aligned vs vocabulary-aligned, and what each can and cannot support.
@@ -33,24 +37,24 @@ The conventional view: the developmental time lag at matched ages.
 
 **TODO**: overlay the spoken trajectories; report the lag.
 
-### Words understood — DS (VG10) vs TD (VG12)
+### Words understood — DS (VG10) vs TD (VG13, young window)
 
-**TODO**: overlay the understood trajectories; report the lag.
+**TODO**: overlay the understood trajectories in the young window only (TD understood is valid to ~18 months; @sec-ws-proxy). Report the lag where the windows overlap; do not extrapolate TD understood to wider ages.
 
-### The comprehension–production gap — DS (VG10) vs TD (VG13)
+### The comprehension–production gap — DS (VG10) vs TD (VG13, young window)
 
-**TODO**: compare the gap / production ratio at matched ages, noting VG13's 8–18 month window limits this to young ages.
+**TODO**: compare the gap / production ratio at matched ages within the young window; state plainly that the wider-age TD gap is unavailable because wide-age TD comprehension is not validly measured.
 
 ## Aligned by words understood {#sec-comparison-vocab}
 
 The question of primary interest: setting age aside, does production track comprehension *the same way* in the two groups — or is there a **structural difference beyond the time lag**?
 
-**TODO**: plot the production ratio $q$ (@sec-ratios) and words spoken **as a function of words understood** (not age) for DS (VG10) and TD (VG13/VG06) on common axes.
+**TODO**: plot the production ratio $q$ (@sec-ratios) and words spoken **as a function of words understood** (not age) for DS (VG10) and TD (VG13) on common axes. Because the alignment is by understood vocabulary rather than age, this comparison is **confined to the range of understood counts the young TD window supports** — it does not require wide-age TD comprehension, which is its key advantage here.
 
 - If the curves **overlay**, the difference between groups is consistent with a developmental time lag: at a given vocabulary size, children produce the same fraction of what they understand.
 - If they **diverge**, there is a structural difference in the comprehension→production mapping itself — e.g. a wider or narrower understood-to-spoken gap in Down syndrome at matched comprehension levels.
 
-**TODO**: state the comparison cleanly with credible bands, and flag the data-support limits (TD coverage is densest at small vocabularies; VG13 spans 8–18 months only — see the protocol above). Note the relevant per-model figures already produced (e.g. production-ratio-by-understood, understood-vs-spoken) and that this chapter curates them rather than re-deriving.
+**TODO**: state the comparison cleanly with credible bands, and flag the data-support limits (TD coverage is densest at small vocabularies; the valid TD source is VG13's 8–18 month window — see the protocol above). Note the relevant per-model figures already produced (e.g. production-ratio-by-understood, understood-vs-spoken) and that this chapter curates them rather than re-deriving.
 
 ## What we can and cannot conclude
 

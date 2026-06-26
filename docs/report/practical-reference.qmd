@@ -19,7 +19,7 @@ Point the least-technical readers to the forthcoming lay summary report.
 
 ## Typically developing: reference counts by age
 
-**TODO**: lift the TD reference tables from Appendix C (VG11/VG12/VG13).
+**TODO**: lift the TD reference tables from Appendix C — words spoken across 9–30 months (VG11) and the young-window understood/joint tables (VG13). There is no wide-age TD understood reference (@sec-ws-proxy).
 
 ## Rates of word learning
 

@@ -39,11 +39,20 @@ Referenced from @sec-betabinomial and @sec-association in methods-framework.qmd.
 
 ### The Words & Sentences comprehension issue {#sec-ws-proxy}
 
-**TODO**: WS records production only; treating its "comprehension" as a true comprehension measure makes it a *production proxy* that biases understood counts upward. Document the handling — WS kept as a spoken-only observation, WS comprehension excluded — and why VG13 restricts to 8–18 months to avoid this bias entirely. (This is the data-quality fact behind the VG06 → VG13 supersession; see @sec-lineage-ds <!-- lineage --> and Appendix A.)
+**TODO**: Words & Sentences (WS) records **production only**. Treating its "comprehension" as a true comprehension measure makes it a **production proxy** that biases understood counts, and beyond infancy WS is the only Wordbank instrument — so typically-developing **comprehension cannot be validly measured across the wider age range**. Document the handling: WS is kept as a spoken-only observation and WS comprehension is excluded everywhere.
+
+This has two structural consequences for the typically-developing models (see @sec-excluded in Appendix A):
+
+- **The only valid wide-age TD outcome is words spoken** (modelled by VG11). There is no valid wide-age TD model of words *understood*.
+- **TD understood and the comprehension–production gap are reported only in the young window** (~8–18 months), where Words & Gestures comprehension is sound; this is the window VG13 models. The wide-age TD understood model VG12 is therefore restricted to that window, and the wide-age TD **joint** model **VG06 is excluded as invalid** (its understood side is not measurable across its age range).
 
 ### Signing data and the four-cell cross-tab {#sec-signing-data}
 
 **TODO**: signing is recorded only in the Down syndrome datasets (so the signing models are DS-only). uk\_02 is the only source with a four-cell within-understood cross-tabulation (sign-only / speak-only / both / neither), which identifies the association $\psi$ (@sec-association). Document the `include_uk06` decision: uk\_06 contributes real signing-*production* counts (≈11 observations at 60–115 months, often comparable to or exceeding spoken), included by default; the open question is coding comparability with uk\_02/04/05, treated as a sensitivity analysis in Appendix B3.
+
+::: {.callout-note title="Follow-up"}
+The `include_uk06` decision is treated here as a sensitivity analysis, **not** a settled modelling choice. It should be revisited: confirm with the data owners whether uk\_06's signed field is coded comparably to uk\_02/04/05 (there is currently no field dictionary), and reconsider its inclusion in light of that. See Appendix B3 for the in-vs-out comparison.
+:::
 
 ## Age windows, subsampling and study trimming
 

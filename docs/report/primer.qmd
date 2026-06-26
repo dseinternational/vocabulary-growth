@@ -42,6 +42,7 @@ Emphasise that credible intervals are direct probability statements about the qu
 |---|---|---|
 | DS words understood & spoken, and the gap | VG10 | @sec-findings-ds, Appendix B2 |
 | DS signing, association and total expressive | VG15 | @sec-findings-signing, Appendix B3 |
-| TD reference (spoken / understood / joint) | VG11 / VG12 / VG13 | @sec-comparison-td, Appendix B4 |
+| TD words spoken (wide age range) | VG11 | @sec-comparison-td, Appendix B4 |
+| TD understood & the gap (young window only) | VG13 | @sec-comparison-td, Appendix B4 |
 
 See @sec-register <!-- appendix-register --> for the full model register and the supersession map, and the glossary for precise definitions.

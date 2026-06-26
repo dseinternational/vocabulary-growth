@@ -29,6 +29,7 @@ single shared cell); do NOT re-derive. Numbers come from Appendix C.
 |---|---|---|---|
 | DS understood & spoken, the gap | VG10 | @sec-findings-ds | Appendix B2 |
 | DS signing, association, total expressive | VG15 | @sec-findings-signing | Appendix B3 |
-| TD spoken / understood / joint | VG11 / VG12 / VG13 | @sec-comparison-td | Appendix B4 |
+| TD words spoken (wide age range) | VG11 | @sec-comparison-td | Appendix B4 |
+| TD understood & the gap (young window) | VG13 | @sec-comparison-td | Appendix B4 |
 
 : Authoritative model by question. {#tbl-authoritative}
