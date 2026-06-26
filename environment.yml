@@ -3,24 +3,21 @@ channels:
   - conda-forge
 dependencies:
   - python=3.14.6
-  - arviz>=1.2.0
-  - arviz-base>=1.2.0
-  - arviz-stats>=1.2.0
-  - arviz-plots>=1.2.0
-  - h5netcdf
   - graphviz>=14.1.2
   - numba>=0.65.1
   - numpy>=2.4.6,<2.5 # numba 0.65.1 requires numpy <2.5; lift cap when numba supports 2.5
   - nutpie>=0.16.10
-  - pandas-stubs
-  - pandas>=3.0.3
   - pymc>=6.0.1
-  - scikit-learn>=1.9.0
-  - xarray>=2026.4.0
+  - scipy>=1.18.0
   - pip
   - pip:
       - azure-identity
       - azure-storage-blob
+      - arviz>=1.2.0
+      - arviz-base>=1.2.0
+      - arviz-stats>=1.2.0
+      - arviz-plots>=1.2.0
+      - h5netcdf
       - duckdb>=1.5.4
       - hatch
       - ipython>=9.14.1
@@ -29,13 +26,16 @@ dependencies:
       - matplotlib>=3.11.0
       - notebook>=7.6.0
       - orjson>=3.11.9
+      - pandas-stubs
+      - pandas>=3.0.3
       - preliz>=0.27.0
       - pytest>=9.1.1
       - rich>=15.0.0
       - ruff>=0.15.20
+      - scikit-learn>=1.9.0
       - scipy-stubs
-      - scipy>=1.18.0
       - seaborn>=0.13.2
-      - setuptools>=82.0.1
+      - setuptools>=81.0.0
+      - xarray>=2026.4.0
       - -e ../research/src/python #  for now, for local development
       - -e ./
