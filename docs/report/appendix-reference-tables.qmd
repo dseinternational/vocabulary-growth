@@ -20,38 +20,49 @@ hand-entered.
 #| echo: false
 # Single loader for every age-indexed table in the report. Body chapters import
 # these helpers (or cross-reference the rendered tables) so no number is
-# hand-entered.
-#
-# TODO (confirm against the real output layout before the first rep render):
-#   * OUTPUT_ROOT and the per-model subdirectory naming. The per-fit dashboards
-#     read CSVs such as posterior_summary_u.csv / _s.csv / _q.csv / _r.csv /
-#     _p_any.csv from each model's output dir.
-#   * the exact column names in those summaries (age + central estimate + HDI).
-# Until the rep fits are present this cell degrades gracefully so the book still
-# renders.
+# hand-entered. Output subdirectories are derived from definitions.py
+# (<MODEL_ID>-<config_name>) so they cannot drift from the code. Models that have
+# not yet been fitted degrade to a visible placeholder so the book still renders.
 from pathlib import Path
 import pandas as pd
+from vocab_growth.models.definitions import MODEL_REGISTRY
 
 OUTPUT_ROOT = Path("../../output/models")
 
-# model_id -> output subdirectory (CONFIRM these names against output/models/)
-MODEL_DIRS = {
-    "VG10": "age-understood-spoken-ds-re-subj-uq-anchored",
-    "VG15": "age-joint-signspeech-ds",
-    "VG11": "age-spoken-td-re",
-    "VG13": "age-understood-spoken-td-re-young",
-}
+# model_id -> "<MODEL_ID>-<config_name>", e.g. "VG10-age-understood-spoken-ds-..."
+_DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
 
 
 def load_summary(model_id: str, name: str):
     """Return a posterior-summary CSV for a model, or None if not yet fitted."""
-    sub = MODEL_DIRS.get(model_id)
+    sub = _DIR_BY_ID.get(model_id)
     if sub is None:
         return None
     path = OUTPUT_ROOT / sub / f"{name}.csv"
-    if not path.exists():
+    return pd.read_csv(path) if path.exists() else None
+
+
+# Columns to surface, in order, when present (schema of posterior_summary_*.csv):
+#   age_months; Ey_* = expected count (typical child); Y_* = predictive (individual)
+_COUNT_COLS = {
+    "age_months": "Age (mo)",
+    "Ey_median": "Expected",
+    "Ey_hdi_lo": "Expected 94% lo",
+    "Ey_hdi_hi": "Expected 94% hi",
+    "Y_hdi_lo": "Individual 94% lo",
+    "Y_hdi_hi": "Individual 94% hi",
+}
+
+
+def format_counts(df):
+    """Tidy a count summary to expected (typical) + individual predictive range."""
+    if df is None:
         return None
-    return pd.read_csv(path)
+    cols = [c for c in _COUNT_COLS if c in df.columns]
+    out = df[cols].rename(columns=_COUNT_COLS)
+    num = out.select_dtypes("number").columns
+    out[num] = out[num].round(0).astype("Int64", errors="ignore")
+    return out
 
 
 def show_or_pending(df, what: str):
@@ -73,19 +84,22 @@ def show_or_pending(df, what: str):
 ```{python}
 #| label: tbl-ref-ds-understood
 #| echo: false
-show_or_pending(load_summary("VG10", "posterior_summary_u"), "DS words understood by age (VG10)")
+#| tbl-cap: "Down syndrome — words **understood** by age (VG10): expected count for a typical child and the 94% range across individual children."
+show_or_pending(format_counts(load_summary("VG10", "posterior_summary_u")), "DS words understood by age (VG10)")
 ```
 
 ```{python}
 #| label: tbl-ref-ds-spoken
 #| echo: false
-show_or_pending(load_summary("VG10", "posterior_summary_s"), "DS words spoken by age (VG10)")
+#| tbl-cap: "Down syndrome — words **spoken** by age (VG10)."
+show_or_pending(format_counts(load_summary("VG10", "posterior_summary_s")), "DS words spoken by age (VG10)")
 ```
 
 ```{python}
 #| label: tbl-ref-ds-total
 #| echo: false
-show_or_pending(load_summary("VG15", "posterior_summary_p_any"), "DS total expressive vocabulary by age (VG15, exploratory)")
+#| tbl-cap: "Down syndrome — **total expressive** vocabulary by age (VG15, exploratory)."
+show_or_pending(format_counts(load_summary("VG15", "posterior_summary_p_any")), "DS total expressive vocabulary by age (VG15, exploratory)")
 ```
 
 ## Typically developing — expected word counts
@@ -95,13 +109,15 @@ show_or_pending(load_summary("VG15", "posterior_summary_p_any"), "DS total expre
 ```{python}
 #| label: tbl-ref-td-spoken
 #| echo: false
-show_or_pending(load_summary("VG11", "posterior_summary_s"), "TD words spoken by age, 9–30 months (VG11)")
+#| tbl-cap: "Typically developing — words **spoken** by age, 9–30 months (VG11)."
+show_or_pending(format_counts(load_summary("VG11", "posterior_summary_s")), "TD words spoken by age, 9–30 months (VG11)")
 ```
 
 ```{python}
 #| label: tbl-ref-td-understood-young
 #| echo: false
-show_or_pending(load_summary("VG13", "posterior_summary_u"), "TD words understood by age, 8–18 months (VG13)")
+#| tbl-cap: "Typically developing — words **understood** by age, 8–18 months (VG13)."
+show_or_pending(format_counts(load_summary("VG13", "posterior_summary_u")), "TD words understood by age, 8–18 months (VG13)")
 ```
 
 ## Rates of word learning
