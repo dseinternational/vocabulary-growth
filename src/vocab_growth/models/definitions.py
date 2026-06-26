@@ -135,7 +135,7 @@ class UnivariateModelDefinition:
 
 @dataclass
 class BivariateModelDefinition:
-    """Complete definition for a joint understood+spoken model (VG05-VG06)."""
+    """Complete definition for a joint understood+spoken model (e.g. VG05, VG07-VG10, VG13)."""
 
     model_id: str
     """Model identifier, e.g. 'VG05'."""
@@ -538,34 +538,6 @@ VG05 = BivariateModelDefinition(
     p_slope_hi_u_beta=1.1,
 )
 
-VG06 = BivariateModelDefinition(
-    model_id="VG06",
-    config_name="age-understood-spoken-td",
-    banner=(
-        "Fitting Model VG06: Joint model of words understood and spoken"
-        " (A -> U, A -> S, U -> S) - typically developing"
-    ),
-    population=Population.TYPICALLY_DEVELOPING,
-    # WG and Oxford CDI measure comprehension and production independently.
-    # WS is production-only in Wordbank, so the TD loader keeps it as a
-    # spoken-only observation. Few WG/Oxford observations are near their
-    # respective inventory ceilings, so treating all counts as out of a common
-    # 800-item reference gives an inventory-comparable scale with DS bivariate
-    # models.
-    n_trials=800,
-    slope_anchors=(12, 26),
-    ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=20.0,
-    p_slope_hi_u_alpha=1.5,
-    p_slope_hi_u_beta=1.1,
-    # Bumped from 0.1: the understood/bivariate pool is 6,134 rows once WS is
-    # excluded from comprehension; this keeps the effective understood training
-    # set (~1,500 rows) close to the previous VG06 fit while letting WS
-    # contribute valid spoken-only observations.
-    sample_fraction=0.25,
-)
-
 VG07 = BivariateModelDefinition(
     model_id="VG07",
     config_name="age-understood-spoken-ds-re",
@@ -843,7 +815,6 @@ MODEL_REGISTRY: dict[
     "vg03": VG03,
     "vg04": VG04,
     "vg05": VG05,
-    "vg06": VG06,
     "vg07": VG07,
     "vg08": VG08,
     "vg09": VG09,

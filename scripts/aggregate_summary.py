@@ -38,7 +38,6 @@ MODELS = [
     ("VG03", "VG03-age-spoken-td"),
     ("VG04", "VG04-age-understood-td"),
     ("VG05", "VG05-age-understood-spoken-ds"),
-    ("VG06", "VG06-age-understood-spoken-td"),
     ("VG07", "VG07-age-understood-spoken-ds-re"),
     ("VG08", "VG08-age-understood-spoken-ds-re-subj"),
     ("VG09", "VG09-age-understood-spoken-ds-re-subj-uq"),

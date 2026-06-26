@@ -3,7 +3,7 @@
 
 """
 Shared dataclasses and pipeline functions for the bivariate vocabulary growth
-models (VG05, VG06).
+models (e.g. VG05, VG07-VG10, VG13).
 
 Uses a production-ratio reparameterization:
     p_U(a) = sigmoid(f_U(a))
@@ -1920,7 +1920,7 @@ def fit_bivariate_model(
     definition: BivariateModelDefinition,
 ) -> BivariateContext:
     """
-    Shared fit pipeline for bivariate models (VG05-VG06).
+    Shared fit pipeline for bivariate models (e.g. VG05, VG07-VG10, VG13).
     """
     run_banner(definition.banner, subtitle=f"sampling config: {config}")
 

@@ -52,7 +52,6 @@ UNIVARIATE = {
 
 BIVARIATE = {
     "VG05": ("VG05-age-understood-spoken-ds", "DS"),
-    "VG06": ("VG06-age-understood-spoken-td", "TD"),
     "VG07": ("VG07-age-understood-spoken-ds-re", "DS"),
     "VG08": ("VG08-age-understood-spoken-ds-re-subj", "DS"),
     "VG09": ("VG09-age-understood-spoken-ds-re-subj-uq", "DS"),

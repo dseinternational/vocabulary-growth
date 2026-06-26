@@ -83,8 +83,9 @@ MIN_COVERAGE = 0.80
 KEY_AGES = [12, 18, 24, 30]
 
 # Comprehension-matched lens needs JOINT models (U and S coupled per draw): the
-# DS joint VG10 vs the TD joint VG13 (RE-based, 8-18 mo). VG06 is the non-RE TD
-# baseline and can be passed via --td-joint=vg06 for a sensitivity check.
+# DS joint VG10 vs the TD joint VG13 (RE-based, 8-18 mo). VG13 is the only valid
+# TD joint model (wide-age TD comprehension is not validly measured; VG06 was
+# excluded as invalid).
 JOINT_DS_KEY = "vg10"
 JOINT_TD_KEY = "vg13"
 # Comprehension levels N (words understood) for the q(U=N) view. Small-N tail is
