@@ -18,6 +18,7 @@ dependencies:
       - arviz-stats>=1.2.0
       - arviz-plots>=1.2.0
       - h5netcdf
+      - h5py # h5netcdf backend; pip h5netcdf no longer pulls this transitively (was via conda-forge)
       - duckdb>=1.5.4
       - hatch
       - ipython>=9.14.1
