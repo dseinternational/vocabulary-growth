@@ -15,67 +15,7 @@ lay summary all lift rows from here via includes/cross-references. Nothing here 
 hand-entered.
 -->
 
-```{python}
-#| label: setup-reference-tables
-#| echo: false
-# Single loader for every age-indexed table in the report. Body chapters import
-# these helpers (or cross-reference the rendered tables) so no number is
-# hand-entered. Output subdirectories are derived from definitions.py
-# (<MODEL_ID>-<config_name>) so they cannot drift from the code. Models that have
-# not yet been fitted degrade to a visible placeholder so the book still renders.
-from pathlib import Path
-import pandas as pd
-from vocab_growth.models.definitions import MODEL_REGISTRY
-
-OUTPUT_ROOT = Path("../../output/models")
-
-# model_id -> "<MODEL_ID>-<config_name>", e.g. "VG10-age-understood-spoken-ds-..."
-_DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
-
-
-def load_summary(model_id: str, name: str):
-    """Return a posterior-summary CSV for a model, or None if not yet fitted."""
-    sub = _DIR_BY_ID.get(model_id)
-    if sub is None:
-        return None
-    path = OUTPUT_ROOT / sub / f"{name}.csv"
-    return pd.read_csv(path) if path.exists() else None
-
-
-# Columns to surface, in order, when present (schema of posterior_summary_*.csv):
-#   age_months; Ey_* = expected count (typical child); Y_* = predictive (individual)
-_COUNT_COLS = {
-    "age_months": "Age (mo)",
-    "Ey_median": "Expected",
-    "Ey_hdi_lo": "Expected 94% lo",
-    "Ey_hdi_hi": "Expected 94% hi",
-    "Y_hdi_lo": "Individual 94% lo",
-    "Y_hdi_hi": "Individual 94% hi",
-}
-
-
-def format_counts(df):
-    """Tidy a count summary to expected (typical) + individual predictive range."""
-    if df is None:
-        return None
-    cols = [c for c in _COUNT_COLS if c in df.columns]
-    out = df[cols].rename(columns=_COUNT_COLS)
-    num = out.select_dtypes("number").columns
-    out[num] = out[num].round(0).astype("Int64", errors="ignore")
-    return out
-
-
-def show_or_pending(df, what: str):
-    """Render a table if available, else a visible placeholder."""
-    if df is None:
-        from IPython.display import Markdown
-
-        return Markdown(
-            f"> **Pending `rep` fit** — {what} will appear here once the model "
-            f"has been fitted and its output is present under `output/models/`."
-        )
-    return df
-```
+{{< include _report_data.qmd >}}
 
 ## Down syndrome — expected word counts {#sec-reference-tables}
 

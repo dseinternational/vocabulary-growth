@@ -9,25 +9,36 @@ Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
 <!--
 PURPOSE: DS-only signing findings from VG15 (VG14 referenced only as the
-superseded development step, Appendix B3). p_any is retained in the deliverables
+superseded development step, Appendix B3). p_any retained in the deliverables
 (author decision) with an explicit exploratory label and uncertainty band — see
-the transcluded caveat. Numbers pulled from VG15 output / Appendix C.
+the transcluded caveat. Numbers pulled live from the VG15 fit. Draft prose
+generated from the current fit; review against the figures.
 -->
+
+{{< include _report_data.qmd >}}
 
 ## The sign-given-understood trajectory r(a) {#sec-findings-signing}
 
-**TODO**: the sign ratio $r(a)$ (@sec-ratios) — the rise-then-fall hump (near zero before ~24 months, a preschool peak, receding after), with study composition absorbed by the random intercepts (@sec-randomeffects). Embed the signed-vs-spoken ratio figure from VG15.
+Signing plays a distinctive, time-limited role in early expressive development. The **sign ratio** $r(a) = P(\text{sign} \mid \text{understood})$ (@sec-ratios) follows a rise-then-fall hump: under VG15 it climbs from about `{python} f'{val("VG15","posterior_summary_r",18,"r_median")*100:.0f}'`% of understood words at 18 months to a peak of roughly `{python} f'{val("VG15","posterior_summary_r",36,"r_median")*100:.0f}'`% around 36 months, then recedes to about `{python} f'{val("VG15","posterior_summary_r",60,"r_median")*100:.0f}'`% by 60 months and `{python} f'{val("VG15","posterior_summary_r",84,"r_median")*100:.0f}'`% by 84 months. @fig-sign-rate shows the signed and spoken ratios together, with study composition absorbed by the random intercepts (@sec-randomeffects) — the signed peak that was study-confounded in VG14 is now identified.
+
+![Signed and spoken production ratios by age, children with Down syndrome (VG15).](figures/VG15-age-joint-signspeech-ds/signed_vs_spoken_rate.svg){#fig-sign-rate .lightbox fig-align="left"}
 
 ## Words migrating from sign to speech
 
-**TODO**: the four-cell within-understood composition (sign-only / both / speak-only / neither) over age (@sec-association) — words moving from signed into spoken as children develop.
+The hump reflects words moving *through* sign into speech. @fig-sign-composition shows the four mutually exclusive states of an understood word — sign-only, both signed and spoken, speak-only, and neither — as fractions of understood vocabulary over age (@sec-association). Early on, signed-and-not-yet-spoken words make up a substantial share; as children develop, words migrate into the spoken (and sign-plus-speech) categories.
+
+![Within-understood four-cell composition (sign-only / both / speak-only / neither) by age (VG15).](figures/VG15-age-joint-signspeech-ds/four_cell_composition.svg){#fig-sign-composition .lightbox fig-align="left"}
 
 ## How sign and speech go together: the association ψ
 
-**TODO**: the posterior of the Plackett odds ratio $\psi$ against the independence reference $\psi = 1$ (@sec-association). State plainly what positive association means and keep it framed as descriptive/exploratory (see caveat).
+Within understood words, signing and speaking co-occur **more** than chance: the Plackett odds ratio (@sec-association) has posterior median $\psi \approx$ `{python} f'{load_summary("VG15","posterior_summary_psi")["psi_median"].iloc[0]:.1f}'` (94% credible interval `{python} f'{load_summary("VG15","posterior_summary_psi")["psi_hdi_lo"].iloc[0]:.1f}'`–`{python} f'{load_summary("VG15","posterior_summary_psi")["psi_hdi_hi"].iloc[0]:.1f}'`), with essentially all of the posterior above the independence reference $\psi = 1$. A word a child understands is more likely to be both signed and spoken than two independent coin-flips at rates $r$ and $q$ would predict.
+
+![Posterior of the sign–speech association $\psi$, with the independence reference $\psi = 1$ (VG15).](figures/VG15-age-joint-signspeech-ds/psi_posterior.svg){#fig-sign-psi .lightbox fig-align="left"}
 
 ## Total expressive vocabulary
 
-**TODO**: the data-identified $p_{\text{any}}(a)$ (@sec-association) against VG14's independence upper bound — the gap is the association VG14 ignored. Present $p_{\text{any}}$ with its uncertainty band and an explicit exploratory label; it is retained in the consolidated deliverables (Appendix C) pending further data.
+Combining speech and sign gives **total expressive vocabulary** $p_{\text{any}}$ (@sec-association): the words a child produces by either route. Because $\psi > 1$ (signed and spoken words overlap more than independence implies), the data-identified total sits just *below* the independence-based upper bound VG14 assumed — the gap is the double-counting VG14 could not avoid. Under VG15 a typical child produces (by speech or sign) about `{python} words("VG15", "posterior_summary_p_any", 36, "Ey_any_median")` words at 36 months and `{python} words("VG15", "posterior_summary_p_any", 60, "Ey_any_median")` at 60 months. @fig-sign-pany shows the identified total against the independence bound.
+
+![Data-identified total expressive vocabulary $p_{\text{any}}$ against VG14's independence upper bound (VG15).](figures/VG15-age-joint-signspeech-ds/p_any_identified_vs_bound.svg){#fig-sign-pany .lightbox fig-align="left"}
 
 {{< include _caveats-signing.qmd >}}

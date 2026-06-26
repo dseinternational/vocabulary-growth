@@ -9,7 +9,7 @@ Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
 <!--
 PURPOSE: the second development arc. Cite @sec-ratios and @sec-association; do not
-re-derive. Per-step diagnostics (incl. the four-cell PPC and psi prior/posterior)
+re-derive. Per-step diagnostics (including the four-cell PPC and psi prior/posterior)
 live in Appendix B3. Supersession claim carries its model-comparison statistic
 inline (@sec-supersedes).
 -->

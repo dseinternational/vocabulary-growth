@@ -16,6 +16,8 @@ predictive. Organised to mirror the model families. Pull diagnostics/figures fro
 fitted output (the same artefacts the docs/models/vgNN dashboards read).
 -->
 
+{{< include _report_data.qmd >}}
+
 # B1 — Down syndrome univariate baselines {#sec-appendix-b1}
 
 ## VG01 — Words spoken (worked exemplar) {#sec-appendix-vg01}
@@ -37,25 +39,57 @@ Anchoring the linear trend (@sec-anchors) at 24 and 84 months. Previous research
 
 ![Prior for the upper slope anchor (spoken words at 84 months)](figures/VG01-age-spoken-ds/p_slope_hi_dist.png){#fig-vg01-slope-hi width="5in"}
 
-<!-- worked kappa example: with s_x ≈ 24 months a 'typical' b_mag ≈ 0.3 implies a
-~26% decline in excess concentration per SD of age. Move the full narrative
-(old model-1 lines 182-227) here. -->
+### Dispersion: a worked example {#sec-vg01-kappa}
+
+VG01 makes the age-varying dispersion of @sec-kappa concrete. For the Down syndrome data the age standard deviation is $s_x \approx 24$ months, so a one-unit change in standardised age ($\Delta z = 1$) is about two years. Writing $\log(\kappa(z) - \kappa_{\min}) = a_\kappa + b_\kappa z$, the coefficient $b_\kappa$ is the log-multiplicative rate of change in the *excess* concentration per SD of age, and for any $\Delta z$,
+
+$$
+\frac{\kappa(z+\Delta z) - \kappa_{\min}}{\kappa(z) - \kappa_{\min}} = \exp(b_\kappa\,\Delta z).
+$$
+
+With $b_\kappa = -b_{\mathrm{mag}}$ and the shared prior $b_{\mathrm{mag}} \sim \mathrm{HalfNormal}(0.3)$ (@tbl-core-priors), a typical magnitude is on the order of $0.3$, i.e. a multiplicative change of $\exp(-0.3) \approx 0.74$ — about a 26% decline in excess concentration per SD of age (roughly two years), tapering toward the floor $\kappa_{\min}$ at older ages (more between-child heterogeneity later). The dispersion priors are shown below.
+
+![`kappa_min` prior (dispersion floor).](figures/VG01-age-spoken-ds/kappa_min_dist.png){#fig-vg01-kappa-min width="4in"}
+
+![`a_kappa` prior (log-scale intercept).](figures/VG01-age-spoken-ds/a_kappa_dist.png){#fig-vg01-a-kappa width="4in"}
+
+![`b_kappa_mag` prior (decline rate magnitude).](figures/VG01-age-spoken-ds/b_kappa_mag_dist.png){#fig-vg01-b-kappa width="4in"}
 
 ### Prior predictive checks
 
-**TODO**: VG01 prior predictive narrative + figures (`prior_samples`, `prior_predictions`, `prior_predictive_checks`), moved from the old model-1 chapter.
+Before fitting, we checked that the priors generate plausible age–vocabulary curves: low counts at younger ages, increasing expected counts across childhood, smooth month-to-month change rather than abrupt oscillation, and a widening between-child spread at later ages without implausible mass near impossible values. The prior predictive draws (@fig-vg01-prior-samples, @fig-vg01-prior-ppc) confirm the priors are informative enough to encode basic developmental expectations while leaving substantial uncertainty about the shape of the trajectory.
+
+![Prior sample trajectories (VG01).](figures/VG01-age-spoken-ds/prior_samples.png){#fig-vg01-prior-samples .lightbox fig-align="left"}
+
+![Prior predictive checks (VG01).](figures/VG01-age-spoken-ds/prior_predictive_checks.svg){#fig-vg01-prior-ppc .lightbox fig-align="left"}
 
 ### Diagnostics
 
-**TODO**: VG01 convergence diagnostics ($\hat{R}$, ESS, divergences, energy) per @sec-supersedes rubric.
+Convergence diagnostics for the reporting fit (the rubric of @sec-supersedes: $\hat{R}$, bulk/tail ESS, divergences).
+
+```{python}
+#| label: tbl-vg01-diagnostics
+#| echo: false
+show_or_pending(load_summary("VG01", "diagnostics"), "VG01 convergence diagnostics")
+```
 
 ### Posterior predictive checks
 
-**TODO**: VG01 posterior predictive checks.
+The fitted model reproduces the observed distribution of spoken-word counts across ages (@fig-vg01-ppc).
+
+![Posterior predictive count distributions by age (VG01).](figures/VG01-age-spoken-ds/posterior_predictive_count_distributions.svg){#fig-vg01-ppc .lightbox fig-align="left"}
 
 ### Results
 
-**TODO**: VG01 posterior trajectory and age-indexed summaries (cross-check against the joint model of record VG10).
+VG01's spoken-word trajectory is a univariate cross-check on the joint model of record (VG10). Expected counts by age:
+
+```{python}
+#| label: tbl-vg01-summary
+#| echo: false
+show_or_pending(format_counts(load_summary("VG01", "posterior_summary")), "VG01 spoken-word summary by age")
+```
+
+![Expected rate of learning spoken words by age (VG01).](figures/VG01-age-spoken-ds/expected_learning_rate.svg){#fig-vg01-rate .lightbox fig-align="left"}
 
 ## VG02 — Words understood (delta)
 
@@ -63,7 +97,7 @@ Anchoring the linear trend (@sec-anchors) at 24 and 84 months. Previous research
 
 # B2 — Down syndrome joint development {#sec-appendix-b2}
 
-**TODO**: VG05, VG07, VG08, VG09, VG10 — each a delta giving only its added structure (@sec-ratios, @sec-randomeffects, @sec-gpanchor), non-default priors, and per-step diagnostics summarised in @tbl-lineage-ds. VG10 is the model of record (full diagnostics + posterior predictive incl. the GP-anchor check).
+**TODO**: VG05, VG07, VG08, VG09, VG10 — each a delta giving only its added structure (@sec-ratios, @sec-randomeffects, @sec-gpanchor), non-default priors, and per-step diagnostics summarised in @tbl-lineage-ds. VG10 is the model of record (full diagnostics + posterior predictive including the GP-anchor check).
 
 # B3 — Down syndrome signing {#sec-appendix-b3}
 

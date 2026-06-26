@@ -9,7 +9,7 @@ Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
 <!--
 PURPOSE: tell the iterative-workflow story at one-table-row-per-step cost — never
-15 repeated math chapters. Cite the engine by anchor (@sec-mean etc.); do NOT
+15 repeated mathematics chapters. Cite the engine by anchor (@sec-mean etc.); do NOT
 re-derive. Per-step diagnostics live in Appendix B2; this chapter carries the
 narrative, the development table, and the net-effect figure. Every supersession
 claim carries its model-comparison statistic inline (@sec-supersedes).

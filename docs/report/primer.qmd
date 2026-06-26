@@ -9,7 +9,7 @@ Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
 <!--
 PURPOSE: results-first on-ramp for the practitioner/researcher reader, sitting
-after the Introduction and before Methods. Math-light: define the quantities and
+after the Introduction and before Methods. Light on maths: define the quantities and
 how to read the uncertainty summaries, then forward-link to the models of record
 and the glossary. The full maths lives in methods-framework.qmd.
 -->
