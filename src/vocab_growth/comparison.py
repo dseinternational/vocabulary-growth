@@ -365,6 +365,29 @@ def plot_summary_band(
     ax.plot(df_ok[x_col], df_ok["median"], color=colour, lw=2.5, label=f"{label} median")
 
 
+def save_panel(out_dir, filename, ax_setup, draw, *, figsize=(8.0, 5.0)) -> None:
+    """Render one standalone figure (png + svg) to ``out_dir``.
+
+    ``draw(ax)`` plots the content; ``ax_setup`` is forwarded to ``ax.set`` for
+    labels/title/limits. One panel per figure, linear axes — so every comparison
+    figure is usable on its own (no subplot grids).
+    """
+    import dse_research_utils.plot.styles as plot_styles
+    import matplotlib.pyplot as plt
+
+    plot_styles.set_matplotlib_default_style()
+    fig, ax = plt.subplots(figsize=figsize)
+    draw(ax)
+    ax.set(**ax_setup)
+    ax.legend(loc="best", frameon=True, fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    os.makedirs(out_dir, exist_ok=True)
+    fig.savefig(os.path.join(out_dir, f"{filename}.png"), dpi=200)
+    fig.savefig(os.path.join(out_dir, f"{filename}.svg"))
+    plt.close(fig)
+
+
 # ----------------------------------------------------------------------------
 # Cross-model population contrasts (separate-model, per-draw)
 # ----------------------------------------------------------------------------
@@ -514,3 +537,176 @@ def summarise_draws(
                 row["p_gt0"] = float(np.mean(c > 0.0))
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+# ----------------------------------------------------------------------------
+# Expressive-delay & distributional contrasts (per-draw, separate-model)
+# ----------------------------------------------------------------------------
+# These extend the per-draw DS-vs-TD contrast lens to the "expressive delay"
+# question — is DS production delayed *beyond* its comprehension delay? — and to
+# distributional (not just mean) contrasts. Everything here is a deterministic
+# functional of the already-fitted, disjoint DS and TD posteriors (no joint
+# model / VG16 required); callers pair draws with :func:`align_draws` first.
+
+
+def attainment_ages(W: np.ndarray, ages: np.ndarray, levels: np.ndarray) -> np.ndarray:
+    """Per-draw age at which trajectory ``W`` (n_draw, n_age) reaches each level.
+
+    Returns ``(n_draw, n_level)``; NaN where a level is not reached on the grid.
+    """
+    return np.column_stack([first_crossing_age(W, ages, float(v)) for v in levels])
+
+
+def expressive_specific_delay(
+    ages_ds: np.ndarray, U_ds: np.ndarray, S_ds: np.ndarray,
+    ages_td: np.ndarray, U_td: np.ndarray, S_td: np.ndarray,
+    levels: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Level-indexed expressive-specific delay (difference-in-differences).
+
+    For each vocabulary level ``N`` and paired draw:
+
+    * ``D_U(N)``     = a_U^DS(N) - a_U^TD(N)   — comprehension attainment delay
+    * ``D_S(N)``     = a_S^DS(N) - a_S^TD(N)   — production attainment delay
+    * ``delta_exp``  = D_S(N) - D_U(N)         — the *extra* production delay DS
+      carries beyond its comprehension delay (== latency_DS - latency_TD).
+
+    A ``delta_exp`` > 0 means DS production lags further behind TD than its
+    comprehension does — an expressive-specific deficit, not just global slowing.
+    All arrays are ``(n_draw, n_level)``. Inputs must be draw-paired and equal
+    length (see :func:`align_draws`).
+    """
+    aU_ds = attainment_ages(U_ds, ages_ds, levels)
+    aS_ds = attainment_ages(S_ds, ages_ds, levels)
+    aU_td = attainment_ages(U_td, ages_td, levels)
+    aS_td = attainment_ages(S_td, ages_td, levels)
+    lat_ds = aS_ds - aU_ds
+    lat_td = aS_td - aU_td
+    return {
+        "D_U": aU_ds - aU_td,
+        "D_S": aS_ds - aS_td,
+        "latency_ds": lat_ds,
+        "latency_td": lat_td,
+        "delta_exp": lat_ds - lat_td,
+    }
+
+
+def _invert_trajectory(
+    ages: np.ndarray, W: np.ndarray, targets: np.ndarray
+) -> np.ndarray:
+    """Per-draw age at which monotone ``W`` (n_draw, n_age) reaches ``targets``.
+
+    ``targets`` is ``(n_draw, n_target)``. Linear interpolation on each draw's
+    (age-increasing) curve; NaN where a target lies outside that draw's observed
+    level range — i.e. where matching would require extrapolating the reference.
+    """
+    n_draw, n_target = targets.shape
+    out = np.full((n_draw, n_target), np.nan)
+    for d in range(n_draw):
+        out[d] = np.interp(targets[d], W[d], ages, left=np.nan, right=np.nan)
+    return out
+
+
+def comprehension_equivalent_age(
+    ages_ds: np.ndarray, U_ds: np.ndarray, S_ds: np.ndarray,
+    ages_td: np.ndarray, U_td: np.ndarray, S_td: np.ndarray,
+    age_grid: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Age-indexed developmental-age view of the expressive delay.
+
+    For DS evaluated at each chronological age ``a`` in ``age_grid``:
+
+    * ``cea_U(a)`` — the TD age whose understood level equals DS's at ``a``
+      (DS's *comprehension-equivalent* developmental age)
+    * ``cea_S(a)`` — the TD age whose spoken level equals DS's at ``a``
+      (DS's *production-equivalent* age)
+    * ``delay_U(a) = a - cea_U(a)`` — receptive delay (months)
+    * ``delay_S(a) = a - cea_S(a)`` — expressive delay (months)
+    * ``delta_exp_age(a) = cea_U(a) - cea_S(a)`` — the extra expressive delay:
+      DS's speech looks like a TD child *younger* than its comprehension age.
+
+    All arrays ``(n_draw, n_age_grid)``; NaN where the DS level falls outside the
+    TD level range (the reference is not extrapolated). Draw-paired inputs.
+    """
+    U_ds_g = interp_draws(ages_ds, U_ds, age_grid)
+    S_ds_g = interp_draws(ages_ds, S_ds, age_grid)
+    cea_U = _invert_trajectory(ages_td, U_td, U_ds_g)
+    cea_S = _invert_trajectory(ages_td, S_td, S_ds_g)
+    a = age_grid[None, :]
+    return {
+        "cea_U": cea_U,
+        "cea_S": cea_S,
+        "delay_U": a - cea_U,
+        "delay_S": a - cea_S,
+        "delta_exp_age": cea_U - cea_S,
+    }
+
+
+def fraction_below_reference_percentile(
+    p_ds: np.ndarray, k_ds: np.ndarray,
+    p_td: np.ndarray, k_td: np.ndarray,
+    n_trials_: int, pct: float = 10.0,
+) -> np.ndarray:
+    """Per-draw fraction of the DS Beta-Binomial child distribution at/below the
+    TD ``pct``-th percentile word count, on a common grid.
+
+    A clinically legible "how atypical" estimand: at each age, what share of DS
+    children fall below the TD ``pct``-th centile. ``p_*``/``k_*`` are
+    ``(n_draw, n_grid)`` population mean proportions and Beta-Binomial
+    concentrations. Returns ``(n_draw, n_grid)``.
+    """
+    from scipy.stats import betabinom
+
+    a_td, b_td = p_td * k_td, (1.0 - p_td) * k_td
+    a_ds, b_ds = p_ds * k_ds, (1.0 - p_ds) * k_ds
+    thresh = betabinom.ppf(pct / 100.0, n_trials_, a_td, b_td)
+    return betabinom.cdf(thresh, n_trials_, a_ds, b_ds)
+
+
+def peak_growth_age(ages: np.ndarray, W: np.ndarray) -> np.ndarray:
+    """Per-draw age of maximum learning rate dW/da over the grid (n_draw,).
+
+    Note: a value at the first/last grid age is *censored* — the true peak may
+    lie outside the model's plotting range — so callers should report the share
+    pinned at the boundary alongside the contrast.
+    """
+    rate = learning_rate(ages, W)
+    return ages[np.argmax(rate, axis=1)]
+
+
+def load_p_any_trajectory(
+    path: str, n_trials_: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return ``(ages, p_any_words)`` for a trivariate/joint model's total
+    expressive trajectory ``p_any = P(word produced in any modality)``.
+
+    ``p_any_words`` is ``(n_draw, n_age)`` expected word counts over the plot
+    grid (signing included), for the DS sign-inclusive expressive contrast.
+    """
+    d = az.from_netcdf(path)
+    post = _dataset(d, "posterior")
+    cdata = _dataset(d, "constant_data")
+    p_any = post["p_any_plot"].values
+    n_chain, n_draw, n_age = p_any.shape
+    p_any = p_any.reshape(n_chain * n_draw, n_age)
+    ages = np.asarray(cdata["X_plot"].values, dtype=float)
+    order = np.argsort(ages)
+    return ages[order], (p_any * n_trials_)[:, order]
+
+
+def shade_unsupported(
+    ax, support_lo: float, support_hi: float, *, colour: str = "0.85",
+    label: str | None = "outside reference support",
+) -> None:
+    """Shade x-regions outside ``[support_lo, support_hi]`` (e.g. the TD age
+    support) so extrapolated/unsupported regions are visually flagged."""
+    x_lo, x_hi = ax.get_xlim()
+    first = True
+    if x_lo < support_lo:
+        ax.axvspan(x_lo, support_lo, color=colour, alpha=0.5, lw=0,
+                   label=label if first else None, zorder=0)
+        first = False
+    if x_hi > support_hi:
+        ax.axvspan(support_hi, x_hi, color=colour, alpha=0.5, lw=0,
+                   label=label if first else None, zorder=0)
+    ax.set_xlim(x_lo, x_hi)

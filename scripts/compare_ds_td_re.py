@@ -35,7 +35,11 @@ Estimands, per outcome, written to ``output/comparisons/``:
   with the contrasts Δκ, Δσ_Y, φ_TD/φ_DS. (κ and σ_Y tell different stories;
   φ isolates pure concentration.)
 
-plus a 2x3 summary figure ``ds_td_<outcome>_re.{png,svg}``.
+Each panel is emitted as its own standalone figure (linear axes, no subplot
+grids) so the figures are usable individually:
+``ds_td_<outcome>_re_{expected_words,learning_rate,attainment_delay,spread,
+spread_contrast,overdispersion}.{png,svg}`` and, for the comprehension-matched
+view, ``ds_td_comprehension_{q_at_U,dq,latency,q_at_age}.{png,svg}``.
 
 Usage::
 
@@ -50,7 +54,6 @@ import os
 import sys
 
 import dse_research_utils.plot.styles as plot_styles
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -219,54 +222,137 @@ def _band(ax, frame, x, label, colour, *, cov=0.0):
     C.plot_summary_band(ax, frame, x, label, colour, min_coverage=cov)
 
 
+def _save_single(filename: str, ax_setup: dict, draw) -> None:
+    """Emit one standalone figure to ``OUT_DIR`` (thin wrapper over the shared
+    :func:`comparison.save_panel`)."""
+    C.save_panel(OUT_DIR, filename, ax_setup, draw)
+
+
 def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
                   SD_td, SD_ds, dSD, PHI_td, PHI_ds, disp_ds_lab) -> None:
-    plot_styles.set_matplotlib_default_style()
-    fig, ax = plt.subplots(2, 3, figsize=(16, 9))
     td_lab, ds_lab = C.model_label(td_key), C.model_label(DS_KEY)
+    pre = f"ds_td_{outcome}_re_"
 
-    _band(ax[0, 0], W_td, "age_months", td_lab, COL_TD)
-    _band(ax[0, 0], W_ds, "age_months", ds_lab, COL_DS)
-    ax[0, 0].set(xlabel="Age (months)", ylabel=f"Expected words {outcome}",
-                 title="Expected vocabulary")
+    def expected(ax):
+        _band(ax, W_td, "age_months", td_lab, COL_TD)
+        _band(ax, W_ds, "age_months", ds_lab, COL_DS)
 
-    _band(ax[0, 1], R_td, "age_months", td_lab, COL_TD)
-    _band(ax[0, 1], R_ds, "age_months", ds_lab, COL_DS)
-    ax[0, 1].set(xlabel="Age (months)", ylabel="Words / month",
-                 title="Learning rate")
+    _save_single(
+        pre + "expected_words",
+        dict(xlabel="Age (months)", ylabel=f"Expected words {outcome}",
+             title=f"Expected vocabulary — words {outcome} (TD vs DS)"),
+        expected,
+    )
 
-    _band(ax[0, 2], ad, "words", "DS - TD", COL_D, cov=MIN_COVERAGE)
-    ax[0, 2].axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
-    ax[0, 2].set(xlabel="Vocabulary level v (words)",
-                 ylabel="Months DS reaches v after TD",
-                 title="Attainment delay D(v)")
-    ax[0, 2].set_xscale("log")
+    def rate(ax):
+        _band(ax, R_td, "age_months", td_lab, COL_TD)
+        _band(ax, R_ds, "age_months", ds_lab, COL_DS)
 
-    _band(ax[1, 0], SD_td, "age_months", td_lab, COL_TD)
-    _band(ax[1, 0], SD_ds, "age_months", disp_ds_lab, COL_DS)
-    ax[1, 0].set(xlabel="Age (months)", ylabel=r"Implied $\sigma_Y$ (words)",
-                 title="Between-child spread")
+    _save_single(
+        pre + "learning_rate",
+        dict(xlabel="Age (months)", ylabel="Words / month",
+             title=f"Learning rate — words {outcome} (TD vs DS)"),
+        rate,
+    )
 
-    _band(ax[1, 1], dSD, "age_months", f"{td_lab} - {disp_ds_lab}", COL_D)
-    ax[1, 1].axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
-    ax[1, 1].set(xlabel="Age (months)", ylabel=r"$\Delta\sigma_Y$ (words)",
-                 title="Spread contrast (TD - DS)")
+    def delay(ax):
+        _band(ax, ad, "words", "DS - TD", COL_D, cov=MIN_COVERAGE)
+        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
 
-    _band(ax[1, 2], PHI_td, "age_months", td_lab, COL_TD)
-    _band(ax[1, 2], PHI_ds, "age_months", disp_ds_lab, COL_DS)
-    ax[1, 2].set(xlabel="Age (months)", ylabel=r"Overdispersion $\varphi$",
-                 title="Concentration (mean-independent, study-RE only)")
+    _save_single(
+        pre + "attainment_delay",
+        dict(xlabel="Vocabulary level v (words)",
+             ylabel="Months DS reaches v after TD",
+             title=f"Attainment delay D(v) — words {outcome}"),
+        delay,
+    )
 
-    for a in ax.flat:
-        a.legend(loc="best", frameon=True, fontsize=8)
-        a.grid(True, alpha=0.3)
-    fig.suptitle(
-        f"DS vs TD — words {outcome} (RE models, population level, "
-        f"per-draw contrasts over the empirical overlap)", fontsize=13)
-    fig.tight_layout()
-    fig.savefig(os.path.join(OUT_DIR, f"ds_td_{outcome}_re.png"), dpi=200)
-    fig.savefig(os.path.join(OUT_DIR, f"ds_td_{outcome}_re.svg"))
-    plt.close(fig)
+    def spread(ax):
+        _band(ax, SD_td, "age_months", td_lab, COL_TD)
+        _band(ax, SD_ds, "age_months", disp_ds_lab, COL_DS)
+
+    _save_single(
+        pre + "spread",
+        dict(xlabel="Age (months)", ylabel=r"Implied $\sigma_Y$ (words)",
+             title=f"Between-child spread — words {outcome}"),
+        spread,
+    )
+
+    def spread_contrast(ax):
+        _band(ax, dSD, "age_months", f"{td_lab} - {disp_ds_lab}", COL_D)
+        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+
+    _save_single(
+        pre + "spread_contrast",
+        dict(xlabel="Age (months)", ylabel=r"$\Delta\sigma_Y$ (words)",
+             title=f"Spread contrast (TD - DS) — words {outcome}"),
+        spread_contrast,
+    )
+
+    def overdispersion(ax):
+        _band(ax, PHI_td, "age_months", td_lab, COL_TD)
+        _band(ax, PHI_ds, "age_months", disp_ds_lab, COL_DS)
+
+    _save_single(
+        pre + "overdispersion",
+        dict(xlabel="Age (months)", ylabel=r"Overdispersion $\varphi$",
+             title=f"Concentration (mean-independent, study-RE only) — words {outcome}"),
+        overdispersion,
+    )
+
+
+def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
+                        da_td, da_ds, qa_td, qa_ds) -> None:
+    """Emit the four comprehension-matched panels as standalone figures."""
+    td_lab, ds_lab = C.model_label(td_key), C.model_label(ds_key)
+    pre = "ds_td_comprehension_"
+
+    def q_at_U(ax):
+        _band(ax, q_td_s, "words", td_lab, COL_TD, cov=MIN_COVERAGE)
+        _band(ax, q_ds_s, "words", ds_lab, COL_DS, cov=MIN_COVERAGE)
+
+    _save_single(
+        pre + "q_at_U",
+        dict(ylim=(0, 1.05), xlabel="Words understood N",
+             ylabel="q(U=N) = spoken / understood",
+             title="Proportion spoken given understood"),
+        q_at_U,
+    )
+
+    def dq(ax):
+        _band(ax, dq_s, "words", "TD - DS", COL_D, cov=MIN_COVERAGE)
+        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+
+    _save_single(
+        pre + "dq",
+        dict(xlabel="Words understood N", ylabel=r"$\Delta q$ (TD - DS)",
+             title="Spoken-fraction gap at matched comprehension"),
+        dq,
+    )
+
+    def latency(ax):
+        _band(ax, da_td, "N", td_lab, COL_TD, cov=MIN_COVERAGE)
+        _band(ax, da_ds, "N", ds_lab, COL_DS, cov=MIN_COVERAGE)
+
+    _save_single(
+        pre + "latency",
+        dict(xlabel="Words understood / spoken N",
+             ylabel=r"$a_S(N) - a_U(N)$ (months)",
+             title="Learn-to-say latency"),
+        latency,
+    )
+
+    def q_at_age(ax):
+        _band(ax, qa_td, "age_months", td_lab, COL_TD)
+        _band(ax, qa_ds, "age_months", ds_lab, COL_DS)
+
+    _save_single(
+        pre + "q_at_age",
+        dict(ylim=(0, 1.05), xlabel="Age (months)",
+             ylabel="q(a) = E[S(a)] / E[U(a)]",
+             title="Production ratio at matched age"),
+        q_at_age,
+    )
 
 
 def _print_summary(outcome, ew, lr, ad, disp, disp_ds_lab) -> None:
@@ -339,44 +425,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     _merge(N_GRID_Q, "words", q_TD=q_td_s, q_DS=q_ds_s, dq=dq_s).to_csv(
         os.path.join(OUT_DIR, "ds_td_comprehension_q_at_U.csv"), index=False)
 
-    plot_styles.set_matplotlib_default_style()
-    fig, ax = plt.subplots(2, 2, figsize=(13, 9))
-    td_lab, ds_lab = C.model_label(td_key), C.model_label(ds_key)
-
-    _band(ax[0, 0], q_td_s, "words", td_lab, COL_TD, cov=MIN_COVERAGE)
-    _band(ax[0, 0], q_ds_s, "words", ds_lab, COL_DS, cov=MIN_COVERAGE)
-    ax[0, 0].set(xscale="log", ylim=(0, 1.05), xlabel="Words understood N",
-                 ylabel="q(U=N) = spoken / understood",
-                 title="Proportion spoken given understood")
-
-    _band(ax[0, 1], dq_s, "words", "TD - DS", COL_D, cov=MIN_COVERAGE)
-    ax[0, 1].axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
-    ax[0, 1].set(xscale="log", xlabel="Words understood N",
-                 ylabel=r"$\Delta q$ (TD - DS)",
-                 title="Spoken-fraction gap at matched comprehension")
-
-    _band(ax[1, 0], da_td, "N", td_lab, COL_TD, cov=MIN_COVERAGE)
-    _band(ax[1, 0], da_ds, "N", ds_lab, COL_DS, cov=MIN_COVERAGE)
-    ax[1, 0].set(xscale="log", xlabel="Words understood / spoken N",
-                 ylabel=r"$a_S(N) - a_U(N)$ (months)",
-                 title="Learn-to-say latency")
-
-    _band(ax[1, 1], qa_td, "age_months", td_lab, COL_TD)
-    _band(ax[1, 1], qa_ds, "age_months", ds_lab, COL_DS)
-    ax[1, 1].set(ylim=(0, 1.05), xlabel="Age (months)",
-                 ylabel="q(a) = E[S(a)] / E[U(a)]",
-                 title="Production ratio at matched age")
-
-    for a in ax.flat:
-        a.legend(loc="best", frameon=True, fontsize=8)
-        a.grid(True, which="both", alpha=0.3)
-    fig.suptitle(
-        f"Comprehension-matched: words spoken given words understood — "
-        f"{ds_lab} vs {td_lab}", fontsize=13)
-    fig.tight_layout()
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_comprehension.png"), dpi=200)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_comprehension.svg"))
-    plt.close(fig)
+    _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s, da_td, da_ds, qa_td, qa_ds)
 
     print("  Spoken fraction given understood q(U=N) (coverage-filtered):")
     qtab = _merge(N_GRID_Q, "words", q_TD=q_td_s, q_DS=q_ds_s, dq=dq_s)
