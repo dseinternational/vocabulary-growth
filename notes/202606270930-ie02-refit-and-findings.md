@@ -12,7 +12,7 @@ below are taken from the fitted output under `output/models/<MODEL>/`
 
 ## 1. Data change — ie_02 wired in
 
-`ie_02` is a longitudinal Down Syndrome Ireland follow-up dataset (long format,
+`ie_02` is a longitudinal Irish dataset (long format,
 one row per timepoint `t1`/`t2`) carrying **understood, spoken _and_ signed**
 counts. It is the second DS source after `uk_01` to record all three modalities.
 
