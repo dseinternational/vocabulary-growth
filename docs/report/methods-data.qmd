@@ -19,11 +19,17 @@ Referenced from @sec-betabinomial and @sec-association in methods-framework.qmd.
 
 ## Contributing studies and instruments {#sec-data}
 
-**TODO**: enumerate the contributing studies and the instruments behind them.
+The Down syndrome estimates pool **eleven studies** (1,078 child-observations in the analysis set), drawn from UK, Irish and other international parent-report datasets — among them the UK datasets uk\_01, uk\_02, uk\_04, uk\_05 and uk\_06 and the Irish datasets ie\_01 and ie\_02. Most record words **understood** and **spoken**; two — uk\_01 and the recently-added **ie\_02** — also record words **signed**, and uk\_02 additionally provides the within-understood four-cell cross-tabulation that identifies the sign–speech association (@sec-signing-data).
 
-- Down syndrome datasets: uk\_01, uk\_02, uk\_04, uk\_05, uk\_06 (and ie\_02).
-- Typically developing datasets: Wordbank Words & Gestures (WG), Words & Sentences (WS), and the Oxford CDI.
-- Which instruments measure comprehension and production independently, and which are production-only.
+Typically developing estimates come from the Wordbank Words & Gestures (WG) and Words & Sentences (WS) forms and the Oxford CDI. WG and the Oxford CDI record comprehension and production independently; **WS records production only** (@sec-ws-proxy).
+
+**TODO**: complete the full study-by-study provenance table (source, country, design, n, age range, modalities).
+
+### The ie_02 dataset {#sec-ie02}
+
+`ie_02` (Ireland 2) is a **longitudinal** Irish Down syndrome dataset — long format, one row per timepoint (`t1`/`t2`) — and the **second tri-modal source** after uk\_01, recording words understood, spoken *and* signed. It was wired into the pipeline in [PR #77](https://github.com/dseinternational/vocabulary-growth/pull/77): the two recruitment groups are pooled as a single Down syndrome study and the analysis is restricted to English-speaking children (the one non-English child — 2 rows — excluded), giving **114 observations from 66 children**. Every count is ≤ 800 and satisfies `spoken ≤ understood` and `signed ≤ understood` (no likelihood-bound violations).
+
+Its principal effect is on the signing models: it lifts the signed-observation count from 414 to **528 (+27.5%)**, making `ie_02` the second-largest signing source after uk\_01 and materially sharpening identification of the signed-ratio peak, the sign→speech crossover, and the association $\psi$ (@sec-findings-signing).
 
 ## The data pipeline
 
@@ -48,7 +54,7 @@ This has two structural consequences for the typically-developing models (see @s
 
 ### Signing data and the four-cell cross-tab {#sec-signing-data}
 
-**TODO**: signing is recorded only in the Down syndrome datasets (so the signing models are DS-only). uk\_02 is the only source with a four-cell within-understood cross-tabulation (sign-only / speak-only / both / neither), which identifies the association $\psi$ (@sec-association). Document the `include_uk06` decision: uk\_06 contributes real signing-*production* counts (≈11 observations at 60–115 months, often comparable to or exceeding spoken), included by default; the open question is coding comparability with uk\_02/04/05, treated as a sensitivity analysis in Appendix B3.
+**TODO**: signing is recorded only in the Down syndrome datasets (so the signing models are DS-only); the signed counts come from uk\_01/02/04/05/06 and ie\_02 (528 signed observations in total; @sec-ie02). uk\_02 is the only source with a four-cell within-understood cross-tabulation (sign-only / speak-only / both / neither), which identifies the association $\psi$ (@sec-association). Document the `include_uk06` decision: uk\_06 contributes real signing-*production* counts (≈11 observations at 60–115 months, often comparable to or exceeding spoken), included by default; the open question is coding comparability with uk\_02/04/05, treated as a sensitivity analysis in Appendix B3.
 
 ::: {.callout-note title="Follow-up"}
 The `include_uk06` decision is treated here as a sensitivity analysis, **not** a settled modelling choice. It should be revisited: confirm with the data owners whether uk\_06's signed field is coded comparably to uk\_02/04/05 (there is currently no field dictionary), and reconsider its inclusion in light of that. See Appendix B3 for the in-vs-out comparison.
@@ -60,4 +66,4 @@ The `include_uk06` decision is treated here as a sensitivity analysis, **not** a
 
 ## Descriptive statistics
 
-**TODO**: one combined descriptive-statistics table (observations, children, ages, counts) across all contributing datasets, generated from the prepared data.
+**TODO**: one combined descriptive-statistics table (observations, children, ages, counts) across all contributing datasets, generated from the prepared data. The current Down syndrome analysis set is **1,078 observations across 11 studies** (including the ie\_02 addition), of which **528** carry a signed count.
