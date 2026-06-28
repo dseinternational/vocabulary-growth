@@ -116,17 +116,21 @@ def population_trajectory(key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 def first_crossing(x: np.ndarray, y: np.ndarray, threshold: float) -> float | None:
     """Smallest x at which a monotone-ish 1-D curve y first reaches threshold.
 
-    Linear interpolation between grid points; ``None`` if never reached. Used
-    for summarising pre-computed median/HDI curves (CSV-based scripts).
+    Linear interpolation between grid points. Returns ``None`` if the threshold
+    is never reached, *or* if it is already exceeded at the first grid point —
+    then the true crossing lies below the observed range and the milestone is
+    unidentified, not ``x[0]`` (e.g. a fast child already past 25 words at the
+    youngest modelled age). Used for summarising pre-computed median/HDI curves
+    (CSV-based scripts), notably the time-to-milestone inversions.
     """
     above = y >= threshold
     if not above.any():
         return None
-    if above.all():
-        return float(x[0])
     i = int(np.argmax(above))
     if i == 0:
-        return float(x[0])
+        # Already at/above the threshold at the youngest grid point: a genuine
+        # crossing only if it equals the threshold there, else below the range.
+        return float(x[0]) if float(y[0]) == float(threshold) else None
     x0, x1 = float(x[i - 1]), float(x[i])
     y0, y1 = float(y[i - 1]), float(y[i])
     if y1 == y0:
@@ -137,7 +141,14 @@ def first_crossing(x: np.ndarray, y: np.ndarray, threshold: float) -> float | No
 def first_crossing_age(Y: np.ndarray, ages: np.ndarray, N: float) -> np.ndarray:
     """Per-draw first age where each row of Y (n_draw, n_age) reaches N.
 
-    Linear interpolation between adjacent grid points; NaN where never reached.
+    Linear interpolation between adjacent grid points. Returns NaN where the
+    level is never reached, *and* where it is already exceeded at the youngest
+    supported age: a "crossing" flagged at the first grid point is only real if
+    the series equals N there, otherwise the true crossing lies below the grid
+    and is unidentified. (Without this guard, evaluating S/U-style ratios at a
+    level below what a short-support model reaches at its first age clamps the
+    evaluation to ``ages[0]`` and fabricates a spurious ``S(ages[0]) / N``
+    hyperbola — e.g. the TD comprehension-matched q below ~40 understood words.)
     """
     mask = Y >= N
     any_above = mask.any(axis=1)
@@ -152,6 +163,8 @@ def first_crossing_age(Y: np.ndarray, ages: np.ndarray, N: float) -> np.ndarray:
         denom = y1 - y0
         interp = np.where(denom == 0, a1, a0 + (N - y0) * (a1 - a0) / denom)
     crossing = np.where(j == 0, ages[0], interp)
+    below_support = (j == 0) & (Y[:, 0] > N)
+    crossing = np.where(below_support, np.nan, crossing)
     return np.where(any_above, crossing, np.nan)
 
 
@@ -352,6 +365,17 @@ def plot_summary_band(
     :func:`summarise_per_N`-shaped frame, dropping low-coverage grid points."""
     df_ok = df[df["coverage"] >= min_coverage] if "coverage" in df else df
     if df_ok.empty:
+        return
+    if len(df_ok) == 1:
+        # Too few points for a band/line — show the single identified estimate as
+        # a point with its 90% HDI so the figure is never silently empty.
+        r = df_ok.iloc[0]
+        ax.errorbar(
+            [r[x_col]], [r["median"]],
+            yerr=[[r["median"] - r["hdi90_lo"]], [r["hdi90_hi"] - r["median"]]],
+            fmt="o", color=colour, capsize=4, markersize=7,
+            label=f"{label} median (90% HDI)",
+        )
         return
     ax.fill_between(
         df_ok[x_col], df_ok["hdi90_lo"], df_ok["hdi90_hi"],

@@ -10,6 +10,7 @@ color
 Counterintuitively
 D'Souza
 dataclass
+dexp
 duckdb
 elpd
 empiricalmodelling
@@ -19,6 +20,7 @@ Graphviz
 HSGP
 hyperparameters
 hyperpriors
+isna
 judgments
 Jupytext
 Kruschke

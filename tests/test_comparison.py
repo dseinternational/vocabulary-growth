@@ -34,9 +34,19 @@ def test_first_crossing_never_reached_is_none():
     assert comparison.first_crossing(x, y, 99.0) is None
 
 
-def test_first_crossing_already_above_returns_first_x():
+def test_first_crossing_already_above_is_none():
+    # Curve already exceeds the threshold at the youngest grid point: the true
+    # crossing lies below the observed range, so the milestone is unidentified
+    # rather than clamped to x[0].
     x = np.array([5.0, 6.0, 7.0])
     y = np.array([50.0, 60.0, 70.0])
+    assert comparison.first_crossing(x, y, 10.0) is None
+
+
+def test_first_crossing_exactly_at_first_point_returns_first_x():
+    # Equals the threshold exactly at the youngest grid point: a genuine crossing.
+    x = np.array([5.0, 6.0, 7.0])
+    y = np.array([10.0, 60.0, 70.0])
     assert comparison.first_crossing(x, y, 10.0) == 5.0
 
 
