@@ -218,7 +218,7 @@ DS early vocabulary is best described as a **developmental stretch with a
 production-specific deficit**: comprehension is delayed and the delay widens with
 level; production is delayed *substantially more* (~12–17 months extra at matched
 low vocabulary size, P(>0)=1.00), peaks ~4 years later, and leaves ~90% of
-2-year-olds below the TD 10th centile for spoken words. Signing partially —
+2-year-old children below the TD 10th centile for spoken words. Signing partially —
 not wholly — compensates. This is exactly the regime the reserved generative
 VG16 would formalise (a directly-estimated, level-indexed expressive-delay
 parameter); §4.3 shows the headline is already recoverable from the disjoint
