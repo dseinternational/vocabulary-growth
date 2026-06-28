@@ -21,6 +21,10 @@ toc-depth: 3
 number-sections: true
 number-depth: 3
 
+# Figures are referenced without an extension; resolve to the PNG that the model
+# plotting emits (both HTML and PDF use PNG — no SVG->PDF conversion needed).
+default-image-extension: png
+
 bibliography: references.bib
 csl: apa.csl
 

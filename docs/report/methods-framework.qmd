@@ -30,20 +30,12 @@ Our goal is to estimate the **total age-associated change** in a vocabulary outc
 
 In the simple causal model below, $A$ is age, $O$ collects the unmeasured mediating factors, and $Y$ is the vocabulary outcome. Because the effect of $A$ on $Y$ is entirely mediated through $O$, and $A$ is exogenous (it has no parents), there are no open backdoor paths. We can therefore identify the total effect of age on the outcome by conditioning on age alone.
 
-```{dot}
-//| label: fig-core-dag
-//| fig-cap: "**The shared identification argument.** $A$: age; $O$: other unmeasured factors; $Y$: the vocabulary outcome. Conditioning on age identifies the total age-associated change."
-//| fig-width: 2.5
-//| fig-height: 0.85
-digraph CoreDAG {
-    graph [size="2.5,0.85", ratio=fill, rankdir=LR]
-    edge [arrowsize=0.75]
-    node [shape=square]
-    O [shape=circle]
-    A -> O
-    O -> Y
-}
-```
+![**The shared identification argument.** $A$: age; $O$: other unmeasured factors; $Y$: the vocabulary outcome. Conditioning on age identifies the total age-associated change.](diagrams/fig-core-dag){#fig-core-dag fig-align="left" width="2.5in"}
+
+<!-- fig-core-dag is pre-rendered from Graphviz to a static PNG (source and
+regeneration command in diagrams/fig-core-dag.dot) so PDF and DOCX rendering do
+not require headless Chrome. -->
+
 
 <!-- TODO: note the joint-model extension of this DAG (A -> U -> S, A -> U -> Sign)
 once @sec-ratios is read; that is the only structural change to the argument. -->

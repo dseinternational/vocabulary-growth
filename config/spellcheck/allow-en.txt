@@ -15,6 +15,7 @@ elpd
 empiricalmodelling
 estimand
 estimands
+Graphviz
 HSGP
 hyperparameters
 hyperpriors

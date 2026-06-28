@@ -35,15 +35,15 @@ Two limits are load-bearing and stated once here:
 
 At 24 months, expected comprehension is roughly four times higher in typically developing children than in Down syndrome, but expected *production* differs by far more — typically developing children are already in the spoken-vocabulary explosion while Down syndrome production has barely begun (@fig-cmp-words). Across the whole overlap the typically developing population is ahead with probability essentially 1. The deficit is **specific to production**: it is much larger than the comprehension gap at the same age.
 
-![Expected words **understood** by age — DS (VG10) vs TD (VG12), over the identified overlap.](figures/comparisons/ds_td_understood_re_expected_words.svg){#fig-cmp-words .lightbox fig-align="left"}
+![Expected words **understood** by age — DS (VG10) vs TD (VG12), over the identified overlap.](figures/comparisons/ds_td_understood_re_expected_words){#fig-cmp-words .lightbox fig-align="left"}
 
-![Expected words **spoken** by age — DS (VG10) vs TD (VG11).](figures/comparisons/ds_td_spoken_re_expected_words.svg){#fig-cmp-words-spoken .lightbox fig-align="left"}
+![Expected words **spoken** by age — DS (VG10) vs TD (VG11).](figures/comparisons/ds_td_spoken_re_expected_words){#fig-cmp-words-spoken .lightbox fig-align="left"}
 
 ## Aligned by chronological age: a developmental *stretch*
 
 If Down syndrome were simply a constant developmental delay, the number of months by which it trails the typically developing population to reach a given vocabulary level would be the *same* at every level. It is not: the **attainment delay grows with the level** (@fig-cmp-delay). The understood delay rises from near zero at 10 words to about 32 months at 300 words; the spoken delay from about 17 months at 10 words to about 38 months at 300 words. The gap *widens* with development — a stretch, not a shift — and production lags comprehension at every level.
 
-![Attainment delay D(v) — months by which DS reaches each spoken-vocabulary level after TD (VG10 vs VG11). A rising curve means the gap widens with development.](figures/comparisons/ds_td_spoken_re_attainment_delay.svg){#fig-cmp-delay .lightbox fig-align="left"}
+![Attainment delay D(v) — months by which DS reaches each spoken-vocabulary level after TD (VG10 vs VG11). A rising curve means the gap widens with development.](figures/comparisons/ds_td_spoken_re_attainment_delay){#fig-cmp-delay .lightbox fig-align="left"}
 
 Consistently, the **age of peak learning rate** arrives about four years later in Down syndrome: roughly 64 vs 23 months for spoken words, and 71 vs 18 months for understood words (`ds_td_peak_growth_age.csv`).
 
@@ -51,7 +51,7 @@ Consistently, the **age of peak learning rate** arrives about four years later i
 
 By age two, roughly `{python} f"{comp_at('ds_td_below_td_p10','age_months',24,'spoken_median')*100:.0f}"`% of children with Down syndrome produce fewer spoken words than the bottom 10% of typically developing children (@fig-cmp-p10). Comprehension is less atypical early — about 30% below the typically developing 10th centile at 12 months — but both become highly atypical as the typically developing vocabulary explodes.
 
-![Fraction of DS children below the TD 10th centile, spoken words, by age.](figures/comparisons/ds_td_below_td_p10_spoken.svg){#fig-cmp-p10 .lightbox fig-align="left"}
+![Fraction of DS children below the TD 10th centile, spoken words, by age.](figures/comparisons/ds_td_below_td_p10_spoken){#fig-cmp-p10 .lightbox fig-align="left"}
 
 ## Aligned by words understood: a production-specific deficit {#sec-comparison-vocab}
 
@@ -59,17 +59,17 @@ Setting age aside and asking *does production track comprehension the same way i
 
 The level-indexed **expressive delay** — the production attainment delay minus the comprehension attainment delay at the same vocabulary size — is about `{python} f"{comp_at('ds_td_expressive_delay','words',10,'dexp_median'):.0f}"` months at 10 understood words and about `{python} f"{comp_at('ds_td_expressive_delay','words',50,'dexp_median'):.0f}"` months at 50, with the difference positive in essentially every posterior draw (@fig-cmp-expressive). That is, **even after accounting for how delayed comprehension itself is**, Down syndrome production lags by roughly a further year at matched low vocabulary sizes. (This is identified only at small vocabularies, where the young-window TD joint model has support.)
 
-![Expressive delay Δ_exp(N): extra months DS takes to *say* words it understands, beyond its comprehension delay, by vocabulary size (DS VG10 vs TD VG13).](figures/comparisons/ds_td_expressive_delay.svg){#fig-cmp-expressive .lightbox fig-align="left"}
+![Expressive delay Δ_exp(N): extra months DS takes to *say* words it understands, beyond its comprehension delay, by vocabulary size (DS VG10 vs TD VG13).](figures/comparisons/ds_td_expressive_delta){#fig-cmp-expressive .lightbox fig-align="left"}
 
 The comprehension-matched production ratio tells the same story directly: at equal comprehension, Down syndrome speaks a smaller fraction of what it understands. At 100 understood words the production ratio is about `{python} f"{comp_at('ds_td_comprehension_q_at_U','words',100,'q_TD_median'):.2f}"` for typically developing children versus about `{python} f"{comp_at('ds_td_comprehension_q_at_U','words',100,'q_DS_median'):.2f}"` for Down syndrome (@fig-cmp-qU); the difference is positive to about 150 understood words and converges thereafter. The low-vocabulary end is noisy (the ratio is unstable when understood vocabulary barely exceeds the matching level), so the mid-range carries the signal.
 
-![Production ratio against words understood — DS (VG10) vs TD (VG13). At matched comprehension, DS speaks a smaller fraction.](figures/comparisons/ds_td_comprehension_q_at_U.svg){#fig-cmp-qU .lightbox fig-align="left"}
+![Production ratio against words understood — DS (VG10) vs TD (VG13). At matched comprehension, DS speaks a smaller fraction.](figures/comparisons/ds_td_comprehension_q_at_U){#fig-cmp-qU .lightbox fig-align="left"}
 
 ## The sign-inclusive gap
 
 Counting signed words credits children with Down syndrome additional early expressive vocabulary (signing data exist only for this group; @sec-findings-signing). This narrows the Down syndrome–typically developing expressive gap by about 14–15% in the 24–30 month window (@fig-cmp-sign) — real, and specifically powered by the new ie_02 signing data, but modest: the gap stays large because typically developing production is mid-explosion in this window, which is also where TD support ends.
 
-![Sign-inclusive expressive gap: the DS–TD gap in expressive vocabulary, spoken-only vs spoken-or-signed.](figures/comparisons/ds_td_sign_inclusive_gap.svg){#fig-cmp-sign .lightbox fig-align="left"}
+![Sign-inclusive expressive gap: the DS–TD gap in expressive vocabulary, spoken-only vs spoken-or-signed.](figures/comparisons/ds_td_sign_inclusive_gap){#fig-cmp-sign .lightbox fig-align="left"}
 
 ## What we can and cannot conclude
 

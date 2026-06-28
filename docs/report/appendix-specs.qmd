@@ -61,7 +61,7 @@ Before fitting, we checked that the priors generate plausible age–vocabulary c
 
 ![Prior sample trajectories (VG01).](figures/VG01-age-spoken-ds/prior_samples.png){#fig-vg01-prior-samples .lightbox fig-align="left"}
 
-![Prior predictive checks (VG01).](figures/VG01-age-spoken-ds/prior_predictive_checks.svg){#fig-vg01-prior-ppc .lightbox fig-align="left"}
+![Prior predictive checks (VG01).](figures/VG01-age-spoken-ds/prior_predictive_checks){#fig-vg01-prior-ppc .lightbox fig-align="left"}
 
 ### Diagnostics
 
@@ -77,7 +77,7 @@ show_or_pending(load_summary("VG01", "diagnostics"), "VG01 convergence diagnosti
 
 The fitted model reproduces the observed distribution of spoken-word counts across ages (@fig-vg01-ppc).
 
-![Posterior predictive count distributions by age (VG01).](figures/VG01-age-spoken-ds/posterior_predictive_count_distributions.svg){#fig-vg01-ppc .lightbox fig-align="left"}
+![Posterior predictive count distributions by age (VG01).](figures/VG01-age-spoken-ds/posterior_predictive_count_distributions){#fig-vg01-ppc .lightbox fig-align="left"}
 
 ### Results
 
@@ -89,7 +89,7 @@ VG01's spoken-word trajectory is a univariate cross-check on the joint model of 
 show_or_pending(format_counts(load_summary("VG01", "posterior_summary")), "VG01 spoken-word summary by age")
 ```
 
-![Expected rate of learning spoken words by age (VG01).](figures/VG01-age-spoken-ds/expected_learning_rate.svg){#fig-vg01-rate .lightbox fig-align="left"}
+![Expected rate of learning spoken words by age (VG01).](figures/VG01-age-spoken-ds/expected_learning_rate){#fig-vg01-rate .lightbox fig-align="left"}
 
 ## VG02 — Words understood (delta)
 
