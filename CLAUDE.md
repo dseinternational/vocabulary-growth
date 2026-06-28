@@ -68,6 +68,14 @@ python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload]
 
 Output (traces, figures, summary tables) is written to `output/models/<model_name>/`.
 
+### Sync report figures
+
+```bash
+python scripts/sync_report_figures.py
+```
+
+Copies the plots (`.svg`/`.png`) and summary tables (`.csv`) from `output/models/` and `output/comparisons/` into `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
+
 ## Architecture
 
 ### Data pipeline

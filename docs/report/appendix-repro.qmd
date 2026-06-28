@@ -14,7 +14,9 @@ with the docs/models/vgNN dashboards + the version tag for this edition.
 
 ## Reproducing the data pipeline and fits
 
-**TODO**: `src/vocab_growth/models/definitions.py` as canonical model metadata; `scripts/prepare_data.py` (merge to DuckDB + `vocab_combined`); `scripts/fit_model.py <model_id> --config <dev|test|rep> [--render] [--upload]`; output layout under `output/models/`.
+**TODO**: `src/vocab_growth/models/definitions.py` as canonical model metadata; `scripts/prepare_data.py` (merge to DuckDB + `vocab_combined`); `scripts/fit_model.py <model_id> --config <dev|test|rep> [--render] [--upload]`; output layout under `output/models/` and cross-model comparisons under `output/comparisons/`.
+
+After fitting (or regenerating the DS/TD comparisons), refresh the report's figure store with `python scripts/sync_report_figures.py`. The report reads its plots and summary tables **only** from `docs/report/figures/` (gitignored), so this step copies the `.svg`/`.png`/`.csv` artefacts (traces excluded) from `output/models/` and `output/comparisons/` into that store; the report is then rendered from it.
 
 ## Sampling configurations and provenance
 
