@@ -116,17 +116,21 @@ def population_trajectory(key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 def first_crossing(x: np.ndarray, y: np.ndarray, threshold: float) -> float | None:
     """Smallest x at which a monotone-ish 1-D curve y first reaches threshold.
 
-    Linear interpolation between grid points; ``None`` if never reached. Used
-    for summarising pre-computed median/HDI curves (CSV-based scripts).
+    Linear interpolation between grid points. Returns ``None`` if the threshold
+    is never reached, *or* if it is already exceeded at the first grid point —
+    then the true crossing lies below the observed range and the milestone is
+    unidentified, not ``x[0]`` (e.g. a fast child already past 25 words at the
+    youngest modelled age). Used for summarising pre-computed median/HDI curves
+    (CSV-based scripts), notably the time-to-milestone inversions.
     """
     above = y >= threshold
     if not above.any():
         return None
-    if above.all():
-        return float(x[0])
     i = int(np.argmax(above))
     if i == 0:
-        return float(x[0])
+        # Already at/above the threshold at the youngest grid point: a genuine
+        # crossing only if it equals the threshold there, else below the range.
+        return float(x[0]) if float(y[0]) == float(threshold) else None
     x0, x1 = float(x[i - 1]), float(x[i])
     y0, y1 = float(y[i - 1]), float(y[i])
     if y1 == y0:
