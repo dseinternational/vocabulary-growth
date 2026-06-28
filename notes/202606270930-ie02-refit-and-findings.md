@@ -27,12 +27,12 @@ DS loader).
 
 Effect on the analysis set:
 
-| Quantity | Value |
-| --- | --- |
-| `ie_02` rows in view | 114 (116 raw − 2 non-English) |
-| `ie_02` subjects | 66 (1 non-English child dropped) |
-| Total DS rows (`load_combined_data`) | 1,078 across 11 studies |
-| **Signed observations (feeds VG14/VG15)** | **414 → 528 (+114, +27.5%)** |
+| Quantity                                  | Value                            |
+| ----------------------------------------- | -------------------------------- |
+| `ie_02` rows in view                      | 114 (116 raw − 2 non-English)    |
+| `ie_02` subjects                          | 66 (1 non-English child dropped) |
+| Total DS rows (`load_combined_data`)      | 1,078 across 11 studies          |
+| **Signed observations (feeds VG14/VG15)** | **414 → 528 (+114, +27.5%)**     |
 
 All `ie_02` counts are ≤ 800 and satisfy `spoken ≤ understood`, `signed ≤
 understood` for every row (no Beta-Binomial guard violations). `ie_02` is now the
@@ -47,22 +47,22 @@ VG02 ~5 m, VG05 ~17 m, VG07 ~20 m, VG08 ~18 m, VG09 ~15 m, VG10 ~16 m, VG14
 
 **Convergence — all 9 DS models:**
 
-| Model | structure | max R̂ | params R̂>1.01 | min ESS (bulk) | divergences |
-| ----- | --------- | ----: | ------------: | -------------: | ----------: |
-| VG01 | spoken, univariate | 1.001 | 0 | 10,933 | 0 |
-| VG02 | understood, univariate | 1.000 | 0 | 10,148 | 0 |
-| VG05 | joint U+S | 1.001 | 0 | 9,116 | 0 |
-| VG07 | + study RE | 1.001 | 0 | 6,435 | 0 |
-| VG08 | + subject RE (U) | 1.004 | 0 | 1,379 | 0 |
-| **VG09** | + subject RE (U,q) | **1.021** | **4** | **423** | 0 |
-| VG10 | + tighter q anchors, GP anchor | 1.006 | 0 | 670 | 0 |
-| VG14 | trivariate (+signed) | 1.001 | 0 | 6,628 | 0 |
-| VG15 | joint four-cell sign/speech | 1.005 | 0 | 911 | 0 |
+| Model    | structure                      |     max R̂ | params R̂>1.01 | min ESS (bulk) | divergences |
+| -------- | ------------------------------ | --------: | ------------: | -------------: | ----------: |
+| VG01     | spoken, univariate             |     1.001 |             0 |         10,933 |           0 |
+| VG02     | understood, univariate         |     1.000 |             0 |         10,148 |           0 |
+| VG05     | joint U+S                      |     1.001 |             0 |          9,116 |           0 |
+| VG07     | + study RE                     |     1.001 |             0 |          6,435 |           0 |
+| VG08     | + subject RE (U)               |     1.004 |             0 |          1,379 |           0 |
+| **VG09** | + subject RE (U,q)             | **1.021** |         **4** |        **423** |           0 |
+| VG10     | + tighter q anchors, GP anchor |     1.006 |             0 |            670 |           0 |
+| VG14     | trivariate (+signed)           |     1.001 |             0 |          6,628 |           0 |
+| VG15     | joint four-cell sign/speech    |     1.005 |             0 |            911 |           0 |
 
 **Zero divergences across all nine models.** Convergence is clean everywhere
 except **VG09**, which shows mild non-convergence (max R̂ 1.021 on 4 parameters,
 min ESS ~420) — consistent with its known sampler difficulty as the model
-carrying subject random intercepts on *both* the understood trajectory and the
+carrying subject random intercepts on _both_ the understood trajectory and the
 production ratio. VG09 is **not** used downstream by the comparison suite (which
 reads VG10 for population means and VG07 for dispersion), so this does not affect
 the DS/TD analysis. VG10 and VG15 (the more heavily parameterised models that the
@@ -72,7 +72,7 @@ ie_02 data most affects) converged cleanly.
 successfully but **failed at the final `trace.to_netcdf`** with `ImportError: No
 module named 'h5py'`. Root cause: a conda update had removed `h5py`/`netcdf4`
 from the env; the joint model is the only one that writes its trace via xarray's
-*DataTree* path, which hard-requires the `h5py` backend, whereas the other eight
+_DataTree_ path, which hard-requires the `h5py` backend, whereas the other eight
 models use the InferenceData path (a different, still-working writer). Fix:
 reinstalled `h5py` (3.16.0), verified the DataTree round-trip, and re-ran VG15
 cleanly. `environment.yml` declares `h5netcdf` (pip) but **not** `h5py` —
@@ -90,15 +90,15 @@ DuckDB rebuilt, then every model refit.
 
 ### Comprehension and production (DS, from the headline joint model VG10)
 
-| Quantity | 24 mo | 48 mo | 72 mo |
-| --- | --- | --- | --- |
-| Words understood | 87 [67, 108] | 259 [213, 307] | 441 [369, 510] |
-| Words spoken | 4 [2, 6] | 131 [93, 170] | 366 [303, 431] |
+| Quantity                 | 24 mo             | 48 mo             | 72 mo             |
+| ------------------------ | ----------------- | ----------------- | ----------------- |
+| Words understood         | 87 [67, 108]      | 259 [213, 307]    | 441 [369, 510]    |
+| Words spoken             | 4 [2, 6]          | 131 [93, 170]     | 366 [303, 431]    |
 | Production ratio q = S/U | 0.05 [0.03, 0.07] | 0.51 [0.39, 0.63] | 0.84 [0.72, 0.95] |
 
 - **Comprehension leads production throughout.** Understanding reaches ~100 words
   by ~24 mo (VG02 reaches 50/100/200 understood at ~16.5/23.7/31.6 mo); the
-  typical child reaches 10/50/100 *spoken* words only at ~25/39/45 mo (VG01).
+  typical child reaches 10/50/100 _spoken_ words only at ~25/39/45 mo (VG01).
 - **The production ratio q crosses 0.5 around 48 months** consistently across
   specifications (VG05 0.50, VG10 0.51, VG14 0.50 at 48 mo) — a DS child speaks
   roughly half the words they understand by age 4, rising to ~0.84 by age 6.
@@ -127,7 +127,7 @@ DuckDB rebuilt, then every model refit.
 - **Sign and speech positively co-occur within children (VG15).** The
   within-understood association **psi = 2.17 [1.46, 2.96]** (P(psi>1) ≈ 0.9999,
   HDI excludes independence): a word a DS child understands is more likely to be
-  *both* signed and spoken than chance predicts — signing accompanies rather than
+  _both_ signed and spoken than chance predicts — signing accompanies rather than
   displaces speech. The data-identified total expressive p_any (≈ 21 / 164 / 361
   words at 24/48/72 mo) sits just below VG14's independence upper bound,
   confirming the conditional-independence assumption modestly over-counts.
@@ -154,38 +154,38 @@ At 24 mo, expected **comprehension** is TD 352 vs DS 87 (≈4×); expected
 **production** is TD 257 vs DS 4 (≈63×) — P(TD>DS)=1.00 across the overlap. The
 deficit is far larger for production than comprehension.
 
-### 4.2 A developmental *stretch*, not a constant shift
+### 4.2 A developmental _stretch_, not a constant shift
 
 The attainment delay D(v) = months DS reaches level v after TD **grows with the
 level** on both outcomes:
 
-| level v | understood delay | spoken delay |
-| --- | --- | --- |
-| 10 words | ~0 mo | 17 mo |
-| 50 words | 10 mo | 22 mo |
-| 100 words | 12 mo | 26 mo |
-| 200 words | 21 mo | 32 mo |
-| 300 words | 32 mo | 38 mo |
+| level v   | understood delay | spoken delay |
+| --------- | ---------------- | ------------ |
+| 10 words  | ~0 mo            | 17 mo        |
+| 50 words  | 10 mo            | 22 mo        |
+| 100 words | 12 mo            | 26 mo        |
+| 200 words | 21 mo            | 32 mo        |
+| 300 words | 32 mo            | 38 mo        |
 
-A flat D(v) would mean a pure time-shift; the rising curve means the gap *widens*
+A flat D(v) would mean a pure time-shift; the rising curve means the gap _widens_
 with development. Production lags comprehension at every level. Consistently,
 **peak learning-rate age** is ~64 mo (DS) vs ~23 mo (TD) for spoken and ~71 vs
 ~18 mo for understood — DS peak-velocity arrives ~3.5–4.5 years later.
 
 ### 4.3 Expressive-specific delay (the "expressive delay" headline)
 
-DS production is delayed *beyond* what its comprehension delay alone predicts,
+DS production is delayed _beyond_ what its comprehension delay alone predicts,
 two complementary ways:
 
-- **Level-indexed** Δ_exp(N) = (production attainment delay) − (comprehension
+- **Level-indexed** Δ*exp(N) = (production attainment delay) − (comprehension
   attainment delay): **16.7 mo [13.6, 19.8] at N=10, ~12.4 mo [9.6, 15.3] at
-  N=50, P(>0)=1.00 throughout.** At a given vocabulary *size*, DS takes ~12–17
-  extra months to *say* the words it *understands*, relative to TD. (Identified
+  N=50, P(>0)=1.00 throughout.** At a given vocabulary \_size*, DS takes ~12–17
+  extra months to _say_ the words it _understands_, relative to TD. (Identified
   only at N≈10–50 — TD's 8–18 mo joint model reaches limited vocabulary.)
-- **Age-indexed** extra-expressive delay (cea_U − cea_S): ~2.9 mo [P=1.00] at
+- **Age-indexed** extra-expressive delay (cea*U − cea_S): ~2.9 mo [P=1.00] at
   24 mo, ~1.5 mo [P=0.95] at 36 mo, ≈0 by 48 mo. Smaller, because at a fixed age
-  DS comprehension is *also* heavily delayed (24 mo DS ≈ TD 12 mo receptively,
-  9 mo expressively), so both map to early-TD ages and the *extra* lag compresses.
+  DS comprehension is \_also* heavily delayed (24 mo DS ≈ TD 12 mo receptively,
+  9 mo expressively), so both map to early-TD ages and the _extra_ lag compresses.
 
 The two are consistent — they hold level vs age fixed respectively. The
 level-indexed Δ_exp is the cleaner "expressive delay" statistic.
@@ -216,7 +216,7 @@ enormous because TD production is mid-explosion here, and the window is capped a
 
 DS early vocabulary is best described as a **developmental stretch with a
 production-specific deficit**: comprehension is delayed and the delay widens with
-level; production is delayed *substantially more* (~12–17 months extra at matched
+level; production is delayed _substantially more_ (~12–17 months extra at matched
 low vocabulary size, P(>0)=1.00), peaks ~4 years later, and leaves ~90% of
 2-year-old children below the TD 10th centile for spoken words. Signing partially —
 not wholly — compensates. This is exactly the regime the reserved generative
