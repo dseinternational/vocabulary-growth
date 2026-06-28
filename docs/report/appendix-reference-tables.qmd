@@ -50,7 +50,7 @@ show_or_pending(format_counts(load_summary("VG15", "posterior_summary_p_any")), 
 #| label: tbl-ref-td-spoken
 #| echo: false
 #| tbl-cap: "Typically developing — words **spoken** by age, 9–30 months (VG11)."
-show_or_pending(format_counts(load_summary("VG11", "posterior_summary_s")), "TD words spoken by age, 9–30 months (VG11)")
+show_or_pending(format_counts(load_summary("VG11", "posterior_summary")), "TD words spoken by age, 9–30 months (VG11)")
 ```
 
 ```{python}
