@@ -45,35 +45,35 @@ For full details and discussion, please refer to the technical report.
 
 ### Lengthscale
 
-![Lengthscale prior distribution `ell_unit_dist`](ell_unit_dist.svg){#fig-lengthscale .lightbox fig-align="left"}
+![Lengthscale prior distribution `ell_unit_dist`](ell_unit_dist.png){#fig-lengthscale .lightbox fig-align="left"}
 
 ### Amplitude
 
-![Amplitude prior distribution `eta_dist`](eta_dist.svg){#fig-amplitude .lightbox fig-align="left"}
+![Amplitude prior distribution `eta_dist`](eta_dist.png){#fig-amplitude .lightbox fig-align="left"}
 
 ### Slope
 
 #### Low slope anchor (12 months)
 
-![Slope prior distribution `p_slope_low_dist`](p_slope_low_dist.svg){#fig-slope-low .lightbox fig-align="left"}
+![Slope prior distribution `p_slope_low_dist`](p_slope_low_dist.png){#fig-slope-low .lightbox fig-align="left"}
 
 #### High slope anchor (26 months)
 
-![Slope prior distribution `p_slope_hi_dist`](p_slope_hi_dist.svg){#fig-slope-hi .lightbox fig-align="left"}
+![Slope prior distribution `p_slope_hi_dist`](p_slope_hi_dist.png){#fig-slope-hi .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion
 
-![Dispersion prior distribution `kappa_min_dist`](kappa_min_dist.svg){#fig-kappa-min .lightbox fig-align="left"}
+![Dispersion prior distribution `kappa_min_dist`](kappa_min_dist.png){#fig-kappa-min .lightbox fig-align="left"}
 
-![Dispersion prior distribution `a_kappa_dist`](a_kappa_dist.svg){#fig-a-kappa .lightbox fig-align="left"}
+![Dispersion prior distribution `a_kappa_dist`](a_kappa_dist.png){#fig-a-kappa .lightbox fig-align="left"}
 
-![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.svg){#fig-b-kappa-mag .lightbox fig-align="left"}
+![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.png){#fig-b-kappa-mag .lightbox fig-align="left"}
 
 ## Prior predictive checks
 
 ### Prior samples
 
-![Prior sample trajectories](prior_samples.svg){#fig-prior-samples .lightbox fig-align="left"}
+![Prior sample trajectories](prior_samples.png){#fig-prior-samples .lightbox fig-align="left"}
 
 ### Prior predictions
 
@@ -126,7 +126,7 @@ _style_diagnostics(diagnostics)
 
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![pair_plot](pair_plot.svg){#fig-pair .lightbox fig-align="left"}
+![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ## Posterior predictions
 
@@ -143,34 +143,34 @@ posterior_summary
 
 The probability of observing a specific count of words spoken for selected ages.
 
-![posterior_predictive_pmf](posterior_predictive_pmf.svg){#fig-posterior-predictive-pmf .lightbox fig-align="left"}
+![posterior_predictive_pmf](posterior_predictive_pmf.png){#fig-posterior-predictive-pmf .lightbox fig-align="left"}
 
 ### Posterior predictive cumulative distribution function (CDF) for word counts, by age
 
 The cumulative sum of the PMF: the probability that the count of words spoken is less than or equal to a specified value for selected ages.
 
-![posterior_predictive_cdf](posterior_predictive_cdf.svg){#fig-posterior-predictive-cdf .lightbox fig-align="left"}
+![posterior_predictive_cdf](posterior_predictive_cdf.png){#fig-posterior-predictive-cdf .lightbox fig-align="left"}
 
 ### Posterior predictive probability distributions for word counts, by age
 
-![posterior_predictive_count_distributions](posterior_predictive_count_distributions.svg){#fig-posterior-predictive-count-distributions .lightbox fig-align="left"}
+![posterior_predictive_count_distributions](posterior_predictive_count_distributions.png){#fig-posterior-predictive-count-distributions .lightbox fig-align="left"}
 
 ### Posterior predictive median trend with uncertainty intervals
 
-![plot_posterior_predictive_median_trend](plot_posterior_predictive_median_trend.svg){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
+![plot_posterior_predictive_median_trend](plot_posterior_predictive_median_trend.png){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
 
 Smoothed:
 
-![plot_posterior_predictive_median_trend_smoothed](plot_posterior_predictive_median_trend_smoothed.svg){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
+![plot_posterior_predictive_median_trend_smoothed](plot_posterior_predictive_median_trend_smoothed.png){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
 
 ### Estimated learning rate
 
 The posterior distribution of the estimated learning rate (estimated gain in spoken words per month) across age. The is the derivative of the conditional expectation of the count given the latent function $f$. The posterior uncertainty bands show how that estimated rate varies across posterior draws of $f$.
 
-![expected_learning_rate](expected_learning_rate.svg){#fig-expected-learning-rate .lightbox fig-align="left"}
+![expected_learning_rate](expected_learning_rate.png){#fig-expected-learning-rate .lightbox fig-align="left"}
 
 ### Posterior distribution for dispersion parameter $\kappa$
 
 Lower $\kappa$ values indicate greater overdispersion (greater between-child variability relative to the mean), while higher $\kappa$ values indicate less overdispersion (less between-child variability relative to the mean). The plot shows how the estimated dispersion parameter $\kappa$ changes with age, along with uncertainty intervals.
 
-![posterior_kappa](posterior_kappa.svg){#fig-posterior-kappa .lightbox fig-align="left"}
+![posterior_kappa](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}

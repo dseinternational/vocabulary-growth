@@ -5,6 +5,7 @@ import mimetypes
 import os
 import time
 import uuid
+from collections.abc import Callable
 from urllib.parse import urlparse
 
 from azure.identity import DefaultAzureCredential
@@ -19,14 +20,27 @@ from vocab_growth.reporting import (
 
 
 def upload_to_blob_storage(
-    output_dir: str, model_label: str, *, include_traces: bool = False
-) -> None:
+    output_dir: str,
+    model_label: str,
+    *,
+    include_traces: bool = False,
+    skip: Callable[[str], bool] | None = None,
+) -> str:
     """Upload model output directory to Azure Blob Storage.
 
     Parameters
     ----------
     include_traces : bool
         If True, include NetCDF trace files (.nc). Excluded by default due to size.
+    skip : callable, optional
+        Predicate called with each file's POSIX-style path relative to
+        ``output_dir``; return True to skip uploading that file. Use to exclude
+        unreferenced artifacts (e.g. heavy SVG figures superseded by PNGs).
+
+    Returns
+    -------
+    str
+        The public URL of the uploaded ``index.html`` report.
     """
     container_url = os.environ.get("DSERESEARCH_BLOB_CONTAINER_URL")
     if not container_url:
@@ -69,12 +83,16 @@ def upload_to_blob_storage(
     started = time.perf_counter()
     for root, _dirs, files in os.walk(output_dir):
         for filename in files:
+            local_path = os.path.join(root, filename)
+            relative_path = os.path.relpath(local_path, output_dir).replace("\\", "/")
+
             if not include_traces and filename.endswith(".nc"):
                 skipped += 1
                 continue
+            if skip is not None and skip(relative_path):
+                skipped += 1
+                continue
 
-            local_path = os.path.join(root, filename)
-            relative_path = os.path.relpath(local_path, output_dir).replace("\\", "/")
             blob_name = f"{blob_prefix}/{relative_path}"
 
             content_type, _ = mimetypes.guess_type(filename)
@@ -91,12 +109,15 @@ def upload_to_blob_storage(
                 )
             uploaded += 1
 
+    report_url = f"{account_url}/{container_name}/{blob_prefix}/index.html"
     key_value_table(
         f"Upload complete — {model_label}",
         [
             ("Files uploaded", uploaded),
-            ("Files skipped (.nc)", skipped),
+            ("Files skipped", skipped),
             ("Bytes uploaded", f"{bytes_sent / 1_000_000:.1f} MB"),
             ("Elapsed", format_duration(time.perf_counter() - started)),
+            ("Report URL", report_url),
         ],
     )
+    return report_url

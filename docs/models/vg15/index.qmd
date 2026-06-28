@@ -75,21 +75,21 @@ The association $\psi$ is identified by the ~60 uk_02 rows with the four-cell cr
 
 ### Trajectories (understood / spoken-ratio / signed-ratio)
 
-![`p_slope_low_u_dist`](p_slope_low_u_dist.svg){.lightbox fig-align="left" width=380}
-![`eta_u_dist`](eta_u_dist.svg){.lightbox fig-align="left" width=380}
-![`intercept_sign_dist` (signed mean is intercept-only)](intercept_sign_dist.svg){.lightbox fig-align="left" width=380}
-![`eta_sign_dist`](eta_sign_dist.svg){.lightbox fig-align="left" width=380}
+![`p_slope_low_u_dist`](p_slope_low_u_dist.png){.lightbox fig-align="left" width=380}
+![`eta_u_dist`](eta_u_dist.png){.lightbox fig-align="left" width=380}
+![`intercept_sign_dist` (signed mean is intercept-only)](intercept_sign_dist.png){.lightbox fig-align="left" width=380}
+![`eta_sign_dist`](eta_sign_dist.png){.lightbox fig-align="left" width=380}
 
 ### Association and concentration
 
-![Plackett log odds-ratio prior `log_psi_dist`](log_psi_dist.svg){#fig-log-psi .lightbox fig-align="left" width=380}
-![Dirichlet-Multinomial log-concentration prior `log_conc_dist`](log_conc_dist.svg){#fig-log-conc .lightbox fig-align="left" width=380}
+![Plackett log odds-ratio prior `log_psi_dist`](log_psi_dist.png){#fig-log-psi .lightbox fig-align="left" width=380}
+![Dirichlet-Multinomial log-concentration prior `log_conc_dist`](log_conc_dist.png){#fig-log-conc .lightbox fig-align="left" width=380}
 
 ## Prior predictive checks
 
-![Prior r(a) = P(sign | understood)](prior_samples_r.svg){#fig-prior-r .lightbox fig-align="left"}
+![Prior r(a) = P(sign | understood)](prior_samples_r.png){#fig-prior-r .lightbox fig-align="left"}
 
-![Prior q(a) = P(speak | understood)](prior_samples_q.svg){#fig-prior-q .lightbox fig-align="left"}
+![Prior q(a) = P(speak | understood)](prior_samples_q.png){#fig-prior-q .lightbox fig-align="left"}
 
 ## Data
 
@@ -113,7 +113,7 @@ diagnostics
 
 The posterior of the sign-speech odds ratio $\psi$, with the independence reference $\psi = 1$.
 
-![Association psi posterior](psi_posterior.svg){#fig-psi .lightbox fig-align="left"}
+![Association psi posterior](psi_posterior.png){#fig-psi .lightbox fig-align="left"}
 
 ```{python}
 summary_psi = pd.read_csv("posterior_summary_psi.csv")
@@ -124,13 +124,13 @@ summary_psi
 
 The four mutually-exclusive states of an understood word (sign-only, sign+speech, speak-only, neither) as fractions of understood vocabulary over age — words migrating from sign into speech.
 
-![Four-cell composition trajectory](four_cell_composition.svg){#fig-composition .lightbox fig-align="left"}
+![Four-cell composition trajectory](four_cell_composition.png){#fig-composition .lightbox fig-align="left"}
 
 ## Total expressive vocabulary (data-identified)
 
 The data-identified $p_\text{any}$ against VG14's independence upper bound. With $\psi > 1$ the identified total sits below the bound (the gap is the association VG14 ignored).
 
-![Data-identified p_any vs independence bound](p_any_identified_vs_bound.svg){#fig-p-any .lightbox fig-align="left"}
+![Data-identified p_any vs independence bound](p_any_identified_vs_bound.png){#fig-p-any .lightbox fig-align="left"}
 
 ```{python}
 summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
@@ -141,7 +141,7 @@ summary_p_any
 
 The population sign and speak ratios with study composition absorbed by the random intercepts. Compare the signed peak/recede with VG14, where it was study-confounded.
 
-![Signed vs spoken ratio](signed_vs_spoken_rate.svg){#fig-rates .lightbox fig-align="left"}
+![Signed vs spoken ratio](signed_vs_spoken_rate.png){#fig-rates .lightbox fig-align="left"}
 
 ```{python}
 summary_r = pd.read_csv("posterior_summary_r.csv")
@@ -152,4 +152,4 @@ summary_r
 
 Observed vs predicted totals for the four within-understood cells (uk_02), checking the Dirichlet-Multinomial fit that identifies $\psi$.
 
-![uk_02 four-cell PPC](uk02_cell_ppc.svg){#fig-ppc .lightbox fig-align="left"}
+![uk_02 four-cell PPC](uk02_cell_ppc.png){#fig-ppc .lightbox fig-align="left"}

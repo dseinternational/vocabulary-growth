@@ -67,79 +67,79 @@ For full details and discussion, please refer to the technical report.
 
 ### Understood trajectory
 
-![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.svg){#fig-ell-u .lightbox fig-align="left"}
+![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
-![Amplitude prior `eta_u_dist`](eta_u_dist.svg){#fig-eta-u .lightbox fig-align="left"}
+![Amplitude prior `eta_u_dist`](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
-![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.svg){#fig-slope-low-u .lightbox fig-align="left"}
+![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
 
-![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.svg){#fig-slope-hi-u .lightbox fig-align="left"}
+![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
 
 ### Production ratio (spoken)
 
-![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.svg){#fig-ell-q .lightbox fig-align="left"}
+![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
-![Amplitude prior `eta_q_dist`](eta_q_dist.svg){#fig-eta-q .lightbox fig-align="left"}
+![Amplitude prior `eta_q_dist`](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
-![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.svg){#fig-slope-low-q .lightbox fig-align="left"}
+![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
 
-![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.svg){#fig-slope-hi-q .lightbox fig-align="left"}
+![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
 
 ### Signed ratio
 
 The empirical signed fraction of understood words is a **hump** — near zero below ~24 months, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean trend is **intercept-only** (no age slope): this structurally prevents a free slope from extrapolating the ratio below the data floor (< ~18 months), so the level no longer needs a tight prior. A single weakly-informative intercept (`intercept_sign`, logit scale) lets the data set the signed level and old-age tail, while the GP — given a **looser amplitude** (`eta_sign`) and a **shorter lengthscale** than the spoken ratio — carries the rise-then-fall shape.
 
-![Lengthscale prior `ell_unit_sign_dist`](ell_unit_sign_dist.svg){#fig-ell-sign .lightbox fig-align="left"}
+![Lengthscale prior `ell_unit_sign_dist`](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
 
-![Amplitude prior `eta_sign_dist`](eta_sign_dist.svg){#fig-eta-sign .lightbox fig-align="left"}
+![Amplitude prior `eta_sign_dist`](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
 
-![Signed-ratio mean intercept prior `intercept_sign_dist` (logit scale, intercept-only mean)](intercept_sign_dist.svg){#fig-intercept-sign .lightbox fig-align="left"}
+![Signed-ratio mean intercept prior `intercept_sign_dist` (logit scale, intercept-only mean)](intercept_sign_dist.png){#fig-intercept-sign .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- understood
 
-![`kappa_min_u_dist`](kappa_min_u_dist.svg){#fig-kappa-min-u .lightbox fig-align="left"}
+![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
-![`a_kappa_u_dist`](a_kappa_u_dist.svg){#fig-a-kappa-u .lightbox fig-align="left"}
+![`a_kappa_u_dist`](a_kappa_u_dist.png){#fig-a-kappa-u .lightbox fig-align="left"}
 
-![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.svg){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.png){#fig-b-kappa-mag-u .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- spoken
 
-![`kappa_min_s_dist`](kappa_min_s_dist.svg){#fig-kappa-min-s .lightbox fig-align="left"}
+![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
 
-![`a_kappa_s_dist`](a_kappa_s_dist.svg){#fig-a-kappa-s .lightbox fig-align="left"}
+![`a_kappa_s_dist`](a_kappa_s_dist.png){#fig-a-kappa-s .lightbox fig-align="left"}
 
-![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.svg){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- signed
 
-![`kappa_min_sign_dist`](kappa_min_sign_dist.svg){#fig-kappa-min-sign .lightbox fig-align="left"}
+![`kappa_min_sign_dist`](kappa_min_sign_dist.png){#fig-kappa-min-sign .lightbox fig-align="left"}
 
-![`a_kappa_sign_dist`](a_kappa_sign_dist.svg){#fig-a-kappa-sign .lightbox fig-align="left"}
+![`a_kappa_sign_dist`](a_kappa_sign_dist.png){#fig-a-kappa-sign .lightbox fig-align="left"}
 
-![`b_kappa_mag_sign_dist`](b_kappa_mag_sign_dist.svg){#fig-b-kappa-mag-sign .lightbox fig-align="left"}
+![`b_kappa_mag_sign_dist`](b_kappa_mag_sign_dist.png){#fig-b-kappa-mag-sign .lightbox fig-align="left"}
 
 ## Prior predictive checks
 
 ### Prior samples -- words understood
 
-![Prior sample trajectories (understood)](prior_samples_u.svg){#fig-prior-samples-u .lightbox fig-align="left"}
+![Prior sample trajectories (understood)](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
 
 ### Prior samples -- words spoken
 
-![Prior sample trajectories (spoken)](prior_samples_s.svg){#fig-prior-samples-s .lightbox fig-align="left"}
+![Prior sample trajectories (spoken)](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
 
 ### Prior samples -- words signed
 
-![Prior sample trajectories (signed)](prior_samples_sign.svg){#fig-prior-samples-sign .lightbox fig-align="left"}
+![Prior sample trajectories (signed)](prior_samples_sign.png){#fig-prior-samples-sign .lightbox fig-align="left"}
 
 ### Prior samples -- production rate q(a)
 
-![Prior sample trajectories for production ratio q(a)](prior_samples_q.svg){#fig-prior-samples-q .lightbox fig-align="left"}
+![Prior sample trajectories for production ratio q(a)](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
 
 ### Prior samples -- signed rate r(a)
 
-![Prior sample trajectories for signed ratio r(a)](prior_samples_r.svg){#fig-prior-samples-r .lightbox fig-align="left"}
+![Prior sample trajectories for signed ratio r(a)](prior_samples_r.png){#fig-prior-samples-r .lightbox fig-align="left"}
 
 ## Data
 
@@ -184,17 +184,17 @@ _style_diagnostics(diagnostics)
 
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![pair_plot](pair_plot.svg){#fig-pair .lightbox fig-align="left"}
+![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ## Joint trajectory
 
-![Joint posterior predictive trajectory for words understood, spoken and signed](joint_trajectory.svg){#fig-joint-trajectory .lightbox fig-align="left"}
+![Joint posterior predictive trajectory for words understood, spoken and signed](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
 ## Total expressive vocabulary
 
 The expected vocabulary by modality, including the derived total-expressive quantity $p_\text{any}(a)$. As noted above, $p_\text{any}$ assumes signing and speaking are conditionally independent given age, so it is an **upper bound** on the true total expressive vocabulary (the sign–speech association is positive).
 
-![Expected vocabulary by modality (understood, spoken, signed, total expressive)](modality_trajectories.svg){#fig-modality .lightbox fig-align="left"}
+![Expected vocabulary by modality (understood, spoken, signed, total expressive)](modality_trajectories.png){#fig-modality .lightbox fig-align="left"}
 
 ```{python}
 summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
@@ -205,7 +205,7 @@ summary_p_any
 
 `uk_02` is the only source that records each understood word as sign-only, sign+speech, speech-only, or understood-only, so we can test the independence assumption directly. Building the independence union $1-(1-r)(1-q)$ from `uk_02`'s **own** observed sign and speech fractions gives 0.608, versus the **observed** union of 0.571 over 20–56 months — independence over-states the total by ~3.7 percentage points (the dashed line above the observed points), because signing and speaking are positively associated. VG14's own $p_\text{any} / p_U$ (the band) lands closer to the observed union (~1.2 pp above) only because the model's in-window signed ratio is lower than `uk_02`'s, partly cancelling the bias. Both gaps are recorded in `p_any_validation_gap.csv`. VG15 will identify the association directly.
 
-![p_any (independence upper bound) vs uk_02 observed union](p_any_validation.svg){#fig-p-any-validation .lightbox fig-align="left"}
+![p_any (independence upper bound) vs uk_02 observed union](p_any_validation.png){#fig-p-any-validation .lightbox fig-align="left"}
 
 ```{python}
 p_any_gap = pd.read_csv("p_any_validation_gap.csv")
@@ -216,7 +216,7 @@ p_any_gap
 
 The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
 
-![Production rate q(a)](production_rate.svg){#fig-production-rate .lightbox fig-align="left"}
+![Production rate q(a)](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
 ```{python}
 summary_q = pd.read_csv("posterior_summary_q.csv")
@@ -233,7 +233,7 @@ The fitted curve peaks at ~24–30 months and then declines, but **the peak age 
 
 :::
 
-![Signed rate r(a)](signed_rate.svg){#fig-signed-rate .lightbox fig-align="left"}
+![Signed rate r(a)](signed_rate.png){#fig-signed-rate .lightbox fig-align="left"}
 
 ```{python}
 summary_r = pd.read_csv("posterior_summary_r.csv")
@@ -244,13 +244,13 @@ summary_r
 
 The signed ratio $r(a)$ against the spoken ratio $q(a)$ on a single axis. The robust result is the **crossover at ~39 months**: early on a larger share of understood words is signed than spoken, and by the late preschool years the rising spoken fraction overtakes the signed fraction — the sign-to-speech hand-off. (As above, the exact signed peak and the post-peak decline are study-confounded and should not be read as a precise developmental month; ages outside the ~18–54-month signing-data window are shaded as extrapolation.)
 
-![Signed ratio r(a) vs production ratio q(a)](sign_speech_crossover.svg){#fig-crossover .lightbox fig-align="left"}
+![Signed ratio r(a) vs production ratio q(a)](sign_speech_crossover.png){#fig-crossover .lightbox fig-align="left"}
 
 ## Comprehension-production gap
 
 The expected difference in word counts between understanding and speaking.
 
-![Comprehension-production gap](comprehension_production_gap.svg){#fig-gap .lightbox fig-align="left"}
+![Comprehension-production gap](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
 ## Posterior predictions -- words understood
 
@@ -263,31 +263,31 @@ posterior_summary_u
 
 ### Posterior predictive PMF
 
-![posterior_predictive_pmf_u](posterior_predictive_pmf_u.svg){#fig-pmf-u .lightbox fig-align="left"}
+![posterior_predictive_pmf_u](posterior_predictive_pmf_u.png){#fig-pmf-u .lightbox fig-align="left"}
 
 ### Posterior predictive CDF
 
-![posterior_predictive_cdf_u](posterior_predictive_cdf_u.svg){#fig-cdf-u .lightbox fig-align="left"}
+![posterior_predictive_cdf_u](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
 
 ### Count distributions by age
 
-![posterior_predictive_count_distributions_u](posterior_predictive_count_distributions_u.svg){#fig-count-dist-u .lightbox fig-align="left"}
+![posterior_predictive_count_distributions_u](posterior_predictive_count_distributions_u.png){#fig-count-dist-u .lightbox fig-align="left"}
 
 ### Median trend
 
-![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.svg){#fig-trend-u .lightbox fig-align="left"}
+![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
 Smoothed:
 
-![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.svg){#fig-trend-u-smooth .lightbox fig-align="left"}
+![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
 ### Learning rate
 
-![expected_learning_rate_u](expected_learning_rate_u.svg){#fig-rate-u .lightbox fig-align="left"}
+![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
 
 ### Dispersion $\kappa$ -- understood
 
-![posterior_kappa_u](posterior_kappa_u.svg){#fig-kappa-u .lightbox fig-align="left"}
+![posterior_kappa_u](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
 ## Posterior predictions -- words spoken
 
@@ -300,31 +300,31 @@ posterior_summary_s
 
 ### Posterior predictive PMF
 
-![posterior_predictive_pmf_s](posterior_predictive_pmf_s.svg){#fig-pmf-s .lightbox fig-align="left"}
+![posterior_predictive_pmf_s](posterior_predictive_pmf_s.png){#fig-pmf-s .lightbox fig-align="left"}
 
 ### Posterior predictive CDF
 
-![posterior_predictive_cdf_s](posterior_predictive_cdf_s.svg){#fig-cdf-s .lightbox fig-align="left"}
+![posterior_predictive_cdf_s](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
 
 ### Count distributions by age
 
-![posterior_predictive_count_distributions_s](posterior_predictive_count_distributions_s.svg){#fig-count-dist-s .lightbox fig-align="left"}
+![posterior_predictive_count_distributions_s](posterior_predictive_count_distributions_s.png){#fig-count-dist-s .lightbox fig-align="left"}
 
 ### Median trend
 
-![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.svg){#fig-trend-s .lightbox fig-align="left"}
+![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
 Smoothed:
 
-![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.svg){#fig-trend-s-smooth .lightbox fig-align="left"}
+![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
 ### Learning rate
 
-![expected_learning_rate_s](expected_learning_rate_s.svg){#fig-rate-s .lightbox fig-align="left"}
+![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 
 ### Dispersion $\kappa$ -- spoken
 
-![posterior_kappa_s](posterior_kappa_s.svg){#fig-kappa-s .lightbox fig-align="left"}
+![posterior_kappa_s](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
 
 ## Posterior predictions -- words signed
 
@@ -337,28 +337,28 @@ posterior_summary_sign
 
 ### Posterior predictive PMF
 
-![posterior_predictive_pmf_sign](posterior_predictive_pmf_sign.svg){#fig-pmf-sign .lightbox fig-align="left"}
+![posterior_predictive_pmf_sign](posterior_predictive_pmf_sign.png){#fig-pmf-sign .lightbox fig-align="left"}
 
 ### Posterior predictive CDF
 
-![posterior_predictive_cdf_sign](posterior_predictive_cdf_sign.svg){#fig-cdf-sign .lightbox fig-align="left"}
+![posterior_predictive_cdf_sign](posterior_predictive_cdf_sign.png){#fig-cdf-sign .lightbox fig-align="left"}
 
 ### Count distributions by age
 
-![posterior_predictive_count_distributions_sign](posterior_predictive_count_distributions_sign.svg){#fig-count-dist-sign .lightbox fig-align="left"}
+![posterior_predictive_count_distributions_sign](posterior_predictive_count_distributions_sign.png){#fig-count-dist-sign .lightbox fig-align="left"}
 
 ### Median trend
 
-![posterior_predictive_median_trend_sign](posterior_predictive_median_trend_sign.svg){#fig-trend-sign .lightbox fig-align="left"}
+![posterior_predictive_median_trend_sign](posterior_predictive_median_trend_sign.png){#fig-trend-sign .lightbox fig-align="left"}
 
 Smoothed:
 
-![posterior_predictive_median_trend_sign_smoothed](posterior_predictive_median_trend_sign_smoothed.svg){#fig-trend-sign-smooth .lightbox fig-align="left"}
+![posterior_predictive_median_trend_sign_smoothed](posterior_predictive_median_trend_sign_smoothed.png){#fig-trend-sign-smooth .lightbox fig-align="left"}
 
 ### Learning rate
 
-![expected_learning_rate_sign](expected_learning_rate_sign.svg){#fig-rate-sign .lightbox fig-align="left"}
+![expected_learning_rate_sign](expected_learning_rate_sign.png){#fig-rate-sign .lightbox fig-align="left"}
 
 ### Dispersion $\kappa$ -- signed
 
-![posterior_kappa_sign](posterior_kappa_sign.svg){#fig-kappa-sign .lightbox fig-align="left"}
+![posterior_kappa_sign](posterior_kappa_sign.png){#fig-kappa-sign .lightbox fig-align="left"}
