@@ -189,7 +189,7 @@ shown two complementary ways.
 ```{python}
 xd = pd.read_csv("ds_td_expressive_delay.csv")
 rows = []
-for N in [40, 50, 75]:
+for N in [50]:
     r = _nearest(xd, "words", N)
     val = band_at(xd, "words", N, "dexp", dec=1, cov_col="dexp_coverage")
     rows.append({
@@ -207,18 +207,19 @@ support is narrow — TD (VG13, 8–18 mo) already understands ~40 words at its
 youngest supported age, and DS spoken-delay coverage thins above ~75 — so it is
 robustly identified around **N ≈ 50: ≈12.5 months [9.7, 15.3], P > 0 = 1.00**.
 DS takes about a year longer to say the words it understands, at matched
-vocabulary size.
+vocabulary size. The figure below shows the two component delays — months DS is
+behind TD to **say** N words (green, identified at low N) and to **understand** N
+words (blue, identified at high N). They overlap only near N ≈ 50, which is why
+Δ_exp is reported as a single-level estimate rather than a curve.
 
-![Expressive-specific delay Δ_exp(N)](ds_td_expressive_delta.png){#fig-dexp .lightbox fig-align="left"}
-
-![Attainment delay: comprehension vs production](ds_td_expressive_attainment_delay.png){#fig-dexp-attain .lightbox fig-align="left"}
+![Attainment delay: comprehension (blue) vs production (green)](ds_td_expressive_attainment_delay.png){#fig-dexp-attain .lightbox fig-align="left"}
 
 ### Age-indexed — comprehension-equivalent developmental age
 
 ```{python}
 ca = pd.read_csv("ds_td_expressive_equivalent_age.csv")
 rows = []
-for a in [24, 36, 48]:
+for a in [24, 36]:
     r = _nearest(ca, "age_months", a)
     rows.append({
         "DS age (mo)": a,

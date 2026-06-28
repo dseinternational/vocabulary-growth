@@ -366,6 +366,17 @@ def plot_summary_band(
     df_ok = df[df["coverage"] >= min_coverage] if "coverage" in df else df
     if df_ok.empty:
         return
+    if len(df_ok) == 1:
+        # Too few points for a band/line — show the single identified estimate as
+        # a point with its 90% HDI so the figure is never silently empty.
+        r = df_ok.iloc[0]
+        ax.errorbar(
+            [r[x_col]], [r["median"]],
+            yerr=[[r["median"] - r["hdi90_lo"]], [r["hdi90_hi"] - r["median"]]],
+            fmt="o", color=colour, capsize=4, markersize=7,
+            label=f"{label} median (90% HDI)",
+        )
+        return
     ax.fill_between(
         df_ok[x_col], df_ok["hdi90_lo"], df_ok["hdi90_hi"],
         color=colour, alpha=0.15, linewidth=0, label=f"{label} 90% HDI",
