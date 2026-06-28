@@ -22,6 +22,7 @@ cannot diverge. Status taxonomy defined once here and enforced everywhere.
 - **TD reference** — typically-developing models used for comparison. (VG11 for words spoken across the wider age range; VG13 for the joint understood+spoken model in the young window.)
 - **Superseded precursor** — replaced by a later model and retained for completeness only. (VG03, VG04, VG12.)
 - **Excluded (invalid)** — not used anywhere in this report because of an identified validity problem. (VG06.)
+- **Reserved / planned** — specified but not yet built; described for the roadmap, not a source of results. (VG16.)
 
 ## Excluded and restricted models {#sec-excluded}
 
@@ -108,3 +109,7 @@ pd.DataFrame(rows).set_index("Model")
 - VG06 is **excluded as invalid**, not superseded (@sec-excluded): wide-age TD comprehension cannot be validly measured, so there is no wide-age TD joint or understood model.
 
 Each supersession is justified by tabulated model comparison plus an identified structural issue (@sec-supersedes); the VG06 exclusion and the VG12 restriction rest on the measurement-validity argument of @sec-ws-proxy.
+
+## Planned and reserved models {#sec-planned}
+
+- **VG16 — joint Down syndrome / typically developing model (reserved).** A generative, partially-pooled joint model of both populations that would make the DS–TD gap itself an estimated object — a directly-parameterised, **level-indexed expressive-delay** term (and related contrasts: a delayed/scaled-trajectory hypothesis, difference-in-differences). It is **not built**: the Down syndrome and typically developing datasets are disjoint, so the population posteriors are independent and every DS–TD contrast in @sec-comparison-td is already recovered exactly by per-draw differencing of the separate fits — no joint model is required for the headline. VG16 is reserved for when a generative treatment of the gap (e.g. for prediction or formal hypothesis comparison) is warranted, and is recorded here so the roadmap is explicit (see also the Discussion).

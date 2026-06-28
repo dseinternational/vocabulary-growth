@@ -33,6 +33,26 @@ def fig(model_id, filename):
     return str(model_dir(model_id) / filename)
 
 
+# Cross-model DS/TD comparison artefacts (figures/comparisons/, synced from
+# output/comparisons/). Schemas vary per file, so access is by (match_col, value).
+COMP_ROOT = FIG_ROOT / "comparisons"
+
+
+def comp_load(name):
+    p = COMP_ROOT / f"{name}.csv"
+    return pd.read_csv(p) if p.exists() else None
+
+
+def comp_at(name, match_col, match_val, col):
+    """Value of `col` in comparison CSV `name` at the row whose `match_col` is
+    nearest `match_val`, or None."""
+    df = comp_load(name)
+    if df is None or match_col not in df or col not in df:
+        return None
+    row = df.iloc[(df[match_col] - match_val).abs().argmin()]
+    return row[col]
+
+
 def val(model_id, summary, age_months, column):
     """Single value from a summary at (or nearest to) an age, or None."""
     df = load_summary(model_id, summary)
