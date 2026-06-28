@@ -161,27 +161,38 @@ level** on both outcomes:
 
 | level v   | understood delay | spoken delay |
 | --------- | ---------------- | ------------ |
-| 10 words  | ~0 mo            | 17 mo        |
+| 10 words  | —                | 17 mo        |
 | 50 words  | 10 mo            | 22 mo        |
 | 100 words | 12 mo            | 26 mo        |
 | 200 words | 21 mo            | 32 mo        |
 | 300 words | 32 mo            | 38 mo        |
 
 A flat D(v) would mean a pure time-shift; the rising curve means the gap _widens_
-with development. Production lags comprehension at every level. Consistently,
+with development. Production lags comprehension at every level. (Understood
+D(v) below ~50 words is not identified — TD already understands ~40 words at
+its 8-month support floor, so its crossing age there is unresolved; the
+10-word row shows the spoken delay only.) Consistently,
 **peak learning-rate age** is ~64 mo (DS) vs ~23 mo (TD) for spoken and ~71 vs
-~18 mo for understood — DS peak-velocity arrives ~3.5–4.5 years later.
+~18 mo for understood — DS peak-velocity arrives ~3.5–4.5 years later. The DS
+peak ages are **boundary-censored**: their upper HDI sits at the 115-mo
+search-grid edge and ≈12% (spoken) / ≈7% (understood) of draws place the peak at
+that boundary, so the DS figures are a lower bound — the _direction_ is robust
+but the upper interval is only weakly identified. The TD peaks are cleanly
+identified (< 0.1% censored).
 
 ### 4.3 Expressive-specific delay (the "expressive delay" headline)
 
 DS production is delayed _beyond_ what its comprehension delay alone predicts,
 two complementary ways:
 
-- **Level-indexed** Δ*exp(N) = (production attainment delay) − (comprehension
-  attainment delay): **16.7 mo [13.6, 19.8] at N=10, ~12.4 mo [9.6, 15.3] at
-  N=50, P(>0)=1.00 throughout.** At a given vocabulary \_size*, DS takes ~12–17
-  extra months to _say_ the words it _understands_, relative to TD. (Identified
-  only at N≈10–50 — TD's 8–18 mo joint model reaches limited vocabulary.)
+- **Level-indexed** Δ\*exp(N) = (production attainment delay) − (comprehension
+  attainment delay): **≈12.5 mo [9.7, 15.3] at N≈50, P(>0)=1.00.** At a matched vocabulary size, DS takes about a year longer to _say_ the
+  words it _understands_ than TD. The identified window is narrow: TD (VG13,
+  8–18 mo) already understands ~40 words at its support floor, so Δ_exp is
+  unidentified below ~40, and DS spoken-delay coverage thins above ~75 — N≈50
+  is the only level both populations reach within support. (An earlier draft
+  quoted ~16.7 mo at N=10; that was inflated by clamping TD's out-of-support
+  comprehension crossing to the 8-mo floor, now corrected.)
 - **Age-indexed** extra-expressive delay (cea*U − cea_S): ~2.9 mo [P=1.00] at
   24 mo, ~1.5 mo [P=0.95] at 36 mo, ≈0 by 48 mo. Smaller, because at a fixed age
   DS comprehension is \_also* heavily delayed (24 mo DS ≈ TD 12 mo receptively,
@@ -192,8 +203,10 @@ level-indexed Δ_exp is the cleaner "expressive delay" statistic.
 
 Comprehension-matched q(U=N) tells the same story: at equal comprehension DS
 speaks a smaller fraction (U=50: TD q=0.08 vs DS 0.03; U=100: 0.16 vs 0.05;
-Δq>0, P≈1.00 to U≈150, converging by U≈200). The low-U end is noisy (q=S(a_U)/N
-is unstable when U barely exceeds N) — read the mid-range.
+Δq>0, P≈1.00 from U≈50 to U≈150, converging by U≈200). Below U≈50 the TD model
+(VG13, 8–18 mo) is out of support — it already understands ~40 words at 8 mo —
+so q is unidentified there and those points are dropped (the q(U=N) curves
+begin at U≈50).
 
 ### 4.4 Distributional "how atypical"
 
@@ -216,8 +229,8 @@ enormous because TD production is mid-explosion here, and the window is capped a
 
 DS early vocabulary is best described as a **developmental stretch with a
 production-specific deficit**: comprehension is delayed and the delay widens with
-level; production is delayed _substantially more_ (~12–17 months extra at matched
-low vocabulary size, P(>0)=1.00), peaks ~4 years later, and leaves ~90% of
+level; production is delayed _substantially more_ (~12.5 months extra at matched
+vocabulary ≈50 words, P(>0)=1.00), peaks several years later, and leaves ~90% of
 2-year-old children below the TD 10th centile for spoken words. Signing partially —
 not wholly — compensates. This is exactly the regime the reserved generative
 VG16 would formalise (a directly-estimated, level-indexed expressive-delay
@@ -239,3 +252,10 @@ fits with exact intervals, no joint model required.
 - Deprecated `compare_ds_td_latency.py` and `compare_ds_td_q_overlap.py` to shims
   delegating to `compare_ds_td_re.run_comprehension_matched` (they duplicated its
   comprehension-matched panels).
+- A standalone **DS/TD comparison report** (`docs/comparison/index.qmd`) now
+  collects all of §4 as a navigable HTML report (PNG figures, CSV-driven tables),
+  publishable like the per-model reports. It also adds a **between-child
+  variability** section (implied word-count SD `σ_Y` and mean-independent
+  overdispersion `φ`): relative heterogeneity is comparable across groups for
+  comprehension, but DS production stays compressed near the floor while TD spread
+  explodes through the second year.
