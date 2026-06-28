@@ -170,7 +170,12 @@ level** on both outcomes:
 A flat D(v) would mean a pure time-shift; the rising curve means the gap _widens_
 with development. Production lags comprehension at every level. Consistently,
 **peak learning-rate age** is ~64 mo (DS) vs ~23 mo (TD) for spoken and ~71 vs
-~18 mo for understood — DS peak-velocity arrives ~3.5–4.5 years later.
+~18 mo for understood — DS peak-velocity arrives ~3.5–4.5 years later. The DS
+peak ages are **boundary-censored**: their upper HDI sits at the 115-mo
+search-grid edge and ≈12% (spoken) / ≈7% (understood) of draws place the peak at
+that boundary, so the DS figures are a lower bound — the _direction_ is robust
+but the upper interval is only weakly identified. The TD peaks are cleanly
+identified (< 0.1% censored).
 
 ### 4.3 Expressive-specific delay (the "expressive delay" headline)
 
@@ -239,3 +244,10 @@ fits with exact intervals, no joint model required.
 - Deprecated `compare_ds_td_latency.py` and `compare_ds_td_q_overlap.py` to shims
   delegating to `compare_ds_td_re.run_comprehension_matched` (they duplicated its
   comprehension-matched panels).
+- A standalone **DS/TD comparison report** (`docs/comparison/index.qmd`) now
+  collects all of §4 as a navigable HTML report (PNG figures, CSV-driven tables),
+  publishable like the per-model reports. It also adds a **between-child
+  variability** section (implied word-count SD `σ_Y` and mean-independent
+  overdispersion `φ`): relative heterogeneity is comparable across groups for
+  comprehension, but DS production stays compressed near the floor while TD spread
+  explodes through the second year.
