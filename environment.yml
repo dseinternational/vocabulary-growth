@@ -18,6 +18,7 @@ dependencies:
       - arviz-stats>=1.2.0
       - arviz-plots>=1.2.0
       - h5netcdf
+      - h5py # h5netcdf backend; required by the joint model's DataTree trace.to_netcdf
       - duckdb>=1.5.4
       - hatch
       - ipython>=9.14.1
