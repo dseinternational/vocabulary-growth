@@ -189,21 +189,25 @@ shown two complementary ways.
 ```{python}
 xd = pd.read_csv("ds_td_expressive_delay.csv")
 rows = []
-for N in [10, 25, 50]:
+for N in [40, 50, 75]:
     r = _nearest(xd, "words", N)
+    val = band_at(xd, "words", N, "dexp", dec=1, cov_col="dexp_coverage")
     rows.append({
         "Vocabulary N (words)": N,
-        "Δ_exp (extra months to say)": band_at(
-            xd, "words", N, "dexp", dec=1, cov_col="dexp_coverage"),
-        "P(Δ_exp > 0)": f"{r['dexp_p_gt0']:.2f}",
+        "Δ_exp (extra months to say)": val,
+        "P(Δ_exp > 0)": f"{r['dexp_p_gt0']:.2f}" if val != "—" else "—",
     })
 pd.DataFrame(rows).set_index("Vocabulary N (words)")
 ```
 
 $\Delta_{exp}(N)$ = (spoken attainment delay) − (understood attainment delay): at
-a given vocabulary _size_, the extra months DS takes to **say** the words it
-**understands**, relative to TD. It is large and certain at low N (identified only
-to N ≈ 50 — TD's 8–18 mo joint model reaches limited vocabulary).
+a matched vocabulary _size_, the extra months DS takes to **say** the words it
+**understands**, relative to TD. The window where both populations reach N within
+support is narrow — TD (VG13, 8–18 mo) already understands ~40 words at its
+youngest supported age, and DS spoken-delay coverage thins above ~75 — so it is
+robustly identified around **N ≈ 50: ≈12.5 months [9.7, 15.3], P > 0 = 1.00**.
+DS takes about a year longer to say the words it understands, at matched
+vocabulary size.
 
 ![Expressive-specific delay Δ_exp(N)](ds_td_expressive_delta.png){#fig-dexp .lightbox fig-align="left"}
 
@@ -252,8 +256,11 @@ pd.DataFrame(rows).set_index("Understood N (words)")
 ```
 
 At equal comprehension, DS speaks a smaller fraction of the words it understands
-(Δq > 0, P ≈ 1.00 to N ≈ 150, converging by N ≈ 200). The very-low-N tail is
-noisy (q = S(a_U)/N is unstable when U barely exceeds N) — read the mid-range.
+(Δq > 0, P ≈ 1.00 from N ≈ 50 to ≈ 150, converging by N ≈ 200). The TD comparator
+(VG13, 8–18 mo) already understands ~40 words at its youngest supported age, so q
+is **not identified below N ≈ 50 for TD** — those points are dropped by the
+coverage filter, and the curves begin where both populations genuinely reach that
+comprehension level within support.
 
 ![Production ratio at matched comprehension q(U=N)](ds_td_comprehension_q_at_U.png){#fig-qatu .lightbox fig-align="left"}
 
