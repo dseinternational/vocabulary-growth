@@ -204,8 +204,11 @@ def _load_uk02_four_cell():
     all four cell counts recorded, whose signed and spoken margins reconcile
     with the cross-tab cells (signed == signed_only + signed_spoken,
     spoken == spoken_only + signed_spoken) and whose four cells sum to a
-    positive total; they identify psi. The rest are marginal-only uk_02 rows
-    (no usable cross-tab).
+    positive total; they identify psi. For these rows the four-cell sum is
+    treated as the authoritative understood total, so a small mismatch between
+    the raw comprehension column and the cross-tab partition does not make the
+    U likelihood and the Dirichlet-Multinomial likelihood disagree. The rest are
+    marginal-only uk_02 rows (no usable cross-tab).
 
     A row missing any cell — in particular ``understood_only`` (some uk_02 rows
     record a produced sign/speech cross-tab but no comprehension total) — cannot
@@ -259,12 +262,13 @@ def prepare_joint_data(
     four, marg = _load_uk02_four_cell()
     include_uk06 = definition.include_uk06
 
-    # uk_02 four-cell rows: understood for the U likelihood; cells for the DM;
-    # marginal spoken/signed set NaN (subsumed by the DM, avoids double counting).
+    # uk_02 four-cell rows: the four-cell sum is the authoritative understood
+    # total; cells feed the DM; marginal spoken/signed are set NaN because they
+    # are subsumed by the DM and would otherwise be double counted.
     four_cols = {
         "study": UK02_STUDY_ID,
         "age": four["age"].to_numpy(dtype=float),
-        "understood": four["comprehension"].to_numpy(dtype=float),
+        "understood": four["cell_total"].to_numpy(dtype=float),
         "spoken": np.nan,
         "signed": np.nan,
         "understood_only": four["understood_only"].to_numpy(dtype=float),
@@ -296,6 +300,14 @@ def prepare_joint_data(
     if not include_uk06:
         m = (analysis_df["study"] == "uk_06") & analysis_df["signed"].notna()
         analysis_df.loc[m, "signed"] = np.nan
+
+    has_any_observation = (
+        analysis_df["understood"].notna()
+        | analysis_df["spoken"].notna()
+        | analysis_df["signed"].notna()
+        | analysis_df["signed_spoken"].notna()
+    )
+    analysis_df = analysis_df[has_any_observation].reset_index(drop=True)
 
     # Integer study codes (sorted for stability).
     unique_studies = sorted(analysis_df["study"].unique())
@@ -687,6 +699,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
         if use_subject_codes:
             subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
+        _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
 
         # Latent full-grid trajectories (plain tensors). Option D anchors each GP
         # (per-draw zero at the reference age) when the matching flag is set.
@@ -920,14 +933,27 @@ def sample_posterior_predictive(context: JointContext, definition=None):
     context.set_trace(trace)
     trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
 
-    # Observed uk_02 four-cell counts / ages (recomputed from analysis_df).
+    # Observed uk_02 four-cell counts / ages. Use the stored training mask so
+    # held-out four-cell rows stay aligned with posterior_predictive["cells_obs"].
     df = context.analysis_df
-    has_cells = df["signed_spoken"].notna().values
+    has_cells = np.array(trace.constant_data["obs_cells_mask"].values, dtype=bool)
     cell_counts = np.asarray(
         df.loc[has_cells, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
         dtype=int,
     )
     cell_ages = np.asarray(df.loc[has_cells, "age"], dtype=float)
+    cell_pred = np.array(
+        trace.posterior_predictive["cells_obs"]
+        .stack(sample=("chain", "draw"))
+        .transpose("obs_cells_id", "cell_id", "sample")
+        .values
+    )
+    if int(has_cells.sum()) != cell_pred.shape[0]:
+        raise ValueError(
+            f"obs_cells_mask count ({int(has_cells.sum())}) does not match "
+            f"posterior predictive cells_obs length ({cell_pred.shape[0]}); "
+            "stored mask and likelihood rows are misaligned."
+        )
 
     samples = JointModelSamples(
         X_plot=np.array(trace.constant_data["X_plot"].values),
@@ -948,12 +974,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         p_any_indep_query=_extract(trace, "p_any_indep_query", "query_id"),
         psi=np.array(trace.posterior["psi"].stack(sample=("chain", "draw")).values),
         cell_obs=cell_counts,
-        cell_pred=np.array(
-            trace.posterior_predictive["cells_obs"]
-            .stack(sample=("chain", "draw"))
-            .transpose("obs_cells_id", "cell_id", "sample")
-            .values
-        ),
+        cell_pred=cell_pred,
         cell_ages=cell_ages,
     )
     context.set_model_samples(samples)

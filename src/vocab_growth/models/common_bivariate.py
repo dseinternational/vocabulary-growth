@@ -143,6 +143,7 @@ class BivariateModelSamples:
     p_u_obs: np.ndarray
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
+    p_u_query_subject_marginal: np.ndarray
     y_u_obs: np.ndarray
     y_u_plot: np.ndarray
     y_u_query: np.ndarray
@@ -164,6 +165,7 @@ class BivariateModelSamples:
     p_s_obs: np.ndarray
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
+    p_s_query_subject_marginal: np.ndarray
     y_s_obs: np.ndarray
     y_s_plot: np.ndarray
     y_s_query: np.ndarray
@@ -759,6 +761,12 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     y_u_query = _extract_posterior_predictive(trace, "y_u_query", "query_id")
     y_s_plot = _extract_posterior_predictive(trace, "y_s_plot", "plot_id")
     y_s_query = _extract_posterior_predictive(trace, "y_s_query", "query_id")
+    p_u_query_subject_marginal = posterior_analysis.extract_posterior_predictive_float(
+        trace, "p_u_query_subject_marginal", "query_id"
+    )
+    p_s_query_subject_marginal = posterior_analysis.extract_posterior_predictive_float(
+        trace, "p_s_query_subject_marginal", "query_id"
+    )
 
     # Constant data
     X_obs = np.array(trace.constant_data["X_obs"].values)
@@ -783,6 +791,7 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         p_u_obs=p_u_obs,
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
+        p_u_query_subject_marginal=p_u_query_subject_marginal,
         y_u_obs=y_u_obs,
         y_u_plot=y_u_plot,
         y_u_query=y_u_query,
@@ -800,6 +809,7 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         p_s_obs=p_s_obs,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
+        p_s_query_subject_marginal=p_s_query_subject_marginal,
         y_s_obs=y_s_obs,
         y_s_plot=y_s_plot,
         y_s_query=y_s_query,
@@ -1063,6 +1073,13 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             p_s_plot = p_u_plot * q_plot
             p_s_query = p_u_query * q_query
 
+        pm.Deterministic(
+            "p_u_query_subject_marginal", p_u_query, dims=("query_id",)
+        )
+        pm.Deterministic(
+            "p_s_query_subject_marginal", p_s_query, dims=("query_id",)
+        )
+
         # Understood — plot
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
@@ -1105,9 +1122,11 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             var_names=[
                 "y_u_plot",
                 "y_u_query",
+                "p_u_query_subject_marginal",
                 "y_u_obs",
                 "y_s_plot",
                 "y_s_query",
+                "p_s_query_subject_marginal",
                 "y_s_obs",
             ],
             extend_inferencedata=True,
@@ -1128,6 +1147,9 @@ def posterior_summary(context: BivariateContext):
     samples = context.model_samples
     n_trials = context.model_data.n_trials
     hdi_prob = context.reporting.hdi
+    has_subject_re = any(
+        name in context.model_variables for name in ("tau_subj_u", "tau_subj_q")
+    )
 
     # Understood summary
     summary_u = posterior_analysis.posterior_summary_table(
@@ -1137,6 +1159,14 @@ def posterior_summary(context: BivariateContext):
         n_trials=n_trials,
         hdi_prob=hdi_prob,
     )
+    if has_subject_re:
+        summary_u = posterior_analysis.add_probability_estimand_columns(
+            summary_u,
+            samples.p_u_query,
+            samples.p_u_query_subject_marginal,
+            n_trials=n_trials,
+            hdi_prob=hdi_prob,
+        )
     dataframe_table(
         summary_u, title="Posterior summary — words understood", show_index=False
     )
@@ -1154,6 +1184,14 @@ def posterior_summary(context: BivariateContext):
         n_trials=n_trials,
         hdi_prob=hdi_prob,
     )
+    if has_subject_re:
+        summary_s = posterior_analysis.add_probability_estimand_columns(
+            summary_s,
+            samples.p_s_query,
+            samples.p_s_query_subject_marginal,
+            n_trials=n_trials,
+            hdi_prob=hdi_prob,
+        )
     dataframe_table(
         summary_s, title="Posterior summary — words spoken", show_index=False
     )
