@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -61,7 +65,7 @@ The association $\psi$ is deliberately kept **decoupled** from the subject rando
 
 - **understood** (all DS studies): $\text{BetaBinomial}(800, p_U, \kappa_U)$.
 - **spoken / signed marginals** (uk_01/04/05/06 + uk_02 marginal-only rows): $\text{BetaBinomial}(800, p_U q, \kappa_S)$ and $\text{BetaBinomial}(800, p_U r, \kappa_\text{sign})$.
-- **uk_02 four cells** (the only cross-tab source): $\text{DirichletMultinomial}(\text{total}, \text{conc}\cdot[\pi_\text{neither}, \pi_\text{sign-only}, \pi_\text{speak-only}, \pi_\text{both}])$. **This is what identifies $\psi$.**
+- **uk_02 four cells** (the only cross-tab source): $\text{DirichletMultinomial}(\text{total}, \text{conc}\cdot[\pi_\text{neither}, \pi_\text{sign-only}, \pi_\text{speak-only}, \pi_\text{both}])$. For rows with complete four-cell data, `total` is the four-cell sum and is also used as the understood count for that assessment occasion, so the marginal understood likelihood and the four-cell likelihood share one authoritative total. **This is what identifies $\psi$.**
 
 ::: {.callout-important title="psi rests almost entirely on uk_02 — descriptive / exploratory"}
 

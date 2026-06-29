@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -182,14 +186,14 @@ The expected difference in word counts between understanding and production.
 ::: {.callout-note title="Subject-marginalised posterior predictive"}
 
 The count distributions, PMF/CDF, median-trend plots and the `Y_*`
-and `P(Y<=k)` columns in the summary tables below have been
-post-processed to integrate over the subject random-effect priors
-(`τ^{subj}_U ≈ 0.84`, `τ^{subj}_q ≈ 1.20`). This is the correct
-predictive distribution to compare with an unseen DS child's
-expected vocabulary counts. The latent probability columns
-(`p_median`, `Ey_median` etc.) are unchanged from the
-population-level estimates because those describe the latent mean,
-not the predictive spread.
+and `P(Y<=k)` columns in the summary tables below integrate over the
+subject random-effect priors (`τ^{subj}_U ≈ 0.84`,
+`τ^{subj}_q ≈ 1.20`). This is the predictive distribution for an
+unseen DS child. The historical `p_*` and `Ey_*` columns retain their
+population-level meaning; the explicit `p_population_*` /
+`Ey_population_*` columns repeat that estimand, and the
+`p_subject_marginal_*` / `Ey_subject_marginal_*` columns report the
+matching new-child probability and expected-count estimand.
 
 :::
 

@@ -7,6 +7,7 @@ import numpy as np
 import xarray as xr
 
 from vocab_growth.posterior_analysis import (
+    add_probability_estimand_columns,
     extract_posterior,
     extract_posterior_predictive,
     posterior_summary_table,
@@ -89,3 +90,29 @@ def test_posterior_summary_values_age_24():
     assert np.isclose(row["P(Y=0)"], 0.0)
     assert np.isclose(row["P(Y<=400)"], 1.0)  # all draws == 400
     assert np.isclose(row["P(Y>400)"], 0.0)
+
+
+def test_add_probability_estimand_columns_makes_population_and_subject_explicit():
+    summary = _summary()
+    p_population = np.vstack([
+        np.full(N_SAMPLES, 0.25),
+        np.full(N_SAMPLES, 0.50),
+    ])
+    p_subject = np.vstack([
+        np.full(N_SAMPLES, 0.20),
+        np.full(N_SAMPLES, 0.60),
+    ])
+
+    out = add_probability_estimand_columns(
+        summary,
+        p_population,
+        p_subject,
+        n_trials=800,
+        hdi_prob=0.90,
+    )
+
+    row = out[out["age_months"] == 12.0].iloc[0]
+    assert np.isclose(row["p_population_median"], 0.25)
+    assert np.isclose(row["Ey_population_median"], 200.0)
+    assert np.isclose(row["p_subject_marginal_median"], 0.20)
+    assert np.isclose(row["Ey_subject_marginal_median"], 160.0)
