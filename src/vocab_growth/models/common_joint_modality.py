@@ -370,6 +370,7 @@ def prepare_joint_data(
 
     context.set_model_data(bmd, analysis_df)
     context.dataframes["descriptive_stats"] = desc
+    os.makedirs(context.reporting.output_dir, exist_ok=True)
     desc.to_csv(
         os.path.join(context.reporting.output_dir, "descriptive_statistics.csv"),
         index=True,

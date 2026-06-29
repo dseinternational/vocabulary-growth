@@ -28,7 +28,7 @@ dependencies:
       - notebook>=7.6.0
       - orjson>=3.11.9
       - pandas-stubs
-      - pandas>=3.0.4
+      - pandas>=3.0.3
       - preliz>=0.27.0
       - pytest>=9.1.1
       - rich>=15.0.0
