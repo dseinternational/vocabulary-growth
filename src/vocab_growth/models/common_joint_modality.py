@@ -66,6 +66,12 @@ from preliz.distributions.distributions import Continuous
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.reporting as vg_reporting
+from vocab_growth.models.build_utils import (
+    construct_age_grids,
+    slope_anchor_logit_coeffs,
+    standardize_ages,
+    validate_ell_bounds,
+)
 from vocab_growth.models.common import (
     PACKAGE_LIST,
     BaseModelConfiguration,
@@ -78,7 +84,9 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.definitions import JointModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
+from vocab_growth.models.gp_utils import make_kappa_of_z
 from vocab_growth.plotting import _save_csv, plot_prior_samples_ratio
+from vocab_growth.posterior_analysis import extract_posterior as _extract
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -543,48 +551,44 @@ def build_model(context: JointContext, definition: JointModelDefinition):
 
     X_obs = np.asarray(df["age"], dtype=float).reshape(-1, 1)
     n = len(X_obs)
-    X_mean = float(np.mean(X_obs))
-    X_std = float(np.std(X_obs, ddof=1))
+    X_mean, X_std, X_obs_z = standardize_ages(X_obs)
 
-    X_obs_z = (X_obs - X_mean) / X_std
-    X_plot = np.linspace(X_obs.min(), X_obs.max(), config.n_plot).reshape(-1, 1)
-    X_plot_z = (X_plot - X_mean) / X_std
-    X_query = np.array(config.ages_query).reshape(-1, 1)
-    X_query_z = (X_query - X_mean) / X_std
-    n_plot = X_plot_z.shape[0]
-    n_query = X_query_z.shape[0]
-
-    # Option D — per-draw GP anchor at a reference age. Append one extra grid row
-    # (the reference age) so each anchored GP can be centred to pass through zero
-    # there for every draw, removing the GP<->intercept level redundancy.
+    # Plot / query grids (standardised), with the optional Option-D reference-age
+    # anchor row — see models.build_utils.construct_age_grids. Option D centres
+    # each anchored GP to pass through zero at the reference age for every draw,
+    # removing the GP<->intercept level redundancy.
     anchor_g_u = bool(definition.anchor_g_u_at_ref)
     anchor_g_q = bool(definition.anchor_g_q_at_ref)
     anchor_g_sign = bool(definition.anchor_g_sign_at_ref)
     use_gp_anchor = anchor_g_u or anchor_g_q or anchor_g_sign
-    if use_gp_anchor:
-        if definition.gp_anchor_age_months is not None:
-            anchor_age_months = float(definition.gp_anchor_age_months)
-        else:
-            anchor_age_months = (
-                float(config.slope_anchors[0]) + float(config.slope_anchors[1])
-            ) / 2.0
-        X_anchor_z = (np.array([[anchor_age_months]], dtype=float) - X_mean) / X_std
-        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z, X_anchor_z])
-        i_anchor = n + n_plot + n_query
-    else:
-        anchor_age_months = None
-        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
-        i_anchor = None
-    n_all = X_all_z.shape[0]
+    grids = construct_age_grids(
+        X_obs,
+        X_obs_z,
+        X_obs_mean=X_mean,
+        X_obs_std=X_std,
+        n_plot=config.n_plot,
+        ages_query=config.ages_query,
+        slope_anchors=config.slope_anchors,
+        use_gp_anchor=use_gp_anchor,
+        gp_anchor_age_months=definition.gp_anchor_age_months,
+    )
+    X_plot = grids.X_plot
+    X_query = grids.X_query
+    X_all_z = grids.X_all_z
+    n_plot = grids.n_plot
+    n_query = grids.n_query
+    n_all = grids.n_all
+    i_anchor = grids.i_anchor
+    anchor_age_months = grids.anchor_age_months
 
-    ell_low_z = float(config.ell_months_range[0]) / X_std
-    ell_high_z = float(config.ell_months_range[1]) / X_std
+    ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
+    ell_low_z = ell_low_months / X_std
+    ell_high_z = ell_high_months / X_std
     L, M = get_hsgp_hyperparams(X_obs_z, (ell_low_z, ell_high_z))
 
-    sa = float(config.slope_anchors[0])
-    sb = float(config.slope_anchors[1])
-    sa_z = (sa - X_mean) / X_std
-    sb_z = (sb - X_mean) / X_std
+    sa_z, sb_z = slope_anchor_logit_coeffs(
+        config.slope_anchors, X_obs_mean=X_mean, X_obs_std=X_std
+    )
 
     build_cfg: list[tuple[str, object]] = [
         ("Total observations", n),
@@ -776,7 +780,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             a = a_d.to_pymc(f"a_kappa_{suffix}")
             bmag = bmag_d.to_pymc(f"b_kappa_mag_{suffix}")
             b = pm.Deterministic(f"b_kappa_{suffix}", -bmag)
-            return lambda z: kmin + pm.math.exp(a + b * z)
+            return make_kappa_of_z(kmin, a, b)
 
         kappa_u_of_z = kappa_fn(config.kappa_min_u_dist, config.a_kappa_u_dist, config.b_kappa_mag_u_dist, "u")
         kappa_s_of_z = kappa_fn(config.kappa_min_s_dist, config.a_kappa_s_dist, config.b_kappa_mag_s_dist, "s")
@@ -903,10 +907,6 @@ def diagnostics(context: JointContext):
     az.plot_energy(context.trace, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
     plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
     plt.close()
-
-
-def _extract(trace, name, dim):
-    return np.array(trace.posterior[name].stack(sample=("chain", "draw")).transpose(dim, "sample").values)
 
 
 def sample_posterior_predictive(context: JointContext, definition=None):

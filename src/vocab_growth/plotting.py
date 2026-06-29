@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import os
+from typing import Protocol
 
 import arviz as az
 import dse_research_utils.plot.predictive as plot_predictive
@@ -979,3 +980,145 @@ def plot_posterior_kappa(
         _save_csv(df_kappa_plot, output_dir, filename)
 
     return fig, df_kappa_plot, df_kappa_query
+
+
+class _RatioGapSamples(Protocol):
+    """Structural type for the two joint-trajectory plots below.
+
+    Both ``BivariateModelSamples`` and ``TrivariateModelSamples`` satisfy this;
+    declaring it here (instead of importing those dataclasses) keeps ``plotting``
+    free of an import cycle with the engine modules.
+    """
+
+    X_plot: np.ndarray
+    q_plot: np.ndarray
+    p_u_plot: np.ndarray
+    p_s_plot: np.ndarray
+
+
+def plot_production_rate(
+    samples: _RatioGapSamples,
+    hdi_prob: float = 0.90,
+    output_dir: str | None = None,
+    filename: str | None = None,
+) -> Figure:
+    """Plot the posterior of the production ratio q(a) = p_S(a) / p_U(a) over age."""
+    X_plot = samples.X_plot
+    q_plot = samples.q_plot
+
+    q_median = np.median(q_plot, axis=1)
+    q_hdi = az.hdi(q_plot, prob=hdi_prob)
+    q_hdi_75 = az.hdi(q_plot, prob=0.75)
+    q_hdi_50 = az.hdi(q_plot, prob=0.50)
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+
+    ax.fill_between(
+        X_plot,
+        q_hdi[:, 0],
+        q_hdi[:, 1],
+        alpha=0.20,
+        label=f"{int(hdi_prob * 100)}% HDI",
+    )
+    ax.fill_between(
+        X_plot,
+        q_hdi_75[:, 0],
+        q_hdi_75[:, 1],
+        alpha=0.25,
+        label="75% HDI",
+    )
+    ax.fill_between(
+        X_plot,
+        q_hdi_50[:, 0],
+        q_hdi_50[:, 1],
+        alpha=0.30,
+        label="50% HDI",
+    )
+    ax.plot(X_plot, q_median, lw=3, label="Median q(a)")
+
+    ax.set_xlabel("Age (months)")
+    ax.set_ylabel("q(a) = p_S(a) / p_U(a)")
+    ax.set_ylim(0, 1)
+    ax.legend(loc="upper left", frameon=True)
+    ax.set_title("Production ratio q(a)")
+
+    if output_dir is not None and filename is not None:
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(
+            pd.DataFrame(
+                {
+                    "age_months": X_plot,
+                    "q_median": q_median,
+                    "hdi_lo": q_hdi[:, 0],
+                    "hdi_hi": q_hdi[:, 1],
+                    "hdi75_lo": q_hdi_75[:, 0],
+                    "hdi75_hi": q_hdi_75[:, 1],
+                    "hdi50_lo": q_hdi_50[:, 0],
+                    "hdi50_hi": q_hdi_50[:, 1],
+                }
+            ),
+            output_dir,
+            filename,
+        )
+
+    return fig
+
+
+def plot_comprehension_production_gap(
+    samples: _RatioGapSamples,
+    n_trials: int,
+    hdi_prob: float = 0.90,
+    output_dir: str | None = None,
+    filename: str | None = None,
+) -> Figure:
+    """Plot the posterior of the comprehension-production gap (p_U - p_S) over age."""
+    X_plot = samples.X_plot
+    gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
+
+    gap_median = np.median(gap, axis=1)
+    gap_hdi = az.hdi(gap, prob=hdi_prob)
+    gap_hdi_50 = az.hdi(gap, prob=0.50)
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+
+    ax.fill_between(
+        X_plot,
+        gap_hdi[:, 0],
+        gap_hdi[:, 1],
+        alpha=0.20,
+        label=f"{int(hdi_prob * 100)}% HDI",
+    )
+    ax.fill_between(
+        X_plot,
+        gap_hdi_50[:, 0],
+        gap_hdi_50[:, 1],
+        alpha=0.30,
+        label="50% HDI",
+    )
+    ax.plot(X_plot, gap_median, lw=3, label="Median gap")
+
+    ax.set_xlabel("Age (months)")
+    ax.set_ylabel("E[understood] - E[spoken] (words)")
+    ax.legend(loc="upper left", frameon=True)
+    ax.set_title("Comprehension-production gap")
+
+    if output_dir is not None and filename is not None:
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(
+            pd.DataFrame(
+                {
+                    "age_months": X_plot,
+                    "gap_median": gap_median,
+                    "hdi_lo": gap_hdi[:, 0],
+                    "hdi_hi": gap_hdi[:, 1],
+                    "hdi50_lo": gap_hdi_50[:, 0],
+                    "hdi50_hi": gap_hdi_50[:, 1],
+                }
+            ),
+            output_dir,
+            filename,
+        )
+
+    return fig

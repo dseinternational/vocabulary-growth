@@ -8,6 +8,35 @@ import numpy as np
 import pandas as pd
 
 
+def extract_posterior(trace, name, dim):
+    """Extract posterior samples for ``name``, stacking chains and draws.
+
+    Returns an array shaped ``(len(dim), n_chain * n_draw)``. Shared by the
+    multivariate engines, which previously each defined an identical private copy.
+    """
+    return np.array(
+        trace.posterior[name]
+        .stack(sample=("chain", "draw"))
+        .transpose(dim, "sample")
+        .values
+    )
+
+
+def extract_posterior_predictive(trace, name, dim):
+    """Extract posterior-predictive samples for ``name`` as integer counts.
+
+    As :func:`extract_posterior`, but reads from ``posterior_predictive`` and
+    casts to ``int`` (the predictive draws are word counts).
+    """
+    return np.array(
+        trace.posterior_predictive[name]
+        .stack(sample=("chain", "draw"))
+        .transpose(dim, "sample")
+        .values,
+        dtype=int,
+    )
+
+
 def posterior_summary_table(
     X_query: np.ndarray,
     p_query: np.ndarray,
