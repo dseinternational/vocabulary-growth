@@ -752,10 +752,22 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     n_obs = len(obs_u_mask)
 
     y_u_obs_raw = np.array(trace.observed_data["y_u_obs"].values, dtype=float)
+    if int(obs_u_mask.sum()) != y_u_obs_raw.shape[0]:
+        raise ValueError(
+            f"obs_u_mask count ({int(obs_u_mask.sum())}) does not match observed "
+            f"y_u_obs length ({y_u_obs_raw.shape[0]}); stored mask and likelihood "
+            "rows are misaligned (issue #67)."
+        )
     y_u_obs = np.full(n_obs, np.nan)
     y_u_obs[obs_u_mask] = y_u_obs_raw
 
     y_s_obs_raw = np.array(trace.observed_data["y_s_obs"].values, dtype=float)
+    if int(obs_s_mask.sum()) != y_s_obs_raw.shape[0]:
+        raise ValueError(
+            f"obs_s_mask count ({int(obs_s_mask.sum())}) does not match observed "
+            f"y_s_obs length ({y_s_obs_raw.shape[0]}); stored mask and likelihood "
+            "rows are misaligned (issue #67)."
+        )
     y_s_obs = np.full(n_obs, np.nan)
     y_s_obs[obs_s_mask] = y_s_obs_raw
 
