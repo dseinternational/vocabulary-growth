@@ -10,11 +10,12 @@
 This document lists every model in the `vocab_growth` family, what each one
 targets, and how the models relate to one another. It is a map, not a
 specification: for the full statistical detail of any single model, read its
-report under [`docs/models/vgNN/`](.) or the consolidated
+report under `docs/models/vgNN/` (e.g. [`vg01/`](vg01/)) or the consolidated
 [technical report](../report/index.qmd).
 
 Each model is a thin module in
-[`src/vocab_growth/models/model_vgNN.py`](../../src/vocab_growth/models) that
+[`src/vocab_growth/models/`](../../src/vocab_growth/models) (e.g.
+[`model_vg01.py`](../../src/vocab_growth/models/model_vg01.py)) that
 selects a definition from
 [`definitions.py`](../../src/vocab_growth/models/definitions.py) and dispatches to
 a shared fitting engine. All procedural code (model building, sampling,
@@ -177,7 +178,7 @@ python scripts/fit_model.py <model_id> [--config dev|test|rep] [--render] [--upl
 configuration — `dev` (fast, for development), `test`, or `rep` (full reporting
 quality); it defaults to `dev`. Output (traces, figures, summary tables) is
 written to `output/models/<model_name>/`, and the per-model report under
-[`docs/models/vgNN/index.qmd`](.) renders from it.
+`docs/models/vgNN/index.qmd` (e.g. [`vg01/index.qmd`](vg01/index.qmd)) renders from it.
 
 ## Related documents
 
