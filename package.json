@@ -20,7 +20,7 @@
   },
   "scripts": {
     "spellcheck": "cspell --show-suggestions --show-context \"**/*.md\" \"docs/**/*.qmd\"",
-    "format": "prettier --write \"**/*.md\"",
-    "format:check": "prettier --check \"**/*.md\""
+    "format": "node scripts/format-markdown.mjs --write",
+    "format:check": "node scripts/format-markdown.mjs --check"
   }
 }

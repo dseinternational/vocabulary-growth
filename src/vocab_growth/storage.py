@@ -1,22 +1,17 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-import mimetypes
-import os
-import time
-import uuid
 from collections.abc import Callable
-from urllib.parse import urlparse
 
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, ContentSettings
+from dse_research_utils.storage.azure import upload_directory_to_blob_storage
 
 from vocab_growth.reporting import (
-    console,
     format_duration,
     heading,
     key_value_table,
 )
+
+DEFAULT_PROJECT = "vocabulary-growth"
 
 
 def upload_to_blob_storage(
@@ -42,82 +37,36 @@ def upload_to_blob_storage(
     str
         The public URL of the uploaded ``index.html`` report.
     """
-    container_url = os.environ.get("DSERESEARCH_BLOB_CONTAINER_URL")
-    if not container_url:
-        console.print(
-            "[bold red]Error: DSERESEARCH_BLOB_CONTAINER_URL environment variable is not set.[/bold red]"
-        )
-        console.print("Set it to your Azure Blob container URL, e.g.:")
-        console.print(
-            "  export DSERESEARCH_BLOB_CONTAINER_URL='https://<account>.blob.core.windows.net/<container>'"
-        )
-        raise RuntimeError(
-            "DSERESEARCH_BLOB_CONTAINER_URL environment variable is not set."
-        )
-
-    parsed = urlparse(container_url.rstrip("/"))
-    account_url = f"{parsed.scheme}://{parsed.netloc}"
-    container_name = parsed.path.lstrip("/")
-
-    run_id = uuid.uuid7()
-    blob_prefix = f"projects/vocabulary-growth/output/{run_id}/{model_label}"
-
     heading(f"Uploading {model_label} to Azure Blob Storage")
     key_value_table(
         "Upload target",
         [
             ("Source", output_dir),
-            ("Container", container_name),
-            ("Prefix", f"{blob_prefix}/"),
+            ("Project", DEFAULT_PROJECT),
             ("Include traces", include_traces),
         ],
     )
 
-    credential = DefaultAzureCredential()
-    blob_service_client = BlobServiceClient(account_url, credential=credential)
-    container_client = blob_service_client.get_container_client(container_name)
+    result = upload_directory_to_blob_storage(
+        output_dir,
+        model_label,
+        project=DEFAULT_PROJECT,
+        include_traces=include_traces,
+        skip=skip,
+    )
 
-    uploaded = 0
-    skipped = 0
-    bytes_sent = 0
-    started = time.perf_counter()
-    for root, _dirs, files in os.walk(output_dir):
-        for filename in files:
-            local_path = os.path.join(root, filename)
-            relative_path = os.path.relpath(local_path, output_dir).replace("\\", "/")
+    if result.report_url is None:
+        raise RuntimeError(f"No index.html report was uploaded for {model_label}.")
 
-            if not include_traces and filename.endswith(".nc"):
-                skipped += 1
-                continue
-            if skip is not None and skip(relative_path):
-                skipped += 1
-                continue
-
-            blob_name = f"{blob_prefix}/{relative_path}"
-
-            content_type, _ = mimetypes.guess_type(filename)
-            if content_type is None:
-                content_type = "application/octet-stream"
-
-            bytes_sent += os.path.getsize(local_path)
-            with open(local_path, "rb") as f:
-                container_client.upload_blob(
-                    blob_name,
-                    f,
-                    overwrite=True,
-                    content_settings=ContentSettings(content_type=content_type),
-                )
-            uploaded += 1
-
-    report_url = f"{account_url}/{container_name}/{blob_prefix}/index.html"
     key_value_table(
         f"Upload complete — {model_label}",
         [
-            ("Files uploaded", uploaded),
-            ("Files skipped", skipped),
-            ("Bytes uploaded", f"{bytes_sent / 1_000_000:.1f} MB"),
-            ("Elapsed", format_duration(time.perf_counter() - started)),
-            ("Report URL", report_url),
+            ("Files uploaded", result.uploaded_files),
+            ("Files skipped", result.skipped_files),
+            ("Bytes uploaded", f"{result.bytes_uploaded / 1_000_000:.1f} MB"),
+            ("Elapsed", format_duration(result.elapsed_seconds)),
+            ("Prefix", result.prefix_url),
+            ("Report URL", result.report_url),
         ],
     )
-    return report_url
+    return result.report_url
