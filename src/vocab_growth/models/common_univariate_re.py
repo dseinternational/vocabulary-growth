@@ -35,6 +35,12 @@ import pymc as pm
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.reporting as vg_reporting
+from vocab_growth.models.build_utils import (
+    construct_age_grids,
+    slope_anchor_logit_coeffs,
+    standardize_ages,
+    validate_ell_bounds,
+)
 from vocab_growth.models.common import (
     PACKAGE_LIST,
     ModelFitContext,
@@ -50,6 +56,7 @@ from vocab_growth.models.common import (
     sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
+from vocab_growth.models.gp_utils import make_kappa_of_z
 from vocab_growth.reporting import (
     console,
     dataframe_table,
@@ -191,11 +198,7 @@ def build_univariate_re_model(
         raise ValueError("y_obs exceeds n_trials.")
 
     # Standardise ages
-    X_obs_mean = float(np.mean(X_obs))
-    X_obs_std = float(np.std(X_obs, ddof=1))
-
-    if not np.isfinite(X_obs_std) or X_obs_std <= 0:
-        raise ValueError("Age standard deviation must be positive.")
+    X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
     key_value_table(
         "Build configuration",
@@ -213,45 +216,31 @@ def build_univariate_re_model(
         ],
     )
 
-    X_obs_z = (X_obs - X_obs_mean) / X_obs_std
-
-    # Plot and query grids
-    X_plot = np.linspace(X_obs.min(), X_obs.max(), config.n_plot).reshape(-1, 1)
-    X_plot_z = (X_plot - X_obs_mean) / X_obs_std
-
-    X_query = np.array(config.ages_query).reshape(-1, 1)
-    X_query_z = (X_query - X_obs_mean) / X_obs_std
-
-    # Optional GP anchor point
+    # Plot / query grids (standardised), with the optional reference-age anchor
+    # row — see models.build_utils.construct_age_grids.
     anchor_g = bool(definition.anchor_g_at_ref)
-    if anchor_g:
-        if definition.gp_anchor_age_months is not None:
-            anchor_age_months = float(definition.gp_anchor_age_months)
-        else:
-            anchor_age_months = (
-                float(config.slope_anchors[0]) + float(config.slope_anchors[1])
-            ) / 2.0
-        X_anchor = np.array([[anchor_age_months]], dtype=float)
-        X_anchor_z = (X_anchor - X_obs_mean) / X_obs_std
-        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z, X_anchor_z])
-    else:
-        anchor_age_months = None
-        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
-
-    n_plot = X_plot_z.shape[0]
-    n_query = X_query_z.shape[0]
-    n_all = X_all_z.shape[0]
-    i_anchor = (n + n_plot + n_query) if anchor_g else None
+    grids = construct_age_grids(
+        X_obs,
+        X_obs_z,
+        X_obs_mean=X_obs_mean,
+        X_obs_std=X_obs_std,
+        n_plot=config.n_plot,
+        ages_query=config.ages_query,
+        slope_anchors=config.slope_anchors,
+        use_gp_anchor=anchor_g,
+        gp_anchor_age_months=definition.gp_anchor_age_months,
+    )
+    X_plot = grids.X_plot
+    X_query = grids.X_query
+    X_all_z = grids.X_all_z
+    n_plot = grids.n_plot
+    n_query = grids.n_query
+    n_all = grids.n_all
+    i_anchor = grids.i_anchor
+    anchor_age_months = grids.anchor_age_months
 
     # Length-scale bounds
-    ell_low_months = float(config.ell_months_range[0])
-    ell_high_months = float(config.ell_months_range[1])
-
-    if ell_low_months <= 0 or ell_high_months <= 0:
-        raise ValueError("Length-scale bounds must be positive (in months).")
-    if ell_high_months <= ell_low_months:
-        raise ValueError("ell_months_range must be (low, high) with high > low.")
-
+    ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
     ell_low_z = ell_low_months / X_obs_std
     ell_high_z = ell_high_months / X_obs_std
     ell_range_z = (ell_low_z, ell_high_z)
@@ -259,10 +248,9 @@ def build_univariate_re_model(
     L, M = get_hsgp_hyperparams(X_obs_z, ell_range_z)
 
     # Slope anchors
-    slope_age_a = float(config.slope_anchors[0])
-    slope_age_b = float(config.slope_anchors[1])
-    slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
-    slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
+    slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
+        config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+    )
 
     derived_rows: list[tuple[str, object]] = [
         ("HSGP basis size (m)", M),
@@ -390,8 +378,7 @@ def build_univariate_re_model(
         b_kappa_mag = config.b_kappa_mag_dist.to_pymc("b_kappa_mag")
         b_kappa = pm.Deterministic("b_kappa", -b_kappa_mag)
 
-        def kappa_of_z(z):
-            return kappa_min + pm.math.exp(a_kappa + b_kappa * z)
+        kappa_of_z = make_kappa_of_z(kappa_min, a_kappa, b_kappa)
 
         kappa_obs = pm.Deterministic(
             "kappa_obs", kappa_of_z(X_all_z_data[i_obs0:i_obs1, 0]), dims="obs_id"
