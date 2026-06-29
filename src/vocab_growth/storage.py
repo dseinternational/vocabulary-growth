@@ -3,8 +3,6 @@
 
 from collections.abc import Callable
 
-from dse_research_utils.storage.azure import upload_directory_to_blob_storage
-
 from vocab_growth.reporting import (
     format_duration,
     heading,
@@ -37,6 +35,8 @@ def upload_to_blob_storage(
     str
         The public URL of the uploaded ``index.html`` report.
     """
+    from dse_research_utils.storage.azure import upload_directory_to_blob_storage
+
     heading(f"Uploading {model_label} to Azure Blob Storage")
     key_value_table(
         "Upload target",
