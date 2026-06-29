@@ -374,9 +374,13 @@ def build_model_re(
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
 
-        # Store masks and indices as constant data for extraction
-        _ = pm.Data("obs_u_mask", has_u.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_s_mask", has_s.astype(int), dims=("obs_id",))
+        # Store masks and indices as constant data for extraction.
+        # Use the *training* masks (full observed mask minus any holdout rows)
+        # so the stored masks align with the likelihood rows / observed_data
+        # consumed by extract_model_samples (issue #67). With no holdout column
+        # has_*_train == has_*, so standard fits are unchanged.
+        _ = pm.Data("obs_u_mask", has_u_train.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_s_mask", has_s_train.astype(int), dims=("obs_id",))
 
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
 
