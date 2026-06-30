@@ -1,5 +1,13 @@
 node_modules
 .venv
+.pytest_cache
+.pytest_cache/**
+**/.pytest_cache
+**/.pytest_cache/**
+.ruff_cache
+.ruff_cache/**
+**/.ruff_cache
+**/.ruff_cache/**
 output
 outputs
 _freeze
