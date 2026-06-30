@@ -60,7 +60,7 @@ MPLCONFIGDIR=.cache/matplotlib conda run -n dse-vocab-growth python scripts/uplo
   10 source datasets, produced `data/vocab_data_merged.csv`, rebuilt
   `data/vocabulary.duckdb`, and reported 917 merged rows.
 - 2026-06-29 12:06: initial `conda run ... scripts/fit_model.py all --config
-  rep --render` attempt failed before model fitting because Numba could not cache
+rep --render` attempt failed before model fitting because Numba could not cache
   a `preliz` function under the `conda run` wrapper. Retried with the Conda
   environment Python executable directly and workspace-local cache directories.
 - 2026-06-29 12:08: direct `dse-vocab-growth` Python reached VG01 but failed
@@ -96,7 +96,7 @@ MPLCONFIGDIR=.cache/matplotlib conda run -n dse-vocab-growth python scripts/uplo
   staged their model report source files, but the script had not reached its
   final Quarto render loop. `output/` was about 31 GiB with about 376 GiB free.
   Recovery plan: continue with single-model `fit_model.py <model> --config rep
-  --render` runs from VG06 onward, then render VG01-VG05 separately.
+--render` runs from VG06 onward, then render VG01-VG05 separately.
 - 2026-06-29 15:27: isolated VG06 fit completed in 1h 20m 24.0s. Reported
   diagnostics passed. LOO-CV for words spoken reported one bad Pareto-k
   observation (1/4138) and no very-bad observations; words understood was all
@@ -166,7 +166,7 @@ MPLCONFIGDIR=.cache/matplotlib conda run -n dse-vocab-growth python scripts/uplo
 - 2026-06-30 00:18: rendered all 15 model Quarto reports under
   `output/models/*/index.html`.
 - 2026-06-30 00:19: `scripts/compare_ds_td_re.py --verify spoken understood
-  comprehension` completed and wrote RE-based TD/DS comparisons to
+comprehension` completed and wrote RE-based TD/DS comparisons to
   `output/comparisons/`.
 - 2026-06-30 00:22: `scripts/compare_ds_td_expressive.py --verify` completed
   and wrote expressive-delay, sign-inclusive, distributional, and peak-growth
