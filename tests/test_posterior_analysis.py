@@ -1,9 +1,52 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-import numpy as np
+import types
 
-from vocab_growth.posterior_analysis import posterior_summary_table
+import numpy as np
+import xarray as xr
+
+from vocab_growth.posterior_analysis import (
+    add_probability_estimand_columns,
+    extract_posterior,
+    extract_posterior_predictive,
+    posterior_summary_table,
+)
+
+
+def _fake_trace(group: str, name: str, values: np.ndarray):
+    """Minimal stand-in for an InferenceData with one (chain, draw, plot_id) var."""
+    n_chain, n_draw, n_plot = values.shape
+    ds = xr.Dataset(
+        {name: (("chain", "draw", "plot_id"), values)},
+        coords={
+            "chain": np.arange(n_chain),
+            "draw": np.arange(n_draw),
+            "plot_id": np.arange(n_plot),
+        },
+    )
+    return types.SimpleNamespace(**{group: ds})
+
+
+def test_extract_posterior_shape_and_order():
+    values = np.arange(2 * 3 * 4, dtype=float).reshape(2, 3, 4)
+    trace = _fake_trace("posterior", "f", values)
+    out = extract_posterior(trace, "f", "plot_id")
+    # (n_plot_id, n_chain * n_draw); sample axis iterates chain-outer, draw-inner
+    assert out.shape == (4, 6)
+    np.testing.assert_array_equal(out, values.transpose(2, 0, 1).reshape(4, 6))
+
+
+def test_extract_posterior_predictive_is_integer():
+    values = np.arange(2 * 3 * 4, dtype=float).reshape(2, 3, 4) + 0.5
+    trace = _fake_trace("posterior_predictive", "y", values)
+    out = extract_posterior_predictive(trace, "y", "plot_id")
+    assert out.shape == (4, 6)
+    assert np.issubdtype(out.dtype, np.integer)
+    # float 0.5+ values are truncated toward zero by the int cast
+    np.testing.assert_array_equal(
+        out, values.transpose(2, 0, 1).reshape(4, 6).astype(int)
+    )
 
 N_SAMPLES = 2000
 EXPECTED_COLUMNS = {
@@ -47,3 +90,29 @@ def test_posterior_summary_values_age_24():
     assert np.isclose(row["P(Y=0)"], 0.0)
     assert np.isclose(row["P(Y<=400)"], 1.0)  # all draws == 400
     assert np.isclose(row["P(Y>400)"], 0.0)
+
+
+def test_add_probability_estimand_columns_makes_population_and_subject_explicit():
+    summary = _summary()
+    p_population = np.vstack([
+        np.full(N_SAMPLES, 0.25),
+        np.full(N_SAMPLES, 0.50),
+    ])
+    p_subject = np.vstack([
+        np.full(N_SAMPLES, 0.20),
+        np.full(N_SAMPLES, 0.60),
+    ])
+
+    out = add_probability_estimand_columns(
+        summary,
+        p_population,
+        p_subject,
+        n_trials=800,
+        hdi_prob=0.90,
+    )
+
+    row = out[out["age_months"] == 12.0].iloc[0]
+    assert np.isclose(row["p_population_median"], 0.25)
+    assert np.isclose(row["Ey_population_median"], 200.0)
+    assert np.isclose(row["p_subject_marginal_median"], 0.20)
+    assert np.isclose(row["Ey_subject_marginal_median"], 160.0)

@@ -40,8 +40,15 @@ import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
+from vocab_growth.models.build_utils import (
+    construct_age_grids,
+    slope_anchor_logit_coeffs,
+    standardize_ages,
+    validate_ell_bounds,
+)
 from vocab_growth.models.definitions import UnivariateModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
+from vocab_growth.models.gp_utils import make_kappa_of_z
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -474,11 +481,7 @@ def build_model(context: ModelFitContext):
         raise ValueError("y_obs exceeds n_trials.")
 
     X_obs_median = float(np.median(context.model_data.X_obs))
-    X_obs_mean = float(np.mean(context.model_data.X_obs))
-    X_obs_std = float(np.std(context.model_data.X_obs, ddof=1))
-
-    if not np.isfinite(X_obs_std) or X_obs_std <= 0:
-        raise ValueError("Age standard deviation must be positive.")
+    X_obs_mean, X_obs_std, X_obs_z = standardize_ages(context.model_data.X_obs)
 
     key_value_table(
         "Build configuration",
@@ -510,36 +513,29 @@ def build_model(context: ModelFitContext):
         value_header="Distribution",
     )
 
-    # Predictor standardised (z-score)
-    X_obs_z = (context.model_data.X_obs - X_obs_mean) / X_obs_std
+    # Plot / query grids (standardised), stacked for 'free' predictions — see
+    # models.build_utils.construct_age_grids.
+    grids = construct_age_grids(
+        context.model_data.X_obs,
+        X_obs_z,
+        X_obs_mean=X_obs_mean,
+        X_obs_std=X_obs_std,
+        n_plot=context.model_config.n_plot,
+        ages_query=context.model_config.ages_query,
+        slope_anchors=context.model_config.slope_anchors,
+    )
+    X_plot = grids.X_plot
+    X_plot_z = grids.X_plot_z
+    X_query = grids.X_query
+    X_query_z = grids.X_query_z
+    X_all_z = grids.X_all_z
+    n_plot = grids.n_plot
+    n_query = grids.n_query
+    n_all = grids.n_all
 
-    # Plot grid
-    X_plot = np.linspace(
-        context.model_data.X_obs.min(),
-        context.model_data.X_obs.max(),
-        context.model_config.n_plot,
-    ).reshape(-1, 1)
-    X_plot_z = (X_plot - X_obs_mean) / X_obs_std
-
-    # Query grid
-    X_query = np.array(context.model_config.ages_query).reshape(-1, 1)
-    X_query_z = (X_query - X_obs_mean) / X_obs_std
-
-    # Stack for 'free' predictions (all standardised)
-    X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
-
-    n_plot = X_plot_z.shape[0]
-    n_query = X_query_z.shape[0]
-    n_all = X_all_z.shape[0]
-
-    ell_low_months = float(context.model_config.ell_months_range[0])
-    ell_high_months = float(context.model_config.ell_months_range[1])
-
-    if ell_low_months <= 0 or ell_high_months <= 0:
-        raise ValueError("Length-scale bounds must be positive (in months).")
-    if ell_high_months <= ell_low_months:
-        raise ValueError("ell_months_range must be (low, high) with high > low.")
-
+    ell_low_months, ell_high_months = validate_ell_bounds(
+        context.model_config.ell_months_range
+    )
     ell_low_z = ell_low_months / X_obs_std
     ell_high_z = ell_high_months / X_obs_std
     ell_range_z = (ell_low_z, ell_high_z)
@@ -549,10 +545,11 @@ def build_model(context: ModelFitContext):
         ell_range_z,
     )
 
-    slope_age_a = float(context.model_config.slope_anchors[0])
-    slope_age_b = float(context.model_config.slope_anchors[1])
-    slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
-    slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
+    slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
+        context.model_config.slope_anchors,
+        X_obs_mean=X_obs_mean,
+        X_obs_std=X_obs_std,
+    )
 
     key_value_table(
         "Derived quantities",
@@ -675,8 +672,7 @@ def build_model(context: ModelFitContext):
         b_kappa = pm.Deterministic("b_kappa", -b_kappa_mag)
 
         # function to compute kappa as a function of age (z)
-        def kappa_of_z(z):
-            return kappa_min + pm.math.exp(a_kappa + b_kappa * z)
+        kappa_of_z = make_kappa_of_z(kappa_min, a_kappa, b_kappa)
 
         # compute kappa for the observed data points, and use that in the likelihood
         kappa_obs = pm.Deterministic("kappa_obs", kappa_of_z(z_obs), dims="obs_id")

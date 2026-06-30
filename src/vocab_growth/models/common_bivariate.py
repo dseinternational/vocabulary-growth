@@ -41,6 +41,12 @@ import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
+from vocab_growth.models.build_utils import (
+    construct_age_grids,
+    slope_anchor_logit_coeffs,
+    standardize_ages,
+    validate_ell_bounds,
+)
 from vocab_growth.models.common import (
     PACKAGE_LIST,
     BaseModelConfiguration,
@@ -53,7 +59,18 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.plotting import _save_csv
+from vocab_growth.models.gp_utils import make_kappa_of_z
+from vocab_growth.plotting import (
+    _save_csv,
+    plot_comprehension_production_gap,
+    plot_production_rate,
+)
+from vocab_growth.posterior_analysis import (
+    extract_posterior as _extract_posterior,
+)
+from vocab_growth.posterior_analysis import (
+    extract_posterior_predictive as _extract_posterior_predictive,
+)
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -126,6 +143,7 @@ class BivariateModelSamples:
     p_u_obs: np.ndarray
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
+    p_u_query_subject_marginal: np.ndarray
     y_u_obs: np.ndarray
     y_u_plot: np.ndarray
     y_u_query: np.ndarray
@@ -147,6 +165,7 @@ class BivariateModelSamples:
     p_s_obs: np.ndarray
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
+    p_s_query_subject_marginal: np.ndarray
     y_s_obs: np.ndarray
     y_s_plot: np.ndarray
     y_s_query: np.ndarray
@@ -377,11 +396,7 @@ def build_model(context: BivariateContext):
         raise ValueError("y_s exceeds n_trials.")
 
     # Standardise ages
-    X_obs_mean = float(np.mean(X_obs))
-    X_obs_std = float(np.std(X_obs, ddof=1))
-
-    if not np.isfinite(X_obs_std) or X_obs_std <= 0:
-        raise ValueError("Age standard deviation must be positive.")
+    X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
     key_value_table(
         "Build configuration",
@@ -398,32 +413,26 @@ def build_model(context: BivariateContext):
         ],
     )
 
-    X_obs_z = (X_obs - X_obs_mean) / X_obs_std
-
-    # Plot grid
-    X_plot = np.linspace(X_obs.min(), X_obs.max(), config.n_plot).reshape(-1, 1)
-    X_plot_z = (X_plot - X_obs_mean) / X_obs_std
-
-    # Query grid
-    X_query = np.array(config.ages_query).reshape(-1, 1)
-    X_query_z = (X_query - X_obs_mean) / X_obs_std
-
-    # Stack all
-    X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
-
-    n_plot = X_plot_z.shape[0]
-    n_query = X_query_z.shape[0]
-    n_all = X_all_z.shape[0]
+    # Plot / query grids (standardised), stacked for 'free' predictions — see
+    # models.build_utils.construct_age_grids.
+    grids = construct_age_grids(
+        X_obs,
+        X_obs_z,
+        X_obs_mean=X_obs_mean,
+        X_obs_std=X_obs_std,
+        n_plot=config.n_plot,
+        ages_query=config.ages_query,
+        slope_anchors=config.slope_anchors,
+    )
+    X_plot = grids.X_plot
+    X_query = grids.X_query
+    X_all_z = grids.X_all_z
+    n_plot = grids.n_plot
+    n_query = grids.n_query
+    n_all = grids.n_all
 
     # Length-scale bounds
-    ell_low_months = float(config.ell_months_range[0])
-    ell_high_months = float(config.ell_months_range[1])
-
-    if ell_low_months <= 0 or ell_high_months <= 0:
-        raise ValueError("Length-scale bounds must be positive (in months).")
-    if ell_high_months <= ell_low_months:
-        raise ValueError("ell_months_range must be (low, high) with high > low.")
-
+    ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
     ell_low_z = ell_low_months / X_obs_std
     ell_high_z = ell_high_months / X_obs_std
     ell_range_z = (ell_low_z, ell_high_z)
@@ -431,10 +440,9 @@ def build_model(context: BivariateContext):
     L, M = get_hsgp_hyperparams(X_obs_z, ell_range_z)
 
     # Slope anchors
-    slope_age_a = float(config.slope_anchors[0])
-    slope_age_b = float(config.slope_anchors[1])
-    slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
-    slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
+    slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
+        config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+    )
 
     key_value_table(
         "Derived quantities",
@@ -614,8 +622,7 @@ def build_model(context: BivariateContext):
         b_kappa_mag_u = config.b_kappa_mag_u_dist.to_pymc("b_kappa_mag_u")
         b_kappa_u = pm.Deterministic("b_kappa_u", -b_kappa_mag_u)
 
-        def kappa_u_of_z(z):
-            return kappa_min_u + pm.math.exp(a_kappa_u + b_kappa_u * z)
+        kappa_u_of_z = make_kappa_of_z(kappa_min_u, a_kappa_u, b_kappa_u)
 
         kappa_u_obs = pm.Deterministic(
             "kappa_u_obs", kappa_u_of_z(z_obs), dims="obs_id"
@@ -632,8 +639,7 @@ def build_model(context: BivariateContext):
         b_kappa_mag_s = config.b_kappa_mag_s_dist.to_pymc("b_kappa_mag_s")
         b_kappa_s = pm.Deterministic("b_kappa_s", -b_kappa_mag_s)
 
-        def kappa_s_of_z(z):
-            return kappa_min_s + pm.math.exp(a_kappa_s + b_kappa_s * z)
+        kappa_s_of_z = make_kappa_of_z(kappa_min_s, a_kappa_s, b_kappa_s)
 
         kappa_s_obs = pm.Deterministic(
             "kappa_s_obs", kappa_s_of_z(z_obs), dims="obs_id"
@@ -689,27 +695,6 @@ def build_model(context: BivariateContext):
 # ============================================================
 
 
-def _extract_posterior(trace, name, dim_name):
-    """Extract posterior samples, stacking chains and draws."""
-    return np.array(
-        trace.posterior[name]
-        .stack(sample=("chain", "draw"))
-        .transpose(dim_name, "sample")
-        .values
-    )
-
-
-def _extract_posterior_predictive(trace, name, dim_name):
-    """Extract posterior predictive samples, stacking chains and draws."""
-    return np.array(
-        trace.posterior_predictive[name]
-        .stack(sample=("chain", "draw"))
-        .transpose(dim_name, "sample")
-        .values,
-        dtype=int,
-    )
-
-
 def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     """Extract model samples into a structured format for plotting and reporting."""
 
@@ -752,10 +737,22 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     n_obs = len(obs_u_mask)
 
     y_u_obs_raw = np.array(trace.observed_data["y_u_obs"].values, dtype=float)
+    if int(obs_u_mask.sum()) != y_u_obs_raw.shape[0]:
+        raise ValueError(
+            f"obs_u_mask count ({int(obs_u_mask.sum())}) does not match observed "
+            f"y_u_obs length ({y_u_obs_raw.shape[0]}); stored mask and likelihood "
+            "rows are misaligned (issue #67)."
+        )
     y_u_obs = np.full(n_obs, np.nan)
     y_u_obs[obs_u_mask] = y_u_obs_raw
 
     y_s_obs_raw = np.array(trace.observed_data["y_s_obs"].values, dtype=float)
+    if int(obs_s_mask.sum()) != y_s_obs_raw.shape[0]:
+        raise ValueError(
+            f"obs_s_mask count ({int(obs_s_mask.sum())}) does not match observed "
+            f"y_s_obs length ({y_s_obs_raw.shape[0]}); stored mask and likelihood "
+            "rows are misaligned (issue #67)."
+        )
     y_s_obs = np.full(n_obs, np.nan)
     y_s_obs[obs_s_mask] = y_s_obs_raw
 
@@ -764,6 +761,12 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     y_u_query = _extract_posterior_predictive(trace, "y_u_query", "query_id")
     y_s_plot = _extract_posterior_predictive(trace, "y_s_plot", "plot_id")
     y_s_query = _extract_posterior_predictive(trace, "y_s_query", "query_id")
+    p_u_query_subject_marginal = posterior_analysis.extract_posterior_predictive_float(
+        trace, "p_u_query_subject_marginal", "query_id"
+    )
+    p_s_query_subject_marginal = posterior_analysis.extract_posterior_predictive_float(
+        trace, "p_s_query_subject_marginal", "query_id"
+    )
 
     # Constant data
     X_obs = np.array(trace.constant_data["X_obs"].values)
@@ -788,6 +791,7 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         p_u_obs=p_u_obs,
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
+        p_u_query_subject_marginal=p_u_query_subject_marginal,
         y_u_obs=y_u_obs,
         y_u_plot=y_u_plot,
         y_u_query=y_u_query,
@@ -805,6 +809,7 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         p_s_obs=p_s_obs,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
+        p_s_query_subject_marginal=p_s_query_subject_marginal,
         y_s_obs=y_s_obs,
         y_s_plot=y_s_plot,
         y_s_query=y_s_query,
@@ -1068,6 +1073,13 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             p_s_plot = p_u_plot * q_plot
             p_s_query = p_u_query * q_query
 
+        pm.Deterministic(
+            "p_u_query_subject_marginal", p_u_query, dims=("query_id",)
+        )
+        pm.Deterministic(
+            "p_s_query_subject_marginal", p_s_query, dims=("query_id",)
+        )
+
         # Understood — plot
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
@@ -1110,9 +1122,11 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             var_names=[
                 "y_u_plot",
                 "y_u_query",
+                "p_u_query_subject_marginal",
                 "y_u_obs",
                 "y_s_plot",
                 "y_s_query",
+                "p_s_query_subject_marginal",
                 "y_s_obs",
             ],
             extend_inferencedata=True,
@@ -1133,6 +1147,9 @@ def posterior_summary(context: BivariateContext):
     samples = context.model_samples
     n_trials = context.model_data.n_trials
     hdi_prob = context.reporting.hdi
+    has_subject_re = any(
+        name in context.model_variables for name in ("tau_subj_u", "tau_subj_q")
+    )
 
     # Understood summary
     summary_u = posterior_analysis.posterior_summary_table(
@@ -1142,6 +1159,14 @@ def posterior_summary(context: BivariateContext):
         n_trials=n_trials,
         hdi_prob=hdi_prob,
     )
+    if has_subject_re:
+        summary_u = posterior_analysis.add_probability_estimand_columns(
+            summary_u,
+            samples.p_u_query,
+            samples.p_u_query_subject_marginal,
+            n_trials=n_trials,
+            hdi_prob=hdi_prob,
+        )
     dataframe_table(
         summary_u, title="Posterior summary — words understood", show_index=False
     )
@@ -1159,6 +1184,14 @@ def posterior_summary(context: BivariateContext):
         n_trials=n_trials,
         hdi_prob=hdi_prob,
     )
+    if has_subject_re:
+        summary_s = posterior_analysis.add_probability_estimand_columns(
+            summary_s,
+            samples.p_s_query,
+            samples.p_s_query_subject_marginal,
+            n_trials=n_trials,
+            hdi_prob=hdi_prob,
+        )
     dataframe_table(
         summary_s, title="Posterior summary — words spoken", show_index=False
     )
@@ -1316,69 +1349,6 @@ def plot_understood_spoken_trajectory_hdi(
     return fig
 
 
-def plot_production_rate(
-    samples: BivariateModelSamples,
-    hdi_prob: float = 0.90,
-    output_dir: str | None = None,
-    filename: str | None = None,
-):
-    """Plot the posterior of the production ratio q(a) = p_S(a) / p_U(a) over age."""
-    X_plot = samples.X_plot
-    q_plot = samples.q_plot
-
-    q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot, prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot, prob=0.75)
-    q_hdi_50 = az.hdi(q_plot, prob=0.50)
-
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-
-    ax.fill_between(
-        X_plot,
-        q_hdi[:, 0],
-        q_hdi[:, 1],
-        alpha=0.20,
-        label=f"{int(hdi_prob * 100)}% HDI",
-    )
-    ax.fill_between(
-        X_plot,
-        q_hdi_75[:, 0],
-        q_hdi_75[:, 1],
-        alpha=0.25,
-        label="75% HDI",
-    )
-    ax.fill_between(
-        X_plot,
-        q_hdi_50[:, 0],
-        q_hdi_50[:, 1],
-        alpha=0.30,
-        label="50% HDI",
-    )
-    ax.plot(X_plot, q_median, lw=3, label="Median q(a)")
-
-    ax.set_xlabel("Age (months)")
-    ax.set_ylabel("q(a) = p_S(a) / p_U(a)")
-    ax.set_ylim(0, 1)
-    ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Production ratio q(a)")
-
-    if output_dir is not None and filename is not None:
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(pd.DataFrame({
-            "age_months": X_plot,
-            "q_median": q_median,
-            "hdi_lo": q_hdi[:, 0],
-            "hdi_hi": q_hdi[:, 1],
-            "hdi75_lo": q_hdi_75[:, 0],
-            "hdi75_hi": q_hdi_75[:, 1],
-            "hdi50_lo": q_hdi_50[:, 0],
-            "hdi50_hi": q_hdi_50[:, 1],
-        }), output_dir, filename)
-
-    return fig
-
-
 def plot_production_rate_by_understood(
     samples: BivariateModelSamples,
     n_trials: int,
@@ -1510,59 +1480,6 @@ def plot_production_rate_predictive(
             "hdi75_hi": ratio_hdi_75[:, 1],
             "hdi50_lo": ratio_hdi_50[:, 0],
             "hdi50_hi": ratio_hdi_50[:, 1],
-        }), output_dir, filename)
-
-    return fig
-
-
-def plot_comprehension_production_gap(
-    samples: BivariateModelSamples,
-    n_trials: int,
-    hdi_prob: float = 0.90,
-    output_dir: str | None = None,
-    filename: str | None = None,
-):
-    """Plot the posterior of the comprehension-production gap (p_U - p_S) over age."""
-    X_plot = samples.X_plot
-    gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
-
-    gap_median = np.median(gap, axis=1)
-    gap_hdi = az.hdi(gap, prob=hdi_prob)
-    gap_hdi_50 = az.hdi(gap, prob=0.50)
-
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-
-    ax.fill_between(
-        X_plot,
-        gap_hdi[:, 0],
-        gap_hdi[:, 1],
-        alpha=0.20,
-        label=f"{int(hdi_prob * 100)}% HDI",
-    )
-    ax.fill_between(
-        X_plot,
-        gap_hdi_50[:, 0],
-        gap_hdi_50[:, 1],
-        alpha=0.30,
-        label="50% HDI",
-    )
-    ax.plot(X_plot, gap_median, lw=3, label="Median gap")
-
-    ax.set_xlabel("Age (months)")
-    ax.set_ylabel("E[understood] - E[spoken] (words)")
-    ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Comprehension-production gap")
-
-    if output_dir is not None and filename is not None:
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(pd.DataFrame({
-            "age_months": X_plot,
-            "gap_median": gap_median,
-            "hdi_lo": gap_hdi[:, 0],
-            "hdi_hi": gap_hdi[:, 1],
-            "hdi50_lo": gap_hdi_50[:, 0],
-            "hdi50_hi": gap_hdi_50[:, 1],
         }), output_dir, filename)
 
     return fig

@@ -21,11 +21,13 @@ dependencies:
       - h5py # h5netcdf backend; pip h5netcdf no longer pulls this transitively (was via conda-forge)
       - duckdb>=1.5.4
       - hatch
-      - ipython>=9.14.1
+      - ipython>=9.15.0
       - ipywidgets>=8.1.8
+      - jax>=0.10.2
       - jupytext
       - matplotlib>=3.11.0
       - notebook>=7.6.0
+      - numpyro>=0.21.0
       - orjson>=3.11.9
       - pandas-stubs
       - pandas>=3.0.3

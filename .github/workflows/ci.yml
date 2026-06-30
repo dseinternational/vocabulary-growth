@@ -86,6 +86,9 @@ jobs:
           pip install -e ../research/src/python
           pip install -e .
 
+      - name: Run pytest
+        run: pytest
+
       - name: Prepare data
         run: python scripts/prepare_data.py
 

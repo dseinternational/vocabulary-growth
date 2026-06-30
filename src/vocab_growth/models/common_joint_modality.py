@@ -66,6 +66,12 @@ from preliz.distributions.distributions import Continuous
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.reporting as vg_reporting
+from vocab_growth.models.build_utils import (
+    construct_age_grids,
+    slope_anchor_logit_coeffs,
+    standardize_ages,
+    validate_ell_bounds,
+)
 from vocab_growth.models.common import (
     PACKAGE_LIST,
     BaseModelConfiguration,
@@ -78,7 +84,9 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.definitions import JointModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
+from vocab_growth.models.gp_utils import make_kappa_of_z
 from vocab_growth.plotting import _save_csv, plot_prior_samples_ratio
+from vocab_growth.posterior_analysis import extract_posterior as _extract
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -196,8 +204,11 @@ def _load_uk02_four_cell():
     all four cell counts recorded, whose signed and spoken margins reconcile
     with the cross-tab cells (signed == signed_only + signed_spoken,
     spoken == spoken_only + signed_spoken) and whose four cells sum to a
-    positive total; they identify psi. The rest are marginal-only uk_02 rows
-    (no usable cross-tab).
+    positive total; they identify psi. For these rows the four-cell sum is
+    treated as the authoritative understood total, so a small mismatch between
+    the raw comprehension column and the cross-tab partition does not make the
+    U likelihood and the Dirichlet-Multinomial likelihood disagree. The rest are
+    marginal-only uk_02 rows (no usable cross-tab).
 
     A row missing any cell — in particular ``understood_only`` (some uk_02 rows
     record a produced sign/speech cross-tab but no comprehension total) — cannot
@@ -251,12 +262,13 @@ def prepare_joint_data(
     four, marg = _load_uk02_four_cell()
     include_uk06 = definition.include_uk06
 
-    # uk_02 four-cell rows: understood for the U likelihood; cells for the DM;
-    # marginal spoken/signed set NaN (subsumed by the DM, avoids double counting).
+    # uk_02 four-cell rows: the four-cell sum is the authoritative understood
+    # total; cells feed the DM; marginal spoken/signed are set NaN because they
+    # are subsumed by the DM and would otherwise be double counted.
     four_cols = {
         "study": UK02_STUDY_ID,
         "age": four["age"].to_numpy(dtype=float),
-        "understood": four["comprehension"].to_numpy(dtype=float),
+        "understood": four["cell_total"].to_numpy(dtype=float),
         "spoken": np.nan,
         "signed": np.nan,
         "understood_only": four["understood_only"].to_numpy(dtype=float),
@@ -288,6 +300,14 @@ def prepare_joint_data(
     if not include_uk06:
         m = (analysis_df["study"] == "uk_06") & analysis_df["signed"].notna()
         analysis_df.loc[m, "signed"] = np.nan
+
+    has_any_observation = (
+        analysis_df["understood"].notna()
+        | analysis_df["spoken"].notna()
+        | analysis_df["signed"].notna()
+        | analysis_df["signed_spoken"].notna()
+    )
+    analysis_df = analysis_df[has_any_observation].reset_index(drop=True)
 
     # Integer study codes (sorted for stability).
     unique_studies = sorted(analysis_df["study"].unique())
@@ -350,6 +370,7 @@ def prepare_joint_data(
 
     context.set_model_data(bmd, analysis_df)
     context.dataframes["descriptive_stats"] = desc
+    os.makedirs(context.reporting.output_dir, exist_ok=True)
     desc.to_csv(
         os.path.join(context.reporting.output_dir, "descriptive_statistics.csv"),
         index=True,
@@ -543,48 +564,44 @@ def build_model(context: JointContext, definition: JointModelDefinition):
 
     X_obs = np.asarray(df["age"], dtype=float).reshape(-1, 1)
     n = len(X_obs)
-    X_mean = float(np.mean(X_obs))
-    X_std = float(np.std(X_obs, ddof=1))
+    X_mean, X_std, X_obs_z = standardize_ages(X_obs)
 
-    X_obs_z = (X_obs - X_mean) / X_std
-    X_plot = np.linspace(X_obs.min(), X_obs.max(), config.n_plot).reshape(-1, 1)
-    X_plot_z = (X_plot - X_mean) / X_std
-    X_query = np.array(config.ages_query).reshape(-1, 1)
-    X_query_z = (X_query - X_mean) / X_std
-    n_plot = X_plot_z.shape[0]
-    n_query = X_query_z.shape[0]
-
-    # Option D — per-draw GP anchor at a reference age. Append one extra grid row
-    # (the reference age) so each anchored GP can be centred to pass through zero
-    # there for every draw, removing the GP<->intercept level redundancy.
+    # Plot / query grids (standardised), with the optional Option-D reference-age
+    # anchor row — see models.build_utils.construct_age_grids. Option D centres
+    # each anchored GP to pass through zero at the reference age for every draw,
+    # removing the GP<->intercept level redundancy.
     anchor_g_u = bool(definition.anchor_g_u_at_ref)
     anchor_g_q = bool(definition.anchor_g_q_at_ref)
     anchor_g_sign = bool(definition.anchor_g_sign_at_ref)
     use_gp_anchor = anchor_g_u or anchor_g_q or anchor_g_sign
-    if use_gp_anchor:
-        if definition.gp_anchor_age_months is not None:
-            anchor_age_months = float(definition.gp_anchor_age_months)
-        else:
-            anchor_age_months = (
-                float(config.slope_anchors[0]) + float(config.slope_anchors[1])
-            ) / 2.0
-        X_anchor_z = (np.array([[anchor_age_months]], dtype=float) - X_mean) / X_std
-        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z, X_anchor_z])
-        i_anchor = n + n_plot + n_query
-    else:
-        anchor_age_months = None
-        X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
-        i_anchor = None
-    n_all = X_all_z.shape[0]
+    grids = construct_age_grids(
+        X_obs,
+        X_obs_z,
+        X_obs_mean=X_mean,
+        X_obs_std=X_std,
+        n_plot=config.n_plot,
+        ages_query=config.ages_query,
+        slope_anchors=config.slope_anchors,
+        use_gp_anchor=use_gp_anchor,
+        gp_anchor_age_months=definition.gp_anchor_age_months,
+    )
+    X_plot = grids.X_plot
+    X_query = grids.X_query
+    X_all_z = grids.X_all_z
+    n_plot = grids.n_plot
+    n_query = grids.n_query
+    n_all = grids.n_all
+    i_anchor = grids.i_anchor
+    anchor_age_months = grids.anchor_age_months
 
-    ell_low_z = float(config.ell_months_range[0]) / X_std
-    ell_high_z = float(config.ell_months_range[1]) / X_std
+    ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
+    ell_low_z = ell_low_months / X_std
+    ell_high_z = ell_high_months / X_std
     L, M = get_hsgp_hyperparams(X_obs_z, (ell_low_z, ell_high_z))
 
-    sa = float(config.slope_anchors[0])
-    sb = float(config.slope_anchors[1])
-    sa_z = (sa - X_mean) / X_std
-    sb_z = (sb - X_mean) / X_std
+    sa_z, sb_z = slope_anchor_logit_coeffs(
+        config.slope_anchors, X_obs_mean=X_mean, X_obs_std=X_std
+    )
 
     build_cfg: list[tuple[str, object]] = [
         ("Total observations", n),
@@ -683,6 +700,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
         if use_subject_codes:
             subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
+        _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
 
         # Latent full-grid trajectories (plain tensors). Option D anchors each GP
         # (per-draw zero at the reference age) when the matching flag is set.
@@ -776,7 +794,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             a = a_d.to_pymc(f"a_kappa_{suffix}")
             bmag = bmag_d.to_pymc(f"b_kappa_mag_{suffix}")
             b = pm.Deterministic(f"b_kappa_{suffix}", -bmag)
-            return lambda z: kmin + pm.math.exp(a + b * z)
+            return make_kappa_of_z(kmin, a, b)
 
         kappa_u_of_z = kappa_fn(config.kappa_min_u_dist, config.a_kappa_u_dist, config.b_kappa_mag_u_dist, "u")
         kappa_s_of_z = kappa_fn(config.kappa_min_s_dist, config.a_kappa_s_dist, config.b_kappa_mag_s_dist, "s")
@@ -905,10 +923,6 @@ def diagnostics(context: JointContext):
     plt.close()
 
 
-def _extract(trace, name, dim):
-    return np.array(trace.posterior[name].stack(sample=("chain", "draw")).transpose(dim, "sample").values)
-
-
 def sample_posterior_predictive(context: JointContext, definition=None):
     """Posterior predictive for the uk_02 four cells (for the cell PPC)."""
     with context.model:
@@ -920,14 +934,27 @@ def sample_posterior_predictive(context: JointContext, definition=None):
     context.set_trace(trace)
     trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
 
-    # Observed uk_02 four-cell counts / ages (recomputed from analysis_df).
+    # Observed uk_02 four-cell counts / ages. Use the stored training mask so
+    # held-out four-cell rows stay aligned with posterior_predictive["cells_obs"].
     df = context.analysis_df
-    has_cells = df["signed_spoken"].notna().values
+    has_cells = np.array(trace.constant_data["obs_cells_mask"].values, dtype=bool)
     cell_counts = np.asarray(
         df.loc[has_cells, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
         dtype=int,
     )
     cell_ages = np.asarray(df.loc[has_cells, "age"], dtype=float)
+    cell_pred = np.array(
+        trace.posterior_predictive["cells_obs"]
+        .stack(sample=("chain", "draw"))
+        .transpose("obs_cells_id", "cell_id", "sample")
+        .values
+    )
+    if int(has_cells.sum()) != cell_pred.shape[0]:
+        raise ValueError(
+            f"obs_cells_mask count ({int(has_cells.sum())}) does not match "
+            f"posterior predictive cells_obs length ({cell_pred.shape[0]}); "
+            "stored mask and likelihood rows are misaligned."
+        )
 
     samples = JointModelSamples(
         X_plot=np.array(trace.constant_data["X_plot"].values),
@@ -948,12 +975,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         p_any_indep_query=_extract(trace, "p_any_indep_query", "query_id"),
         psi=np.array(trace.posterior["psi"].stack(sample=("chain", "draw")).values),
         cell_obs=cell_counts,
-        cell_pred=np.array(
-            trace.posterior_predictive["cells_obs"]
-            .stack(sample=("chain", "draw"))
-            .transpose("obs_cells_id", "cell_id", "sample")
-            .values
-        ),
+        cell_pred=cell_pred,
         cell_ages=cell_ages,
     )
     context.set_model_samples(samples)

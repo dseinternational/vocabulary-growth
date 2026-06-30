@@ -1,10 +1,48 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import os
+import types
+
 import numpy as np
 import pytest
+from matplotlib.figure import Figure
 
-from vocab_growth.plotting import _maybe_savgol, _resolve_savgol_window_length
+from vocab_growth.plotting import (
+    _maybe_savgol,
+    _resolve_savgol_window_length,
+    plot_comprehension_production_gap,
+    plot_production_rate,
+)
+
+
+def _ratio_gap_samples(n_plot: int = 20, n_draws: int = 50):
+    """Duck-typed stand-in for Bivariate/Trivariate model samples."""
+    rng = np.random.default_rng(0)
+    return types.SimpleNamespace(
+        X_plot=np.linspace(8.0, 36.0, n_plot),
+        q_plot=rng.uniform(0.0, 1.0, size=(n_plot, n_draws)),
+        p_u_plot=rng.uniform(0.3, 0.6, size=(n_plot, n_draws)),
+        p_s_plot=rng.uniform(0.0, 0.3, size=(n_plot, n_draws)),
+    )
+
+
+def test_plot_production_rate_returns_figure_and_writes_files(tmp_path):
+    fig = plot_production_rate(
+        _ratio_gap_samples(), output_dir=str(tmp_path), filename="prod"
+    )
+    assert isinstance(fig, Figure)
+    for ext in ("png", "svg", "csv"):
+        assert os.path.exists(os.path.join(str(tmp_path), f"prod.{ext}"))
+
+
+def test_plot_comprehension_production_gap_returns_figure_and_writes_files(tmp_path):
+    fig = plot_comprehension_production_gap(
+        _ratio_gap_samples(), n_trials=800, output_dir=str(tmp_path), filename="gap"
+    )
+    assert isinstance(fig, Figure)
+    for ext in ("png", "svg", "csv"):
+        assert os.path.exists(os.path.join(str(tmp_path), f"gap.{ext}"))
 
 
 @pytest.mark.parametrize("n", [5, 7, 15, 21, 100])

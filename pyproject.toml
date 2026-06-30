@@ -16,6 +16,7 @@ dependencies = [
   "arviz-stats>=1.2.0",
   "arviz>=1.2.0",
   "duckdb>=1.5.2",
+  "dse-research-utils>=0.2.0",
   "jaxlib>=0.9.2",
   "matplotlib>=3.10.9",
   "numpy>=2.4.4",
@@ -24,7 +25,9 @@ dependencies = [
   "pandas>=3.0.3",
   "preliz>=0.18.0",
   "pymc>=6.0.1",
-  "scipy>=1.18.0"
+  "scipy>=1.18.0",
+  "rich>=15.0.0",
+  "xarray>=2026.4.0"
 ]
 
 [project.optional-dependencies]
