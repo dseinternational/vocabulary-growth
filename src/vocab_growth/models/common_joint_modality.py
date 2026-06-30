@@ -954,6 +954,21 @@ def sample(context: JointContext):
 
 def diagnostics(context: JointContext):
     var_names = [v.name for v in context.model.unobserved_RVs if v.size.eval() <= 2]
+    posterior_vars = set(context.trace.posterior.data_vars)
+
+    def prioritized_unique_var_names(
+        names: list[str],
+        priority: tuple[str, ...] = ("psi", "conc"),
+    ) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in (*priority, *names):
+            if name in posterior_vars and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+        return ordered
+
+    plot_var_names = prioritized_unique_var_names(var_names)
     diag = az.summary(context.trace, var_names=var_names, round_to=4,
                       ci_prob=context.reporting.hdi, ci_kind="hdi")
     diag.to_csv(os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True)
@@ -961,7 +976,7 @@ def diagnostics(context: JointContext):
     _report_diagnostic_warnings(diag)
     pair_plot_var_names = capped_plot_var_names(
         context.trace,
-        var_names + ["psi", "conc"],
+        plot_var_names,
         squared=True,
     )
     if pair_plot_var_names:
@@ -972,7 +987,7 @@ def diagnostics(context: JointContext):
             filename="pair_plot",
         )
         plt.close()
-    tv = capped_plot_var_names(context.trace, var_names + ["psi", "conc"])
+    tv = capped_plot_var_names(context.trace, plot_var_names)
     az.plot_trace(context.trace, var_names=tv, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     plt.close()
