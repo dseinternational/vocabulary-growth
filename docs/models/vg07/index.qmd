@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -38,6 +42,16 @@ $$h(a, s) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s]
 
 where $\delta_U[s] \sim \text{Normal}(0, \tau_U)$ and $\delta_q[s] \sim \text{Normal}(0, \tau_q)$ are study-level random intercepts on the logit scale. Plot and query predictions use the population-level trajectory ($\delta = 0$).
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcomes:** words understood and words spoken.
+- **Hierarchy:** study random intercepts on both the understood trajectory and the production ratio.
+- **Reported curves:** population-level trajectories with study effects set to zero.
+- **Role in the lineage:** VG05 plus study-level heterogeneity.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -47,6 +61,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The trajectory and dispersion priors match the broad DS bivariate baseline. The study random-intercept scales use HalfNormal(0.5) priors on the logit scale for both understood and `q`, allowing meaningful between-study level differences while regularising weakly informed studies.
 
 ### Understood trajectory
 
@@ -85,6 +101,8 @@ For full details and discussion, please refer to the technical report.
 ![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+In addition to the population trajectories, read these checks with the study effects in mind: the prior should allow between-study heterogeneity without letting study shifts dominate the developmental curve.
 
 ### Prior samples -- words understood
 
@@ -142,6 +160,12 @@ _style_diagnostics(diagnostics)
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+::: {.callout-note title="Diagnostic focus"}
+
+Check `tau_u`, `tau_q`, the study intercepts, and the GP level parameters for evidence that between-study shifts are trading off with the global developmental curves.
+
+:::
 
 ## Joint trajectory
 

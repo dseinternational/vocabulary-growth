@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -33,6 +37,16 @@ import pandas as pd
 
 We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only one outcome is available are retained using separate observation indices.
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcomes:** words understood and words spoken.
+- **Decomposition:** $p_S(a)=p_U(a)q(a)$, so spoken vocabulary is bounded by comprehension.
+- **Age anchors:** 24 and 84 months for both the understood trajectory and `q`.
+- **Hierarchy:** none; study and repeated-child effects are introduced in later DS joint models.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -42,6 +56,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The understood trajectory uses the DS comprehension anchors. The production-ratio anchors are broad baseline priors: they regularise $q(a)=P(\text{speak}\mid\text{understood})$ without treating the fraction as a direct word count. The two dispersion blocks let extra-binomial heterogeneity differ between comprehension and spoken production.
 
 ### Understood trajectory
 
@@ -80,6 +96,8 @@ For full details and discussion, please refer to the technical report.
 ![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+For this joint baseline, inspect whether the prior induces plausible understood counts, plausible spoken counts, and a credible comprehension-production gap over the full 12-90 month query range.
 
 ### Prior samples -- words understood
 
@@ -137,6 +155,12 @@ _style_diagnostics(diagnostics)
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+::: {.callout-note title="Diagnostic focus"}
+
+The bivariate geometry depends on the understood anchors, `q` anchors, GP hyperparameters, and both `kappa` curves. Weak diagnostics for `q` should be treated as directly relevant to the spoken trajectory.
+
+:::
 
 ## Joint trajectory
 

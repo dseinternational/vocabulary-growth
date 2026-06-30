@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -23,6 +27,16 @@ If the model was not fitted in "reporting" mode, the results will be more approx
 :::
 
 This model adds **signing** as a third production modality alongside speaking. It jointly examines how age influences words understood, words spoken and words signed ($A \rightarrow U$, $A \rightarrow S$, $A \rightarrow \text{Sign}$; $U \rightarrow S$, $U \rightarrow \text{Sign}$), using a production-ratio reparameterization that enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction.
+
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcomes:** words understood, spoken, and signed.
+- **Decomposition:** spoken and signed vocabularies are each modelled as fractions of understood vocabulary.
+- **Signing structure:** signed ratio has an intercept-only mean plus GP, not a monotone age slope.
+- **Total expressive vocabulary:** `p_any` is an independence-based upper bound, not a data-identified union.
+
+:::
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -39,7 +53,7 @@ $$
 p_S(a) = p_U(a) \cdot q(a), \qquad p_\text{Sign}(a) = p_U(a) \cdot r(a),
 $$
 
-where $q(a) = \text{sigmoid}(h(a))$ is the **production ratio** (the fraction of understood words that are spoken at age $a$) and $r(a) = \text{sigmoid}(g_\text{sign}(a))$ is the **signed ratio** (the fraction of understood words that are signed). Since $q(a), r(a) \in (0, 1)$, this enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction. Each of $f_U(a)$, $h(a)$ and $g_\text{sign}(a)$ has its own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only some outcomes are available are retained using separate observation indices.
+where $q(a) = \text{sigmoid}(h(a))$ is the **production ratio** (the fraction of understood words that are spoken at age $a$) and $r(a) = \text{sigmoid}(g_\text{sign}(a))$ is the **signed ratio** (the fraction of understood words that are signed). Since $q(a), r(a) \in (0, 1)$, this enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction. The understood trajectory $f_U(a)$ and spoken-ratio trajectory $h(a)$ each have a linear trend plus a Gaussian process. The signed-ratio trajectory instead has an intercept-only mean plus a Gaussian process; this avoids imposing a monotone signing slope and lets the GP carry the observed rise-and-fall pattern. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only some outcomes are available are retained using separate observation indices.
 
 ### Total expressive vocabulary
 
@@ -51,7 +65,7 @@ $$
 
 ::: {.callout-important title="p_any is an independence-based upper bound"}
 
-This formula assumes signing and speaking are **conditionally independent given age** (the Option 1 limitation of issue #49). The signed and spoken blocks share the understood trajectory $p_U(a)$ but are otherwise modelled independently. In reality a word is often signed *before* it is spoken, so the two are **positively associated**: in the only source with the four-cell breakdown (`uk_02`), words produced in both modalities are observed more often than independence predicts (0.18 vs $r \cdot q$ 0.14 over 20–56 months). Because positive association reduces the union, $p_\text{any}$ as computed here **over-states** the true total expressive vocabulary — it is an **upper bound** (≈ 4 percentage points high against the `uk_02` observed union; see the validation below). VG14 therefore gives a first, lightweight read on the sign→speech hand-off; the planned VG15 model relaxes the independence assumption using the `uk_02` four-cell (sign-only / sign+speech / speech-only / neither) breakdown to identify the within-understood signed–spoken association directly.
+This formula assumes signing and speaking are **conditionally independent given age** (the Option 1 limitation of issue #49). The signed and spoken blocks share the understood trajectory $p_U(a)$ but are otherwise modelled independently. In reality a word is often signed _before_ it is spoken, so the two are **positively associated**: in the only source with the four-cell breakdown (`uk_02`), words produced in both modalities are observed more often than independence predicts (0.18 vs $r \cdot q$ 0.14 over 20-56 months). Because positive association reduces the union, $p_\text{any}$ as computed here **over-states** the true total expressive vocabulary. It is an **upper bound** (about 4 percentage points high against the `uk_02` observed union; see the validation below). VG14 therefore gives a first, lightweight read on the sign-to-speech hand-off; VG15 relaxes the independence assumption using the `uk_02` four-cell (sign-only / sign+speech / speech-only / neither) breakdown to identify the within-understood signed-spoken association directly.
 
 :::
 
@@ -64,6 +78,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The understood and spoken-ratio priors follow the baseline DS bivariate structure. The signed-ratio prior is different by design: it uses an intercept-only signed mean, a shorter signed GP length-scale, and a larger signed GP amplitude so the prior can express a signing hump without forcing a monotone developmental trend. The signed prior should therefore be judged mainly through prior predictive trajectories for `r(a)` and signed counts, not by the intercept plot alone.
 
 ### Understood trajectory
 
@@ -121,6 +137,8 @@ The empirical signed fraction of understood words is a **hump** — near zero be
 
 ## Prior predictive checks
 
+For VG14 the key prior predictive question is whether signing can rise and fall over the observed age range without implying substantial signing before the signing data begin. The prior should also leave the understood and spoken trajectories broad enough that the signed pathway does not indirectly force total expressive vocabulary.
+
 ### Prior samples -- words understood
 
 ![Prior sample trajectories (understood)](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
@@ -140,6 +158,12 @@ The empirical signed fraction of understood words is a **hump** — near zero be
 ### Prior samples -- signed rate r(a)
 
 ![Prior sample trajectories for signed ratio r(a)](prior_samples_r.png){#fig-prior-samples-r .lightbox fig-align="left"}
+
+::: {.callout-note title="Prior predictive focus"}
+
+Inspect the signed-count and signed-ratio panels together. A plausible prior should allow near-floor signing at the youngest ages, a preschool rise, and a later decline, while still allowing uncertainty where signing observations are sparse.
+
+:::
 
 ## Data
 
@@ -186,6 +210,12 @@ _style_diagnostics(diagnostics)
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
+::: {.callout-note title="Diagnostic focus"}
+
+The sparse signing pathway is the main diagnostic pressure point. Pay particular attention to the signed GP length-scale and amplitude, `kappa_sign`, and any pair-plot evidence that the signed level, signed GP, and dispersion are trading off.
+
+:::
+
 ## Joint trajectory
 
 ![Joint posterior predictive trajectory for words understood, spoken and signed](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
@@ -225,7 +255,7 @@ summary_q
 
 ## Signed ratio
 
-The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ is the fraction of understood words that are signed at each age. The robust, headline finding is that signing **rises from near zero in infancy to a substantial fraction — about 0.4–0.5 of understood words — by age 2–3**: children sign words they understand but cannot yet say. Signing is a *bridge*, not a 12-month-dominant modality (the baseline fit's monotone decline from 0.58 was an artefact).
+The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ is the fraction of understood words that are signed at each age. The robust, headline finding is that signing **rises from near zero in infancy to a substantial fraction — about 0.4–0.5 of understood words — by age 2–3**: children sign words they understand but cannot yet say. Signing is a _bridge_, not a 12-month-dominant modality (the baseline fit's monotone decline from 0.58 was an artefact).
 
 ::: {.callout-warning title="The peak age and the decline are study-confounded — not a precise developmental fact"}
 

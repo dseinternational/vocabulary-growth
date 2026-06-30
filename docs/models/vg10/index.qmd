@@ -49,6 +49,25 @@ $$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + \tilde g_q(a) + \
 
 where $\tilde g_U(a) = \eta_U \cdot (\tilde u_U(a) - \tilde u_U(a_{\text{ref}}))$ and $\tilde g_q(a) = \eta_q \cdot (\tilde u_q(a) - \tilde u_q(a_{\text{ref}}))$ with $\tilde u_U, \tilde u_q$ the unit-amplitude HSGP draws. By construction, $\tilde g_U(a_{\text{ref}}) = \tilde g_q(a_{\text{ref}}) = 0$ on every draw. Plot and query predictions use the population-level trajectory ($\delta = 0$ throughout).
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcomes:** words understood and words spoken.
+- **Hierarchy:** study and subject random intercepts on both understood and `q`.
+- **Reported curves:** population-level trajectories with study and subject effects set to zero.
+- **Role in the lineage:** stabilised version of VG09 and the main DS understood-spoken interpretive template.
+
+:::
+
+::: {.callout-note title="What changed from VG09"}
+
+- **Tighter `q` anchors:** posterior-informed regularisation from the VG07 fit.
+- **GP anchoring:** both GPs are constrained to be zero at 54 months on every draw.
+- **Hierarchy:** study and subject random intercepts remain on both understood and `q`.
+- **Purpose:** reduce the trend/GP/random-effect redundancy that made VG09 harder to sample.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -58,6 +77,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The understood priors match VG09. The production-ratio anchors are intentionally tighter than the VG05-VG09 defaults: they are informed by the VG07 posterior and should be labelled as data-informed regularisation. They are used to stabilise the decomposition of spoken vocabulary into understood vocabulary times `q(a)`, not as independent prior evidence.
 
 ### Understood trajectory
 
@@ -96,6 +117,8 @@ For full details and discussion, please refer to the technical report.
 ![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+These checks should demonstrate that the tightened `q` anchors still allow plausible spoken trajectories and comprehension-production gaps over 12-90 months. If the prior predictive spoken curves are too narrow, the stabilising prior may be doing too much substantive work.
 
 ### Prior samples -- words understood
 
@@ -153,6 +176,12 @@ _style_diagnostics(diagnostics)
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+::: {.callout-note title="Diagnostic focus"}
+
+The critical question is whether the VG09 geometry issue is resolved. Check R-hat and ESS for the `q` anchors, `q` GP hyperparameters, `tau_q`, `tau_subj_q`, and the anchored GP components.
+
+:::
 
 ## Joint trajectory
 
