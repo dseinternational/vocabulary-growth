@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -33,6 +37,16 @@ import pandas as pd
 
 We model the number of words understood as a bounded count outcome out of 800 possible words. The expected proportion of words understood is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Priors for the linear trend are specified indirectly through the expected proportion of words understood at two reference ages, making the prior assumptions more interpretable.
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcome:** words understood out of the common 800-word reference inventory.
+- **Age anchors:** 24 and 84 months.
+- **Hierarchy:** none; study and repeated-child effects are not modelled here.
+- **Role in the model family:** baseline DS understood trajectory, mainly for comparison with joint understood-spoken models.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -42,6 +56,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The low-age anchor encodes a floor expectation for understood words at 24 months, but it is less floor-heavy than the spoken anchor because comprehension typically precedes production. The 84-month anchor is deliberately broad, so later comprehension is not forced toward either low or high vocabulary. The GP priors control smooth nonlinear departures from the anchor trend, and the age-varying `kappa` priors control extra-binomial heterogeneity.
 
 ### Lengthscale
 
@@ -70,6 +86,8 @@ For full details and discussion, please refer to the technical report.
 ![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.png){#fig-b-kappa-mag .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+Read these checks as a pre-data plausibility test: young-age comprehension should usually remain low but not impossible, later-age comprehension should not be forced to the ceiling, and simulated counts should have realistic spread.
 
 ### Prior samples
 
@@ -128,7 +146,15 @@ _style_diagnostics(diagnostics)
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
+::: {.callout-note title="Diagnostic focus"}
+
+For this baseline model, focus on the understood anchors, GP hyperparameters, and age-varying `kappa` parameters. Poor diagnostics there would affect both the median comprehension trajectory and the width of posterior predictive intervals.
+
+:::
+
 ## Posterior predictions
+
+The main findings to inspect are the understood vocabulary trajectory, the age profile of expected learning rate, and uncertainty in the older-age tail. Use the joint models, especially the later DS bivariate models, when the question is the relationship between comprehension and spoken production.
 
 ### Posterior summary table for selected ages
 

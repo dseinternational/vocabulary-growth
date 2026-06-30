@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -33,6 +37,16 @@ import pandas as pd
 
 We jointly model words understood and words spoken as bounded count outcomes out of an 800-word reference inventory. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Wordbank WG and Oxford CDI rows contribute independently measured understood and spoken observations; Words & Sentences rows contribute spoken observations only.
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** typically developing children.
+- **Outcomes:** words understood and words spoken.
+- **Decomposition:** $p_S(a)=p_U(a)q(a)$, so spoken vocabulary is bounded by comprehension.
+- **Age anchors:** 12 and 26 months.
+- **Data handling:** 25% TD sample; Words & Sentences rows contribute spoken-only observations.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -42,6 +56,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The understood anchors are TD-specific and centred on a much younger developmental window than the DS joint models. The `q` anchors are the same broad baseline production-ratio priors used in VG05, so TD-DS comparisons should not be read as having identical anchor assumptions.
 
 ### Understood trajectory
 
@@ -80,6 +96,8 @@ For full details and discussion, please refer to the technical report.
 ![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+For this TD joint baseline, inspect whether the prior allows rapid comprehension growth, plausible spoken counts, and `q(a)` values that can rise over the 9-30 month query range without being forced to one.
 
 ### Prior samples -- words understood
 
@@ -137,6 +155,12 @@ _style_diagnostics(diagnostics)
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+::: {.callout-note title="Diagnostic focus"}
+
+Read these diagnostics with the TD subsampling in mind. The `q` trajectory, GP hyperparameters, and both dispersion curves are the main checks for the joint TD interpretation; VG13 is the denser young-TD refinement.
+
+:::
 
 ## Joint trajectory
 
