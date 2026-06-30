@@ -165,27 +165,3 @@ qualifying observations can contribute.
   trajectories** and carries VG10's stabilisation (tighter `q` anchors + GP
   anchoring at 54 months), yielding a **data-identified** total expressive
   vocabulary rather than VG14's independence-based bound.
-
-## Fitting and reporting
-
-Fit any model from the repository root:
-
-```bash
-python scripts/fit_model.py <model_id> [--config dev|test|rep] [--render] [--upload]
-```
-
-`model_id` is `vg01`…`vg15` or `all`. The `--config` flag selects the sampling
-configuration — `dev` (fast, for development), `test`, or `rep` (full reporting
-quality); it defaults to `dev`. Output (traces, figures, summary tables) is
-written to `output/models/<model_name>/`, and the per-model report under
-`docs/models/vgNN/index.qmd` (e.g. [`vg01/index.qmd`](vg01/index.qmd)) renders from it.
-
-## Related documents
-
-- [Technical report](../report/index.qmd) — the consolidated write-up of the
-  study and its models.
-- [DS/TD comparison report](../comparison/index.qmd) — side-by-side comparison of
-  Down syndrome and typically-developing trajectories.
-- [Project README](../../README.md) — study background, goals, and intended
-  outputs.
-- [`CLAUDE.md`](../../CLAUDE.md) — architecture and conventions for contributors.
