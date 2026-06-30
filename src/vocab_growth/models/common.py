@@ -21,6 +21,7 @@ import dse_research_utils.plot.distributions as plot_dist
 import dse_research_utils.plot.predictive as plot_predictive
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
+import dse_research_utils.statistics.diagnostics as shared_diagnostics
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
 import dse_research_utils.statistics.models.reporting as reporting
@@ -819,6 +820,10 @@ def diagnostics(context: ModelFitContext):
 
     diagnostics_df.to_csv(
         os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True
+    )
+
+    shared_diagnostics.write_diagnostics_summary(
+        context.trace, context.reporting.output_dir, var_names=var_names
     )
 
     dataframe_table(diagnostics_df, title="Posterior diagnostics")

@@ -13,7 +13,9 @@ already produced for the findings chapters (cross-reference or re-embed via a
 single shared cell); do NOT re-derive. Numbers come from Appendix C.
 -->
 
-## What we found
+## What we found {#sec-synthesis}
+
+The headline for each question is collected in @tbl-at-a-glance (Findings at a glance, in the front matter); this chapter draws those threads together across dimensions.
 
 **TODO**: synthesise across dimensions — DS understood vs spoken; the comprehension–production gap and its growth with age; DS vs TD by chronological age and by words understood (@sec-comparison-vocab); signing's place in expressive development and total expressive vocabulary.
 

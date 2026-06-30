@@ -31,11 +31,15 @@ Every model in this report is held to the same checks; the per-model evidence is
 
 ### Convergence diagnostics
 
-**TODO**: $\hat{R}$, bulk/tail ESS, divergences, and energy (BFMI). State the reporting thresholds used throughout ($\hat{R} \le 1.01$, ESS $\ge 400$) and that `rep` fits are reported as clean.
+Every reported fit must clear a single, explicit convergence gate before any estimate is read from it: no divergent transitions, a potential scale reduction factor $\hat{R} \le 1.01$ on all parameters, bulk and tail effective sample size (ESS) $\ge 400$, and an energy Bayesian fraction of missing information (BFMI) $\ge 0.3$ on every chain. These thresholds are applied uniformly across all models, and each model's appendix entry carries a generated pass/fail banner that records them against the achieved values (@sec-appendix-b1). The `rep`-quality fits reported here clear the gate; where a development-configuration fit does not — short chains routinely miss the ESS target — its estimates are treated as provisional until refitted at reporting quality.
 
 ### Posterior predictive checks
 
 **TODO**: how fitted models are checked against observed counts (PMF/CDF overlays, count distributions by age, the four-cell PPC for the signing model).
+
+### Reporting estimates: lead with the interval
+
+Several estimands in this report rest on modest samples — most acutely the sign–speech association $\psi$, identified from roughly 34 children. At that precision a point estimate selected because it looks "significant" (for example, because its interval excludes a reference value) is on average inflated in magnitude, and at low power can even take the wrong sign — the Type-M and Type-S errors that follow from selecting on a noisy estimate (the "winner's curse"). We therefore lead with the credible interval and the strength of evidence for a named claim, and treat the point estimate as the least informative summary rather than the headline.
 
 ## Model comparison and what "supersedes" means {#sec-supersedes}
 
