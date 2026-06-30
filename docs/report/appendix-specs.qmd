@@ -65,7 +65,13 @@ Before fitting, we checked that the priors generate plausible age–vocabulary c
 
 ### Diagnostics
 
-Convergence diagnostics for the reporting fit (the rubric of @sec-supersedes: $\hat{R}$, bulk/tail ESS, divergences).
+Convergence diagnostics for the reporting fit (the rubric of @sec-supersedes: $\hat{R}$, bulk/tail ESS, divergences, BFMI). The gate banner gives the pass/fail verdict; the table below gives the per-parameter detail.
+
+```{python}
+#| echo: false
+#| output: asis
+print(convergence_banner("VG01"))
+```
 
 ```{python}
 #| label: tbl-vg01-diagnostics

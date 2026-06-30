@@ -99,4 +99,54 @@ def show_or_pending(df, what):
             f"fitted and its output is present under `docs/report/figures/`."
         )
     return df
+
+
+def load_json(model_id, name):
+    """Parsed JSON artefact for a model (e.g. the convergence gate), or None."""
+    import json
+
+    p = model_dir(model_id) / f"{name}.json"
+    return json.loads(p.read_text()) if p.exists() else None
+
+
+def num(value, fmt="{:.0f}"):
+    """Format a value for prose, or an em dash when it is missing."""
+    return "—" if value is None else fmt.format(value)
+
+
+def pct(model_id, summary, age_months, column):
+    """A summary value at an age as a whole-number percentage, or an em dash."""
+    v = val(model_id, summary, age_months, column)
+    return "—" if v is None else f"{v * 100:.0f}%"
+
+
+def psi_evidence(model_id="VG15"):
+    """(probability, odds, label) for the P(psi > 1) claim, or None if unfitted.
+
+    Uses the shared evidence ladder (dse_research_utils) so the strength of
+    evidence for a positive sign–speech association reads the same wherever it
+    appears in the report.
+    """
+    df = load_summary(model_id, "posterior_summary_psi")
+    if df is None or "P_psi_gt_1" not in df.columns:
+        return None
+    from dse_research_utils.statistics.evidence import evidence_label, odds_string
+
+    p = float(df["P_psi_gt_1"].iloc[0])
+    # When every draw clears the reference the literal odds are absurd (e.g.
+    # "1000000000:1"); cap the display at the point it stops being informative.
+    odds = ">999:1" if p >= 0.999 else odds_string(p)
+    return p, odds, evidence_label(p)
+
+
+def convergence_banner(model_id):
+    """Quarto callout (Markdown) for a model's convergence gate.
+
+    Reads `diagnostics_summary.json` (written at fit time via dse_research_utils)
+    and renders the shared pass/fail banner; a missing file yields a graceful
+    placeholder. Use from an `output: asis` cell: `print(convergence_banner("VG15"))`.
+    """
+    from dse_research_utils.statistics.diagnostics import convergence_banner_markdown
+
+    return convergence_banner_markdown(load_json(model_id, "diagnostics_summary"))
 ```

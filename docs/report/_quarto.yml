@@ -57,6 +57,7 @@ book:
   chapters:
     - index.qmd
     - acknowledgements.qmd
+    - summary.qmd
     - part: "Background and aims"
       chapters:
         - intro.qmd
