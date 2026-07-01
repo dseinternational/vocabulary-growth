@@ -5,7 +5,7 @@ dependencies:
   - python=3.14.6
   - graphviz>=14.1.2
   - numba>=0.65.1
-  - numpy>=2.4.6,<2.5 # numba 0.65.1 requires numpy <2.5; lift cap when numba supports 2.5
+  - numpy>=2.4.6,<2.6.0 # numba 0.65.1 requires numpy <2.5; lift cap when numba supports 2.5
   - nutpie>=0.16.10
   - pymc>=6.0.1
   - scipy>=1.18.0
@@ -38,7 +38,7 @@ dependencies:
       - scikit-learn>=1.9.0
       - scipy-stubs
       - seaborn>=0.13.2
-      - setuptools>=81.0.0
+      - setuptools>=82.0.1
       - xarray>=2026.4.0
       - -e ../research/src/python #  for now, for local development
       - -e ./
