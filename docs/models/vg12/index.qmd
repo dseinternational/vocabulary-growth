@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -33,6 +37,16 @@ import pandas as pd
 
 We model the number of words understood as a bounded count outcome out of an 800-word reference inventory. The expected proportion of words understood is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend, a Gaussian process term (anchored at 19 months to remove the GP–intercept ridge), and a dataset-level study random intercept. Study intercepts are modelled with a non-centred Normal parameterisation and absorbed at the observation level only; plot and query predictions use the population-level trajectory. To account for extra variation between children, we use a Beta-Binomial likelihood with age-varying dispersion. Only Wordbank WG and Oxford CDI rows contribute understood observations; WS comprehension values are production proxies and are excluded.
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** typically developing children.
+- **Outcome:** words understood out of the common 800-word reference inventory.
+- **Data handling:** full TD data rather than the VG04 subsample; datasets with fewer than 200 observations are filtered.
+- **Hierarchy:** dataset-level study random intercepts.
+- **Stabilisation:** the GP is anchored at 19 months.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -42,6 +56,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The trajectory priors match the TD understood baseline anchors at 12 and 26 months. The low anchor is strongly floor-oriented, while the high anchor allows rapid TD comprehension growth without forcing a ceiling. The study random-effect scale uses a HalfNormal(0.5) prior on the logit scale, and the 19-month GP anchor is an identifiability constraint rather than a substantive developmental breakpoint.
 
 ### Lengthscale
 
@@ -70,6 +86,8 @@ For full details and discussion, please refer to the technical report.
 ![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.png){#fig-b-kappa-mag .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+Prior predictive checks should be judged against rapid TD comprehension growth and possible ceiling pressure. The prior should allow high comprehension by later query ages without making that outcome inevitable before seeing the data.
 
 ### Prior samples
 
@@ -133,7 +151,15 @@ _style_diagnostics(diagnostics)
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
+::: {.callout-note title="Diagnostic focus"}
+
+Check the study-effect scale, study intercepts, GP hyperparameters, and age-varying `kappa`. The full-data study hierarchy is the main difference from VG04.
+
+:::
+
 ## Posterior predictions
+
+The main findings to inspect are how the full-data, study-adjusted understood trajectory differs from VG04, and how much uncertainty remains near the upper end of the TD comprehension range.
 
 ### Posterior summary table for selected ages
 

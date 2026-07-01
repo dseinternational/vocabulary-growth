@@ -15,6 +15,10 @@ format:
       - repo
 ---
 
+::: {.callout-note}
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+:::
+
 ::: {.callout-warning title="Warning: Preliminary model output"}
 
 This model output is preliminary and likely to change as the model evolves and further data are received.
@@ -33,6 +37,16 @@ import pandas as pd
 
 We model the number of words spoken as a bounded count outcome out of 800 possible words. The expected proportion of words spoken is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Priors for the linear trend are specified indirectly through the expected proportion of words spoken at two reference ages, making the prior assumptions more interpretable.
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcome:** words spoken out of the common 800-word reference inventory.
+- **Age anchors:** 24 and 84 months.
+- **Hierarchy:** none; study and repeated-child effects are not modelled here.
+- **Role in the model family:** baseline DS spoken trajectory, mainly for comparison with later joint and hierarchical models.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -42,6 +56,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The low-age anchor encodes a strong floor expectation for spoken words at 24 months. The 84-month anchor is deliberately broad, so the prior does not rule out either low or high later spoken vocabulary before seeing the data. The GP length-scale and amplitude priors allow smooth nonlinear departures from the anchor-defined trend, while the `kappa` priors allow extra-binomial heterogeneity to vary with age.
 
 ### Lengthscale
 
@@ -70,6 +86,8 @@ For full details and discussion, please refer to the technical report.
 ![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.png){#fig-b-kappa-mag .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+Read these checks as a pre-data plausibility test: young-age spoken vocabulary should usually remain near the floor, older-age trajectories should not be forced to the ceiling, and simulated counts should show realistic between-child spread.
 
 ### Prior samples
 
@@ -128,7 +146,15 @@ _style_diagnostics(diagnostics)
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
+::: {.callout-note title="Diagnostic focus"}
+
+For this baseline model, focus on the slope anchors, GP hyperparameters, and age-varying `kappa` parameters. Poor diagnostics there would directly affect the spoken trajectory and learning-rate interpretation.
+
+:::
+
 ## Posterior predictions
+
+The main findings to inspect are the spoken vocabulary trajectory, the age at which the expected learning rate is largest, and how much uncertainty remains at older ages. Because this model has no study or subject effects, treat it as a baseline rather than the final DS spoken-vocabulary account.
 
 ### Posterior summary table for selected ages
 

@@ -26,7 +26,17 @@ This model output is preliminary and likely to change as the model evolves and f
 If the model was not fitted in "reporting" mode, the results will be more approximate than when additional sampling has been performed.
 :::
 
-This model (issue #49, Option 3) estimates the **within-understood association** between signing and speaking — the overlap that VG14 assumed away — and adds **study random intercepts**, replacing VG14's independence-based `p_any` upper bound with a _data-identified_ total expressive vocabulary.
+This model (issue #49, Option 3) estimates the **within-understood association** between signing and speaking, the overlap that VG14 assumed away. It adds study random intercepts, subject random intercepts on all three latent trajectories, and VG10-style GP anchoring, replacing VG14's independence-based `p_any` upper bound with a _data-identified_ total expressive vocabulary.
+
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcomes:** words understood, spoken, signed, and four-cell sign/speech composition.
+- **Association:** scalar Plackett odds ratio `psi`, identified mainly from `uk_02`.
+- **Hierarchy:** study and subject random intercepts on understood, `q`, and signing.
+- **Stabilisation:** VG10-style tightened `q` anchors and GP anchors at 54 months.
+
+:::
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -77,23 +87,102 @@ The association $\psi$ is identified by the ~60 uk_02 rows with the four-cell cr
 
 ## Priors
 
-### Trajectories (understood / spoken-ratio / signed-ratio)
+VG15 inherits the DS understood priors from the bivariate lineage, the signed-ratio prior from VG14, and the VG10 posterior-informed `q` anchors. The `q` anchors and the weakly positive `log_psi` prior are data-informed regularisation, not independent external evidence; they should be carried into sensitivity checks.
 
-![`p_slope_low_u_dist`](p_slope_low_u_dist.png){.lightbox fig-align="left" width=380}
-![`eta_u_dist`](eta_u_dist.png){.lightbox fig-align="left" width=380}
-![`intercept_sign_dist` (signed mean is intercept-only)](intercept_sign_dist.png){.lightbox fig-align="left" width=380}
-![`eta_sign_dist`](eta_sign_dist.png){.lightbox fig-align="left" width=380}
+### Understood trajectory
+
+![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+
+![Amplitude prior `eta_u_dist`](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+
+### Production ratio
+
+The `q(a)` anchors are tightened relative to VG05-VG09 and VG14: the low-age anchor uses `Beta(3, 22)` and the high-age anchor uses `Beta(20, 4)`. These priors stabilise the same hierarchy and GP anchoring strategy used in VG10.
+
+![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+
+![Amplitude prior `eta_q_dist`](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
+
+![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+
+![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
+
+### Signed ratio
+
+The signed mean is intercept-only. A shorter signed GP length-scale and larger signed GP amplitude let the prior express a signing rise and later decline without imposing a monotone signed slope.
+
+![Lengthscale prior `ell_unit_sign_dist`](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
+
+![Amplitude prior `eta_sign_dist`](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
+
+![`intercept_sign_dist` (signed mean is intercept-only)](intercept_sign_dist.png){#fig-intercept-sign .lightbox fig-align="left"}
+
+### Random-effect scales
+
+Study and subject random-intercept scales use HalfNormal(0.5) priors on the logit scale for understood, spoken-ratio and signed-ratio trajectories. The reported age curves are population-level curves with random effects set to zero; the random effects enter the likelihood to account for study composition and repeated measurements.
+
+### Dispersion / overdispersion
+
+![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![`a_kappa_u_dist`](a_kappa_u_dist.png){#fig-a-kappa-u .lightbox fig-align="left"}
+
+![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.png){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+
+![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![`a_kappa_s_dist`](a_kappa_s_dist.png){#fig-a-kappa-s .lightbox fig-align="left"}
+
+![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+
+![`kappa_min_sign_dist`](kappa_min_sign_dist.png){#fig-kappa-min-sign .lightbox fig-align="left"}
+
+![`a_kappa_sign_dist`](a_kappa_sign_dist.png){#fig-a-kappa-sign .lightbox fig-align="left"}
+
+![`b_kappa_mag_sign_dist`](b_kappa_mag_sign_dist.png){#fig-b-kappa-mag-sign .lightbox fig-align="left"}
 
 ### Association and concentration
 
 ![Plackett log odds-ratio prior `log_psi_dist`](log_psi_dist.png){#fig-log-psi .lightbox fig-align="left" width=380}
 ![Dirichlet-Multinomial log-concentration prior `log_conc_dist`](log_conc_dist.png){#fig-log-conc .lightbox fig-align="left" width=380}
 
+::: {.callout-note title="Sensitivity targets"}
+
+Prior sensitivity should focus on the posterior-informed `q` anchors, signed GP amplitude and length-scale, signed intercept, random-effect scales, `log_psi`, and the Dirichlet-Multinomial concentration prior.
+
+:::
+
 ## Prior predictive checks
+
+These checks should show that the model can generate plausible understood, spoken, signed, and total-expressive trajectories before seeing the data. The key VG15-specific questions are whether the prior allows a signing hump, whether `p_any` is not forced close to the independence bound, and whether `q(a)` remains plausible under the tightened VG10-style anchors.
+
+### Prior samples -- words understood
+
+![Prior samples -- words understood](prior_samples_u.png){#fig-prior-u .lightbox fig-align="left"}
+
+### Prior samples -- words spoken
+
+![Prior samples -- words spoken](prior_samples_s.png){#fig-prior-s .lightbox fig-align="left"}
+
+### Prior samples -- words signed
+
+![Prior samples -- words signed](prior_samples_sign.png){#fig-prior-sign .lightbox fig-align="left"}
+
+### Prior samples -- signed ratio r(a)
 
 ![Prior r(a) = P(sign | understood)](prior_samples_r.png){#fig-prior-r .lightbox fig-align="left"}
 
+### Prior samples -- production ratio q(a)
+
 ![Prior q(a) = P(speak | understood)](prior_samples_q.png){#fig-prior-q .lightbox fig-align="left"}
+
+### Prior samples -- total expressive probability
+
+![Prior p_any(a)](prior_samples_p_any.png){#fig-prior-p-any .lightbox fig-align="left"}
 
 ## Data
 
@@ -106,12 +195,82 @@ descriptive_stats
 
 ```{python}
 diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
-diagnostics
+
+
+def _flag_red(v, threshold, *, above):
+    bad = v > threshold if above else v < threshold
+    return "color: #b00; font-weight: bold;" if bad else ""
+
+
+def _style_diagnostics(df):
+    styler = df.style.format(precision=3)
+    if "r_hat" in df.columns:
+        styler = styler.map(
+            lambda v: _flag_red(v, 1.01, above=True), subset=["r_hat"]
+        )
+    ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
+    if ess_cols:
+        styler = styler.map(
+            lambda v: _flag_red(v, 400, above=False), subset=ess_cols
+        )
+    styler.set_caption(
+        "Reported convergence diagnostics. Cells highlighted red flag "
+        "r̂ > 1.01 or ESS < 400."
+    )
+    return styler
+
+
+_style_diagnostics(diagnostics)
 ```
 
 ![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+::: {.callout-note title="Diagnostic focus"}
+
+Check `psi`, `conc`, the signed GP hyperparameters, and all study/subject random-effect scales. The signed subject scale is especially important because sparse four-cell data can otherwise trade association strength against child-level signing heterogeneity.
+
+:::
+
+## Posterior vocabulary summaries
+
+These tables report population-level query-age summaries with study and subject random effects set to zero. They are interpretable as the expected trajectory for the reference population, not as the full predictive distribution for a new child.
+
+### Words understood
+
+```{python}
+summary_u = pd.read_csv("posterior_summary_u.csv")
+summary_u
+```
+
+### Words spoken
+
+```{python}
+summary_s = pd.read_csv("posterior_summary_s.csv")
+summary_s
+```
+
+### Words signed
+
+```{python}
+summary_sign = pd.read_csv("posterior_summary_sign.csv")
+summary_sign
+```
+
+### Production and signed ratios
+
+```{python}
+summary_q = pd.read_csv("posterior_summary_q.csv")
+summary_r = pd.read_csv("posterior_summary_r.csv")
+summary_q
+```
+
+```{python}
+summary_r
+```
 
 ## Association psi
 
@@ -128,6 +287,12 @@ summary_psi
 
 The four mutually-exclusive states of an understood word (sign-only, sign+speech, speak-only, neither) as fractions of understood vocabulary over age — words migrating from sign into speech.
 
+::: {.callout-warning title="Four-cell extrapolation"}
+
+The scalar association parameter is identified mainly by `uk_02` four-cell rows from about 19-56 months. Composition curves outside that support combine marginal trajectories with the scalar-$\psi$ assumption and should be treated as exploratory.
+
+:::
+
 ![Four-cell composition trajectory](four_cell_composition.png){#fig-composition .lightbox fig-align="left"}
 
 ## Total expressive vocabulary (data-identified)
@@ -141,14 +306,13 @@ summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
 summary_p_any
 ```
 
-## Signed vs spoken ratio (study REs marginalised)
+## Signed vs spoken ratio
 
-The population sign and speak ratios with study composition absorbed by the random intercepts. Compare the signed peak/recede with VG14, where it was study-confounded.
+The population sign and speak ratios with study and subject effects set to zero. Compare the signed peak/recede with VG14, where the signed curve was more strongly confounded with study composition.
 
 ![Signed vs spoken ratio](signed_vs_spoken_rate.png){#fig-rates .lightbox fig-align="left"}
 
 ```{python}
-summary_r = pd.read_csv("posterior_summary_r.csv")
 summary_r
 ```
 

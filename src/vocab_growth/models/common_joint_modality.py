@@ -50,6 +50,7 @@ import arviz as az
 import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.metadata.packages as package_metadata
+import dse_research_utils.plot.diagnostics_mcmc as plot_diagnostics_mcmc
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
@@ -90,7 +91,11 @@ from vocab_growth.models.gp_utils import (
     make_kappa_of_z,
     trend_and_gp,
 )
-from vocab_growth.plotting import _save_csv, plot_prior_samples_ratio
+from vocab_growth.plotting import (
+    _save_csv,
+    plot_prior_samples,
+    plot_prior_samples_ratio,
+)
 from vocab_growth.posterior_analysis import extract_posterior as _extract
 from vocab_growth.reporting import (
     config_table,
@@ -851,19 +856,59 @@ def build_model(context: JointContext, definition: JointModelDefinition):
 
 
 def prior_predictive_checks(context: JointContext):
-    """Light prior predictive check: r(a), q(a), psi spans independence."""
+    """Prior predictive checks for the joint sign/speech model."""
     with context.model:
         prior = pm.sample_prior_predictive(
             draws=500, random_seed=context.sampling.random_seed,
             compile_kwargs=dict(mode="FAST_COMPILE"),
         )
     context.set_prior_samples(prior)
-    for var, ylab, fname in [("r_plot", "r(a) = P(sign | understood)", "prior_samples_r"),
-                             ("q_plot", "q(a) = P(speak | understood)", "prior_samples_q")]:
-        s = prior.prior[var].stack(sample=("chain", "draw")).transpose("plot_id", "sample")
+
+    def prior_matrix(var: str) -> np.ndarray:
+        return (
+            prior.prior[var]
+            .stack(sample=("chain", "draw"))
+            .transpose("plot_id", "sample")
+            .values
+        )
+
+    x_plot = prior.constant_data["X_plot"].values
+    analysis_df = context.analysis_df
+
+    p_u = prior_matrix("p_u_plot")
+    q = prior_matrix("q_plot")
+    r = prior_matrix("r_plot")
+    p_s = p_u * q
+    p_sign = p_u * r
+
+    for y_col, samples, y_label, fname in [
+        ("understood", p_u, "Words understood", "prior_samples_u"),
+        ("spoken", p_s, "Words spoken", "prior_samples_s"),
+        ("signed", p_sign, "Words signed", "prior_samples_sign"),
+    ]:
+        observed = analysis_df[analysis_df[y_col].notna()]
+        fig = plot_prior_samples(
+            x_plot,
+            samples,
+            observed["age"],
+            observed[y_col],
+            n_trials=context.model_data.n_trials,
+            x_label="Age (months)",
+            y_label=y_label,
+            filename=fname,
+            output_dir=context.reporting.output_dir,
+        )
+        plt.close(fig)
+
+    for var, ylab, fname in [
+        ("r_plot", "r(a) = P(sign | understood)", "prior_samples_r"),
+        ("q_plot", "q(a) = P(speak | understood)", "prior_samples_q"),
+        ("p_any_plot", "p_any(a) total expressive probability", "prior_samples_p_any"),
+    ]:
+        s = prior_matrix(var)
         fig = plot_prior_samples_ratio(
-            prior.constant_data["X_plot"].values,
-            s.values,
+            x_plot,
+            s,
             y_label=ylab,
             filename=fname,
             output_dir=context.reporting.output_dir,
@@ -889,12 +934,40 @@ def sample(context: JointContext):
 
 def diagnostics(context: JointContext):
     var_names = [v.name for v in context.model.unobserved_RVs if v.size.eval() <= 2]
+    posterior_vars = set(context.trace.posterior.data_vars)
+
+    def prioritized_unique_var_names(
+        names: list[str],
+        priority: tuple[str, ...] = ("psi", "conc"),
+    ) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in (*priority, *names):
+            if name in posterior_vars and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+        return ordered
+
+    plot_var_names = prioritized_unique_var_names(var_names)
     diag = az.summary(context.trace, var_names=var_names, round_to=4,
                       ci_prob=context.reporting.hdi, ci_kind="hdi")
     diag.to_csv(os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True)
     dataframe_table(diag, title="Posterior diagnostics")
     _report_diagnostic_warnings(diag)
-    tv = capped_plot_var_names(context.trace, var_names + ["psi", "conc"])
+    pair_plot_var_names = capped_plot_var_names(
+        context.trace,
+        plot_var_names,
+        squared=True,
+    )
+    if pair_plot_var_names:
+        plot_diagnostics_mcmc.plot_kde_pair(
+            context.trace,
+            var_names=pair_plot_var_names,
+            output_dir=context.reporting.output_dir,
+            filename="pair_plot",
+        )
+        plt.close()
+    tv = capped_plot_var_names(context.trace, plot_var_names)
     az.plot_trace(context.trace, var_names=tv, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     plt.close()
@@ -967,6 +1040,23 @@ def posterior_summary(context: JointContext):
     hdi = context.reporting.hdi
     od = context.reporting.output_dir
 
+    def probability_summary(X, draws, prefix, label):
+        h = az.hdi(draws, prob=hdi)
+        Ey = draws * n_trials
+        Ey_h = az.hdi(Ey, prob=hdi)
+        d = pd.DataFrame({
+            "age_months": X,
+            f"p_{prefix}_median": np.median(draws, axis=1),
+            f"p_{prefix}_hdi_lo": h[:, 0],
+            f"p_{prefix}_hdi_hi": h[:, 1],
+            f"Ey_{prefix}_median": np.median(Ey, axis=1),
+            f"Ey_{prefix}_hdi_lo": Ey_h[:, 0],
+            f"Ey_{prefix}_hdi_hi": Ey_h[:, 1],
+        })
+        d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
+        dataframe_table(d.round(3), title=label, show_index=False)
+        return d
+
     def ratio_summary(X, draws, prefix):
         med = np.median(draws, axis=1)
         h = az.hdi(draws, prob=hdi)
@@ -975,6 +1065,9 @@ def posterior_summary(context: JointContext):
         d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
         return d
 
+    probability_summary(s.X_query, s.p_u_query, "u", "Words understood")
+    probability_summary(s.X_query, s.p_u_query * s.q_query, "s", "Words spoken")
+    probability_summary(s.X_query, s.p_u_query * s.r_query, "sign", "Words signed")
     ratio_summary(s.X_query, s.r_query, "r")
     ratio_summary(s.X_query, s.q_query, "q")
 
@@ -1078,7 +1171,7 @@ def _run_joint_plots(context: JointContext):
     context.plots["psi_posterior"] = fig
     plt.close(fig)
 
-    # 4) signed rate r(a) (study REs absorb composition)
+    # 4) signed rate r(a) and spoken rate q(a), population level
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     r_med = np.median(s.r_plot, axis=1)
     r_hdi = az.hdi(s.r_plot, prob=hdi)
@@ -1090,7 +1183,7 @@ def _run_joint_plots(context: JointContext):
     ax.set_ylabel("Fraction of understood words")
     ax.set_ylim(0, 1)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Signed vs spoken ratio (population, study REs marginalised)")
+    ax.set_title("Signed vs spoken ratio (population-level)")
     fig.savefig(os.path.join(od, "signed_vs_spoken_rate.png"), dpi=300)
     fig.savefig(os.path.join(od, "signed_vs_spoken_rate.svg"))
     context.plots["signed_vs_spoken_rate"] = fig
