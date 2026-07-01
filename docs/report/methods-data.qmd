@@ -7,7 +7,7 @@ abstract: "*TODO*"
 
 **TODO**: inventory of studies, data sources, and instruments
 
-### Measures
+## Measures
 
 **TODO**: explain harmonisation onto a common 800-item reference scale ($N_{\text{trials}} = 800$); why this gives an inventory-comparable scale across DS and TD instruments even where native checklist ceilings differ (e.g. WG ≈ 396, Oxford CDI ≈ 418 items).
 

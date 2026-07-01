@@ -69,8 +69,8 @@ book:
         - methods-workflow.qmd
     - part: "Results"
       chapters:
-        - findings-words-understood-spoken.qmd
-        - findings-words-signed-total-expressive.qmd
+        - results-words-understood-spoken.qmd
+        - results-words-signed-total-expressive.qmd
     - part: "Discussion"
       chapters:
         - discussion.qmd

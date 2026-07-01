@@ -1,6 +1,3 @@
----
-title: "Summary"
-abstract: "*TODO.*"
----
+# Summary {.unnumbered}
 
 [TODO]
