@@ -50,6 +50,7 @@ import arviz as az
 import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.metadata.packages as package_metadata
+import dse_research_utils.plot.diagnostics_mcmc as plot_diagnostics_mcmc
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.diagnostics as shared_diagnostics
@@ -85,8 +86,17 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.definitions import JointModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.models.gp_utils import make_kappa_of_z
-from vocab_growth.plotting import _save_csv, plot_prior_samples_ratio
+from vocab_growth.models.gp_utils import (
+    GPGrid,
+    intercept_and_gp,
+    make_kappa_of_z,
+    trend_and_gp,
+)
+from vocab_growth.plotting import (
+    _save_csv,
+    plot_prior_samples,
+    plot_prior_samples_ratio,
+)
 from vocab_growth.posterior_analysis import extract_posterior as _extract
 from vocab_growth.reporting import (
     config_table,
@@ -643,57 +653,6 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     if use_subject_codes:
         coords["subject_id"] = np.arange(n_subjects)
 
-    def trend_and_gp(cfg_low, cfg_hi, cfg_ell, cfg_eta, suffix, X_all_z_data, anchor_idx=None):
-        """Build a logit-linear trend + HSGP deviation; return the full-grid latent.
-
-        If ``anchor_idx`` is given (Option D), the GP is centred to pass through
-        zero at that grid row for every draw, so the linear trend alone sets the
-        level there and the GP only carries deviations.
-        """
-        p_lo = cfg_low.to_pymc(f"p_slope_low_{suffix}")
-        p_hi = cfg_hi.to_pymc(f"p_slope_hi_{suffix}")
-        slope = pm.Deterministic(
-            f"slope_{suffix}",
-            (pymc_utils.logit(p_hi) - pymc_utils.logit(p_lo)) / (sb_z - sa_z),
-        )
-        intercept = pm.Deterministic(
-            f"intercept_{suffix}", pymc_utils.logit(p_lo) - slope * sa_z
-        )
-        mean_trend = intercept + slope * X_all_z_data[:, 0]
-        ell_unit = cfg_ell.to_pymc(f"ell_unit_{suffix}")
-        ell = pm.Deterministic(
-            f"ell_{suffix}", ell_low_z + (ell_high_z - ell_low_z) * ell_unit
-        )
-        eta = cfg_eta.to_pymc(f"eta_{suffix}")
-        cov = pm.gp.cov.ExpQuad(1, ls=ell)
-        hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
-        g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
-        if anchor_idx is not None:
-            g_unit = g_unit - g_unit[anchor_idx]
-        return mean_trend + eta * g_unit  # plain tensor (n_all,)
-
-    def intercept_and_gp(cfg_intercept, cfg_ell, cfg_eta, suffix, X_all_z_data, anchor_idx=None):
-        """Intercept-only mean (no age slope) + HSGP deviation; full-grid latent.
-
-        Used for the signed ratio: a free age slope would extrapolate the ratio
-        below the data floor (< ~18 mo), so the mean is intercept-only and the GP
-        carries the age-varying (rise-then-fall) shape. The study random
-        intercept is added at observation level by the caller. If ``anchor_idx``
-        is given (Option D), the GP passes through zero at that grid row per draw.
-        """
-        intercept = cfg_intercept.to_pymc(f"intercept_{suffix}")
-        ell_unit = cfg_ell.to_pymc(f"ell_unit_{suffix}")
-        ell = pm.Deterministic(
-            f"ell_{suffix}", ell_low_z + (ell_high_z - ell_low_z) * ell_unit
-        )
-        eta = cfg_eta.to_pymc(f"eta_{suffix}")
-        cov = pm.gp.cov.ExpQuad(1, ls=ell)
-        hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
-        g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
-        if anchor_idx is not None:
-            g_unit = g_unit - g_unit[anchor_idx]
-        return intercept + eta * g_unit  # plain tensor (n_all,)
-
     with pm.Model(coords=coords) as model_pm:
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
@@ -703,23 +662,49 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
         _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
 
-        # Latent full-grid trajectories (plain tensors). Option D anchors each GP
-        # (per-draw zero at the reference age) when the matching flag is set.
+        # Latent full-grid trajectories (plain tensors), built by the shared
+        # gp_utils helpers. Option D anchors each GP (per-draw zero at the
+        # reference age) when the matching flag is set.
+        gp_grid = GPGrid(
+            sa_z=sa_z,
+            sb_z=sb_z,
+            ell_low_z=ell_low_z,
+            ell_high_z=ell_high_z,
+            M=M,
+            L=L,
+        )
         f_u_all = trend_and_gp(
-            config.p_slope_low_u_dist, config.p_slope_hi_u_dist,
-            config.ell_unit_u_dist, config.eta_u_dist, "u", X_all_z_data,
+            cfg_low=config.p_slope_low_u_dist,
+            cfg_hi=config.p_slope_hi_u_dist,
+            cfg_ell=config.ell_unit_u_dist,
+            cfg_eta=config.eta_u_dist,
+            suffix="_u",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_u else None,
         )
         h_all = trend_and_gp(
-            config.p_slope_low_q_dist, config.p_slope_hi_q_dist,
-            config.ell_unit_q_dist, config.eta_q_dist, "q", X_all_z_data,
+            cfg_low=config.p_slope_low_q_dist,
+            cfg_hi=config.p_slope_hi_q_dist,
+            cfg_ell=config.ell_unit_q_dist,
+            cfg_eta=config.eta_q_dist,
+            suffix="_q",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_q else None,
         )
         # Signed marginal: intercept-only mean (no age slope) + GP hump; the
         # study random intercept delta_sign is added at obs level below.
         g_all = intercept_and_gp(
-            config.intercept_sign_dist,
-            config.ell_unit_sign_dist, config.eta_sign_dist, "sign", X_all_z_data,
+            cfg_intercept=config.intercept_sign_dist,
+            cfg_ell=config.ell_unit_sign_dist,
+            cfg_eta=config.eta_sign_dist,
+            suffix="_sign",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_sign else None,
         )
 
@@ -872,19 +857,59 @@ def build_model(context: JointContext, definition: JointModelDefinition):
 
 
 def prior_predictive_checks(context: JointContext):
-    """Light prior predictive check: r(a), q(a), psi spans independence."""
+    """Prior predictive checks for the joint sign/speech model."""
     with context.model:
         prior = pm.sample_prior_predictive(
             draws=500, random_seed=context.sampling.random_seed,
             compile_kwargs=dict(mode="FAST_COMPILE"),
         )
     context.set_prior_samples(prior)
-    for var, ylab, fname in [("r_plot", "r(a) = P(sign | understood)", "prior_samples_r"),
-                             ("q_plot", "q(a) = P(speak | understood)", "prior_samples_q")]:
-        s = prior.prior[var].stack(sample=("chain", "draw")).transpose("plot_id", "sample")
+
+    def prior_matrix(var: str) -> np.ndarray:
+        return (
+            prior.prior[var]
+            .stack(sample=("chain", "draw"))
+            .transpose("plot_id", "sample")
+            .values
+        )
+
+    x_plot = prior.constant_data["X_plot"].values
+    analysis_df = context.analysis_df
+
+    p_u = prior_matrix("p_u_plot")
+    q = prior_matrix("q_plot")
+    r = prior_matrix("r_plot")
+    p_s = p_u * q
+    p_sign = p_u * r
+
+    for y_col, samples, y_label, fname in [
+        ("understood", p_u, "Words understood", "prior_samples_u"),
+        ("spoken", p_s, "Words spoken", "prior_samples_s"),
+        ("signed", p_sign, "Words signed", "prior_samples_sign"),
+    ]:
+        observed = analysis_df[analysis_df[y_col].notna()]
+        fig = plot_prior_samples(
+            x_plot,
+            samples,
+            observed["age"],
+            observed[y_col],
+            n_trials=context.model_data.n_trials,
+            x_label="Age (months)",
+            y_label=y_label,
+            filename=fname,
+            output_dir=context.reporting.output_dir,
+        )
+        plt.close(fig)
+
+    for var, ylab, fname in [
+        ("r_plot", "r(a) = P(sign | understood)", "prior_samples_r"),
+        ("q_plot", "q(a) = P(speak | understood)", "prior_samples_q"),
+        ("p_any_plot", "p_any(a) total expressive probability", "prior_samples_p_any"),
+    ]:
+        s = prior_matrix(var)
         fig = plot_prior_samples_ratio(
-            prior.constant_data["X_plot"].values,
-            s.values,
+            x_plot,
+            s,
             y_label=ylab,
             filename=fname,
             output_dir=context.reporting.output_dir,
@@ -910,6 +935,21 @@ def sample(context: JointContext):
 
 def diagnostics(context: JointContext):
     var_names = [v.name for v in context.model.unobserved_RVs if v.size.eval() <= 2]
+    posterior_vars = set(context.trace.posterior.data_vars)
+
+    def prioritized_unique_var_names(
+        names: list[str],
+        priority: tuple[str, ...] = ("psi", "conc"),
+    ) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in (*priority, *names):
+            if name in posterior_vars and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+        return ordered
+
+    plot_var_names = prioritized_unique_var_names(var_names)
     diag = az.summary(context.trace, var_names=var_names, round_to=4,
                       ci_prob=context.reporting.hdi, ci_kind="hdi")
     diag.to_csv(os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True)
@@ -918,7 +958,20 @@ def diagnostics(context: JointContext):
     )
     dataframe_table(diag, title="Posterior diagnostics")
     _report_diagnostic_warnings(diag)
-    tv = capped_plot_var_names(context.trace, var_names + ["psi", "conc"])
+    pair_plot_var_names = capped_plot_var_names(
+        context.trace,
+        plot_var_names,
+        squared=True,
+    )
+    if pair_plot_var_names:
+        plot_diagnostics_mcmc.plot_kde_pair(
+            context.trace,
+            var_names=pair_plot_var_names,
+            output_dir=context.reporting.output_dir,
+            filename="pair_plot",
+        )
+        plt.close()
+    tv = capped_plot_var_names(context.trace, plot_var_names)
     az.plot_trace(context.trace, var_names=tv, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
     plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
     plt.close()
@@ -991,6 +1044,23 @@ def posterior_summary(context: JointContext):
     hdi = context.reporting.hdi
     od = context.reporting.output_dir
 
+    def probability_summary(X, draws, prefix, label):
+        h = az.hdi(draws, prob=hdi)
+        Ey = draws * n_trials
+        Ey_h = az.hdi(Ey, prob=hdi)
+        d = pd.DataFrame({
+            "age_months": X,
+            f"p_{prefix}_median": np.median(draws, axis=1),
+            f"p_{prefix}_hdi_lo": h[:, 0],
+            f"p_{prefix}_hdi_hi": h[:, 1],
+            f"Ey_{prefix}_median": np.median(Ey, axis=1),
+            f"Ey_{prefix}_hdi_lo": Ey_h[:, 0],
+            f"Ey_{prefix}_hdi_hi": Ey_h[:, 1],
+        })
+        d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
+        dataframe_table(d.round(3), title=label, show_index=False)
+        return d
+
     def ratio_summary(X, draws, prefix):
         med = np.median(draws, axis=1)
         h = az.hdi(draws, prob=hdi)
@@ -999,6 +1069,9 @@ def posterior_summary(context: JointContext):
         d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
         return d
 
+    probability_summary(s.X_query, s.p_u_query, "u", "Words understood")
+    probability_summary(s.X_query, s.p_u_query * s.q_query, "s", "Words spoken")
+    probability_summary(s.X_query, s.p_u_query * s.r_query, "sign", "Words signed")
     ratio_summary(s.X_query, s.r_query, "r")
     ratio_summary(s.X_query, s.q_query, "q")
 
@@ -1102,7 +1175,7 @@ def _run_joint_plots(context: JointContext):
     context.plots["psi_posterior"] = fig
     plt.close(fig)
 
-    # 4) signed rate r(a) (study REs absorb composition)
+    # 4) signed rate r(a) and spoken rate q(a), population level
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     r_med = np.median(s.r_plot, axis=1)
     r_hdi = az.hdi(s.r_plot, prob=hdi)
@@ -1114,7 +1187,7 @@ def _run_joint_plots(context: JointContext):
     ax.set_ylabel("Fraction of understood words")
     ax.set_ylim(0, 1)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Signed vs spoken ratio (population, study REs marginalised)")
+    ax.set_title("Signed vs spoken ratio (population-level)")
     fig.savefig(os.path.join(od, "signed_vs_spoken_rate.png"), dpi=300)
     fig.savefig(os.path.join(od, "signed_vs_spoken_rate.svg"))
     context.plots["signed_vs_spoken_rate"] = fig

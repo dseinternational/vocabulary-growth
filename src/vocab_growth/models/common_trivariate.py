@@ -73,7 +73,12 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.definitions import TrivariateModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.models.gp_utils import make_kappa_of_z
+from vocab_growth.models.gp_utils import (
+    GPGrid,
+    intercept_and_gp,
+    make_kappa_of_z,
+    trend_and_gp,
+)
 from vocab_growth.plotting import (
     _save_csv,
     plot_comprehension_production_gap,
@@ -601,98 +606,58 @@ def build_model(context: TrivariateContext):
         _ = pm.Data("obs_s_mask", has_s.astype(int), dims=("obs_id",))
         _ = pm.Data("obs_sign_mask", has_sign.astype(int), dims=("obs_id",))
 
-        # ============================================================
-        # Understood (U) trajectory: f_U(a) -> p_U(a)
-        # ============================================================
-
-        p_slope_low_u = config.p_slope_low_u_dist.to_pymc("p_slope_low_u")
-        p_slope_hi_u = config.p_slope_hi_u_dist.to_pymc("p_slope_hi_u")
-
-        slope_u = pm.Deterministic(
-            "slope_u",
-            (pymc_utils.logit(p_slope_hi_u) - pymc_utils.logit(p_slope_low_u))
-            / (slope_age_b_z - slope_age_a_z),
+        # Shared trend + HSGP builder (gp_utils); graph byte-identical to the
+        # inlined form. Full-grid (n_all,) latents are returned as plain tensors
+        # (not stored Deterministics): only the obs/plot/query slices below are
+        # extracted, so storing the full arrays for every draw would waste a large
+        # amount of trace memory.
+        gp_grid = GPGrid(
+            sa_z=slope_age_a_z,
+            sb_z=slope_age_b_z,
+            ell_low_z=ell_low_z,
+            ell_high_z=ell_high_z,
+            M=M,
+            L=L,
         )
-        intercept_u = pm.Deterministic(
-            "intercept_u",
-            pymc_utils.logit(p_slope_low_u) - slope_u * slope_age_a_z,
+
+        # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
+        f_u_all = trend_and_gp(
+            cfg_low=config.p_slope_low_u_dist,
+            cfg_hi=config.p_slope_hi_u_dist,
+            cfg_ell=config.ell_unit_u_dist,
+            cfg_eta=config.eta_u_dist,
+            suffix="_u",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
         )
-        mean_trend_u = intercept_u + slope_u * X_all_z_data[:, 0]
 
-        # GP for understood
-        ell_unit_u = config.ell_unit_u_dist.to_pymc("ell_unit_u")
-        ell_u = pm.Deterministic(
-            "ell_u", ell_low_z + (ell_high_z - ell_low_z) * ell_unit_u
+        # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
+        h_all = trend_and_gp(
+            cfg_low=config.p_slope_low_q_dist,
+            cfg_hi=config.p_slope_hi_q_dist,
+            cfg_ell=config.ell_unit_q_dist,
+            cfg_eta=config.eta_q_dist,
+            suffix="_q",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
         )
-        eta_u = config.eta_u_dist.to_pymc("eta_u")
 
-        cov_u = pm.gp.cov.ExpQuad(1, ls=ell_u)
-        hsgp_u = pm.gp.HSGP(cov_func=cov_u, m=M, L=L)
-        g_unit_u = hsgp_u.prior("g_unit_u", X=X_all_z_data, dims="all_id")
-        # Full-grid (n_all,) intermediates are kept as plain tensors rather than
-        # stored Deterministics: only the obs/plot/query slices below are
-        # extracted, so storing the full-grid arrays for every draw would waste
-        # a large amount of trace memory.
-        g_u = eta_u * g_unit_u
-
-        f_u_all = mean_trend_u + g_u
-
-        # ============================================================
-        # Production ratio: h(a) -> q(a) = sigmoid(h(a))
-        # ============================================================
-
-        p_slope_low_q = config.p_slope_low_q_dist.to_pymc("p_slope_low_q")
-        p_slope_hi_q = config.p_slope_hi_q_dist.to_pymc("p_slope_hi_q")
-
-        slope_q = pm.Deterministic(
-            "slope_q",
-            (pymc_utils.logit(p_slope_hi_q) - pymc_utils.logit(p_slope_low_q))
-            / (slope_age_b_z - slope_age_a_z),
-        )
-        intercept_q = pm.Deterministic(
-            "intercept_q",
-            pymc_utils.logit(p_slope_low_q) - slope_q * slope_age_a_z,
-        )
-        mean_trend_q = intercept_q + slope_q * X_all_z_data[:, 0]
-
-        # GP for production rate
-        ell_unit_q = config.ell_unit_q_dist.to_pymc("ell_unit_q")
-        ell_q = pm.Deterministic(
-            "ell_q", ell_low_z + (ell_high_z - ell_low_z) * ell_unit_q
-        )
-        eta_q = config.eta_q_dist.to_pymc("eta_q")
-
-        cov_q = pm.gp.cov.ExpQuad(1, ls=ell_q)
-        hsgp_q = pm.gp.HSGP(cov_func=cov_q, m=M, L=L)
-        g_unit_q = hsgp_q.prior("g_unit_q", X=X_all_z_data, dims="all_id")
-        g_q = eta_q * g_unit_q
-
-        h_all = mean_trend_q + g_q
-
-        # ============================================================
-        # Signed ratio: g_sign(a) -> r(a) = sigmoid(g_sign(a))
-        # ============================================================
-
+        # ---- Signed ratio: g_sign(a) -> r(a) = sigmoid(g_sign(a)) ----
         # Intercept-only mean (no age slope): structurally prevents a free slope
         # from extrapolating the signed ratio below the data floor (< ~18 mo),
         # while a wide intercept prior lets the data set the level. The GP carries
         # the age-varying (rise-then-fall) shape.
-        intercept_sign = config.intercept_sign_dist.to_pymc("intercept_sign")
-        mean_trend_sign = intercept_sign
-
-        # GP for signed rate
-        ell_unit_sign = config.ell_unit_sign_dist.to_pymc("ell_unit_sign")
-        ell_sign = pm.Deterministic(
-            "ell_sign", ell_low_z + (ell_high_z - ell_low_z) * ell_unit_sign
+        g_sign_all = intercept_and_gp(
+            cfg_intercept=config.intercept_sign_dist,
+            cfg_ell=config.ell_unit_sign_dist,
+            cfg_eta=config.eta_sign_dist,
+            suffix="_sign",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
         )
-        eta_sign = config.eta_sign_dist.to_pymc("eta_sign")
-
-        cov_sign = pm.gp.cov.ExpQuad(1, ls=ell_sign)
-        hsgp_sign = pm.gp.HSGP(cov_func=cov_sign, m=M, L=L)
-        g_unit_sign = hsgp_sign.prior("g_unit_sign", X=X_all_z_data, dims="all_id")
-        gp_sign = eta_sign * g_unit_sign
-
-        g_sign_all = mean_trend_sign + gp_sign
 
         # ============================================================
         # Derived quantities: p_U, q, p_S, r, p_Sign, p_any

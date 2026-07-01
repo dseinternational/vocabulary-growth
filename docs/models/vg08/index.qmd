@@ -44,6 +44,16 @@ where $\delta_U[s] \sim \text{Normal}(0, \tau_U)$ and $\delta_q[s] \sim \text{No
 
 The subject random intercept is applied only to the understood outcome in this first iteration; the production ratio $q$ retains the study-only RE structure from VG07.
 
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Outcomes:** words understood and words spoken.
+- **Hierarchy:** study random intercepts on understood and `q`, plus subject random intercepts on understood.
+- **Reported curves:** population-level trajectories with study and subject effects set to zero.
+- **Subject-marginal predictions:** count summaries integrate over a new child-level understood effect where noted below.
+
+:::
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -53,6 +63,8 @@ For full details and discussion, please refer to the technical report.
 ![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Priors
+
+The study and subject random-effect scale priors use HalfNormal(0.5) distributions on the logit scale. The subject-level understood prior is important because repeated observations can otherwise inflate residual dispersion and make within-child observations look independent.
 
 ### Understood trajectory
 
@@ -91,6 +103,8 @@ For full details and discussion, please refer to the technical report.
 ![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
+
+For VG08, prior predictive checks should be read at two levels: the population age curve and the amount of child-to-child variation implied by the subject random-effect prior on understood vocabulary.
 
 ### Prior samples -- words understood
 
@@ -148,6 +162,12 @@ _style_diagnostics(diagnostics)
 ![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+::: {.callout-note title="Diagnostic focus"}
+
+Check `tau_subj_u`, `tau_u`, the understood GP level, and `kappa_u`. If the subject random effect is doing useful work, residual understood dispersion should no longer need to absorb all repeated-child heterogeneity.
+
+:::
 
 ## Joint trajectory
 

@@ -49,7 +49,7 @@ from vocab_growth.models.build_utils import (
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.models.gp_utils import make_kappa_of_z
+from vocab_growth.models.gp_utils import GPGrid, make_kappa_of_z, trend_and_gp
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -586,54 +586,28 @@ def build_model(context: ModelFitContext):
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
 
-        # ---- Mean developmental trajectory ----
-
-        # Anchors
-        p_slope_low = context.model_config.p_slope_low_dist.to_pymc("p_slope_low")
-        p_slope_hi = context.model_config.p_slope_hi_dist.to_pymc("p_slope_hi")
-
-        # Slope (β₁)
-        beta_1 = pm.Deterministic(
-            "slope",
-            (pymc_utils.logit(p_slope_hi) - pymc_utils.logit(p_slope_low))
-            / (slope_age_b_z - slope_age_a_z),
+        # ---- Mean developmental trajectory + HSGP deviation ----
+        # Logit-linear trend + HSGP, built by the shared helper (gp_utils) so the
+        # graph is byte-identical to the previously inlined form: it stores the
+        # named `g` and `f_all` Deterministics and the slope/intercept/ell.
+        f_all = trend_and_gp(
+            cfg_low=context.model_config.p_slope_low_dist,
+            cfg_hi=context.model_config.p_slope_hi_dist,
+            cfg_ell=context.model_config.ell_unit_dist,
+            cfg_eta=context.model_config.eta_dist,
+            suffix="",
+            X_all_z_data=X_all_z_data,
+            grid=GPGrid(
+                sa_z=slope_age_a_z,
+                sb_z=slope_age_b_z,
+                ell_low_z=ell_low_z,
+                ell_high_z=ell_high_z,
+                M=M,
+                L=L,
+            ),
+            store_deterministic=True,
+            latent_name="f_all",
         )
-
-        # Intercept (β₀)
-        beta_0 = pm.Deterministic(
-            "intercept", pymc_utils.logit(p_slope_low) - beta_1 * slope_age_a_z
-        )
-
-        # Linear trend, evaluated at all input points (X_all_data)
-        mean_trend_all = beta_0 + beta_1 * X_all_z_data[:, 0]  # (n_all,)
-
-        # ---- Gaussian Process ----
-
-        # GP hyperparameters
-
-        # Length-scale ℓ (on the z-score scale)
-        ell_unit = context.model_config.ell_unit_dist.to_pymc("ell_unit")
-        ell = pm.Deterministic("ell", ell_low_z + (ell_high_z - ell_low_z) * ell_unit)
-
-        # Amplitude (marginal standard deviation)
-        eta = context.model_config.eta_dist.to_pymc("eta")
-
-        # * HSGP specification *
-
-        # co-variance function: radial basis function (RBF)
-        cov0 = pm.gp.cov.ExpQuad(1, ls=ell)
-
-        # unit-variance kernel: the amplitude η is applied to the basis function weights, not the kernel
-        hsgp0 = pm.gp.HSGP(cov_func=cov0, m=M, L=L)
-
-        # GP function values at all input points (obs + plot + query)
-        g_unit = hsgp0.prior("g_unit", X=X_all_z_data, dims="all_id")
-
-        # scale the raw GP values by the amplitude η to get the actual GP function values
-        g = pm.Deterministic("g", eta * g_unit, dims=("all_id",))
-
-        # the overall function is the sum of the mean trend and the GP deviation from that trend
-        f_all = pm.Deterministic("f_all", mean_trend_all + g, dims=("all_id",))
 
         # Slice for obs / plot / query
         f_obs = pm.Deterministic("f_obs", f_all[i_obs0:i_obs1], dims=("obs_id",))

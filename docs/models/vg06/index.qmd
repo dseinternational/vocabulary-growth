@@ -1,5 +1,5 @@
 ---
-title: "Model VG13: Joint words understood + spoken (TD, 8–18 months) with study random intercepts"
+title: "Model VG06: Joint model of words understood and spoken - typically developing children"
 
 date: last-modified
 date-format: "YYYY-MM-DD HH:mm:ss Z"
@@ -26,7 +26,7 @@ This model output is preliminary and likely to change as the model evolves and f
 If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
 :::
 
-This model fits a joint bivariate model of words understood and spoken in typically developing children aged 8–18 months. It extends VG06 with dataset-level study random intercepts and restricts the age range to 8–18 months, where Wordbank WG and Oxford CDI data are dense and cover multiple labs. Above 18 months only a single dataset (Floccia/Oxford CDI) contributes bivariate observations, making inference unreliable. The production-ratio reparameterisation enforces $p_S \leq p_U$ by construction.
+This model jointly examines how age influences words understood and words spoken ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$) in typically developing children, using a production-ratio reparameterization that enforces $p_S \leq p_U$ by construction.
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -35,16 +35,15 @@ import pandas as pd
 
 ## Statistical model
 
-We model words understood and words spoken as bounded count outcomes out of an 800-word reference inventory, restricted to children aged 8-18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP). Both GPs are anchored at 13 months to remove the GP-intercept ridge. Dataset-level study random intercepts are added to both trajectories on the logit scale using a non-centred parameterisation, with the same marginal distribution as $\delta_U[s], \delta_q[s] \sim \text{Normal}(0,\tau)$. These study effects are absorbed at the observation level only; plot and query predictions use the population-level trajectory with study effects set to zero. Separate Beta-Binomial likelihoods with age-varying dispersion account for extra-binomial variability in both outcomes.
+We jointly model words understood and words spoken as bounded count outcomes out of an 800-word reference inventory. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Wordbank WG and Oxford CDI rows contribute independently measured understood and spoken observations; Words & Sentences rows contribute spoken observations only.
 
 ::: {.callout-note title="Model at a glance"}
 
 - **Population:** typically developing children.
-- **Age range:** 8-18 months only.
-- **Outcomes:** words understood and words spoken, each out of the common 800-word reference inventory.
-- **Mean structure:** $p_U(a)$ for understood and $q(a)=P(\text{speak}\mid\text{understood})$ for the production ratio; $p_S(a)=p_U(a)q(a)$.
-- **Hierarchy:** dataset-level study random intercepts on both $p_U$ and $q$.
-- **Stabilisation:** per-draw GP anchors at 13 months.
+- **Outcomes:** words understood and words spoken.
+- **Decomposition:** $p_S(a)=p_U(a)q(a)$, so spoken vocabulary is bounded by comprehension.
+- **Age anchors:** 12 and 26 months.
+- **Data handling:** 25% TD sample; Words & Sentences rows contribute spoken-only observations.
 
 :::
 
@@ -58,7 +57,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The understood trajectory uses young-TD anchors at 10 and 16 months. The low-age anchor is concentrated near the floor, while the 16-month anchor remains deliberately broad because this model covers the steep early part of comprehension growth. The production-ratio priors are the broad baseline `q` priors used in the other bivariate models; they regularise the fraction of understood words that are spoken without forcing a single developmental shape.
+The understood anchors are TD-specific and centred on a much younger developmental window than the DS joint models. The `q` anchors are the same broad baseline production-ratio priors used in VG05, so TD-DS comparisons should not be read as having identical anchor assumptions.
 
 ### Understood trajectory
 
@@ -66,25 +65,19 @@ The understood trajectory uses young-TD anchors at 10 and 16 months. The low-age
 
 ![Amplitude prior `eta_u_dist`](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
-![Low slope anchor (10 months) `p_slope_low_u_dist`](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+![Low slope anchor (12 months) `p_slope_low_u_dist`](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
 
-![High slope anchor (16 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+![High slope anchor (26 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
 
 ### Production ratio
-
-The `q(a)` anchors are probabilities conditional on understanding, not direct word counts. A value of 0.25 means a child is expected to speak about one quarter of the words they understand at that age.
 
 ![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![Amplitude prior `eta_q_dist`](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
-![Low slope anchor (10 months) `p_slope_low_q_dist`](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+![Low slope anchor (12 months) `p_slope_low_q_dist`](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
 
-![High slope anchor (16 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
-
-### Study random effects
-
-Study random-intercept scales use the shared HalfNormal(0.5) prior on the logit scale for both understood and production-ratio trajectories. This is regularising but still allows meaningful between-dataset differences. The study effects are included in the likelihood and omitted from the reported population-level curves.
+![High slope anchor (26 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- understood
 
@@ -104,7 +97,7 @@ Study random-intercept scales use the shared HalfNormal(0.5) prior on the logit 
 
 ## Prior predictive checks
 
-These checks should be read against the model's deliberately narrow 8-18 month target. The prior should allow rapid early comprehension growth, low-to-moderate spoken counts, smooth trajectories, and plausible `q(a)` values without using the later TD data that motivated the age restriction.
+For this TD joint baseline, inspect whether the prior allows rapid comprehension growth, plausible spoken counts, and `q(a)` values that can rise over the 9-30 month query range without being forced to one.
 
 ### Prior samples -- words understood
 
@@ -165,7 +158,7 @@ _style_diagnostics(diagnostics)
 
 ::: {.callout-note title="Diagnostic focus"}
 
-For this model the main geometry checks are the study-effect scales, the anchored GP hyperparameters, and the `q` trajectory. Treat any weak ESS or elevated R-hat on those parameters as directly relevant to the young-TD comprehension-production interpretation.
+Read these diagnostics with the TD subsampling in mind. The `q` trajectory, GP hyperparameters, and both dispersion curves are the main checks for the joint TD interpretation; VG13 is the denser young-TD refinement.
 
 :::
 
@@ -175,15 +168,10 @@ For this model the main geometry checks are the study-effect scales, the anchore
 
 ![Joint posterior predictive trajectory with 50% and 75% HDI bands](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
 
-::: {.callout-warning title="Age restriction"}
-
-VG13 is an 8-18 month model. It should not be used as a general TD trajectory beyond this window; the restriction avoids a region where only one bivariate dataset contributes.
-
-:::
-
 ## Production ratio
 
-The first figure shows the latent $q(a)=P(\text{speak}\mid\text{understood})$ curve. The posterior predictive spoken/understood count ratio shown later is different: it includes outcome uncertainty and should not be read as the latent `q` parameter itself.
+The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
+The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood word counts, so it should not be interpreted as the same quantity as $q(a)$.
 
 ![Production rate q(a)](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
@@ -200,7 +188,7 @@ summary_q
 
 The expected difference in word counts between understanding and production.
 
-![Comprehension-production gap](comprehension_production_gap.png){#fig-comprehension-production-gap .lightbox fig-align="left"}
+![Comprehension-production gap](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
 ## Words understood vs words spoken
 
@@ -233,11 +221,13 @@ posterior_summary_u
 
 ![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
+Smoothed:
+
 ![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
 ### Learning rate
 
-![expected_learning_rate_u](expected_learning_rate_u.png){#fig-learning-rate-u .lightbox fig-align="left"}
+![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
 
 ### Dispersion $\kappa$ -- understood
 
@@ -268,11 +258,13 @@ posterior_summary_s
 
 ![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
+Smoothed:
+
 ![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
 ### Learning rate
 
-![expected_learning_rate_s](expected_learning_rate_s.png){#fig-learning-rate-s .lightbox fig-align="left"}
+![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 
 ### Dispersion $\kappa$ -- spoken
 

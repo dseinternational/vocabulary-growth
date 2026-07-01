@@ -63,7 +63,7 @@ from vocab_growth.models.common_bivariate import (
     sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
-from vocab_growth.models.gp_utils import make_kappa_of_z
+from vocab_growth.models.gp_utils import GPGrid, make_kappa_of_z, trend_and_gp
 from vocab_growth.reporting import (
     console,
     dataframe_table,
@@ -376,79 +376,45 @@ def build_model_re(
                 "subject_obs", subject_codes, dims=("obs_id",)
             )
 
-        # ============================================================
-        # Understood (U) trajectory: f_U(a) -> p_U(a)
-        # ============================================================
-
-        p_slope_low_u = config.p_slope_low_u_dist.to_pymc("p_slope_low_u")
-        p_slope_hi_u = config.p_slope_hi_u_dist.to_pymc("p_slope_hi_u")
-
-        slope_u = pm.Deterministic(
-            "slope_u",
-            (pymc_utils.logit(p_slope_hi_u) - pymc_utils.logit(p_slope_low_u))
-            / (slope_age_b_z - slope_age_a_z),
+        # Shared trend + HSGP builder (gp_utils); graph byte-identical to the
+        # inlined form: stores g_u/f_u_all and g_q/h_all (+ slope/intercept/ell),
+        # population-level latents (no study effect), Option-D anchor per outcome.
+        gp_grid = GPGrid(
+            sa_z=slope_age_a_z,
+            sb_z=slope_age_b_z,
+            ell_low_z=ell_low_z,
+            ell_high_z=ell_high_z,
+            M=M,
+            L=L,
         )
-        intercept_u = pm.Deterministic(
-            "intercept_u",
-            pymc_utils.logit(p_slope_low_u) - slope_u * slope_age_a_z,
+
+        # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
+        f_u_all = trend_and_gp(
+            cfg_low=config.p_slope_low_u_dist,
+            cfg_hi=config.p_slope_hi_u_dist,
+            cfg_ell=config.ell_unit_u_dist,
+            cfg_eta=config.eta_u_dist,
+            suffix="_u",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=True,
+            latent_name="f_u_all",
+            anchor_idx=i_anchor if anchor_g_u else None,
         )
-        mean_trend_u = intercept_u + slope_u * X_all_z_data[:, 0]
 
-        # GP for understood
-        ell_unit_u = config.ell_unit_u_dist.to_pymc("ell_unit_u")
-        ell_u = pm.Deterministic(
-            "ell_u", ell_low_z + (ell_high_z - ell_low_z) * ell_unit_u
+        # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
+        h_all = trend_and_gp(
+            cfg_low=config.p_slope_low_q_dist,
+            cfg_hi=config.p_slope_hi_q_dist,
+            cfg_ell=config.ell_unit_q_dist,
+            cfg_eta=config.eta_q_dist,
+            suffix="_q",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=True,
+            latent_name="h_all",
+            anchor_idx=i_anchor if anchor_g_q else None,
         )
-        eta_u = config.eta_u_dist.to_pymc("eta_u")
-
-        cov_u = pm.gp.cov.ExpQuad(1, ls=ell_u)
-        hsgp_u = pm.gp.HSGP(cov_func=cov_u, m=M, L=L)
-        g_unit_u = hsgp_u.prior("g_unit_u", X=X_all_z_data, dims="all_id")
-        if anchor_g_u:
-            g_unit_u_centred = g_unit_u - g_unit_u[i_anchor]
-        else:
-            g_unit_u_centred = g_unit_u
-        g_u = pm.Deterministic("g_u", eta_u * g_unit_u_centred, dims=("all_id",))
-
-        # Population-level f_U (no study effect)
-        f_u_all = pm.Deterministic("f_u_all", mean_trend_u + g_u, dims=("all_id",))
-
-        # ============================================================
-        # Production ratio: h(a) -> q(a) = sigmoid(h(a))
-        # ============================================================
-
-        p_slope_low_q = config.p_slope_low_q_dist.to_pymc("p_slope_low_q")
-        p_slope_hi_q = config.p_slope_hi_q_dist.to_pymc("p_slope_hi_q")
-
-        slope_q = pm.Deterministic(
-            "slope_q",
-            (pymc_utils.logit(p_slope_hi_q) - pymc_utils.logit(p_slope_low_q))
-            / (slope_age_b_z - slope_age_a_z),
-        )
-        intercept_q = pm.Deterministic(
-            "intercept_q",
-            pymc_utils.logit(p_slope_low_q) - slope_q * slope_age_a_z,
-        )
-        mean_trend_q = intercept_q + slope_q * X_all_z_data[:, 0]
-
-        # GP for production rate
-        ell_unit_q = config.ell_unit_q_dist.to_pymc("ell_unit_q")
-        ell_q = pm.Deterministic(
-            "ell_q", ell_low_z + (ell_high_z - ell_low_z) * ell_unit_q
-        )
-        eta_q = config.eta_q_dist.to_pymc("eta_q")
-
-        cov_q = pm.gp.cov.ExpQuad(1, ls=ell_q)
-        hsgp_q = pm.gp.HSGP(cov_func=cov_q, m=M, L=L)
-        g_unit_q = hsgp_q.prior("g_unit_q", X=X_all_z_data, dims="all_id")
-        if anchor_g_q:
-            g_unit_q_centred = g_unit_q - g_unit_q[i_anchor]
-        else:
-            g_unit_q_centred = g_unit_q
-        g_q = pm.Deterministic("g_q", eta_q * g_unit_q_centred, dims=("all_id",))
-
-        # Population-level h (no study effect)
-        h_all = pm.Deterministic("h_all", mean_trend_q + g_q, dims=("all_id",))
 
         # ============================================================
         # Study-level random intercepts
