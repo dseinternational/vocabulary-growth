@@ -3,12 +3,14 @@
 <!-- cspell:words conc -->
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+> Drafted by LLM-based AI tools (OpenAI Codex/GPT-5; "Evidence base" section and
+> prior–norm comparison by Claude Code/Opus 4.8).
 
 > [!WARNING]
-> This is a working document for issue 89, last reviewed on 2026-06-29. It
-> records the current prior inventory, first-pass interpretation, and review
-> questions. It is not yet the final prior rationale for the technical report.
+> This is a working document for issue 89, last reviewed on 2026-07-01. It
+> records the current prior inventory, first-pass interpretation, review
+> questions, and a first pass at the external evidence base. It is not yet the
+> final prior rationale for the technical report.
 
 ## Purpose
 
@@ -298,6 +300,185 @@ Review notes:
   remains a population-conditioned association. The rationale is documented in
   [`notes/202606171200-vg15-subject-re-stabilisation.md`](../../notes/202606171200-vg15-subject-re-stabilisation.md).
 
+## Evidence base: literature and normative data
+
+This section records the external evidence that can anchor or challenge the
+priors above, and — critically — separates _independent_ evidence from
+_regularisation_ drawn from data that overlap the training set (issue 89,
+step 3).
+
+### Independence of candidate sources
+
+Not every published cohort is independent of the fitted data. Where a prior is
+anchored on a study whose participants are already in `vocab_data_merged.csv`,
+it is regularisation, not independent prior evidence.
+
+| Source                                                                                                                      | Role for priors                                 | Independent of training data?                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Wordbank by-child data (`wordbank_administration_data.csv`)                                                                 | TD anchors, `q`, dispersion                     | **No** — it _is_ the TD training data. Use the published normative percentiles as the non-circular check, not the rows. |
+| Berglund et al. (2001), n=330, Sweden                                                                                       | DS anchors, growth shape, heterogeneity         | Yes                                                                                                                     |
+| Næss et al. (2021), Norway; Galeote et al. (2008), Spain; Deckers et al. (2016), Kaat-van den Os et al. (2017), Netherlands | DS anchors, `q`, signed `r`                     | Yes                                                                                                                     |
+| Miller et al. (1995); Mervis & Robinson (2000), US                                                                          | DS anchors, parent-report validity              | Yes                                                                                                                     |
+| Oliver & Buckley (1994), UK                                                                                                 | DS low-age spoken anchor (10-word stage ~27 mo) | Yes — confirmed **not** to overlap `uk_01`                                                                              |
+| Caselli et al. (1998); Zampini & D'Odorico (2013); Bello & Caselli (2014), Italy                                            | DS trajectory, gesture, dispersion              | **No** — overlap the `it_01` Italian-CDI-DS cohort; treat as regularisation                                             |
+
+### Instrument scale (Fenson et al., 2007, via Hutchins, 2013)
+
+The MB-CDI forms have different item totals, which the models fold onto the
+common 800-item reference scale:
+
+- **Words & Gestures (WG)** — 396-item checklist, _separate_ comprehension and
+  production columns; infant form (~8–18 months).
+- **Words & Sentences (WS)** — 680-item checklist, _production only_; toddler
+  form (~16–30 months). This is why the TD loader keeps WS as a spoken-only
+  observation and excludes WS "comprehension".
+
+Two consequences for the priors:
+
+1. Because WG carries the only CDI comprehension data, an _understood_
+   proportion derived from WG cannot exceed 396/800 = **0.495** on the model
+   scale. A high-age understood anchor near 0.5 (e.g. VG13's `Beta(2, 2)`,
+   median 0.500) therefore sits against the WG ceiling and implicitly assumes
+   near-total WG comprehension.
+2. Fenson et al. caution that percentile ranks are unstable at ages where a
+   skill is just emerging ("small differences in raw scores can have
+   dramatically different effects on percentile ranks"). The youngest-age
+   anchors should be re-centred toward the norms but **not** tightened.
+
+### TD anchor priors vs Wordbank norms
+
+Wordbank US-English, typically-developing, monolingual, cross-sectional deciles
+(downloaded 2026-07-01) translated onto the model's 800-item scale. The final
+column flags where the prior _centre_ departs from the normative median at the
+anchor age:
+
+| Anchor (models)                        | Prior            | Prior median (words/800) | Wordbank median | Prior ÷ empirical                   |
+| -------------------------------------- | ---------------- | -----------------------: | --------------: | ----------------------------------- |
+| Spoken low @12mo (VG03/VG11)           | `Beta(1, 15)`    |               0.045 (36) |      0.013 (11) | 3.4× high                           |
+| Understood low @12mo (VG04/VG06/VG12)  | `Beta(1, 20)`    |               0.034 (27) |      0.104 (83) | 0.33× low                           |
+| Spoken high @26mo (VG03/VG06/VG11)     | `Beta(1.5, 1.1)` |              0.599 (479) |     0.436 (349) | 1.4× (broad, covers)                |
+| Young-TD understood low @10mo (VG13)   | `Beta(1, 15)`    |               0.045 (36) |      0.062 (50) | 0.73×                               |
+| Young-TD understood high @16mo (VG13)  | `Beta(2, 2)`     |              0.500 (400) |     0.222 (177) | 2.3× high (at the WG ceiling)       |
+| Understood high @26mo (VG04/VG06/VG12) | `Beta(1.5, 1.1)` |              0.599 (479) |               — | no CDI norm (WS is production-only) |
+
+Every prior's 5–95% band still covers the empirical median, so none is
+inconsistent with the norms — but several are off-centre. The low-age anchors
+lean the "wrong" way in opposite directions (too generous for spoken, too
+austere for understood), the VG13 high understood anchor sits at the WG ceiling,
+and the 26-month understood anchor cannot be anchored to CDI norms at all (a
+sensitivity target). Source data: Wordbank vocabulary norm tables,
+<https://wordbank.stanford.edu/data/?name=vocab_norms>.
+
+### Production ratio `q(a)` from norms
+
+Because WG reports comprehension and production at the same ages, an empirical
+TD `q(a) = P(speak | understood)` can be read off as the ratio of median
+production to median comprehension (indicative — a ratio of population medians,
+not a within-child median):
+
+| Age (months) | Empirical TD `q(a)` |
+| ------------ | ------------------: |
+| 10           |                0.12 |
+| 12           |                0.13 |
+| 16           |                0.19 |
+| 18           |                0.26 |
+
+The baseline `q` anchors (`Beta(1, 1.5)` / `Beta(2, 1.2)`, medians 0.37 / 0.65)
+sit roughly 3× above this at young ages. The **posterior-informed** VG10/VG15
+low-age `q` anchor, `Beta(3, 22)` (median 0.110), matches the independent TD
+`q(10–12 mo) ≈ 0.12` almost exactly. This upgrades the VG10/VG15 tightening from
+purely internal regularisation (from the VG07 posterior) to a choice
+_corroborated by independent TD norms_.
+
+### DS anchor priors vs independent cohorts
+
+The DS anchors (24 and 84 months) can be checked against the independent DS CDI
+cohorts — those not overlapping the training data. Only expressive (spoken)
+vocabulary can be anchored this way: the usable cohorts report production, and DS
+comprehension at chronological age has no independent source here (Berglund's
+form is production-only, Galeote et al. (2008) is mental-age-based, and the
+Italian comprehension cohorts overlap `it_01`).
+
+Berglund et al. (2001) — 330 DS children on a 710-item Swedish CDI — give a full
+spoken trajectory by chronological age (their Table 3), translated onto the
+model's 800-item scale:
+
+| Age (months) | Berglund DS spoken (approx. median words / 800) | Notes                            |
+| ------------ | ----------------------------------------------: | -------------------------------- |
+| 12           |                                      ~0 (0.000) | 12% have ≥1 word                 |
+| 24           |                                     ~10 (0.013) | 53% pass 10 words, 3% pass 50    |
+| 36           |                                     ~30 (0.045) | mean 36 words (range 0–165)      |
+| 48           |                                     ~50 (0.063) | 54% pass 50 words; max child 668 |
+| 60           |                                     ~65 (0.081) | 73% pass 50 words                |
+
+Comparison with the DS spoken prior (VG01, `Beta(1, 15)` at 24 months, median
+0.045 ≈ 36 words):
+
+- The prior places at **24 months** the vocabulary that Berglund observes only at
+  **36 months** (~36 words). At 24 months the independent median is ~10 words, so
+  the DS spoken-low prior is ~3× high — the same direction and magnitude as the
+  TD spoken-low mismatch.
+- The **84-month high anchor** (`Beta(1.1, 1.1)`, median 0.500 ≈ 400 words) is
+  **beyond the range of every independent DS CDI cohort** (Berglund tops out at
+  60 months; CDIs are young-child instruments). It is deliberately broad and can
+  only be checked against the project's own older DS data — i.e. it is
+  regularisation, not independently anchored. This mirrors the un-anchored TD
+  understood high anchor at 26 months.
+- The DS **understood** low anchor (`Beta(1, 10)` at 24 months, median 0.067 ≈ 54
+  words) has **no independent chronological-age comprehension source** in the
+  current library. It is directionally sensible (understood > spoken at 24
+  months) but its level rests on the project's own DS comprehension data — a gap
+  worth filling.
+
+Milestone timing corroborates the shape: the 50-word level is reached by ~25% of
+DS children at age 3, ~50% at age 4, and ~75% at age 5 (Berglund et al., 2001;
+consistent with Næss et al., 2021). Galeote et al. (2008) add that, matched on
+mental age, DS spoken vocabulary is comparable to TD while gesture use is
+superior — evidence for the signed ratio `r(a)` rather than a chronological-age
+anchor.
+
+### Dispersion (`kappa`)
+
+Fitting a Beta-Binomial (n = 800, matching the model likelihood) per age to the
+by-child Wordbank TD data (English variants, `typically_developing`,
+`health_conditions` null — the loader's filter) gives the empirical dispersion.
+`kappa` is the concentration; `rho = 1 / (kappa + 1)` is the intra-child
+overdispersion.
+
+| Outcome / form  | Age span | Empirical `kappa` | Empirical `rho` | Age trend                      |
+| --------------- | -------- | ----------------: | --------------: | ------------------------------ |
+| Understood (WG) | 8–18 mo  |              6–14 |       0.07–0.13 | ~flat                          |
+| Spoken (WG)     | 8–18 mo  |             10–36 |       0.03–0.09 | `kappa` falls with age         |
+| Spoken (WS)     | 16–30 mo |              3–14 |       0.07–0.26 | `kappa` falls steeply with age |
+
+Against the shared prior (`kappa` median ~13–17, 5–95% ~5–60; `b_kappa < 0`):
+
+- **Direction confirmed.** For the spoken/production outcome (the primary one)
+  `kappa` clearly falls with age (WG spoken slope −0.13/month; WS spoken
+  −0.09/month) — dispersion rises with age, exactly the sign the prior encodes.
+  Comprehension is roughly flat. Independently, Zampini & D'Odorico (2013) report
+  DS vocabulary variability _increasing_ from 36 months, the same direction.
+- **Level slightly too tight at the high-dispersion end.** The prior's central
+  `kappa ≈ 14` is a reasonable mid-range value, but the empirical range is wider.
+  At older toddler ages (WS 24–30 months) `kappa` falls to ~3–4 (`rho ≈
+0.21–0.26`), below the prior's ~5 lower 5–95% bound. Part of this is a ceiling
+  artefact (WS counts pile toward the 680-item form limit), and the model's GP
+  mean and study random effects absorb some spread that these raw per-age fits do
+  not — so the fitted-model `kappa` would sit somewhat higher. Even so, a broader
+  `kappa_min` allowance is worth a sensitivity check at older ages.
+
+### Methodological endorsement of the 800-item design
+
+Laudańska et al. (2026), systematically reviewing CDI use across
+neurodevelopmental and genetic conditions, recommend exactly the harmonisation
+this project adopts: proportion-based scoring on a common overlapping item set
+to compare across CDI forms and languages. Their pooled DS expressive-vocabulary
+age trend and cohort catalogue provide a meta-analytic DS anchor, with the
+caveat that clusters mix forms and languages. A useful cross-anchor: DS
+expressive vocabulary at ages 3–4 is comparable to TD at 16–20 months (Berglund
+et al., 2001), which via the Wordbank WS norms pins the DS spoken trajectory
+through the preschool years.
+
 ## Prior predictive review status
 
 Generated model reports already include prior predictive plots for many models,
@@ -363,6 +544,19 @@ are not neutral defaults and need explicit labelling.
   should be interpreted on the logit and probability scales.
 - VG15 `psi` is weakly positively regularised and must be tested against neutral
   alternatives.
+- Checked against independent Wordbank normative deciles, the TD anchor priors
+  are broad enough to cover the norms but several are off-centre on the
+  observable scale (notably the low-age spoken and understood anchors and the
+  VG13 high understood anchor, which sits at the WG comprehension ceiling); the
+  independent TD `q(a)` curve corroborates the VG10/VG15 `q`-anchor tightening.
+  See "Evidence base: literature and normative data" above.
+- The independent DS cohorts anchor only DS _spoken_ vocabulary and only to ~60
+  months (Berglund et al., 2001): the DS spoken-low prior is ~3× high at 24
+  months, the DS understood-low anchor has no independent chronological-age
+  source, and the 84-month high anchor is beyond all independent CDI data.
+- A per-age Beta-Binomial fit to the Wordbank by-child data confirms the sign of
+  the `kappa` age-trend (dispersion rises with age for production) but shows the
+  prior is slightly tight at the high-dispersion (older-age) end.
 
 No final robustness conclusion should be made until the prior predictive audit
 and sensitivity checks above are complete.
