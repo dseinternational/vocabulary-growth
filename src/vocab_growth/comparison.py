@@ -9,7 +9,7 @@ of ``first_crossing``, two trace loaders, ad-hoc HDI code). The comparison
 scripts are now thin CLI wrappers around the functions here.
 
 Everything is **model-agnostic** and **registry-parameterised**: a comparison
-target is a ``MODEL_REGISTRY`` key (e.g. ``"vg06"``, ``"vg10"``). Output
+target is a ``MODEL_REGISTRY`` key (e.g. ``"vg11"``, ``"vg10"``). Output
 directories, vocabulary-checklist sizes (``n_trials``) and populations are
 resolved from the model definition rather than hardcoded paths, so a *new*
 model pair -- for example a future TD model with study intercepts -- can be
@@ -50,7 +50,7 @@ DEFAULT_MIN_COVERAGE = 0.80
 # Registry resolution
 # ----------------------------------------------------------------------------
 def model_dir(key: str) -> str:
-    """Output directory for a registry key, e.g. 'vg06' -> .../VG06-age-...-td."""
+    """Output directory for a registry key, e.g. 'vg11' -> .../VG11-age-...-td."""
     d = MODEL_REGISTRY[key]
     return os.path.join(env.MODELS_OUTPUT_DIR, f"{d.model_id}-{d.config_name}")
 
@@ -69,7 +69,7 @@ def population(key: str) -> str:
 
 
 def model_label(key: str) -> str:
-    """Short display label, e.g. 'VG06 (TD)'."""
+    """Short display label, e.g. 'VG11 (TD)'."""
     d = MODEL_REGISTRY[key]
     return f"{d.model_id} ({population(key).upper()})"
 

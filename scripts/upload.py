@@ -18,7 +18,6 @@ MODEL_CONFIGS = {
     "vg03": ("VG03", "age-spoken-td"),
     "vg04": ("VG04", "age-understood-td"),
     "vg05": ("VG05", "age-understood-spoken-ds"),
-    "vg06": ("VG06", "age-understood-spoken-td"),
     "vg07": ("VG07", "age-understood-spoken-ds-re"),
     "vg08": ("VG08", "age-understood-spoken-ds-re-subj"),
     "vg09": ("VG09", "age-understood-spoken-ds-re-subj-uq"),

@@ -9,14 +9,14 @@ from vocab_growth import comparison
 
 # ---- registry resolution ----
 def test_registry_resolution():
-    assert comparison.model_dir("vg06").replace("\\", "/").endswith(
-        "output/models/VG06-age-understood-spoken-td"
+    assert comparison.model_dir("vg11").replace("\\", "/").endswith(
+        "output/models/VG11-age-spoken-td-re"
     )
-    assert comparison.n_trials("vg06") == 800
+    assert comparison.n_trials("vg11") == 800
     assert comparison.n_trials("vg10") == 800
-    assert comparison.population("vg06") == "td"
+    assert comparison.population("vg11") == "td"
     assert comparison.population("vg10") == "ds"
-    assert comparison.model_label("vg06") == "VG06 (TD)"
+    assert comparison.model_label("vg11") == "VG11 (TD)"
     assert comparison.model_label("vg10") == "VG10 (DS)"
     assert comparison.trace_path("vg10").replace("\\", "/").endswith("trace.nc")
 

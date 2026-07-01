@@ -1,0 +1,14 @@
+---
+title: "Data and measures"
+abstract: "*TODO*"
+---
+
+## Data sources {#sec-data}
+
+**TODO**: inventory of studies, data sources, and instruments
+
+## Measures
+
+**TODO**: explain harmonisation onto a common 800-item reference scale ($N_{\text{trials}} = 800$); why this gives an inventory-comparable scale across DS and TD instruments even where native checklist ceilings differ (e.g. WG ≈ 396, Oxford CDI ≈ 418 items).
+
+**TODO**: Words & Sentences (WS) records **production only** - therefore TD understood and the comprehension–production gap are reported only in the young window (~8–18 months)

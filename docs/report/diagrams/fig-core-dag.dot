@@ -1,0 +1,12 @@
+// Source for fig-core-dag (the shared identification DAG in methods-framework.qmd).
+// Pre-rendered to a static PNG so PDF/DOCX rendering does not require headless Chrome.
+// Regenerate after editing:
+//   dot -Tpng -Gdpi=300 diagrams/fig-core-dag.dot -o diagrams/fig-core-dag.png
+digraph CoreDAG {
+    graph [size="2.5,0.85", ratio=fill, rankdir=LR]
+    edge [arrowsize=0.75]
+    node [shape=square]
+    O [shape=circle]
+    A -> O
+    O -> Y
+}

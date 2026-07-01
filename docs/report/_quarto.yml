@@ -16,10 +16,14 @@ execute:
 date: now
 
 toc: true
-toc-depth: 2
+toc-depth: 3
 
 number-sections: true
 number-depth: 3
+
+# Figures are referenced without an extension; resolve to the PNG that the model
+# plotting emits (both HTML and PDF use PNG — no SVG->PDF conversion needed).
+default-image-extension: png
 
 bibliography: references.bib
 csl: apa.csl
@@ -53,17 +57,29 @@ book:
   chapters:
     - index.qmd
     - acknowledgements.qmd
-    - intro.qmd
-    - methods.qmd
-    - model-1-spoken.qmd
-    - model-2-understood.qmd
-    - model-3-spoken-td.qmd
-    - model-4-understood-td.qmd
-    - model-5-spoken-understood.qmd
-    - model-6-spoken-understood-td.qmd
-    - discussion.qmd
+    - summary.qmd
     - glossary.qmd
-    - references.qmd
+    - part: "Background and aims"
+      chapters:
+        - intro.qmd
+    - part: "Methods"
+      chapters:
+        - methods-data.qmd
+        - methods-models.qmd
+        - methods-workflow.qmd
+    - part: "Results"
+      chapters:
+        - results-words-understood-spoken.qmd
+        - results-words-signed-total-expressive.qmd
+    - part: "Discussion"
+      chapters:
+        - discussion.qmd
+    - part: "Appendices"
+      chapters:
+        - appendix-specs.qmd
+        - appendix-reference-tables.qmd
+        - appendix-ai.qmd
+        - references.qmd
 
 format:
   html:

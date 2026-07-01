@@ -9,9 +9,9 @@ Produces figures under ``output/comparisons/``:
 - ``ds_td_understood_by_age.{png,svg}`` — VG02 (DS) vs VG04 (TD) — understood
 - ``vg05_vs_vg07_{understood,spoken}.{png,svg}`` — study-RE effect in VG07
 - ``ds_td_q_vs_understood.{png,svg}`` (+ ``ds_td_q_crossings.csv``) — headline
-  matched-comprehension q overlay (DS VG09 / TD VG06, VG07 dashed reference)
+  matched-comprehension q overlay (DS VG09 / TD VG13, VG07 dashed reference)
 - ``vg07_vg09_vg10_q_by_age.{png,svg}`` — q(age) three-way overlay
-- ``ds_td_q_by_age_vg10.{png,svg}`` — q(age) DS (VG10) vs TD (VG06)
+- ``ds_td_q_by_age_vg10.{png,svg}`` — q(age) DS (VG10) vs TD (VG13)
 - ``ds_td_q_vs_understood_vg10.{png,svg}`` — matched-comprehension q with VG10
 
 Shared helpers (``first_crossing``, ``overlay_age_curves``) and model-path
@@ -89,10 +89,10 @@ def _q_vs_understood_crossings(series: list[tuple[str, pd.DataFrame]]) -> pd.Dat
 
 
 def ds_td_q_vs_understood() -> None:
-    """Headline matched-comprehension q overlay: DS (VG09) vs TD (VG06), VG07 dashed."""
+    """Headline matched-comprehension q overlay: DS (VG09) vs TD (VG13), VG07 dashed."""
     ds_vg09 = _read("vg09", "production_rate_by_understood.csv")
     ds_vg07 = _read("vg07", "production_rate_by_understood.csv")
-    td = _read("vg06", "production_rate_by_understood.csv")
+    td = _read("vg13", "production_rate_by_understood.csv")
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(td["words_understood"], td["hdi_lo"], td["hdi_hi"],
@@ -100,7 +100,7 @@ def ds_td_q_vs_understood() -> None:
     ax.fill_between(ds_vg09["words_understood"], ds_vg09["hdi_lo"], ds_vg09["hdi_hi"],
                     color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 90% HDI")
     ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5,
-            label="TD median q (VG06)")
+            label="TD median q (VG13)")
     ax.plot(ds_vg09["words_understood"], ds_vg09["q_median"], color=DS_COLOUR, lw=2.5,
             label="DS median q (VG09)")
     ax.plot(ds_vg07["words_understood"], ds_vg07["q_median"], color=DS_COLOUR,
@@ -111,14 +111,14 @@ def ds_td_q_vs_understood() -> None:
     ax.set_ylim(0, 1)
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio against words understood — DS (VG09) vs TD (VG06)")
+    ax.set_title("Production ratio against words understood — DS (VG09) vs TD (VG13)")
     ax.legend(loc="lower right", frameon=True)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood.png"))
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood.svg"))
     plt.close(fig)
 
     _q_vs_understood_crossings(
-        [("DS (VG09)", ds_vg09), ("DS (VG07)", ds_vg07), ("TD (VG06)", td)]
+        [("DS (VG09)", ds_vg09), ("DS (VG07)", ds_vg07), ("TD (VG13)", td)]
     ).to_csv(os.path.join(OUT_DIR, "ds_td_q_crossings.csv"), index=False)
 
 
@@ -160,15 +160,15 @@ def vg07_vg09_vg10_q_by_age() -> None:
 
 
 def ds_td_q_by_age_vg10() -> None:
-    """DS (VG10) vs TD (VG06) production-ratio overlay against age."""
+    """DS (VG10) vs TD (VG13) production-ratio overlay against age."""
     ds = _read("vg10", "posterior_summary_q.csv")
-    td = _read("vg06", "posterior_summary_q.csv")
+    td = _read("vg13", "posterior_summary_q.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(td["age_months"], td["q_hdi_lo"], td["q_hdi_hi"],
                     color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 90% HDI")
     ax.fill_between(ds["age_months"], ds["q_hdi_lo"], ds["q_hdi_hi"],
                     color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 90% HDI")
-    ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG06)")
+    ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG13)")
     ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG10)")
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
@@ -177,7 +177,7 @@ def ds_td_q_by_age_vg10() -> None:
     ax.set_ylim(0, 1)
     ax.set_xlabel("Age (months)")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio by age — DS (VG10) vs TD (VG06)")
+    ax.set_title("Production ratio by age — DS (VG10) vs TD (VG13)")
     ax.legend(loc="lower right", frameon=True)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.png"))
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.svg"))
@@ -188,15 +188,15 @@ def ds_td_q_by_age_vg10() -> None:
 
 
 def ds_td_q_vs_understood_vg10() -> None:
-    """DS (VG10) vs TD (VG06) production-ratio against words understood."""
+    """DS (VG10) vs TD (VG13) production-ratio against words understood."""
     ds = _read("vg10", "production_rate_by_understood.csv")
-    td = _read("vg06", "production_rate_by_understood.csv")
+    td = _read("vg13", "production_rate_by_understood.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(td["words_understood"], td["hdi_lo"], td["hdi_hi"],
                     color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 90% HDI")
     ax.fill_between(ds["words_understood"], ds["hdi_lo"], ds["hdi_hi"],
                     color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 90% HDI")
-    ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG06)")
+    ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG13)")
     ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG10)")
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
@@ -204,7 +204,7 @@ def ds_td_q_vs_understood_vg10() -> None:
     ax.set_ylim(0, 1)
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio against words understood — DS (VG10) vs TD (VG06)")
+    ax.set_title("Production ratio against words understood — DS (VG10) vs TD (VG13)")
     ax.legend(loc="lower right", frameon=True)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.png"))
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.svg"))

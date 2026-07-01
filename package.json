@@ -20,6 +20,7 @@
   },
   "scripts": {
     "spellcheck": "cspell --show-suggestions --show-context \"**/*.md\" \"docs/**/*.qmd\"",
+    "report:figures": "python scripts/prepare_report_figures.py",
     "format": "node scripts/format-markdown.mjs --write",
     "format:check": "node scripts/format-markdown.mjs --check"
   }

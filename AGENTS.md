@@ -61,12 +61,20 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload]
 ```
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg06`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, or `all`.
+- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after fitting.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
 
 Output (traces, figures, summary tables) is written to `output/models/<model_name>/`.
+
+### Sync report figures
+
+```bash
+python scripts/sync_report_figures.py
+```
+
+Copies the plots (`.svg`/`.png`) and summary tables (`.csv`) from `output/models/` and `output/comparisons/` into `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
 
 ## Architecture
 
@@ -86,9 +94,9 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 - Models use **PyMC** with the **nutpie** sampler and **HSGP** (Hilbert-Space Gaussian Process) approximations for scalable nonparametric mean functions.
 - The likelihood is **Beta-Binomial** with age-varying dispersion.
 
-The full, canonical list of models — each model's population, outcome, structure, and purpose — is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
+The full, canonical list of models -- each model's population, outcome, structure, and purpose -- is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
 
-There are currently fifteen models (`VG01`–`VG15`), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), and signing (understood + spoken + signed) structures.
+There are currently fifteen models (`VG01`-`VG15`), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), and signing (understood + spoken + signed) structures.
 
 ### Shared utilities (`dse_research_utils`)
 

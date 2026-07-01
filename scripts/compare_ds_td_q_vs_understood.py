@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Overlay DS (VG10) and TD (VG06) median production ratio q(U) = E[S]/E[U]
+Overlay DS (VG10) and TD (VG13) median production ratio q(U) = E[S]/E[U]
 as a function of words understood, with HDI bands. This is the bivariate
 equivalent of Figure 25 in each model's report (`production_rate_by_understood`),
 overlaid on a single axis.
@@ -25,7 +25,7 @@ from vocab_growth import comparison
 from vocab_growth import environment as env
 
 DS_DIR = comparison.model_dir("vg10")
-TD_DIR = comparison.model_dir("vg06")
+TD_DIR = comparison.model_dir("vg13")
 OUT_DIR = "output/comparisons"
 
 
@@ -45,16 +45,16 @@ def main() -> None:
     ax.fill_between(
         td["words_understood"], td["hdi_lo"], td["hdi_hi"],
         color=td_colour, alpha=0.15, linewidth=0,
-        label="TD (VG06) 90% HDI",
+        label="TD (VG13) 90% HDI",
     )
     ax.fill_between(
         td["words_understood"], td["hdi50_lo"], td["hdi50_hi"],
         color=td_colour, alpha=0.30, linewidth=0,
-        label="TD (VG06) 50% HDI",
+        label="TD (VG13) 50% HDI",
     )
     ax.plot(
         td["words_understood"], td["q_median"],
-        color=td_colour, lw=2.5, label="TD (VG06) median",
+        color=td_colour, lw=2.5, label="TD (VG13) median",
     )
 
     ax.fill_between(
@@ -80,7 +80,7 @@ def main() -> None:
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel(r"Production ratio  q = $E[S] / E[U]$")
     ax.set_title(
-        "Production ratio against words understood — DS (VG10) vs TD (VG06)"
+        "Production ratio against words understood — DS (VG10) vs TD (VG13)"
     )
     ax.legend(loc="lower right", frameon=True, fontsize=10)
     ax.grid(True, alpha=0.3)

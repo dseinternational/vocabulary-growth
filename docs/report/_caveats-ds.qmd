@@ -1,0 +1,9 @@
+<!--
+Transcluded scope-and-caveats note for the Down syndrome findings.
+Included via {{< include _caveats-ds.qmd >}} so the shared caveats are stated
+once and reused. Edit here only.
+-->
+
+::: {.callout-warning title="Scope and caveats"}
+**TODO**: the shared DS findings caveats, stated once — parent-report measures; cross-study harmonisation onto the 800-item reference (@sec-data); the sample is not a random sample of all children with Down syndrome (representativeness); estimates describe the modelled population and are conditional on the model. Numbers are drawn from the model of record (VG10) at the canonical 6-monthly ages; see Appendix C for the complete tables.
+:::

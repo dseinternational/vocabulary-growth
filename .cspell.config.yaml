@@ -22,6 +22,11 @@ overrides:
 ignorePaths:
     - 'node_modules'
     - 'config/**'
+    # Standalone literature review: an 88-entry spelled-out bibliography of
+    # international author names yields only false positives. References in the
+    # report proper live in references.bib (not spellchecked) and are cited via
+    # @citekey, so this exclusion matches the project's existing approach.
+    - 'notes/202606281600-literature-review.md'
 patterns:
   - name: qmd_frontmatter
     pattern: |
