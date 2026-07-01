@@ -56,10 +56,18 @@ def comp_at(name, match_col, match_val, col):
 def val(model_id, summary, age_months, column):
     """Single value from a summary at (or nearest to) an age, or None."""
     df = load_summary(model_id, summary)
-    if df is None or "age_months" not in df:
+    if df is None or "age_months" not in df or column not in df:
         return None
     row = df.iloc[(df["age_months"] - age_months).abs().argmin()]
     return row[column]
+
+
+def summary_value(model_id, summary, column):
+    """Single value from the first row of a summary, or None."""
+    df = load_summary(model_id, summary)
+    if df is None or df.empty or column not in df:
+        return None
+    return df[column].iloc[0]
 
 
 def words(model_id, summary, age_months, column="Ey_median"):
@@ -112,6 +120,11 @@ def load_json(model_id, name):
 def num(value, fmt="{:.0f}"):
     """Format a value for prose, or an em dash when it is missing."""
     return "—" if value is None else fmt.format(value)
+
+
+def summary_num(model_id, summary, column, fmt="{:.0f}"):
+    """Formatted first-row summary value for prose."""
+    return num(summary_value(model_id, summary, column), fmt)
 
 
 def pct(model_id, summary, age_months, column):

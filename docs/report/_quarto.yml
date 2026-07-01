@@ -58,34 +58,26 @@ book:
     - index.qmd
     - acknowledgements.qmd
     - summary.qmd
-    - contents.qmd
     - glossary.qmd
-    - part: "Part 1 – Background and aims"
+    - part: "Background and aims"
       chapters:
         - intro.qmd
-    - part: "Part 2 – Methods"
+    - part: "Methods"
       chapters:
         - methods-data.qmd
-        - methods-framework.qmd
+        - methods-models.qmd
         - methods-workflow.qmd
-        - lineage-ds.qmd
-        - lineage-signing.qmd
-    - part: "Part 3 – Results"
+    - part: "Results"
       chapters:
-        - findings-ds.qmd
-        - findings-signing.qmd
-        - comparison-td.qmd
-        - synthesis.qmd
-        - practical-reference.qmd
-    - part: "Part 4 – Discussion"
+        - findings-words-understood-spoken.qmd
+        - findings-words-signed-total-expressive.qmd
+    - part: "Discussion"
       chapters:
         - discussion.qmd
     - part: "Appendices"
       chapters:
-        - appendix-register.qmd
         - appendix-specs.qmd
         - appendix-reference-tables.qmd
-        - appendix-repro.qmd
         - appendix-ai.qmd
         - references.qmd
 

@@ -1,19 +1,11 @@
 ---
-title: "Signing and total expressive vocabulary"
-abstract: "*Signing findings for children with Down syndrome, drawn from the joint sign/speech model of record (VG15): the proportion of understood words that are signed and how it rises then recedes with age, the migration of words from sign into speech, the within-understood association between signing and speaking, and the data-identified total expressive vocabulary. Signing data exist only for the Down syndrome datasets, so there is no typically-developing comparison.*"
+title: "Words signed and total expressive vocabulary"
+abstract: "*TODO*"
 ---
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 :::
-
-<!--
-PURPOSE: DS-only signing findings from VG15 (VG14 referenced only as the
-superseded development step, Appendix B3). p_any retained in the deliverables
-(author decision) with an explicit exploratory label and uncertainty band — see
-the transcluded caveat. Numbers pulled live from the VG15 fit. Draft prose
-generated from the current fit; review against the figures.
--->
 
 {{< include _report_data.qmd >}}
 
@@ -31,13 +23,13 @@ if _pe:
     )
 else:
     _psi_evidence_clause = (
-        "with essentially all of the posterior above the independence reference $\\psi = 1$"
+        "with posterior evidence to be inserted once the VG15 psi summary is available"
     )
 ```
 
 ## The sign-given-understood trajectory r(a) {#sec-findings-signing}
 
-Signing plays a distinctive, time-limited role in early expressive development. The **sign ratio** $r(a) = P(\text{sign} \mid \text{understood})$ (@sec-ratios) follows a rise-then-fall hump: under VG15 it climbs from about `{python} f'{val("VG15","posterior_summary_r",18,"r_median")*100:.0f}'`% of understood words at 18 months to a peak of roughly `{python} f'{val("VG15","posterior_summary_r",36,"r_median")*100:.0f}'`% around 36 months, then recedes to about `{python} f'{val("VG15","posterior_summary_r",60,"r_median")*100:.0f}'`% by 60 months and `{python} f'{val("VG15","posterior_summary_r",84,"r_median")*100:.0f}'`% by 84 months. @fig-sign-rate shows the signed and spoken ratios together, with study composition absorbed by the random intercepts (@sec-randomeffects) — the signed peak that was study-confounded in VG14 is now identified.
+Signing plays a distinctive, time-limited role in early expressive development. The **sign ratio** $r(a) = P(\text{sign} \mid \text{understood})$ (@sec-ratios) follows a rise-then-fall hump: under VG15 it climbs from about `{python} pct("VG15","posterior_summary_r",18,"r_median")` of understood words at 18 months to a peak of roughly `{python} pct("VG15","posterior_summary_r",36,"r_median")` around 36 months, then recedes to about `{python} pct("VG15","posterior_summary_r",60,"r_median")` by 60 months and `{python} pct("VG15","posterior_summary_r",84,"r_median")` by 84 months. @fig-sign-rate shows the signed and spoken ratios together, with study composition absorbed by the random intercepts (@sec-randomeffects) — the signed peak that was study-confounded in VG14 is now identified.
 
 ![Signed and spoken production ratios by age, children with Down syndrome (VG15).](figures/VG15-age-joint-signspeech-ds/signed_vs_spoken_rate){#fig-sign-rate .lightbox fig-align="left"}
 
@@ -49,7 +41,7 @@ The hump reflects words moving *through* sign into speech. @fig-sign-composition
 
 ## How sign and speech go together: the association ψ
 
-Within understood words, signing and speaking co-occur **more** than chance: the Plackett odds ratio (@sec-association) has posterior median $\psi \approx$ `{python} f'{load_summary("VG15","posterior_summary_psi")["psi_median"].iloc[0]:.1f}'` (94% credible interval `{python} f'{load_summary("VG15","posterior_summary_psi")["psi_hdi_lo"].iloc[0]:.1f}'`–`{python} f'{load_summary("VG15","posterior_summary_psi")["psi_hdi_hi"].iloc[0]:.1f}'`), `{python} _psi_evidence_clause`. A word a child understands is more likely to be both signed and spoken than two independent coin-flips at rates $r$ and $q$ would predict. The association is a single descriptive scalar estimated from a modest sample, so we lead with the interval and the strength of evidence rather than the point value (see the caveat below).
+Within understood words, signing and speaking co-occur **more** than chance: the Plackett odds ratio (@sec-association) has posterior median $\psi \approx$ `{python} summary_num("VG15","posterior_summary_psi","psi_median", "{:.1f}")` (94% credible interval `{python} summary_num("VG15","posterior_summary_psi","psi_hdi_lo", "{:.1f}")`–`{python} summary_num("VG15","posterior_summary_psi","psi_hdi_hi", "{:.1f}")`), `{python} _psi_evidence_clause`. A word a child understands is more likely to be both signed and spoken than two independent coin-flips at rates $r$ and $q$ would predict. The association is a single descriptive scalar estimated from a modest sample, so we lead with the interval and the strength of evidence rather than the point value (see the caveat below).
 
 ![Posterior of the sign–speech association $\psi$, with the independence reference $\psi = 1$ (VG15).](figures/VG15-age-joint-signspeech-ds/psi_posterior){#fig-sign-psi .lightbox fig-align="left"}
 
