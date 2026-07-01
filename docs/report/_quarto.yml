@@ -58,41 +58,37 @@ book:
     - index.qmd
     - acknowledgements.qmd
     - summary.qmd
-    - part: "Background and aims"
+    - contents.qmd
+    - glossary.qmd
+    - part: "Part 1 – Background and aims"
       chapters:
         - intro.qmd
         - primer.qmd
-    - part: "Methods"
+    - part: "Part 2 – Methods"
       chapters:
         - methods-data.qmd
         - methods-framework.qmd
         - methods-workflow.qmd
-    - part: "Model development and selection"
-      chapters:
         - lineage-ds.qmd
         - lineage-signing.qmd
-    - part: "Vocabulary growth in children with Down syndrome"
+    - part: "Part 3 – Results"
       chapters:
         - findings-ds.qmd
-    - part: "Signing and total expressive vocabulary"
-      chapters:
         - findings-signing.qmd
-    - part: "Comparison with typically developing children"
-      chapters:
         - comparison-td.qmd
-    - part: "Synthesis and practical reference"
-      chapters:
         - synthesis.qmd
         - practical-reference.qmd
-    - discussion.qmd
+    - part: "Part 4 – Discussion"
+      chapters:
+        - discussion.qmd
     - part: "Appendices"
       chapters:
         - appendix-register.qmd
         - appendix-specs.qmd
         - appendix-reference-tables.qmd
         - appendix-repro.qmd
-    - glossary.qmd
-    - references.qmd
+        - appendix-ai.qmd
+        - references.qmd
 
 format:
   html:

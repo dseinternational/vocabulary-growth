@@ -1,0 +1,22 @@
+# Contents {.unnumbered}
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Codex/GPT-5).
+:::
+
+This report is organised as follows:
+
+| Section                      | Chapters                                                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Preface                      | Preface                                                                                                                                                                  |
+| Acknowledgements             | Acknowledgements                                                                                                                                                         |
+| Summary                      | Summary                                                                                                                                                                  |
+| Contents                     | Contents                                                                                                                                                                 |
+| Glossary                     | Glossary                                                                                                                                                                 |
+| Part 1 – Background and aims | Introduction; What we estimated and how to read the estimates                                                                                                            |
+| Part 2 – Methods             | Data and measurement; Statistical framework; Workflow, validation and reporting; Developing the Down syndrome joint model; Developing the signing model                  |
+| Part 3 – Results             | Vocabulary growth in children with Down syndrome; Signing and total expressive vocabulary; Comparison with typically developing children; Synthesis; Practical reference |
+| Part 4 – Discussion          | Discussion                                                                                                                                                               |
+| Appendices                   | Model register and lineage map; Model specifications and diagnostics; Reference tables; Reproducibility and computational environment; Use of AI; References             |
+
+The rendered HTML output also provides the full chapter list in the navigation panel. PDF and Word outputs generate their table of contents from the same Quarto book structure.

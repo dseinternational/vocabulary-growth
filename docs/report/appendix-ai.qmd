@@ -1,0 +1,12 @@
+---
+title: "Appendix E — Use of AI"
+abstract: "*How LLM-based AI tools were used in preparing this report and the safeguards applied to generated content.*"
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Codex/GPT-5).
+:::
+
+LLM-based AI tools may be used in this project as drafting, coding, editing and review assistants. AI-assisted document sections are labelled near the top of the relevant Markdown or Quarto file, following the repository convention.
+
+The human authors remain responsible for the study design, data handling, model specification, interpretation, verification and final wording. AI-assisted changes must be reviewed against the source data, fitted model output, cited literature and repository checks before publication.

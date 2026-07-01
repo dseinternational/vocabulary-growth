@@ -1,5 +1,5 @@
 ---
-title: "Findings at a glance"
+title: "Summary"
 abstract: "*A one-page executive summary: the headline finding for each question this report answers, with the model of record behind it and a link to the full estimates. Read this first; the chapters that follow give the detail, the uncertainty, and the model development behind each number.*"
 ---
 
@@ -89,4 +89,4 @@ print(
 )
 ```
 
-Every figure above is a posterior median for the *typical* child, reported with a 94% credible interval and the spread expected across *individual* children in the chapters that follow; @sec-supersedes explains how a model earns "of record" status, and the per-model convergence gate (@sec-appendix-b1) shows the diagnostics were cleared before any estimate was read. For how to read a credible interval and a posterior-predictive range, see the primer; for the cross-model synthesis, see @sec-synthesis <!-- synthesis.qmd -->.
+Every figure above is a posterior median for the _typical_ child, reported with a 94% credible interval and the spread expected across _individual_ children in the chapters that follow; @sec-supersedes explains how a model earns "of record" status, and the per-model convergence gate (@sec-appendix-b1) shows the diagnostics were cleared before any estimate was read. For how to read a credible interval and a posterior-predictive range, see the primer; for the cross-model synthesis, see @sec-synthesis <!-- synthesis.qmd -->.
