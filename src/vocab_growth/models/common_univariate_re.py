@@ -56,7 +56,7 @@ from vocab_growth.models.common import (
     sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
-from vocab_growth.models.gp_utils import make_kappa_of_z
+from vocab_growth.models.gp_utils import GPGrid, make_kappa_of_z, trend_and_gp
 from vocab_growth.reporting import (
     console,
     dataframe_table,
@@ -289,44 +289,30 @@ def build_univariate_re_model(
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
 
         # ============================================================
-        # Mean developmental trajectory
+        # Mean developmental trajectory + HSGP deviation
         # ============================================================
-
-        p_slope_low = config.p_slope_low_dist.to_pymc("p_slope_low")
-        p_slope_hi = config.p_slope_hi_dist.to_pymc("p_slope_hi")
-
-        beta_1 = pm.Deterministic(
-            "slope",
-            (pymc_utils.logit(p_slope_hi) - pymc_utils.logit(p_slope_low))
-            / (slope_age_b_z - slope_age_a_z),
+        # Shared helper (gp_utils); graph byte-identical to the inlined form
+        # (stores the named g / f_all; Option-D anchor when the model enables it).
+        # Population-level linear predictor (no study effect).
+        f_all = trend_and_gp(
+            cfg_low=config.p_slope_low_dist,
+            cfg_hi=config.p_slope_hi_dist,
+            cfg_ell=config.ell_unit_dist,
+            cfg_eta=config.eta_dist,
+            suffix="",
+            X_all_z_data=X_all_z_data,
+            grid=GPGrid(
+                sa_z=slope_age_a_z,
+                sb_z=slope_age_b_z,
+                ell_low_z=ell_low_z,
+                ell_high_z=ell_high_z,
+                M=M,
+                L=L,
+            ),
+            store_deterministic=True,
+            latent_name="f_all",
+            anchor_idx=i_anchor if anchor_g else None,
         )
-        beta_0 = pm.Deterministic(
-            "intercept",
-            pymc_utils.logit(p_slope_low) - beta_1 * slope_age_a_z,
-        )
-        mean_trend_all = beta_0 + beta_1 * X_all_z_data[:, 0]
-
-        # ============================================================
-        # Gaussian Process
-        # ============================================================
-
-        ell_unit = config.ell_unit_dist.to_pymc("ell_unit")
-        ell = pm.Deterministic("ell", ell_low_z + (ell_high_z - ell_low_z) * ell_unit)
-        eta = config.eta_dist.to_pymc("eta")
-
-        cov0 = pm.gp.cov.ExpQuad(1, ls=ell)
-        hsgp0 = pm.gp.HSGP(cov_func=cov0, m=M, L=L)
-        g_unit = hsgp0.prior("g_unit", X=X_all_z_data, dims="all_id")
-
-        if anchor_g:
-            g_unit_centred = g_unit - g_unit[i_anchor]
-        else:
-            g_unit_centred = g_unit
-
-        g = pm.Deterministic("g", eta * g_unit_centred, dims=("all_id",))
-
-        # Population-level linear predictor (no study effect)
-        f_all = pm.Deterministic("f_all", mean_trend_all + g, dims=("all_id",))
 
         # ============================================================
         # Study-level random intercepts (non-centred parameterisation)

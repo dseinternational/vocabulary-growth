@@ -85,7 +85,12 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.definitions import JointModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.models.gp_utils import make_kappa_of_z
+from vocab_growth.models.gp_utils import (
+    GPGrid,
+    intercept_and_gp,
+    make_kappa_of_z,
+    trend_and_gp,
+)
 from vocab_growth.plotting import (
     _save_csv,
     plot_prior_samples,
@@ -647,57 +652,6 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     if use_subject_codes:
         coords["subject_id"] = np.arange(n_subjects)
 
-    def trend_and_gp(cfg_low, cfg_hi, cfg_ell, cfg_eta, suffix, X_all_z_data, anchor_idx=None):
-        """Build a logit-linear trend + HSGP deviation; return the full-grid latent.
-
-        If ``anchor_idx`` is given (Option D), the GP is centred to pass through
-        zero at that grid row for every draw, so the linear trend alone sets the
-        level there and the GP only carries deviations.
-        """
-        p_lo = cfg_low.to_pymc(f"p_slope_low_{suffix}")
-        p_hi = cfg_hi.to_pymc(f"p_slope_hi_{suffix}")
-        slope = pm.Deterministic(
-            f"slope_{suffix}",
-            (pymc_utils.logit(p_hi) - pymc_utils.logit(p_lo)) / (sb_z - sa_z),
-        )
-        intercept = pm.Deterministic(
-            f"intercept_{suffix}", pymc_utils.logit(p_lo) - slope * sa_z
-        )
-        mean_trend = intercept + slope * X_all_z_data[:, 0]
-        ell_unit = cfg_ell.to_pymc(f"ell_unit_{suffix}")
-        ell = pm.Deterministic(
-            f"ell_{suffix}", ell_low_z + (ell_high_z - ell_low_z) * ell_unit
-        )
-        eta = cfg_eta.to_pymc(f"eta_{suffix}")
-        cov = pm.gp.cov.ExpQuad(1, ls=ell)
-        hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
-        g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
-        if anchor_idx is not None:
-            g_unit = g_unit - g_unit[anchor_idx]
-        return mean_trend + eta * g_unit  # plain tensor (n_all,)
-
-    def intercept_and_gp(cfg_intercept, cfg_ell, cfg_eta, suffix, X_all_z_data, anchor_idx=None):
-        """Intercept-only mean (no age slope) + HSGP deviation; full-grid latent.
-
-        Used for the signed ratio: a free age slope would extrapolate the ratio
-        below the data floor (< ~18 mo), so the mean is intercept-only and the GP
-        carries the age-varying (rise-then-fall) shape. The study random
-        intercept is added at observation level by the caller. If ``anchor_idx``
-        is given (Option D), the GP passes through zero at that grid row per draw.
-        """
-        intercept = cfg_intercept.to_pymc(f"intercept_{suffix}")
-        ell_unit = cfg_ell.to_pymc(f"ell_unit_{suffix}")
-        ell = pm.Deterministic(
-            f"ell_{suffix}", ell_low_z + (ell_high_z - ell_low_z) * ell_unit
-        )
-        eta = cfg_eta.to_pymc(f"eta_{suffix}")
-        cov = pm.gp.cov.ExpQuad(1, ls=ell)
-        hsgp = pm.gp.HSGP(cov_func=cov, m=M, L=L)
-        g_unit = hsgp.prior(f"g_unit_{suffix}", X=X_all_z_data, dims="all_id")
-        if anchor_idx is not None:
-            g_unit = g_unit - g_unit[anchor_idx]
-        return intercept + eta * g_unit  # plain tensor (n_all,)
-
     with pm.Model(coords=coords) as model_pm:
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
@@ -707,23 +661,49 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
         _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
 
-        # Latent full-grid trajectories (plain tensors). Option D anchors each GP
-        # (per-draw zero at the reference age) when the matching flag is set.
+        # Latent full-grid trajectories (plain tensors), built by the shared
+        # gp_utils helpers. Option D anchors each GP (per-draw zero at the
+        # reference age) when the matching flag is set.
+        gp_grid = GPGrid(
+            sa_z=sa_z,
+            sb_z=sb_z,
+            ell_low_z=ell_low_z,
+            ell_high_z=ell_high_z,
+            M=M,
+            L=L,
+        )
         f_u_all = trend_and_gp(
-            config.p_slope_low_u_dist, config.p_slope_hi_u_dist,
-            config.ell_unit_u_dist, config.eta_u_dist, "u", X_all_z_data,
+            cfg_low=config.p_slope_low_u_dist,
+            cfg_hi=config.p_slope_hi_u_dist,
+            cfg_ell=config.ell_unit_u_dist,
+            cfg_eta=config.eta_u_dist,
+            suffix="_u",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_u else None,
         )
         h_all = trend_and_gp(
-            config.p_slope_low_q_dist, config.p_slope_hi_q_dist,
-            config.ell_unit_q_dist, config.eta_q_dist, "q", X_all_z_data,
+            cfg_low=config.p_slope_low_q_dist,
+            cfg_hi=config.p_slope_hi_q_dist,
+            cfg_ell=config.ell_unit_q_dist,
+            cfg_eta=config.eta_q_dist,
+            suffix="_q",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_q else None,
         )
         # Signed marginal: intercept-only mean (no age slope) + GP hump; the
         # study random intercept delta_sign is added at obs level below.
         g_all = intercept_and_gp(
-            config.intercept_sign_dist,
-            config.ell_unit_sign_dist, config.eta_sign_dist, "sign", X_all_z_data,
+            cfg_intercept=config.intercept_sign_dist,
+            cfg_ell=config.ell_unit_sign_dist,
+            cfg_eta=config.eta_sign_dist,
+            suffix="_sign",
+            X_all_z_data=X_all_z_data,
+            grid=gp_grid,
+            store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_sign else None,
         )
 
