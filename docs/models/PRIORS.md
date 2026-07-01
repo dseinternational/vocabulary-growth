@@ -298,27 +298,37 @@ Review notes:
   remains a population-conditioned association. The rationale is documented in
   [`notes/202606171200-vg15-subject-re-stabilisation.md`](../../notes/202606171200-vg15-subject-re-stabilisation.md).
 
-## Prior predictive review status
+## Prior predictive audit
 
-Generated model reports already include prior predictive plots for many models,
-but this review has not yet completed a consistent cross-model prior predictive
-audit.
+Prior-predictive output was regenerated for one representative of each model
+family — VG11 and VG12 (typically-developing univariate with study random
+effects), VG10 (Down syndrome bivariate understood + spoken, study + subject
+random effects and a GP anchor), VG13 (typically-developing bivariate, young
+8-18 month window), VG14 (trivariate signing) and VG15 (joint sign/speech) —
+using `scripts/prior_predictive_audit.py`, which builds each model and draws
+from the prior predictive only (no posterior sampling). The `prior_samples_*`,
+`prior_predictions` and `prior_predictive_checks` plots in each model's output
+directory were reviewed against the checklist below.
 
-The audit should record, for each model family:
+| Check                              | Finding                                                                                                                                                                                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Young-age floor                    | Plausible. Every trajectory family places prior-predictive mass near zero at the youngest ages (spoken and signed at 8-12 months, understood a little higher); no prior draw forces a high count at young ages.                                                                     |
+| Old-age ceiling                    | Plausible. Understood and spoken curves approach the 800-word ceiling only gradually and only for the fastest draws; the bulk of the prior mass stays well below saturation across the query range, so the ceiling is reachable but not imposed.                                     |
+| Smoothness                         | Appropriate. The HSGP produces smooth curves with individual-draw wiggle, admitting both near-linear and gently curved trajectories without high-frequency oscillation.                                                                                                             |
+| `q(a)` (speak given understood)    | Plausible. The prior band is a smooth 0-to-1 sigmoid rising from about 0.05 at the youngest ages toward about 0.9 by ~100 months, with no mass piling implausibly at the bounds.                                                                                                     |
+| `r(a)` (sign given understood)     | Deliberately broad. The intercept-only mean plus GP spans roughly 0-1 with most mass low-to-mid and a visible narrowing ("waist") at the 54-month GP anchor — the intended weakly-informative signed prior (data set the level, the GP carries the hump); no piling at 0 or 1.       |
+| Random-effect heterogeneity        | Plausible. At the observation level the study/subject random effects widen the prior-predictive cloud enough to cover the observed between-study and between-child spread without implying implausible extremes on the probability scale.                                            |
+| Simulated count spread             | Plausible. The prior-predictive count clouds bracket the observed counts for every outcome (understood, spoken, signed) before the data are seen — neither too narrow (which would fight the data) nor degenerate at 0 or 800.                                                       |
+| VG15 signing / four-cell           | Plausible. Signed counts stay low with a broad, hump-capable upper tail (matching the sparse signing data); the `log_psi ~ Normal(0.3, 0.5)` association prior spans the independence reference `psi = 1`, so the four-cell composition is not prior-forced toward association.       |
 
-- whether young-age floor behaviour is plausible;
-- whether old-age ceiling behaviour is plausible;
-- whether trajectories are smooth without being too rigid;
-- whether `q(a)` and `r(a)` remain plausible over the full query range;
-- whether random effects imply realistic between-study and between-child
-  heterogeneity on the probability scale;
-- whether simulated counts have plausible spread before seeing the data;
-- whether VG15 four-cell simulations imply plausible sign-only, speak-only,
-  both, and neither compositions.
-
-Current local fitted output is available for VG01-VG09 and VG11. The review
-should either regenerate or retrieve corresponding output for VG10, VG12, VG13,
-VG14, and VG15 before making final claims.
+**Conclusion.** The priors pass the prior-predictive audit: they encode the
+developmental floor and a reachable-but-not-imposed ceiling, keep the production
+and signed ratios in plausible ranges, and generate count spreads that bracket
+the observed data without dominating it. The signed-ratio prior is the broadest
+by design and the association prior is weakly positive but spans independence.
+No prior required revision on prior-predictive grounds. Evidence: each model's
+`prior_samples_*.png` under `output/models/<model>-<config>/`, regenerated by
+`scripts/prior_predictive_audit.py`.
 
 ## Sensitivity targets
 
