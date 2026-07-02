@@ -826,7 +826,10 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             pm.Deterministic(f"p_any_{grid}", pug * (rg + qg - pi_both), dims=f"{grid}_id")
             pm.Deterministic(f"p_any_indep_{grid}", pug * (1 - (1 - rg) * (1 - qg)), dims=f"{grid}_id")
 
-        # store the obs-grid signed kappa for reporting (diagnostics() trace plot)
+        # Persist the obs-grid signed kappa in the trace for downstream
+        # inspection. (It is not shown in the diagnostics() trace plot: that
+        # plots only scalar unobserved RVs, and this is an obs_id-length
+        # deterministic.)
         pm.Deterministic("kappa_sign_obs", kappa_sign_obs, dims="obs_id")
 
     pymc_utils.report_model_summary(model_pm)

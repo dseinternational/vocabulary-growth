@@ -133,10 +133,19 @@ def marginal_subject_loglik(
 ) -> np.ndarray:
     """Compute marginal per-subject log-likelihood under spec's RE structure.
 
-    For VG07: no subject RE — marginal == conditional, so we just sum
-    per-observation log-likelihoods using the model's own posterior.
+    For each (thinned) posterior draw and subject, this draws K samples from
+    each active subject-RE prior and Monte-Carlo integrates the conditional
+    log-likelihood over them (``logsumexp(...) - log K``).
 
-    For VG08/VG09: integrate the subject RE(s) over their prior.
+    The path is unified across models: a subject RE that ``spec`` does not
+    enable contributes an all-zero draw vector, so its K samples are identical
+    and the average collapses exactly to the population+study conditional
+    log-likelihood. For VG07 (no subject RE) both REs are zero, so this returns
+    the conditional == marginal value — correct, though it evaluates the same
+    conditional likelihood K times. (A no-RE short-circuit that instead
+    aggregates the stored ``idata.log_likelihood`` directly would be faster and
+    read fewer posterior variables; left as a future optimisation since it
+    changes an offline analysis path not exercised by the fit tests.)
     """
     rng = np.random.default_rng(seed)
     post = idata.posterior
