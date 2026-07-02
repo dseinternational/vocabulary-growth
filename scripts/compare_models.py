@@ -192,23 +192,42 @@ def ds_td_q_vs_understood_vg10() -> None:
     ds = _read("vg10", "production_rate_by_understood.csv")
     td = _read("vg13", "production_rate_by_understood.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+
     ax.fill_between(td["words_understood"], td["hdi_lo"], td["hdi_hi"],
-                    color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 90% HDI")
+                    color=TD_COLOUR, alpha=0.15, linewidth=0, label="TD (VG13) 90% HDI")
+    ax.fill_between(td["words_understood"], td["hdi50_lo"], td["hdi50_hi"],
+                    color=TD_COLOUR, alpha=0.30, linewidth=0, label="TD (VG13) 50% HDI")
+    ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD (VG13) median")
+
     ax.fill_between(ds["words_understood"], ds["hdi_lo"], ds["hdi_hi"],
-                    color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 90% HDI")
-    ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG13)")
-    ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG10)")
+                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG10) 90% HDI")
+    ax.fill_between(ds["words_understood"], ds["hdi50_lo"], ds["hdi50_hi"],
+                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG10) 50% HDI")
+    ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS (VG10) median")
+
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
     ax.set_xlim(0, max(td["words_understood"].max(), ds["words_understood"].max()))
-    ax.set_ylim(0, 1)
+    ax.set_ylim(0, 1.05)
     ax.set_xlabel("Expected words understood")
-    ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
+    ax.set_ylabel(r"Production ratio  q = $E[S] / E[U]$")
     ax.set_title("Production ratio against words understood — DS (VG10) vs TD (VG13)")
-    ax.legend(loc="lower right", frameon=True)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.png"))
+    ax.legend(loc="lower right", frameon=True, fontsize=10)
+    ax.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.png"), dpi=300)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.svg"))
     plt.close(fig)
+
+    print(
+        f"DS (VG10) U range covered: {ds['words_understood'].min():.0f} – "
+        f"{ds['words_understood'].max():.0f}"
+    )
+    print(
+        f"TD (VG13) U range covered: {td['words_understood'].min():.0f} – "
+        f"{td['words_understood'].max():.0f}"
+    )
 
 
 def main() -> None:

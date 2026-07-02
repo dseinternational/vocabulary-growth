@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
@@ -49,7 +50,7 @@ from vocab_growth.models.build_utils import (
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.models.gp_utils import GPGrid, make_kappa_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -634,20 +635,13 @@ def build_model(context: ModelFitContext):
         # ---- Dispersion / overdispersion ----
 
         # dispersion parameter κ (kappa) is a function of age (z), with a minimum value and an
-        # exponential increase/decrease with age
-
-        # minimum kappa value
-        kappa_min = context.model_config.kappa_min_dist.to_pymc("kappa_min")
-
-        # slope of kappa with age (on log scale)
-        a_kappa = context.model_config.a_kappa_dist.to_pymc("a_kappa")
-        # magnitude of slope (on log scale)
-        b_kappa_mag = context.model_config.b_kappa_mag_dist.to_pymc("b_kappa_mag")
-        # the slope is negative, so we take the negative of the magnitude
-        b_kappa = pm.Deterministic("b_kappa", -b_kappa_mag)
-
-        # function to compute kappa as a function of age (z)
-        kappa_of_z = make_kappa_of_z(kappa_min, a_kappa, b_kappa)
+        # exponential increase/decrease with age (kappa_min, a_kappa/b_kappa_mag -> b_kappa,
+        # shared helper — see models.gp_utils.build_kappa_of_z).
+        kappa_of_z = build_kappa_of_z(
+            context.model_config.kappa_min_dist,
+            context.model_config.a_kappa_dist,
+            context.model_config.b_kappa_mag_dist,
+        )
 
         # compute kappa for the observed data points, and use that in the likelihood
         kappa_obs = pm.Deterministic("kappa_obs", kappa_of_z(z_obs), dims="obs_id")
@@ -695,7 +689,8 @@ def prior_predictive_checks(
     with context.model:
         prior_samples = pm.sample_prior_predictive(
             draws=1000,
-            random_seed=context.sampling.random_seed
+            random_seed=context.sampling.random_seed,
+            compile_kwargs=dict(mode="FAST_COMPILE"),
         )
 
     # Sample prior functions
@@ -771,9 +766,33 @@ def sample(context: ModelFitContext):
     context.set_trace(trace)
 
 
-def diagnostics(context: ModelFitContext):
+def diagnostics(
+    context: ModelFitContext,
+    *,
+    extra_trace_var_names: tuple[str, ...] = (),
+    loo_var_names: tuple[tuple[str, str], ...] | None = None,
+    var_names_fn=None,
+    round_to: int = 3,
+):
     """
     Run diagnostics on the posterior samples, including convergence diagnostics and posterior predictive checks.
+
+    Shared across every engine (single-outcome, bivariate, trivariate, joint).
+    The engines differ only in:
+
+    - ``extra_trace_var_names``: extra (per-outcome kappa) variable names
+      appended to the trace plot only, not the summary/pair/posterior-density
+      plots.
+    - ``loo_var_names``: ``((var_name, heading_label), ...)`` for per-outcome
+      LOO-CV (bivariate/trivariate/joint likelihoods are named, e.g.
+      ``y_u_obs``). ``None`` runs a single unnamed ``az.loo`` call (the
+      single-outcome / study-RE engines, which have exactly one likelihood).
+    - ``var_names_fn``: optional ``list[str] -> list[str]`` reordering applied
+      before the pair/trace/posterior-density plots only (the joint engine
+      prioritises ``psi``/``conc`` first); the summary table always uses the
+      unordered ``var_names``.
+    - ``round_to``: decimal places for the summary table (joint uses 4 to keep
+      ``psi``/``conc`` precision; every other engine uses the default 3).
     """
     # Summary diagnostic statistics
 
@@ -783,7 +802,7 @@ def diagnostics(context: ModelFitContext):
     diagnostics_df = az.summary(
         context.trace,
         var_names=var_names,
-        round_to=3,
+        round_to=round_to,
         ci_prob=context.reporting.hdi,
         ci_kind="hdi",
     )
@@ -801,9 +820,11 @@ def diagnostics(context: ModelFitContext):
 
     # Kernel density estimates (KDE) of the joint posterior, and marginals
 
+    plot_var_names = var_names if var_names_fn is None else var_names_fn(var_names)
+
     pair_plot_var_names = capped_plot_var_names(
         context.trace,
-        var_names,
+        plot_var_names,
         squared=True,
     )
     if pair_plot_var_names:
@@ -818,7 +839,7 @@ def diagnostics(context: ModelFitContext):
 
     # Trace plot
 
-    var_names_ext = var_names + ["kappa_obs"]
+    var_names_ext = plot_var_names + list(extra_trace_var_names)
     trace_var_names = capped_plot_var_names(context.trace, var_names_ext)
 
     az.plot_trace(
@@ -840,7 +861,7 @@ def diagnostics(context: ModelFitContext):
     plt.close()
 
     # Posterior densities
-    posterior_var_names = capped_plot_var_names(context.trace, var_names)
+    posterior_var_names = capped_plot_var_names(context.trace, plot_var_names)
     az.plot_dist(
         context.trace,
         var_names=posterior_var_names,
@@ -861,10 +882,20 @@ def diagnostics(context: ModelFitContext):
 
     context.set_trace(trace)
 
-    loocv = az.loo(context.trace)
-    context.set_loocv(loocv)
-    heading("LOO-CV", style="bold cyan")
-    console.print(loocv)
+    if loo_var_names is None:
+        loocv = az.loo(context.trace)
+        context.set_loocv(loocv)
+        heading("LOO-CV", style="bold cyan")
+        console.print(loocv)
+    else:
+        loocv_by_name = {
+            var_name: az.loo(context.trace, var_name=var_name)
+            for var_name, _label in loo_var_names
+        }
+        context.set_loocv(loocv_by_name)
+        for var_name, label in loo_var_names:
+            heading(f"LOO-CV — {label}", style="bold cyan")
+            console.print(loocv_by_name[var_name])
 
 
 def sample_posterior_predictive(context: ModelFitContext):
@@ -1225,12 +1256,22 @@ def configure_univariate_priors(
     context.set_model_config(config)
 
 
-def fit_single_outcome_model(
+def run_fit_pipeline(
     config: str,
-    definition: UnivariateModelDefinition,
+    definition,
+    *,
+    stages: list[tuple[str, Callable[[ModelFitContext], None]]],
 ) -> ModelFitContext:
-    """
-    Shared fit pipeline for single-outcome models (VG01-VG04).
+    """Shared fit-pipeline scaffold used by every engine's ``fit_*_model``.
+
+    Every engine's orchestration function differed only in *which* stage
+    functions it ran (data prep / prior config / model build / predictive
+    sampling / plots are all engine-specific); the banner, environment and
+    package reporting, ``ModelFitContext`` construction, output-directory
+    clearing, timed-section bookkeeping and final summary were six identical
+    copies. ``stages`` is the ordered ``(section_name, fn)`` list, where each
+    ``fn`` takes the freshly-created ``context`` (typically a closure binding
+    the engine's ``definition``).
     """
     run_banner(definition.banner, subtitle=f"sampling config: {config}")
 
@@ -1257,40 +1298,9 @@ def fit_single_outcome_model(
     timings = context.timings
     run_started = time.perf_counter()
 
-    y_col = definition.outcome.value
-    outcome_label = definition.outcome_label
-
-    with section("Prepare data", timings=timings):
-        prepare_univariate_data(context, definition)
-
-    with section("Priors and hyperparameters", timings=timings):
-        configure_univariate_priors(context, definition)
-
-    with section("Model definition and initialisation", timings=timings):
-        build_model(context)
-
-    with section("Prior predictive checks", timings=timings):
-        prior_predictive_checks(
-            context, outcome_col=y_col, outcome_label=outcome_label
-        )
-
-    with section("Posterior sampling", timings=timings):
-        sample(context)
-
-    with section("Diagnostics", timings=timings):
-        diagnostics(context)
-
-    with section("Posterior predictions", timings=timings):
-        sample_posterior_predictive(context)
-
-    with section("Posterior summary", timings=timings):
-        posterior_summary(context)
-
-    with section("Plots", timings=timings):
-        run_standard_plots(context, outcome_label=outcome_label)
-
-    with section("Report", timings=timings):
-        report(context)
+    for name, fn in stages:
+        with section(name, timings=timings):
+            fn(context)
 
     pipeline_summary(
         f"Pipeline summary — {context.reporting.model_label}", timings
@@ -1301,3 +1311,42 @@ def fit_single_outcome_model(
     )
 
     return context
+
+
+def fit_single_outcome_model(
+    config: str,
+    definition: UnivariateModelDefinition,
+) -> ModelFitContext:
+    """
+    Shared fit pipeline for single-outcome models (VG01-VG04).
+    """
+    y_col = definition.outcome.value
+    outcome_label = definition.outcome_label
+
+    return run_fit_pipeline(
+        config,
+        definition,
+        stages=[
+            ("Prepare data", lambda ctx: prepare_univariate_data(ctx, definition)),
+            (
+                "Priors and hyperparameters",
+                lambda ctx: configure_univariate_priors(ctx, definition),
+            ),
+            ("Model definition and initialisation", build_model),
+            (
+                "Prior predictive checks",
+                lambda ctx: prior_predictive_checks(
+                    ctx, outcome_col=y_col, outcome_label=outcome_label
+                ),
+            ),
+            ("Posterior sampling", sample),
+            ("Diagnostics", diagnostics),
+            ("Posterior predictions", sample_posterior_predictive),
+            ("Posterior summary", posterior_summary),
+            (
+                "Plots",
+                lambda ctx: run_standard_plots(ctx, outcome_label=outcome_label),
+            ),
+            ("Report", report),
+        ],
+    )

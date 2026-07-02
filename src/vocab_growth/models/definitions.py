@@ -5,8 +5,11 @@
 Model definitions for the vocabulary growth model family.
 
 Each model is fully determined by its definition: population, outcome(s),
-prior parameters, and data configuration. All procedural code (model building,
-sampling, plotting, reporting) lives in common.py and common_bivariate.py.
+prior parameters, and data configuration. Procedural code (model building,
+sampling, plotting, reporting) lives in the six engines — common.py,
+common_univariate_re.py, common_bivariate.py, common_bivariate_re.py,
+common_trivariate.py and common_joint_modality.py — with sampling,
+diagnostics and fit orchestration shared from common.py across all of them.
 """
 
 from __future__ import annotations
@@ -40,7 +43,7 @@ class ModelType(Enum):
 
 
 # ============================================================
-# Shared prior defaults (identical across all 6 models)
+# Shared prior defaults (same default kappa shape reused by every model)
 # ============================================================
 
 
@@ -67,7 +70,7 @@ class KappaPriorParams:
 
 @dataclass
 class UnivariateModelDefinition:
-    """Complete definition for a single-outcome model (VG01-VG04)."""
+    """Complete definition for a single-outcome model (VG01-VG04, VG11-VG12)."""
 
     model_id: str
     """Model identifier, e.g. 'VG01'."""

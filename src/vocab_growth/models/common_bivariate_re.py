@@ -22,23 +22,15 @@ Plot and query predictions use the population-level trajectory (delta=0).
 """
 
 import os
-import shutil
-import time
 
-import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
-import dse_research_utils.metadata.packages as package_metadata
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
-import dse_research_utils.statistics.models.reporting as reporting
-import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
-import vocab_growth.environment as local_env
-import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -46,11 +38,10 @@ from vocab_growth.models.build_utils import (
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
-    PACKAGE_LIST,
-    ModelFitContext,
     get_hsgp_hyperparams,
     render_model_graph,
     report,
+    run_fit_pipeline,
 )
 from vocab_growth.models.common_bivariate import (
     BivariateContext,
@@ -63,14 +54,10 @@ from vocab_growth.models.common_bivariate import (
     sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
-from vocab_growth.models.gp_utils import GPGrid, make_kappa_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
 from vocab_growth.reporting import (
-    console,
     dataframe_table,
     key_value_table,
-    pipeline_summary,
-    run_banner,
-    section,
 )
 
 EPSILON = math_constants.EPSILON
@@ -554,12 +541,12 @@ def build_model_re(
         # Kappa — understood
         # ============================================================
 
-        kappa_min_u = config.kappa_min_u_dist.to_pymc("kappa_min_u")
-        a_kappa_u = config.a_kappa_u_dist.to_pymc("a_kappa_u")
-        b_kappa_mag_u = config.b_kappa_mag_u_dist.to_pymc("b_kappa_mag_u")
-        b_kappa_u = pm.Deterministic("b_kappa_u", -b_kappa_mag_u)
-
-        kappa_u_of_z = make_kappa_of_z(kappa_min_u, a_kappa_u, b_kappa_u)
+        kappa_u_of_z = build_kappa_of_z(
+            config.kappa_min_u_dist,
+            config.a_kappa_u_dist,
+            config.b_kappa_mag_u_dist,
+            suffix="_u",
+        )
 
         kappa_u_obs = pm.Deterministic(
             "kappa_u_obs", kappa_u_of_z(z_obs), dims="obs_id"
@@ -571,12 +558,12 @@ def build_model_re(
         # Kappa — spoken
         # ============================================================
 
-        kappa_min_s = config.kappa_min_s_dist.to_pymc("kappa_min_s")
-        a_kappa_s = config.a_kappa_s_dist.to_pymc("a_kappa_s")
-        b_kappa_mag_s = config.b_kappa_mag_s_dist.to_pymc("b_kappa_mag_s")
-        b_kappa_s = pm.Deterministic("b_kappa_s", -b_kappa_mag_s)
-
-        kappa_s_of_z = make_kappa_of_z(kappa_min_s, a_kappa_s, b_kappa_s)
+        kappa_s_of_z = build_kappa_of_z(
+            config.kappa_min_s_dist,
+            config.a_kappa_s_dist,
+            config.b_kappa_mag_s_dist,
+            suffix="_s",
+        )
 
         kappa_s_obs = pm.Deterministic(
             "kappa_s_obs", kappa_s_of_z(z_obs), dims="obs_id"
@@ -639,67 +626,34 @@ def fit_bivariate_re_model(
     """
     Fit pipeline for bivariate model with study random intercepts (VG07).
     """
-    run_banner(definition.banner, subtitle=f"sampling config: {config}")
-
-    env_info.report_environment_info()
-
-    console.print()
-    package_metadata.report_package_versions(PACKAGE_LIST)
-
-    context: BivariateREContext = ModelFitContext(
-        reporting=reporting.ReportingConfiguration(
-            model_name=definition.model_id,
-            config_name=definition.config_name,
-            output_root_dir=local_env.OUTPUT_DIR,
-            hdi=0.90,
-        ),
-        sampling=sampling.get_sampling_configuration(config),
+    return run_fit_pipeline(
+        config,
+        definition,
+        stages=[
+            (
+                "Prepare data",
+                lambda ctx: prepare_bivariate_re_data(ctx, definition),
+            ),
+            (
+                "Priors and hyperparameters",
+                lambda ctx: configure_bivariate_priors(ctx, definition),
+            ),
+            (
+                "Model definition and initialisation",
+                lambda ctx: build_model_re(ctx, definition),
+            ),
+            ("Prior predictive checks", prior_predictive_checks),
+            ("Posterior sampling", sample),
+            ("Diagnostics", diagnostics),
+            (
+                "Posterior predictions",
+                lambda ctx: sample_posterior_predictive(ctx, definition),
+            ),
+            ("Posterior summary", posterior_summary),
+            (
+                "Plots",
+                lambda ctx: _run_bivariate_joint_plots(ctx, definition),
+            ),
+            ("Report", report),
+        ],
     )
-
-    if os.path.exists(context.reporting.output_dir):
-        shutil.rmtree(context.reporting.output_dir)
-
-    os.makedirs(context.reporting.output_dir, exist_ok=True)
-
-    timings = context.timings
-    run_started = time.perf_counter()
-
-    with section("Prepare data", timings=timings):
-        prepare_bivariate_re_data(context, definition)
-
-    with section("Priors and hyperparameters", timings=timings):
-        configure_bivariate_priors(context, definition)
-
-    with section("Model definition and initialisation", timings=timings):
-        build_model_re(context, definition)
-
-    with section("Prior predictive checks", timings=timings):
-        prior_predictive_checks(context)
-
-    with section("Posterior sampling", timings=timings):
-        sample(context)
-
-    with section("Diagnostics", timings=timings):
-        diagnostics(context)
-
-    with section("Posterior predictions", timings=timings):
-        sample_posterior_predictive(context, definition)
-
-    with section("Posterior summary", timings=timings):
-        posterior_summary(context)
-
-    with section("Plots", timings=timings):
-        _run_bivariate_joint_plots(context, definition)
-
-    with section("Report", timings=timings):
-        report(context)
-
-    pipeline_summary(
-        f"Pipeline summary — {context.reporting.model_label}", timings
-    )
-    console.print(
-        f"[dim]Total wall time: "
-        f"{vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
-    )
-
-    return context

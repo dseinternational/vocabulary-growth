@@ -32,16 +32,13 @@ from typing import Any
 import arviz as az
 import pandas as pd
 
+from vocab_growth.models.definitions import MODEL_REGISTRY
+
+# (short model id, output-folder label), derived from the registry so a newly
+# added model is picked up automatically rather than requiring a second,
+# hand-maintained list here.
 MODELS = [
-    ("VG01", "VG01-age-spoken-ds"),
-    ("VG02", "VG02-age-understood-ds"),
-    ("VG03", "VG03-age-spoken-td"),
-    ("VG04", "VG04-age-understood-td"),
-    ("VG05", "VG05-age-understood-spoken-ds"),
-    ("VG07", "VG07-age-understood-spoken-ds-re"),
-    ("VG08", "VG08-age-understood-spoken-ds-re-subj"),
-    ("VG09", "VG09-age-understood-spoken-ds-re-subj-uq"),
-    ("VG10", "VG10-age-understood-spoken-ds-re-subj-uq-anchored"),
+    (d.model_id, f"{d.model_id}-{d.config_name}") for d in MODEL_REGISTRY.values()
 ]
 
 LOG_DIR = "output/logs"
@@ -65,7 +62,7 @@ def parse_log_timings(log_path: str) -> dict[str, Any]:
     # plain ASCII `|` does not appear). Accept either form.
     per_model = {}
     rows = re.findall(
-        r"[│|]\s*(vg0[1-9][a-z]?)\s*[│|]\s*([\dhms\. ]+?)\s*[│|]\s*([\d\.]+%)\s*[│|]",
+        r"[│|]\s*(vg\d{2}[a-z]?)\s*[│|]\s*([\dhms\. ]+?)\s*[│|]\s*([\d\.]+%)\s*[│|]",
         text,
     )
     for model_id, wall, pct in rows:

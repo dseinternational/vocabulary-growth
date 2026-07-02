@@ -5,6 +5,7 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 """
 
 import argparse
+import importlib
 import os
 import subprocess
 import sys
@@ -14,22 +15,7 @@ from multiprocessing import freeze_support
 import dse_research_utils.environment.setup as setup
 
 from vocab_growth import environment as env
-from vocab_growth.models import (
-    model_vg01,
-    model_vg02,
-    model_vg03,
-    model_vg04,
-    model_vg05,
-    model_vg07,
-    model_vg08,
-    model_vg09,
-    model_vg10,
-    model_vg11,
-    model_vg12,
-    model_vg13,
-    model_vg14,
-    model_vg15,
-)
+from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting import (
     console,
     format_duration,
@@ -70,27 +56,18 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    models = {
-        "vg01": model_vg01,
-        "vg02": model_vg02,
-        "vg03": model_vg03,
-        "vg04": model_vg04,
-        "vg05": model_vg05,
-        "vg07": model_vg07,
-        "vg08": model_vg08,
-        "vg09": model_vg09,
-        "vg10": model_vg10,
-        "vg11": model_vg11,
-        "vg12": model_vg12,
-        "vg13": model_vg13,
-        "vg14": model_vg14,
-        "vg15": model_vg15,
-    }
+    # Model modules follow the "model_<key>" naming convention 1:1 with
+    # MODEL_REGISTRY (definitions.py), so the set of fittable models is
+    # derived from the registry rather than a second, hand-maintained list
+    # that can drift out of sync with it (e.g. a newly added model forgetting
+    # this file).
+    def _load_model_module(key: str):
+        return importlib.import_module(f"vocab_growth.models.model_{key}")
 
     if args.model == "all":
-        selected = list(models.items())
-    elif args.model in models:
-        selected = [(args.model, models[args.model])]
+        selected = [(key, _load_model_module(key)) for key in MODEL_REGISTRY]
+    elif args.model in MODEL_REGISTRY:
+        selected = [(args.model, _load_model_module(args.model))]
     else:
         console.print(f"[bold red]Unknown model: {args.model}[/bold red]")
         sys.exit(1)

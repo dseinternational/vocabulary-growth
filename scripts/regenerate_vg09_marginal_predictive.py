@@ -75,8 +75,6 @@ def main() -> None:
 
     n_plot = f_u_plot.shape[1]
     n_query = f_u_query.shape[1]
-    X_plot = post["z_plot"].values  # not needed; we use X_plot from the model
-    # Actually use the dedicated X arrays:
     constant = idata.constant_data
     X_plot = constant["X_plot"].values  # (n_plot,)
     X_query = constant["X_query"].values  # (n_query,)
