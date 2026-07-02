@@ -50,7 +50,7 @@ The three axes that distinguish the models:
 | [VG03](vg03/index.qmd) | TD         | Spoken                       | TD counterpart to VG01.                                                                                                |
 | [VG04](vg04/index.qmd) | TD         | Understood                   | TD counterpart to VG02.                                                                                                |
 | [VG05](vg05/index.qmd) | DS         | Understood + spoken (joint)  | Baseline joint model; spoken modelled as a fraction `q(a)` of understood.                                              |
-| VG06 *(retired)*       | TD         | Understood + spoken (joint)  | TD counterpart to VG05; retired after the WS-comprehension data issue (see below) — superseded by VG13.                |
+| VG06 _(retired)_       | TD         | Understood + spoken (joint)  | TD counterpart to VG05; retired after the WS-comprehension data issue (see below) — superseded by VG13.                |
 | [VG07](vg07/index.qmd) | DS         | Understood + spoken (joint)  | VG05 + study random intercepts.                                                                                        |
 | [VG08](vg08/index.qmd) | DS         | Understood + spoken (joint)  | VG07 + subject random intercepts on understood.                                                                        |
 | [VG09](vg09/index.qmd) | DS         | Understood + spoken (joint)  | VG08 + subject random intercepts on the production ratio `q`.                                                          |
@@ -139,7 +139,7 @@ model:
 
 ### Joint understood + spoken, typically developing (VG13; VG06 retired)
 
-- **VG06** *(retired)* — was the TD counterpart to VG05, used for
+- **VG06** _(retired)_ — was the TD counterpart to VG05, used for
   DS-versus-TD comparison. Wordbank's CDI: Words & Sentences (WS) form records
   `comprehension` as a production proxy rather than an independent measurement,
   which had been telling VG06 that `U = S` for most TD rows above 18 months
