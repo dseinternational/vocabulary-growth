@@ -32,22 +32,26 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
+
 MODELS_DIR = "output/models"
 OUT_DIR = "output/comparisons"
 
+# Registry-derived so a newly added univariate/bivariate model is picked up
+# automatically. Trivariate (VG14) and joint (VG15) models have a different
+# likelihood shape (three+ outcomes, a Dirichlet-Multinomial component) that
+# this script's LOO logic does not handle, so they are excluded here — not a
+# staleness gap, a scope boundary.
 UNIVARIATE = {
-    "VG01": "VG01-age-spoken-ds",
-    "VG02": "VG02-age-understood-ds",
-    "VG03": "VG03-age-spoken-td",
-    "VG04": "VG04-age-understood-td",
+    d.model_id: f"{d.model_id}-{d.config_name}"
+    for d in MODEL_REGISTRY.values()
+    if d.model_type == ModelType.UNIVARIATE
 }
 
 BIVARIATE = {
-    "VG05": "VG05-age-understood-spoken-ds",
-    "VG07": "VG07-age-understood-spoken-ds-re",
-    "VG08": "VG08-age-understood-spoken-ds-re-subj",
-    "VG09": "VG09-age-understood-spoken-ds-re-subj-uq",
-    "VG10": "VG10-age-understood-spoken-ds-re-subj-uq-anchored",
+    d.model_id: f"{d.model_id}-{d.config_name}"
+    for d in MODEL_REGISTRY.values()
+    if d.model_type == ModelType.BIVARIATE
 }
 
 MODEL_LABELS = {**UNIVARIATE, **BIVARIATE}

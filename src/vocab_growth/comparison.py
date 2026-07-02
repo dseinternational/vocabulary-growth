@@ -83,6 +83,30 @@ def _dataset(idata: az.InferenceData, group: str):
     return node if hasattr(node, "data_vars") else node.to_dataset()
 
 
+def _load_reshaped_draws(
+    path: str, var_names: tuple[str, ...]
+) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Load named posterior variables over the ``X_plot`` grid, draw-flattened.
+
+    Shared tail of every population-trajectory loader below: opens the trace,
+    reshapes each named posterior variable from ``(chain, draw, n_age)`` to
+    ``(chain*draw, n_age)``, and age-sorts both the variables and the grid.
+    Returns ``(ages_sorted, [var_sorted, ...])`` in the same order as
+    ``var_names``.
+    """
+    d = az.from_netcdf(path)
+    post = _dataset(d, "posterior")
+    cdata = _dataset(d, "constant_data")
+    ages = np.asarray(cdata["X_plot"].values, dtype=float)
+    order = np.argsort(ages)
+    arrays = []
+    for name in var_names:
+        arr = post[name].values  # (chain, draw, n_age)
+        n_chain, n_draw, n_age = arr.shape
+        arrays.append(arr.reshape(n_chain * n_draw, n_age)[:, order])
+    return ages[order], arrays
+
+
 def load_population_trajectory(
     path: str, n_trials_: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -92,17 +116,8 @@ def load_population_trajectory(
     over the plot grid; ``ages`` is sorted ascending in months. ``n_trials_``
     must match the checklist size used at fit time (see definitions.py).
     """
-    d = az.from_netcdf(path)
-    post = _dataset(d, "posterior")
-    cdata = _dataset(d, "constant_data")
-    p_u = post["p_u_plot"].values  # (chain, draw, n_age)
-    p_s = post["p_s_plot"].values
-    n_chain, n_draw, n_age = p_u.shape
-    p_u = p_u.reshape(n_chain * n_draw, n_age)
-    p_s = p_s.reshape(n_chain * n_draw, n_age)
-    ages = np.asarray(cdata["X_plot"].values, dtype=float)
-    order = np.argsort(ages)
-    return ages[order], (p_u * n_trials_)[:, order], (p_s * n_trials_)[:, order]
+    ages, (p_u, p_s) = _load_reshaped_draws(path, ("p_u_plot", "p_s_plot"))
+    return ages, p_u * n_trials_, p_s * n_trials_
 
 
 def population_trajectory(key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -207,28 +222,12 @@ def hdi_from_samples(x: np.ndarray, prob: float) -> tuple[float, float]:
 
 
 def summarise_per_N(samples: np.ndarray, grid: np.ndarray) -> pd.DataFrame:
-    """Median + 50%/90% HDI across draws (axis 0) per grid column, with coverage."""
-    rows = []
-    n_draw = samples.shape[0]
-    for i, N in enumerate(grid):
-        col = samples[:, i]
-        valid = ~np.isnan(col)
-        n_valid = int(valid.sum())
-        cov = n_valid / n_draw
-        if n_valid == 0:
-            rows.append(
-                {"N": N, "coverage": cov, "median": np.nan,
-                 "hdi50_lo": np.nan, "hdi50_hi": np.nan,
-                 "hdi90_lo": np.nan, "hdi90_hi": np.nan}
-            )
-            continue
-        l50, u50 = hdi_from_samples(col, 0.50)
-        l90, u90 = hdi_from_samples(col, 0.90)
-        rows.append(
-            {"N": N, "coverage": cov, "median": float(np.nanmedian(col)),
-             "hdi50_lo": l50, "hdi50_hi": u50, "hdi90_lo": l90, "hdi90_hi": u90}
-        )
-    return pd.DataFrame(rows)
+    """Median + 50%/90% HDI across draws (axis 0) per grid column, with coverage.
+
+    Thin alias of :func:`summarise_draws` with ``grid_name="N"`` — kept as a
+    separate name for the (many) call sites that read as "per N words".
+    """
+    return summarise_draws(samples, grid, "N")
 
 
 def prob_a_greater_b(
@@ -460,17 +459,8 @@ def load_outcome_trajectory(
             f"{key}: model_type {mt} is not supported by load_outcome_trajectory."
         )
 
-    d_idata = az.from_netcdf(trace_path(key))
-    post = _dataset(d_idata, "posterior")
-    cdata = _dataset(d_idata, "constant_data")
-    p = post[p_name].values  # (chain, draw, n_age)
-    k = post[k_name].values
-    n_chain, n_draw, n_age = p.shape
-    p = p.reshape(n_chain * n_draw, n_age)
-    k = k.reshape(n_chain * n_draw, n_age)
-    ages = np.asarray(cdata["X_plot"].values, dtype=float)
-    order = np.argsort(ages)
-    return ages[order], p[:, order], k[:, order], n_trials(key)
+    ages, (p, k) = _load_reshaped_draws(trace_path(key), (p_name, k_name))
+    return ages, p, k, n_trials(key)
 
 
 def implied_sd_y(p: np.ndarray, kappa: np.ndarray, n: int) -> np.ndarray:
@@ -707,15 +697,8 @@ def load_p_any_trajectory(
     ``p_any_words`` is ``(n_draw, n_age)`` expected word counts over the plot
     grid (signing included), for the DS sign-inclusive expressive contrast.
     """
-    d = az.from_netcdf(path)
-    post = _dataset(d, "posterior")
-    cdata = _dataset(d, "constant_data")
-    p_any = post["p_any_plot"].values
-    n_chain, n_draw, n_age = p_any.shape
-    p_any = p_any.reshape(n_chain * n_draw, n_age)
-    ages = np.asarray(cdata["X_plot"].values, dtype=float)
-    order = np.argsort(ages)
-    return ages[order], (p_any * n_trials_)[:, order]
+    ages, (p_any,) = _load_reshaped_draws(path, ("p_any_plot",))
+    return ages, p_any * n_trials_
 
 
 def shade_unsupported(

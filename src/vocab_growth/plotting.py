@@ -20,49 +20,17 @@ def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
     df.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
 
 
+def _save_png_svg(fig: Figure, output_dir: str, filename: str, *, dpi: int = 300) -> None:
+    """Save a figure as both PNG and SVG under the same filename stem."""
+    fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=dpi)
+    fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+
+
 def _hdi_by_sample(values: np.ndarray, prob: float) -> np.ndarray:
     """Compute HDI over posterior samples for each plot point."""
     values_da = xr.DataArray(values, dims=("sample", "plot"))
     return az.hdi(values_da, prob=prob, dim="sample").to_numpy()
 
-
-def plot_eta_effect_sizes(
-    eta_values=None,
-    p_values=None,
-    n_trials=800,
-    output_dir=None,
-    filename=None):
-    """
-    Show how the amplitude η translates to word-count effects.
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-    """
-    if eta_values is None:
-        eta_values = [0.3, 0.5, 0.7, 1.0, 1.5]
-    if p_values is None:
-        p_values = np.linspace(0.01, 0.99, 100)
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_MD)
-
-    for eta in eta_values:
-        effects = n_trials * p_values * (1 - p_values) * eta
-        word_counts = p_values * n_trials
-        ax.plot(word_counts, effects, label=f"η = {eta}", lw=2)
-
-    ax.set_xlabel("Vocabulary size (words)")
-    ax.set_ylabel("Effect size (±words for 1 SD of GP)")
-    ax.legend()
-
-    if output_dir is not None and filename is not None:
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        csv_data = {"vocabulary_size": p_values * n_trials}
-        for eta in eta_values:
-            csv_data[f"effect_eta_{eta}"] = n_trials * p_values * (1 - p_values) * eta
-        _save_csv(pd.DataFrame(csv_data), output_dir, filename)
-
-    return fig
 
 # ------------------------------------------------------------
 # Prior predictive plots
@@ -141,8 +109,7 @@ def plot_prior_samples_ratio(
 
     if filename is not None and output_dir is not None:
         os.makedirs(output_dir, exist_ok=True)
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(fig, output_dir, filename)
 
     return fig
 
@@ -181,7 +148,7 @@ def plot_prior_predictions(
     plt.ylim(-20, n_trials + 50)
 
     if filename is not None and output_dir is not None:
-        plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
+        _save_png_svg(plt.gcf(), output_dir, filename)
 
     return plt.gcf()
 
@@ -282,8 +249,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     fig.suptitle("Posterior predictive distributions at query ages", y=1.02)
 
     if filename is not None and output_dir is not None:
-        plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(plt.gcf(), output_dir, filename)
         rows = []
         for j, age in enumerate(X_query):
             draws = y_query[j, :].astype(int)
@@ -344,8 +310,7 @@ def plot_posterior_predictive_pmf(
     plt.legend(title="Age", ncol=2, frameon=True)
 
     if filename is not None and output_dir is not None:
-        plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(plt.gcf(), output_dir, filename)
         csv_data = {"word_count": k}
         for _a, j in zip(X_query, idxs, strict=True):
             draws = np.clip(y_plot[j, :].astype(int), x_lo, x_hi)
@@ -399,8 +364,7 @@ def plot_posterior_predictive_cdf(
     plt.legend(title="Age", ncol=2, frameon=True)
 
     if filename is not None and output_dir is not None:
-        plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(plt.gcf(), output_dir, filename)
         csv_data = {"word_count": k}
         for _a, j, draws in zip(X_query, plot_idx_by_age, draws_by_age, strict=True):
             draws_sorted = np.sort(draws)
@@ -653,8 +617,7 @@ def plot_posterior_predictive_median_trend(
     plt.ylim(-20, np.max(y_plot) + 50)
 
     if filename is not None and output_dir is not None:
-        plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(plt.gcf(), output_dir, filename)
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
             "median": y_plot_samples_median,
@@ -855,8 +818,7 @@ def plot_expected_learning_rate(
     plt.legend(loc="upper left", frameon=True)
 
     if filename is not None and output_dir is not None:
-        plt.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        plt.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(plt.gcf(), output_dir, filename)
         _save_csv(pd.DataFrame({
             "age_months": x_plot_values,
             "median_rate": median_rate,
@@ -975,8 +937,7 @@ def plot_posterior_kappa(
     ax.legend(frameon=True)
 
     if filename is not None and output_dir is not None:
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(fig, output_dir, filename)
         _save_csv(df_kappa_plot, output_dir, filename)
 
     return fig, df_kappa_plot, df_kappa_query
@@ -1043,8 +1004,7 @@ def plot_production_rate(
     ax.set_title("Production ratio q(a)")
 
     if output_dir is not None and filename is not None:
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(fig, output_dir, filename)
         _save_csv(
             pd.DataFrame(
                 {
@@ -1104,8 +1064,7 @@ def plot_comprehension_production_gap(
     ax.set_title("Comprehension-production gap")
 
     if output_dir is not None and filename is not None:
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_png_svg(fig, output_dir, filename)
         _save_csv(
             pd.DataFrame(
                 {

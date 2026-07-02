@@ -25,23 +25,15 @@ some duplication is intentional, to keep the signed logic fully isolated.
 """
 
 import os
-import shutil
 import sys
-import time
 from dataclasses import dataclass
 
 import arviz as az
-import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
-import dse_research_utils.metadata.packages as package_metadata
-import dse_research_utils.plot.diagnostics_mcmc as plot_diagnostics_mcmc
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
-import dse_research_utils.statistics.diagnostics as shared_diagnostics
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
-import dse_research_utils.statistics.models.reporting as reporting
-import dse_research_utils.statistics.models.sampling as sampling
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -54,7 +46,6 @@ import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
-import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -62,21 +53,21 @@ from vocab_growth.models.build_utils import (
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
-    PACKAGE_LIST,
     BaseModelConfiguration,
     ModelFitContext,
     _plot_and_print_dist,
-    _report_diagnostic_warnings,
     get_hsgp_hyperparams,
     render_model_graph,
     report,
+    run_fit_pipeline,
 )
+from vocab_growth.models.common import diagnostics as _shared_diagnostics
+from vocab_growth.models.common import sample as _shared_sample
 from vocab_growth.models.definitions import TrivariateModelDefinition
-from vocab_growth.models.diagnostics_utils import capped_plot_var_names
 from vocab_growth.models.gp_utils import (
     GPGrid,
+    build_kappa_of_z,
     intercept_and_gp,
-    make_kappa_of_z,
     trend_and_gp,
 )
 from vocab_growth.plotting import (
@@ -91,14 +82,9 @@ from vocab_growth.posterior_analysis import (
     extract_posterior_predictive as _extract_posterior_predictive,
 )
 from vocab_growth.reporting import (
-    config_table,
-    console,
     dataframe_table,
     heading,
     key_value_table,
-    pipeline_summary,
-    run_banner,
-    section,
 )
 
 EPSILON = math_constants.EPSILON
@@ -777,12 +763,12 @@ def build_model(context: TrivariateContext):
         # Kappa — understood
         # ============================================================
 
-        kappa_min_u = config.kappa_min_u_dist.to_pymc("kappa_min_u")
-        a_kappa_u = config.a_kappa_u_dist.to_pymc("a_kappa_u")
-        b_kappa_mag_u = config.b_kappa_mag_u_dist.to_pymc("b_kappa_mag_u")
-        b_kappa_u = pm.Deterministic("b_kappa_u", -b_kappa_mag_u)
-
-        kappa_u_of_z = make_kappa_of_z(kappa_min_u, a_kappa_u, b_kappa_u)
+        kappa_u_of_z = build_kappa_of_z(
+            config.kappa_min_u_dist,
+            config.a_kappa_u_dist,
+            config.b_kappa_mag_u_dist,
+            suffix="_u",
+        )
 
         kappa_u_obs = pm.Deterministic(
             "kappa_u_obs", kappa_u_of_z(z_obs), dims="obs_id"
@@ -794,12 +780,12 @@ def build_model(context: TrivariateContext):
         # Kappa — spoken
         # ============================================================
 
-        kappa_min_s = config.kappa_min_s_dist.to_pymc("kappa_min_s")
-        a_kappa_s = config.a_kappa_s_dist.to_pymc("a_kappa_s")
-        b_kappa_mag_s = config.b_kappa_mag_s_dist.to_pymc("b_kappa_mag_s")
-        b_kappa_s = pm.Deterministic("b_kappa_s", -b_kappa_mag_s)
-
-        kappa_s_of_z = make_kappa_of_z(kappa_min_s, a_kappa_s, b_kappa_s)
+        kappa_s_of_z = build_kappa_of_z(
+            config.kappa_min_s_dist,
+            config.a_kappa_s_dist,
+            config.b_kappa_mag_s_dist,
+            suffix="_s",
+        )
 
         kappa_s_obs = pm.Deterministic(
             "kappa_s_obs", kappa_s_of_z(z_obs), dims="obs_id"
@@ -811,13 +797,11 @@ def build_model(context: TrivariateContext):
         # Kappa — signed
         # ============================================================
 
-        kappa_min_sign = config.kappa_min_sign_dist.to_pymc("kappa_min_sign")
-        a_kappa_sign = config.a_kappa_sign_dist.to_pymc("a_kappa_sign")
-        b_kappa_mag_sign = config.b_kappa_mag_sign_dist.to_pymc("b_kappa_mag_sign")
-        b_kappa_sign = pm.Deterministic("b_kappa_sign", -b_kappa_mag_sign)
-
-        kappa_sign_of_z = make_kappa_of_z(
-            kappa_min_sign, a_kappa_sign, b_kappa_sign
+        kappa_sign_of_z = build_kappa_of_z(
+            config.kappa_min_sign_dist,
+            config.a_kappa_sign_dist,
+            config.b_kappa_mag_sign_dist,
+            suffix="_sign",
         )
 
         kappa_sign_obs = pm.Deterministic(
@@ -961,14 +945,32 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     n_obs = len(obs_u_mask)
 
     y_u_obs_raw = np.array(trace.observed_data["y_u_obs"].values, dtype=float)
+    if int(obs_u_mask.sum()) != y_u_obs_raw.shape[0]:
+        raise ValueError(
+            f"obs_u_mask count ({int(obs_u_mask.sum())}) does not match observed "
+            f"y_u_obs length ({y_u_obs_raw.shape[0]}); stored mask and likelihood "
+            "rows are misaligned (issue #67)."
+        )
     y_u_obs = np.full(n_obs, np.nan)
     y_u_obs[obs_u_mask] = y_u_obs_raw
 
     y_s_obs_raw = np.array(trace.observed_data["y_s_obs"].values, dtype=float)
+    if int(obs_s_mask.sum()) != y_s_obs_raw.shape[0]:
+        raise ValueError(
+            f"obs_s_mask count ({int(obs_s_mask.sum())}) does not match observed "
+            f"y_s_obs length ({y_s_obs_raw.shape[0]}); stored mask and likelihood "
+            "rows are misaligned (issue #67)."
+        )
     y_s_obs = np.full(n_obs, np.nan)
     y_s_obs[obs_s_mask] = y_s_obs_raw
 
     y_sign_obs_raw = np.array(trace.observed_data["y_sign_obs"].values, dtype=float)
+    if int(obs_sign_mask.sum()) != y_sign_obs_raw.shape[0]:
+        raise ValueError(
+            f"obs_sign_mask count ({int(obs_sign_mask.sum())}) does not match observed "
+            f"y_sign_obs length ({y_sign_obs_raw.shape[0]}); stored mask and likelihood "
+            "rows are misaligned (issue #67)."
+        )
     y_sign_obs = np.full(n_obs, np.nan)
     y_sign_obs[obs_sign_mask] = y_sign_obs_raw
 
@@ -1155,124 +1157,27 @@ def prior_predictive_checks(context: TrivariateContext):
     )
 
 
-def sample(context: TrivariateContext):
-    """Draw samples from the posterior using MCMC."""
-    config_table("Sampling configuration", context.sampling)
-
-    with context.model:
-        trace = pm.sample(
-            context.sampling.draws,
-            tune=context.sampling.tune,
-            chains=context.sampling.chains,
-            cores=context.sampling.cores,
-            target_accept=context.sampling.target_accept,
-            nuts_sampler="nutpie",
-            # The rich progress bar segfaults under nutpie's worker threads when
-            # stdout is not a TTY (redirected/backgrounded); keep it for
-            # interactive terminals only. (Matches common.py.)
-            progressbar=sys.stdout.isatty(),
-            return_inferencedata=True,
-            random_seed=context.sampling.random_seed,
-        )
-
-    context.set_trace(trace)
+# ``sample`` is engine-agnostic (identical pm.sample() call in every engine) —
+# reuse the shared implementation from common.py rather than redefining it.
+sample = _shared_sample
 
 
 def diagnostics(context: TrivariateContext):
-    """Run diagnostics on the posterior samples."""
-    var_names = [
-        var.name for var in context.model.unobserved_RVs if var.size.eval() <= 2
-    ]
-    diagnostics_df = az.summary(
-        context.trace,
-        var_names=var_names,
-        round_to=3,
-        ci_prob=context.reporting.hdi,
-        ci_kind="hdi",
+    """Run diagnostics on the posterior samples.
+
+    Thin wrapper over the shared engine (common.py): trivariate adds the
+    three per-outcome kappas to the trace plot and reports per-outcome LOO-CV
+    for understood/spoken/signed.
+    """
+    _shared_diagnostics(
+        context,
+        extra_trace_var_names=("kappa_u_obs", "kappa_s_obs", "kappa_sign_obs"),
+        loo_var_names=(
+            ("y_u_obs", "words understood"),
+            ("y_s_obs", "words spoken"),
+            ("y_sign_obs", "words signed"),
+        ),
     )
-
-    diagnostics_df.to_csv(
-        os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True
-    )
-
-    shared_diagnostics.write_diagnostics_summary(
-        context.trace, context.reporting.output_dir, var_names=var_names
-    )
-
-    dataframe_table(diagnostics_df, title="Posterior diagnostics")
-    _report_diagnostic_warnings(diagnostics_df)
-
-    # KDE pair plot
-    pair_plot_var_names = capped_plot_var_names(
-        context.trace,
-        var_names,
-        squared=True,
-    )
-    if pair_plot_var_names:
-        plot_diagnostics_mcmc.plot_kde_pair(
-            context.trace,
-            var_names=pair_plot_var_names,
-            output_dir=context.reporting.output_dir,
-            filename="pair_plot",
-        )
-        context.plots["pair_plot"] = plt.gcf()
-        plt.close()
-
-    # Trace plot
-    var_names_ext = var_names + ["kappa_u_obs", "kappa_s_obs", "kappa_sign_obs"]
-    trace_var_names = capped_plot_var_names(context.trace, var_names_ext)
-
-    az.plot_trace(
-        context.trace,
-        var_names=trace_var_names,
-        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
-    )
-    plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
-    context.plots["trace_plot"] = plt.gcf()
-    plt.close()
-
-    # Energy plot
-    az.plot_energy(
-        context.trace,
-        figure_kwargs={"figsize": plot_styles.FIGSIZE_XL},
-    )
-    plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
-    context.plots["energy_plot"] = plt.gcf()
-    plt.close()
-
-    # Posterior densities
-    posterior_var_names = capped_plot_var_names(context.trace, var_names)
-    az.plot_dist(
-        context.trace,
-        var_names=posterior_var_names,
-        point_estimate="median",
-        ci_kind="hdi",
-        ci_prob=context.reporting.hdi,
-    )
-    plt.savefig(
-        os.path.join(context.reporting.output_dir, "posterior_plot.png"), dpi=300
-    )
-    context.plots["posterior_plot"] = plt.gcf()
-    plt.close()
-
-    # LOO-CV
-    with context.model:
-        trace = pm.compute_log_likelihood(context.trace)
-
-    context.set_trace(trace)
-
-    loocv_u = az.loo(context.trace, var_name="y_u_obs")
-    loocv_s = az.loo(context.trace, var_name="y_s_obs")
-    loocv_sign = az.loo(context.trace, var_name="y_sign_obs")
-    context.set_loocv(
-        {"y_u_obs": loocv_u, "y_s_obs": loocv_s, "y_sign_obs": loocv_sign}
-    )
-    heading("LOO-CV — words understood", style="bold cyan")
-    console.print(loocv_u)
-    heading("LOO-CV — words spoken", style="bold cyan")
-    console.print(loocv_s)
-    heading("LOO-CV — words signed", style="bold cyan")
-    console.print(loocv_sign)
 
 
 def sample_posterior_predictive(context: TrivariateContext, definition=None):
@@ -1849,6 +1754,20 @@ def _run_trivariate_outcome_plots(
         y_label=f"Estimated {outcome_label.lower()} gain per month",
     )
 
+    plotting.plot_expected_learning_rate(
+        samples.X_plot,
+        f_plot,
+        n_trials=n_trials,
+        hdi_prob=hdi_prob,
+        smooth=True,
+        savgol_window_length=15,
+        savgol_polyorder=3,
+        smooth_intervals=True,
+        output_dir=output_dir,
+        filename=f"expected_learning_rate_{suffix}_smoothed",
+        y_label=f"Estimated {outcome_label.lower()} gain per month",
+    )
+
     plotting.plot_posterior_kappa(
         samples.X_plot,
         kappa_plot,
@@ -2139,65 +2058,25 @@ def fit_trivariate_model(
     """
     Shared fit pipeline for the trivariate model (VG14).
     """
-    run_banner(definition.banner, subtitle=f"sampling config: {config}")
-
-    env_info.report_environment_info()
-
-    console.print()
-    package_metadata.report_package_versions(PACKAGE_LIST)
-
-    context: TrivariateContext = ModelFitContext(
-        reporting=reporting.ReportingConfiguration(
-            model_name=definition.model_id,
-            config_name=definition.config_name,
-            output_root_dir=local_env.OUTPUT_DIR,
-            hdi=0.90,
-        ),
-        sampling=sampling.get_sampling_configuration(config),
+    return run_fit_pipeline(
+        config,
+        definition,
+        stages=[
+            ("Prepare data", lambda ctx: prepare_trivariate_data(ctx, definition)),
+            (
+                "Priors and hyperparameters",
+                lambda ctx: configure_trivariate_priors(ctx, definition),
+            ),
+            ("Model definition and initialisation", build_model),
+            ("Prior predictive checks", prior_predictive_checks),
+            ("Posterior sampling", sample),
+            ("Diagnostics", diagnostics),
+            (
+                "Posterior predictions",
+                lambda ctx: sample_posterior_predictive(ctx, definition),
+            ),
+            ("Posterior summary", posterior_summary),
+            ("Plots", _run_trivariate_plots),
+            ("Report", report),
+        ],
     )
-
-    if os.path.exists(context.reporting.output_dir):
-        shutil.rmtree(context.reporting.output_dir)
-
-    os.makedirs(context.reporting.output_dir, exist_ok=True)
-
-    timings = context.timings
-    run_started = time.perf_counter()
-
-    with section("Prepare data", timings=timings):
-        prepare_trivariate_data(context, definition)
-
-    with section("Priors and hyperparameters", timings=timings):
-        configure_trivariate_priors(context, definition)
-
-    with section("Model definition and initialisation", timings=timings):
-        build_model(context)
-
-    with section("Prior predictive checks", timings=timings):
-        prior_predictive_checks(context)
-
-    with section("Posterior sampling", timings=timings):
-        sample(context)
-
-    with section("Diagnostics", timings=timings):
-        diagnostics(context)
-
-    with section("Posterior predictions", timings=timings):
-        sample_posterior_predictive(context, definition)
-
-    with section("Posterior summary", timings=timings):
-        posterior_summary(context)
-
-    with section("Plots", timings=timings):
-        _run_trivariate_plots(context)
-
-    with section("Report", timings=timings):
-        report(context)
-
-    pipeline_summary(f"Pipeline summary — {context.reporting.model_label}", timings)
-    console.print(
-        f"[dim]Total wall time: "
-        f"{vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
-    )
-
-    return context

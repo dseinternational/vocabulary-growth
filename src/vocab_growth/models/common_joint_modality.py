@@ -41,23 +41,15 @@ VG14 memory discipline.
 """
 
 import os
-import shutil
 import sys
-import time
 from dataclasses import dataclass
 
 import arviz as az
-import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
-import dse_research_utils.metadata.packages as package_metadata
-import dse_research_utils.plot.diagnostics_mcmc as plot_diagnostics_mcmc
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
-import dse_research_utils.statistics.diagnostics as shared_diagnostics
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
-import dse_research_utils.statistics.models.reporting as reporting
-import dse_research_utils.statistics.models.sampling as sampling
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -67,7 +59,6 @@ from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
-import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -75,21 +66,21 @@ from vocab_growth.models.build_utils import (
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
-    PACKAGE_LIST,
     BaseModelConfiguration,
     ModelFitContext,
     _plot_and_print_dist,
-    _report_diagnostic_warnings,
     get_hsgp_hyperparams,
     render_model_graph,
     report,
+    run_fit_pipeline,
 )
+from vocab_growth.models.common import diagnostics as _shared_diagnostics
+from vocab_growth.models.common import sample as _shared_sample
 from vocab_growth.models.definitions import JointModelDefinition
-from vocab_growth.models.diagnostics_utils import capped_plot_var_names
 from vocab_growth.models.gp_utils import (
     GPGrid,
+    build_kappa_of_z,
     intercept_and_gp,
-    make_kappa_of_z,
     trend_and_gp,
 )
 from vocab_growth.plotting import (
@@ -99,14 +90,9 @@ from vocab_growth.plotting import (
 )
 from vocab_growth.posterior_analysis import extract_posterior as _extract
 from vocab_growth.reporting import (
-    config_table,
-    console,
     dataframe_table,
     heading,
     key_value_table,
-    pipeline_summary,
-    run_banner,
-    section,
 )
 
 EPSILON = math_constants.EPSILON
@@ -774,17 +760,16 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         log_conc = config.log_conc_dist.to_pymc("log_conc")
         conc = pm.Deterministic("conc", pm.math.exp(log_conc))
 
-        # --- kappa functions ---
-        def kappa_fn(kmin_d, a_d, bmag_d, suffix):
-            kmin = kmin_d.to_pymc(f"kappa_min_{suffix}")
-            a = a_d.to_pymc(f"a_kappa_{suffix}")
-            bmag = bmag_d.to_pymc(f"b_kappa_mag_{suffix}")
-            b = pm.Deterministic(f"b_kappa_{suffix}", -bmag)
-            return make_kappa_of_z(kmin, a, b)
-
-        kappa_u_of_z = kappa_fn(config.kappa_min_u_dist, config.a_kappa_u_dist, config.b_kappa_mag_u_dist, "u")
-        kappa_s_of_z = kappa_fn(config.kappa_min_s_dist, config.a_kappa_s_dist, config.b_kappa_mag_s_dist, "s")
-        kappa_sign_of_z = kappa_fn(config.kappa_min_sign_dist, config.a_kappa_sign_dist, config.b_kappa_mag_sign_dist, "sign")
+        # --- kappa functions (shared helper — see models.gp_utils.build_kappa_of_z) ---
+        kappa_u_of_z = build_kappa_of_z(
+            config.kappa_min_u_dist, config.a_kappa_u_dist, config.b_kappa_mag_u_dist, suffix="_u"
+        )
+        kappa_s_of_z = build_kappa_of_z(
+            config.kappa_min_s_dist, config.a_kappa_s_dist, config.b_kappa_mag_s_dist, suffix="_s"
+        )
+        kappa_sign_of_z = build_kappa_of_z(
+            config.kappa_min_sign_dist, config.a_kappa_sign_dist, config.b_kappa_mag_sign_dist, suffix="_sign"
+        )
 
         kappa_u_obs = kappa_u_of_z(z_obs)
         kappa_s_obs = kappa_s_of_z(z_obs)
@@ -841,7 +826,10 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             pm.Deterministic(f"p_any_{grid}", pug * (rg + qg - pi_both), dims=f"{grid}_id")
             pm.Deterministic(f"p_any_indep_{grid}", pug * (1 - (1 - rg) * (1 - qg)), dims=f"{grid}_id")
 
-        # kappa for plot grid (reporting)
+        # Persist the obs-grid signed kappa in the trace for downstream
+        # inspection. (It is not shown in the diagnostics() trace plot: that
+        # plots only scalar unobserved RVs, and this is an obs_id-length
+        # deterministic.)
         pm.Deterministic("kappa_sign_obs", kappa_sign_obs, dims="obs_id")
 
     pymc_utils.report_model_summary(model_pm)
@@ -917,27 +905,24 @@ def prior_predictive_checks(context: JointContext):
         plt.close(fig)
 
 
-def sample(context: JointContext):
-    config_table("Sampling configuration", context.sampling)
-    with context.model:
-        trace = pm.sample(
-            context.sampling.draws, tune=context.sampling.tune,
-            chains=context.sampling.chains, cores=context.sampling.cores,
-            target_accept=context.sampling.target_accept,
-            nuts_sampler="nutpie", return_inferencedata=True,
-            # The rich progress bar segfaults under nutpie's worker threads when
-            # stdout is not a TTY (redirected/backgrounded); interactive only.
-            progressbar=sys.stdout.isatty(),
-            random_seed=context.sampling.random_seed,
-        )
-    context.set_trace(trace)
+# ``sample`` is engine-agnostic (identical pm.sample() call in every engine) —
+# reuse the shared implementation from common.py rather than redefining it.
+sample = _shared_sample
 
 
 def diagnostics(context: JointContext):
-    var_names = [v.name for v in context.model.unobserved_RVs if v.size.eval() <= 2]
+    """Run diagnostics on the posterior samples.
+
+    Thin wrapper over the shared engine (common.py): joint prioritises
+    ``psi``/``conc`` first in the pair/trace/posterior-density plots (they are
+    the headline association/concentration parameters) and reports per-outcome
+    LOO-CV for the three marginal likelihoods (the four-cell
+    Dirichlet-Multinomial ``cells_obs`` is not a per-observation Beta-Binomial
+    and is left out of LOO-CV, matching every other engine's scope).
+    """
     posterior_vars = set(context.trace.posterior.data_vars)
 
-    def prioritized_unique_var_names(
+    def _prioritise_psi_conc(
         names: list[str],
         priority: tuple[str, ...] = ("psi", "conc"),
     ) -> list[str]:
@@ -949,35 +934,16 @@ def diagnostics(context: JointContext):
                 seen.add(name)
         return ordered
 
-    plot_var_names = prioritized_unique_var_names(var_names)
-    diag = az.summary(context.trace, var_names=var_names, round_to=4,
-                      ci_prob=context.reporting.hdi, ci_kind="hdi")
-    diag.to_csv(os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True)
-    shared_diagnostics.write_diagnostics_summary(
-        context.trace, context.reporting.output_dir, var_names=var_names
+    _shared_diagnostics(
+        context,
+        var_names_fn=_prioritise_psi_conc,
+        round_to=4,
+        loo_var_names=(
+            ("y_u_obs", "words understood"),
+            ("y_s_obs", "words spoken (marginal)"),
+            ("y_sign_obs", "words signed (marginal)"),
+        ),
     )
-    dataframe_table(diag, title="Posterior diagnostics")
-    _report_diagnostic_warnings(diag)
-    pair_plot_var_names = capped_plot_var_names(
-        context.trace,
-        plot_var_names,
-        squared=True,
-    )
-    if pair_plot_var_names:
-        plot_diagnostics_mcmc.plot_kde_pair(
-            context.trace,
-            var_names=pair_plot_var_names,
-            output_dir=context.reporting.output_dir,
-            filename="pair_plot",
-        )
-        plt.close()
-    tv = capped_plot_var_names(context.trace, plot_var_names)
-    az.plot_trace(context.trace, var_names=tv, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
-    plt.savefig(os.path.join(context.reporting.output_dir, "trace_plot.png"), dpi=300)
-    plt.close()
-    az.plot_energy(context.trace, figure_kwargs={"figsize": plot_styles.FIGSIZE_XL})
-    plt.savefig(os.path.join(context.reporting.output_dir, "energy_plot.png"), dpi=300)
-    plt.close()
 
 
 def sample_posterior_predictive(context: JointContext, definition=None):
@@ -1224,49 +1190,28 @@ def _run_joint_plots(context: JointContext):
 
 def fit_joint_model(config: str, definition: JointModelDefinition) -> JointContext:
     """Shared fit pipeline for the joint sign/speech model (VG15)."""
-    run_banner(definition.banner, subtitle=f"sampling config: {config}")
-    env_info.report_environment_info()
-    console.print()
-    package_metadata.report_package_versions(PACKAGE_LIST)
-
-    context: JointContext = ModelFitContext(
-        reporting=reporting.ReportingConfiguration(
-            model_name=definition.model_id,
-            config_name=definition.config_name,
-            output_root_dir=local_env.OUTPUT_DIR,
-            hdi=0.90,
-        ),
-        sampling=sampling.get_sampling_configuration(config),
+    return run_fit_pipeline(
+        config,
+        definition,
+        stages=[
+            ("Prepare data", lambda ctx: prepare_joint_data(ctx, definition)),
+            (
+                "Priors and hyperparameters",
+                lambda ctx: configure_joint_priors(ctx, definition),
+            ),
+            (
+                "Model definition and initialisation",
+                lambda ctx: build_model(ctx, definition),
+            ),
+            ("Prior predictive checks", prior_predictive_checks),
+            ("Posterior sampling", sample),
+            ("Diagnostics", diagnostics),
+            (
+                "Posterior predictions",
+                lambda ctx: sample_posterior_predictive(ctx, definition),
+            ),
+            ("Posterior summary", posterior_summary),
+            ("Plots", _run_joint_plots),
+            ("Report", report),
+        ],
     )
-    if os.path.exists(context.reporting.output_dir):
-        shutil.rmtree(context.reporting.output_dir)
-    os.makedirs(context.reporting.output_dir, exist_ok=True)
-
-    timings = context.timings
-    run_started = time.perf_counter()
-    with section("Prepare data", timings=timings):
-        prepare_joint_data(context, definition)
-    with section("Priors and hyperparameters", timings=timings):
-        configure_joint_priors(context, definition)
-    with section("Model definition and initialisation", timings=timings):
-        build_model(context, definition)
-    with section("Prior predictive checks", timings=timings):
-        prior_predictive_checks(context)
-    with section("Posterior sampling", timings=timings):
-        sample(context)
-    with section("Diagnostics", timings=timings):
-        diagnostics(context)
-    with section("Posterior predictions", timings=timings):
-        sample_posterior_predictive(context, definition)
-    with section("Posterior summary", timings=timings):
-        posterior_summary(context)
-    with section("Plots", timings=timings):
-        _run_joint_plots(context)
-    with section("Report", timings=timings):
-        report(context)
-
-    pipeline_summary(f"Pipeline summary — {context.reporting.model_label}", timings)
-    console.print(
-        f"[dim]Total wall time: {vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
-    )
-    return context

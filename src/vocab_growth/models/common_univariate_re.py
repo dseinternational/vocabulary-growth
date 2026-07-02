@@ -18,23 +18,15 @@ This module is the shared pipeline for VG11 (TD spoken) and VG12 (TD understood)
 """
 
 import os
-import shutil
-import time
 
-import dse_research_utils.environment.info as env_info
 import dse_research_utils.math.constants as math_constants
-import dse_research_utils.metadata.packages as package_metadata
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
-import dse_research_utils.statistics.models.reporting as reporting
-import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
-import vocab_growth.environment as local_env
-import vocab_growth.reporting as vg_reporting
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -42,7 +34,6 @@ from vocab_growth.models.build_utils import (
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
-    PACKAGE_LIST,
     ModelFitContext,
     configure_univariate_priors,
     diagnostics,
@@ -51,19 +42,16 @@ from vocab_growth.models.common import (
     prior_predictive_checks,
     render_model_graph,
     report,
+    run_fit_pipeline,
     run_standard_plots,
     sample,
     sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
-from vocab_growth.models.gp_utils import GPGrid, make_kappa_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
 from vocab_growth.reporting import (
-    console,
     dataframe_table,
     key_value_table,
-    pipeline_summary,
-    run_banner,
-    section,
 )
 
 EPSILON = math_constants.EPSILON
@@ -359,12 +347,9 @@ def build_univariate_re_model(
         # Dispersion / overdispersion
         # ============================================================
 
-        kappa_min = config.kappa_min_dist.to_pymc("kappa_min")
-        a_kappa = config.a_kappa_dist.to_pymc("a_kappa")
-        b_kappa_mag = config.b_kappa_mag_dist.to_pymc("b_kappa_mag")
-        b_kappa = pm.Deterministic("b_kappa", -b_kappa_mag)
-
-        kappa_of_z = make_kappa_of_z(kappa_min, a_kappa, b_kappa)
+        kappa_of_z = build_kappa_of_z(
+            config.kappa_min_dist, config.a_kappa_dist, config.b_kappa_mag_dist
+        )
 
         kappa_obs = pm.Deterministic(
             "kappa_obs", kappa_of_z(X_all_z_data[i_obs0:i_obs1, 0]), dims="obs_id"
@@ -418,72 +403,39 @@ def fit_univariate_re_model(
     (prior predictive checks, sampling, diagnostics, posterior summary, plots,
     report) are reused unchanged from ``common.py``.
     """
-    run_banner(definition.banner, subtitle=f"sampling config: {config}")
-
-    env_info.report_environment_info()
-
-    console.print()
-    package_metadata.report_package_versions(PACKAGE_LIST)
-
-    context: UnivariateREContext = ModelFitContext(
-        reporting=reporting.ReportingConfiguration(
-            model_name=definition.model_id,
-            config_name=definition.config_name,
-            output_root_dir=local_env.OUTPUT_DIR,
-            hdi=0.90,
-        ),
-        sampling=sampling.get_sampling_configuration(config),
-    )
-
-    if os.path.exists(context.reporting.output_dir):
-        shutil.rmtree(context.reporting.output_dir)
-
-    os.makedirs(context.reporting.output_dir, exist_ok=True)
-
-    timings = context.timings
-    run_started = time.perf_counter()
-
     y_col = definition.outcome.value
     outcome_label = definition.outcome_label
 
-    with section("Prepare data", timings=timings):
-        prepare_univariate_re_data(context, definition)
-
-    with section("Priors and hyperparameters", timings=timings):
-        configure_univariate_priors(context, definition)
-
-    with section("Model definition and initialisation", timings=timings):
-        build_univariate_re_model(context, definition)
-
-    with section("Prior predictive checks", timings=timings):
-        prior_predictive_checks(
-            context, outcome_col=y_col, outcome_label=outcome_label
-        )
-
-    with section("Posterior sampling", timings=timings):
-        sample(context)
-
-    with section("Diagnostics", timings=timings):
-        diagnostics(context)
-
-    with section("Posterior predictions", timings=timings):
-        sample_posterior_predictive(context)
-
-    with section("Posterior summary", timings=timings):
-        posterior_summary(context)
-
-    with section("Plots", timings=timings):
-        run_standard_plots(context, outcome_label=outcome_label)
-
-    with section("Report", timings=timings):
-        report(context)
-
-    pipeline_summary(
-        f"Pipeline summary — {context.reporting.model_label}", timings
+    return run_fit_pipeline(
+        config,
+        definition,
+        stages=[
+            (
+                "Prepare data",
+                lambda ctx: prepare_univariate_re_data(ctx, definition),
+            ),
+            (
+                "Priors and hyperparameters",
+                lambda ctx: configure_univariate_priors(ctx, definition),
+            ),
+            (
+                "Model definition and initialisation",
+                lambda ctx: build_univariate_re_model(ctx, definition),
+            ),
+            (
+                "Prior predictive checks",
+                lambda ctx: prior_predictive_checks(
+                    ctx, outcome_col=y_col, outcome_label=outcome_label
+                ),
+            ),
+            ("Posterior sampling", sample),
+            ("Diagnostics", diagnostics),
+            ("Posterior predictions", sample_posterior_predictive),
+            ("Posterior summary", posterior_summary),
+            (
+                "Plots",
+                lambda ctx: run_standard_plots(ctx, outcome_label=outcome_label),
+            ),
+            ("Report", report),
+        ],
     )
-    console.print(
-        f"[dim]Total wall time: "
-        f"{vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
-    )
-
-    return context

@@ -27,31 +27,22 @@ import preliz as pz
 from scipy import stats
 
 from vocab_growth.models.definitions import (
-    VG01,
-    VG02,
-    VG03,
-    VG04,
-    VG05,
-    VG07,
-    VG08,
-    VG09,
-    VG10,
+    MODEL_REGISTRY,
     BivariateModelDefinition,
     UnivariateModelDefinition,
 )
 
 MODELS_DIR = "output/models"
 
+# Registry-derived: covers every univariate/bivariate model, matching the two
+# prior-dispatch functions below. Trivariate (VG14) and joint (VG15)
+# definitions carry extra priors (signed ratio, psi, conc) this script does
+# not build, so they are intentionally excluded rather than silently
+# under-plotted.
 MODEL_LABELS = {
-    "VG01": ("VG01-age-spoken-ds", VG01),
-    "VG02": ("VG02-age-understood-ds", VG02),
-    "VG03": ("VG03-age-spoken-td", VG03),
-    "VG04": ("VG04-age-understood-td", VG04),
-    "VG05": ("VG05-age-understood-spoken-ds", VG05),
-    "VG07": ("VG07-age-understood-spoken-ds-re", VG07),
-    "VG08": ("VG08-age-understood-spoken-ds-re-subj", VG08),
-    "VG09": ("VG09-age-understood-spoken-ds-re-subj-uq", VG09),
-    "VG10": ("VG10-age-understood-spoken-ds-re-subj-uq-anchored", VG10),
+    d.model_id: (f"{d.model_id}-{d.config_name}", d)
+    for d in MODEL_REGISTRY.values()
+    if isinstance(d, (UnivariateModelDefinition, BivariateModelDefinition))
 }
 
 

@@ -10,23 +10,14 @@ import os
 from rich import print
 
 from vocab_growth import environment as local_env
+from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.storage import upload_to_blob_storage
 
+# Registry-derived so a newly added model is uploadable without editing this
+# file (key -> (model_id, config_name), matching every model's output folder
+# naming "{model_id}-{config_name}").
 MODEL_CONFIGS = {
-    "vg01": ("VG01", "age-spoken-ds"),
-    "vg02": ("VG02", "age-understood-ds"),
-    "vg03": ("VG03", "age-spoken-td"),
-    "vg04": ("VG04", "age-understood-td"),
-    "vg05": ("VG05", "age-understood-spoken-ds"),
-    "vg07": ("VG07", "age-understood-spoken-ds-re"),
-    "vg08": ("VG08", "age-understood-spoken-ds-re-subj"),
-    "vg09": ("VG09", "age-understood-spoken-ds-re-subj-uq"),
-    "vg10": ("VG10", "age-understood-spoken-ds-re-subj-uq-anchored"),
-    "vg11": ("VG11", "age-spoken-td-re"),
-    "vg12": ("VG12", "age-understood-td-re"),
-    "vg13": ("VG13", "age-understood-spoken-td-re-young"),
-    "vg14": ("VG14", "age-understood-spoken-signed-ds"),
-    "vg15": ("VG15", "age-joint-signspeech-ds"),
+    key: (d.model_id, d.config_name) for key, d in MODEL_REGISTRY.items()
 }
 
 if __name__ == "__main__":

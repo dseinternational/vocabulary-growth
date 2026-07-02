@@ -100,7 +100,7 @@ def load_analysis_frame() -> pd.DataFrame:
 
 def stratified_subject_folds(
     analysis_df: pd.DataFrame, K: int = 5, seed: int = 47
-) -> list[np.ndarray]:
+) -> tuple[list[np.ndarray], pd.DataFrame]:
     """Assign each subject to one of K folds, stratified by (study, n_obs_bin)."""
     subj = analysis_df.groupby("subject_code").agg(
         study_code=("study_code", "first"),
@@ -145,7 +145,7 @@ def fit_fold(
     analysis_df_with_holdout: pd.DataFrame,
     sampling_cfg: sampling.SamplingConfiguration,
     label: str,
-) -> xr.DataTree:
+) -> tuple[xr.DataTree, int]:
     """Run prepare → priors → build → sample on a holdout-marked analysis frame."""
     n = len(analysis_df_with_holdout)
     has_u = analysis_df_with_holdout["understood"].notna().values
@@ -239,7 +239,7 @@ def main(K: int = 5, sampling_config_name: str = "test") -> None:
     )
 
     print(f"\nBuilding {K} stratified folds …", flush=True)
-    folds, subj_table = stratified_subject_folds(analysis_df, K=K)
+    folds, _subj_table = stratified_subject_folds(analysis_df, K=K)
     for k, fold in enumerate(folds):
         n_obs_in = analysis_df["subject_code"].isin(fold).sum()
         print(f"  fold {k}: {len(fold)} subjects, {n_obs_in} observations")

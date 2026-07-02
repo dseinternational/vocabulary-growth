@@ -35,28 +35,27 @@ import pandas as pd
 
 from vocab_growth import environment as env
 from vocab_growth.comparison import invert_curve
+from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
 MODELS_DIR = "output/models"
 COMPARE_DIR = "output/comparisons"
 
 TARGETS = [25, 50, 100, 200, 400]
 
+# Registry-derived so a newly added univariate/bivariate model is picked up
+# automatically. Trivariate (VG14) and joint (VG15) models write different
+# summary CSVs (per-modality, not per-{u,s}), so they are intentionally
+# excluded rather than silently mishandled.
 UNIVARIATE = {
-    "VG01": ("VG01-age-spoken-ds", "spoken", "DS"),
-    "VG02": ("VG02-age-understood-ds", "understood", "DS"),
-    "VG03": ("VG03-age-spoken-td", "spoken", "TD"),
-    "VG04": ("VG04-age-understood-td", "understood", "TD"),
-    "VG11": ("VG11-age-spoken-td-re", "spoken", "TD"),
-    "VG12": ("VG12-age-understood-td-re", "understood", "TD"),
+    d.model_id: (f"{d.model_id}-{d.config_name}", d.outcome.value, d.population.value.upper())
+    for d in MODEL_REGISTRY.values()
+    if d.model_type == ModelType.UNIVARIATE
 }
 
 BIVARIATE = {
-    "VG05": ("VG05-age-understood-spoken-ds", "DS"),
-    "VG07": ("VG07-age-understood-spoken-ds-re", "DS"),
-    "VG08": ("VG08-age-understood-spoken-ds-re-subj", "DS"),
-    "VG09": ("VG09-age-understood-spoken-ds-re-subj-uq", "DS"),
-    "VG10": ("VG10-age-understood-spoken-ds-re-subj-uq-anchored", "DS"),
-    "VG13": ("VG13-age-understood-spoken-td-re-young", "TD"),
+    d.model_id: (f"{d.model_id}-{d.config_name}", d.population.value.upper())
+    for d in MODEL_REGISTRY.values()
+    if d.model_type == ModelType.BIVARIATE
 }
 
 

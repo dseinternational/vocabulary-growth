@@ -45,6 +45,25 @@ def make_kappa_of_z(kappa_min, a_kappa, b_kappa):
     return kappa_of_z
 
 
+def build_kappa_of_z(kappa_min_dist, a_kappa_dist, b_kappa_mag_dist, suffix=""):
+    """Create the kappa RVs and return the age-varying dispersion closure.
+
+    Mechanical extraction of the identical four-line block every engine
+    repeats once per outcome: ``kappa_min{suffix}``, ``a_kappa{suffix}`` and
+    ``b_kappa_mag{suffix}`` are created via ``to_pymc`` (in that order), then
+    ``b_kappa{suffix} = -b_kappa_mag{suffix}`` is stored as a named
+    ``Deterministic``, and the two feed :func:`make_kappa_of_z`. Because the
+    op order and names are unchanged from the inlined form, this moves no
+    random-variable creation and cannot change the model graph (same
+    contract as :func:`make_kappa_of_z`, which it wraps).
+    """
+    kappa_min = kappa_min_dist.to_pymc(f"kappa_min{suffix}")
+    a_kappa = a_kappa_dist.to_pymc(f"a_kappa{suffix}")
+    b_kappa_mag = b_kappa_mag_dist.to_pymc(f"b_kappa_mag{suffix}")
+    b_kappa = pm.Deterministic(f"b_kappa{suffix}", -b_kappa_mag)
+    return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
+
+
 @dataclass(frozen=True)
 class GPGrid:
     """The standardised-grid + HSGP scalars the trend/GP helpers need.
