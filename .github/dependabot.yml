@@ -14,19 +14,6 @@ updates:
     assignees:
       - frankbuckley
 
-  - package-ecosystem: conda
-    directory: /
-    schedule:
-      interval: daily
-      time: "05:00"
-      timezone: "Europe/London"
-    groups:
-      conda-dependencies:
-        patterns:
-          - "*"
-    assignees:
-      - frankbuckley
-
   - package-ecosystem: npm
     directory: /
     schedule:
