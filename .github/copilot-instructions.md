@@ -8,13 +8,20 @@ This project is an exploratory study of vocabulary development in children with 
 
 The Python package `vocab_growth` (in `src/vocab_growth/`) defines a series of PyMC models that are fitted to vocabulary assessment data aggregated from multiple international studies. Reports are authored in Quarto (`.qmd`).
 
-This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. During local development it is installed as an editable package from `../research/src/python`.
+This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.5.0` (see [Environment setup](#environment-setup)); a commented local-dev override in `environment.yml` lets you point at a sibling `../research/src/python` checkout instead.
 
 ## Environment setup
 
-- **Python environment**: Conda (environment name `dse-vocab-growth`), Python 3.14, channels: `conda-forge`. Install/update with `conda env update -f environment.yml`.
+Hybrid two-layer environment (shared across DSE research repos):
+
+- **Compiled core** — the scientific stack (`numpy`/`scipy`/`pandas`/`pymc`/`nutpie`/`jax`/`arviz`, …) comes from **conda-forge** and must match the canonical spec shipped in `dse-research-utils` (`data/environment-core.yml`) so it cannot drift across repos. Verify with `dse-check-env environment.yml`.
+- **Pip layer** — the pure-Python tail and the shared library. `dse-research-utils` installs from the public git tag `v0.5.0` (`dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.5.0#subdirectory=src/python`); the package itself installs editable (`-e ./`).
+
+- **Python environment**: Conda/mamba (environment name `dse-vocab-growth`), Python 3.14, channel `conda-forge`. Create with `mamba env create -f environment.yml`; update with `conda env update -f environment.yml`.
+- **Windows**: there is no conda-forge `jax`/`jaxlib` win-64 build, so the stack cannot solve natively — use **WSL** (Ubuntu, linux-64).
+- **Local dev against research**: comment the `dse-research-utils[...] @ git+…` line in `environment.yml`'s pip block and uncomment the `-e ../research/src/python[...]` override.
+- **GPU**: opt-in overlay (`jax[cuda]`); the base env is CPU-only and cross-platform.
 - **Node dependencies** (spellcheck, formatting): `npm install`.
-- The package itself is installed in editable mode (`-e ./`) via the Conda environment.
 
 ## Commands
 

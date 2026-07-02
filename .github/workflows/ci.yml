@@ -6,12 +6,14 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   spellcheck:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.0
-
 
       - name: Setup Node
         uses: actions/setup-node@v6.4.0
@@ -32,7 +34,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.0
 
-
       - name: Setup Python
         uses: actions/setup-python@v6.3.0
         with:
@@ -45,46 +46,29 @@ jobs:
         run: ruff check src/ scripts/
 
   model-fit-tests:
-    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Native Windows is intentionally omitted: jax/jaxlib have no conda-forge
+        # win-64 build, so the compiled stack cannot solve there. Windows users
+        # work in Ubuntu on WSL (linux-64), which the ubuntu runner covers.
+        os: [ubuntu-26.04, macos-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash -el {0}
-        working-directory: vocabulary-growth
     steps:
-      - name: Checkout vocabulary-growth
-        uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.0
 
+      - name: Setup conda environment
+        uses: mamba-org/setup-micromamba@v3.0.0
         with:
-          path: vocabulary-growth
+          environment-file: environment.yml
+          cache-environment: true
+          cache-downloads: true
 
-      - name: Checkout research (sibling dependency)
-        uses: actions/checkout@v7.0.0
-
-        with:
-          repository: dseinternational/research
-          path: research
-
-      - name: Setup Conda
-        uses: conda-incubator/setup-miniconda@v4
-        with:
-          activate-environment: dse-vocab-growth
-          miniforge-version: latest
-
-      - name: Cache conda env
-        id: conda-cache
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.CONDA }}/envs/dse-vocab-growth
-          key: conda-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vocabulary-growth/environment.yml') }}
-
-      - name: Create env (cache miss)
-        if: steps.conda-cache.outputs.cache-hit != 'true'
-        run: conda env update -n dse-vocab-growth -f environment.yml
-
-      - name: Install editable packages
-        run: |
-          pip install -e ../research/src/python
-          pip install -e .
+      - name: Verify environment core matches the canonical spec
+        run: dse-check-env environment.yml
 
       - name: Run pytest
         run: pytest

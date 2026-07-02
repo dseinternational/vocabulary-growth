@@ -15,8 +15,8 @@ dependencies = [
   "arviz-plots>=1.2.0",
   "arviz-stats>=1.2.0",
   "arviz>=1.2.0",
-  "duckdb>=1.5.2",
-  "dse-research-utils>=0.2.0",
+  "duckdb>=1.5.4",
+  "dse-research-utils>=0.5.0",
   "jaxlib>=0.9.2",
   "matplotlib>=3.10.9",
   "numpy>=2.4.4",
@@ -38,6 +38,12 @@ dev = [
   "pytest>=9.0.3",
   "ruff>=0.15.18"
 ]
+
+[tool.uv.sources]
+# dse-research-utils isn't published to PyPI — resolve it from the public git
+# tag. (The conda env in environment.yml installs it from the same tag in its
+# pip layer; this entry is only consumed by uv.)
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.5.0" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"
