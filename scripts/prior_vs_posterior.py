@@ -26,13 +26,14 @@ import numpy as np
 import preliz as pz
 from scipy import stats
 
+from vocab_growth import environment as env
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     BivariateModelDefinition,
     UnivariateModelDefinition,
 )
 
-MODELS_DIR = "output/models"
+MODELS_DIR = env.models_output_dir()
 
 # Registry-derived: covers every univariate/bivariate model, matching the two
 # prior-dispatch functions below. Trivariate (VG14) and joint (VG15)

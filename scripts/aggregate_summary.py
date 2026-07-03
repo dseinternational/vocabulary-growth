@@ -32,6 +32,7 @@ from typing import Any
 import arviz as az
 import pandas as pd
 
+from vocab_growth import environment as env
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 # (short model id, output-folder label), derived from the registry so a newly
@@ -41,9 +42,9 @@ MODELS = [
     (d.model_id, f"{d.model_id}-{d.config_name}") for d in MODEL_REGISTRY.values()
 ]
 
-LOG_DIR = "output/logs"
-MODELS_DIR = "output/models"
-COMPARE_DIR = "output/comparisons"
+LOG_DIR = os.path.join(env.output_root(), "logs")
+MODELS_DIR = env.models_output_dir()
+COMPARE_DIR = env.comparisons_output_dir()
 
 
 def parse_log_timings(log_path: str) -> dict[str, Any]:

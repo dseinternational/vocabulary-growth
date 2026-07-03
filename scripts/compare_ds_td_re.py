@@ -21,7 +21,8 @@ generative object (partial pooling, a directly-estimated delay, difference-in-
 differences, the "delayed/scaled TD trajectory" hypothesis) is the reserved
 future **VG16** and is intentionally NOT built here.
 
-Estimands, per outcome, written to ``output/comparisons/``:
+Estimands, per outcome, written to the configured comparisons dir (default
+``output/comparisons/``; see ``vocab_growth.environment.output_root``):
 
 * ``ds_td_<outcome>_re_expected_words.csv``   — TD & DS expected words, the
   difference δ(a)=TD-DS (+90/50% HDI, P(TD>DS)) and the ratio.
@@ -73,7 +74,7 @@ DISP_DS_KEY = "vg07"
 # TD comparator per outcome: the univariate study-RE models.
 TD_KEYS = {"spoken": "vg11", "understood": "vg12"}
 
-OUT_DIR = os.path.join("output", "comparisons")
+OUT_DIR = env.comparisons_output_dir()
 SEED = 20260616
 GRID_STEP = 0.5  # months
 # Vocabulary levels (words) for the attainment-delay D(v) curve.

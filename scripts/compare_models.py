@@ -26,9 +26,10 @@ import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from vocab_growth import environment as env
 from vocab_growth.comparison import first_crossing, model_dir, overlay_age_curves
 
-OUT_DIR = os.path.join("output", "comparisons")
+OUT_DIR = env.comparisons_output_dir()
 
 DS_COLOUR = plot_styles.COLOUR_BLUE
 TD_COLOUR = plot_styles.COLOUR_ORANGE
