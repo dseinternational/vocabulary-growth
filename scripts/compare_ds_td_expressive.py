@@ -72,7 +72,7 @@ TD_UNDERSTOOD_KEY = "vg12"
 # spoken curve is used too, so spoken and p_any share one DS posterior).
 DS_SIGN_KEY = "vg14"
 
-OUT_DIR = os.path.join("output", "comparisons")
+OUT_DIR = env.comparisons_output_dir()
 SEED = 20260626
 PCT = 10.0
 # Vocabulary levels (words) for the level-indexed delay curves.

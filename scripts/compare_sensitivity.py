@@ -27,7 +27,7 @@ from vocab_growth.sensitivity.registry import VARIANTS, variants_for
 def _model_dir(model_key: str, suffix: str | None = None) -> str:
     d = MODEL_REGISTRY[model_key]
     name = f"{d.model_id}-{d.config_name}" + (f"-{suffix}" if suffix else "")
-    return os.path.join(env.MODELS_OUTPUT_DIR, name)
+    return os.path.join(env.models_output_dir(), name)
 
 
 if __name__ == "__main__":
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     names = variants_for(args.model) if args.variant == "all" else [args.variant]
-    detail_dir = os.path.join(env.OUTPUT_DIR, "comparisons", "sensitivity")
+    detail_dir = os.path.join(env.comparisons_output_dir(), "sensitivity")
     os.makedirs(detail_dir, exist_ok=True)
 
     rows: list[dict] = []

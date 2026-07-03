@@ -73,7 +73,7 @@ DISP_DS_KEY = "vg07"
 # TD comparator per outcome: the univariate study-RE models.
 TD_KEYS = {"spoken": "vg11", "understood": "vg12"}
 
-OUT_DIR = os.path.join("output", "comparisons")
+OUT_DIR = env.comparisons_output_dir()
 SEED = 20260616
 GRID_STEP = 0.5  # months
 # Vocabulary levels (words) for the attainment-delay D(v) curve.

@@ -31,7 +31,7 @@ from vocab_growth import environment as env
 
 DS_DIR = comparison.model_dir("vg10")
 TD_DIR = comparison.model_dir("vg13")
-OUT_DIR = "output/comparisons"
+OUT_DIR = env.comparisons_output_dir()
 
 UNDERSTOOD_COLOUR = "C0"
 SPOKEN_COLOUR = "C1"

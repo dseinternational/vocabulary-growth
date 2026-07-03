@@ -49,10 +49,21 @@ if __name__ == "__main__":
         default="test",
         help="Sampling configuration (default: test — the honest tier for robustness).",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help=(
+            "Root directory for model output (overrides "
+            "$DSE_VOCAB_GROWTH_OUTPUT_DIR; default: <repo>/output)."
+        ),
+    )
 
     freeze_support()
     setup.init_script()
     args = parser.parse_args()
+
+    env.set_output_root(args.output_dir)
 
     if args.model not in _RUNNER_BY_KEY:
         console.print(
@@ -72,11 +83,12 @@ if __name__ == "__main__":
             ("Variants", ", ".join(names)),
             ("Sampling config", args.config),
             ("Fits", len(variant_defs)),
+            ("Output root", env.output_root()),
         ],
     )
     env.preflight_disk(
         2.0 * len(variant_defs),
-        env.OUTPUT_DIR,
+        env.output_root(),
         label=f"{len(variant_defs)} sensitivity fit(s) [{args.config}]",
     )
 

@@ -49,12 +49,27 @@ if __name__ == "__main__":
         action="store_true",
         help="Include trace files (.nc) in the upload (excluded by default).",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help=(
+            "Root directory for model output (overrides "
+            "$DSE_VOCAB_GROWTH_OUTPUT_DIR; default: <repo>/output). Useful for "
+            "redirecting heavy traces to a scratch disk on ephemeral VMs."
+        ),
+    )
 
     freeze_support()
 
     setup.init_script()
 
     args = parser.parse_args()
+
+    # Resolve where heavy artefacts (traces, figures, tables) are written before
+    # any output path is computed. --output-dir wins over
+    # $DSE_VOCAB_GROWTH_OUTPUT_DIR, which wins over the repo-local output/ default.
+    env.set_output_root(args.output_dir)
 
     # Model modules follow the "model_<key>" naming convention 1:1 with
     # MODEL_REGISTRY (definitions.py), so the set of fittable models is
@@ -80,6 +95,7 @@ if __name__ == "__main__":
             ("Render Quarto", args.render),
             ("Upload to blob storage", args.upload),
             ("Include traces in upload", args.include_traces),
+            ("Output root", env.output_root()),
         ],
     )
 
@@ -88,7 +104,7 @@ if __name__ == "__main__":
     heavy = args.config in {"rep", "rep-lite"}
     env.preflight_disk(
         (20.0 if heavy else 2.0) * len(selected),
-        env.OUTPUT_DIR,
+        env.output_root(),
         label=f"{len(selected)} fit(s) [{args.config}]",
     )
 
