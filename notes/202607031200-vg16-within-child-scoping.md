@@ -13,7 +13,7 @@ precise formulation for sign-off before implementation.
 Within children who have repeated measures, does a child's **earlier** receptive
 vocabulary (words understood) predict their **later** expressive vocabulary
 (words spoken), beyond the population age trajectory and the child's own stable
-level? I.e. is there a within-child *lead* of comprehension over production?
+level? I.e. is there a within-child _lead_ of comprehension over production?
 
 ## 2. What the foundation already provides (VG09/VG10)
 
@@ -23,7 +23,7 @@ Per observation `i` of child `c` at age `a`:
 - `spoken_i ~ BetaBinomial(N, p_U(a_i)·q_i)`, `q_i = sigmoid(h(a) + δ_study + δ_subj_q[c])`
 
 Subject effects are **intercepts only** — constant within a child, no temporal
-structure. The *concurrent* U→S link is built in (`p_S = p_U·q`), but nothing
+structure. The _concurrent_ U→S link is built in (`p_S = p_U·q`), but nothing
 couples a child's **earlier** understood to their **later** spoken.
 
 ## 3. Data — the within-child signal
@@ -32,7 +32,7 @@ couples a child's **earlier** understood to their **later** spoken.
 exactly 2, 57 with 3, 16 with 4, 19 with 5, 1 with 8); **279 have understood AND
 spoken at ≥2 ages** — the pool that identifies a cross-lag. Age is the time axis;
 spacing is irregular. Because most repeated-measures children contribute only 2
-waves, the design must extract a *population* lead-lag from many short series, not
+waves, the design must extract a _population_ lead-lag from many short series, not
 long per-child series.
 
 ## 4. Proposed VG16 structure (cross-lagged)
@@ -41,17 +41,17 @@ Add **one population lead-lag coefficient `β`** to the VG09 foundation. For eac
 observation `i` of child `c` at age `a_i`, build a lagged predictor from the
 child's **immediately preceding observed wave** (age `a_prev`).
 
-**Primary (within-child, RI-CLPM):** baseline against the child's *own* expected
-comprehension, so `x_lag` is the within-child *fluctuation* (not their stable standing):
+**Primary (within-child, RI-CLPM):** baseline against the child's _own_ expected
+comprehension, so `x_lag` is the within-child _fluctuation_ (not their stable standing):
 
 ```
 x_lag,i = logit(understood_prev / N) − ( f_U(a_prev) + δ_study + δ_subj_u[c] )   # within-child residual
 x_lag,i = 0                                                                       # first wave / no prior understood
 ```
 
-Subtracting `δ_subj_u[c]` is what separates the *within-child lead* ("a child
+Subtracting `δ_subj_u[c]` is what separates the _within-child lead_ ("a child
 temporarily ahead of their own comprehension trend then produces more" — Q2) from
-the *between-child* association ("high-comprehension children just talk more",
+the _between-child_ association ("high-comprehension children just talk more",
 which the correlated-RE alternative already captures). This is the modern
 random-intercept cross-lagged panel (RI-CLPM) logic: the subject REs are the
 random intercepts, so `β` on top of them is the within-child cross-lag rather
@@ -62,8 +62,8 @@ q_i = sigmoid( h(a_i) + δ_study[study] + δ_subj_q[c] + β · x_lag,i )
 ```
 
 with `spoken_i ~ BetaBinomial(N, p_U(a_i)·q_i)` as before. `δ_subj_q` absorbs the
-child's stable conversion level; **`β` isolates the effect of the child's *prior*
-receptive standing on their *current* production** — the within-child lead of
+child's stable conversion level; **`β` isolates the effect of the child's _prior_
+receptive standing on their _current_ production** — the within-child lead of
 receptive over expressive. `β > 0` with a 90% HDI excluding 0 is the Q2-positive
 result.
 
@@ -87,7 +87,7 @@ predictive so a ±1-SD prior-understood deviation moves `q` by a plausible amoun
 
 ### Alternatives / companions
 
-- **Population-relative baseline** (`x_lag` vs `f_U(a_prev)+δ_study` only, *not*
+- **Population-relative baseline** (`x_lag` vs `f_U(a_prev)+δ_study` only, _not_
   subtracting `δ_subj_u`) — more strongly identified with 2-wave data and free of
   the own-intercept short-T bias, but blends within- and between-child comprehension
   on the predictor side. **Fitted as a robustness companion** (a `lag_baseline` flag):
@@ -104,7 +104,7 @@ predictive so a ±1-SD prior-understood deviation moves `q` by a plausible amoun
 
 ## 5. Caveats
 
-- **Errors-in-variables → `β` is conservative.** `x_lag` uses the *observed* prior-wave understood (Beta-Binomial sampling noise), which attenuates `β` toward 0. A v1 `β>0` is a lower bound; the latent-AR-understood v2 de-attenuates.
+- **Errors-in-variables → `β` is conservative.** `x_lag` uses the _observed_ prior-wave understood (Beta-Binomial sampling noise), which attenuates `β` toward 0. A v1 `β>0` is a lower bound; the latent-AR-understood v2 de-attenuates.
 - **Short-T / dynamic-panel bias.** With ~73% of repeated-measures children at exactly 2 waves, the within/between split leans on partial pooling, the ~93 children with ≥3 waves, and the prior; regressing on a lag tied to the child's own intercept carries a Nickell-type bias — mitigated (not eliminated) by the Bayesian pooled single-`β` setting. Check with prior/posterior predictive and a simulate-and-recover before interpreting.
 - **Continuous time.** Age-adjusting the lag handles the trend; discrete "previous wave" approximates a continuous-time cross-effect (CT-SEM). Gap-decay (v2) refines it.
 - **First wave / missing prior understood → `x_lag = 0`** (does not inform `β`); the report states how many observations inform the lag.
