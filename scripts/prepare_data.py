@@ -35,6 +35,7 @@ _sources = {
     "vocab_uk_05": "./data/vocab_data_uk_05.csv",
     "vocab_us_02": "./data/vocab_data_us_02.csv",
     "vocab_uk_06": "./data/vocab_data_uk_06.csv",
+    "vocab_nz_01": "./data/vocab_data_nz_01.csv",
 }
 _loaded = {name: pd.read_csv(path) for name, path in _sources.items()}
 
@@ -54,6 +55,7 @@ vocab_uk_04_df = _loaded["vocab_uk_04"]
 vocab_uk_05_df = _loaded["vocab_uk_05"]
 vocab_us_02_df = _loaded["vocab_us_02"]
 vocab_uk_06_df = _loaded["vocab_uk_06"]
+vocab_nz_01_df = _loaded["vocab_nz_01"]
 
 # Prepare the data for merging
 vocab_to_merge = vocab_uk_01_df[["subject_id", "age", "understood", "spoken"]].copy()
@@ -131,6 +133,16 @@ ireland_2_to_merge = (
 )
 ireland_2_to_merge["study"] = 10
 
+# New Zealand (nz_01, Foster-Cohen): a longitudinal Down syndrome dataset,
+# production-only (no comprehension) with a modality partition. The any-modality
+# spoken marginal is word-only + both (spoken + spoken_signed); understood is
+# unavailable. (VG15 instead consumes nz_01's produced cross-tab directly — see
+# common_joint_modality — so this marginal feeds the other DS models.)
+nz_01_to_merge = vocab_nz_01_df[["subject_id", "age"]].copy()
+nz_01_to_merge["understood"] = pd.NA
+nz_01_to_merge["spoken"] = vocab_nz_01_df["spoken"] + vocab_nz_01_df["spoken_signed"]
+nz_01_to_merge["study"] = 11
+
 
 merged_df = pd.concat(
     [
@@ -145,6 +157,7 @@ merged_df = pd.concat(
         vocab_us_02_to_merge,
         vocab_uk_06_to_merge,
         ireland_2_to_merge,
+        nz_01_to_merge,
     ],
     ignore_index=True,
 )
@@ -232,6 +245,13 @@ con.execute(
     """
     CREATE TABLE vocab_ie_02 AS
     SELECT * FROM vocab_ie_02_df
+    """
+)
+
+con.execute(
+    """
+    CREATE TABLE vocab_nz_01 AS
+    SELECT * FROM vocab_nz_01_df
     """
 )
 
@@ -398,6 +418,20 @@ con.execute(
         800                                 as survey_vocab_max
     FROM vocab_ie_02 as vie2
     WHERE vie2.english_speaking = 'yes'
+    UNION
+    -- nz_01 (Foster-Cohen): production-only, no comprehension. The CSV columns are
+    -- modality-exclusive, so any-modality spoken = spoken + spoken_signed (a + c)
+    -- and signed = signed + spoken_signed (b + c). 675-item NZCDI ceiling.
+    SELECT 'nz_01'                                        as study,
+        vnz01.subject_id,
+        NULL                                              as sex,
+        vnz01.age,
+        NULL                                              as understood,
+        vnz01.spoken + vnz01.spoken_signed                as spoken,
+        vnz01.signed + vnz01.spoken_signed                as signed,
+        vnz01.spoken + vnz01.signed + vnz01.spoken_signed as produced,
+        675                                               as survey_vocab_max
+    FROM vocab_nz_01 as vnz01
 
     """
 )
