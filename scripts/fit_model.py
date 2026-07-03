@@ -56,6 +56,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Model ids are registered in lower case (see definitions.py); normalise
+    # user input so "VG01", "vg01", "Vg01" and "ALL" all resolve correctly.
+    args.model = args.model.lower()
+
     # Model modules follow the "model_<key>" naming convention 1:1 with
     # MODEL_REGISTRY (definitions.py), so the set of fittable models is
     # derived from the registry rather than a second, hand-maintained list
