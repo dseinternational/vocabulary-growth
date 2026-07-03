@@ -1284,7 +1284,7 @@ def run_fit_pipeline(
         reporting=reporting.ReportingConfiguration(
             model_name=definition.model_id,
             config_name=definition.config_name,
-            output_root_dir=local_env.OUTPUT_DIR,
+            output_root_dir=local_env.output_root(),
             hdi=0.90,
         ),
         sampling=sampling.get_sampling_configuration(config),

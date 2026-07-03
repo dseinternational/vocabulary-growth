@@ -12,7 +12,8 @@ Reads the per-model CSVs already produced by the model fit pipeline:
 - `comprehension_production_gap.csv` — posterior median + HDI bands for the
   expected gap (p_U - p_S) * n_trials.
 
-Outputs (in `output/comparisons/`):
+Outputs (in the configured comparisons dir — default `output/comparisons/`, see
+`vocab_growth.environment.output_root`):
 
 - `ds_td_joint_trajectory.{png,svg}` — two panels, shared x-axis 0-115 months.
 - `ds_td_comprehension_production_gap.{png,svg}` — two panels, shared x-axis.
@@ -31,7 +32,7 @@ from vocab_growth import environment as env
 
 DS_DIR = comparison.model_dir("vg10")
 TD_DIR = comparison.model_dir("vg13")
-OUT_DIR = "output/comparisons"
+OUT_DIR = env.comparisons_output_dir()
 
 UNDERSTOOD_COLOUR = "C0"
 SPOKEN_COLOUR = "C1"

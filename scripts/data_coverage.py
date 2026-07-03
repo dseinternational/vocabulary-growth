@@ -28,9 +28,10 @@ import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from vocab_growth import environment as env
 from vocab_growth.data_utils import load_combined_data
 
-OUT_DIR = "output/data"
+OUT_DIR = os.path.join(env.output_root(), "data")
 
 AGE_BIN_EDGES = list(range(0, 121, 6))  # 0, 6, 12, …, 120 months
 

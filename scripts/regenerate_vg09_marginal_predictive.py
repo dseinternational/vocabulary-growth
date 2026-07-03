@@ -34,8 +34,9 @@ from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
 import vocab_growth.plotting as plotting
+from vocab_growth import environment as env
 
-VG09_DIR = "output/models/VG09-age-understood-spoken-ds-re-subj-uq"
+VG09_DIR = os.path.join(env.models_output_dir(), "VG09-age-understood-spoken-ds-re-subj-uq")
 N_TRIALS = 800
 EPSILON = 1e-12
 SEED = 47
