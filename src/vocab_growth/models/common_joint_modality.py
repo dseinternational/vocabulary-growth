@@ -334,7 +334,10 @@ def prepare_joint_data(
     marg_df = pd.DataFrame(marg_cols)
 
     frames = [other, marg_df, four_df]
-    if definition.include_nz01_cells:
+    # nz_01's (real-key) CSV is committed separately; tolerate its absence (CI,
+    # unit tests, or a checkout predating the data) so the model still builds.
+    nz01_csv = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
+    if definition.include_nz01_cells and os.path.exists(nz01_csv):
         frames.append(_load_nz01_produced_cells())
     analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
