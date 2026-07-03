@@ -233,6 +233,39 @@ def build_model_re(
         subject_codes = None
         n_subjects = 0
 
+    # Within-child cross-lag (VG16, issue #113): for each observation, locate the
+    # child's immediately-earlier observed wave that carries an understood measure
+    # (the lag source). x_lag = 0 where there is no such prior wave (first wave, or
+    # the prior wave lacks comprehension). prev_idx/has_lag_f/y_u_prev_logit are
+    # per-observation arrays consumed in build_model_re; y_u_prev_logit is the
+    # logit of the prior-wave understood proportion (clipped for 0/N).
+    use_cross_lag = bool(definition.use_cross_lag)
+    prev_idx = np.zeros(n, dtype=int)
+    has_lag_f = np.zeros(n, dtype=float)
+    y_u_prev_logit = np.zeros(n, dtype=float)
+    if use_cross_lag:
+        subj = np.asarray(analysis_df["subject_code"], dtype=int)
+        age = np.asarray(analysis_df["age"], dtype=float)
+        und = analysis_df["understood"].to_numpy(dtype=float)
+        prev_subj, last = -1, -1
+        for pos in np.lexsort((age, subj)):  # walk each child in age order
+            if subj[pos] != prev_subj:
+                prev_subj, last = subj[pos], -1
+            if last >= 0:
+                prev_idx[pos] = last
+                has_lag_f[pos] = 1.0
+            if not np.isnan(und[pos]):
+                last = pos
+        und_prev = np.where(has_lag_f > 0, und[prev_idx], n_trials * 0.5)
+        p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
+        y_u_prev_logit = np.where(
+            has_lag_f > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0
+        )
+        print(
+            f"Cross-lag ({definition.lag_baseline}): "
+            f"{int(has_lag_f.sum())} of {n} observations have a prior-wave understood source."
+        )
+
     # Validate
     if not np.all(y_u_observed >= 0):
         raise ValueError("y_u contains negative counts.")
@@ -464,8 +497,26 @@ def build_model_re(
         # For diagnostics: population-level f at obs ages
         _ = pm.Deterministic("f_u_obs", f_u_all[i_obs0:i_obs1], dims=("obs_id",))
 
+        # Within-child cross-lag (VG16, issue #113): the child's prior-wave
+        # understood residual shifts their current production ratio q. With the
+        # subject intercepts as random intercepts this is a RI-CLPM within-child
+        # cross-lag; beta_lag > 0 means earlier receptive standing predicts later
+        # expressive conversion. x_lag is 0 for observations with no prior wave.
+        if use_cross_lag:
+            beta_lag = pm.Normal(
+                "beta_lag", mu=definition.beta_lag_mu, sigma=definition.beta_lag_sigma
+            )
+            lag_base = f_u_obs_re[prev_idx]  # child's own expected understood logit at prior wave
+            if definition.lag_baseline == "population":
+                # subtract only population+study (add the subject intercept back)
+                lag_base = lag_base - subject_shift_u[prev_idx]
+            x_lag = has_lag_f * (y_u_prev_logit - lag_base)
+            q_lag_term = beta_lag * x_lag
+        else:
+            q_lag_term = 0.0
+
         # Production ratio — obs level includes study shift (and optional subject shift)
-        h_obs_re = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q
+        h_obs_re = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q + q_lag_term
         q_obs = pm.Deterministic(
             "q_obs", pm.math.sigmoid(h_obs_re), dims=("obs_id",)
         )

@@ -204,6 +204,21 @@ class BivariateModelDefinition:
     tau_subj_q_sigma: float = 0.5
     """HalfNormal scale for subject intercept SD on q (logit scale)."""
 
+    # -- Within-child cross-lag (VG16, issue #113) --
+    use_cross_lag: bool = False
+    """If True, add a within-child cross-lag: the child's prior-wave understood
+    residual predicts their current production ratio q (earlier receptive ->
+    later expressive). Uses the subject understood intercept, so requires
+    use_subject_re_u=True for the 'within' baseline."""
+    lag_baseline: str = "within"
+    """Baseline for the lag residual. 'within' subtracts the child's own understood
+    intercept (RI-CLPM within-child effect); 'population' subtracts only the
+    population+study level (robustness companion; blends within/between)."""
+    beta_lag_mu: float = 0.0
+    """Normal mean for the cross-lag coefficient beta_lag (0 = no direction imposed)."""
+    beta_lag_sigma: float = 0.5
+    """Normal SD for beta_lag (logit scale, weakly-informative)."""
+
     # -- GP anchor constraint (per-draw zero at reference age) --
     anchor_g_u_at_ref: bool = False
     """If True, constrain g_u to equal zero at the reference age for every draw."""
@@ -806,6 +821,42 @@ VG15 = JointModelDefinition(
     gp_anchor_age_months=54.0,
 )
 
+# ============================================================
+# VG16 — within-child cross-lag (issue #113): VG09 + prior understood -> current q
+# ============================================================
+
+VG16 = BivariateModelDefinition(
+    model_id="VG16",
+    config_name="age-understood-spoken-ds-re-subj-uq-crosslag",
+    banner=(
+        "Fitting Model VG16: VG09 + cross-lag (prior understood -> current q;"
+        " bias-robust population-relative baseline) - Down syndrome"
+    ),
+    population=Population.DOWN_SYNDROME,
+    n_trials=800,
+    slope_anchors=(24, 84),
+    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    p_slope_low_u_alpha=1.0,
+    p_slope_low_u_beta=10.0,
+    p_slope_hi_u_alpha=1.1,
+    p_slope_hi_u_beta=1.1,
+    tau_u_sigma=0.5,
+    tau_q_sigma=0.5,
+    use_subject_re_u=True,
+    tau_subj_u_sigma=0.5,
+    use_subject_re_q=True,
+    tau_subj_q_sigma=0.5,
+    use_cross_lag=True,
+    # Headline uses the population-relative baseline: with 2-wave-dominated data the
+    # pure within-child (own-intercept) baseline is biased by the short-T / Nickell
+    # / errors-in-variables mechanics (dev: beta -0.60 [-0.85,-0.35], an artifact),
+    # while the population-relative estimate is null (dev: +0.05 [-0.07,0.17]). The
+    # within-child variant is reported as a cautionary contrast. See the scoping note.
+    lag_baseline="population",
+    beta_lag_mu=0.0,
+    beta_lag_sigma=0.5,
+)
+
 MODEL_REGISTRY: dict[
     str,
     UnivariateModelDefinition
@@ -827,4 +878,5 @@ MODEL_REGISTRY: dict[
     "vg13": VG13,
     "vg14": VG14,
     "vg15": VG15,
+    "vg16": VG16,
 }
