@@ -62,14 +62,15 @@ if __name__ == "__main__":
 
     freeze_support()
 
-    setup.init_script()
-
     args = parser.parse_args()
 
-    # Resolve where heavy artefacts (traces, figures, tables) are written before
-    # any output path is computed. --output-dir wins over
-    # $DSE_VOCAB_GROWTH_OUTPUT_DIR, which wins over the repo-local output/ default.
+    # Resolve the output root before any output path is computed — and before
+    # init_script(), in case script setup ever reads an output location.
+    # --output-dir wins over $DSE_VOCAB_GROWTH_OUTPUT_DIR, which wins over the
+    # repo-local output/ default.
     env.set_output_root(args.output_dir)
+
+    setup.init_script()
 
     # Model ids are registered in lower case (see definitions.py); normalise
     # user input so "VG01", "vg01", "Vg01" and "ALL" all resolve correctly.

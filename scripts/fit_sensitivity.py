@@ -60,10 +60,10 @@ if __name__ == "__main__":
     )
 
     freeze_support()
-    setup.init_script()
     args = parser.parse_args()
-
+    # Set the output root before init_script(), in case script setup reads a path.
     env.set_output_root(args.output_dir)
+    setup.init_script()
 
     if args.model not in _RUNNER_BY_KEY:
         console.print(

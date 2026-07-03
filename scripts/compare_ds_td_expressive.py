@@ -9,7 +9,8 @@ DS and TD posteriors, so per-draw pairing gives exact credible intervals with
 **no joint/stacked model**. (The generative joint model that would make the gap
 itself a parameter is the reserved VG16; see ``compare_ds_td_re.py``.)
 
-Outputs (individual, linear-axis figures + CSVs) to ``output/comparisons/``:
+Outputs (individual, linear-axis figures + CSVs) to the configured comparisons
+dir (default ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
 
 Expressive-specific delay (level-indexed — "as a function of TD performance")
   * ``ds_td_expressive_attainment_delay.{png,svg}`` — D_U(N), D_S(N): months DS

@@ -1,5 +1,15 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
+"""Filesystem locations for ``vocab_growth`` and the output-root resolver.
+
+The output root is resolved at call time by :func:`output_root`, with precedence:
+an explicit override set via :func:`set_output_root` (e.g. from ``--output-dir``) >
+the ``DSE_VOCAB_GROWTH_OUTPUT_DIR`` environment variable > the repository-local
+``output/`` default. :func:`models_output_dir` / :func:`comparisons_output_dir` are
+its ``models`` / ``comparisons`` subdirectories. ``docs/report/figures/``
+(``REPORT_FIGS_DIR``) is the report-facing cache and deliberately stays in the
+checkout, never under this root.
+"""
 
 import os
 import shutil
@@ -116,7 +126,10 @@ def preflight_disk(
     target = _normalise(path or output_root())
     free = free_space_gb(target)
     drive = os.path.splitdrive(target)[0] or target
-    print(f"[output] resolved output root: {output_root()}", flush=True)
+    # Surface the resolved root only when that is what we are actually checking, so
+    # this line can't disagree with the [disk] target when a caller passes a subdir.
+    if target == _normalise(output_root()):
+        print(f"[output] resolved output root: {output_root()}", flush=True)
     print(f"[disk] {free:.1f} GiB free on {drive} "
           f"(need >= {min_gb:.0f} GiB for {label})", flush=True)
     if free < min_gb:

@@ -15,13 +15,14 @@ percentile child first reach a target word count?**
 
 Targets: 25, 50, 100, 200, 400 words.
 
-Output per model:
+Output per model (paths are under the configured output root — default `output/`;
+see `vocab_growth.environment.output_root`):
 
-- `output/models/<MODEL>/time_to_milestone[_<u|s>].csv`
-- `output/models/<MODEL>/time_to_milestone[_<u|s>].png/.svg`
+- `<output-root>/models/<MODEL>/time_to_milestone[_<u|s>].csv`
+- `<output-root>/models/<MODEL>/time_to_milestone[_<u|s>].png/.svg`
 
 The same CSVs are also concatenated into
-`output/comparisons/time_to_milestone_all.csv` for cross-population
+`<output-root>/comparisons/time_to_milestone_all.csv` for cross-population
 contrasts.
 """
 
