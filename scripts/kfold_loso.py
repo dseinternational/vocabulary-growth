@@ -49,6 +49,7 @@ from scipy.special import logsumexp
 from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
+from vocab_growth import environment as env
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.common_bivariate import (
     configure_bivariate_priors,
@@ -58,8 +59,8 @@ from vocab_growth.models.common_bivariate_re import build_model_re
 from vocab_growth.models.definitions import VG07, VG08, VG09, BivariateModelDefinition
 
 N_TRIALS = 800
-OUT_DIR = "output/comparisons"
-KFOLD_TMP_DIR = "output/kfold_tmp"
+OUT_DIR = env.comparisons_output_dir()
+KFOLD_TMP_DIR = os.path.join(env.output_root(), "kfold_tmp")
 
 
 @dataclass(frozen=True)

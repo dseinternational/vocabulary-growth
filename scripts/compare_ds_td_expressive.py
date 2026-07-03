@@ -9,7 +9,8 @@ DS and TD posteriors, so per-draw pairing gives exact credible intervals with
 **no joint/stacked model**. (The generative joint model that would make the gap
 itself a parameter is the reserved VG16; see ``compare_ds_td_re.py``.)
 
-Outputs (individual, linear-axis figures + CSVs) to ``output/comparisons/``:
+Outputs (individual, linear-axis figures + CSVs) to the configured comparisons
+dir (default ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
 
 Expressive-specific delay (level-indexed — "as a function of TD performance")
   * ``ds_td_expressive_attainment_delay.{png,svg}`` — D_U(N), D_S(N): months DS
@@ -72,7 +73,7 @@ TD_UNDERSTOOD_KEY = "vg12"
 # spoken curve is used too, so spoken and p_any share one DS posterior).
 DS_SIGN_KEY = "vg14"
 
-OUT_DIR = os.path.join("output", "comparisons")
+OUT_DIR = env.comparisons_output_dir()
 SEED = 20260626
 PCT = 10.0
 # Vocabulary levels (words) for the level-indexed delay curves.

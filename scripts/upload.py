@@ -34,8 +34,20 @@ if __name__ == "__main__":
         action="store_true",
         help="Include trace files (.nc) in the upload (excluded by default).",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help=(
+            "Root directory to upload model output from (overrides "
+            "$DSE_VOCAB_GROWTH_OUTPUT_DIR; default: <repo>/output)."
+        ),
+    )
 
     args = parser.parse_args()
+
+    local_env.set_output_root(args.output_dir)
+    print(f"[output] uploading from {local_env.output_root()}")
 
     if args.model == "all":
         to_upload = list(MODEL_CONFIGS.items())
@@ -47,7 +59,7 @@ if __name__ == "__main__":
 
     for model_id, (model_name, config_name) in to_upload:
         model_label = f"{model_name}-{config_name}"
-        output_dir = os.path.join(local_env.MODELS_OUTPUT_DIR, model_label)
+        output_dir = os.path.join(local_env.models_output_dir(), model_label)
 
         if not os.path.isdir(output_dir):
             print(

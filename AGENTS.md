@@ -65,23 +65,24 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 ### Fit a model
 
 ```bash
-python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload]
+python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload] [--output-dir <dir>]
 ```
 
 - `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after fitting.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
+- `--output-dir`: root directory for model output. Overrides the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable; both fall back to the repository-local `output/`.
 
-Output (traces, figures, summary tables) is written to `output/models/<model_name>/`.
+Output (traces, figures, summary tables) is written to `<output-root>/models/<model_name>/`. The output root is resolved (highest precedence first) from `--output-dir`, then the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable, then the repository-local `output/` default — so reporting-quality VM runs can redirect the multi-gigabyte traces to a scratch disk without changing the layout. `fit_model.py`, `fit_sensitivity.py`, `sync_report_figures.py`, and `upload.py` all honour the same resolution (`vocab_growth.environment.output_root`), and the disk preflight prints the resolved root. The report figure cache (`docs/report/figures/`, below) always stays in the checkout.
 
 ### Sync report figures
 
 ```bash
-python scripts/sync_report_figures.py
+python scripts/sync_report_figures.py [--output-dir <dir>]
 ```
 
-Copies the plots (`.svg`/`.png`) and summary tables (`.csv`) from `output/models/` and `output/comparisons/` into `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
+Copies the plots (`.svg`/`.png`) and summary tables (`.csv`) from the output root's `models/` and `comparisons/` (same resolution as above) into `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
 
 ## Architecture
 

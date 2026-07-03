@@ -40,12 +40,13 @@ from scipy.special import logsumexp
 from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
+from vocab_growth import environment as env
 
 EPSILON = 1e-12
 N_TRIALS = 800
 
-MODELS_DIR = "output/models"
-OUT_DIR = "output/comparisons"
+MODELS_DIR = env.models_output_dir()
+OUT_DIR = env.comparisons_output_dir()
 
 
 @dataclass(frozen=True)
