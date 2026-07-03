@@ -32,10 +32,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from vocab_growth import environment as env
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
-MODELS_DIR = "output/models"
-OUT_DIR = "output/comparisons"
+MODELS_DIR = env.models_output_dir()
+OUT_DIR = env.comparisons_output_dir()
 
 # Registry-derived so a newly added univariate/bivariate model is picked up
 # automatically. Trivariate (VG14) and joint (VG15) models have a different

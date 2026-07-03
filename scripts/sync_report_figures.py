@@ -21,6 +21,12 @@ Usage::
     python scripts/sync_report_figures.py                 # models + comparisons
     python scripts/sync_report_figures.py --models-only
     python scripts/sync_report_figures.py --comparisons-only
+    python scripts/sync_report_figures.py --output-dir /scratch/vg-output
+
+The source output root follows the same resolution as the fitting scripts:
+``--output-dir`` overrides ``$DSE_VOCAB_GROWTH_OUTPUT_DIR``, which overrides the
+repository-local ``output/`` default. The report figure store
+(``docs/report/figures/``) always stays in the checkout.
 """
 
 from __future__ import annotations
@@ -32,7 +38,6 @@ import shutil
 from vocab_growth import environment as env
 
 COPY_EXTS = (".svg", ".png", ".csv")
-COMPARISONS_DIR = os.path.join(env.OUTPUT_DIR, "comparisons")
 
 
 def _sync_dir(src: str, dst: str) -> int:
@@ -59,30 +64,44 @@ def main() -> None:
         action="store_true",
         help="Sync only the DS/TD comparison figures.",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help=(
+            "Root directory to read fitted output from (overrides "
+            "$DSE_VOCAB_GROWTH_OUTPUT_DIR; default: <repo>/output)."
+        ),
+    )
     args = parser.parse_args()
+
+    env.set_output_root(args.output_dir)
+    models_dir = env.models_output_dir()
+    comparisons_dir = env.comparisons_output_dir()
+    print(f"[output] reading fitted output from {env.output_root()}")
 
     total = 0
 
     if not args.comparisons_only:
-        if os.path.isdir(env.MODELS_OUTPUT_DIR):
-            for name in sorted(os.listdir(env.MODELS_OUTPUT_DIR)):
-                src = os.path.join(env.MODELS_OUTPUT_DIR, name)
+        if os.path.isdir(models_dir):
+            for name in sorted(os.listdir(models_dir)):
+                src = os.path.join(models_dir, name)
                 if os.path.isdir(src):
                     n = _sync_dir(src, os.path.join(env.REPORT_FIGS_DIR, name))
                     total += n
                     print(f"  {name}: {n} files")
         else:
-            print(f"[skip] no models output dir: {env.MODELS_OUTPUT_DIR}")
+            print(f"[skip] no models output dir: {models_dir}")
 
     if not args.models_only:
-        if os.path.isdir(COMPARISONS_DIR):
+        if os.path.isdir(comparisons_dir):
             n = _sync_dir(
-                COMPARISONS_DIR, os.path.join(env.REPORT_FIGS_DIR, "comparisons")
+                comparisons_dir, os.path.join(env.REPORT_FIGS_DIR, "comparisons")
             )
             total += n
             print(f"  comparisons: {n} files")
         else:
-            print(f"[skip] no comparisons dir: {COMPARISONS_DIR}")
+            print(f"[skip] no comparisons dir: {comparisons_dir}")
 
     print(f"[done] synced {total} files into {env.REPORT_FIGS_DIR}")
 

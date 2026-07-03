@@ -52,7 +52,7 @@ DEFAULT_MIN_COVERAGE = 0.80
 def model_dir(key: str) -> str:
     """Output directory for a registry key, e.g. 'vg11' -> .../VG11-age-...-td."""
     d = MODEL_REGISTRY[key]
-    return os.path.join(env.MODELS_OUTPUT_DIR, f"{d.model_id}-{d.config_name}")
+    return os.path.join(env.models_output_dir(), f"{d.model_id}-{d.config_name}")
 
 
 def trace_path(key: str) -> str:

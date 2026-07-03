@@ -15,13 +15,14 @@ percentile child first reach a target word count?**
 
 Targets: 25, 50, 100, 200, 400 words.
 
-Output per model:
+Output per model (paths are under the configured output root — default `output/`;
+see `vocab_growth.environment.output_root`):
 
-- `output/models/<MODEL>/time_to_milestone[_<u|s>].csv`
-- `output/models/<MODEL>/time_to_milestone[_<u|s>].png/.svg`
+- `<output-root>/models/<MODEL>/time_to_milestone[_<u|s>].csv`
+- `<output-root>/models/<MODEL>/time_to_milestone[_<u|s>].png/.svg`
 
 The same CSVs are also concatenated into
-`output/comparisons/time_to_milestone_all.csv` for cross-population
+`<output-root>/comparisons/time_to_milestone_all.csv` for cross-population
 contrasts.
 """
 
@@ -37,8 +38,8 @@ from vocab_growth import environment as env
 from vocab_growth.comparison import invert_curve
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
-MODELS_DIR = "output/models"
-COMPARE_DIR = "output/comparisons"
+MODELS_DIR = env.models_output_dir()
+COMPARE_DIR = env.comparisons_output_dir()
 
 TARGETS = [25, 50, 100, 200, 400]
 
@@ -138,7 +139,7 @@ def process_bivariate(short: str, label: str, pop: str,
 
 
 def main() -> None:
-    env.preflight_disk(2.0, env.OUTPUT_DIR, label="milestone outputs")
+    env.preflight_disk(2.0, env.output_root(), label="milestone outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(COMPARE_DIR, exist_ok=True)
 

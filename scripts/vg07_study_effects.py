@@ -26,10 +26,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from vocab_growth import environment as env
 from vocab_growth.data_utils import load_data
 from vocab_growth.models.definitions import Population
 
-MODEL_DIR = "output/models/VG07-age-understood-spoken-ds-re"
+MODEL_DIR = os.path.join(env.models_output_dir(), "VG07-age-understood-spoken-ds-re")
 HDI_PROB = 0.90
 
 
