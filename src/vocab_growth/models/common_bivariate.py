@@ -884,10 +884,9 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
 
     For models with subject-level random intercepts (use_subject_re_u and/or
     use_subject_re_q), the y_*_plot / y_*_query nodes are constructed using
-    marginal probabilities that integrate over a freshly-sampled subject RE
-    drawn from the corresponding prior. This makes y_u_query etc. the
-    correct predictive distribution for an unseen DS child, rather than
-    the population-mean conditional distribution.
+    probabilities from one freshly-sampled subject RE per posterior draw. That
+    gives a coherent unseen-child trajectory across age rather than independent
+    one-age marginals at each plot or query point.
     """
     n_trials = context.model_data.n_trials
 
@@ -906,34 +905,24 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
 
     with context.model:
         # Subject-marginalised probabilities if subject REs are present.
-        # delta_subj_*_marg_{plot,query} are auxiliary RVs sampled from the
-        # subject-RE prior during sample_posterior_predictive — they are not
-        # part of the likelihood and do not affect posterior sampling.
+        # delta_subj_*_marg are auxiliary scalar RVs sampled from the subject-RE
+        # prior during sample_posterior_predictive. Reusing one scalar across
+        # plot/query ages makes y_*_plot a coherent unseen-child trajectory.
         if use_subject_re_u:
             tau_subj_u = context.model_variables["tau_subj_u"]
             f_u_plot_var = context.model_variables["f_u_plot"]
             f_u_query_var = context.model_variables["f_u_query"]
-            delta_u_plot_marg = pm.Normal(
-                "_delta_subj_u_plot_marg", mu=0.0, sigma=tau_subj_u, dims="plot_id"
-            )
-            delta_u_query_marg = pm.Normal(
-                "_delta_subj_u_query_marg", mu=0.0, sigma=tau_subj_u, dims="query_id"
-            )
-            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_plot_marg)
-            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_query_marg)
+            delta_u_marg = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_subj_u)
+            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_marg)
+            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_marg)
 
         if use_subject_re_q:
             tau_subj_q = context.model_variables["tau_subj_q"]
             h_plot_var = context.model_variables["h_plot"]
             h_query_var = context.model_variables["h_query"]
-            delta_q_plot_marg = pm.Normal(
-                "_delta_subj_q_plot_marg", mu=0.0, sigma=tau_subj_q, dims="plot_id"
-            )
-            delta_q_query_marg = pm.Normal(
-                "_delta_subj_q_query_marg", mu=0.0, sigma=tau_subj_q, dims="query_id"
-            )
-            q_plot_marg = pm.math.sigmoid(h_plot_var + delta_q_plot_marg)
-            q_query_marg = pm.math.sigmoid(h_query_var + delta_q_query_marg)
+            delta_q_marg = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q)
+            q_plot_marg = pm.math.sigmoid(h_plot_var + delta_q_marg)
+            q_query_marg = pm.math.sigmoid(h_query_var + delta_q_marg)
             p_s_plot = p_u_plot * q_plot_marg
             p_s_query = p_u_query * q_query_marg
         elif use_subject_re_u:

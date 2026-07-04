@@ -108,6 +108,7 @@ CELL_NAMES = ["neither", "sign_only", "speak_only", "both"]
 # Order of nz_01's three within-produced cells (the four-cell composition
 # conditioned on produced, dropping the unobservable "neither"/understood-only).
 PROD_CELL_NAMES = ["sign_only", "speak_only", "both"]
+PROD_CELL_COLUMNS = ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]
 
 
 # ============================================================
@@ -190,6 +191,11 @@ class JointModelSamples:
     cell_obs: np.ndarray  # (n_cells_obs, 4) observed
     cell_pred: np.ndarray  # (n_cells_obs, 4, n_samples) predicted
     cell_ages: np.ndarray  # (n_cells_obs,)
+
+    # nz_01 produced-cell posterior predictive (counts) and observed
+    prod_cell_obs: np.ndarray  # (n_prod_obs, 3) observed
+    prod_cell_pred: np.ndarray  # (n_prod_obs, 3, n_samples) predicted
+    prod_cell_ages: np.ndarray  # (n_prod_obs,)
 
 
 JointContext = ModelFitContext[JointModelConfiguration, JointModelSamples]
@@ -618,7 +624,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     idx_prod = np.where(has_prod_t)[0]
     if idx_prod.size:
         prod_counts = np.asarray(
-            df.loc[has_prod_t, ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]],
+            df.loc[has_prod_t, PROD_CELL_COLUMNS],
             dtype=int,
         )
         prod_total = np.asarray(df.loc[has_prod_t, "prod_total"], dtype=int)
@@ -734,6 +740,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         if use_subject_codes:
             subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
         _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_prod_mask", has_prod_t.astype(int), dims=("obs_id",))
 
         # Latent full-grid trajectories (plain tensors), built by the shared
         # gp_utils helpers. Option D anchors each GP (per-draw zero at the
@@ -1053,11 +1060,38 @@ def diagnostics(context: JointContext):
     )
 
 
+def _extract_produced_cell_observations(
+    df: pd.DataFrame,
+    has_prod: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Observed nz_01 produced-cell counts and ages for rows flagged by ``has_prod``."""
+    if not has_prod.any():
+        return (
+            np.zeros((0, len(PROD_CELL_NAMES)), dtype=int),
+            np.zeros(0, dtype=float),
+        )
+
+    missing = [col for col in (*PROD_CELL_COLUMNS, "age") if col not in df.columns]
+    if missing:
+        raise ValueError(
+            "obs_prod_mask marks produced-cell rows, but analysis_df is missing "
+            f"columns: {', '.join(missing)}"
+        )
+
+    return (
+        np.asarray(df.loc[has_prod, PROD_CELL_COLUMNS], dtype=int),
+        np.asarray(df.loc[has_prod, "age"], dtype=float),
+    )
+
+
 def sample_posterior_predictive(context: JointContext, definition=None):
-    """Posterior predictive for the uk_02 four cells (for the cell PPC)."""
+    """Posterior predictive for the observed cell-count likelihoods."""
     with context.model:
+        var_names = ["cells_obs"]
+        if "nz_prod_cells_obs" in context.model.named_vars:
+            var_names.append("nz_prod_cells_obs")
         trace = pm.sample_posterior_predictive(
-            context.trace, var_names=["cells_obs"], extend_inferencedata=True,
+            context.trace, var_names=var_names, extend_inferencedata=True,
             progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
         )
@@ -1086,6 +1120,24 @@ def sample_posterior_predictive(context: JointContext, definition=None):
             "stored mask and likelihood rows are misaligned."
         )
 
+    has_prod = np.array(trace.constant_data["obs_prod_mask"].values, dtype=bool)
+    prod_counts, prod_ages = _extract_produced_cell_observations(df, has_prod)
+    if "nz_prod_cells_obs" in trace.posterior_predictive:
+        prod_pred = np.array(
+            trace.posterior_predictive["nz_prod_cells_obs"]
+            .stack(sample=("chain", "draw"))
+            .transpose("obs_prod_id", "prod_cell_id", "sample")
+            .values
+        )
+        if int(has_prod.sum()) != prod_pred.shape[0]:
+            raise ValueError(
+                f"obs_prod_mask count ({int(has_prod.sum())}) does not match "
+                f"posterior predictive nz_prod_cells_obs length ({prod_pred.shape[0]}); "
+                "stored mask and likelihood rows are misaligned."
+            )
+    else:
+        prod_pred = np.zeros((0, len(PROD_CELL_NAMES), 0), dtype=int)
+
     samples = JointModelSamples(
         X_plot=np.array(trace.constant_data["X_plot"].values),
         X_query=np.array(trace.constant_data["X_query"].values),
@@ -1107,6 +1159,9 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         cell_obs=cell_counts,
         cell_pred=cell_pred,
         cell_ages=cell_ages,
+        prod_cell_obs=prod_counts,
+        prod_cell_pred=prod_pred,
+        prod_cell_ages=prod_ages,
     )
     context.set_model_samples(samples)
 
@@ -1288,6 +1343,38 @@ def _run_joint_plots(context: JointContext):
     fig.savefig(os.path.join(od, "uk02_cell_ppc.svg"))
     context.plots["uk02_cell_ppc"] = fig
     plt.close(fig)
+
+    # 6) nz_01 produced-cell PPC (observed vs predicted produced-cell totals)
+    if s.prod_cell_obs.size and s.prod_cell_pred.size:
+        fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_MD)
+        obs_tot = s.prod_cell_obs.sum(axis=0)  # (3,)
+        pred_tot = s.prod_cell_pred.sum(axis=0)  # (3, n_samples)
+        pred_med = np.median(pred_tot, axis=1)
+        lo, hi = 100 * (1 - hdi) / 2, 100 * (1 + hdi) / 2
+        pred_lo = np.percentile(pred_tot, lo, axis=1)
+        pred_hi = np.percentile(pred_tot, hi, axis=1)
+        yerr = np.vstack([pred_med - pred_lo, pred_hi - pred_med])
+        xpos = np.arange(len(PROD_CELL_NAMES))
+        ax.bar(xpos - 0.18, obs_tot, width=0.36, color="C0", label="observed")
+        ax.bar(
+            xpos + 0.18,
+            pred_med,
+            width=0.36,
+            color="C3",
+            alpha=0.7,
+            label="predicted (median)",
+            yerr=yerr,
+            capsize=4,
+        )
+        ax.set_xticks(xpos)
+        ax.set_xticklabels(PROD_CELL_NAMES)
+        ax.set_ylabel("Total produced-cell count (nz_01)")
+        ax.legend(frameon=True)
+        ax.set_title("nz_01 produced-cell posterior predictive check")
+        fig.savefig(os.path.join(od, "nz01_produced_cell_ppc.png"), dpi=300)
+        fig.savefig(os.path.join(od, "nz01_produced_cell_ppc.svg"))
+        context.plots["nz01_produced_cell_ppc"] = fig
+        plt.close(fig)
 
 
 # ============================================================

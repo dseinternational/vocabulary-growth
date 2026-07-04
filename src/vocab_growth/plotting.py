@@ -32,6 +32,12 @@ def _hdi_by_sample(values: np.ndarray, prob: float) -> np.ndarray:
     return az.hdi(values_da, prob=prob, dim="sample").to_numpy()
 
 
+def _hdi_by_row(values: np.ndarray, prob: float) -> np.ndarray:
+    """Compute HDI over the second axis for each row of ``values``."""
+    values_da = xr.DataArray(np.asarray(values).T, dims=("sample", "point"))
+    return az.hdi(values_da, prob=prob, dim="sample").to_numpy()
+
+
 # ------------------------------------------------------------
 # Prior predictive plots
 # ------------------------------------------------------------
@@ -291,11 +297,12 @@ def plot_posterior_predictive_pmf(
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
     for _a, j in zip(X_query, idxs, strict=True):
-        draws = np.clip(y_plot[j, :].astype(int), x_lo, x_hi)
+        draws = y_plot[j, :].astype(int)
 
         # Empirical PMF on common support
-        counts = np.bincount(draws - x_lo, minlength=len(k))
-        pmf = counts[: len(k)] / counts.sum()
+        in_support = (draws >= x_lo) & (draws <= x_hi)
+        counts = np.bincount(draws[in_support] - x_lo, minlength=len(k))
+        pmf = counts[: len(k)] / draws.size
         # Step line (discrete PMF)
         plt.step(k, pmf, where="mid", lw=2, label=f"{X_plot[j]:.0f}m")
 
@@ -313,9 +320,10 @@ def plot_posterior_predictive_pmf(
         _save_png_svg(plt.gcf(), output_dir, filename)
         csv_data = {"word_count": k}
         for _a, j in zip(X_query, idxs, strict=True):
-            draws = np.clip(y_plot[j, :].astype(int), x_lo, x_hi)
-            counts = np.bincount(draws - x_lo, minlength=len(k))
-            pmf = counts[: len(k)] / counts.sum()
+            draws = y_plot[j, :].astype(int)
+            in_support = (draws >= x_lo) & (draws <= x_hi)
+            counts = np.bincount(draws[in_support] - x_lo, minlength=len(k))
+            pmf = counts[: len(k)] / draws.size
             csv_data[f"pmf_{X_plot[j]:.0f}m"] = pmf
         _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
@@ -880,13 +888,11 @@ def plot_posterior_kappa(
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
     kappa_query_samps = np.asarray(kappa_query)
 
-    q_lo = (1.0 - hdi_prob) / 2.0
-    q_hi = 1.0 - q_lo
-
     # --- Plot grid ---
-    kappa_plot_lo = np.quantile(kappa_plot_samps, q_lo, axis=1)
     kappa_plot_med = np.quantile(kappa_plot_samps, 0.5, axis=1)
-    kappa_plot_hi = np.quantile(kappa_plot_samps, q_hi, axis=1)
+    kappa_plot_hdi = _hdi_by_row(kappa_plot_samps, hdi_prob)
+    kappa_plot_lo = kappa_plot_hdi[:, 0]
+    kappa_plot_hi = kappa_plot_hdi[:, 1]
 
     df_kappa_plot = pd.DataFrame(
         {
@@ -901,9 +907,10 @@ def plot_posterior_kappa(
 
     # --- Query ages ---
 
-    kappa_query_lo = np.quantile(kappa_query_samps, q_lo, axis=1)
     kappa_query_med = np.quantile(kappa_query_samps, 0.5, axis=1)
-    kappa_query_hi = np.quantile(kappa_query_samps, q_hi, axis=1)
+    kappa_query_hdi = _hdi_by_row(kappa_query_samps, hdi_prob)
+    kappa_query_lo = kappa_query_hdi[:, 0]
+    kappa_query_hi = kappa_query_hdi[:, 1]
 
     df_kappa_query = pd.DataFrame(
         {
@@ -926,7 +933,7 @@ def plot_posterior_kappa(
         kappa_plot_lo,
         kappa_plot_hi,
         alpha=0.25,
-        label=f"{int(hdi_prob * 100)}% credible interval",
+        label=f"{int(hdi_prob * 100)}% HDI",
     )
     ax.plot(X_plot, kappa_plot_med, lw=2.5, label="Median κ(age)")
 
