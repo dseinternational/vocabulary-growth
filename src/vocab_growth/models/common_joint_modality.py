@@ -108,6 +108,7 @@ CELL_NAMES = ["neither", "sign_only", "speak_only", "both"]
 # Order of nz_01's three within-produced cells (the four-cell composition
 # conditioned on produced, dropping the unobservable "neither"/understood-only).
 PROD_CELL_NAMES = ["sign_only", "speak_only", "both"]
+PROD_CELL_COLUMNS = ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]
 
 
 # ============================================================
@@ -623,7 +624,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     idx_prod = np.where(has_prod_t)[0]
     if idx_prod.size:
         prod_counts = np.asarray(
-            df.loc[has_prod_t, ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]],
+            df.loc[has_prod_t, PROD_CELL_COLUMNS],
             dtype=int,
         )
         prod_total = np.asarray(df.loc[has_prod_t, "prod_total"], dtype=int)
@@ -1059,6 +1060,30 @@ def diagnostics(context: JointContext):
     )
 
 
+def _extract_produced_cell_observations(
+    df: pd.DataFrame,
+    has_prod: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Observed nz_01 produced-cell counts and ages for rows flagged by ``has_prod``."""
+    if not has_prod.any():
+        return (
+            np.zeros((0, len(PROD_CELL_NAMES)), dtype=int),
+            np.zeros(0, dtype=float),
+        )
+
+    missing = [col for col in (*PROD_CELL_COLUMNS, "age") if col not in df.columns]
+    if missing:
+        raise ValueError(
+            "obs_prod_mask marks produced-cell rows, but analysis_df is missing "
+            f"columns: {', '.join(missing)}"
+        )
+
+    return (
+        np.asarray(df.loc[has_prod, PROD_CELL_COLUMNS], dtype=int),
+        np.asarray(df.loc[has_prod, "age"], dtype=float),
+    )
+
+
 def sample_posterior_predictive(context: JointContext, definition=None):
     """Posterior predictive for the observed cell-count likelihoods."""
     with context.model:
@@ -1096,11 +1121,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         )
 
     has_prod = np.array(trace.constant_data["obs_prod_mask"].values, dtype=bool)
-    prod_counts = np.asarray(
-        df.loc[has_prod, ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]],
-        dtype=int,
-    )
-    prod_ages = np.asarray(df.loc[has_prod, "age"], dtype=float)
+    prod_counts, prod_ages = _extract_produced_cell_observations(df, has_prod)
     if "nz_prod_cells_obs" in trace.posterior_predictive:
         prod_pred = np.array(
             trace.posterior_predictive["nz_prod_cells_obs"]
