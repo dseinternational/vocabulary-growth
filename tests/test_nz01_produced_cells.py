@@ -61,7 +61,7 @@ def test_nz01_loader_maps_cells_and_drops_zero_produced(tmp_path, monkeypatch):
     )
 
 
-def _prepare(tmp_path, monkeypatch, definition):
+def _prepare_context(tmp_path, monkeypatch, definition):
     """Run ``prepare_joint_data`` for ``definition`` with nz_01 + uk_02 fixtures."""
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_nz01_csv(tmp_path / "vocab_data_nz_01.csv")
@@ -106,6 +106,12 @@ def _prepare(tmp_path, monkeypatch, definition):
         sampling=sampling.get_sampling_configuration("test"),
     )
     cjm.prepare_joint_data(context, definition)
+    return context
+
+
+def _prepare(tmp_path, monkeypatch, definition):
+    """Return the prepared analysis frame for ``definition``."""
+    context = _prepare_context(tmp_path, monkeypatch, definition)
     return context.analysis_df
 
 
@@ -135,3 +141,15 @@ def test_prepare_joint_data_excludes_nz01_when_flag_false(tmp_path, monkeypatch)
         assert analysis_df["prod_signed_spoken"].notna().sum() == 0
     # ...and the nz_01 marginal is still excluded (not silently re-added as marginal).
     assert "nz_marginal_only" not in set(analysis_df["subject_id"])
+
+
+def test_build_model_registers_nz01_produced_cell_likelihood(tmp_path, monkeypatch):
+    context = _prepare_context(tmp_path, monkeypatch, VG15)
+    monkeypatch.setattr(cjm, "_plot_and_print_dist", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cjm, "render_model_graph", lambda *args, **kwargs: None)
+
+    cjm.configure_joint_priors(context, VG15)
+    cjm.build_model(context, VG15)
+
+    assert "obs_prod_mask" in context.model.named_vars
+    assert "nz_prod_cells_obs" in context.model.named_vars
