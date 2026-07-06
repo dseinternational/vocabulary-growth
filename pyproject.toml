@@ -69,5 +69,10 @@ ignore = [
     "E741",  # ambiguous variable name — mathematical names (l, X, y) are meaningful
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*.py" = [
+    "B018",  # notebook display expressions are intentional in Jupytext percent files
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["vocab_growth"]

@@ -5,6 +5,7 @@ import os
 import types
 
 import numpy as np
+import pandas as pd
 import pytest
 from matplotlib.figure import Figure
 
@@ -12,6 +13,8 @@ from vocab_growth.plotting import (
     _maybe_savgol,
     _resolve_savgol_window_length,
     plot_comprehension_production_gap,
+    plot_posterior_kappa,
+    plot_posterior_predictive_pmf,
     plot_production_rate,
 )
 
@@ -43,6 +46,39 @@ def test_plot_comprehension_production_gap_returns_figure_and_writes_files(tmp_p
     assert isinstance(fig, Figure)
     for ext in ("png", "svg", "csv"):
         assert os.path.exists(os.path.join(str(tmp_path), f"gap.{ext}"))
+
+
+def test_plot_posterior_predictive_pmf_does_not_fold_tails_into_endpoints(tmp_path):
+    draws = np.array([0] * 5 + [1] * 495 + [2] * 495 + [10] * 5)
+    plot_posterior_predictive_pmf(
+        X_query=np.array([12.0]),
+        X_plot=np.array([12.0]),
+        y_plot=draws.reshape(1, -1),
+        n_trials=10,
+        output_dir=str(tmp_path),
+        filename="pmf",
+    )
+
+    pmf = pd.read_csv(tmp_path / "pmf.csv")
+    assert pmf["word_count"].tolist() == [1, 2]
+    np.testing.assert_allclose(pmf["pmf_12m"].to_numpy(), [0.495, 0.495])
+
+
+def test_plot_posterior_kappa_reports_hdi_not_equal_tailed_interval():
+    kappa = np.array([[1.0, 2.0, 3.0, 4.0, 100.0]])
+    _fig, df_plot, df_query = plot_posterior_kappa(
+        X_plot=np.array([12.0]),
+        kappa_plot=kappa,
+        X_query=np.array([12.0]),
+        kappa_query=kappa,
+        n_trials=800,
+        hdi_prob=0.60,
+    )
+
+    # The 60% HDI excludes the far outlier; the equal-tailed 60% upper bound would
+    # be much larger for this deliberately skewed sample.
+    assert df_plot.loc[0, "kappa_hi"] < 10.0
+    assert df_query.loc[0, "kappa_hi"] < 10.0
 
 
 @pytest.mark.parametrize("n", [5, 7, 15, 21, 100])

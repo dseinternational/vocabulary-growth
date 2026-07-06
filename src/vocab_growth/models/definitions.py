@@ -458,6 +458,15 @@ class JointModelDefinition:
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk06: bool = True
 
+    # -- nz_01 (Foster-Cohen) produced cross-tab inclusion --
+    include_nz01_cells: bool = True
+    """If True (default), nz_01's produced modality cross-tab (word-only / sign-only
+    / both) enters via a within-produced Dirichlet-Multinomial that informs psi/q/r
+    (see common_joint_modality). If False, nz_01 is excluded from VG15 entirely
+    (its production-only, 675-item marginals are not comparable to the 800-item
+    marginal likelihoods); the flag is kept for reversibility and for isolating
+    nz_01's pull on psi."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.JOINT
