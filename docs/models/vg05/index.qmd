@@ -225,7 +225,13 @@ posterior_summary_u
 
 ### Count distributions by age
 
-![posterior_predictive_count_distributions_u](posterior_predictive_count_distributions_u.png){#fig-count-dist-u .lightbox fig-align="left"}
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.plotting import ppc_count_distribution_gallery
+
+ppc_count_distribution_gallery("posterior_predictive_count_distributions_u")
+```
 
 ### Median trend
 
@@ -262,7 +268,13 @@ posterior_summary_s
 
 ### Count distributions by age
 
-![posterior_predictive_count_distributions_s](posterior_predictive_count_distributions_s.png){#fig-count-dist-s .lightbox fig-align="left"}
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.plotting import ppc_count_distribution_gallery
+
+ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
+```
 
 ### Median trend
 
