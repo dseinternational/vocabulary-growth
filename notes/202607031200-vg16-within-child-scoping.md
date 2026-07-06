@@ -3,10 +3,12 @@
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
-Status: scoping / pre-build, 2026-07-03. Addresses issue #113 (Q2). Builds on the
-VG09/VG10 bivariate + subject-random-intercept foundation. The **cross-lagged
-coupling** spec family was chosen by the modelling lead; this note pins the
-precise formulation for sign-off before implementation.
+Status: written 2026-07-03 as a pre-build scoping / sign-off note. **VG16 has
+since been implemented and fitted** (see `docs/models/vg16/index.qmd`),
+headlining the bias-robust population-relative baseline. Addresses issue #113
+(Q2). Builds on the VG09/VG10 bivariate + subject-random-intercept foundation.
+The **cross-lagged coupling** spec family was chosen by the modelling lead; this
+note pinned the precise formulation before implementation.
 
 ## 1. The question (Q2)
 

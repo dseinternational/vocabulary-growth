@@ -180,6 +180,63 @@ def prepare_bivariate_re_data(
 # Model building (with study random intercepts)
 # ============================================================
 
+_VALID_LAG_BASELINES = ("population", "within")
+
+
+def _validate_cross_lag(lag_baseline: str, use_subject_re_u: bool) -> None:
+    """Validate the VG16 within-child cross-lag configuration (issue #113).
+
+    ``lag_baseline`` must be one of ``_VALID_LAG_BASELINES``. Both baselines are
+    defined relative to the child's understood subject intercept — the
+    within-child baseline subtracts it, the population-relative baseline adds it
+    back — so ``use_subject_re_u`` must be True; otherwise the two baselines
+    silently coincide (and the population branch would index a scalar). Raising
+    here turns a silent misconfiguration into an explicit error.
+    """
+    if lag_baseline not in _VALID_LAG_BASELINES:
+        raise ValueError(
+            f"lag_baseline must be one of {_VALID_LAG_BASELINES}, got {lag_baseline!r}."
+        )
+    if not use_subject_re_u:
+        raise ValueError(
+            "Cross-lag (use_cross_lag=True) requires use_subject_re_u=True: both the "
+            "population-relative and within-child baselines are defined relative to "
+            "the child's understood subject intercept."
+        )
+
+
+def _compute_prev_wave_lag(analysis_df, n_trials: int):
+    """Per-observation prior-wave understood lag source for the VG16 cross-lag.
+
+    For each observation, locate the child's immediately-earlier observed wave
+    that carries an understood measure (the lag source). Returns
+    ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation arrays:
+    ``has_lag_f`` is 1.0 where such a prior wave exists and 0.0 otherwise (a
+    child's first wave, or when every earlier wave lacks comprehension);
+    ``prev_idx`` points at that prior wave (0 where absent, gated by
+    ``has_lag_f``); ``y_u_prev_logit`` is the logit of the prior-wave understood
+    proportion (clipped away from 0/1), and 0.0 where there is no lag source.
+    """
+    n = len(analysis_df)
+    prev_idx = np.zeros(n, dtype=int)
+    has_lag_f = np.zeros(n, dtype=float)
+    subj = np.asarray(analysis_df["subject_code"], dtype=int)
+    age = np.asarray(analysis_df["age"], dtype=float)
+    und = analysis_df["understood"].to_numpy(dtype=float)
+    prev_subj, last = -1, -1
+    for pos in np.lexsort((age, subj)):  # walk each child in age order
+        if subj[pos] != prev_subj:
+            prev_subj, last = subj[pos], -1
+        if last >= 0:
+            prev_idx[pos] = last
+            has_lag_f[pos] = 1.0
+        if not np.isnan(und[pos]):
+            last = pos
+    und_prev = np.where(has_lag_f > 0, und[prev_idx], n_trials * 0.5)
+    p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
+    y_u_prev_logit = np.where(has_lag_f > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0)
+    return prev_idx, has_lag_f, y_u_prev_logit
+
 
 def build_model_re(
     context: BivariateREContext,
@@ -233,34 +290,18 @@ def build_model_re(
         subject_codes = None
         n_subjects = 0
 
-    # Within-child cross-lag (VG16, issue #113): for each observation, locate the
-    # child's immediately-earlier observed wave that carries an understood measure
-    # (the lag source). x_lag = 0 where there is no such prior wave (first wave, or
-    # the prior wave lacks comprehension). prev_idx/has_lag_f/y_u_prev_logit are
-    # per-observation arrays consumed in build_model_re; y_u_prev_logit is the
-    # logit of the prior-wave understood proportion (clipped for 0/N).
+    # Within-child cross-lag (VG16, issue #113): for each observation, the child's
+    # immediately-earlier observed understood wave is the lag source; x_lag = 0
+    # where there is no such prior wave (first wave, or every earlier wave lacks
+    # comprehension). prev_idx/has_lag_f/y_u_prev_logit are consumed below when
+    # injecting beta_lag * x_lag into the q logit.
     use_cross_lag = bool(definition.use_cross_lag)
     prev_idx = np.zeros(n, dtype=int)
     has_lag_f = np.zeros(n, dtype=float)
     y_u_prev_logit = np.zeros(n, dtype=float)
     if use_cross_lag:
-        subj = np.asarray(analysis_df["subject_code"], dtype=int)
-        age = np.asarray(analysis_df["age"], dtype=float)
-        und = analysis_df["understood"].to_numpy(dtype=float)
-        prev_subj, last = -1, -1
-        for pos in np.lexsort((age, subj)):  # walk each child in age order
-            if subj[pos] != prev_subj:
-                prev_subj, last = subj[pos], -1
-            if last >= 0:
-                prev_idx[pos] = last
-                has_lag_f[pos] = 1.0
-            if not np.isnan(und[pos]):
-                last = pos
-        und_prev = np.where(has_lag_f > 0, und[prev_idx], n_trials * 0.5)
-        p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
-        y_u_prev_logit = np.where(
-            has_lag_f > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0
-        )
+        _validate_cross_lag(definition.lag_baseline, use_subject_re_u)
+        prev_idx, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(analysis_df, n_trials)
         print(
             f"Cross-lag ({definition.lag_baseline}): "
             f"{int(has_lag_f.sum())} of {n} observations have a prior-wave understood source."

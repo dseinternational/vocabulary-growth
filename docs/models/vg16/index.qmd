@@ -41,7 +41,7 @@ $$h(a, s, i) = \text{intercept}_q + \text{slope}_q\,a_z + g_q(a) + \delta_q[s] +
 
 where, for the child's immediately preceding observed wave (age $a_{\text{prev}}$),
 
-$$x^{\text{lag}}_i = \operatorname{logit}\!\big(\text{understood}_{\text{prev}}/N\big) - \big(f_U(a_{\text{prev}}) + \delta_U[s] + \delta^{\text{subj}}_U[i]\big)$$
+$$x^{\text{lag}}_i = \operatorname{logit}\!\big(\text{understood}_{\text{prev}}/N\big) - \big(f_U(a_{\text{prev}}) + \delta_U[s]\big)$$
 
 is the child's prior-wave understood relative to a baseline (0 for first waves / no prior comprehension). Two baselines are fit. The **population-relative** headline subtracts only the population + study comprehension level (as written above). The **within-child** (RI-CLPM) contrast additionally subtracts the child's own understood intercept $\delta^{\text{subj}}_U[i]$. In both, $\beta > 0$ means earlier receptive standing predicts later expressive conversion, and the subject $q$-intercept $\delta^{\text{subj}}_q[i]$ controls for the child's stable production level.
 
@@ -49,8 +49,8 @@ is the child's prior-wave understood relative to a baseline (0 for first waves /
 
 - **Population:** children with Down syndrome.
 - **Foundation:** VG09 (study + subject random intercepts on understood and on $q$).
-- **New term:** within-child cross-lag $\beta$ (prior receptive residual → current $q$).
-- **Baseline:** within-child (subtract the child's own understood intercept); a population-relative companion is fitted as a robustness check.
+- **New term:** cross-lag $\beta$ (prior receptive → current $q$).
+- **Baseline:** population-relative headline (subtract the population + study comprehension level); a within-child (RI-CLPM) contrast is also fitted (cautionary — see results).
 - **Reported curves:** population-level trajectories (all random effects set to zero).
 
 :::
