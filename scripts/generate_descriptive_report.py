@@ -4,14 +4,17 @@
 """Generate the descriptive-data report artefacts (issue #111).
 
 Writes a per-study summary table and study-coloured scatter plots for the pooled
-Down syndrome dataset into ``docs/report/figures/descriptives/``, which the
-report's "Data and measures" chapter (``methods-data.qmd``) reads. Run after
-``prepare_data.py`` and before rendering the report:
+Down syndrome dataset into ``docs/descriptive/figures/`` — the standalone
+descriptive report (``docs/descriptive/index.qmd``, a sibling of the model and
+comparison reports). The same artefacts are mirrored into the main report's
+figure cache (``docs/report/figures/descriptives/``) so its "Data and measures"
+chapter keeps rendering. Run after ``prepare_data.py``:
 
     python scripts/generate_descriptive_report.py
 """
 
 import os
+import shutil
 
 import dse_research_utils.environment.setup as setup
 import matplotlib.pyplot as plt
@@ -31,8 +34,12 @@ SCATTERS = [
 
 def main():
     setup.init_script()
-    out_dir = os.path.join(local_env.REPORT_FIGS_DIR, "descriptives")
+    # Primary home: the standalone descriptive report (docs/descriptive/).
+    out_dir = os.path.join(local_env.DOCS_DIR, "descriptive", "figures")
+    # Mirror: the main report's figure cache, so methods-data.qmd keeps rendering.
+    report_dir = os.path.join(local_env.REPORT_FIGS_DIR, "descriptives")
     os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(report_dir, exist_ok=True)
 
     # Pooled Down syndrome data (one row per observation), with per-study labels.
     df = load_combined_data()
@@ -53,6 +60,12 @@ def main():
         )
         plt.close(fig)
         print(f"Wrote {filename}")
+
+    # Mirror every artefact into the report figure cache.
+    artefacts = sorted(os.listdir(out_dir))
+    for name in artefacts:
+        shutil.copy2(os.path.join(out_dir, name), os.path.join(report_dir, name))
+    print(f"Mirrored {len(artefacts)} artefacts into {report_dir}")
 
 
 if __name__ == "__main__":
