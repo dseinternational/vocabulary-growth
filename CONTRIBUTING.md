@@ -43,3 +43,7 @@ Please get in touch via research@dseinternational.org before sending data, so we
 ## Contributing code, models and reports
 
 Code contributions are welcome by pull request and are accepted under the project's AGPL-3.0 licence (see [LICENSE](LICENSE)); documentation and reports are under CC BY 4.0 (see [docs/LICENSE](docs/LICENSE)).
+
+### Commit messages
+
+Please follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/): a `<type>(optional scope): <summary>` subject line in the imperative mood, with any detail and rationale in the body. Common types are `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, and `chore`, and you can reference the issue a change closes (`Closes #123`) in the body or pull-request description. This keeps the project history readable and consistent.

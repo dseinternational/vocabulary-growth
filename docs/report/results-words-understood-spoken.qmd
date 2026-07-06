@@ -1,6 +1,59 @@
 ---
 title: "Words understood and spoken"
-abstract: "[TODO]"
+abstract: "In children with Down syndrome, words understood consistently exceed words spoken throughout development — comprehension leads production. Matching on the number of words understood, typically-developing children say a larger fraction of what they understand than children with Down syndrome, especially at lower vocabulary levels: the comprehension–production gap is disproportionately larger in Down syndrome, narrowing as vocabulary grows."
 ---
 
-[TODO]
+{{< include _report_data.qmd >}}
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+Every joint model in this report writes spoken vocabulary as a fraction of understood vocabulary, $p_S(a) = p_U(a)\,q(a)$, where $q(a) = P(\text{speak} \mid \text{understand})$ is the **production ratio** — the share of understood words a child also says. The comprehension–production gap is exactly $q(a) < 1$: the smaller $q$, the more a child understands relative to what they say.
+
+## Comprehension leads production in Down syndrome
+
+Across the Down syndrome age range the production ratio stays well below 1 and rises with age (@fig-ds-q): children understand many more words than they say, and the gap narrows only gradually as they get older. The posterior median and 90% HDI of $q(a)$ by age:
+
+```{python}
+#| label: tbl-ds-q
+#| echo: false
+_qds = load_summary("VG10", "posterior_summary_q")
+_qds
+```
+
+![Production ratio $q(a) = P(\text{speak}\mid\text{understand})$ for children with Down syndrome (VG10). $q(a) < 1$ throughout — comprehension leads production — rising with age.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/production_rate.png){#fig-ds-q}
+
+This reproduces, in a large pooled sample, the long-standing observation that expressive vocabulary lags behind receptive vocabulary in Down syndrome.
+
+## Down syndrome vs typically developing: the gap is larger in Down syndrome
+
+Down syndrome and typically-developing children grow vocabulary on very different timescales, so contrasting the gap **by age** would conflate that timescale difference. Instead we match on **comprehension level**: for a child who understands $N$ words, what fraction $q(U = N)$ do they say, in each population? Because words understood and words spoken are coupled per posterior draw within each joint model (Down syndrome from VG10; typically-developing from the young-window model VG13), this is a within-draw contrast at matched comprehension.
+
+```{python}
+#| label: tbl-ds-td-q
+#| echo: false
+import pandas as pd
+
+_q = comp_load("ds_td_comprehension_q_at_U")
+_q = _q[_q["dq_coverage"] >= 0.80].copy()
+_tab = _q[
+    ["words", "q_TD_median", "q_DS_median", "dq_median", "dq_hdi90_lo", "dq_hdi90_hi", "dq_p_gt0"]
+].round(3)
+_tab.columns = [
+    "Words understood", "TD q", "DS q", "Δq (TD−DS)", "HDI 90% lo", "HDI 90% hi", "P(TD>DS)"
+]
+_tab.reset_index(drop=True)
+```
+
+![Spoken fraction given words understood, $q(U = N)$: typically-developing (TD) vs Down syndrome (DS).](figures/comparisons/ds_td_comprehension_q_at_U.png){#fig-q-at-u}
+
+![Difference $\Delta q(U = N) = q_{\text{TD}} - q_{\text{DS}}$ at matched comprehension, with 90% HDI.](figures/comparisons/ds_td_comprehension_dq.png){#fig-dq}
+
+At matched comprehension, typically-developing children say a **larger fraction** of the words they understand than children with Down syndrome. The difference $\Delta q = q_{\text{TD}} - q_{\text{DS}}$ is credibly positive from roughly 50 to 150 understood words (90% HDI excluding 0, $P(\text{TD}>\text{DS}) \ge 0.96$), peaks around +0.13, and narrows to uncertain by about 200 words (@fig-dq). So the comprehension–production gap is **disproportionately larger in Down syndrome at lower vocabulary levels, and converges towards the typically-developing pattern as vocabulary grows**. In this large pooled sample this differs from the smaller-study suggestion of a typically-developing-like pattern in Down syndrome.
+
+## Limitations
+
+- **Preliminary fits.** The Down syndrome (VG10) and typically-developing (VG13) models here are development-tier fits; the direction of the contrast is clear, but the magnitudes await reporting-quality re-fits.
+- **Comprehension coverage.** Typically-developing comprehension+production data span only ~8–18 months (words understood up to ~200); above ~200 understood words the typically-developing estimate is coverage-limited, so the contrast is shown only where both populations reach that comprehension level (coverage ≥ 80%).
+- **Across-model contrast.** Down syndrome (VG10) and typically-developing (VG13) are separate fits on the common 800-item scale. A single joint Down syndrome–typically-developing model would give a formal within-model contrast, but only over this same comprehension range; it is noted as a natural refinement rather than built here.
