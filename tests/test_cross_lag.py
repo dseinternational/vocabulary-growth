@@ -59,6 +59,27 @@ def test_compute_prev_wave_lag_logit_of_prior_understood():
     np.testing.assert_array_equal(y_u_prev_logit[[0, 3, 4, 5, 6]], 0.0)
 
 
+def test_compute_prev_wave_lag_ignores_same_age_duplicates():
+    df = pd.DataFrame(
+        {
+            "subject_code": [0, 0, 0],
+            "age": [12, 12, 24],
+            "understood": [100, 150, 300],
+        }
+    )
+
+    prev_idx, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(df, N_TRIALS)
+
+    np.testing.assert_array_equal(has_lag_f, [0, 0, 1])
+    assert prev_idx[2] == 1
+    assert y_u_prev_logit[1] == 0.0
+    np.testing.assert_allclose(
+        y_u_prev_logit[2],
+        np.log(150 / 800) - np.log(1 - 150 / 800),
+        rtol=1e-6,
+    )
+
+
 @pytest.mark.parametrize("baseline", ["population", "within"])
 def test_validate_cross_lag_accepts_valid_config(baseline):
     _validate_cross_lag(baseline, use_subject_re_u=True)  # no raise

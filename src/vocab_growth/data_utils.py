@@ -151,13 +151,13 @@ def load_data(
     #
     # Wordbank's CDI: Words & Sentences (WS) rows contain valid production
     # counts, but their comprehension column is a production proxy. Keep WG
-    # and Oxford CDI as bivariate observations, and include WS only when the
-    # requested model can use spoken observations.
+    # and Oxford CDI as bivariate observations, and include WS only for
+    # spoken-only models.
     needs_understood = "understood" in columns
     needs_spoken = "spoken" in columns
 
     td_forms = list(TD_BIVARIATE_FORMS)
-    if needs_spoken or not needs_understood:
+    if needs_spoken and not needs_understood:
         td_forms.extend(TD_SPOKEN_ONLY_FORMS)
 
     age_upper = max_age_months if max_age_months is not None else 30

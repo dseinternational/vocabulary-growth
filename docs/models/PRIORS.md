@@ -52,23 +52,24 @@ which models this review must cover.
 
 ## Model coverage
 
-| Model | Population | Outcomes                     | Prior features to review                                                                                    |
-| ----- | ---------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| VG01  | DS         | spoken                       | Single-outcome spoken anchors, GP, kappa.                                                                   |
-| VG02  | DS         | understood                   | Single-outcome understood anchors, GP, kappa.                                                               |
-| VG03  | TD         | spoken                       | TD spoken anchors, GP, kappa, subsampling.                                                                  |
-| VG04  | TD         | understood                   | TD understood anchors, GP, kappa, subsampling.                                                              |
-| VG05  | DS         | understood + spoken          | Understood anchors, production-ratio `q` anchors, GP, kappa.                                                |
-| VG06  | TD         | understood + spoken          | TD understood anchors, `q` anchors, GP, kappa, subsampling.                                                 |
-| VG07  | DS         | understood + spoken          | VG05 plus study random-effect scales.                                                                       |
-| VG08  | DS         | understood + spoken          | VG07 plus subject random effects on understood.                                                             |
-| VG09  | DS         | understood + spoken          | VG08 plus subject random effects on `q`; diagnostic ridge motivates VG10.                                   |
-| VG10  | DS         | understood + spoken          | VG09 plus posterior-informed `q` anchors and GP anchoring.                                                  |
-| VG11  | TD         | spoken                       | VG03 plus study random effects, full TD data, GP anchoring.                                                 |
-| VG12  | TD         | understood                   | VG04 plus study random effects, full TD data, GP anchoring.                                                 |
-| VG13  | TD         | understood + spoken          | Young TD bivariate model, study random effects, GP anchoring.                                               |
-| VG14  | DS         | understood + spoken + signed | Adds signed ratio `r`, sign GP, sign kappa, signing-data decisions.                                         |
-| VG15  | DS         | understood + spoken + signed | VG14 plus `psi`, Dirichlet-Multinomial concentration, study and subject random effects, VG10 stabilisation. |
+| Model            | Population | Outcomes                     | Prior features to review                                                                                           |
+| ---------------- | ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| VG01             | DS         | spoken                       | Single-outcome spoken anchors, GP, kappa.                                                                          |
+| VG02             | DS         | understood                   | Single-outcome understood anchors, GP, kappa.                                                                      |
+| VG03             | TD         | spoken                       | TD spoken anchors, GP, kappa, subsampling.                                                                         |
+| VG04             | TD         | understood                   | TD understood anchors, GP, kappa, subsampling.                                                                     |
+| VG05             | DS         | understood + spoken          | Understood anchors, production-ratio `q` anchors, GP, kappa.                                                       |
+| VG06 _(retired)_ | TD         | understood + spoken          | TD understood anchors, `q` anchors, GP, kappa, subsampling; retained here only as historical prior context.        |
+| VG07             | DS         | understood + spoken          | VG05 plus study random-effect scales.                                                                              |
+| VG08             | DS         | understood + spoken          | VG07 plus subject random effects on understood.                                                                    |
+| VG09             | DS         | understood + spoken          | VG08 plus subject random effects on `q`; diagnostic ridge motivates VG10.                                          |
+| VG10             | DS         | understood + spoken          | VG09 plus posterior-informed `q` anchors and GP anchoring.                                                         |
+| VG11             | TD         | spoken                       | VG03 plus study random effects, full TD data, GP anchoring.                                                        |
+| VG12             | TD         | understood                   | VG04 plus study random effects, full TD data, GP anchoring.                                                        |
+| VG13             | TD         | understood + spoken          | Young TD bivariate model, study random effects, GP anchoring.                                                      |
+| VG14             | DS         | understood + spoken + signed | Adds signed ratio `r`, sign GP, sign kappa, signing-data decisions.                                                |
+| VG15             | DS         | understood + spoken + signed | VG14 plus `psi`, Dirichlet-Multinomial concentration, study and subject random effects, VG10 stabilisation.        |
+| VG16             | DS         | understood + spoken          | VG09 plus prior-understood cross-lag coefficient `beta_lag`; uses the same main prior families plus the lag prior. |
 
 ## Prior families
 

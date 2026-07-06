@@ -3,11 +3,15 @@ title: "Statistical models"
 abstract: "*TODO*"
 ---
 
-Our goal is to estimate the **total age-associated change** in a vocabulary outcome — not to disentangle the specific causal pathways through which age acts. Many factors influence a child's opportunities to learn and produce words (word meanings already learned, exposure, explicit teaching and therapy, hearing, and so on). Age does not act on the outcome directly, but it influences these mediating factors and therefore acts on the outcome indirectly.
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Codex/GPT-5).
+:::
 
-In the simple causal model below, $A$ is age, $O$ collects the unmeasured mediating factors, and $Y$ is the vocabulary outcome. Because the effect of $A$ on $Y$ is entirely mediated through $O$, and $A$ is exogenous (it has no parents), there are no open backdoor paths. We can therefore identify the total effect of age on the outcome by conditioning on age alone.
+Our goal is to estimate **age-associated change** in a vocabulary outcome, not to claim that age alone causally determines vocabulary growth. Many factors influence a child's opportunities to learn and produce words, including exposure, explicit teaching and therapy, hearing, and words already learned. Age is a useful ordering variable because these opportunities accumulate over time, but the pooled observational data also vary by study, instrument, recruitment, cohort, and sample selection.
 
-![**The shared identification argument.** $A$: age; $O$: other unmeasured factors; $Y$: the vocabulary outcome. Conditioning on age identifies the total age-associated change.](diagrams/fig-core-dag){#fig-core-dag fig-align="left" width="2.5in"}
+In the simple organising diagram below, $A$ is age, $O$ collects the unmeasured mediating factors, and $Y$ is the vocabulary outcome. The models therefore estimate descriptive trajectories conditional on age and the model structure. Study and subject effects absorb some systematic differences, but they do not make age randomised or remove every possible cohort, instrument, or selection difference.
+
+![**The shared age-association argument.** $A$: age; $O$: other unmeasured factors; $Y$: the vocabulary outcome. Conditioning on age summarises the modelled age-associated change.](diagrams/fig-core-dag){#fig-core-dag fig-align="left" width="2.5in"}
 
 ## The outcome: a Beta-Binomial count {#sec-betabinomial}
 
