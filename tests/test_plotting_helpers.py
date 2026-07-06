@@ -14,8 +14,10 @@ from vocab_growth.plotting import (
     _resolve_savgol_window_length,
     plot_comprehension_production_gap,
     plot_posterior_kappa,
+    plot_posterior_predictive_count_distributions_by_query_age,
     plot_posterior_predictive_pmf,
     plot_production_rate,
+    ppc_count_distribution_gallery,
 )
 
 
@@ -120,3 +122,50 @@ def test_maybe_savgol_passthrough_when_disabled():
     np.testing.assert_array_equal(out, y)
     # The returned array is always float (the smoothing path returns floats too).
     assert out.dtype == float
+
+
+def test_count_distributions_writes_combined_and_individual_files(tmp_path):
+    # issue #123: alongside the combined grid, one figure is written per query age.
+    rng = np.random.default_rng(0)
+    X_query = np.array([12.0, 24.0])
+    y_query = rng.integers(0, 800, size=(2, 200))
+    fig = plot_posterior_predictive_count_distributions_by_query_age(
+        X_query=X_query,
+        y_query=y_query,
+        n_trials=800,
+        output_dir=str(tmp_path),
+        filename="ppc",
+    )
+    assert isinstance(fig, Figure)
+    # combined figure + per-age summary table
+    for ext in ("png", "svg", "csv"):
+        assert os.path.exists(os.path.join(str(tmp_path), f"ppc.{ext}"))
+    # one figure per query age
+    for age in (12, 24):
+        for ext in ("png", "svg"):
+            assert os.path.exists(os.path.join(str(tmp_path), f"ppc_{age}m.{ext}"))
+
+
+def test_ppc_gallery_emits_layout_of_individual_files_sorted_by_age(tmp_path, capsys):
+    for age in (24, 12, 36):  # created out of order; helper must sort
+        (tmp_path / f"ppc_{age}m.png").write_bytes(b"")
+    ppc_count_distribution_gallery("ppc", directory=str(tmp_path))
+    out = capsys.readouterr().out
+    assert "layout-ncol=2" in out
+    assert out.index("ppc_12m.png") < out.index("ppc_24m.png") < out.index("ppc_36m.png")
+    assert out.count(".lightbox") == 3
+    assert "12 months" in out
+
+
+def test_ppc_gallery_falls_back_to_combined_figure(tmp_path, capsys):
+    (tmp_path / "ppc.png").write_bytes(b"")  # only the combined grid exists (pre re-fit)
+    ppc_count_distribution_gallery("ppc", directory=str(tmp_path))
+    out = capsys.readouterr().out
+    assert "layout-ncol" not in out
+    assert "ppc.png" in out
+    assert ".lightbox" in out
+
+
+def test_ppc_gallery_prints_nothing_when_no_files(tmp_path, capsys):
+    ppc_count_distribution_gallery("ppc", directory=str(tmp_path))
+    assert capsys.readouterr().out.strip() == ""

@@ -159,6 +159,78 @@ def plot_prior_predictions(
     return plt.gcf()
 
 
+def _draw_ppc_count_distribution(
+    ax,
+    age: float,
+    draws: np.ndarray,
+    n_trials: int,
+    bin_width: int,
+    hdi_prob: float,
+    eti_prob: float | None,
+    q_lo: float,
+    q_hi: float,
+) -> None:
+    """Draw one query age's posterior predictive count distribution on ``ax``.
+
+    Shared by the combined grid figure and the individual per-age figures
+    (issue #123). Does not set the x-axis label — the caller owns that, so the
+    combined grid can label only its bottom row.
+    """
+    bins = np.arange(0, n_trials + bin_width + 1, bin_width)
+    centres = (bins[:-1] + bins[1:]) / 2
+    draws = draws.astype(int)
+
+    counts, _ = np.histogram(draws, bins=bins)
+    pmf_bins = counts / counts.sum()
+
+    med = np.median(draws)
+    hdi = az.hdi(draws, prob=hdi_prob)  # (lo, hi)
+
+    ylim_max = max(pmf_bins.max() * 1.08, 0.25)
+
+    # HDI
+    ax.fill_betweenx(
+        [0, ylim_max * 0.96], hdi[0], hdi[1], color=plot_styles.COLOUR_GREEN, alpha=0.10
+    )
+    ax.text(
+        hdi[1] + 150,
+        ylim_max * 0.9,
+        f"{int(hdi_prob*100)}% HPDI: {hdi[0]:.0f} to {hdi[1]:.0f}",
+        color=plot_styles.COLOUR_GREEN,
+        ha="center",
+    )
+
+    if eti_prob is not None:
+        eti_lo, eti_hi = np.quantile(draws, [q_lo, q_hi])
+        ax.fill_betweenx([0, ylim_max * 0.96], eti_lo, eti_hi, color=plot_styles.COLOUR_ORANGE, alpha=0.10)
+        ax.text(
+            eti_hi + 150,
+            ylim_max * 0.82,
+            f"{int(eti_prob*100)}% ETI: {eti_lo:.0f} to {eti_hi:.0f}",
+            color=plot_styles.COLOUR_ORANGE,
+            ha="center",
+        )
+
+    # PMF histogram
+    ax.bar(centres, pmf_bins, width=bin_width, color=plot_styles.COLOUR_BLUE, align="center")
+
+    # median
+    ax.axvline(med, lw=2, ls="--", color=plot_styles.COLOUR_RED)
+    ax.text(
+        med + 110,
+        ylim_max * 0.98,
+        f"median: {med:.0f}",
+        color=plot_styles.COLOUR_RED,
+        ha="center",
+    )
+
+    ax.set_title(f"{age:.1f} months")
+    ax.set_ylim(0, ylim_max)
+    ax.set_ylabel(f"Posterior predictive probability mass (bin width {bin_width})")
+    ax.set_xlim(0, n_trials)
+    ax.set_xticks(np.arange(0, n_trials + 1, 100))
+
+
 def plot_posterior_predictive_count_distributions_by_query_age(
     X_query: np.ndarray,
     y_query: np.ndarray,
@@ -173,14 +245,14 @@ def plot_posterior_predictive_count_distributions_by_query_age(
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts, as a histogram.
-    """
-    bins = np.arange(0, n_trials + bin_width + 1, bin_width)
-    centres = (bins[:-1] + bins[1:]) / 2
-    nq = len(X_query)
 
-    plot_rows = int(np.ceil(nq / plot_cols))
-    fig, axes = plt.subplots(plot_rows, plot_cols, figsize=(10, 3.8 * plot_rows), sharex=False)
-    axes = np.atleast_1d(axes).ravel()
+    Returns the combined grid figure (one subplot per query age). When
+    ``output_dir``/``filename`` are given, also writes each age as its own file
+    ``{filename}_{age}m.{png,svg}`` alongside the combined figure, so the
+    distributions can be embedded individually and flexibly in reports
+    (issue #123).
+    """
+    nq = len(X_query)
 
     # ETI quantile levels matching context.reporting.hdi mass (e.g., 0.90 -> [0.05, 0.95])
     if eti_prob is not None:
@@ -189,62 +261,14 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     else:
         q_lo, q_hi = 0, 0
 
+    plot_rows = int(np.ceil(nq / plot_cols))
+    fig, axes = plt.subplots(plot_rows, plot_cols, figsize=(10, 3.8 * plot_rows), sharex=False)
+    axes = np.atleast_1d(axes).ravel()
+
     for j, age in enumerate(X_query):
-        ax = axes[j]
-        draws = y_query[j, :].astype(int)
-        counts, _ = np.histogram(draws, bins=bins)
-        pmf_bins = counts / counts.sum()
-
-        med = np.median(draws)
-        hdi = az.hdi(draws, prob=hdi_prob)  # (lo, hi)
-
-        if eti_prob is not None:
-            eti_lo, eti_hi = np.quantile(draws, [q_lo, q_hi])
-        else:
-            eti_lo, eti_hi = 0, 0
-
-        ylim_max = max(pmf_bins.max() * 1.08, 0.25)
-
-        # HDI
-        ax.fill_betweenx(
-            [0, ylim_max * 0.96], hdi[0], hdi[1], color=plot_styles.COLOUR_GREEN, alpha=0.10
+        _draw_ppc_count_distribution(
+            axes[j], age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi
         )
-        ax.text(
-            hdi[1] + 150,
-            ylim_max * 0.9,
-            f"{int(hdi_prob*100)}% HPDI: {hdi[0]:.0f} to {hdi[1]:.0f}",
-            color=plot_styles.COLOUR_GREEN,
-            ha="center",
-        )
-
-        if eti_prob is not None:
-            ax.fill_betweenx([0, ylim_max * 0.96], eti_lo, eti_hi, color=plot_styles.COLOUR_ORANGE, alpha=0.10)
-            ax.text(
-                eti_hi + 150,
-                ylim_max * 0.82,
-                f"{int(eti_prob*100)}% ETI: {eti_lo:.0f} to {eti_hi:.0f}",
-                color=plot_styles.COLOUR_ORANGE,
-                ha="center",
-            )
-
-        # PMF histogram
-        ax.bar(centres, pmf_bins, width=bin_width, color=plot_styles.COLOUR_BLUE, align="center")
-
-        # median
-        ax.axvline(med, lw=2, ls="--", color=plot_styles.COLOUR_RED)
-        ax.text(
-            med + 110,
-            ylim_max * 0.98,
-            f"median: {med:.0f}",
-            color=plot_styles.COLOUR_RED,
-            ha="center",
-        )
-
-        ax.set_title(f"{age:.1f} months")
-        ax.set_ylim(0, ylim_max)
-        ax.set_ylabel(f"Posterior predictive probability mass (bin width {bin_width})")
-        ax.set_xlim(0, n_trials)
-        ax.set_xticks(np.arange(0, n_trials + 1, 100))
 
     for k in range(nq, len(axes)):
         axes[k].axis("off")
@@ -255,7 +279,18 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     fig.suptitle("Posterior predictive distributions at query ages", y=1.02)
 
     if filename is not None and output_dir is not None:
-        _save_png_svg(plt.gcf(), output_dir, filename)
+        _save_png_svg(fig, output_dir, filename)
+
+        # Individual per-age figures, for flexible reuse in reports (issue #123).
+        for j, age in enumerate(X_query):
+            fig_i, ax_i = plt.subplots(figsize=(10, 3.8))
+            _draw_ppc_count_distribution(
+                ax_i, age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi
+            )
+            ax_i.set_xlabel(f"{x_label} (bins of {bin_width})")
+            _save_png_svg(fig_i, output_dir, f"{filename}_{age:g}m")
+            plt.close(fig_i)
+
         rows = []
         for j, age in enumerate(X_query):
             draws = y_query[j, :].astype(int)
@@ -268,6 +303,42 @@ def plot_posterior_predictive_count_distributions_by_query_age(
         _save_csv(pd.DataFrame(rows), output_dir, filename)
 
     return fig
+
+
+def ppc_count_distribution_gallery(
+    prefix: str, *, ncol: int = 2, directory: str = "."
+) -> None:
+    """Emit a Quarto column layout of the individual per-age posterior predictive
+    count-distribution plots (issue #123).
+
+    Intended for a model report cell with ``#| output: asis``. Globs
+    ``{prefix}_<age>m.png`` in ``directory``, and prints one lightboxed image per
+    age, sorted by age. Falls back to the combined grid figure ``{prefix}.png``
+    when no per-age files are present (e.g. before a model is re-fit with the
+    individual plots), so the report section is never empty. Prints nothing if
+    neither is present.
+    """
+    import glob
+    import re
+
+    def _age(path: str) -> float:
+        m = re.search(r"_(\d+(?:\.\d+)?)m\.png$", os.path.basename(path))
+        return float(m.group(1)) if m else float("inf")
+
+    candidates = glob.glob(os.path.join(directory, f"{prefix}_*m.png"))
+    files = [path for path in candidates if _age(path) != float("inf")]
+    files.sort(key=_age)
+    if not files:
+        combined = os.path.join(directory, f"{prefix}.png")
+        if os.path.exists(combined):
+            print(f'![]({os.path.basename(combined)}){{.lightbox fig-align="left"}}')
+        return
+
+    print(f"::: {{layout-ncol={ncol}}}")
+    for path in files:
+        print(f"![{_age(path):g} months]({os.path.basename(path)}){{.lightbox}}")
+        print()
+    print(":::")
 
 def plot_posterior_predictive_pmf(
     X_query: np.ndarray,
