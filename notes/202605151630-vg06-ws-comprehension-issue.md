@@ -59,6 +59,8 @@ All downstream DS-vs-TD comparison scripts have been rerun (latency, q-overlap, 
 | **VG06**  | **TD bivariate**  | **yes**                     | **refit completed 2026-05-15**                                             |
 | VG07–VG09 | DS bivariate      | n/a (DS)                    | unaffected                                                                 |
 
+**Update (2026-07-06):** the "unaffected" verdicts for the DS models above were wrong. The us_01/Edgin block of the `vocab_combined` view had the same defect — WS `comprehension` passed through as `understood` unguarded — so VG02 and all DS joint models did train on WS proxy rows. See `notes/202607061200-us01-edgin-ws-comprehension-issue.md` for the DS-side fix and refit list.
+
 ## Reproducing the discovery
 
 ```python

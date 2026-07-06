@@ -13,11 +13,22 @@ from vocab_growth.models.definitions import Population
 
 VOCABULARY_DATA_PATH = os.path.join(local_env.DATA_DIR, "vocabulary.duckdb")
 
-TD_BIVARIATE_FORMS = ("Oxford CDI", "WG")
-"""Wordbank TD forms with independent comprehension and production measures."""
+WORDBANK_BIVARIATE_FORMS = ("Oxford CDI", "WG")
+"""Wordbank forms whose comprehension is an independent measurement.
 
-TD_SPOKEN_ONLY_FORMS = ("WS",)
-"""Wordbank TD forms that contribute production observations only."""
+On the other English forms (WS, WSShort, TEDS Twos/Threes) the
+``comprehension`` column is a production proxy (``comprehension ==
+production`` by data convention), so only these forms may contribute
+``understood`` observations. This is a property of the instrument, not the
+population: the guard applies both to the TD loader (:func:`load_data`) and
+to the us_01/Edgin DS block of the ``vocab_combined`` view
+(:func:`vocab_combined_view_sql`). See
+``notes/202605151630-vg06-ws-comprehension-issue.md`` (TD) and
+``notes/202607061200-us01-edgin-ws-comprehension-issue.md`` (DS).
+"""
+
+WORDBANK_SPOKEN_ONLY_FORMS = ("WS",)
+"""Wordbank forms that contribute production observations only."""
 
 ENGLISH_LANGUAGES = (
     "English (American)",
@@ -68,6 +79,207 @@ def filter_studies_by_min_obs(
     dropped = sorted(set(sizes.index) - set(keep))
     filtered = df[df[study_col].isin(keep)].reset_index(drop=True)
     return filtered, dropped
+
+
+def _sql_string_list(values: tuple[str, ...]) -> str:
+    """Render a tuple of strings as a quoted SQL ``IN``-list body."""
+    return ", ".join(f"'{v}'" for v in values)
+
+
+def vocab_combined_view_sql() -> str:
+    """Return the ``CREATE VIEW vocab_combined`` statement.
+
+    The view unions the per-study tables built by ``scripts/prepare_data.py``
+    into the single DS analysis relation read by :func:`load_combined_data`.
+    It is defined here rather than inline in the script so the per-study
+    transformations — in particular the us_01/Edgin Wordbank form guard,
+    which must stay in lockstep with the TD guard in :func:`load_data` — are
+    importable and regression-tested (see ``tests/test_data_utils.py``).
+
+    The Wordbank export contains all languages; the DS (Edgin) subset is
+    restricted to English via :data:`ENGLISH_LANGUAGES`.
+    """
+    english_sql_list = _sql_string_list(ENGLISH_LANGUAGES)
+    bivariate_forms_sql_list = _sql_string_list(WORDBANK_BIVARIATE_FORMS)
+    return f"""
+    CREATE VIEW vocab_combined AS
+    SELECT 'uk_01' as study,
+           vuk1.subject_id,
+           vuk1.sex,
+           vuk1.age,
+           vuk1.understood,
+           vuk1.spoken,
+           vuk1.signed,
+           vuk1.produced,
+           vuk1.survey_vocab_max
+    FROM vocab_uk_01 as vuk1
+    UNION ALL
+    SELECT 'uk_02'          as study,
+           vuk2.subject_id,
+           CASE
+               WHEN vuk2.gender = 0 THEN 'M'
+               WHEN vuk2.gender = 1 THEN 'F'
+               ELSE NULL
+           END            as sex,
+           vuk2.age age,
+           vuk2.comprehension as understood,
+           vuk2.spoken,
+           vuk2.signed,
+           vuk2.production as produced,
+           CASE
+               WHEN vuk2.form = 'DSE' THEN 800
+               WHEN vuk2.form = 'Oxford_CDI' THEN 428
+               ELSE NULL
+           END                as survey_vocab_max
+    FROM vocab_uk_02 as vuk2
+    UNION ALL
+    SELECT 'ie_01'                                                   as study,
+           vie.subject_id,
+           NULL                                                        as sex,
+           vie.age_months_start                                        as age,
+           GREATEST(vie.says_total_start, vie.understands_total_start) as understood,
+           vie.says_total_start                                        as spoken,
+           null                                                        as signed,
+           null                                                        as produced,
+           800                                                         as survey_vocab_max
+    FROM vocab_ie_01 as vie
+    UNION ALL
+    SELECT 'ie_01'                                               as study,
+           vie.subject_id,
+           NULL                                                    as sex,
+           vie.age_months_end                                      as age,
+           GREATEST(vie.says_total_end, vie.understands_total_end) as understood,
+           vie.says_total_end                                      as spoken,
+           null                                                    as signed,
+           vie.says_total_end                                      as produced,
+           800                                                     as survey_vocab_max
+    FROM vocab_ie_01 as vie
+    UNION ALL
+    -- us_01 (Edgin): the English Down syndrome subset of the Wordbank export.
+    -- Wordbank's CDI: Words & Sentences (WS) form records comprehension as a
+    -- production proxy (comprehension == production by data convention), so
+    -- understood is taken only from the genuinely bivariate forms — the same
+    -- guard load_data applies on the TD side. WS rows still contribute
+    -- production (spoken/produced). See
+    -- notes/202607061200-us01-edgin-ws-comprehension-issue.md.
+    SELECT 'us_01'                          as study,
+           concat('id_', hex(hash(child_id))) as subject_id,
+           sex,
+           age,
+           CASE
+               WHEN form IN ({bivariate_forms_sql_list}) THEN comprehension
+               ELSE NULL
+           END                                as understood,
+           production                         as spoken,
+           null                               as signed,
+           production                         as produced,
+           CASE form
+               WHEN 'WG' THEN 396
+               WHEN 'WS' THEN 690
+               ELSE NULL
+               END                            as survey_vocab_max
+    FROM wordbank_child
+    WHERE dataset_name = 'Edgin'
+      AND language IN ({english_sql_list})
+      AND lower(health_conditions) = 'down syndrome'
+      -- Production cap inherited from the initial import with no recorded
+      -- rationale (in the 2026-07 export it drops the highest-production
+      -- administrations: 8/87 WG and 24/109 WS English DS rows). Kept as-is
+      -- pending review; see the 2026-07-06 note above.
+      AND production <= 100
+    UNION ALL
+    SELECT 'uk_03'                           as study,
+           vuk2025.subject_id,
+           NULL                                as sex,
+           vuk2025.age,
+           vuk2025.comprehension               as understood,
+           vuk2025.production                  as spoken,
+           null                                as signed,
+           vuk2025.production                  as produced,
+           418                                 as survey_vocab_max
+    FROM vocab_uk_03 as vuk2025
+    UNION ALL
+    SELECT 'it_01'                           as study,
+           vit2013.subject_id,
+           NULL                                as sex,
+           vit2013.age,
+           vit2013.understood,
+           vit2013.spoken,
+           null                                as signed,
+           vit2013.spoken                      as produced,
+           vit2013.form_max_spoken             as survey_vocab_max
+    FROM vocab_it_01 as vit2013
+    UNION ALL
+    SELECT 'uk_04'                           as study,
+        vuk2013.subject_id,
+        NULL                                as sex,
+        vuk2013.age,
+        vuk2013.understood,
+        vuk2013.spoken,
+        vuk2013.signed,
+        vuk2013.spoken                      as produced,
+        418                                 as survey_vocab_max
+    FROM vocab_uk_04 as vuk2013
+        UNION ALL
+    SELECT 'uk_05'                           as study,
+        vuk05.subject_id,
+        NULL                                as sex,
+        vuk05.age,
+        vuk05.understood,
+        vuk05.spoken,
+        vuk05.signed,
+        vuk05.spoken                      as produced,
+        418                                 as survey_vocab_max
+    FROM vocab_uk_05 as vuk05
+        UNION ALL
+    SELECT 'us_02'                           as study,
+        vus02.subject_id,
+        NULL                                as sex,
+        vus02.age,
+        vus02.understood,
+        vus02.spoken,
+        NULL                                as signed,
+        vus02.spoken                     as produced,
+        418                                 as survey_vocab_max
+    FROM vocab_us_02 as vus02
+        UNION ALL
+    SELECT 'uk_06'                           as study,
+        vuk06.subject_id,
+        NULL                                as sex,
+        vuk06.age,
+        vuk06.understood,
+        vuk06.spoken,
+        vuk06.signed                                as signed,
+        vuk06.spoken                      as produced,
+        800                                 as survey_vocab_max
+    FROM vocab_uk_06 as vuk06
+        UNION ALL
+    SELECT 'ie_02'                           as study,
+        vie2.subject_id,
+        NULL                                as sex,
+        vie2.age,
+        vie2.understood,
+        vie2.spoken,
+        vie2.signed                         as signed,
+        vie2.spoken                         as produced,
+        800                                 as survey_vocab_max
+    FROM vocab_ie_02 as vie2
+    WHERE vie2.english_speaking = 'yes'
+    UNION ALL
+    -- nz_01 (Foster-Cohen): production-only, no comprehension. The CSV columns are
+    -- modality-exclusive, so any-modality spoken = spoken + spoken_signed (a + c)
+    -- and signed = signed + spoken_signed (b + c). 675-item NZCDI ceiling.
+    SELECT 'nz_01'                                        as study,
+        vnz01.subject_id,
+        NULL                                              as sex,
+        vnz01.age,
+        NULL                                              as understood,
+        vnz01.spoken + vnz01.spoken_signed                as spoken,
+        vnz01.signed + vnz01.spoken_signed                as signed,
+        vnz01.spoken + vnz01.signed + vnz01.spoken_signed as produced,
+        675                                               as survey_vocab_max
+    FROM vocab_nz_01 as vnz01
+    """
 
 
 def load_combined_data(max_age_months=None):
@@ -156,9 +368,9 @@ def load_data(
     needs_understood = "understood" in columns
     needs_spoken = "spoken" in columns
 
-    td_forms = list(TD_BIVARIATE_FORMS)
+    td_forms = list(WORDBANK_BIVARIATE_FORMS)
     if needs_spoken or not needs_understood:
-        td_forms.extend(TD_SPOKEN_ONLY_FORMS)
+        td_forms.extend(WORDBANK_SPOKEN_ONLY_FORMS)
 
     age_upper = max_age_months if max_age_months is not None else 30
 
@@ -179,7 +391,7 @@ def load_data(
                 concat('id_', hex(hash(child_id))) as subject_id,
                 age,
                 CASE
-                    WHEN form IN ('Oxford CDI', 'WG') THEN comprehension
+                    WHEN form IN ({_sql_string_list(WORDBANK_BIVARIATE_FORMS)}) THEN comprehension
                     ELSE NULL
                 END                                as understood,
                 production                         as spoken,
