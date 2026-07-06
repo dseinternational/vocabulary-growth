@@ -159,3 +159,11 @@ Every Python source file starts with:
 ### Spelling
 
 CSpell is configured in `.cspell.config.yaml` (British English). Custom allowed words are in `config/spellcheck/allow-en.txt`.
+
+### Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/): a `<type>(optional scope): <summary>` subject line in the imperative mood, with any detail and rationale in the body. Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`. Examples: `feat(vg16): add a within-child cross-lag`, `fix(data): tolerate a missing nz_01 source CSV`, `docs(report): add the words-understood-spoken chapter`. Reference the issue a commit or pull request closes (`Closes #123`) in the body or pull-request description.
+
+### Writing Markdown
+
+When generating Markdown — `notes/` entries and documents, and especially pull request and issue descriptions and comments — do not insert superfluous line breaks. Write each paragraph as one continuous line and let it reflow; do not hard-wrap prose at a fixed column, and avoid stray blank lines. Prettier is configured with `proseWrap: "preserve"`, so it will **not** rewrap prose for you, and pull-request / issue text is not run through Prettier at all — hard-wrapped paragraphs therefore render as awkward mid-sentence breaks on GitHub and stay that way.
