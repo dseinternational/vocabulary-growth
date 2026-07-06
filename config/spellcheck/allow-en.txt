@@ -11,6 +11,7 @@ callout
 Caselli
 centered
 centile
+CLPM
 color
 Counterintuitively
 D'Souza

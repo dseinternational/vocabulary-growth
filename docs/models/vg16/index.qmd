@@ -1,0 +1,110 @@
+---
+title: "Model VG16: Within-child cross-lag (earlier receptive → later expressive) - children with Down syndrome"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+::: {.callout-warning title="Warning: Preliminary model output"}
+
+This model output is preliminary and likely to change as the model evolves and further data are received.
+
+If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
+:::
+
+This model extends VG09 (joint understood + spoken with study and subject random intercepts) with a **cross-lag** (issue #113): a child's prior-wave words understood predicts their current production ratio $q$, testing whether *earlier receptive* vocabulary leads *later expressive* vocabulary **within a child**. Because the repeated-measures children are mostly two-wave, the pure within-child (RI-CLPM) baseline is biased by short-T / errors-in-variables mechanics; VG16 therefore **headlines the bias-robust population-relative baseline** and reports the within-child variant as a cautionary contrast. See `notes/202607031200-vg16-within-child-scoping.md`.
+
+```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+```
+
+## Statistical model
+
+The mean structure follows VG09 — words understood and spoken as bounded counts out of 800, with $p_S(a) = p_U(a)\,q(a)$ and study + subject random intercepts on both the understood logit $f_U$ and the production-ratio logit $h$. VG16 adds one **population cross-lag coefficient** $\beta$ to the production-ratio logit:
+
+$$h(a, s, i) = \text{intercept}_q + \text{slope}_q\,a_z + g_q(a) + \delta_q[s] + \delta^{\text{subj}}_q[i] + \beta\,x^{\text{lag}}_i$$
+
+where, for the child's immediately preceding observed wave (age $a_{\text{prev}}$),
+
+$$x^{\text{lag}}_i = \operatorname{logit}\!\big(\text{understood}_{\text{prev}}/N\big) - \big(f_U(a_{\text{prev}}) + \delta_U[s]\big)$$
+
+is the child's prior-wave understood relative to a baseline (0 for first waves / no prior comprehension). Two baselines are fit. The **population-relative** headline subtracts only the population + study comprehension level (as written above). The **within-child** (RI-CLPM) contrast additionally subtracts the child's own understood intercept $\delta^{\text{subj}}_U[i]$. In both, $\beta > 0$ means earlier receptive standing predicts later expressive conversion, and the subject $q$-intercept $\delta^{\text{subj}}_q[i]$ controls for the child's stable production level.
+
+::: {.callout-note title="Model at a glance"}
+
+- **Population:** children with Down syndrome.
+- **Foundation:** VG09 (study + subject random intercepts on understood and on $q$).
+- **New term:** cross-lag $\beta$ (prior receptive → current $q$).
+- **Baseline:** population-relative headline (subtract the population + study comprehension level); a within-child (RI-CLPM) contrast is also fitted (cautionary — see results).
+- **Reported curves:** population-level trajectories (all random effects set to zero).
+
+:::
+
+## Cross-lag: earlier receptive → later expressive
+
+The headline cross-lag coefficient $\beta$ (`beta_lag`, population-relative baseline) is the earlier-receptive → later-expressive lead on the logit scale, controlling for the child's stable production level:
+
+```{python}
+#| label: tbl-beta-lag
+#| echo: false
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+diagnostics.loc[diagnostics.index.str.contains("beta_lag", case=False)]
+```
+
+::: {.callout-important title="Within-child contrast and the short-T bias"}
+
+The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's *own* understood intercept — was fit as a diagnostic. With the two-wave-dominated data it is **strongly and spuriously negative** (dev-tier $\beta \approx -0.60$, 90% HDI $[-0.85, -0.35]$): a **short-T (Nickell-type) / errors-in-variables artifact** of regressing on a lag tied to the child's own random intercept, *not* evidence that comprehension suppresses later production. The bias-robust population-relative headline above avoids that circularity and is essentially null at dev-tier ($\beta \approx +0.05$, HDI spanning 0). Sharpening the within-child estimate (latent-AR understood; restricting to the ≥3-wave children) is deferred to v2. See the scoping note (§5).
+
+:::
+
+## Data
+
+```{python}
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+## Diagnostics
+
+```{python}
+diagnostics
+```
+
+![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+## Joint trajectory
+
+![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Joint posterior predictive trajectory with 50% and 75% HDI bands](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
+
+## Production ratio
+
+![Production rate q(a)](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+
+## Comprehension-production gap
+
+![Comprehension-production gap](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
+
+## Words understood vs words spoken
+
+![Expected words understood vs spoken](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}

@@ -25,7 +25,7 @@ themselves differ only by **population**, **outcome(s)**, **structure**, and
 
 ## How the models are named
 
-Models are numbered `VG01`–`VG15` in roughly the order they were developed. The
+Models are numbered `VG01`–`VG16` in roughly the order they were developed. The
 numbering is historical rather than hierarchical — a higher number means "added
 later", not "supersedes". Models build on one another along two main lineages
 (joint understood + spoken for Down syndrome, and the signing models), with
@@ -43,23 +43,24 @@ The three axes that distinguish the models:
 
 ## Inventory
 
-| Model                  | Population | Outcome(s)                   | What it adds / its purpose                                                                                             |
-| ---------------------- | ---------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [VG01](vg01/index.qmd) | DS         | Spoken                       | Baseline age → words spoken trajectory.                                                                                |
-| [VG02](vg02/index.qmd) | DS         | Understood                   | Baseline age → words understood trajectory.                                                                            |
-| [VG03](vg03/index.qmd) | TD         | Spoken                       | TD counterpart to VG01.                                                                                                |
-| [VG04](vg04/index.qmd) | TD         | Understood                   | TD counterpart to VG02.                                                                                                |
-| [VG05](vg05/index.qmd) | DS         | Understood + spoken (joint)  | Baseline joint model; spoken modelled as a fraction `q(a)` of understood.                                              |
-| VG06 _(retired)_       | TD         | Understood + spoken (joint)  | TD counterpart to VG05; retired after the WS-comprehension data issue (see below) — superseded by VG13.                |
-| [VG07](vg07/index.qmd) | DS         | Understood + spoken (joint)  | VG05 + study random intercepts.                                                                                        |
-| [VG08](vg08/index.qmd) | DS         | Understood + spoken (joint)  | VG07 + subject random intercepts on understood.                                                                        |
-| [VG09](vg09/index.qmd) | DS         | Understood + spoken (joint)  | VG08 + subject random intercepts on the production ratio `q`.                                                          |
-| [VG10](vg10/index.qmd) | DS         | Understood + spoken (joint)  | VG09 + tighter `q`-anchor priors + per-draw GP anchor at 54 months (stabilisation).                                    |
-| [VG11](vg11/index.qmd) | TD         | Spoken                       | VG03 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).         |
-| [VG12](vg12/index.qmd) | TD         | Understood                   | VG04 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).         |
-| [VG13](vg13/index.qmd) | TD         | Understood + spoken (joint)  | Young TD joint model, ages 8–18 months only; study random intercepts + GP anchor at 13 months.                         |
-| [VG14](vg14/index.qmd) | DS         | Understood + spoken + signed | Adds signing as a third ratio `r(a)`; total expressive vocabulary derived assuming sign/speech independence given age. |
-| [VG15](vg15/index.qmd) | DS         | Understood + spoken + signed | VG14 + within-understood sign–speech association `psi` + study & subject random intercepts + VG10 stabilisation.       |
+| Model                  | Population | Outcome(s)                   | What it adds / its purpose                                                                                                                                                                                                |
+| ---------------------- | ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [VG01](vg01/index.qmd) | DS         | Spoken                       | Baseline age → words spoken trajectory.                                                                                                                                                                                   |
+| [VG02](vg02/index.qmd) | DS         | Understood                   | Baseline age → words understood trajectory.                                                                                                                                                                               |
+| [VG03](vg03/index.qmd) | TD         | Spoken                       | TD counterpart to VG01.                                                                                                                                                                                                   |
+| [VG04](vg04/index.qmd) | TD         | Understood                   | TD counterpart to VG02.                                                                                                                                                                                                   |
+| [VG05](vg05/index.qmd) | DS         | Understood + spoken (joint)  | Baseline joint model; spoken modelled as a fraction `q(a)` of understood.                                                                                                                                                 |
+| VG06 _(retired)_       | TD         | Understood + spoken (joint)  | TD counterpart to VG05; retired after the WS-comprehension data issue (see below) — superseded by VG13.                                                                                                                   |
+| [VG07](vg07/index.qmd) | DS         | Understood + spoken (joint)  | VG05 + study random intercepts.                                                                                                                                                                                           |
+| [VG08](vg08/index.qmd) | DS         | Understood + spoken (joint)  | VG07 + subject random intercepts on understood.                                                                                                                                                                           |
+| [VG09](vg09/index.qmd) | DS         | Understood + spoken (joint)  | VG08 + subject random intercepts on the production ratio `q`.                                                                                                                                                             |
+| [VG10](vg10/index.qmd) | DS         | Understood + spoken (joint)  | VG09 + tighter `q`-anchor priors + per-draw GP anchor at 54 months (stabilisation).                                                                                                                                       |
+| [VG11](vg11/index.qmd) | TD         | Spoken                       | VG03 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).                                                                                                            |
+| [VG12](vg12/index.qmd) | TD         | Understood                   | VG04 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).                                                                                                            |
+| [VG13](vg13/index.qmd) | TD         | Understood + spoken (joint)  | Young TD joint model, ages 8–18 months only; study random intercepts + GP anchor at 13 months.                                                                                                                            |
+| [VG14](vg14/index.qmd) | DS         | Understood + spoken + signed | Adds signing as a third ratio `r(a)`; total expressive vocabulary derived assuming sign/speech independence given age.                                                                                                    |
+| [VG15](vg15/index.qmd) | DS         | Understood + spoken + signed | VG14 + within-understood sign–speech association `psi` + study & subject random intercepts + VG10 stabilisation.                                                                                                          |
+| [VG16](vg16/index.qmd) | DS         | Understood + spoken          | VG09 + a within-child cross-lag (prior understood → current `q`): earlier receptive → later expressive. Population-relative headline (≈ null); the within-child (RI-CLPM) contrast is biased by short-T with 2-wave data. |
 
 ## Shared architecture
 
