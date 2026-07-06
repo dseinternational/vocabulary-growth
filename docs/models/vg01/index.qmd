@@ -179,7 +179,13 @@ The cumulative sum of the PMF: the probability that the count of words spoken is
 
 ### Posterior predictive probability distributions for word counts, by age
 
-![posterior_predictive_count_distributions](posterior_predictive_count_distributions.png){#fig-posterior-predictive-count-distributions .lightbox fig-align="left"}
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.plotting import ppc_count_distribution_gallery
+
+ppc_count_distribution_gallery("posterior_predictive_count_distributions")
+```
 
 ### Posterior predictive median trend with uncertainty intervals
 

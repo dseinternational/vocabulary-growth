@@ -2,6 +2,7 @@ approximator
 apraxia
 arrowsize
 ArviZ
+asis
 Bello
 Berglund
 BFMI
