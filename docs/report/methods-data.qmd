@@ -3,9 +3,37 @@ title: "Data and measures"
 abstract: "*TODO*"
 ---
 
+::: {.callout-note}
+The "Data sources" inventory below was drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
 ## Data sources {#sec-data}
 
-**TODO**: inventory of studies, data sources, and instruments
+We pool vocabulary assessments of children with Down syndrome from several international studies, harmonised onto the common 800-item reference inventory described under [Measures](#measures). Each study contributes parent-report checklist counts of words *understood* and *spoken* — and, for the signing sub-set, words *signed* — together with the child's age in months. The table below inventories each study: the number of observations and distinct children, the age range, and the mean, median and quartiles of each measure (full detail in the accompanying CSV). The figures that follow plot the raw observations, one colour per study.
+
+```{python}
+#| label: tbl-ds-datasets
+#| echo: false
+from pathlib import Path
+
+import pandas as pd
+
+_p = Path("figures/descriptives/dataset_summary_ds.csv")
+_ds_summary = (
+    pd.read_csv(_p)
+    if _p.exists()
+    else pd.DataFrame({"note": ["Run scripts/generate_descriptive_report.py"]})
+)
+_ds_summary
+```
+
+![Words understood by age, coloured by study](figures/descriptives/scatter_age_understood_ds.png){#fig-ds-understood}
+
+![Words spoken by age, coloured by study](figures/descriptives/scatter_age_spoken_ds.png){#fig-ds-spoken}
+
+![Words understood versus words spoken, coloured by study](figures/descriptives/scatter_understood_spoken_ds.png){#fig-ds-us}
+
+![Words signed by age (signing sub-set), coloured by study](figures/descriptives/scatter_age_signed_ds.png){#fig-ds-signed}
 
 ## Measures
 
