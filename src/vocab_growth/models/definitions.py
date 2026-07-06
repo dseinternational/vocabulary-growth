@@ -728,8 +728,8 @@ VG13 = BivariateModelDefinition(
     ),
     population=Population.TYPICALLY_DEVELOPING,
     # Common 800-item reference inventory. Counts from WG (ceiling 396) and
-    # Oxford CDI (ceiling 418) are comfortably below the 800-item scale in the
-    # 8–18 month window, so no distortion is introduced.
+    # Oxford CDI (ceiling 418) are interpreted on this shared reference scale;
+    # source-form ceilings remain an interpretation caveat.
     n_trials=800,
     # Restrict to 8–18 months where WG/Oxford CDI data are dense and the WS
     # bias (production proxy comprehension) is avoided entirely.

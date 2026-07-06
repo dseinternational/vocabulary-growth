@@ -30,6 +30,16 @@ to the us_01/Edgin DS block of the ``vocab_combined`` view
 WORDBANK_SPOKEN_ONLY_FORMS = ("WS",)
 """Wordbank forms that contribute production observations only."""
 
+US_01_MAX_PRODUCTION = 100
+"""Production cap on the us_01/Edgin DS Wordbank subset.
+
+Inherited from the initial import with no recorded rationale; rows above the
+threshold are kept out until their source form and eligibility can be
+revalidated (in the 2026-07 export it drops the highest-production
+administrations: 8/87 WG and 24/109 WS English DS rows). See
+``notes/202607061200-us01-edgin-ws-comprehension-issue.md``.
+"""
+
 ENGLISH_LANGUAGES = (
     "English (American)",
     "English (Australian)",
@@ -182,11 +192,9 @@ def vocab_combined_view_sql() -> str:
     WHERE dataset_name = 'Edgin'
       AND language IN ({english_sql_list})
       AND lower(health_conditions) = 'down syndrome'
-      -- Production cap inherited from the initial import with no recorded
-      -- rationale (in the 2026-07 export it drops the highest-production
-      -- administrations: 8/87 WG and 24/109 WS English DS rows). Kept as-is
-      -- pending review; see the 2026-07-06 note above.
-      AND production <= 100
+      -- Legacy production cap (see US_01_MAX_PRODUCTION); kept as-is pending
+      -- review of its rationale, per the 2026-07-06 note above.
+      AND production <= {US_01_MAX_PRODUCTION}
     UNION ALL
     SELECT 'uk_03'                           as study,
            vuk2025.subject_id,
@@ -363,13 +371,13 @@ def load_data(
     #
     # Wordbank's CDI: Words & Sentences (WS) rows contain valid production
     # counts, but their comprehension column is a production proxy. Keep WG
-    # and Oxford CDI as bivariate observations, and include WS only when the
-    # requested model can use spoken observations.
+    # and Oxford CDI as bivariate observations, and include WS only for
+    # spoken-only models.
     needs_understood = "understood" in columns
     needs_spoken = "spoken" in columns
 
     td_forms = list(WORDBANK_BIVARIATE_FORMS)
-    if needs_spoken or not needs_understood:
+    if needs_spoken and not needs_understood:
         td_forms.extend(WORDBANK_SPOKEN_ONLY_FORMS)
 
     age_upper = max_age_months if max_age_months is not None else 30
