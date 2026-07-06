@@ -325,7 +325,9 @@ def ppc_count_distribution_gallery(
         m = re.search(r"_(\d+(?:\.\d+)?)m\.png$", os.path.basename(path))
         return float(m.group(1)) if m else float("inf")
 
-    files = sorted(glob.glob(os.path.join(directory, f"{prefix}_*m.png")), key=_age)
+    candidates = glob.glob(os.path.join(directory, f"{prefix}_*m.png"))
+    files = [path for path in candidates if _age(path) != float("inf")]
+    files.sort(key=_age)
     if not files:
         combined = os.path.join(directory, f"{prefix}.png")
         if os.path.exists(combined):
