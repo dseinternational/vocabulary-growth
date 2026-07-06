@@ -26,7 +26,7 @@ This model output is preliminary and likely to change as the model evolves and f
 If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
 :::
 
-This model fits a joint bivariate model of words understood and spoken in typically developing children aged 8–18 months. It extends VG06 with dataset-level study random intercepts and restricts the age range to 8–18 months, where Wordbank WG and Oxford CDI data are dense and cover multiple labs. Above 18 months only a single dataset (Floccia/Oxford CDI) contributes bivariate observations, making inference unreliable. The production-ratio reparameterisation enforces $p_S \leq p_U$ by construction.
+This model fits a joint bivariate model of words understood and spoken in typically developing children aged 8–18 months. It supersedes the retired VG06 model with dataset-level study random intercepts and restricts the age range to 8–18 months, where Wordbank WG and Oxford CDI data are dense and cover multiple labs. Wordbank Words & Sentences rows are not used in this bivariate model because their comprehension field is a production proxy. Above 18 months only a single dataset (Floccia/Oxford CDI) contributes bivariate observations, making inference unreliable. The production-ratio reparameterisation enforces $p_S \leq p_U$ by construction.
 
 ```{python}
 import matplotlib.pyplot as plt

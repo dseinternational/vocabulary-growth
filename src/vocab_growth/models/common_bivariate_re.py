@@ -208,7 +208,7 @@ def _validate_cross_lag(lag_baseline: str, use_subject_re_u: bool) -> None:
 def _compute_prev_wave_lag(analysis_df, n_trials: int):
     """Per-observation prior-wave understood lag source for the VG16 cross-lag.
 
-    For each observation, locate the child's immediately-earlier observed wave
+    For each observation, locate the child's immediately-earlier age wave
     that carries an understood measure (the lag source). Returns
     ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation arrays:
     ``has_lag_f`` is 1.0 where such a prior wave exists and 0.0 otherwise (a
@@ -223,15 +223,16 @@ def _compute_prev_wave_lag(analysis_df, n_trials: int):
     subj = np.asarray(analysis_df["subject_code"], dtype=int)
     age = np.asarray(analysis_df["age"], dtype=float)
     und = analysis_df["understood"].to_numpy(dtype=float)
-    prev_subj, last = -1, -1
-    for pos in np.lexsort((age, subj)):  # walk each child in age order
+    row_order = np.arange(n)
+    prev_subj, last, last_age = -1, -1, np.nan
+    for pos in np.lexsort((row_order, age, subj)):  # walk each child in age order
         if subj[pos] != prev_subj:
-            prev_subj, last = subj[pos], -1
-        if last >= 0:
+            prev_subj, last, last_age = subj[pos], -1, np.nan
+        if last >= 0 and age[pos] > last_age:
             prev_idx[pos] = last
             has_lag_f[pos] = 1.0
         if not np.isnan(und[pos]):
-            last = pos
+            last, last_age = pos, age[pos]
     und_prev = np.where(has_lag_f > 0, und[prev_idx], n_trials * 0.5)
     p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
     y_u_prev_logit = np.where(has_lag_f > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0)
@@ -290,11 +291,12 @@ def build_model_re(
         subject_codes = None
         n_subjects = 0
 
-    # Within-child cross-lag (VG16, issue #113): for each observation, the child's
-    # immediately-earlier observed understood wave is the lag source; x_lag = 0
-    # where there is no such prior wave (first wave, or every earlier wave lacks
-    # comprehension). prev_idx/has_lag_f/y_u_prev_logit are consumed below when
-    # injecting beta_lag * x_lag into the q logit.
+    # Cross-lag (VG16, issue #113): for each observation, the child's
+    # immediately-earlier age wave with understood data is the lag source;
+    # x_lag = 0 where there is no such prior wave (first wave, same-age
+    # duplicates, or every earlier wave lacks comprehension).
+    # prev_idx/has_lag_f/y_u_prev_logit are consumed below when injecting
+    # beta_lag * x_lag into the q logit.
     use_cross_lag = bool(definition.use_cross_lag)
     prev_idx = np.zeros(n, dtype=int)
     has_lag_f = np.zeros(n, dtype=float)
@@ -538,18 +540,18 @@ def build_model_re(
         # For diagnostics: population-level f at obs ages
         _ = pm.Deterministic("f_u_obs", f_u_all[i_obs0:i_obs1], dims=("obs_id",))
 
-        # Within-child cross-lag (VG16, issue #113): the child's prior-wave
-        # understood residual shifts their current production ratio q. With the
-        # subject intercepts as random intercepts this is a RI-CLPM within-child
-        # cross-lag; beta_lag > 0 means earlier receptive standing predicts later
-        # expressive conversion. x_lag is 0 for observations with no prior wave.
+        # Cross-lag (VG16, issue #113): the child's prior-wave understood
+        # residual shifts their current production ratio q. The configured
+        # baseline decides whether the residual is population-relative or
+        # within-child. beta_lag > 0 means earlier receptive standing predicts
+        # later expressive conversion; x_lag is 0 with no prior wave.
         if use_cross_lag:
             beta_lag = pm.Normal(
                 "beta_lag", mu=definition.beta_lag_mu, sigma=definition.beta_lag_sigma
             )
             lag_base = f_u_obs_re[prev_idx]  # child's own expected understood logit at prior wave
             if definition.lag_baseline == "population":
-                # subtract only population+study (add the subject intercept back)
+                # Use the population+study baseline by removing the subject shift.
                 lag_base = lag_base - subject_shift_u[prev_idx]
             x_lag = has_lag_f * (y_u_prev_logit - lag_base)
             q_lag_term = beta_lag * x_lag

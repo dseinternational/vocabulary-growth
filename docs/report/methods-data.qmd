@@ -37,6 +37,6 @@ _ds_summary
 
 ## Measures
 
-**TODO**: explain harmonisation onto a common 800-item reference scale ($N_{\text{trials}} = 800$); why this gives an inventory-comparable scale across DS and TD instruments even where native checklist ceilings differ (e.g. WG ≈ 396, Oxford CDI ≈ 418 items).
+The models report vocabulary counts on a common 800-item reference scale ($N_{\text{trials}} = 800$). This is a reference-inventory scale rather than the native denominator for every source checklist: some source forms have lower ceilings, including Wordbank Words & Gestures (about 396 items) and Oxford CDI (about 418 items). The common scale keeps estimates comparable across DS and TD instruments, but it remains a modelling approximation, so source-form ceilings and near-ceiling observations should be checked when interpreting high-count regions.
 
-**TODO**: Words & Sentences (WS) records **production only** - therefore TD understood and the comprehension–production gap are reported only in the young window (~8–18 months)
+Wordbank Words & Sentences (WS) records are treated as **production-only** because the WS comprehension field is a production proxy rather than an independent comprehension measurement. TD spoken-only models can use WS production counts, but TD bivariate models that estimate both understood and spoken vocabulary exclude WS rows and rely on WG and Oxford CDI observations for the comprehension-production gap.

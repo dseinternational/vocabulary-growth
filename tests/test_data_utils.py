@@ -8,7 +8,7 @@ import vocab_growth.data_utils as data_utils
 from vocab_growth.models.definitions import Population
 
 
-def test_td_load_data_keeps_ws_as_spoken_only(tmp_path, monkeypatch):
+def test_td_bivariate_data_excludes_ws_before_sampling(tmp_path, monkeypatch):
     db_path = _create_wordbank_db(tmp_path)
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
@@ -18,11 +18,7 @@ def test_td_load_data_keeps_ws_as_spoken_only(tmp_path, monkeypatch):
     )
 
     df = df.sort_values("form").reset_index(drop=True)
-    assert df["form"].to_list() == ["Oxford CDI", "WG", "WS"]
-
-    ws_row = df.loc[df["form"] == "WS"].iloc[0]
-    assert pd.isna(ws_row["understood"])
-    assert ws_row["spoken"] == 51
+    assert df["form"].to_list() == ["Oxford CDI", "WG"]
 
 
 def test_td_understood_data_excludes_ws_before_sampling(tmp_path, monkeypatch):

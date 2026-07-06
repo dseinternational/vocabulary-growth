@@ -21,6 +21,10 @@ from vocab_growth.reporting import (
 # now contains all languages; the DS (Edgin) subset is restricted to English.
 _ENGLISH_SQL_LIST = ", ".join(f"'{lang}'" for lang in ENGLISH_LANGUAGES)
 
+# Data-quality guard for the Edgin DS Wordbank subset. Rows above this threshold
+# are kept out until their source form and eligibility can be revalidated.
+US_01_MAX_PRODUCTION = 100
+
 _started = time.perf_counter()
 heading("Preparing vocabulary data")
 
@@ -370,7 +374,7 @@ con.execute(
     WHERE dataset_name = 'Edgin'
       AND language IN ({_ENGLISH_SQL_LIST})
       AND lower(health_conditions) = 'down syndrome'
-      AND production <= 100
+      AND production <= {US_01_MAX_PRODUCTION}
     UNION ALL
     SELECT 'uk_03'                           as study,
            vuk2025.subject_id,
