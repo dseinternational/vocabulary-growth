@@ -67,6 +67,15 @@ def test_evaluate_at_ages_interp_and_out_of_range():
     assert np.isnan(comparison.evaluate_at_ages(Y, ages, np.array([25.0]))[0])
 
 
+def test_interp_draws_out_of_range_returns_nan():
+    ages = np.array([0.0, 10.0, 20.0])
+    Y = np.array([[0.0, 100.0, 200.0]])
+    out = comparison.interp_draws(ages, Y, np.array([-1.0, 5.0, 21.0]))
+    assert np.isnan(out[0, 0])
+    assert np.isclose(out[0, 1], 50.0)
+    assert np.isnan(out[0, 2])
+
+
 # ---- HDI / summary ----
 def test_hdi_from_samples_uniform_grid():
     x = np.linspace(0.0, 1.0, 1001)
@@ -99,6 +108,24 @@ def test_compute_q_at_U_constant_ratio():
     S = 0.3 * U
     q = comparison.compute_q_at_U(ages, U, S, np.array([100.0, 400.0]))
     assert np.allclose(q[~np.isnan(q)], 0.3, atol=1e-6)
+
+
+def test_comprehension_equivalent_age_uses_first_crossing_for_nonmonotone_reference():
+    ages_ds = np.array([0.0, 1.0])
+    U_ds = np.array([[0.0, 7.0]])
+    S_ds = U_ds.copy()
+    ages_td = np.array([0.0, 1.0, 2.0, 3.0])
+    # This reference draw first crosses 7 words between ages 0 and 1, then dips.
+    # Plain np.interp(target, W, ages) is undefined here because W is not sorted.
+    U_td = np.array([[0.0, 10.0, 5.0, 15.0]])
+    S_td = U_td.copy()
+
+    out = comparison.comprehension_equivalent_age(
+        ages_ds, U_ds, S_ds, ages_td, U_td, S_td, np.array([1.0])
+    )
+
+    assert np.isclose(out["cea_U"][0, 0], 0.7)
+    assert np.isclose(out["cea_S"][0, 0], 0.7)
 
 
 def test_invert_curve_linear():

@@ -196,6 +196,16 @@ The expected difference in word counts between understanding and production.
 
 ![Posterior predictive words understood vs spoken](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
+## Receptive → expressive (cross-sectional)
+
+**Does receptive vocabulary predict expressive vocabulary, cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child *says* is the number they *understand* scaled by $q(a)$,
+
+$$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
+
+So receptive vocabulary predicts expressive vocabulary with an age-dependent slope $q(a)$ — the expected number of words spoken per word understood. The figure below reads this off directly: for children with Down syndrome at several ages, it maps words understood (x-axis) to the predicted words spoken (y-axis), with the shaded band the 90% HDI on $q(a)$ and the dashed line the ceiling (a child cannot say more distinct words than they understand). The per-age posterior of $q(a)$ (median and HDI) is tabulated under [Production ratio](#production-ratio) above.
+
+![Predicted words spoken given words understood, by age](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
+
 ## Posterior predictions -- words understood
 
 ### Posterior summary table

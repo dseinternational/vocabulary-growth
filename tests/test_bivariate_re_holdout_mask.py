@@ -16,6 +16,7 @@ No graphviz / ``dot`` binary is required.
 """
 
 import os
+from dataclasses import replace
 
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
@@ -50,7 +51,7 @@ def _as_dataset(node):
     return node if isinstance(node, xr.Dataset) else node.to_dataset()
 
 
-def _build_holdout_model(tmp_path, monkeypatch):
+def _build_holdout_model(tmp_path, monkeypatch, definition=VG07):
     """Build the real VG07 model on synthetic data carrying a ``holdout`` column.
 
     Returns the populated context plus the synthetic ``understood`` / ``spoken``
@@ -83,6 +84,7 @@ def _build_holdout_model(tmp_path, monkeypatch):
             "spoken": spoken,
             "study": ["study_a"] * (n // 2) + ["study_b"] * (n - n // 2),
             "study_code": [0] * (n // 2) + [1] * (n - n // 2),
+            "subject_code": np.repeat(np.arange(n // 2), 2),
             "holdout": holdout,
         }
     )
@@ -101,11 +103,11 @@ def _build_holdout_model(tmp_path, monkeypatch):
     bmd = model_data.BinomialModelData(
         X_obs=ages.reshape(-1, 1),
         y_obs=np.zeros(n, dtype=int),
-        n_trials=VG07.n_trials,
+        n_trials=definition.n_trials,
     )
     context.set_model_data(bmd, analysis_df)
-    configure_bivariate_priors(context, VG07)
-    build_model_re(context, VG07)
+    configure_bivariate_priors(context, definition)
+    build_model_re(context, definition)
 
     return context, understood, spoken, holdout
 
@@ -149,6 +151,21 @@ def test_holdout_masks_round_trip_through_extract_model_samples(tmp_path, monkey
     np.testing.assert_array_equal(np.isnan(samples.y_s_obs), ~has_s_train)
     np.testing.assert_array_equal(samples.y_u_obs[has_u_train], understood[has_u_train])
     np.testing.assert_array_equal(samples.y_s_obs[has_s_train], spoken[has_s_train])
+
+
+def test_subject_marginal_predictive_uses_one_new_subject_per_draw(tmp_path, monkeypatch):
+    definition = replace(VG07, use_subject_re_u=True, use_subject_re_q=True)
+    context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
+
+    context.set_trace(_prior_as_posterior_trace(context))
+    sample_posterior_predictive(context, definition)
+
+    assert "_delta_subj_u_plot_marg" not in context.model.named_vars
+    assert "_delta_subj_u_query_marg" not in context.model.named_vars
+    assert "_delta_subj_q_plot_marg" not in context.model.named_vars
+    assert "_delta_subj_q_query_marg" not in context.model.named_vars
+    assert context.model.named_vars["_delta_subj_u_marg"].ndim == 0
+    assert context.model.named_vars["_delta_subj_q_marg"].ndim == 0
 
 
 def test_extract_model_samples_guards_against_misaligned_mask(tmp_path, monkeypatch):
