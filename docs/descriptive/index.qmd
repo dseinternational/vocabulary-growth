@@ -1,0 +1,104 @@
+---
+title: "Descriptive report: pooled Down syndrome vocabulary data"
+
+date: last-modified
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+:::
+
+::: {.callout-warning title="Warning: Describes the observed data, not model output"}
+This report summarises the **raw observed data only** — no fitted model output. The inventory table and scatter plots are regenerated from the prepared dataset by `scripts/generate_descriptive_report.py` (run after `scripts/prepare_data.py`); as studies are added or corrected, the numbers below will change. Figures are cached under `docs/descriptive/figures/` and are not version-controlled.
+:::
+
+This report inventories the pooled Down syndrome vocabulary data before any modelling: how much data each contributing study provides, over what ages, and how words understood, spoken and signed are distributed. It is deliberately separate from the [modelling report](../report/) and the [model pages](../models/) — a plain description of what we are fitting to.
+
+Each row of the source data is one **parent-report checklist administration** for one child at one age: counts of words *understood* and *spoken* (and, for the signing sub-set, words *signed*), harmonised onto the common 800-item reference inventory. Children measured repeatedly contribute several rows, so observations exceed children. The current pooled sample comprises **1,078 observations of 576 children across eleven international studies, spanning ages 8–115 months** — 818 observations record words understood, 1,063 words spoken, and 528 words signed. Per-study detail is in @tbl-inventory; the figures then plot the raw observations, one colour per study.
+
+## Study inventory
+
+```{python}
+#| label: tbl-inventory
+#| echo: false
+#| tbl-cap: "Per-study data inventory (observed counts). Obs. = checklist administrations; Children = distinct subjects; medians are of the observed word counts (blank where a study records no such measure)."
+from pathlib import Path
+
+import pandas as pd
+
+_p = Path("figures/dataset_summary_ds.csv")
+if not _p.exists():
+    _out = pd.DataFrame({"note": ["Run scripts/generate_descriptive_report.py first."]})
+else:
+    _d = pd.read_csv(_p)
+
+    def _rng(lo, hi):
+        return f"{int(round(lo))}–{int(round(hi))}"
+
+    def _med(v):
+        return "" if pd.isna(v) else f"{v:.0f}"
+
+    _out = pd.DataFrame(
+        {
+            "Study": _d["study"],
+            "Obs.": _d["n_observations"].astype(int),
+            "Children": _d["n_subjects"].astype(int),
+            "Age (mo)": [_rng(a, b) for a, b in zip(_d["age_min"], _d["age_max"])],
+            "Understood n": _d["understood_n"].astype("Int64"),
+            "Understood med.": _d["understood_median"].map(_med),
+            "Spoken n": _d["spoken_n"].astype("Int64"),
+            "Spoken med.": _d["spoken_median"].map(_med),
+            "Signed n": _d["signed_n"].astype("Int64"),
+        }
+    )
+    _total = {
+        "Study": "All",
+        "Obs.": int(_d["n_observations"].sum()),
+        "Children": int(_d["n_subjects"].sum()),
+        "Age (mo)": _rng(_d["age_min"].min(), _d["age_max"].max()),
+        "Understood n": int(_d["understood_n"].sum()),
+        "Understood med.": "",
+        "Spoken n": int(_d["spoken_n"].sum()),
+        "Spoken med.": "",
+        "Signed n": int(_d["signed_n"].sum()),
+    }
+    _out = pd.concat([_out, pd.DataFrame([_total])], ignore_index=True)
+_out
+```
+
+The studies vary widely in size (from a dozen to a couple of hundred observations) and in the ages they cover: some are infant/toddler samples, others reach well into childhood. This heterogeneity is exactly why the models use study-level random effects.
+
+## Vocabulary by age
+
+Both receptive and expressive vocabulary rise with age, but with very wide between-child spread at every age — the raw scatter makes the case for a flexible (nonparametric) mean function and for modelling the between-child variability explicitly rather than assuming a tight growth curve.
+
+![Words understood by age, coloured by study](figures/scatter_age_understood_ds.png){#fig-understood-age .lightbox fig-align="left"}
+
+![Words spoken by age, coloured by study](figures/scatter_age_spoken_ds.png){#fig-spoken-age .lightbox fig-align="left"}
+
+## Words understood versus words spoken
+
+Plotting spoken against understood shows the two are strongly coupled, and that observations sit largely **on or below the diagonal**: children generally say no more than they understand, and usually fewer. This comprehension-leads-production gap is the relationship the joint models formalise as the production ratio $q = P(\text{speak} \mid \text{understand})$.
+
+![Words understood versus words spoken, coloured by study](figures/scatter_understood_spoken_ds.png){#fig-us .lightbox fig-align="left"}
+
+## Signed vocabulary
+
+Only a subset of studies record signed vocabulary. Where they do, signing is most visible in the early years — an alternative expressive route while spoken vocabulary is still emerging — motivating the signing models (VG14/VG15).
+
+![Words signed by age (signing sub-set), coloured by study](figures/scatter_age_signed_ds.png){#fig-signed-age .lightbox fig-align="left"}
+
+## Reading
+
+The descriptive picture sets up the modelling: vocabulary grows with age but with large, study- and child-level variability; production trails comprehension; and signing contributes early expressive vocabulary in the studies that record it. The fitted models quantify each of these — see the [modelling report](../report/) and the [per-model pages](../models/).
