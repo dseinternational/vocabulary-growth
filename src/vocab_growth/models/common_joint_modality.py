@@ -97,11 +97,18 @@ from vocab_growth.reporting import (
 
 EPSILON = math_constants.EPSILON
 
-# uk_02 is the only source with the four-cell sign/speech cross-tabulation.
+# uk_02 is the only source with the four-cell within-understood cross-tabulation.
 UK02_STUDY_ID = "uk_02"
+# nz_01 (Foster-Cohen) carries a production-only three-cell (within-produced)
+# cross-tabulation: word-only, sign-only, both. No comprehension.
+NZ01_STUDY_ID = "nz_01"
 
 # Order of the four mutually-exclusive within-understood cells.
 CELL_NAMES = ["neither", "sign_only", "speak_only", "both"]
+# Order of nz_01's three within-produced cells (the four-cell composition
+# conditioned on produced, dropping the unobservable "neither"/understood-only).
+PROD_CELL_NAMES = ["sign_only", "speak_only", "both"]
+PROD_CELL_COLUMNS = ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]
 
 
 # ============================================================
@@ -185,6 +192,11 @@ class JointModelSamples:
     cell_pred: np.ndarray  # (n_cells_obs, 4, n_samples) predicted
     cell_ages: np.ndarray  # (n_cells_obs,)
 
+    # nz_01 produced-cell posterior predictive (counts) and observed
+    prod_cell_obs: np.ndarray  # (n_prod_obs, 3) observed
+    prod_cell_pred: np.ndarray  # (n_prod_obs, 3, n_samples) predicted
+    prod_cell_ages: np.ndarray  # (n_prod_obs,)
+
 
 JointContext = ModelFitContext[JointModelConfiguration, JointModelSamples]
 
@@ -229,6 +241,40 @@ def _load_uk02_four_cell():
     return four, marg
 
 
+def _load_nz01_produced_cells():
+    """Load nz_01 (Foster-Cohen) rows as a within-produced three-cell cross-tab.
+
+    nz_01 is production-only (no comprehension). Its checklist codes partition ALL
+    items into word-only (a), sign-only (b), both (c) and neither (d). The three
+    produced cells {a, b, c} form a modality cross-tab *conditioned on production*,
+    not on comprehension: nz_01 records no understood total, and its "neither"
+    mixes understood-but-unproduced with not-understood, so it cannot fill uk_02's
+    ``understood_only`` cell. Conditioning on produced cancels that cell (and the
+    understood level), so these rows identify psi/q/r through a three-cell
+    Dirichlet-Multinomial (see ``build_model``). Rows with no produced words
+    (``prod_total == 0``) carry no composition and are dropped.
+    """
+    path = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
+    raw = pd.read_csv(path)
+    out = pd.DataFrame(
+        {
+            "study": NZ01_STUDY_ID,
+            "age": raw["age"].to_numpy(dtype=float),
+            "subject_id": raw["subject_id"].to_numpy(),
+            # CSV columns are modality-exclusive: spoken=word-only, signed=sign-only,
+            # spoken_signed=both. Marginal understood/spoken/signed stay NaN so these
+            # rows feed only the produced DM (no double counting).
+            "prod_spoken_only": raw["spoken"].to_numpy(dtype=float),
+            "prod_signed_only": raw["signed"].to_numpy(dtype=float),
+            "prod_signed_spoken": raw["spoken_signed"].to_numpy(dtype=float),
+        }
+    )
+    out["prod_total"] = (
+        out["prod_spoken_only"] + out["prod_signed_only"] + out["prod_signed_spoken"]
+    )
+    return out[out["prod_total"] > 0].reset_index(drop=True)
+
+
 def prepare_joint_data(
     context: JointContext,
     definition: JointModelDefinition,
@@ -254,7 +300,10 @@ def prepare_joint_data(
         population=definition.population,
         columns=merged_columns,
     )
-    other = merged[merged["study"] != UK02_STUDY_ID].copy()
+    # uk_02 and nz_01 are handled via their cross-tab paths below, so exclude their
+    # marginals from the merged view here to avoid double counting. (nz_01 is
+    # dropped entirely when include_nz01_cells is False.)
+    other = merged[~merged["study"].isin([UK02_STUDY_ID, NZ01_STUDY_ID])].copy()
 
     four, marg = _load_uk02_four_cell()
     include_uk06 = definition.include_uk06
@@ -290,7 +339,13 @@ def prepare_joint_data(
     four_df = pd.DataFrame(four_cols)
     marg_df = pd.DataFrame(marg_cols)
 
-    analysis_df = pd.concat([other, marg_df, four_df], ignore_index=True)
+    frames = [other, marg_df, four_df]
+    # nz_01's (real-key) CSV is committed separately; tolerate its absence (CI,
+    # unit tests, or a checkout predating the data) so the model still builds.
+    nz01_csv = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
+    if definition.include_nz01_cells and os.path.exists(nz01_csv):
+        frames.append(_load_nz01_produced_cells())
+    analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
 
     # Drop uk_06 signed unless included (its understood/spoken stay).
@@ -298,11 +353,17 @@ def prepare_joint_data(
         m = (analysis_df["study"] == "uk_06") & analysis_df["signed"].notna()
         analysis_df.loc[m, "signed"] = np.nan
 
+    has_prod_obs = (
+        analysis_df["prod_signed_spoken"].notna()
+        if "prod_signed_spoken" in analysis_df.columns
+        else pd.Series(False, index=analysis_df.index)
+    )
     has_any_observation = (
         analysis_df["understood"].notna()
         | analysis_df["spoken"].notna()
         | analysis_df["signed"].notna()
         | analysis_df["signed_spoken"].notna()
+        | has_prod_obs
     )
     analysis_df = analysis_df[has_any_observation].reset_index(drop=True)
 
@@ -328,6 +389,11 @@ def prepare_joint_data(
     n_s = int(analysis_df["spoken"].notna().sum())
     n_sign = int(analysis_df["signed"].notna().sum())
     n_cells = int(analysis_df["signed_spoken"].notna().sum())
+    n_prod = (
+        int(analysis_df["prod_signed_spoken"].notna().sum())
+        if "prod_signed_spoken" in analysis_df.columns
+        else 0
+    )
 
     counts: list[tuple[str, object]] = [
         ("Total observations", n),
@@ -336,7 +402,9 @@ def prepare_joint_data(
         ("Spoken observed (marginal)", n_s),
         ("Signed observed (marginal)", n_sign),
         ("uk_02 four-cell rows (DM)", n_cells),
+        ("nz_01 produced-cell rows (DM)", n_prod),
         ("include_uk06", include_uk06),
+        ("include_nz01_cells", definition.include_nz01_cells),
     ]
     if n_subjects is not None:
         n_singletons = int((analysis_df.groupby("subject_code").size() == 1).sum())
@@ -545,6 +613,29 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         if cell_total.max() > n_trials:
             raise ValueError(f"four-cell total exceeds n_trials ({n_trials}).")
 
+    # nz_01 produced three-cell cross-tab (order matches PROD_CELL_NAMES:
+    # sign_only, speak_only, both). n is the observed produced total, not n_trials.
+    has_prod = (
+        df["prod_signed_spoken"].notna().values
+        if "prod_signed_spoken" in df.columns
+        else np.zeros(len(df), dtype=bool)
+    )
+    has_prod_t = has_prod & ~holdout
+    idx_prod = np.where(has_prod_t)[0]
+    if idx_prod.size:
+        prod_counts = np.asarray(
+            df.loc[has_prod_t, PROD_CELL_COLUMNS],
+            dtype=int,
+        )
+        prod_total = np.asarray(df.loc[has_prod_t, "prod_total"], dtype=int)
+        if prod_counts.min() < 0:
+            raise ValueError("negative produced-cell count.")
+        if not np.array_equal(prod_counts.sum(axis=1), prod_total):
+            raise ValueError("produced-cell counts do not sum to prod_total.")
+    else:
+        prod_counts = np.zeros((0, 3), dtype=int)
+        prod_total = np.zeros(0, dtype=int)
+
     study_codes = np.asarray(df["study_code"], dtype=int)
     n_studies = int(study_codes.max()) + 1
 
@@ -630,10 +721,12 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         "obs_s_id": np.arange(len(idx_s)),
         "obs_sign_id": np.arange(len(idx_sign)),
         "obs_cells_id": np.arange(len(idx_cells)),
+        "obs_prod_id": np.arange(len(idx_prod)),
         "plot_id": np.arange(n_plot),
         "query_id": np.arange(n_query),
         "study_id": np.arange(n_studies),
         "cell_id": CELL_NAMES,
+        "prod_cell_id": PROD_CELL_NAMES,
         "x_dim": np.arange(1),
     }
     if use_subject_codes:
@@ -647,6 +740,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         if use_subject_codes:
             subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
         _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_prod_mask", has_prod_t.astype(int), dims=("obs_id",))
 
         # Latent full-grid trajectories (plain tensors), built by the shared
         # gp_utils helpers. Option D anchors each GP (per-draw zero at the
@@ -813,6 +907,26 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             dims=("obs_cells_id", "cell_id"),
         )
 
+        # nz_01 produced three cells (Dirichlet-Multinomial), within-PRODUCED
+        # composition. nz_01 has no comprehension, so we condition on produced:
+        # drop the unobservable "neither" (understood_only) cell from the Plackett
+        # within-understood composition and renormalise over {sign_only, speak_only,
+        # both}. Same psi/conc and population+study marginals as the uk_02 DM, so the
+        # two cross-tab sources jointly identify psi.
+        if idx_prod.size:
+            r_p = pm.math.clip(r_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
+            q_p = pm.math.clip(q_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
+            pi_both_p = _plackett_pi_both(r_p, q_p, psi)
+            pi_sign_p = pm.math.maximum(r_p - pi_both_p, EPSILON)
+            pi_speak_p = pm.math.maximum(q_p - pi_both_p, EPSILON)
+            pi_both_p = pm.math.maximum(pi_both_p, EPSILON)
+            pi_prod = pm.math.stack([pi_sign_p, pi_speak_p, pi_both_p], axis=1)
+            pi_prod = pi_prod / pi_prod.sum(axis=1, keepdims=True)
+            pm.DirichletMultinomial(
+                "nz_prod_cells_obs", n=prod_total, a=conc * pi_prod, observed=prod_counts,
+                dims=("obs_prod_id", "prod_cell_id"),
+            )
+
         # ============================================================
         # Reporting deterministics (population, plot/query): four-cell + p_any
         # ============================================================
@@ -946,11 +1060,38 @@ def diagnostics(context: JointContext):
     )
 
 
+def _extract_produced_cell_observations(
+    df: pd.DataFrame,
+    has_prod: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Observed nz_01 produced-cell counts and ages for rows flagged by ``has_prod``."""
+    if not has_prod.any():
+        return (
+            np.zeros((0, len(PROD_CELL_NAMES)), dtype=int),
+            np.zeros(0, dtype=float),
+        )
+
+    missing = [col for col in (*PROD_CELL_COLUMNS, "age") if col not in df.columns]
+    if missing:
+        raise ValueError(
+            "obs_prod_mask marks produced-cell rows, but analysis_df is missing "
+            f"columns: {', '.join(missing)}"
+        )
+
+    return (
+        np.asarray(df.loc[has_prod, PROD_CELL_COLUMNS], dtype=int),
+        np.asarray(df.loc[has_prod, "age"], dtype=float),
+    )
+
+
 def sample_posterior_predictive(context: JointContext, definition=None):
-    """Posterior predictive for the uk_02 four cells (for the cell PPC)."""
+    """Posterior predictive for the observed cell-count likelihoods."""
     with context.model:
+        var_names = ["cells_obs"]
+        if "nz_prod_cells_obs" in context.model.named_vars:
+            var_names.append("nz_prod_cells_obs")
         trace = pm.sample_posterior_predictive(
-            context.trace, var_names=["cells_obs"], extend_inferencedata=True,
+            context.trace, var_names=var_names, extend_inferencedata=True,
             progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
         )
@@ -979,6 +1120,24 @@ def sample_posterior_predictive(context: JointContext, definition=None):
             "stored mask and likelihood rows are misaligned."
         )
 
+    has_prod = np.array(trace.constant_data["obs_prod_mask"].values, dtype=bool)
+    prod_counts, prod_ages = _extract_produced_cell_observations(df, has_prod)
+    if "nz_prod_cells_obs" in trace.posterior_predictive:
+        prod_pred = np.array(
+            trace.posterior_predictive["nz_prod_cells_obs"]
+            .stack(sample=("chain", "draw"))
+            .transpose("obs_prod_id", "prod_cell_id", "sample")
+            .values
+        )
+        if int(has_prod.sum()) != prod_pred.shape[0]:
+            raise ValueError(
+                f"obs_prod_mask count ({int(has_prod.sum())}) does not match "
+                f"posterior predictive nz_prod_cells_obs length ({prod_pred.shape[0]}); "
+                "stored mask and likelihood rows are misaligned."
+            )
+    else:
+        prod_pred = np.zeros((0, len(PROD_CELL_NAMES), 0), dtype=int)
+
     samples = JointModelSamples(
         X_plot=np.array(trace.constant_data["X_plot"].values),
         X_query=np.array(trace.constant_data["X_query"].values),
@@ -1000,6 +1159,9 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         cell_obs=cell_counts,
         cell_pred=cell_pred,
         cell_ages=cell_ages,
+        prod_cell_obs=prod_counts,
+        prod_cell_pred=prod_pred,
+        prod_cell_ages=prod_ages,
     )
     context.set_model_samples(samples)
 
@@ -1181,6 +1343,38 @@ def _run_joint_plots(context: JointContext):
     fig.savefig(os.path.join(od, "uk02_cell_ppc.svg"))
     context.plots["uk02_cell_ppc"] = fig
     plt.close(fig)
+
+    # 6) nz_01 produced-cell PPC (observed vs predicted produced-cell totals)
+    if s.prod_cell_obs.size and s.prod_cell_pred.size:
+        fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_MD)
+        obs_tot = s.prod_cell_obs.sum(axis=0)  # (3,)
+        pred_tot = s.prod_cell_pred.sum(axis=0)  # (3, n_samples)
+        pred_med = np.median(pred_tot, axis=1)
+        lo, hi = 100 * (1 - hdi) / 2, 100 * (1 + hdi) / 2
+        pred_lo = np.percentile(pred_tot, lo, axis=1)
+        pred_hi = np.percentile(pred_tot, hi, axis=1)
+        yerr = np.vstack([pred_med - pred_lo, pred_hi - pred_med])
+        xpos = np.arange(len(PROD_CELL_NAMES))
+        ax.bar(xpos - 0.18, obs_tot, width=0.36, color="C0", label="observed")
+        ax.bar(
+            xpos + 0.18,
+            pred_med,
+            width=0.36,
+            color="C3",
+            alpha=0.7,
+            label="predicted (median)",
+            yerr=yerr,
+            capsize=4,
+        )
+        ax.set_xticks(xpos)
+        ax.set_xticklabels(PROD_CELL_NAMES)
+        ax.set_ylabel("Total produced-cell count (nz_01)")
+        ax.legend(frameon=True)
+        ax.set_title("nz_01 produced-cell posterior predictive check")
+        fig.savefig(os.path.join(od, "nz01_produced_cell_ppc.png"), dpi=300)
+        fig.savefig(os.path.join(od, "nz01_produced_cell_ppc.svg"))
+        context.plots["nz01_produced_cell_ppc"] = fig
+        plt.close(fig)
 
 
 # ============================================================

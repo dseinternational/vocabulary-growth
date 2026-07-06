@@ -884,10 +884,9 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
 
     For models with subject-level random intercepts (use_subject_re_u and/or
     use_subject_re_q), the y_*_plot / y_*_query nodes are constructed using
-    marginal probabilities that integrate over a freshly-sampled subject RE
-    drawn from the corresponding prior. This makes y_u_query etc. the
-    correct predictive distribution for an unseen DS child, rather than
-    the population-mean conditional distribution.
+    probabilities from one freshly-sampled subject RE per posterior draw. That
+    gives a coherent unseen-child trajectory across age rather than independent
+    one-age marginals at each plot or query point.
     """
     n_trials = context.model_data.n_trials
 
@@ -906,34 +905,24 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
 
     with context.model:
         # Subject-marginalised probabilities if subject REs are present.
-        # delta_subj_*_marg_{plot,query} are auxiliary RVs sampled from the
-        # subject-RE prior during sample_posterior_predictive — they are not
-        # part of the likelihood and do not affect posterior sampling.
+        # delta_subj_*_marg are auxiliary scalar RVs sampled from the subject-RE
+        # prior during sample_posterior_predictive. Reusing one scalar across
+        # plot/query ages makes y_*_plot a coherent unseen-child trajectory.
         if use_subject_re_u:
             tau_subj_u = context.model_variables["tau_subj_u"]
             f_u_plot_var = context.model_variables["f_u_plot"]
             f_u_query_var = context.model_variables["f_u_query"]
-            delta_u_plot_marg = pm.Normal(
-                "_delta_subj_u_plot_marg", mu=0.0, sigma=tau_subj_u, dims="plot_id"
-            )
-            delta_u_query_marg = pm.Normal(
-                "_delta_subj_u_query_marg", mu=0.0, sigma=tau_subj_u, dims="query_id"
-            )
-            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_plot_marg)
-            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_query_marg)
+            delta_u_marg = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_subj_u)
+            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_marg)
+            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_marg)
 
         if use_subject_re_q:
             tau_subj_q = context.model_variables["tau_subj_q"]
             h_plot_var = context.model_variables["h_plot"]
             h_query_var = context.model_variables["h_query"]
-            delta_q_plot_marg = pm.Normal(
-                "_delta_subj_q_plot_marg", mu=0.0, sigma=tau_subj_q, dims="plot_id"
-            )
-            delta_q_query_marg = pm.Normal(
-                "_delta_subj_q_query_marg", mu=0.0, sigma=tau_subj_q, dims="query_id"
-            )
-            q_plot_marg = pm.math.sigmoid(h_plot_var + delta_q_plot_marg)
-            q_query_marg = pm.math.sigmoid(h_query_var + delta_q_query_marg)
+            delta_q_marg = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q)
+            q_plot_marg = pm.math.sigmoid(h_plot_var + delta_q_marg)
+            q_query_marg = pm.math.sigmoid(h_query_var + delta_q_marg)
             p_s_plot = p_u_plot * q_plot_marg
             p_s_query = p_u_query * q_query_marg
         elif use_subject_re_u:
@@ -1447,6 +1436,77 @@ def plot_understood_vs_spoken_predictive(
     return fig
 
 
+def plot_spoken_given_understood(
+    samples: BivariateModelSamples,
+    n_trials: int,
+    hdi_prob: float = 0.90,
+    output_dir: str | None = None,
+    filename: str | None = None,
+):
+    """Predicted words spoken given words understood, by age (issue #112, Q1).
+
+    The bivariate model implies E[spoken | understood = U, age a] = U * q(a),
+    where q(a) = P(speak | understood). This plots that structural read-out as a
+    fan of lines (one per representative age), each shaded by the posterior HDI of
+    q(a), so a reader can answer directly: "given a child understands N words at
+    age a, how many words are they expected to say?". The slope of each line is
+    q(a); the dashed y = x line is the ceiling (a child cannot say more distinct
+    words than they understand).
+    """
+    q_query = samples.q_query  # (n_query, n_samples)
+    ages = np.asarray(samples.X_query)  # (n_query,)
+
+    # A few representative ages spanning the query range (keeps the fan legible).
+    n_age = len(ages)
+    sel = np.unique(np.linspace(0, n_age - 1, num=min(5, n_age)).round().astype(int))
+
+    understood = np.linspace(0, n_trials, 100)
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    rows = []
+    for k, j in enumerate(sel):
+        q_samps = q_query[j, :]
+        q_med = float(np.median(q_samps))
+        q_lo, q_hi = az.hdi(q_samps, prob=hdi_prob)
+        color = f"C{k}"
+        ax.fill_between(
+            understood, understood * q_lo, understood * q_hi, alpha=0.15, color=color
+        )
+        ax.plot(
+            understood,
+            understood * q_med,
+            lw=2.5,
+            color=color,
+            label=f"{int(round(float(ages[j])))} mo (q={q_med:.2f})",
+        )
+        rows.append(pd.DataFrame({
+            "age_months": int(round(float(ages[j]))),
+            "words_understood": understood,
+            "spoken_median": understood * q_med,
+            "spoken_hdi_lo": understood * q_lo,
+            "spoken_hdi_hi": understood * q_hi,
+        }))
+
+    ax.plot(
+        [0, n_trials], [0, n_trials], ls="--", lw=1, color="grey",
+        label="spoken = understood",
+    )
+
+    ax.set_xlabel("Words understood")
+    ax.set_ylabel("Predicted words spoken")
+    ax.set_xlim(0, n_trials)
+    ax.set_ylim(0, n_trials)
+    ax.set_title("Predicted words spoken given words understood")
+    ax.legend(loc="upper left", frameon=True, title="Age")
+
+    if output_dir is not None and filename is not None:
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _save_csv(pd.concat(rows, ignore_index=True), output_dir, filename)
+
+    return fig
+
+
 # ============================================================
 # Shared bivariate plotting pipeline
 # ============================================================
@@ -1656,6 +1716,18 @@ def _run_bivariate_joint_plots(
         filename="understood_vs_spoken_predictive",
     )
     context.plots["understood_vs_spoken_predictive"] = fig
+    plt.close(fig)
+
+    # ---- Predicted spoken given understood, by age (issue #112, Q1) ----
+
+    fig = plot_spoken_given_understood(
+        samples,
+        n_trials=context.model_data.n_trials,
+        hdi_prob=context.reporting.hdi,
+        output_dir=context.reporting.output_dir,
+        filename="spoken_given_understood",
+    )
+    context.plots["spoken_given_understood"] = fig
     plt.close(fig)
 
     # ---- Per-outcome plots: understood ----

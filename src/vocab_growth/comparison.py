@@ -504,7 +504,7 @@ def interp_draws(ages: np.ndarray, Y: np.ndarray, grid: np.ndarray) -> np.ndarra
     """Linear-interpolate each row of ``Y`` (n_draw, n_age) onto a shared ``grid``."""
     out = np.empty((Y.shape[0], grid.size), dtype=float)
     for i in range(Y.shape[0]):
-        out[i] = np.interp(grid, ages, Y[i])
+        out[i] = np.interp(grid, ages, Y[i], left=np.nan, right=np.nan)
     return out
 
 
@@ -605,19 +605,64 @@ def expressive_specific_delay(
     }
 
 
+def _first_crossing_age_targets(
+    W: np.ndarray,
+    ages: np.ndarray,
+    targets: np.ndarray,
+) -> np.ndarray:
+    """Per-draw first crossing age for one target per draw.
+
+    ``np.interp(target, W, ages)`` only works when each trajectory is monotone.
+    The fitted GP trajectories are not constrained that way, so this mirrors
+    :func:`first_crossing_age` but lets the target vary by draw.
+    """
+    targets = np.asarray(targets, dtype=float)
+    if targets.shape != (W.shape[0],):
+        raise ValueError("targets must have shape (n_draw,).")
+
+    out = np.full(W.shape[0], np.nan)
+    valid = np.isfinite(targets)
+    if not valid.any():
+        return out
+
+    W_valid = W[valid]
+    targets_valid = targets[valid]
+    mask = W_valid >= targets_valid[:, None]
+    any_above = mask.any(axis=1)
+    first_idx = mask.argmax(axis=1)
+    j_prev = np.maximum(first_idx - 1, 0)
+
+    y0 = np.take_along_axis(W_valid, j_prev[:, None], axis=1).squeeze(1)
+    y1 = np.take_along_axis(W_valid, first_idx[:, None], axis=1).squeeze(1)
+    a0 = ages[j_prev]
+    a1 = ages[first_idx]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        denom = y1 - y0
+        interp = np.where(
+            denom == 0,
+            a1,
+            a0 + (targets_valid - y0) * (a1 - a0) / denom,
+        )
+    crossing = np.where(first_idx == 0, ages[0], interp)
+    below_support = (first_idx == 0) & (W_valid[:, 0] > targets_valid)
+    crossing = np.where(below_support, np.nan, crossing)
+    out[valid] = np.where(any_above, crossing, np.nan)
+    return out
+
+
 def _invert_trajectory(
     ages: np.ndarray, W: np.ndarray, targets: np.ndarray
 ) -> np.ndarray:
-    """Per-draw age at which monotone ``W`` (n_draw, n_age) reaches ``targets``.
+    """Per-draw first age at which ``W`` (n_draw, n_age) reaches ``targets``.
 
     ``targets`` is ``(n_draw, n_target)``. Linear interpolation on each draw's
-    (age-increasing) curve; NaN where a target lies outside that draw's observed
-    level range — i.e. where matching would require extrapolating the reference.
+    first crossing; NaN where a target lies outside that draw's observed level
+    range — i.e. where matching would require extrapolating the reference.
     """
     n_draw, n_target = targets.shape
     out = np.full((n_draw, n_target), np.nan)
-    for d in range(n_draw):
-        out[d] = np.interp(targets[d], W[d], ages, left=np.nan, right=np.nan)
+    for j in range(n_target):
+        out[:, j] = _first_crossing_age_targets(W, ages, targets[:, j])
     return out
 
 
