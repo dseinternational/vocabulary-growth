@@ -15,10 +15,10 @@ The view has now been fixed to null out `understood` for non-bivariate forms whi
 
 In the English Down syndrome subset of the Wordbank export (`dataset_name = 'Edgin'`, `lower(health_conditions) = 'down syndrome'`), counting rows where `comprehension == production`:
 
-| Form | n   | U == S      | After `production <= 100` cap | Ages (used rows) | Median "understood" (used rows) |
-| ---- | --- | ----------- | ----------------------------- | ---------------- | ------------------------------- |
-| WG   | 87  | 5 (5.7%)    | 79                            | 11–18 months     | 33                              |
-| WS   | 109 | 109 (100%)  | 85                            | 17–27 months     | 7 (== median spoken)            |
+| Form | n   | U == S     | After `production <= 100` cap | Ages (used rows) | Median "understood" (used rows) |
+| ---- | --- | ---------- | ----------------------------- | ---------------- | ------------------------------- |
+| WG   | 87  | 5 (5.7%)   | 79                            | 11–18 months     | 33                              |
+| WS   | 109 | 109 (100%) | 85                            | 17–27 months     | 7 (== median spoken)            |
 
 The WS rows are production-only measurements wearing a comprehension label. The contrast at the age overlap makes the distortion concrete: WG rows at 17–18 months have median understood 46.5 (n = 46), while the WS rows spanning 17–27 months report median "understood" 7 — because that is their median production.
 
@@ -42,17 +42,17 @@ While fixing the block we documented the `AND production <= 100` filter, which h
 
 ## Models requiring attention
 
-| Model     | Population | Outcome(s)                   | Affected?                        | Action                              |
-| --------- | ---------- | ---------------------------- | -------------------------------- | ----------------------------------- |
-| VG01      | DS         | Spoken                       | no — WS production is valid      | none                                |
-| **VG02**  | **DS**     | **Understood**               | **yes**                          | **refit**                           |
-| VG03/VG04 | TD         | Spoken / understood          | no — TD loader guarded 2026-05-15 | none                                |
-| **VG05**  | **DS**     | **Joint U + S**              | **yes**                          | **refit**                           |
-| **VG07–VG10** | **DS** | **Joint U + S (+ REs)**      | **yes**                          | **refit**                           |
-| VG11–VG13 | TD         | Various                      | no                               | none                                |
-| **VG14**  | **DS**     | **U + S + signed**           | **yes** (us_01 U/S marginals)    | **refit**                           |
-| **VG15**  | **DS**     | **Joint modality**           | **yes** (us_01 in merged marginals) | **refit**                        |
-| **VG16**  | **DS**     | **Cross-lag (U → q)**        | **yes**                          | **refit**                           |
+| Model         | Population | Outcome(s)              | Affected?                           | Action    |
+| ------------- | ---------- | ----------------------- | ----------------------------------- | --------- |
+| VG01          | DS         | Spoken                  | no — WS production is valid         | none      |
+| **VG02**      | **DS**     | **Understood**          | **yes**                             | **refit** |
+| VG03/VG04     | TD         | Spoken / understood     | no — TD loader guarded 2026-05-15   | none      |
+| **VG05**      | **DS**     | **Joint U + S**         | **yes**                             | **refit** |
+| **VG07–VG10** | **DS**     | **Joint U + S (+ REs)** | **yes**                             | **refit** |
+| VG11–VG13     | TD         | Various                 | no                                  | none      |
+| **VG14**      | **DS**     | **U + S + signed**      | **yes** (us_01 U/S marginals)       | **refit** |
+| **VG15**      | **DS**     | **Joint modality**      | **yes** (us_01 in merged marginals) | **refit** |
+| **VG16**      | **DS**     | **Cross-lag (U → q)**   | **yes**                             | **refit** |
 
 Downstream DS-vs-TD comparisons and report chapters that consume these posteriors (comprehension–production gap, joint trajectory, latency, `q` overlap) need regenerating after the refits.
 
