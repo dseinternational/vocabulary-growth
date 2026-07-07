@@ -96,6 +96,22 @@ def _sql_string_list(values: tuple[str, ...]) -> str:
     return ", ".join(f"'{v}'" for v in values)
 
 
+# Form-ceiling guard (issues #128/#131): exclude rows whose word count exceeds
+# the native item ceiling of the checklist form they came from
+# (``survey_vocab_max``). Such counts are impossible — a data-entry error, e.g.
+# an it_01 row recording 461 words understood on a 408-item form — and must not
+# reach any model. Rows with an unknown ceiling (``survey_vocab_max`` NULL) are
+# kept, as are counts at the ceiling (a legitimate ceiling observation); only a
+# count strictly above its form's ceiling is dropped.
+_CEILING_GUARD_KEEP = (
+    "survey_vocab_max IS NULL OR ("
+    "(understood IS NULL OR understood <= survey_vocab_max) AND "
+    "(spoken IS NULL OR spoken <= survey_vocab_max) AND "
+    "(signed IS NULL OR signed <= survey_vocab_max) AND "
+    "(produced IS NULL OR produced <= survey_vocab_max))"
+)
+
+
 def vocab_combined_view_sql() -> str:
     """Return the ``CREATE VIEW vocab_combined`` statement.
 
@@ -113,6 +129,7 @@ def vocab_combined_view_sql() -> str:
     bivariate_forms_sql_list = _sql_string_list(WORDBANK_BIVARIATE_FORMS)
     return f"""
     CREATE VIEW vocab_combined AS
+    SELECT * FROM (
     SELECT 'uk_01' as study,
            vuk1.subject_id,
            vuk1.sex,
@@ -287,6 +304,8 @@ def vocab_combined_view_sql() -> str:
         vnz01.spoken + vnz01.signed + vnz01.spoken_signed as produced,
         675                                               as survey_vocab_max
     FROM vocab_nz_01 as vnz01
+    ) vc
+    WHERE {_CEILING_GUARD_KEEP}
     """
 
 
