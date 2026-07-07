@@ -43,6 +43,8 @@ import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
 
 EPSILON = 1e-12
+# TODO(#131): derive from definition.n_trials (this script keys off trace
+# folders via ModelSpec and has no model definition object in scope).
 N_TRIALS = 800
 
 MODELS_DIR = env.models_output_dir()
@@ -101,6 +103,20 @@ def aggregate_to_subject(
 
     ll_u = ll["y_u_obs"].values
     ll_s = ll["y_s_obs"].values
+    # The trace's per-observation log-likelihoods are aligned to the freshly
+    # re-queried frame purely by row position, and load_combined_data() has no
+    # ORDER BY. Guard against a frame/trace row-count mismatch before aligning
+    # (mirrors common_joint_modality.sample_posterior_predictive).
+    assert ll_u.shape[-1] == len(subj_u), (
+        f"understood log-likelihood obs dim ({ll_u.shape[-1]}) does not match "
+        f"the re-queried frame's understood-row count ({len(subj_u)}); the "
+        "trace and analysis frame are misaligned."
+    )
+    assert ll_s.shape[-1] == len(subj_s), (
+        f"spoken log-likelihood obs dim ({ll_s.shape[-1]}) does not match "
+        f"the re-queried frame's spoken-row count ({len(subj_s)}); the "
+        "trace and analysis frame are misaligned."
+    )
     n_chain, n_draw = ll_u.shape[:2]
     out = np.zeros((n_chain, n_draw, n_subjects), dtype=ll_u.dtype)
     np.add.at(out, (slice(None), slice(None), subj_u), ll_u)

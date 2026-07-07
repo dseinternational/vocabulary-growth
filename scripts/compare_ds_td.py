@@ -4,7 +4,7 @@
 DEPRECATED — superseded by ``scripts/compare_models.py``.
 
 This one-off produced the early VG07-vs-VG06 ``ds_td_q_vs_understood`` overlay
-and ``ds_td_q_crossings.csv``. The canonical figure (DS VG09 vs TD VG06, with
+and ``ds_td_q_crossings.csv``. The canonical figure (DS VG09 vs TD VG13, with
 VG07 as a dashed reference) is now produced by
 ``compare_models.ds_td_q_vs_understood``. This shim delegates there so the
 output files stay in sync; please call ``compare_models.py`` directly.

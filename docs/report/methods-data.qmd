@@ -1,6 +1,6 @@
 ---
 title: "Data and measures"
-abstract: "*TODO*"
+abstract: "This chapter describes the data behind the analyses: parent-report vocabulary assessments of children with Down syndrome pooled from several international studies and harmonised onto a common 800-item reference inventory. For each study we tabulate the numbers of words understood and spoken — and, for the signing sub-set, words signed — by age, alongside the observation and child counts, age range, and per-measure summaries. It then documents the measurement decisions that shape those counts: the common 800-item scale and its relationship to each source form's native checklist ceiling, the production-only treatment of Wordbank Words & Sentences records, and the study-specific inclusion rules applied when loading the data."
 ---
 
 ::: {.callout-note}
@@ -39,4 +39,8 @@ _ds_summary
 
 The models report vocabulary counts on a common 800-item reference scale ($N_{\text{trials}} = 800$). This is a reference-inventory scale rather than the native denominator for every source checklist: some source forms have lower ceilings, including Wordbank Words & Gestures (about 396 items) and Oxford CDI (about 418 items). The common scale keeps estimates comparable across DS and TD instruments, but it remains a modelling approximation, so source-form ceilings and near-ceiling observations should be checked when interpreting high-count regions.
 
+Each source's native checklist ceiling is recorded in the data as `survey_vocab_max`, but the likelihoods do not use it: every count is modelled against the common 800-item denominator regardless of the form it came from. A count near a small form's ceiling is therefore effectively right-censored under the harmonisation — a child who checks every item on Words & Gestures (about 396 items) records 396, not the larger count they might reach on a fuller inventory, yet the model treats 396 as one of 800 possible words. High-count observations from small-ceiling forms should be read with this censoring in mind.
+
 Wordbank Words & Sentences (WS) records are treated as **production-only** because the WS comprehension field is a production proxy rather than an independent comprehension measurement. TD spoken-only models can use WS production counts, but TD bivariate models that estimate both understood and spoken vocabulary exclude WS rows and rely on WG and Oxford CDI observations for the comprehension-production gap.
+
+The us_01 Edgin Down syndrome Wordbank subset carries a further inclusion rule: rows are kept only where production is at most 100 words (`US_01_MAX_PRODUCTION`), a legacy cap retained pending review of its rationale. In the 2026-07 export this excludes 8 of 87 Words & Gestures rows and 24 of 109 Words & Sentences rows from that subset.

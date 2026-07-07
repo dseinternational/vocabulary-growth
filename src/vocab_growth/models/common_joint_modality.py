@@ -1087,7 +1087,10 @@ def _extract_produced_cell_observations(
 def sample_posterior_predictive(context: JointContext, definition=None):
     """Posterior predictive for the observed cell-count likelihoods."""
     with context.model:
-        var_names = ["cells_obs"]
+        # Include the three marginal word-count likelihoods alongside the
+        # four-cell composition likelihoods so they are posterior-predictively
+        # sampled too (they are unconditionally defined in the build above).
+        var_names = ["cells_obs", "y_u_obs", "y_s_obs", "y_sign_obs"]
         if "nz_prod_cells_obs" in context.model.named_vars:
             var_names.append("nz_prod_cells_obs")
         trace = pm.sample_posterior_predictive(
