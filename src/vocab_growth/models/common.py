@@ -277,7 +277,7 @@ def get_hsgp_hyperparams(
     ell_range_z,
 ):
     """
-    Compute HSGP basis size (m), boundary factor (c), and derived L, m.
+    Compute the HSGP boundary ``L`` and basis size ``M`` for the age kernel.
 
     Parameters
     ----------

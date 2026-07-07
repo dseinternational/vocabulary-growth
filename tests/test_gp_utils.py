@@ -1,12 +1,15 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Unit tests for the kappa dispersion-closure factory in ``models.gp_utils``.
+"""Unit tests for the shared HSGP/trend build helpers.
 
-The factory returns the closure ``z -> kappa_min + exp(a_kappa + b_kappa * z)``;
-these tests pin that closed form. Evaluating with constant inputs is sufficient
-(and matches the per-engine usage, where the same expression is built from random
-variables the caller has already created).
+Covers the kappa dispersion-closure factory (``make_kappa_of_z`` — pinning the
+closed form ``z -> kappa_min + exp(a_kappa + b_kappa * z)``), the trend + HSGP
+graph builders (``trend_and_gp`` / ``intercept_and_gp`` — checking which RVs and
+deterministics they emit), and ``get_hsgp_hyperparams`` (the boundary/basis
+sizing). Evaluating with constant inputs is sufficient (and matches the
+per-engine usage, where the same expression is built from random variables the
+caller has already created).
 """
 
 import numpy as np
