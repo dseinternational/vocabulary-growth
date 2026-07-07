@@ -132,11 +132,13 @@ def summarise(comparison: pd.DataFrame, variant_dir: str, label: str) -> dict:
     """One-row robustness verdict for a variant (feeds the §7 matrix)."""
     converged, max_rhat, min_ess = diagnostics_gate(variant_dir)
     checked = comparison.dropna(subset=["within_baseline_hdi"])
-    n_within = int(checked["within_baseline_hdi"].sum())
+    # The column mixes Python bools with None (Ey_any / P_psi_gt_1 rows), so it
+    # is object dtype even after dropna; ~ on object bools yields -2/-1, not a
+    # mask. Coerce before inverting.
+    within = checked["within_baseline_hdi"].astype(bool)
+    n_within = int(within.sum())
     n_checked = int(len(checked))
-    outside = sorted(
-        checked.loc[~checked["within_baseline_hdi"], "quantity"].unique().tolist()
-    )
+    outside = sorted(checked.loc[~within, "quantity"].unique().tolist())
     max_abs_delta = float(comparison["delta"].abs().max()) if len(comparison) else 0.0
     if converged is False:
         verdict = "NON-CONVERGED (not assessed)"
