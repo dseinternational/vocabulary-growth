@@ -517,10 +517,18 @@ VG03 = UnivariateModelDefinition(
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    # Prior-predictive recalibration (mirrors VG01): TD production is delayed, so
+    # the old prior mean-trajectory band overshot the near-zero young floor
+    # (median ~38 words at 12 mo against an empirical mean of ~10) and ran above
+    # the data mean at every age. Lower the 12 mo anchor (Beta(1,15) -> Beta(1,30),
+    # ~26 words), soften the near-uniform 26 mo anchor (Beta(1.5,1.1) -> Beta(1.3,
+    # 1.3)), and widen eta (0.4 -> 0.5) so the median band tracks the empirical
+    # mean through the dense 16-26 mo region.
     p_slope_low_alpha=1.0,
-    p_slope_low_beta=15.0,
-    p_slope_hi_alpha=1.5,
-    p_slope_hi_beta=1.1,
+    p_slope_low_beta=30.0,
+    p_slope_hi_alpha=1.3,
+    p_slope_hi_beta=1.3,
+    eta_sigma=0.5,
     # Bumped from 0.1: total TD pool shrank from 16,552 to 6,134
     # after the WS exclusion; this keeps the effective training set
     # (~1,500 rows) close to the previous VG03 fit.
@@ -538,10 +546,17 @@ VG04 = UnivariateModelDefinition(
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    p_slope_low_alpha=1.0,
-    p_slope_low_beta=20.0,
-    p_slope_hi_alpha=1.5,
-    p_slope_hi_beta=1.1,
+    # Prior-predictive recalibration (mirrors VG02): TD comprehension is already
+    # substantial at 12 mo (empirical mean ~82 words), but the old prior centred
+    # it at ~28 (the data mean sat near the prior's 85th percentile young) then
+    # overshot by 24 mo. Raise and firm up the 12 mo anchor (Beta(1,20) ->
+    # Beta(1.2,8), ~90 words, mode off zero), soften the 26 mo anchor
+    # (Beta(1.5,1.1) -> Beta(1.3,1.3)), and widen eta (0.4 -> 0.5).
+    p_slope_low_alpha=1.2,
+    p_slope_low_beta=8.0,
+    p_slope_hi_alpha=1.3,
+    p_slope_hi_beta=1.3,
+    eta_sigma=0.5,
     # Bumped from 0.1: total comprehension pool shrank from 16,552 to 6,134
     # after the WS exclusion; this keeps the effective training set
     # (~1,500 rows) close to the previous VG04 fit.
@@ -672,10 +687,13 @@ VG11 = UnivariateModelDefinition(
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    # Spoken trajectory priors shared with VG03 (see the note there): lower the
+    # 12 mo anchor for delayed TD production, soften the 26 mo anchor, widen eta.
     p_slope_low_alpha=1.0,
-    p_slope_low_beta=15.0,
-    p_slope_hi_alpha=1.5,
-    p_slope_hi_beta=1.1,
+    p_slope_low_beta=30.0,
+    p_slope_hi_alpha=1.3,
+    p_slope_hi_beta=1.3,
+    eta_sigma=0.5,
     # Use all bivariate-capable rows (WG + Oxford CDI) plus WS production rows.
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
@@ -702,10 +720,14 @@ VG12 = UnivariateModelDefinition(
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    p_slope_low_alpha=1.0,
-    p_slope_low_beta=20.0,
-    p_slope_hi_alpha=1.5,
-    p_slope_hi_beta=1.1,
+    # Understood trajectory priors shared with VG04 (see the note there): raise
+    # and firm up the 12 mo anchor for high early TD comprehension, soften the
+    # 26 mo anchor, widen eta.
+    p_slope_low_alpha=1.2,
+    p_slope_low_beta=8.0,
+    p_slope_hi_alpha=1.3,
+    p_slope_hi_beta=1.3,
+    eta_sigma=0.5,
     # WG + Oxford CDI only (WS comprehension is a production proxy).
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
