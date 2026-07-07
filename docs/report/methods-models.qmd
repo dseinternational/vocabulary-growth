@@ -126,6 +126,8 @@ $$
 
 The signed mean $g_{\text{sign}}$ is **intercept-only** (no age slope) plus a GP: a free age slope extrapolates the signed ratio below the data floor at young ages, so the GP alone carries the empirical rise-then-fall hump. Each marginal outcome has its own Beta-Binomial likelihood with its own age-varying dispersion (@sec-betabinomial, @sec-kappa).
 
+The outcomes share the latent means $p_U$, $q$ and $r$, but each enters the likelihood as its own marginal Beta-Binomial, so the joint likelihood is a **composite (pseudo-)likelihood**: it couples the outcomes only through those shared means and treats the marginal *counts* as conditionally independent given them. It does not model the item-level joint distribution — which specific understood words a child also speaks or signs — and so mildly over-counts the information that shared words contribute across marginals. The one place item-level structure is modelled directly is the uk_02 four-cell cross-tabulation in VG15 (the Plackett $\psi$ and Dirichlet-Multinomial, below), which identifies the sign–speech overlap within understood words. Elsewhere the composite marginal likelihood is a deliberate simplification — appropriate because most sources report only marginal totals — and LOO comparisons and interval widths should be read with this mild between-marginal dependence in mind.
+
 ### Study and subject random intercepts {#sec-randomeffects}
 
 To separate the population age curves from differences in study composition and from repeated measurements on the same child, we add random intercepts on the logit-scale predictors at the observation level. For a predictor $f_\bullet \in \{f_U, h, g_{\text{sign}}\}$,
