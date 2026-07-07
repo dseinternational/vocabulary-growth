@@ -863,6 +863,12 @@ def diagnostics(
         )
         context.plots["pair_plot"] = plt.gcf()
         plt.close()
+        # Drop the SVG: plot_kde_pair always writes both PNG and SVG, but the
+        # dense KDE grid produces a multi-megabyte SVG that nothing embeds (the
+        # report uses pair_plot.png).
+        pair_plot_svg = os.path.join(context.reporting.output_dir, "pair_plot.svg")
+        if os.path.exists(pair_plot_svg):
+            os.remove(pair_plot_svg)
 
     # Trace plot
 

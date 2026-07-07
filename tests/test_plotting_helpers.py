@@ -124,8 +124,9 @@ def test_maybe_savgol_passthrough_when_disabled():
     assert out.dtype == float
 
 
-def test_count_distributions_writes_combined_and_individual_files(tmp_path):
-    # issue #123: alongside the combined grid, one figure is written per query age.
+def test_count_distributions_writes_individual_files_and_csv_not_combined(tmp_path):
+    # issue #123: one figure is written per query age. The combined grid plot is
+    # no longer written (reports embed the per-age figures), but the CSV remains.
     rng = np.random.default_rng(0)
     X_query = np.array([12.0, 24.0])
     y_query = rng.integers(0, 800, size=(2, 200))
@@ -137,9 +138,11 @@ def test_count_distributions_writes_combined_and_individual_files(tmp_path):
         filename="ppc",
     )
     assert isinstance(fig, Figure)
-    # combined figure + per-age summary table
-    for ext in ("png", "svg", "csv"):
-        assert os.path.exists(os.path.join(str(tmp_path), f"ppc.{ext}"))
+    # summary table is still written
+    assert os.path.exists(os.path.join(str(tmp_path), "ppc.csv"))
+    # combined grid figure is NOT written any more
+    for ext in ("png", "svg"):
+        assert not os.path.exists(os.path.join(str(tmp_path), f"ppc.{ext}"))
     # one figure per query age
     for age in (12, 24):
         for ext in ("png", "svg"):

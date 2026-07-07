@@ -20,10 +20,23 @@ def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
     df.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
 
 
-def _save_png_svg(fig: Figure, output_dir: str, filename: str, *, dpi: int = 300) -> None:
-    """Save a figure as both PNG and SVG under the same filename stem."""
+# ISO 216 A-series landscape aspect ratio (width : height = √2 : 1), used to size
+# the individual per-age posterior-predictive count figures.
+ISO_A_LANDSCAPE_RATIO = 2**0.5
+
+
+def _iso_a_landscape_figsize(width: float = 7.5) -> tuple[float, float]:
+    """Return an (width, height) tuple in ISO A-series landscape proportions."""
+    return (width, width / ISO_A_LANDSCAPE_RATIO)
+
+
+def _save_png_svg(
+    fig: Figure, output_dir: str, filename: str, *, dpi: int = 300, svg: bool = True
+) -> None:
+    """Save a figure as PNG (and, unless ``svg=False``, SVG) under one filename stem."""
     fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=dpi)
-    fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+    if svg:
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
 
 
 def _hdi_by_sample(values: np.ndarray, prob: float) -> np.ndarray:
@@ -154,7 +167,9 @@ def plot_prior_predictions(
     plt.ylim(-20, n_trials + 50)
 
     if filename is not None and output_dir is not None:
-        _save_png_svg(plt.gcf(), output_dir, filename)
+        # PNG only: the dense per-draw scatter produces a multi-megabyte SVG that
+        # nothing embeds (reports use the PNG).
+        _save_png_svg(plt.gcf(), output_dir, filename, svg=False)
 
     return plt.gcf()
 
@@ -169,13 +184,21 @@ def _draw_ppc_count_distribution(
     eti_prob: float | None,
     q_lo: float,
     q_hi: float,
+    count_axis_max: int | None = None,
 ) -> None:
     """Draw one query age's posterior predictive count distribution on ``ax``.
 
     Shared by the combined grid figure and the individual per-age figures
     (issue #123). Does not set the x-axis label — the caller owns that, so the
     combined grid can label only its bottom row.
+
+    ``count_axis_max`` caps the word-count axis (defaults to ``n_trials``); the
+    label offsets scale with it so annotations stay on-plot when the axis is
+    zoomed in.
     """
+    axis_max = n_trials if count_axis_max is None else count_axis_max
+    label_off = axis_max * 0.19
+    med_off = axis_max * 0.14
     bins = np.arange(0, n_trials + bin_width + 1, bin_width)
     centres = (bins[:-1] + bins[1:]) / 2
     draws = draws.astype(int)
@@ -193,7 +216,7 @@ def _draw_ppc_count_distribution(
         [0, ylim_max * 0.96], hdi[0], hdi[1], color=plot_styles.COLOUR_GREEN, alpha=0.10
     )
     ax.text(
-        hdi[1] + 150,
+        hdi[1] + label_off,
         ylim_max * 0.9,
         f"{int(hdi_prob*100)}% HPDI: {hdi[0]:.0f} to {hdi[1]:.0f}",
         color=plot_styles.COLOUR_GREEN,
@@ -204,7 +227,7 @@ def _draw_ppc_count_distribution(
         eti_lo, eti_hi = np.quantile(draws, [q_lo, q_hi])
         ax.fill_betweenx([0, ylim_max * 0.96], eti_lo, eti_hi, color=plot_styles.COLOUR_ORANGE, alpha=0.10)
         ax.text(
-            eti_hi + 150,
+            eti_hi + label_off,
             ylim_max * 0.82,
             f"{int(eti_prob*100)}% ETI: {eti_lo:.0f} to {eti_hi:.0f}",
             color=plot_styles.COLOUR_ORANGE,
@@ -217,7 +240,7 @@ def _draw_ppc_count_distribution(
     # median
     ax.axvline(med, lw=2, ls="--", color=plot_styles.COLOUR_RED)
     ax.text(
-        med + 110,
+        med + med_off,
         ylim_max * 0.98,
         f"median: {med:.0f}",
         color=plot_styles.COLOUR_RED,
@@ -227,8 +250,9 @@ def _draw_ppc_count_distribution(
     ax.set_title(f"{age:.1f} months")
     ax.set_ylim(0, ylim_max)
     ax.set_ylabel(f"Posterior predictive probability mass (bin width {bin_width})")
-    ax.set_xlim(0, n_trials)
-    ax.set_xticks(np.arange(0, n_trials + 1, 100))
+    ax.set_xlim(0, axis_max)
+    tick_step = 100 if axis_max > 400 else 50
+    ax.set_xticks(np.arange(0, axis_max + 1, tick_step))
 
 
 def plot_posterior_predictive_count_distributions_by_query_age(
@@ -242,17 +266,23 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     output_dir: str | None = None,
     filename: str | None = None,
     x_label: str = "Word count",
+    count_axis_max: int | None = None,
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts, as a histogram.
 
-    Returns the combined grid figure (one subplot per query age). When
-    ``output_dir``/``filename`` are given, also writes each age as its own file
-    ``{filename}_{age}m.{png,svg}`` alongside the combined figure, so the
-    distributions can be embedded individually and flexibly in reports
-    (issue #123).
+    ``count_axis_max`` caps the word-count axis of every subplot (defaults to
+    ``n_trials``, i.e. 800), so young ages whose mass sits well below the full
+    inventory can be zoomed in.
+
+    Returns the combined grid figure (one subplot per query age; built for the
+    return value but no longer written to disk — the reports embed the per-age
+    figures). When ``output_dir``/``filename`` are given, writes each age as its
+    own ISO A-landscape file ``{filename}_{age}m.{png,svg}`` and the summary
+    table ``{filename}.csv`` (issue #123).
     """
     nq = len(X_query)
+    axis_max = n_trials if count_axis_max is None else count_axis_max
 
     # ETI quantile levels matching context.reporting.hdi mass (e.g., 0.90 -> [0.05, 0.95])
     if eti_prob is not None:
@@ -267,7 +297,8 @@ def plot_posterior_predictive_count_distributions_by_query_age(
 
     for j, age in enumerate(X_query):
         _draw_ppc_count_distribution(
-            axes[j], age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi
+            axes[j], age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi,
+            axis_max,
         )
 
     for k in range(nq, len(axes)):
@@ -279,15 +310,18 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     fig.suptitle("Posterior predictive distributions at query ages", y=1.02)
 
     if filename is not None and output_dir is not None:
-        _save_png_svg(fig, output_dir, filename)
-
-        # Individual per-age figures, for flexible reuse in reports (issue #123).
+        # The combined grid is no longer written — reports embed the per-age
+        # figures below (via ppc_count_distribution_gallery). The grid is still
+        # returned for callers/tests.
+        # Individual per-age figures, in ISO A landscape (issue #123).
         for j, age in enumerate(X_query):
-            fig_i, ax_i = plt.subplots(figsize=(10, 3.8))
+            fig_i, ax_i = plt.subplots(figsize=_iso_a_landscape_figsize())
             _draw_ppc_count_distribution(
-                ax_i, age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi
+                ax_i, age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi,
+                axis_max,
             )
             ax_i.set_xlabel(f"{x_label} (bins of {bin_width})")
+            fig_i.tight_layout()
             _save_png_svg(fig_i, output_dir, f"{filename}_{age:g}m")
             plt.close(fig_i)
 
