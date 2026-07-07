@@ -58,7 +58,15 @@ from vocab_growth.models.common_bivariate import (
 from vocab_growth.models.common_bivariate_re import build_model_re
 from vocab_growth.models.definitions import VG07, VG08, VG09, BivariateModelDefinition
 
-N_TRIALS = 800
+# Derive the Beta-Binomial trial count from the model definitions rather than a
+# literal (issue #131). All three compared models share the common 800-item
+# reference scale; assert they agree so a future divergence surfaces here.
+_n_trials_set = {VG07.n_trials, VG08.n_trials, VG09.n_trials}
+assert len(_n_trials_set) == 1, (
+    f"VG07/VG08/VG09 disagree on n_trials ({sorted(_n_trials_set)}); "
+    "kfold_loso assumes a single common trial count."
+)
+N_TRIALS = _n_trials_set.pop()
 OUT_DIR = env.comparisons_output_dir()
 KFOLD_TMP_DIR = os.path.join(env.output_root(), "kfold_tmp")
 

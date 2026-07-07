@@ -77,6 +77,8 @@ The association $\psi$ is deliberately kept **decoupled** from the subject rando
 - **spoken / signed marginals** (uk_01/04/05/06 + uk_02 marginal-only rows): $\text{BetaBinomial}(800, p_U q, \kappa_S)$ and $\text{BetaBinomial}(800, p_U r, \kappa_\text{sign})$.
 - **uk_02 four cells** (the only cross-tab source): $\text{DirichletMultinomial}(\text{total}, \text{conc}\cdot[\pi_\text{neither}, \pi_\text{sign-only}, \pi_\text{speak-only}, \pi_\text{both}])$. For rows with complete four-cell data, `total` is the four-cell sum and is also used as the understood count for that assessment occasion, so the marginal understood likelihood and the four-cell likelihood share one authoritative total. **This is what identifies $\psi$.**
 
+The Dirichlet-Multinomial four-cell likelihood is excluded from LOO-CV by design: it is not a per-observation Beta-Binomial like the three marginal word-count likelihoods, so LOO-CV is reported for words understood, spoken and signed only, matching every other model's scope.
+
 ::: {.callout-important title="psi rests almost entirely on uk_02 — descriptive / exploratory"}
 
 The association $\psi$ is identified by the ~60 uk_02 rows with the four-cell cross-tab (19–56 months). It is a **single scalar** (the data do not support an age-varying association at this sample size) and is **descriptive/exploratory**. The four-cell composition outside ~19–56 months, and $p_\text{any}$ there, lean on the marginal trajectories plus scalar-$\psi$ extrapolation. uk_06 contributes marginal signed/spoken counts only (no cross-tab).

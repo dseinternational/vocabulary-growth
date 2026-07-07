@@ -37,6 +37,8 @@ import vocab_growth.plotting as plotting
 from vocab_growth import environment as env
 
 VG09_DIR = os.path.join(env.models_output_dir(), "VG09-age-understood-spoken-ds-re-subj-uq")
+# TODO(#131): derive from definition.n_trials (this script post-processes a
+# saved trace and has no model definition object in scope).
 N_TRIALS = 800
 EPSILON = 1e-12
 SEED = 47
@@ -244,17 +246,19 @@ def main() -> None:
 
     def _augment_summary(summary_path: str, y_arr: np.ndarray) -> None:
         df = pd.read_csv(summary_path)
-        # y_arr: (N, n_query). Quantiles across draws per age.
-        y_median = np.median(y_arr, axis=0).astype(int)
-        y_lo = np.quantile(y_arr, 0.05, axis=0).astype(int)
-        y_hi = np.quantile(y_arr, 0.95, axis=0).astype(int)
+        # y_arr: (N, n_query). Quantiles across draws per age. Round to the
+        # nearest integer count rather than truncating (floor), which would
+        # bias every reported count downward.
+        y_median = np.rint(np.median(y_arr, axis=0)).astype(int)
+        y_lo = np.rint(np.quantile(y_arr, 0.05, axis=0)).astype(int)
+        y_hi = np.rint(np.quantile(y_arr, 0.95, axis=0)).astype(int)
         df["Y_median"] = y_median
         df["Y_hdi_lo"] = y_lo
         df["Y_hdi_hi"] = y_hi
         df["Y_p05"] = y_lo
         df["Y_p95"] = y_hi
-        df["Y_p25"] = np.quantile(y_arr, 0.25, axis=0).astype(int)
-        df["Y_p75"] = np.quantile(y_arr, 0.75, axis=0).astype(int)
+        df["Y_p25"] = np.rint(np.quantile(y_arr, 0.25, axis=0)).astype(int)
+        df["Y_p75"] = np.rint(np.quantile(y_arr, 0.75, axis=0)).astype(int)
         for c in cutoffs:
             col = f"P(Y={c})" if c == 0 else f"P(Y<={c})"
             df[col] = (y_arr <= c).mean(axis=0)

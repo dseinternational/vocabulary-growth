@@ -230,27 +230,6 @@ def summarise_per_N(samples: np.ndarray, grid: np.ndarray) -> pd.DataFrame:
     return summarise_draws(samples, grid, "N")
 
 
-def prob_a_greater_b(
-    a: np.ndarray, b: np.ndarray, *, n_iter: int = 20000, rng=None
-) -> np.ndarray:
-    """Per-column MC estimate of P(a > b) treating columns as independent posteriors.
-
-    NaN-aware; NaN where either column is empty.
-    """
-    if rng is None:
-        rng = np.random.default_rng(0)
-    p = np.full(a.shape[1], np.nan)
-    for i in range(a.shape[1]):
-        a_i = a[~np.isnan(a[:, i]), i]
-        b_i = b[~np.isnan(b[:, i]), i]
-        if a_i.size == 0 or b_i.size == 0:
-            continue
-        a_s = rng.choice(a_i, size=n_iter, replace=True)
-        b_s = rng.choice(b_i, size=n_iter, replace=True)
-        p[i] = float(np.mean(a_s > b_s))
-    return p
-
-
 # ----------------------------------------------------------------------------
 # Analyses (per-draw, population-level)
 # ----------------------------------------------------------------------------
