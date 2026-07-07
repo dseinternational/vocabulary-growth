@@ -1,18 +1,22 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Unit tests for the kappa dispersion-closure factory in ``models.gp_utils``.
+"""Unit tests for the shared HSGP/trend build helpers.
 
-The factory returns the closure ``z -> kappa_min + exp(a_kappa + b_kappa * z)``;
-these tests pin that closed form. Evaluating with constant inputs is sufficient
-(and matches the per-engine usage, where the same expression is built from random
-variables the caller has already created).
+Covers the kappa dispersion-closure factory (``make_kappa_of_z`` — pinning the
+closed form ``z -> kappa_min + exp(a_kappa + b_kappa * z)``), the trend + HSGP
+graph builders (``trend_and_gp`` / ``intercept_and_gp`` — checking which RVs and
+deterministics they emit), and ``get_hsgp_hyperparams`` (the boundary/basis
+sizing). Evaluating with constant inputs is sufficient (and matches the
+per-engine usage, where the same expression is built from random variables the
+caller has already created).
 """
 
 import numpy as np
 import preliz as pz
 import pymc as pm
 
+from vocab_growth.models.common import get_hsgp_hyperparams
 from vocab_growth.models.gp_utils import (
     GPGrid,
     intercept_and_gp,
@@ -130,3 +134,39 @@ def test_intercept_and_gp_intercept_is_free_no_slope():
     assert "intercept_sign" in free  # intercept-only mean is a free RV
     assert "slope_sign" not in det  # no slope for the signed trajectory
     assert "ell_sign" in det
+
+
+# --- get_hsgp_hyperparams -----------------------------------------------------
+
+
+def test_get_hsgp_hyperparams_L_is_c_times_half_range():
+    # Grid deliberately skewed about zero: max|z| = 3.5 exceeds the half-range
+    # 2.5. HSGP.prior_linearized centres inputs at the grid midpoint, so the
+    # boundary must be c times the half-range — the same S that
+    # approx_hsgp_hyperparams sizes (m, c) for — not c times max|z|.
+    x_min, x_max = -1.5, 3.5
+    X_all_z = np.array([x_min, -0.5, 0.0, 1.0, x_max]).reshape(-1, 1)
+    ell_range_z = (0.3, 1.2)
+
+    L, M = get_hsgp_hyperparams(X_all_z, ell_range_z)
+
+    m, c = pm.gp.hsgp_approx.approx_hsgp_hyperparams(
+        x_range=[x_min, x_max],
+        lengthscale_range=list(ell_range_z),
+        cov_func="expquad",
+    )
+    half_range = (x_max - x_min) / 2.0
+    assert np.isclose(L[0], c * half_range)
+    assert M == [m]
+    # regression guard: the pre-fix boundary was c * max|z|, strictly larger here
+    assert L[0] < c * max(abs(x_min), abs(x_max))
+
+
+def test_get_hsgp_hyperparams_boundary_covers_centred_grid():
+    x = np.array([-2.0, 0.0, 4.0])
+    L, _ = get_hsgp_hyperparams(x.reshape(-1, 1), (0.5, 1.5))
+    centred = x - (x.max() + x.min()) / 2.0
+    # c >= 1.2, so the boundary always covers the midpoint-centred grid
+    assert L[0] >= np.max(np.abs(centred))
+
+

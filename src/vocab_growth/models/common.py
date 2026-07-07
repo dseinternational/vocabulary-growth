@@ -273,27 +273,30 @@ PACKAGE_LIST = [
 
 
 def get_hsgp_hyperparams(
-    X_obs_z,
+    X_all_z,
     ell_range_z,
 ):
     """
-    Compute HSGP basis size (m), boundary factor (c), and derived L, m.
+    Compute the HSGP boundary ``L`` and basis size ``M`` for the age kernel.
 
     Parameters
     ----------
-    X_obs_z : np.ndarray
-        Standardised observed ages, shape (n, 1).
+    X_all_z : np.ndarray
+        Standardised ages for the full evaluation grid the HSGP basis is
+        evaluated on (observed + plot + query + anchor points), shape (n, 1).
+        Passing only the observed ages under-covers the domain whenever the
+        query grid extends beyond the observed range.
     ell_range_z : tuple of float
         Length-scale range in z-score scale.
 
     Returns
     -------
     tuple[list[float], list[int]]
-        ``(L, M)`` where ``L`` is the HSGP boundary factor and ``M`` is the
-        basis size, each wrapped in a single-element list (one per input dim).
+        ``(L, M)`` where ``L`` is the HSGP boundary and ``M`` is the basis
+        size, each wrapped in a single-element list (one per input dim).
     """
-    x_min = float(np.min(X_obs_z))
-    x_max = float(np.max(X_obs_z))
+    x_min = float(np.min(X_all_z))
+    x_max = float(np.max(X_all_z))
 
     ell_low_z = ell_range_z[0]
     ell_high_z = ell_range_z[1]
@@ -304,7 +307,13 @@ def get_hsgp_hyperparams(
         cov_func="expquad",
     )
 
-    S = max(abs(x_min), abs(x_max))
+    # HSGP.prior_linearized centres X at the grid midpoint, so the domain the
+    # basis must cover is the half-range S = (x_max - x_min) / 2 — the same S
+    # that approx_hsgp_hyperparams sizes (m, c) for. Deriving L from max|z|
+    # instead would inflate L past what m supports (z-scores are skewed about
+    # zero, not about the midpoint), raising the smallest well-approximated
+    # length-scale above ell_range_z[0].
+    S = (x_max - x_min) / 2.0
     L = [S * c]
     M = [m]
 
@@ -543,7 +552,7 @@ def build_model(context: ModelFitContext):
     ell_range_z = (ell_low_z, ell_high_z)
 
     L, M = get_hsgp_hyperparams(
-        X_obs_z,
+        X_all_z,
         ell_range_z,
     )
 
