@@ -89,14 +89,14 @@ the model machinery is shared:
 The main TD/DS differences are concentrated in the anchor ages and in a few
 anchor distributions:
 
-| Prior area            | DS                                                                                      | TD                                                                           | Interpretation                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Anchor ages           | Usually 24 and 84 months.                                                               | Usually 12 and 26 months; VG13 uses 10 and 16 months.                        | Priors are placed over different developmental windows.                                                            |
-| Spoken low anchor     | `Beta(1, 15)` at 24 months in VG01.                                                     | `Beta(1, 15)` at 12 months in VG03/VG11.                                     | Same distributional shape, different age.                                                                          |
-| Understood low anchor | `Beta(1, 10)` at 24 months in DS understood and joint models.                           | `Beta(1, 20)` at 12 months in VG04/VG12; `Beta(1, 15)` at 10 months in VG13. | TD early-understanding priors are more tightly concentrated near the floor.                                        |
-| High anchor           | Usually `Beta(1.1, 1.1)` at 84 months.                                                  | Usually `Beta(1.5, 1.1)` at 26 months; VG13 uses `Beta(2, 2)` at 16 months.  | TD high-age priors lean more toward larger vocabulary by the older anchor; DS high-age priors remain much broader. |
-| Baseline `q` anchors  | `Beta(1, 1.5)` low and `Beta(2, 1.2)` high in VG05-VG09 and VG14; tighter in VG10/VG15. | Same broad defaults in VG13.                                                 | Mostly shared, except for posterior-informed DS stabilisation models.                                              |
-| Signing priors        | DS-only in VG14/VG15.                                                                   | Not modelled.                                                                | There is no TD signing counterpart.                                                                                |
+| Prior area            | DS                                                                                      | TD                                                                            | Interpretation                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Anchor ages           | Usually 24 and 84 months.                                                               | Usually 12 and 26 months; VG13 uses 10 and 16 months.                         | Priors are placed over different developmental windows.                                                            |
+| Spoken low anchor     | `Beta(1, 25)` at 24 months in VG01.                                                     | `Beta(1, 30)` at 12 months in VG03/VG11.                                      | Both concentrate near the floor after the young-age prior-predictive recalibration.                                |
+| Understood low anchor | `Beta(1, 7)` at 24 months in VG02; `Beta(1, 10)` in the DS joint models.                | `Beta(1.2, 8)` at 12 months in VG04/VG12; `Beta(1, 15)` at 10 months in VG13. | The TD understood low anchor was recalibrated up off the floor (TD comprehension is already substantial young).    |
+| High anchor           | Usually `Beta(1.1, 1.1)` at 84 months.                                                  | Usually `Beta(1.3, 1.3)` at 26 months; VG13 uses `Beta(2, 6)` at 16 months.   | The TD high anchors were softened toward the middle from a more optimistic prior; DS high-age priors remain broad. |
+| Baseline `q` anchors  | `Beta(1, 1.5)` low and `Beta(2, 1.2)` high in VG05-VG09 and VG14; tighter in VG10/VG15. | `Beta(1, 10)` low and `Beta(2, 7)` high in VG13.                              | VG13's young-TD production ratio is far below the DS window, so it no longer inherits the DS defaults.             |
+| Signing priors        | DS-only in VG14/VG15.                                                                   | Not modelled.                                                                 | There is no TD signing counterpart.                                                                                |
 
 Review notes:
 
@@ -121,19 +121,24 @@ by 800 gives the expected number of words out of the common reference inventory.
 For `q`, the anchor is a fraction of understood words, so it should not be read
 as a direct word count without also considering `p_U(a)`.
 
-| Prior use                              | Models                                  | Distribution     | Observable interpretation                                              |
-| -------------------------------------- | --------------------------------------- | ---------------- | ---------------------------------------------------------------------- |
-| Low-age spoken anchor                  | VG01, VG03, VG11                        | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 800.  |
-| Low-age DS understood anchor           | VG02, VG05, VG07-VG10, VG14, VG15       | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259, or about 54 words median out of 800.  |
-| Low-age TD understood anchor           | VG04, VG12                              | `Beta(1, 20)`    | Median 0.034, 5-95% 0.003-0.139, or about 27 words median out of 800.  |
-| Low-age young-TD understood anchor     | VG13                                    | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 800.  |
-| High-age DS single/U anchor            | VG01, VG02, VG05, VG07-VG10, VG14, VG15 | `Beta(1.1, 1.1)` | Median 0.500, 5-95% 0.060-0.940, or about 400 words median out of 800. |
-| High-age TD single/U anchor            | VG03, VG04, VG11, VG12                  | `Beta(1.5, 1.1)` | Median 0.599, 5-95% 0.126-0.955, or about 479 words median out of 800. |
-| High-age young-TD understood anchor    | VG13                                    | `Beta(2, 2)`     | Median 0.500, 5-95% 0.135-0.865, or about 400 words median out of 800. |
-| Baseline low-age `q` anchor            | VG05-VG09, VG13, VG14                   | `Beta(1, 1.5)`   | Median 0.370, 5-95% 0.034-0.864 of understood words.                   |
-| Baseline high-age `q` anchor           | VG05-VG09, VG13, VG14                   | `Beta(2, 1.2)`   | Median 0.654, 5-95% 0.197-0.956 of understood words.                   |
-| Posterior-informed low-age `q` anchor  | VG10, VG15                              | `Beta(3, 22)`    | Median 0.110, 5-95% 0.035-0.240 of understood words.                   |
-| Posterior-informed high-age `q` anchor | VG10, VG15                              | `Beta(20, 4)`    | Median 0.843, 5-95% 0.696-0.938 of understood words.                   |
+| Prior use                              | Models                      | Distribution     | Observable interpretation                                              |
+| -------------------------------------- | --------------------------- | ---------------- | ---------------------------------------------------------------------- |
+| Low-age DS spoken anchor               | VG01                        | `Beta(1, 25)`    | Median 0.027, 5-95% 0.002-0.113, or about 22 words median out of 800.  |
+| Low-age TD spoken anchor               | VG03, VG11                  | `Beta(1, 30)`    | Median 0.023, 5-95% 0.002-0.095, or about 18 words median out of 800.  |
+| Low-age DS understood anchor (single)  | VG02                        | `Beta(1, 7)`     | Median 0.094, 5-95% 0.007-0.348, or about 75 words median out of 800.  |
+| Low-age DS understood anchor (joint)   | VG05, VG07-VG10, VG14, VG15 | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259, or about 54 words median out of 800.  |
+| Low-age TD understood anchor           | VG04, VG12                  | `Beta(1.2, 8)`   | Median 0.104, 5-95% 0.011-0.341, or about 83 words median out of 800.  |
+| Low-age young-TD understood anchor     | VG13                        | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 800.  |
+| High-age DS single anchor (VG01/VG02)  | VG01, VG02                  | `Beta(2, 1.5)`   | Median 0.586, 5-95% 0.168-0.924, or about 469 words median out of 800. |
+| High-age DS understood anchor (joint)  | VG05, VG07-VG10, VG14, VG15 | `Beta(1.1, 1.1)` | Median 0.500, 5-95% 0.060-0.940, or about 400 words median out of 800. |
+| High-age TD single/U anchor            | VG03, VG04, VG11, VG12      | `Beta(1.3, 1.3)` | Median 0.500, 5-95% 0.079-0.921, or about 400 words median out of 800. |
+| High-age young-TD understood anchor    | VG13                        | `Beta(2, 6)`     | Median 0.228, 5-95% 0.053-0.521, or about 183 words median out of 800. |
+| Baseline low-age `q` anchor            | VG05-VG09, VG14             | `Beta(1, 1.5)`   | Median 0.370, 5-95% 0.034-0.864 of understood words.                   |
+| Young-TD low-age `q` anchor            | VG13                        | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259 of understood words.                   |
+| Baseline high-age `q` anchor           | VG05-VG09, VG14             | `Beta(2, 1.2)`   | Median 0.654, 5-95% 0.197-0.956 of understood words.                   |
+| Young-TD high-age `q` anchor           | VG13                        | `Beta(2, 7)`     | Median 0.201, 5-95% 0.046-0.471 of understood words.                   |
+| Posterior-informed low-age `q` anchor  | VG10, VG15                  | `Beta(3, 22)`    | Median 0.110, 5-95% 0.035-0.240 of understood words.                   |
+| Posterior-informed high-age `q` anchor | VG10, VG15                  | `Beta(20, 4)`    | Median 0.843, 5-95% 0.696-0.938 of understood words.                   |
 
 Review notes:
 
@@ -338,9 +343,7 @@ Two consequences for the priors:
 
 1. Because WG carries the only CDI comprehension data, an _understood_
    proportion derived from WG cannot exceed 396/800 = **0.495** on the model
-   scale. A high-age understood anchor near 0.5 (e.g. VG13's `Beta(2, 2)`,
-   median 0.500) therefore sits against the WG ceiling and implicitly assumes
-   near-total WG comprehension.
+   scale. A high-age understood anchor near 0.5 would sit against the WG ceiling and implicitly assume near-total WG comprehension; VG13's 16-month understood anchor was recalibrated to `Beta(2, 6)` (median 0.228, about 183 words) partly for this reason, keeping it clear of the ceiling.
 2. Fenson et al. caution that percentile ranks are unstable at ages where a
    skill is just emerging ("small differences in raw scores can have
    dramatically different effects on percentile ranks"). The youngest-age
@@ -355,19 +358,15 @@ anchor age:
 
 | Anchor (models)                       | Prior            | Prior median (words/800) | Wordbank median | Prior ÷ empirical                   |
 | ------------------------------------- | ---------------- | -----------------------: | --------------: | ----------------------------------- |
-| Spoken low @12mo (VG03/VG11)          | `Beta(1, 15)`    |               0.045 (36) |      0.013 (11) | 3.4× high                           |
-| Understood low @12mo (VG04/VG12)      | `Beta(1, 20)`    |               0.034 (27) |      0.104 (83) | 0.33× low                           |
-| Spoken high @26mo (VG03/VG11)         | `Beta(1.5, 1.1)` |              0.599 (479) |     0.436 (349) | 1.4× (broad, covers)                |
+| Spoken low @12mo (VG03/VG11)          | `Beta(1, 30)`    |               0.023 (18) |      0.013 (11) | 1.8× high                           |
+| Understood low @12mo (VG04/VG12)      | `Beta(1.2, 8)`   |               0.104 (83) |      0.104 (83) | 1.0× (matches)                      |
+| Spoken high @26mo (VG03/VG11)         | `Beta(1.3, 1.3)` |              0.500 (400) |     0.436 (349) | 1.1× (broad, covers)                |
 | Young-TD understood low @10mo (VG13)  | `Beta(1, 15)`    |               0.045 (36) |      0.062 (50) | 0.73×                               |
-| Young-TD understood high @16mo (VG13) | `Beta(2, 2)`     |              0.500 (400) |     0.222 (177) | 2.3× high (at the WG ceiling)       |
-| Understood high @26mo (VG04/VG12)     | `Beta(1.5, 1.1)` |              0.599 (479) |               — | no CDI norm (WS is production-only) |
+| Young-TD understood high @16mo (VG13) | `Beta(2, 6)`     |              0.228 (183) |     0.222 (177) | 1.0× (matches)                      |
+| Understood high @26mo (VG04/VG12)     | `Beta(1.3, 1.3)` |              0.500 (400) |               — | no CDI norm (WS is production-only) |
 
 Every prior's 5–95% band still covers the empirical median, so none is
-inconsistent with the norms — but several are off-centre. The low-age anchors
-lean the "wrong" way in opposite directions (too generous for spoken, too
-austere for understood), the VG13 high understood anchor sits at the WG ceiling,
-and the 26-month understood anchor cannot be anchored to CDI norms at all (a
-sensitivity target). Source data: Wordbank vocabulary norm tables,
+inconsistent with the norms — but the low-age and VG13 high anchors now sit close to the normative medians after the young-age recalibration (#135/#138/#140); the 26-month understood anchor still cannot be anchored to CDI norms (WS is production-only) and remains a sensitivity target. Source data: Wordbank vocabulary norm tables,
 <https://wordbank.stanford.edu/data/?name=vocab_norms>.
 
 ### Production ratio `q(a)` from norms
@@ -385,7 +384,7 @@ not a within-child median):
 | 18           |                0.26 |
 
 The baseline `q` anchors (`Beta(1, 1.5)` / `Beta(2, 1.2)`, medians 0.37 / 0.65)
-sit roughly 3× above this at young ages. The **posterior-informed** VG10/VG15
+sit roughly 3× above this at young ages. VG13 no longer inherits these — it now uses `Beta(1, 10)` / `Beta(2, 7)` (medians 0.067 / 0.201), matching the empirical TD ratio above. The **posterior-informed** VG10/VG15
 low-age `q` anchor, `Beta(3, 22)` (median 0.110), matches the independent TD
 `q(10–12 mo) ≈ 0.12` almost exactly. This upgrades the VG10/VG15 tightening from
 purely internal regularisation (from the VG07 posterior) to a choice
@@ -412,14 +411,10 @@ model's 800-item scale:
 | 48           |                                     ~50 (0.063) | 54% pass 50 words; max child 668 |
 | 60           |                                     ~65 (0.081) | 73% pass 50 words                |
 
-Comparison with the DS spoken prior (VG01, `Beta(1, 15)` at 24 months, median
-0.045 ≈ 36 words):
+Comparison with the DS spoken prior (VG01, `Beta(1, 25)` at 24 months, median 0.027, about 22 words):
 
-- The prior places at **24 months** the vocabulary that Berglund observes only at
-  **36 months** (~36 words). At 24 months the independent median is ~10 words, so
-  the DS spoken-low prior is ~3× high — the same direction and magnitude as the
-  TD spoken-low mismatch.
-- The **84-month high anchor** (`Beta(1.1, 1.1)`, median 0.500 ≈ 400 words) is
+- The prior now places about 22 words at **24 months**, which Berglund observes around 30 months; at 24 months the independent median is ~10 words, so the DS spoken-low prior is ~2x high — recalibrated much closer to the cohort, in the same direction as the TD spoken-low anchor.
+- The **84-month high anchor** (`Beta(2, 1.5)`, median 0.586, about 469 words) is
   **beyond the range of every independent DS CDI cohort** (Berglund tops out at
   60 months; CDIs are young-child instruments). It is deliberately broad and can
   only be checked against the project's own older DS data — i.e. it is
@@ -556,14 +551,10 @@ are not neutral defaults and need explicit labelling.
 - VG15 `psi` is weakly positively regularised and must be tested against neutral
   alternatives.
 - Checked against independent Wordbank normative deciles, the TD anchor priors
-  are broad enough to cover the norms but several are off-centre on the
-  observable scale (notably the low-age spoken and understood anchors and the
-  VG13 high understood anchor, which sits at the WG comprehension ceiling); the
-  independent TD `q(a)` curve corroborates the VG10/VG15 `q`-anchor tightening.
+  are broad enough to cover the norms and, after the young-age recalibration (#135/#138/#140), their centres now track the normative medians; the independent TD `q(a)` curve corroborates both VG13's recalibrated `q` anchors and the VG10/VG15 `q`-anchor tightening.
   See "Evidence base: literature and normative data" above.
 - The independent DS cohorts anchor only DS _spoken_ vocabulary and only to ~60
-  months (Berglund et al., 2001): the DS spoken-low prior is ~3× high at 24
-  months, the DS understood-low anchor has no independent chronological-age
+  months (Berglund et al., 2001): the DS spoken-low prior is ~2x high at 24 months, the DS understood-low anchor has no independent chronological-age
   source, and the 84-month high anchor is beyond all independent CDI data.
 - A per-age Beta-Binomial fit to the Wordbank by-child data confirms the sign of
   the `kappa` age-trend (dispersion rises with age for production) but shows the
