@@ -375,11 +375,11 @@ class JointModelDefinition:
     slope_anchors: tuple[float, float]
     ages_query: list[int]
 
-    # -- Understood (U) slope priors (seeded from VG05/VG14) --
+    # -- Understood (U) slope priors (aligned with the recalibrated VG02 / VG05) --
     p_slope_low_u_alpha: float = 1.0
-    p_slope_low_u_beta: float = 10.0
-    p_slope_hi_u_alpha: float = 1.1
-    p_slope_hi_u_beta: float = 1.1
+    p_slope_low_u_beta: float = 7.0
+    p_slope_hi_u_alpha: float = 2.0
+    p_slope_hi_u_beta: float = 1.5
 
     # -- Speak-given-understood (q) slope priors (bivariate defaults) --
     p_slope_low_q_alpha: float = 1.0
@@ -400,7 +400,7 @@ class JointModelDefinition:
     # -- Shared GP / amplitude priors (sign GP looser + shorter, per VG14) --
     ell_unit_u_alpha: float = 3.0
     ell_unit_u_beta: float = 3.0
-    eta_u_sigma: float = 0.4
+    eta_u_sigma: float = 0.6  # aligned with the recalibrated VG02 understood trajectory
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
     eta_q_sigma: float = 0.4
@@ -597,10 +597,21 @@ VG05 = BivariateModelDefinition(
     n_trials=800,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
+    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
+    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
+    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
     p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=10.0,
-    p_slope_hi_u_alpha=1.1,
-    p_slope_hi_u_beta=1.1,
+    p_slope_low_u_beta=7.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=1.5,
+    eta_u_sigma=0.6,
+    # q anchors: adopt VG10/VG15's data-informed tight priors (the loose
+    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09).
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
 )
 
 VG07 = BivariateModelDefinition(
@@ -614,10 +625,23 @@ VG07 = BivariateModelDefinition(
     n_trials=800,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
+    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
+    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
+    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
     p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=10.0,
-    p_slope_hi_u_alpha=1.1,
-    p_slope_hi_u_beta=1.1,
+    p_slope_low_u_beta=7.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=1.5,
+    eta_u_sigma=0.6,
+    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
+    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
+    # compounding with U to overshoot spoken; the tight priors track the
+    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
 )
@@ -633,10 +657,23 @@ VG08 = BivariateModelDefinition(
     n_trials=800,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
+    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
+    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
+    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
     p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=10.0,
-    p_slope_hi_u_alpha=1.1,
-    p_slope_hi_u_beta=1.1,
+    p_slope_low_u_beta=7.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=1.5,
+    eta_u_sigma=0.6,
+    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
+    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
+    # compounding with U to overshoot spoken; the tight priors track the
+    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -654,10 +691,23 @@ VG09 = BivariateModelDefinition(
     n_trials=800,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
+    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
+    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
+    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
     p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=10.0,
-    p_slope_hi_u_alpha=1.1,
-    p_slope_hi_u_beta=1.1,
+    p_slope_low_u_beta=7.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=1.5,
+    eta_u_sigma=0.6,
+    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
+    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
+    # compounding with U to overshoot spoken; the tight priors track the
+    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -677,10 +727,15 @@ VG10 = BivariateModelDefinition(
     n_trials=800,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
+    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
+    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
+    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
     p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=10.0,
-    p_slope_hi_u_alpha=1.1,
-    p_slope_hi_u_beta=1.1,
+    p_slope_low_u_beta=7.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=1.5,
+    eta_u_sigma=0.6,
     # Tighter q-anchor priors (Option A) — informed by VG07 posterior
     p_slope_low_q_alpha=3.0,
     p_slope_low_q_beta=22.0,
@@ -827,12 +882,20 @@ VG14 = TrivariateModelDefinition(
     n_trials=800,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
-    # Understood trajectory: reuse VG05's understood slope priors.
+    # Understood trajectory: matches VG05 — anchors aligned with the recalibrated
+    # VG02 (#135): raise the 24 mo anchor (Beta(1,10) -> Beta(1,7)), soften the
+    # near-uniform 84 mo anchor (Beta(1.1,1.1) -> Beta(2,1.5)), widen eta_u to 0.6.
     p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=10.0,
-    p_slope_hi_u_alpha=1.1,
-    p_slope_hi_u_beta=1.1,
-    # Spoken ratio q: bivariate defaults.
+    p_slope_low_u_beta=7.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=1.5,
+    eta_u_sigma=0.6,
+    # Spoken ratio q: adopt VG10/VG15's data-informed tight priors (the loose
+    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09).
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
     # Signed ratio r: intercept-only mean (data-set level) + loosened GP
     #   (eta_sign=1.0) carrying the rise-then-fall hump (see dataclass).
     # uk_06 signed included by default (include_uk06=True); kappa_sign default.
@@ -906,10 +969,23 @@ VG16 = BivariateModelDefinition(
     n_trials=800,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
+    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
+    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
+    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
     p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=10.0,
-    p_slope_hi_u_alpha=1.1,
-    p_slope_hi_u_beta=1.1,
+    p_slope_low_u_beta=7.0,
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=1.5,
+    eta_u_sigma=0.6,
+    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
+    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
+    # compounding with U to overshoot spoken; the tight priors track the
+    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
+    p_slope_low_q_alpha=3.0,
+    p_slope_low_q_beta=22.0,
+    p_slope_hi_q_alpha=20.0,
+    p_slope_hi_q_beta=4.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
