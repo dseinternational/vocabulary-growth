@@ -35,11 +35,10 @@ from scipy.stats import betabinom
 import vocab_growth.data_utils as data_utils
 import vocab_growth.plotting as plotting
 from vocab_growth import environment as env
+from vocab_growth.models.definitions import VG09
 
 VG09_DIR = os.path.join(env.models_output_dir(), "VG09-age-understood-spoken-ds-re-subj-uq")
-# TODO(#131): derive from definition.n_trials (this script post-processes a
-# saved trace and has no model definition object in scope).
-N_TRIALS = 800
+N_TRIALS = VG09.n_trials  # trial count from the model this script post-processes
 EPSILON = 1e-12
 SEED = 47
 

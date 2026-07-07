@@ -119,6 +119,10 @@ def _merge(grid: np.ndarray, grid_name: str, **frames: pd.DataFrame) -> pd.DataF
 def _at_age(frame: pd.DataFrame, age: float, col: str) -> float:
     """Nearest-grid-point value of ``col`` at ``age`` (for console summaries)."""
     i = int((frame["age_months"] - age).abs().idxmin())
+    nearest = float(frame.loc[i, "age_months"])
+    if abs(nearest - age) > 1.0:
+        print(f"    [warn] no grid point near {age:g} mo for '{col}'; "
+              f"snapped to {nearest:g} mo")
     return float(frame.loc[i, col])
 
 
