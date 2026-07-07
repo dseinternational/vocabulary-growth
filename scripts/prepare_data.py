@@ -50,6 +50,21 @@ key_value_table(
 
 vocab_ie_01_df = _loaded["vocab_ie_01"]
 vocab_ie_02_df = _loaded["vocab_ie_02"]
+
+# Exclude ie_02 subject ID_79C464EF367C4D5B: an evident data-entry error. Both of
+# its rows report near-ceiling counts implausible for the recorded ages (spoken/
+# understood 432/477 at 13 mo and 456/477 at 16 mo, versus 0-38 spoken for every
+# other ie_02 child under 24 mo), with the imitates/spoken/says_clearly columns
+# byte-identical at both visits and understood pinned at 477 across the 3-month
+# gap — the signature of one value propagated across the production columns. It is
+# the sole source of the anomalous >400-words-before-20-months points in the
+# spoken (VG01) and understood (VG02) trajectories. Dropped here at load so it is
+# absent from both the merged CSV and the DuckDB vocab_ie_02 table (and hence the
+# vocab_combined view the models read). Excluded pending source verification with
+# the ie_02 data provider.
+vocab_ie_02_df = vocab_ie_02_df[
+    vocab_ie_02_df["subject_id"] != "ID_79C464EF367C4D5B"
+].copy()
 vocab_it_01_df = _loaded["vocab_it_01"]
 vocab_uk_01_df = _loaded["vocab_uk_01"]
 vocab_uk_02_df = _loaded["vocab_uk_02"]
@@ -127,6 +142,9 @@ vocab_uk_06_to_merge["study"] = 9
 # (one row per timepoint t1/t2), carrying understood/spoken/signed counts. The
 # instruments measure English vocabulary, so non-English-speaking children are
 # excluded (english_speaking == 'yes'). Both recruitment groups are pooled as DS.
+# (Subject ID_79C464EF367C4D5B was dropped at load — see the exclusion note where
+# vocab_ie_02_df is read — so it is absent from both the merged CSV and the
+# DuckDB vocab_ie_02 table / vocab_combined view.)
 ireland_2_to_merge = (
     vocab_ie_02_df.loc[
         vocab_ie_02_df["english_speaking"] == "yes",
