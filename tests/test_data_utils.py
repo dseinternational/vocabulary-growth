@@ -108,6 +108,29 @@ def test_ds_us01_production_cap_excludes_rows_above_100(tmp_path, monkeypatch):
     assert sorted(us01["spoken"].tolist()) == [12, 77]
 
 
+def test_form_ceiling_guard_drops_counts_above_survey_vocab_max(tmp_path, monkeypatch):
+    # issue #131: a count above its source form's native ceiling is impossible
+    # (a data-entry error) and must be dropped. it_01 carries a per-row ceiling
+    # (form_max_spoken); a row with understood=461 on a 408-item form is
+    # excluded, while a count at the ceiling is a legitimate observation kept.
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            "INSERT INTO vocab_it_01 VALUES (?, ?, ?, ?, ?)",
+            [
+                ("it_ok", 30.0, 408, 100, 408),  # understood == ceiling: kept
+                ("it_bad", 47.0, 461, 12, 408),  # understood 461 > 408: dropped
+            ],
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    it01 = data_utils.load_combined_data()
+    it01 = it01[it01["study"] == "it_01"]
+
+    assert it01["understood"].tolist() == [408]  # only the valid (at-ceiling) row survives
+    assert 461 not in it01["understood"].tolist()
+
+
 def _study_frame():
     # Studies A (3 rows), B (1 row), C (5 rows); index intentionally non-trivial.
     studies = ["A", "A", "A", "B", "C", "C", "C", "C", "C"]
