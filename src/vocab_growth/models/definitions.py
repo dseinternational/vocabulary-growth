@@ -486,9 +486,21 @@ VG01 = UnivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     p_slope_low_alpha=1.0,
-    p_slope_low_beta=15.0,
-    p_slope_hi_alpha=1.1,
-    p_slope_hi_beta=1.1,
+    # Tightened from 15.0: the prior mean-trajectory band centred the 24 mo
+    # spoken level at ~37 words, but DS speech onset is delayed — empirical mean
+    # is ~15 and even the individual p90 is ~37. Beta(1, 25) pulls the 24 mo
+    # centre down to ~22, respecting the near-zero early-speech floor without
+    # excluding the occasional early talker.
+    p_slope_low_beta=25.0,
+    # Nudged from the near-uniform Beta(1.1, 1.1) (same rationale as VG02): the
+    # 84 mo anchor was maximally vague, producing implausible flat-near-zero
+    # spoken curves out to 9 years. Beta(2, 1.5) lifts the 7-year level and
+    # curbs both tails while staying broad.
+    p_slope_hi_alpha=2.0,
+    p_slope_hi_beta=1.5,
+    # Raised from 0.4 to offset the p_slope_low pull-down: lets the HSGP add
+    # mid-range curvature so the steep 36-60 mo rise stays covered.
+    eta_sigma=0.5,
 )
 
 VG02 = UnivariateModelDefinition(
@@ -501,9 +513,20 @@ VG02 = UnivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     p_slope_low_alpha=1.0,
-    p_slope_low_beta=10.0,
-    p_slope_hi_alpha=1.1,
-    p_slope_hi_beta=1.1,
+    # Loosened from 10.0: the prior mean-trajectory band under-covered the
+    # 30-48 mo data centre (empirical median sat at the prior's 90th
+    # percentile). A fatter upper tail at the 24 mo anchor lifts the young-age
+    # band toward the observed central trend. Paired with eta_sigma=0.6 below,
+    # which widens the range of early growth rates the HSGP can express.
+    p_slope_low_beta=7.0,
+    # Nudged from the near-uniform Beta(1.1, 1.1): the 84 mo anchor was
+    # maximally vague, placing ~10% of prior mass below 80 understood words at
+    # age 7 (implausibly low for DS) and ~10% above 720. Beta(2, 1.5) is mildly
+    # informative (mean ~0.57, still spanning ~0.1-0.95), curbing the
+    # flat-near-zero and rocket-to-800 tails without over-committing the level.
+    p_slope_hi_alpha=2.0,
+    p_slope_hi_beta=1.5,
+    eta_sigma=0.6,
 )
 
 VG03 = UnivariateModelDefinition(
