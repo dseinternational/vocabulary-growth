@@ -766,6 +766,26 @@ def sample(context: ModelFitContext):
     context.set_trace(trace)
 
 
+def diagnostics_var_names(model) -> tuple[list[str], list[str]]:
+    """Return ``(summary_var_names, gate_var_names)`` for :func:`diagnostics`.
+
+    The summary table and plots show only the scalar (size <= 2) unobserved
+    RVs so they stay readable.  The convergence gate must screen every sampled
+    parameter, so it additionally covers the vector-valued free RVs — HSGP
+    basis coefficients and, in the RE engines, the study/subject random
+    intercepts — element-wise.  Vector-valued deterministics (e.g. the GP
+    evaluated over the data grid) stay out of both sets: they are derived from
+    the free RVs, not sampled.
+    """
+    summary_var_names = [
+        var.name for var in model.unobserved_RVs if var.size.eval() <= 2
+    ]
+    gate_var_names = summary_var_names + [
+        rv.name for rv in model.free_RVs if rv.name not in summary_var_names
+    ]
+    return summary_var_names, gate_var_names
+
+
 def diagnostics(
     context: ModelFitContext,
     *,
@@ -796,9 +816,7 @@ def diagnostics(
     """
     # Summary diagnostic statistics
 
-    var_names = [
-        var.name for var in context.model.unobserved_RVs if var.size.eval() <= 2
-    ]
+    var_names, gate_var_names = diagnostics_var_names(context.model)
     diagnostics_df = az.summary(
         context.trace,
         var_names=var_names,
@@ -811,12 +829,12 @@ def diagnostics(
         os.path.join(context.reporting.output_dir, "diagnostics.csv"), index=True
     )
 
-    shared_diagnostics.write_diagnostics_summary(
-        context.trace, context.reporting.output_dir, var_names=var_names
+    gate_summary = shared_diagnostics.write_diagnostics_summary(
+        context.trace, context.reporting.output_dir, var_names=gate_var_names
     )
 
     dataframe_table(diagnostics_df, title="Posterior diagnostics")
-    _report_diagnostic_warnings(diagnostics_df)
+    _report_diagnostic_warnings(gate_summary)
 
     # Kernel density estimates (KDE) of the joint posterior, and marginals
 
@@ -1133,40 +1151,49 @@ def _plot_and_print_dist(context, dist, name):
 
 _RHAT_WARN = 1.01
 _ESS_WARN = 400
-_DIAGNOSTIC_COLS = {"r_hat", "ess_bulk", "ess_tail"}
 
 
-def _report_diagnostic_warnings(diagnostics_df: pd.DataFrame) -> None:
-    """Flag MCMC convergence issues visible in the summary frame."""
-    cols = set(diagnostics_df.columns)
-    if not _DIAGNOSTIC_COLS.intersection(cols):
-        return
+def _report_diagnostic_warnings(gate_summary: dict) -> None:
+    """Flag MCMC convergence issues recorded in the gate payload.
+
+    ``gate_summary`` is the dict returned by
+    ``shared_diagnostics.write_diagnostics_summary``, so the banner covers the
+    same (unrounded) R-hat / ESS scan as the gate itself — every free
+    parameter, element-wise — rather than the rounded scalar-only summary
+    table.
+    """
+    thresholds = gate_summary.get("thresholds") or {}
+    rhat_max = thresholds.get("rhat_max", _RHAT_WARN)
+    ess_threshold = thresholds.get("ess_threshold", _ESS_WARN)
+    max_rhat = gate_summary.get("max_rhat")
+    min_ess = gate_summary.get("min_ess")
 
     problems: list[str] = []
-    if "r_hat" in cols:
-        bad = diagnostics_df["r_hat"].dropna()
-        bad = bad[bad > _RHAT_WARN]
-        if len(bad):
-            problems.append(
-                f"{len(bad)} parameter(s) with r_hat > {_RHAT_WARN} (max {bad.max():.3f})"
-            )
-    for ess_col in ("ess_bulk", "ess_tail"):
-        if ess_col in cols:
-            bad = diagnostics_df[ess_col].dropna()
-            bad = bad[bad < _ESS_WARN]
-            if len(bad):
-                problems.append(
-                    f"{len(bad)} parameter(s) with {ess_col} < {_ESS_WARN} (min {bad.min():.0f})"
-                )
+    rhat_failing = gate_summary.get("rhat_failing") or []
+    if rhat_failing:
+        detail = f" (max {max_rhat:.3f})" if max_rhat is not None else ""
+        problems.append(
+            f"{len(rhat_failing)} parameter(s) with r_hat > {rhat_max}{detail}"
+        )
+    ess_failing = gate_summary.get("ess_failing") or []
+    if ess_failing:
+        detail = f" (min {min_ess:.0f})" if min_ess is not None else ""
+        problems.append(
+            f"{len(ess_failing)} parameter(s) with bulk or tail ESS "
+            f"< {ess_threshold}{detail}"
+        )
 
     if problems:
         console.print()
         for line in problems:
             console.print(f"[bold yellow]⚠ {line}[/bold yellow]")
-    else:
+    elif max_rhat is not None and min_ess is not None:
         console.print(
-            "[green]✓ r_hat ≤ 1.01 and ESS ≥ 400 across reported parameters.[/green]"
+            f"[green]✓ r_hat ≤ {rhat_max} and ESS ≥ {ess_threshold} across all "
+            "free parameters (including vector-valued).[/green]"
         )
+    # When the gate's R-hat/ESS scan itself failed (both values None),
+    # write_diagnostics_summary has already reported it; claim nothing here.
 
 
 def prepare_univariate_data(
