@@ -19,6 +19,7 @@ dataclass
 Deckers
 dexp
 duckdb
+Edgin
 elpd
 empiricalmodelling
 estimand
