@@ -736,10 +736,26 @@ VG13 = BivariateModelDefinition(
     max_age_months=18,
     slope_anchors=(10, 16),
     ages_query=[8, 10, 12, 14, 16, 18],
+    # Understood trajectory. The 10 mo anchor Beta(1,15) (~50 words) matches the
+    # empirical mean (~51). Prior-predictive checks showed the 16 mo anchor was
+    # too high: Beta(2,2) centres on 0.5 (~400 words) against an empirical mean
+    # of ~178, so the trajectory overshot ~2x by 16 mo. Lower it to Beta(2,6)
+    # (~0.25, ~200 words) so the median tracks the data at the anchor.
     p_slope_low_u_alpha=1.0,
     p_slope_low_u_beta=15.0,
     p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=2.0,
+    p_slope_hi_u_beta=6.0,
+    # Production ratio q = P(speak | understood). The shared bivariate defaults
+    # (lo Beta(1,1.5)~0.4, hi Beta(2,1.2)~0.62) are tuned for the DS 24/84 mo
+    # window where a large fraction of understood words are spoken; in this young
+    # TD window (8-18 mo) production is just beginning and the empirical q is
+    # ~0.09 (10 mo) rising to ~0.23 (16 mo). The DS defaults centred q 3-4x too
+    # high, compounding with U to overshoot spoken ~5x. Set window-appropriate
+    # anchors: lo Beta(1,10) (~0.09), hi Beta(2,7) (~0.22).
+    p_slope_low_q_alpha=1.0,
+    p_slope_low_q_beta=10.0,
+    p_slope_hi_q_alpha=2.0,
+    p_slope_hi_q_beta=7.0,
     # Use all available bivariate rows in the 8–18 month window; study REs
     # absorb between-lab variation so no subsampling is required.
     sample_fraction=1.0,
