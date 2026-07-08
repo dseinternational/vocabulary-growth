@@ -86,7 +86,7 @@ templates for rendered model outputs.
 - Priors should be interpreted at 12 and 26 months and contrasted with the DS
   anchor ages.
 - Prior predictive checks should include whether the TD prior reaches plausible
-  spoken counts by 24-30 months under the 800-word reference scale.
+  spoken counts by 24-30 months under the 810-word reference scale.
 - Diagnostics should note whether subsampling creates stable estimates across
   the random seed or whether seed sensitivity should be checked.
 - Findings should compare the baseline TD spoken trajectory with VG11, not only
@@ -123,7 +123,7 @@ templates for rendered model outputs.
 ### VG06: TD baseline joint understood + spoken
 
 - Model description is accurate but should explicitly describe TD data handling:
-  WG/Oxford bivariate rows, WS spoken-only rows, 25% sampling, and the 800-word
+  WG/Oxford bivariate rows, WS spoken-only rows, 25% sampling, and the 810-word
   reference scale.
 - Priors should explain that the `q` priors are broad defaults shared with VG05,
   while U anchor ages/distributions are TD-specific.

@@ -447,7 +447,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
 # ----------------------------------------------------------------------------
 def _verify() -> None:
     from scipy.stats import betabinom
-    n = 800
+    n = 810
     for p, kap in [(0.05, 5.0), (0.30, 20.0), (0.60, 3.0)]:
         want = float(betabinom(n, p * kap, (1 - p) * kap).std())
         got = float(C.implied_sd_y(np.array(p), np.array(kap), n))

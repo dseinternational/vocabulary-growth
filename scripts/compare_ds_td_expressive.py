@@ -324,7 +324,7 @@ def _verify() -> None:
     # Below-percentile: DS == TD -> fraction ≈ pct/100.
     p = np.full((nd, 5), 0.3)
     k = np.full((nd, 5), 15.0)
-    frac = C.fraction_below_reference_percentile(p, k, p, k, 800, pct=10.0)
+    frac = C.fraction_below_reference_percentile(p, k, p, k, 810, pct=10.0)
     assert abs(float(np.mean(frac)) - 0.10) < 0.05, float(np.mean(frac))
     # Peak growth age: logistic inflection at 30.
     W = np.stack([1000 / (1 + np.exp(-(ages - 30) / 5))] * nd)

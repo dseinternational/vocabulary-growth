@@ -67,7 +67,7 @@ The three axes that distinguish the models:
 Despite their differences, every model is built from the same components:
 
 - **Outcome** — each vocabulary count is treated as a bounded count out of an
-  **800-item common reference inventory**, so DS and TD counts sit on a
+  **810-item common reference inventory**, so DS and TD counts sit on a
   comparable scale regardless of which checklist (MB-CDI Words & Gestures, Words
   & Sentences, Oxford CDI, etc.) produced them.
 - **Likelihood** — a **Beta-Binomial** with **age-varying dispersion**, so the

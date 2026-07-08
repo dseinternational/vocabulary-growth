@@ -463,7 +463,7 @@ class JointModelDefinition:
     """If True (default), nz_01's produced modality cross-tab (word-only / sign-only
     / both) enters via a within-produced Dirichlet-Multinomial that informs psi/q/r
     (see common_joint_modality). If False, nz_01 is excluded from VG15 entirely
-    (its production-only, 675-item marginals are not comparable to the 800-item
+    (its production-only, 675-item marginals are not comparable to the 810-item
     marginal likelihoods); the flag is kept for reversibility and for isolating
     nz_01's pull on psi."""
 
@@ -482,7 +482,7 @@ VG01 = UnivariateModelDefinition(
     banner="Fitting Model VG01: Influence of age on words spoken (A -> S)",
     population=Population.DOWN_SYNDROME,
     outcome=Outcome.SPOKEN,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     p_slope_low_alpha=1.0,
@@ -509,7 +509,7 @@ VG02 = UnivariateModelDefinition(
     banner="Fitting Model VG02: Influence of age on words understood (A -> U)",
     population=Population.DOWN_SYNDROME,
     outcome=Outcome.UNDERSTOOD,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     p_slope_low_alpha=1.0,
@@ -523,7 +523,7 @@ VG02 = UnivariateModelDefinition(
     # maximally vague, placing ~10% of prior mass below 80 understood words at
     # age 7 (implausibly low for DS) and ~10% above 720. Beta(2, 1.5) is mildly
     # informative (mean ~0.57, still spanning ~0.1-0.95), curbing the
-    # flat-near-zero and rocket-to-800 tails without over-committing the level.
+    # flat-near-zero and rocket-to-810 tails without over-committing the level.
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     eta_sigma=0.6,
@@ -535,9 +535,9 @@ VG03 = UnivariateModelDefinition(
     banner="Fitting Model VG03: Influence of age on words spoken (A -> S)",
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.SPOKEN,
-    # Common 800-item reference inventory for TD/DS comparisons. The TD
+    # Common 810-item reference inventory for TD/DS comparisons. The TD
     # loader uses WG and Oxford CDI production plus WS production-only rows.
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
     # Prior-predictive recalibration (mirrors VG01): TD production is delayed, so
@@ -564,9 +564,9 @@ VG04 = UnivariateModelDefinition(
     banner="Fitting Model VG04: Influence of age on words understood (A -> U)",
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.UNDERSTOOD,
-    # Common 800-item reference inventory for TD/DS comparisons. The TD
+    # Common 810-item reference inventory for TD/DS comparisons. The TD
     # loader excludes WS comprehension because it is a production proxy.
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
     # Prior-predictive recalibration (mirrors VG02): TD comprehension is already
@@ -594,7 +594,7 @@ VG05 = BivariateModelDefinition(
         " (A -> U, A -> S, U -> S)"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
@@ -622,7 +622,7 @@ VG07 = BivariateModelDefinition(
         " (A -> U, A -> S, U -> S) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
@@ -654,7 +654,7 @@ VG08 = BivariateModelDefinition(
         " (A -> U, A -> S, U -> S) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
@@ -688,7 +688,7 @@ VG09 = BivariateModelDefinition(
         " (A -> U, A -> S, U -> S) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
@@ -724,7 +724,7 @@ VG10 = BivariateModelDefinition(
         " reference age (A -> U, A -> S, U -> S) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
@@ -761,8 +761,8 @@ VG11 = UnivariateModelDefinition(
     ),
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.SPOKEN,
-    # Common 800-item reference inventory for TD/DS comparisons.
-    n_trials=800,
+    # Common 810-item reference inventory for TD/DS comparisons.
+    n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
     # Spoken trajectory priors shared with VG03 (see the note there): lower the
@@ -794,8 +794,8 @@ VG12 = UnivariateModelDefinition(
     ),
     population=Population.TYPICALLY_DEVELOPING,
     outcome=Outcome.UNDERSTOOD,
-    # Common 800-item reference inventory for TD/DS comparisons.
-    n_trials=800,
+    # Common 810-item reference inventory for TD/DS comparisons.
+    n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
     # Understood trajectory priors shared with VG04 (see the note there): raise
@@ -827,10 +827,10 @@ VG13 = BivariateModelDefinition(
         "with dataset-level study random intercepts"
     ),
     population=Population.TYPICALLY_DEVELOPING,
-    # Common 800-item reference inventory. Counts from WG (ceiling 396) and
+    # Common 810-item reference inventory. Counts from WG (ceiling 396) and
     # Oxford CDI (ceiling 418) are interpreted on this shared reference scale;
     # source-form ceilings remain an interpretation caveat.
-    n_trials=800,
+    n_trials=810,
     # Restrict to 8–18 months where WG/Oxford CDI data are dense and the WS
     # bias (production proxy comprehension) is avoided entirely.
     max_age_months=18,
@@ -879,7 +879,7 @@ VG14 = TrivariateModelDefinition(
         " signed (A -> U, A -> S, A -> Sign; U -> S, U -> Sign)"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # Understood trajectory: matches VG05 — anchors aligned with the recalibrated
@@ -910,7 +910,7 @@ VG15 = JointModelDefinition(
         " - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # r/q/p_U priors seeded from the (uk_06-included) VG14 fit (see dataclass
@@ -966,7 +966,7 @@ VG16 = BivariateModelDefinition(
         " bias-robust population-relative baseline) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
-    n_trials=800,
+    n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the

@@ -60,7 +60,7 @@ def plot_prior_samples(
     y_samples: np.ndarray,
     x_obs: np.ndarray | pd.Series,
     y_obs: np.ndarray | pd.Series,
-    n_trials: int = 800,
+    n_trials: int = 810,
     n_curves = 1000,
     x_label: str = "x",
     y_label: str = "y",
@@ -138,7 +138,7 @@ def plot_prior_predictions(
     y_pred: np.ndarray,
     x_obs: np.ndarray | pd.Series,
     y_obs: np.ndarray | pd.Series,
-    n_trials: int = 800,
+    n_trials: int = 810,
     x_label: str = "x",
     y_label: str = "y",
     filename: str | None = None,
@@ -272,7 +272,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     For each query age, plot the posterior predictive distribution of counts, as a histogram.
 
     ``count_axis_max`` caps the word-count axis of every subplot (defaults to
-    ``n_trials``, i.e. 800), so young ages whose mass sits well below the full
+    ``n_trials``, i.e. 810), so young ages whose mass sits well below the full
     inventory can be zoomed in.
 
     Returns the combined grid figure (one subplot per query age; built for the

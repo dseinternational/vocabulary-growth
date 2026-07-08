@@ -40,7 +40,7 @@ SPOKEN_COLOUR = "C1"
 X_MAX = 115.0
 # TODO(#131): derive from definition.n_trials (this script only reads the
 # per-model summary CSVs and has no model definition object in scope).
-N_TRIALS = 800
+N_TRIALS = 810
 
 
 def plot_joint_panel(ax, df: pd.DataFrame, title: str) -> None:

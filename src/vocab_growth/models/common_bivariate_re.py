@@ -668,6 +668,13 @@ def build_model_re(
         # ============================================================
         # Likelihoods — separate observation indices
         # ============================================================
+        #
+        # Composite marginal (pseudo-)likelihood: understood and spoken enter as
+        # two separate Beta-Binomial marginals, coupled only through the shared
+        # latent means (p_S = p_U * q) plus the study/subject random intercepts.
+        # The counts are treated as conditionally independent given those means;
+        # the item-level joint distribution is not modelled. See methods-models.qmd,
+        # "Joint outcomes and production ratios".
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]

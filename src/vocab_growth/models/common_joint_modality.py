@@ -16,7 +16,7 @@ VG15 extends the trivariate VG14 with two things VG14 assumed away:
     so the age curve is separated from study composition (which made VG14's
     signed peak unidentifiable).
 
-Latent scale (all out of N = 800 checklist words):
+Latent scale (all out of N = 810 checklist words, the DSE reference inventory):
 
     p_U(a)  = sigmoid(f_U(a))                 # proportion understood
     r(a)    = sigmoid(g(a))                   # P(sign  | understood)
@@ -28,11 +28,17 @@ Latent scale (all out of N = 800 checklist words):
     pi_neither  = 1 - r - q + pi_both
     p_any(a)    = p_U(a) * (r + q - pi_both)   # total expressive (data-identified)
 
-Likelihoods:
-    - understood ~ BetaBinomial(800, p_U)              (all DS studies)
-    - spoken     ~ BetaBinomial(800, p_U * q)          (marginal-only rows)
-    - signed     ~ BetaBinomial(800, p_U * r)          (uk_01/04/05/06 + uk_02 marginal-only)
-    - uk_02 four cells ~ DirichletMultinomial(total, conc * [pi_*])  (identifies psi)
+Likelihoods (a composite marginal / pseudo-likelihood — the three word-count
+outcomes enter as separate marginal Beta-Binomials coupled only through the
+shared latent means p_U, q, r; they are treated as conditionally independent
+given those means and item-level joint structure is NOT modelled here, except
+by the uk_02 four-cell term below. See methods-models.qmd, "Joint outcomes and
+production ratios", for the full discussion):
+    - understood ~ BetaBinomial(810, p_U)              (all DS studies)
+    - spoken     ~ BetaBinomial(810, p_U * q)          (marginal-only rows)
+    - signed     ~ BetaBinomial(810, p_U * r)          (uk_01/04/05/06 + uk_02 marginal-only)
+    - uk_02 four cells ~ DirichletMultinomial(total, conc * [pi_*])  (the one
+      item-level joint term; identifies psi)
 
 This is a self-contained module (like common_trivariate.py); it does not import
 from or modify the bivariate / trivariate engines. The full-grid intermediates

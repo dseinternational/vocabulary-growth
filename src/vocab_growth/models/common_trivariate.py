@@ -817,6 +817,15 @@ def build_model(context: TrivariateContext):
         # ============================================================
         # Likelihoods — separate observation indices
         # ============================================================
+        #
+        # Composite marginal (pseudo-)likelihood: understood, spoken and signed
+        # enter as three separate Beta-Binomial marginals, coupled only through
+        # the shared latent means (p_S = p_U * q, p_Sign = p_U * r). The counts
+        # are treated as conditionally independent given those means; the
+        # item-level joint distribution is not modelled here (VG15's uk_02
+        # four-cell term does that). This is distinct from the p_any
+        # conditional-independence assumption noted in the module docstring. See
+        # methods-models.qmd, "Joint outcomes and production ratios".
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]

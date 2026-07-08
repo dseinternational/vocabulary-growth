@@ -35,12 +35,12 @@ import pandas as pd
 
 ## Statistical model
 
-We model the number of words spoken as a bounded count outcome out of 800 possible words. The expected proportion of words spoken is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Priors for the linear trend are specified indirectly through the expected proportion of words spoken at two reference ages, making the prior assumptions more interpretable.
+We model the number of words spoken as a bounded count outcome out of 810 possible words. The expected proportion of words spoken is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Priors for the linear trend are specified indirectly through the expected proportion of words spoken at two reference ages, making the prior assumptions more interpretable.
 
 ::: {.callout-note title="Model at a glance"}
 
 - **Population:** children with Down syndrome.
-- **Outcome:** words spoken out of the common 800-word reference inventory.
+- **Outcome:** words spoken out of the common 810-word reference inventory.
 - **Age anchors:** 24 and 84 months.
 - **Hierarchy:** none; study and repeated-child effects are not modelled here.
 - **Role in the model family:** baseline DS spoken trajectory, mainly for comparison with later joint and hierarchical models.
