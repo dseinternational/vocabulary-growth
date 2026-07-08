@@ -120,6 +120,19 @@ def load_population_trajectory(
     return ages, p_u * n_trials_, p_s * n_trials_
 
 
+def load_univariate_trajectory(
+    path: str, n_trials_: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return ``(ages, W)`` for a single-outcome model's population trajectory.
+
+    ``W`` is ``(n_draw, n_age)`` word counts (``p_plot`` * ``n_trials``) over the
+    plot grid; ``ages`` is sorted ascending. The single-outcome analogue of
+    :func:`load_population_trajectory`.
+    """
+    ages, (p,) = _load_reshaped_draws(path, ("p_plot",))
+    return ages, p * n_trials_
+
+
 def population_trajectory(key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Registry-keyed convenience wrapper around :func:`load_population_trajectory`."""
     return load_population_trajectory(trace_path(key), n_trials(key))
@@ -134,9 +147,11 @@ def first_crossing(x: np.ndarray, y: np.ndarray, threshold: float) -> float | No
     Linear interpolation between grid points. Returns ``None`` if the threshold
     is never reached, *or* if it is already exceeded at the first grid point —
     then the true crossing lies below the observed range and the milestone is
-    unidentified, not ``x[0]`` (e.g. a fast child already past 25 words at the
-    youngest modelled age). Used for summarising pre-computed median/HDI curves
-    (CSV-based scripts), notably the time-to-milestone inversions.
+    unidentified, not ``x[0]`` (e.g. a curve already past 25 words at the
+    youngest modelled age). Used for summarising a single pre-computed median/HDI
+    curve (CSV-based scripts, e.g. compare_models.py). For posterior milestone
+    ages prefer the per-draw :func:`attainment_ages` / :func:`milestone_table`,
+    which give the correct median-of-crossings rather than crossing-of-median.
     """
     above = y >= threshold
     if not above.any():
@@ -278,28 +293,47 @@ def compute_q_at_age(
     return q
 
 
-def invert_curve(
-    df: pd.DataFrame, targets=DEFAULT_MILESTONES
+def milestone_table(
+    W: np.ndarray,
+    ages: np.ndarray,
+    targets=DEFAULT_MILESTONES,
+    hdi_prob: float = 0.90,
 ) -> pd.DataFrame:
-    """Age at which the 5%/50%/95% percentile child first reaches each target.
+    """Posterior age at which the trajectory first reaches each target word count.
 
-    Inverts the pre-computed posterior-predictive percentile columns
-    (``Y_hdi_lo``/``Y_median``/``Y_hdi_hi``) of a ``posterior_summary*`` frame.
+    ``W`` is the ``(n_draw, n_age)`` per-draw population count trajectory (from
+    :func:`load_population_trajectory` / :func:`load_univariate_trajectory`). For
+    each target this computes the crossing age *per draw* (:func:`attainment_ages`)
+    and summarises that distribution — the correct **median-of-crossings**, not
+    the age at which the median curve crosses the target (crossing-of-median),
+    which the two differ for a nonlinear trajectory. The reported interval is the
+    posterior HDI on the milestone age for the population trajectory; it is *not*
+    a spread across individual "percentile children" (that would need new-child
+    posterior-predictive draws — see the predictive-interval caveat in the report).
+
+    ``prop_reaching`` is the fraction of draws that reach the target anywhere on
+    the modelled age grid; the age summaries are over those draws only, so a low
+    ``prop_reaching`` means the median/HDI ages are conditional and should be read
+    with care.
     """
-    age = df["age_months"].to_numpy(dtype=float)
-    y_lo = df["Y_hdi_lo"].to_numpy(dtype=float)
-    y_md = df["Y_median"].to_numpy(dtype=float)
-    y_hi = df["Y_hdi_hi"].to_numpy(dtype=float)
+    A = attainment_ages(W, ages, np.asarray(list(targets), dtype=float))
     rows = []
-    for target in targets:
-        rows.append(
-            {
-                "target_words": target,
-                "age_fast_child_p95": first_crossing(age, y_hi, target),
-                "age_typical_child_p50": first_crossing(age, y_md, target),
-                "age_slow_child_p5": first_crossing(age, y_lo, target),
-            }
-        )
+    for j, target in enumerate(targets):
+        a = A[:, j]
+        reached = a[~np.isnan(a)]
+        prop = float(reached.size) / float(a.size) if a.size else 0.0
+        if reached.size == 0:
+            rows.append({
+                "target_words": target, "age_median": None,
+                "age_hdi_lo": None, "age_hdi_hi": None, "prop_reaching": prop,
+            })
+            continue
+        lo, hi = hdi_from_samples(reached, hdi_prob)
+        rows.append({
+            "target_words": target,
+            "age_median": float(np.median(reached)),
+            "age_hdi_lo": lo, "age_hdi_hi": hi, "prop_reaching": round(prop, 3),
+        })
     return pd.DataFrame(rows)
 
 

@@ -128,18 +128,34 @@ def test_comprehension_equivalent_age_uses_first_crossing_for_nonmonotone_refere
     assert np.isclose(out["cea_S"][0, 0], 0.7)
 
 
-def test_invert_curve_linear():
-    df = pd.DataFrame(
-        {
-            "age_months": [0.0, 10.0, 20.0, 30.0],
-            "Y_hdi_lo": [0.0, 50.0, 100.0, 150.0],
-            "Y_median": [0.0, 100.0, 200.0, 300.0],
-            "Y_hdi_hi": [0.0, 200.0, 400.0, 600.0],
-        }
-    )
-    inv = comparison.invert_curve(df, targets=[100])
-    row = inv.iloc[0]
+def test_milestone_table_is_median_of_crossings():
+    # Three draws with different linear slopes; each reaches 100 words at a known
+    # age. milestone_table must report the median-of-crossings (age 10 here), NOT
+    # the crossing of the median count curve.
+    ages = np.array([0.0, 10.0, 20.0, 30.0])
+    W = np.array([
+        [0.0, 200.0, 400.0, 600.0],  # crosses 100 at age 5
+        [0.0, 100.0, 200.0, 300.0],  # crosses 100 at age 10
+        [0.0, 50.0, 100.0, 150.0],   # crosses 100 at age 20
+    ])
+    tbl = comparison.milestone_table(W, ages, targets=[100], hdi_prob=0.90)
+    row = tbl.iloc[0]
     assert row["target_words"] == 100
-    assert np.isclose(row["age_typical_child_p50"], 10.0)  # median hits 100 at age 10
-    assert np.isclose(row["age_fast_child_p95"], 5.0)      # fast hits 100 at age 5
-    assert np.isclose(row["age_slow_child_p5"], 20.0)      # slow hits 100 at age 20
+    assert np.isclose(row["age_median"], 10.0)   # median of {5, 10, 20}
+    assert row["prop_reaching"] == 1.0
+    assert row["age_hdi_lo"] <= 10.0 <= row["age_hdi_hi"]
+
+
+def test_milestone_table_flags_unreached_and_below_support():
+    ages = np.array([8.0, 12.0, 16.0])
+    # Draw 0 never reaches 400 on the grid; draw 1 is already above 400 at the
+    # youngest age (crossing below support) — both are excluded from the age
+    # summary and counted in prop_reaching.
+    W = np.array([
+        [10.0, 50.0, 120.0],   # never reaches 400
+        [500.0, 600.0, 700.0],  # already > 400 at age 8 → unidentified
+    ])
+    tbl = comparison.milestone_table(W, ages, targets=[400])
+    row = tbl.iloc[0]
+    assert row["prop_reaching"] == 0.0
+    assert row["age_median"] is None
