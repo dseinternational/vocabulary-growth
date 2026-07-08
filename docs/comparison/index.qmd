@@ -1,7 +1,7 @@
 ---
 title: "Down syndrome vs typically developing: vocabulary growth comparison"
 
-date: last-modified
+date: now
 date-format: "YYYY-MM-DD HH:mm:ss Z"
 
 format:

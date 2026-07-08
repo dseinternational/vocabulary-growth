@@ -1,7 +1,7 @@
 ---
 title: "Model VG12: Words understood (TD) with dataset-level study random intercepts"
 
-date: last-modified
+date: now
 date-format: "YYYY-MM-DD HH:mm:ss Z"
 
 format:
@@ -19,12 +19,48 @@ format:
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
 :::
 
-::: {.callout-warning title="Warning: Preliminary model output"}
+```{python}
+#| echo: false
+#| output: asis
+# Report the sampling configuration this model was actually fitted at, read
+# from the trace header (chains x draws). rep / rep-lite are reporting-grade;
+# dev / test are flagged as approximate.
+import h5netcdf as _h5
 
-This model output is preliminary and likely to change as the model evolves and further data are received.
+with _h5.File("trace.nc", "r") as _f:
+    _post = _f["posterior"]
+    _n_chains = _post.dimensions["chain"].size
+    _n_draws = _post.dimensions["draw"].size
 
-If the model was not fitted in "reporting" mode, the results will be more approximate than where additional sampling has been performed.
-:::
+_CONFIGS = {
+    (6, 6000): ("reporting", False),
+    (4, 4000): ("reporting-lite", False),
+    (4, 2000): ("test", True),
+    (2, 500): ("development", True),
+}
+_cfg_name, _approximate = _CONFIGS.get(
+    (_n_chains, _n_draws), (f"{_n_chains} chains × {_n_draws} draws", True)
+)
+
+print('::: {.callout-warning title="Warning: Preliminary model output"}')
+print()
+print(
+    "This model output is preliminary and likely to change as the model "
+    "evolves and further data are received."
+)
+print()
+print(
+    f"This model was fitted in **{_cfg_name}** configuration "
+    f"({_n_chains} chains × {_n_draws:,} draws per chain)."
+)
+if _approximate:
+    print()
+    print(
+        "It was **not** fitted in reporting mode, so these results are more "
+        "approximate than a full reporting-quality fit."
+    )
+print(":::")
+```
 
 This model examines how age influences words understood ($A \rightarrow U$) in typically developing children, extending VG04 with dataset-level study random intercepts to account for between-lab variation in the Wordbank data.
 
