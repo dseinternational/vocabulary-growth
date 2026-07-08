@@ -101,8 +101,10 @@ def _sql_string_list(values: tuple[str, ...]) -> str:
 #     reference inventory every model's likelihood scores counts against
 #     (``n_trials = 810``), so DSE-native studies (uk_02 DSE form, ie_01, uk_06,
 #     ie_02) carry survey_vocab_max = 810.
-#   - Oxford CDI = 416 words (uk_02 Oxford form, uk_03, uk_04, uk_05, us_02).
-#   - MacArthur-Bates CDI Words & Sentences (WS) = 680; Words & Gestures (WG) = 396.
+#   - Oxford CDI = 416 words (uk_02 Oxford form, uk_03, uk_04, uk_05).
+#   - MacArthur-Bates CDI: Words & Gestures (WG) = 396 (us_01 WG form, us_02 —
+#     which carries comprehension, so it is the WG form); Words & Sentences
+#     (WS, production only) = 680 (us_01 WS form).
 #   - NZCDI (nz_01) = 675. uk_01 and it_01 carry a per-row source ceiling.
 #
 # Form-ceiling guard (issues #128/#131): exclude rows whose word count exceeds
@@ -274,7 +276,7 @@ def vocab_combined_view_sql() -> str:
         vus02.spoken,
         NULL                                as signed,
         vus02.spoken                     as produced,
-        416                                 as survey_vocab_max
+        396                                 as survey_vocab_max  -- MacArthur-Bates WG
     FROM vocab_us_02 as vus02
         UNION ALL
     SELECT 'uk_06'                           as study,
