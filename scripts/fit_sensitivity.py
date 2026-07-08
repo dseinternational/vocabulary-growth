@@ -37,12 +37,13 @@ from vocab_growth.sensitivity.registry import build_variant, variants_for
 _RUNNER_BY_KEY = {
     "vg10": fit_bivariate_re_model,
     "vg11": fit_univariate_re_model,
+    "vg12": fit_univariate_re_model,
     "vg15": fit_joint_model,
 }
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("model", help="Model key with sensitivity variants (vg10, vg11, vg15).")
+    parser.add_argument("model", help="Model key with sensitivity variants (vg10, vg11, vg12, vg15).")
     parser.add_argument("variant", help="Variant name, or 'all' for every variant of the model.")
     parser.add_argument(
         "--config",
