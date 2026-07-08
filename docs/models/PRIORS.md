@@ -117,22 +117,22 @@ anchored in the same way, and the spoken production ratio
 `q(a) = P(speak | understood)` has its own pair of anchors.
 
 The anchors are probabilities. For direct vocabulary trajectories, multiplying
-by 800 gives the expected number of words out of the common reference inventory.
+by 810 gives the expected number of words out of the common reference inventory.
 For `q`, the anchor is a fraction of understood words, so it should not be read
 as a direct word count without also considering `p_U(a)`.
 
 | Prior use                              | Models                      | Distribution     | Observable interpretation                                              |
 | -------------------------------------- | --------------------------- | ---------------- | ---------------------------------------------------------------------- |
-| Low-age DS spoken anchor               | VG01                        | `Beta(1, 25)`    | Median 0.027, 5-95% 0.002-0.113, or about 22 words median out of 800.  |
-| Low-age TD spoken anchor               | VG03, VG11                  | `Beta(1, 30)`    | Median 0.023, 5-95% 0.002-0.095, or about 18 words median out of 800.  |
-| Low-age DS understood anchor (single)  | VG02                        | `Beta(1, 7)`     | Median 0.094, 5-95% 0.007-0.348, or about 75 words median out of 800.  |
-| Low-age DS understood anchor (joint)   | VG05, VG07-VG10, VG14, VG15 | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259, or about 54 words median out of 800.  |
-| Low-age TD understood anchor           | VG04, VG12                  | `Beta(1.2, 8)`   | Median 0.104, 5-95% 0.011-0.341, or about 83 words median out of 800.  |
-| Low-age young-TD understood anchor     | VG13                        | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 800.  |
-| High-age DS single anchor (VG01/VG02)  | VG01, VG02                  | `Beta(2, 1.5)`   | Median 0.586, 5-95% 0.168-0.924, or about 469 words median out of 800. |
-| High-age DS understood anchor (joint)  | VG05, VG07-VG10, VG14, VG15 | `Beta(1.1, 1.1)` | Median 0.500, 5-95% 0.060-0.940, or about 400 words median out of 800. |
-| High-age TD single/U anchor            | VG03, VG04, VG11, VG12      | `Beta(1.3, 1.3)` | Median 0.500, 5-95% 0.079-0.921, or about 400 words median out of 800. |
-| High-age young-TD understood anchor    | VG13                        | `Beta(2, 6)`     | Median 0.228, 5-95% 0.053-0.521, or about 183 words median out of 800. |
+| Low-age DS spoken anchor               | VG01                        | `Beta(1, 25)`    | Median 0.027, 5-95% 0.002-0.113, or about 22 words median out of 810.  |
+| Low-age TD spoken anchor               | VG03, VG11                  | `Beta(1, 30)`    | Median 0.023, 5-95% 0.002-0.095, or about 19 words median out of 810.  |
+| Low-age DS understood anchor (single)  | VG02                        | `Beta(1, 7)`     | Median 0.094, 5-95% 0.007-0.348, or about 76 words median out of 810.  |
+| Low-age DS understood anchor (joint)   | VG05, VG07-VG10, VG14, VG15 | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259, or about 54 words median out of 810.  |
+| Low-age TD understood anchor           | VG04, VG12                  | `Beta(1.2, 8)`   | Median 0.104, 5-95% 0.011-0.341, or about 84 words median out of 810.  |
+| Low-age young-TD understood anchor     | VG13                        | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 810.  |
+| High-age DS single anchor (VG01/VG02)  | VG01, VG02                  | `Beta(2, 1.5)`   | Median 0.586, 5-95% 0.168-0.924, or about 475 words median out of 810. |
+| High-age DS understood anchor (joint)  | VG05, VG07-VG10, VG14, VG15 | `Beta(1.1, 1.1)` | Median 0.500, 5-95% 0.060-0.940, or about 405 words median out of 810. |
+| High-age TD single/U anchor            | VG03, VG04, VG11, VG12      | `Beta(1.3, 1.3)` | Median 0.500, 5-95% 0.079-0.921, or about 405 words median out of 810. |
+| High-age young-TD understood anchor    | VG13                        | `Beta(2, 6)`     | Median 0.228, 5-95% 0.053-0.521, or about 185 words median out of 810. |
 | Baseline low-age `q` anchor            | VG05-VG09, VG14             | `Beta(1, 1.5)`   | Median 0.370, 5-95% 0.034-0.864 of understood words.                   |
 | Young-TD low-age `q` anchor            | VG13                        | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259 of understood words.                   |
 | Baseline high-age `q` anchor           | VG05-VG09, VG14             | `Beta(2, 1.2)`   | Median 0.654, 5-95% 0.197-0.956 of understood words.                   |
@@ -165,7 +165,7 @@ intercept_sign ~ Normal(logit(0.15), 0.75)
 ```
 
 On the probability scale this gives a median signed ratio of about 0.15, with a
-5-95% interval of about 0.05-0.38 before adding the signed GP. If all 800 words
+5-95% interval of about 0.05-0.38 before adding the signed GP. If all 810 words
 were understood, this would correspond to roughly 120 signed words at the
 intercept level, with a 5-95% range of about 39-302 words.
 
@@ -331,7 +331,7 @@ it is regularisation, not independent prior evidence.
 ### Instrument scale (Fenson et al., 2007, via Hutchins, 2013)
 
 The MB-CDI forms have different item totals, which the models fold onto the
-common 800-item reference scale:
+common 810-item reference scale:
 
 - **Words & Gestures (WG)** — 396-item checklist, _separate_ comprehension and
   production columns; infant form (~8–18 months).
@@ -342,8 +342,8 @@ common 800-item reference scale:
 Two consequences for the priors:
 
 1. Because WG carries the only CDI comprehension data, an _understood_
-   proportion derived from WG cannot exceed 396/800 = **0.495** on the model
-   scale. A high-age understood anchor near 0.5 would sit against the WG ceiling and implicitly assume near-total WG comprehension; VG13's 16-month understood anchor was recalibrated to `Beta(2, 6)` (median 0.228, about 183 words) partly for this reason, keeping it clear of the ceiling.
+   proportion derived from WG cannot exceed 396/810 = **0.489** on the model
+   scale. A high-age understood anchor near 0.5 would sit against the WG ceiling and implicitly assume near-total WG comprehension; VG13's 16-month understood anchor was recalibrated to `Beta(2, 6)` (median 0.228, about 185 words) partly for this reason, keeping it clear of the ceiling.
 2. Fenson et al. caution that percentile ranks are unstable at ages where a
    skill is just emerging ("small differences in raw scores can have
    dramatically different effects on percentile ranks"). The youngest-age
@@ -352,18 +352,18 @@ Two consequences for the priors:
 ### TD anchor priors vs Wordbank norms
 
 Wordbank US-English, typically-developing, monolingual, cross-sectional deciles
-(downloaded 2026-07-01) translated onto the model's 800-item scale. The final
+(downloaded 2026-07-01) translated onto the model's 810-item scale. The final
 column flags where the prior _centre_ departs from the normative median at the
 anchor age:
 
-| Anchor (models)                       | Prior            | Prior median (words/800) | Wordbank median | Prior ÷ empirical                   |
+| Anchor (models)                       | Prior            | Prior median (words/810) | Wordbank median | Prior ÷ empirical                   |
 | ------------------------------------- | ---------------- | -----------------------: | --------------: | ----------------------------------- |
-| Spoken low @12mo (VG03/VG11)          | `Beta(1, 30)`    |               0.023 (18) |      0.013 (11) | 1.8× high                           |
-| Understood low @12mo (VG04/VG12)      | `Beta(1.2, 8)`   |               0.104 (83) |      0.104 (83) | 1.0× (matches)                      |
-| Spoken high @26mo (VG03/VG11)         | `Beta(1.3, 1.3)` |              0.500 (400) |     0.436 (349) | 1.1× (broad, covers)                |
+| Spoken low @12mo (VG03/VG11)          | `Beta(1, 30)`    |               0.023 (19) |      0.013 (11) | 1.8× high                           |
+| Understood low @12mo (VG04/VG12)      | `Beta(1.2, 8)`   |               0.104 (84) |      0.104 (84) | 1.0× (matches)                      |
+| Spoken high @26mo (VG03/VG11)         | `Beta(1.3, 1.3)` |              0.500 (405) |     0.436 (353) | 1.1× (broad, covers)                |
 | Young-TD understood low @10mo (VG13)  | `Beta(1, 15)`    |               0.045 (36) |      0.062 (50) | 0.73×                               |
-| Young-TD understood high @16mo (VG13) | `Beta(2, 6)`     |              0.228 (183) |     0.222 (177) | 1.0× (matches)                      |
-| Understood high @26mo (VG04/VG12)     | `Beta(1.3, 1.3)` |              0.500 (400) |               — | no CDI norm (WS is production-only) |
+| Young-TD understood high @16mo (VG13) | `Beta(2, 6)`     |              0.228 (185) |     0.222 (180) | 1.0× (matches)                      |
+| Understood high @26mo (VG04/VG12)     | `Beta(1.3, 1.3)` |              0.500 (405) |               — | no CDI norm (WS is production-only) |
 
 Every prior's 5–95% band still covers the empirical median, so none is
 inconsistent with the norms — but the low-age and VG13 high anchors now sit close to the normative medians after the young-age recalibration (#135/#138/#140); the 26-month understood anchor still cannot be anchored to CDI norms (WS is production-only) and remains a sensitivity target. Source data: Wordbank vocabulary norm tables,
@@ -401,9 +401,9 @@ Italian comprehension cohorts overlap `it_01`).
 
 Berglund et al. (2001) — 330 DS children on a 710-item Swedish CDI — give a full
 spoken trajectory by chronological age (their Table 3), translated onto the
-model's 800-item scale:
+model's 810-item scale:
 
-| Age (months) | Berglund DS spoken (approx. median words / 800) | Notes                            |
+| Age (months) | Berglund DS spoken (approx. median words / 810) | Notes                            |
 | ------------ | ----------------------------------------------: | -------------------------------- |
 | 12           |                                      ~0 (0.000) | 12% have ≥1 word                 |
 | 24           |                                     ~10 (0.013) | 53% pass 10 words, 3% pass 50    |
@@ -414,7 +414,7 @@ model's 800-item scale:
 Comparison with the DS spoken prior (VG01, `Beta(1, 25)` at 24 months, median 0.027, about 22 words):
 
 - The prior now places about 22 words at **24 months**, which Berglund observes around 30 months; at 24 months the independent median is ~10 words, so the DS spoken-low prior is ~2x high — recalibrated much closer to the cohort, in the same direction as the TD spoken-low anchor.
-- The **84-month high anchor** (`Beta(2, 1.5)`, median 0.586, about 469 words) is
+- The **84-month high anchor** (`Beta(2, 1.5)`, median 0.586, about 475 words) is
   **beyond the range of every independent DS CDI cohort** (Berglund tops out at
   60 months; CDIs are young-child instruments). It is deliberately broad and can
   only be checked against the project's own older DS data — i.e. it is
@@ -435,7 +435,7 @@ anchor.
 
 ### Dispersion (`kappa`)
 
-Fitting a Beta-Binomial (n = 800, matching the model likelihood) per age to the
+Fitting a Beta-Binomial (n = 810, matching the model likelihood) per age to the
 by-child Wordbank TD data (English variants, `typically_developing`,
 `health_conditions` null — the loader's filter) gives the empirical dispersion.
 `kappa` is the concentration; `rho = 1 / (kappa + 1)` is the intra-child
@@ -463,7 +463,7 @@ Against the shared prior (`kappa` median ~13–17, 5–95% ~5–60; `b_kappa < 0
   not — so the fitted-model `kappa` would sit somewhat higher. Even so, a broader
   `kappa_min` allowance is worth a sensitivity check at older ages.
 
-### Methodological endorsement of the 800-item design
+### Methodological endorsement of the 810-item design
 
 Laudańska et al. (2026), systematically reviewing CDI use across
 neurodevelopmental and genetic conditions, recommend exactly the harmonisation
@@ -490,12 +490,12 @@ directory were reviewed against the checklist below.
 | Check                           | Finding                                                                                                                                                                                                                                                                         |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Young-age floor                 | Plausible. Every trajectory family places prior-predictive mass near zero at the youngest ages (spoken and signed at 8-12 months, understood a little higher); no prior draw forces a high count at young ages.                                                                 |
-| Old-age ceiling                 | Plausible. Understood and spoken curves approach the 800-word ceiling only gradually and only for the fastest draws; the bulk of the prior mass stays well below saturation across the query range, so the ceiling is reachable but not imposed.                                |
+| Old-age ceiling                 | Plausible. Understood and spoken curves approach the 810-word ceiling only gradually and only for the fastest draws; the bulk of the prior mass stays well below saturation across the query range, so the ceiling is reachable but not imposed.                                |
 | Smoothness                      | Appropriate. The HSGP produces smooth curves with individual-draw wiggle, admitting both near-linear and gently curved trajectories without high-frequency oscillation.                                                                                                         |
 | `q(a)` (speak given understood) | Plausible. The prior band is a smooth 0-to-1 sigmoid rising from about 0.05 at the youngest ages toward about 0.9 by ~100 months, with no mass piling implausibly at the bounds.                                                                                                |
 | `r(a)` (sign given understood)  | Deliberately broad. The intercept-only mean plus GP spans roughly 0-1 with most mass low-to-mid and a visible narrowing ("waist") at the 54-month GP anchor — the intended weakly-informative signed prior (data set the level, the GP carries the hump); no piling at 0 or 1.  |
 | Random-effect heterogeneity     | Plausible. At the observation level the study/subject random effects widen the prior-predictive cloud enough to cover the observed between-study and between-child spread without implying implausible extremes on the probability scale.                                       |
-| Simulated count spread          | Plausible. The prior-predictive count clouds bracket the observed counts for every outcome (understood, spoken, signed) before the data are seen — neither too narrow (which would fight the data) nor degenerate at 0 or 800.                                                  |
+| Simulated count spread          | Plausible. The prior-predictive count clouds bracket the observed counts for every outcome (understood, spoken, signed) before the data are seen — neither too narrow (which would fight the data) nor degenerate at 0 or 810.                                                  |
 | VG15 signing / four-cell        | Plausible. Signed counts stay low with a broad, hump-capable upper tail (matching the sparse signing data); the `log_psi ~ Normal(0.3, 0.5)` association prior spans the independence reference `psi = 1`, so the four-cell composition is not prior-forced toward association. |
 
 **Conclusion.** The priors pass the prior-predictive audit: they encode the

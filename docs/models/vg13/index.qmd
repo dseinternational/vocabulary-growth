@@ -35,13 +35,13 @@ import pandas as pd
 
 ## Statistical model
 
-We model words understood and words spoken as bounded count outcomes out of an 800-word reference inventory, restricted to children aged 8-18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP). Both GPs are anchored at 13 months to remove the GP-intercept ridge. Dataset-level study random intercepts are added to both trajectories on the logit scale using a non-centred parameterisation, with the same marginal distribution as $\delta_U[s], \delta_q[s] \sim \text{Normal}(0,\tau)$. These study effects are absorbed at the observation level only; plot and query predictions use the population-level trajectory with study effects set to zero. Separate Beta-Binomial likelihoods with age-varying dispersion account for extra-binomial variability in both outcomes.
+We model words understood and words spoken as bounded count outcomes out of an 810-word reference inventory, restricted to children aged 8-18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP). Both GPs are anchored at 13 months to remove the GP-intercept ridge. Dataset-level study random intercepts are added to both trajectories on the logit scale using a non-centred parameterisation, with the same marginal distribution as $\delta_U[s], \delta_q[s] \sim \text{Normal}(0,\tau)$. These study effects are absorbed at the observation level only; plot and query predictions use the population-level trajectory with study effects set to zero. Separate Beta-Binomial likelihoods with age-varying dispersion account for extra-binomial variability in both outcomes.
 
 ::: {.callout-note title="Model at a glance"}
 
 - **Population:** typically developing children.
 - **Age range:** 8-18 months only.
-- **Outcomes:** words understood and words spoken, each out of the common 800-word reference inventory.
+- **Outcomes:** words understood and words spoken, each out of the common 810-word reference inventory.
 - **Mean structure:** $p_U(a)$ for understood and $q(a)=P(\text{speak}\mid\text{understood})$ for the production ratio; $p_S(a)=p_U(a)q(a)$.
 - **Hierarchy:** dataset-level study random intercepts on both $p_U$ and $q$.
 - **Stabilisation:** per-draw GP anchors at 13 months.

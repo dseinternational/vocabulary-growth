@@ -59,7 +59,7 @@ from vocab_growth.models.common_bivariate_re import build_model_re
 from vocab_growth.models.definitions import VG07, VG08, VG09, BivariateModelDefinition
 
 # Derive the Beta-Binomial trial count from the model definitions rather than a
-# literal (issue #131). All three compared models share the common 800-item
+# literal (issue #131). All three compared models share the common 810-item
 # reference scale; assert they agree so a future divergence surfaces here.
 _n_trials_set = {VG07.n_trials, VG08.n_trials, VG09.n_trials}
 assert len(_n_trials_set) == 1, (

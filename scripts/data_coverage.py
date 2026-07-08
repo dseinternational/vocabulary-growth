@@ -25,15 +25,68 @@ from __future__ import annotations
 import os
 
 import dse_research_utils.plot.styles as plot_styles
+import duckdb
 import matplotlib.pyplot as plt
 import pandas as pd
 
 from vocab_growth import environment as env
-from vocab_growth.data_utils import load_combined_data
+from vocab_growth.data_utils import VOCABULARY_DATA_PATH, load_combined_data
 
 OUT_DIR = os.path.join(env.output_root(), "data")
 
 AGE_BIN_EDGES = list(range(0, 121, 6))  # 0, 6, 12, …, 120 months
+
+# Fraction of a form's native ceiling above which a count is counted as
+# "near-ceiling" for the harmonisation audit (issue #128): every count is
+# modelled against the common 810-item reference denominator regardless of its
+# source form, so counts near a *smaller* native ceiling are the ones most
+# exposed to the right-censoring approximation.
+NEAR_CEILING_FRACTION = 0.90
+
+
+def _ceiling_by_form() -> pd.DataFrame:
+    """Quantify at-ceiling and near-ceiling observations by (study, ceiling).
+
+    Reads ``survey_vocab_max`` straight from the ``vocab_combined`` view — it is
+    the native checklist ceiling of each row's source form and is dropped by
+    :func:`load_combined_data`, so this audit queries the view directly. For
+    each (study, ceiling, outcome) it reports how many modelled counts sit at
+    the ceiling or within ``NEAR_CEILING_FRACTION`` of it, i.e. how much of the
+    data is exposed to the fixed-810-denominator harmonisation.
+    """
+    with duckdb.connect(VOCABULARY_DATA_PATH, read_only=True) as con:
+        df = con.execute(
+            "SELECT study, survey_vocab_max, understood, spoken, signed "
+            "FROM vocab_combined"
+        ).df()
+
+    rows: list[dict] = []
+    for outcome in ("understood", "spoken", "signed"):
+        work = df[["study", "survey_vocab_max", outcome]].dropna(subset=[outcome])
+        for (study, ceiling), grp in work.groupby(
+            ["study", "survey_vocab_max"], dropna=False
+        ):
+            counts = grp[outcome]
+            n = len(counts)
+            has_ceiling = pd.notna(ceiling)
+            at_ceiling = int((counts == ceiling).sum()) if has_ceiling else 0
+            near = (
+                int((counts >= NEAR_CEILING_FRACTION * ceiling).sum())
+                if has_ceiling
+                else 0
+            )
+            rows.append({
+                "study": study,
+                "outcome": outcome,
+                "ceiling": int(ceiling) if has_ceiling else None,
+                "n_obs": n,
+                "max_count": int(counts.max()),
+                "n_at_ceiling": at_ceiling,
+                "n_near_ceiling": near,  # >= NEAR_CEILING_FRACTION * ceiling
+                "pct_near_ceiling": round(100 * near / n, 1) if has_ceiling else None,
+            })
+    out = pd.DataFrame(rows).sort_values(["outcome", "study", "ceiling"])
+    return out
 
 
 def _make_pivot(df: pd.DataFrame, column: str) -> pd.DataFrame:
@@ -115,6 +168,12 @@ def main() -> None:
     })
     pd.DataFrame(rows).to_csv(os.path.join(OUT_DIR, "coverage_summary.csv"),
                               index=False)
+
+    # Near-ceiling / harmonisation audit for the 810-item reference scale (#128).
+    ceiling = _ceiling_by_form()
+    ceiling.to_csv(os.path.join(OUT_DIR, "ceiling_by_form.csv"), index=False)
+    print("Near-ceiling audit (by study × native ceiling):")
+    print(ceiling.to_string(index=False))
 
     print(f"Wrote coverage CSVs + heatmaps under: {OUT_DIR}")
 

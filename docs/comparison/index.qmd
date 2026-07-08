@@ -113,7 +113,7 @@ for a in ages:
 pd.DataFrame(rows).set_index("Age (mo)")
 ```
 
-Expected vocabulary (latent mean out of the 800-word reference inventory). The
+Expected vocabulary (latent mean out of the 810-word reference inventory). The
 comprehension gap is large (~4× at 24 mo) but the **production** gap is far larger
 (tens-fold), and P(TD > DS) = 1.00 across the supported overlap on both outcomes.
 

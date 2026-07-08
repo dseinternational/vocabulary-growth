@@ -35,7 +35,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The structure follows VG08 with an additional non-centered subject-level random intercept on the production ratio $q$:
+We jointly model words understood and words spoken as bounded count outcomes out of 810 possible words. The structure follows VG08 with an additional non-centered subject-level random intercept on the production ratio $q$:
 
 $$f_U(a, s, i) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s] + \delta^{\text{subj}}_U[i]$$
 $$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s] + \delta^{\text{subj}}_q[i]$$

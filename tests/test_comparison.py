@@ -12,8 +12,8 @@ def test_registry_resolution():
     assert comparison.model_dir("vg11").replace("\\", "/").endswith(
         "output/models/VG11-age-spoken-td-re"
     )
-    assert comparison.n_trials("vg11") == 800
-    assert comparison.n_trials("vg10") == 800
+    assert comparison.n_trials("vg11") == 810
+    assert comparison.n_trials("vg10") == 810
     assert comparison.population("vg11") == "td"
     assert comparison.population("vg10") == "ds"
     assert comparison.model_label("vg11") == "VG11 (TD)"

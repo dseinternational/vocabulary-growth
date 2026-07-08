@@ -609,6 +609,14 @@ def build_model(context: BivariateContext):
         # ============================================================
         # Likelihoods — separate observation indices
         # ============================================================
+        #
+        # Composite marginal (pseudo-)likelihood: understood and spoken enter as
+        # two separate Beta-Binomial marginals, coupled only through the shared
+        # latent means (p_S = p_U * q). The counts are treated as conditionally
+        # independent given those means; the item-level joint distribution (which
+        # understood words a child also speaks) is not modelled, as most sources
+        # report only marginal totals. See methods-models.qmd, "Joint outcomes
+        # and production ratios", for the estimand implications.
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]

@@ -35,12 +35,12 @@ import pandas as pd
 
 ## Statistical model
 
-We model the number of words understood as a bounded count outcome out of an 800-word reference inventory. The expected proportion of words understood is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Wordbank WG and Oxford CDI rows contribute independently measured understood observations; Words & Sentences rows are excluded because their comprehension values are production proxies. Priors for the linear trend are specified indirectly through the expected proportion of words understood at two reference ages, making the prior assumptions more interpretable.
+We model the number of words understood as a bounded count outcome out of an 810-word reference inventory. The expected proportion of words understood is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Wordbank WG and Oxford CDI rows contribute independently measured understood observations; Words & Sentences rows are excluded because their comprehension values are production proxies. Priors for the linear trend are specified indirectly through the expected proportion of words understood at two reference ages, making the prior assumptions more interpretable.
 
 ::: {.callout-note title="Model at a glance"}
 
 - **Population:** typically developing children.
-- **Outcome:** words understood out of the common 800-word reference inventory.
+- **Outcome:** words understood out of the common 810-word reference inventory.
 - **Age anchors:** 12 and 26 months.
 - **Data handling:** 25% TD subsample; Wordbank WG and Oxford CDI comprehension rows are included, and Words & Sentences comprehension proxies are excluded.
 - **Role in the model family:** baseline TD understood trajectory; VG12 is the full-data study-random-effect successor.
@@ -57,7 +57,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The early TD understood anchor is tighter near the floor than the DS understood anchor because this model covers much younger children. The 26-month anchor mildly favours larger vocabularies while still allowing wide uncertainty on the 800-word scale. Prior predictive checks should be used to judge whether these anchors imply plausible rapid comprehension growth without excessive ceiling pressure.
+The early TD understood anchor is tighter near the floor than the DS understood anchor because this model covers much younger children. The 26-month anchor mildly favours larger vocabularies while still allowing wide uncertainty on the 810-word scale. Prior predictive checks should be used to judge whether these anchors imply plausible rapid comprehension growth without excessive ceiling pressure.
 
 ### Lengthscale
 
@@ -87,7 +87,7 @@ The early TD understood anchor is tighter near the floor than the DS understood 
 
 ## Prior predictive checks
 
-Read these checks as a pre-data plausibility test over the TD comprehension age range: simulated counts should allow rapid growth, but should not force the trajectory to the 800-word ceiling before the data are observed.
+Read these checks as a pre-data plausibility test over the TD comprehension age range: simulated counts should allow rapid growth, but should not force the trajectory to the 810-word ceiling before the data are observed.
 
 ### Prior samples
 

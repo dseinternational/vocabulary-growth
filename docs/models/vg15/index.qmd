@@ -45,7 +45,7 @@ import pandas as pd
 
 ## Statistical model
 
-For each understood word, a child may sign it, speak it, both, or neither. We model the within-understood marginals and their association jointly, out of 800 checklist words:
+For each understood word, a child may sign it, speak it, both, or neither. We model the within-understood marginals and their association jointly, out of 810 checklist words:
 
 $$
 p_U(a) = \text{sigmoid}(f_U(a)), \quad r(a) = P(\text{sign}\mid\text{understood}) = \text{sigmoid}(g(a)), \quad q(a) = P(\text{speak}\mid\text{understood}) = \text{sigmoid}(h(a)),
@@ -73,8 +73,8 @@ The association $\psi$ is deliberately kept **decoupled** from the subject rando
 
 ### Likelihoods
 
-- **understood** (all DS studies): $\text{BetaBinomial}(800, p_U, \kappa_U)$.
-- **spoken / signed marginals** (uk_01/04/05/06 + uk_02 marginal-only rows): $\text{BetaBinomial}(800, p_U q, \kappa_S)$ and $\text{BetaBinomial}(800, p_U r, \kappa_\text{sign})$.
+- **understood** (all DS studies): $\text{BetaBinomial}(810, p_U, \kappa_U)$.
+- **spoken / signed marginals** (uk_01/04/05/06 + uk_02 marginal-only rows): $\text{BetaBinomial}(810, p_U q, \kappa_S)$ and $\text{BetaBinomial}(810, p_U r, \kappa_\text{sign})$.
 - **uk_02 four cells** (the only cross-tab source): $\text{DirichletMultinomial}(\text{total}, \text{conc}\cdot[\pi_\text{neither}, \pi_\text{sign-only}, \pi_\text{speak-only}, \pi_\text{both}])$. For rows with complete four-cell data, `total` is the four-cell sum and is also used as the understood count for that assessment occasion, so the marginal understood likelihood and the four-cell likelihood share one authoritative total. **This is what identifies $\psi$.**
 
 The Dirichlet-Multinomial four-cell likelihood is excluded from LOO-CV by design: it is not a per-observation Beta-Binomial like the three marginal word-count likelihoods, so LOO-CV is reported for words understood, spoken and signed only, matching every other model's scope.

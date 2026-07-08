@@ -96,6 +96,17 @@ def _sql_string_list(values: tuple[str, ...]) -> str:
     return ", ".join(f"'{v}'" for v in values)
 
 
+# Native checklist ceilings (``survey_vocab_max``), by source form (issue #128):
+#   - DSE Checklists (1+2+3 = 120+340+350) = 810 words. This is the common
+#     reference inventory every model's likelihood scores counts against
+#     (``n_trials = 810``), so DSE-native studies (uk_02 DSE form, ie_01, uk_06,
+#     ie_02) carry survey_vocab_max = 810.
+#   - Oxford CDI = 416 words (uk_02 Oxford form, uk_03, uk_04, uk_05).
+#   - MacArthur-Bates CDI: Words & Gestures (WG) = 396 (us_01 WG form, us_02 —
+#     which carries comprehension, so it is the WG form); Words & Sentences
+#     (WS, production only) = 680 (us_01 WS form).
+#   - NZCDI (nz_01) = 675. uk_01 and it_01 carry a per-row source ceiling.
+#
 # Form-ceiling guard (issues #128/#131): exclude rows whose word count exceeds
 # the native item ceiling of the checklist form they came from
 # (``survey_vocab_max``). Such counts are impossible — a data-entry error, e.g.
@@ -154,8 +165,8 @@ def vocab_combined_view_sql() -> str:
            vuk2.signed,
            vuk2.production as produced,
            CASE
-               WHEN vuk2.form = 'DSE' THEN 800
-               WHEN vuk2.form = 'Oxford_CDI' THEN 428
+               WHEN vuk2.form = 'DSE' THEN 810
+               WHEN vuk2.form = 'Oxford_CDI' THEN 416
                ELSE NULL
            END                as survey_vocab_max
     FROM vocab_uk_02 as vuk2
@@ -168,7 +179,7 @@ def vocab_combined_view_sql() -> str:
            vie.says_total_start                                        as spoken,
            null                                                        as signed,
            null                                                        as produced,
-           800                                                         as survey_vocab_max
+           810                                                         as survey_vocab_max
     FROM vocab_ie_01 as vie
     UNION ALL
     SELECT 'ie_01'                                               as study,
@@ -179,7 +190,7 @@ def vocab_combined_view_sql() -> str:
            vie.says_total_end                                      as spoken,
            null                                                    as signed,
            vie.says_total_end                                      as produced,
-           800                                                     as survey_vocab_max
+           810                                                     as survey_vocab_max
     FROM vocab_ie_01 as vie
     UNION ALL
     -- us_01 (Edgin): the English Down syndrome subset of the Wordbank export.
@@ -202,7 +213,7 @@ def vocab_combined_view_sql() -> str:
            production                         as produced,
            CASE form
                WHEN 'WG' THEN 396
-               WHEN 'WS' THEN 690
+               WHEN 'WS' THEN 680
                ELSE NULL
                END                            as survey_vocab_max
     FROM wordbank_child
@@ -221,7 +232,7 @@ def vocab_combined_view_sql() -> str:
            vuk2025.production                  as spoken,
            null                                as signed,
            vuk2025.production                  as produced,
-           418                                 as survey_vocab_max
+           416                                 as survey_vocab_max
     FROM vocab_uk_03 as vuk2025
     UNION ALL
     SELECT 'it_01'                           as study,
@@ -243,7 +254,7 @@ def vocab_combined_view_sql() -> str:
         vuk2013.spoken,
         vuk2013.signed,
         vuk2013.spoken                      as produced,
-        418                                 as survey_vocab_max
+        416                                 as survey_vocab_max
     FROM vocab_uk_04 as vuk2013
         UNION ALL
     SELECT 'uk_05'                           as study,
@@ -254,7 +265,7 @@ def vocab_combined_view_sql() -> str:
         vuk05.spoken,
         vuk05.signed,
         vuk05.spoken                      as produced,
-        418                                 as survey_vocab_max
+        416                                 as survey_vocab_max
     FROM vocab_uk_05 as vuk05
         UNION ALL
     SELECT 'us_02'                           as study,
@@ -265,7 +276,7 @@ def vocab_combined_view_sql() -> str:
         vus02.spoken,
         NULL                                as signed,
         vus02.spoken                     as produced,
-        418                                 as survey_vocab_max
+        396                                 as survey_vocab_max  -- MacArthur-Bates WG
     FROM vocab_us_02 as vus02
         UNION ALL
     SELECT 'uk_06'                           as study,
@@ -276,7 +287,7 @@ def vocab_combined_view_sql() -> str:
         vuk06.spoken,
         vuk06.signed                                as signed,
         vuk06.spoken                      as produced,
-        800                                 as survey_vocab_max
+        810                                 as survey_vocab_max
     FROM vocab_uk_06 as vuk06
         UNION ALL
     SELECT 'ie_02'                           as study,
@@ -287,7 +298,7 @@ def vocab_combined_view_sql() -> str:
         vie2.spoken,
         vie2.signed                         as signed,
         vie2.spoken                         as produced,
-        800                                 as survey_vocab_max
+        810                                 as survey_vocab_max
     FROM vocab_ie_02 as vie2
     WHERE vie2.english_speaking = 'yes'
     UNION ALL

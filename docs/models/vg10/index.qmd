@@ -42,7 +42,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 800 possible words. The structure follows VG09; the only differences are the tightened q-anchor priors and the GP anchor constraint:
+We jointly model words understood and words spoken as bounded count outcomes out of 810 possible words. The structure follows VG09; the only differences are the tightened q-anchor priors and the GP anchor constraint:
 
 $$f_U(a, s, i) = \text{intercept}_U + \text{slope}_U \cdot a_z + \tilde g_U(a) + \delta_U[s] + \delta^{\text{subj}}_U[i]$$
 $$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + \tilde g_q(a) + \delta_q[s] + \delta^{\text{subj}}_q[i]$$

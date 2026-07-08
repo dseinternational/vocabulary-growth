@@ -35,12 +35,12 @@ import pandas as pd
 
 ## Statistical model
 
-We model the number of words spoken as a bounded count outcome out of an 800-word reference inventory. The expected proportion of words spoken is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Wordbank WG, Oxford CDI, and Words & Sentences rows contribute spoken observations. Priors for the linear trend are specified indirectly through the expected proportion of words spoken at two reference ages, making the prior assumptions more interpretable.
+We model the number of words spoken as a bounded count outcome out of an 810-word reference inventory. The expected proportion of words spoken is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Wordbank WG, Oxford CDI, and Words & Sentences rows contribute spoken observations. Priors for the linear trend are specified indirectly through the expected proportion of words spoken at two reference ages, making the prior assumptions more interpretable.
 
 ::: {.callout-note title="Model at a glance"}
 
 - **Population:** typically developing children.
-- **Outcome:** words spoken out of the common 800-word reference inventory.
+- **Outcome:** words spoken out of the common 810-word reference inventory.
 - **Age anchors:** 12 and 26 months.
 - **Data handling:** 25% TD subsample; Wordbank WG, Oxford CDI, and Words & Sentences rows contribute spoken observations.
 - **Role in the model family:** baseline TD spoken trajectory; VG11 is the full-data study-random-effect successor.
@@ -57,7 +57,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The TD anchor ages are much younger than the DS anchor ages because typical spoken vocabulary changes rapidly across the second year. The low-age anchor is near the floor at 12 months, while the 26-month anchor mildly favours larger vocabularies but remains broad on the 800-word scale. The GP and `kappa` priors match the shared univariate model machinery.
+The TD anchor ages are much younger than the DS anchor ages because typical spoken vocabulary changes rapidly across the second year. The low-age anchor is near the floor at 12 months, while the 26-month anchor mildly favours larger vocabularies but remains broad on the 810-word scale. The GP and `kappa` priors match the shared univariate model machinery.
 
 ### Lengthscale
 

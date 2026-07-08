@@ -15,7 +15,7 @@ In the simple organising diagram below, $A$ is age, $O$ collects the unmeasured 
 
 ## The outcome: a Beta-Binomial count {#sec-betabinomial}
 
-We model each vocabulary outcome as a count bounded between $0$ and $N_{\text{trials}}$ words, where $N_{\text{trials}}$ is the number of words on the reference checklist (a common 800-item reference inventory throughout this report; see @sec-data <!-- methods-data -->). For observation $i$ at age $x_i$ months we standardise age,
+We model each vocabulary outcome as a count bounded between $0$ and $N_{\text{trials}}$ words, where $N_{\text{trials}}$ is the number of words on the reference checklist (a common 810-item reference inventory throughout this report; see @sec-data <!-- methods-data -->). For observation $i$ at age $x_i$ months we standardise age,
 
 $$
 z_i = \frac{x_i - \bar{x}}{s_x},
@@ -100,7 +100,7 @@ The following priors are held **constant across all models** (they are the share
 
 : Shared default prior distributions, identical across all models. {#tbl-core-priors}
 
-The length-scale is mapped from the unit interval onto a 6–18 month range, $\ell = \ell_{\min} + (\ell_{\max} - \ell_{\min})\,\ell_\text{unit}$, which favours changes over 6–18 month periods and offers better sampling geometry than a direct prior on the positive reals. The amplitude $\eta$ is constant on the logit scale but, through the logistic link, has its largest effect on counts near $p \approx 0.5$ (about 400 of 800 words) and least effect near the floor or ceiling — matching the expectation that there is least scope for variation when a child is just starting out or near the checklist limit.
+The length-scale is mapped from the unit interval onto a 6–18 month range, $\ell = \ell_{\min} + (\ell_{\max} - \ell_{\min})\,\ell_\text{unit}$, which favours changes over 6–18 month periods and offers better sampling geometry than a direct prior on the positive reals. The amplitude $\eta$ is constant on the logit scale but, through the logistic link, has its largest effect on counts near $p \approx 0.5$ (about 405 of 810 words) and least effect near the floor or ceiling — matching the expectation that there is least scope for variation when a child is just starting out or near the checklist limit.
 
 ## Extension mechanisms
 

@@ -45,7 +45,7 @@ from vocab_growth import environment as env
 EPSILON = 1e-12
 # TODO(#131): derive from definition.n_trials (this script keys off trace
 # folders via ModelSpec and has no model definition object in scope).
-N_TRIALS = 800
+N_TRIALS = 810
 
 MODELS_DIR = env.models_output_dir()
 OUT_DIR = env.comparisons_output_dir()
