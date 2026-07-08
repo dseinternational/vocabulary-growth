@@ -4,6 +4,14 @@
 outputs/
 output/
 figures/
+
+# Standalone comparison-doc render artifacts. The comparison suite writes its
+# tables to output/comparisons/; docs/comparison/index.qmd reads them by bare
+# name, so they are staged next to the doc at render time (with the rendered
+# index.html + index_files/). All generated — never committed.
+docs/comparison/*.csv
+docs/comparison/index.html
+docs/comparison/index_files/
 _freeze/
 _temp/
 temp/
