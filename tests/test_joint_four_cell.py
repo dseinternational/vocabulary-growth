@@ -117,3 +117,28 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
     four_rows = analysis_df[analysis_df["signed_spoken"].notna()]
     np.testing.assert_array_equal(four_rows["understood"], four_rows["cell_total"])
     assert 22 not in set(four_rows["understood"])
+
+
+def test_plackett_pi_both_stable_and_correct_at_psi_one():
+    """The rationalised Plackett root is continuous and correctly-differentiable
+    at psi == 1 (issue #131 §3): it returns the independence value ``r*q`` with a
+    finite, non-zero gradient, where the old ``switch`` form returned a spurious
+    zero/NaN gradient in the psi->1 neighbourhood."""
+    import pytensor
+    import pytensor.tensor as pt
+
+    psi = pt.dscalar("psi")
+    r, q = 0.4, 0.6  # r + q - 1 = 0, so the Frechet lower bound is 0 here
+    expr = cjm._plackett_pi_both(r, q, psi)
+    f = pytensor.function([psi], [expr, pt.grad(expr, psi)])
+
+    val, grad = f(1.0)
+    assert np.isclose(val, r * q)  # independence at psi == 1
+    assert np.isfinite(grad) and abs(grad) > 1e-6  # not the old spurious 0
+
+    # Matches the textbook closed-form root away from psi == 1.
+    for p in (0.5, 2.0, 5.0):
+        S = 1.0 + (r + q) * (p - 1.0)
+        disc = np.sqrt(S * S - 4.0 * p * (p - 1.0) * r * q)
+        textbook = (S - disc) / (2.0 * (p - 1.0))
+        assert np.isclose(f(p)[0], textbook)

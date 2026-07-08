@@ -553,11 +553,20 @@ def _plackett_pi_both(r, q, psi):
     Closed-form root, falling back to independence at psi == 1, then clipped to
     the Frechet bounds [max(0, r+q-1), min(r, q)].
     """
+    # Numerically stable, branch-free form of the Plackett root. The textbook
+    # expression ``(S - disc) / (2 (psi - 1))`` needs a ``switch`` fallback to
+    # ``r*q`` at psi == 1 (0/0) and suffers catastrophic cancellation in the
+    # whole psi->1 neighbourhood (S ~ disc ~ 1 while the denominator ~ 0), which
+    # both distorts pi_both and destabilises the NUTS gradient. Rationalising by
+    # ``(S + disc)`` cancels the ``(psi - 1)`` factor exactly:
+    #     (S - disc) / (2 (psi - 1))  ==  2 psi r q / (S + disc),
+    # since ``S^2 - disc^2 = 4 psi (psi - 1) r q``. The right-hand side has no
+    # vanishing denominator (S + disc > 0 across the valid odds-ratio range) and
+    # is continuous at psi == 1, where it returns exactly ``r*q`` — so no switch
+    # is needed.
     S = 1.0 + (r + q) * (psi - 1.0)
     disc = pm.math.sqrt(pm.math.maximum(S * S - 4.0 * psi * (psi - 1.0) * r * q, 0.0))
-    denom = 2.0 * (psi - 1.0)
-    pi_root = (S - disc) / denom
-    pi_both = pm.math.switch(abs(psi - 1.0) < 1e-6, r * q, pi_root)
+    pi_both = 2.0 * psi * r * q / pm.math.maximum(S + disc, 1e-12)
     lo = pm.math.maximum(0.0, r + q - 1.0)
     hi = pm.math.minimum(r, q)
     return pm.math.clip(pi_both, lo, hi)
