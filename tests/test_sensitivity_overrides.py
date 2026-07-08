@@ -13,7 +13,7 @@ import dataclasses
 
 import pytest
 
-from vocab_growth.models.definitions import VG10, VG11, VG15
+from vocab_growth.models.definitions import VG10, VG11, VG12, VG15
 from vocab_growth.sensitivity.overrides import make_variant, replace_kappa
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
@@ -62,9 +62,12 @@ def test_replace_kappa_overrides_only_named_fields():
 
 
 def test_registry_counts_and_models():
-    assert len(VARIANTS) == 27
-    assert len(variants_for("vg10")) == 8
-    assert len(variants_for("vg11")) == 2
+    # 27 §7 targets + 7 Target-8 young-age anchor variants (#146): vg10 +2,
+    # vg11 +2, vg12 +3.
+    assert len(VARIANTS) == 34
+    assert len(variants_for("vg10")) == 10
+    assert len(variants_for("vg11")) == 4
+    assert len(variants_for("vg12")) == 3
     assert len(variants_for("vg15")) == 17
     assert "vg13" not in {m for (m, _) in VARIANTS}  # excluded (too heavy)
 
@@ -92,6 +95,6 @@ def test_variants_are_single_factor_or_documented_pairs():
     # (sanity that replace preserved the class), and changes at least one field.
     for (model_key, name) in VARIANTS:
         (v,) = build_variant(model_key, name)
-        base = {"vg10": VG10, "vg11": VG11, "vg15": VG15}[model_key]
+        base = {"vg10": VG10, "vg11": VG11, "vg12": VG12, "vg15": VG15}[model_key]
         assert v.model_type == base.model_type
         assert dataclasses.asdict(v) != dataclasses.asdict(base)

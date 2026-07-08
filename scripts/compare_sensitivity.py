@@ -32,7 +32,7 @@ def _model_dir(model_key: str, suffix: str | None = None) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("model", help="Model key (vg10, vg11, vg15).")
+    parser.add_argument("model", help="Model key (vg10, vg11, vg12, vg15).")
     parser.add_argument("--variant", default="all", help="Variant name or 'all' (default).")
     parser.add_argument("--out", default=None, help="Robustness-matrix CSV path.")
     args = parser.parse_args()
