@@ -75,10 +75,10 @@ def _loo_summary_row(label: str, loo) -> dict:
         k = loo.diagnostics.values
     return {
         "label": label,
-        "elpd_loo": float(loo.elpd_loo),
+        "elpd_loo": float(loo.elpd),
         "se": float(loo.se),
-        "p_loo": float(loo.p_loo),
-        "looic": float(-2.0 * loo.elpd_loo),
+        "p_loo": float(loo.p),
+        "looic": float(-2.0 * loo.elpd),
         "looic_se": float(2.0 * loo.se),
         "pareto_k_gt_0.7": int((k > 0.7).sum()),
         "n_observations": int(k.size),
@@ -118,7 +118,7 @@ def per_model_loo() -> dict[str, list[dict]]:
             continue
         print(f"  {short}: loading trace …", flush=True)
         idata = az.from_netcdf(trace_path)
-        if "log_likelihood" not in idata.groups():
+        if "log_likelihood" not in [g.rsplit("/", 1)[-1] for g in idata.groups]:
             print(f"  {short}: no log_likelihood group — skipped")
             continue
 
@@ -158,7 +158,7 @@ def compare_pair(
 ) -> None:
     """Run az.compare on the given InferenceData objects and write CSV."""
     compare_dict = {name: idata for name, idata in members}
-    kwargs = {"ic": "loo", "method": "stacking"}
+    kwargs = {"method": "stacking"}
     if var_name is not None:
         kwargs["var_name"] = var_name
     df = az.compare(compare_dict, **kwargs)

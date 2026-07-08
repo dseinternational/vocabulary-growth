@@ -303,9 +303,9 @@ def _summary_row(label: str, loo) -> dict:
     k = loo.pareto_k.values if hasattr(loo, "pareto_k") else loo.diagnostics.values
     return {
         "label": label,
-        "elpd_loo": float(loo.elpd_loo),
+        "elpd_loo": float(loo.elpd),
         "se": float(loo.se),
-        "p_loo": float(loo.p_loo),
+        "p_loo": float(loo.p),
         "pareto_k_gt_0.7": int((k > 0.7).sum()),
         "n_subjects": int(k.size),
     }
