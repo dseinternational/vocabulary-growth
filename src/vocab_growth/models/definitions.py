@@ -486,16 +486,20 @@ VG01 = UnivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     p_slope_low_alpha=1.0,
-    # Tightened from 15.0: the prior mean-trajectory band centred the 24 mo
-    # spoken level at ~37 words, but DS speech onset is delayed — empirical mean
-    # is ~15 and even the individual p90 is ~37. Beta(1, 25) pulls the 24 mo
-    # centre down to ~22, respecting the near-zero early-speech floor without
-    # excluding the occasional early talker.
+    # Independent anchor — Berglund et al. (2001, Table 3; 330 DS children,
+    # confirmed non-overlapping with the training data): DS spoken vocabulary is
+    # ~10 median words at 24 mo. Beta(1, 25) places the 24 mo centre at ~22 words
+    # (median), deliberately a little above the cohort median so the near-zero
+    # early-speech floor is respected without excluding early talkers; the
+    # in-sample mean (~15) corroborates. See docs/models/PRIORS.md, "DS anchor
+    # priors vs independent cohorts".
     p_slope_low_beta=25.0,
-    # Nudged from the near-uniform Beta(1.1, 1.1) (same rationale as VG02): the
-    # 84 mo anchor was maximally vague, producing implausible flat-near-zero
-    # spoken curves out to 9 years. Beta(2, 1.5) lifts the 7-year level and
-    # curbs both tails while staying broad.
+    # 84 mo high anchor: beyond the range of every independent DS CDI cohort
+    # (Berglund tops out at 60 mo), so this is deliberately broad regularisation,
+    # NOT an externally anchored value. Nudged off the near-uniform Beta(1.1,1.1)
+    # only on plausibility grounds — to rule out a priori implausible
+    # flat-near-zero spoken curves at age 7. Beta(2, 1.5) lifts the 7-year level
+    # and curbs both tails while staying broad.
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     # Raised from 0.4 to offset the p_slope_low pull-down: lets the HSGP add
@@ -513,17 +517,21 @@ VG02 = UnivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     p_slope_low_alpha=1.0,
-    # Loosened from 10.0: the prior mean-trajectory band under-covered the
-    # 30-48 mo data centre (empirical median sat at the prior's 90th
-    # percentile). A fatter upper tail at the 24 mo anchor lifts the young-age
-    # band toward the observed central trend. Paired with eta_sigma=0.6 below,
-    # which widens the range of early growth rates the HSGP can express.
+    # Data-informed regularisation — NOT independently anchored. DS comprehension
+    # at chronological age has no independent source in the current library
+    # (Berglund is production-only), so this young-age understood anchor rests on
+    # the project's own DS data: the previous Beta(1,10) band under-covered the
+    # 30-48 mo centre, and Beta(1,7) widens the upper tail toward it. Flagged as a
+    # sensitivity target in docs/models/PRIORS.md (no independent comprehension
+    # norm). Paired with eta_sigma=0.6 below, which widens the range of early
+    # growth rates the HSGP can express.
     p_slope_low_beta=7.0,
-    # Nudged from the near-uniform Beta(1.1, 1.1): the 84 mo anchor was
-    # maximally vague, placing ~10% of prior mass below 80 understood words at
-    # age 7 (implausibly low for DS) and ~10% above 720. Beta(2, 1.5) is mildly
-    # informative (mean ~0.57, still spanning ~0.1-0.95), curbing the
-    # flat-near-zero and rocket-to-800 tails without over-committing the level.
+    # 84 mo understood high anchor: likewise no independent DS comprehension norm.
+    # Nudged off the near-uniform Beta(1.1, 1.1) only on plausibility grounds —
+    # the old anchor placed ~10% of prior mass below 80 words at age 7 and ~10%
+    # above 720. Beta(2, 1.5) is mildly informative (mean ~0.57, spanning
+    # ~0.1-0.95), curbing the flat-near-zero and rocket-to-800 tails without
+    # over-committing the level.
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     eta_sigma=0.6,
@@ -540,13 +548,14 @@ VG03 = UnivariateModelDefinition(
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    # Prior-predictive recalibration (mirrors VG01): TD production is delayed, so
-    # the old prior mean-trajectory band overshot the near-zero young floor
-    # (median ~38 words at 12 mo against an empirical mean of ~10) and ran above
-    # the data mean at every age. Lower the 12 mo anchor (Beta(1,15) -> Beta(1,30),
-    # ~26 words), soften the near-uniform 26 mo anchor (Beta(1.5,1.1) -> Beta(1.3,
-    # 1.3)), and widen eta (0.4 -> 0.5) so the median band tracks the empirical
-    # mean through the dense 16-26 mo region.
+    # Independent anchor — Wordbank US-English TD normative deciles (published
+    # percentiles, not the training rows): spoken median ~11 words/800 at 12 mo,
+    # ~349 at 26 mo (docs/models/PRIORS.md, "TD anchor priors vs Wordbank norms").
+    # Lower the 12 mo anchor toward the near-zero norm floor (Beta(1,15) ->
+    # Beta(1,30), median ~18 words), soften the near-uniform 26 mo anchor
+    # (Beta(1.5,1.1) -> Beta(1.3,1.3), median ~400, broad enough to cover the ~349
+    # norm), and widen eta (0.4 -> 0.5). The in-sample mean (~10 words at 12 mo)
+    # corroborates.
     p_slope_low_alpha=1.0,
     p_slope_low_beta=30.0,
     p_slope_hi_alpha=1.3,
@@ -569,14 +578,16 @@ VG04 = UnivariateModelDefinition(
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    # Prior-predictive recalibration (mirrors VG02): TD comprehension is already
-    # substantial at 12 mo (empirical mean ~82 words), but the old prior centred
-    # it at ~28 (the data mean sat near the prior's 85th percentile young) then
-    # overshot by 24 mo. Raise and firm up the 12 mo anchor (Beta(1,20) ->
-    # Beta(1.2,8), ~90 words, mode off zero), soften the 26 mo anchor
-    # (Beta(1.5,1.1) -> Beta(1.3,1.3)), and widen eta (0.4 -> 0.5).
+    # 12 mo understood low anchor — independent Wordbank TD norm: comprehension
+    # median ~83 words/800 at 12 mo. Beta(1.2, 8) matches at median ~83 (the
+    # in-sample mean ~82 corroborates); the old Beta(1,20) centred it at ~28, well
+    # below the norm. See docs/models/PRIORS.md, "TD anchor priors vs Wordbank
+    # norms".
     p_slope_low_alpha=1.2,
     p_slope_low_beta=8.0,
+    # 26 mo understood high anchor — NO independent CDI comprehension norm (WS is
+    # production-only), so Beta(1.3, 1.3) is broad regularisation and a named
+    # sensitivity target in PRIORS.md, not an externally anchored value.
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
     eta_sigma=0.5,
@@ -798,9 +809,10 @@ VG12 = UnivariateModelDefinition(
     n_trials=800,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    # Understood trajectory priors shared with VG04 (see the note there): raise
-    # and firm up the 12 mo anchor for high early TD comprehension, soften the
-    # 26 mo anchor, widen eta.
+    # Understood trajectory priors shared with VG04 (see the note there): the
+    # 12 mo low anchor is anchored to the independent Wordbank comprehension norm
+    # (~83 words), while the 26 mo high anchor has no independent CDI norm (WS is
+    # production-only) and remains broad regularisation / a sensitivity target.
     p_slope_low_alpha=1.2,
     p_slope_low_beta=8.0,
     p_slope_hi_alpha=1.3,
@@ -836,22 +848,27 @@ VG13 = BivariateModelDefinition(
     max_age_months=18,
     slope_anchors=(10, 16),
     ages_query=[8, 10, 12, 14, 16, 18],
-    # Understood trajectory. The 10 mo anchor Beta(1,15) (~50 words) matches the
-    # empirical mean (~51). Prior-predictive checks showed the 16 mo anchor was
-    # too high: Beta(2,2) centres on 0.5 (~400 words) against an empirical mean
-    # of ~178, so the trajectory overshot ~2x by 16 mo. Lower it to Beta(2,6)
-    # (~0.25, ~200 words) so the median tracks the data at the anchor.
+    # Understood trajectory — Wordbank TD normative medians (published deciles):
+    # ~50 words/800 at 10 mo, ~177 at 16 mo. Beta(1,15) (10 mo, median ~36) sits a
+    # touch below the norm floor by design (Fenson: percentiles are unstable where
+    # a skill is just emerging — re-centre toward norms, do not tighten). The old
+    # 16 mo Beta(2,2) (~400 words) overshot the ~177 norm ~2x AND sat against the
+    # WG comprehension ceiling (396/800 = 0.495); Beta(2,6) (median 0.228, ~183
+    # words) matches the norm and stays clear of the ceiling. In-sample means
+    # (~51, ~178) corroborate. See PRIORS.md, "TD anchor priors vs Wordbank norms".
     p_slope_low_u_alpha=1.0,
     p_slope_low_u_beta=15.0,
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=6.0,
-    # Production ratio q = P(speak | understood). The shared bivariate defaults
-    # (lo Beta(1,1.5)~0.4, hi Beta(2,1.2)~0.62) are tuned for the DS 24/84 mo
-    # window where a large fraction of understood words are spoken; in this young
-    # TD window (8-18 mo) production is just beginning and the empirical q is
-    # ~0.09 (10 mo) rising to ~0.23 (16 mo). The DS defaults centred q 3-4x too
-    # high, compounding with U to overshoot spoken ~5x. Set window-appropriate
-    # anchors: lo Beta(1,10) (~0.09), hi Beta(2,7) (~0.22).
+    # Production ratio q = P(speak | understood). Independent norm-derived TD q(a)
+    # (ratio of Wordbank median production to median comprehension): ~0.12 at
+    # 10 mo rising to ~0.19 at 16 mo (PRIORS.md, "Production ratio q(a) from
+    # norms"). The shared bivariate defaults (lo Beta(1,1.5)~0.4, hi Beta(2,1.2)
+    # ~0.62) are tuned for the DS 24/84 mo window and sit ~3x above this young-TD
+    # curve, compounding with U to overshoot spoken ~5x. Set window-appropriate
+    # anchors at/just below the norm floor: lo Beta(1,10) (median ~0.067), hi
+    # Beta(2,7) (median ~0.201). The in-sample q (~0.09 at 10 mo, ~0.23 at 16 mo)
+    # corroborates.
     p_slope_low_q_alpha=1.0,
     p_slope_low_q_beta=10.0,
     p_slope_hi_q_alpha=2.0,

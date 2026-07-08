@@ -8,11 +8,14 @@ hyperparameter overrides that define one alternative-prior variant of a model of
 record. ``build_variant`` materialises the variant definition(s) via
 :func:`make_variant`, so each variant's fit lands in its own output directory.
 
-The matrix is the minimum set covering the seven §7 sensitivity targets on the
-models of record (VG10, VG11, VG15). **VG13 is intentionally excluded** — it
-keeps ~7,920 observations and does not converge at the ``test`` tier in a
-reasonable time; its random-effect / kappa priors are covered transitively by
-VG10 (same engine) and VG11 (typically-developing study REs).
+The matrix covers the seven §7 sensitivity targets plus Target 8 — the young-age
+trajectory-anchor recalibration (#135/#138/#140/#142) — on the models of record
+(VG10, VG11, VG12, VG15). VG12 (TD understood RE) is included for Target 8
+because it carries the 26-month understood high anchor, which has no independent
+CDI comprehension norm (WS is production-only). **VG13 is intentionally
+excluded** — it keeps ~7,920 observations and does not converge at the ``test``
+tier in a reasonable time; its random-effect / kappa priors are covered
+transitively by VG10 (same engine) and VG11 (typically-developing study REs).
 
 Co-identified priors are kept as whole units per variant: a Beta anchor moves
 both ``alpha`` and ``beta`` together (mean = α/(α+β), concentration = α+β), and
@@ -94,6 +97,35 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg15", "conc-broad"): {"suffix": "conc-broad", "scalar": {"log_conc_sigma": 1.5}},
     ("vg15", "conc-lo"): {"suffix": "conc-lo", "scalar": {"log_conc_mu": 2.0}},
     ("vg15", "conc-hi"): {"suffix": "conc-hi", "scalar": {"log_conc_mu": 4.0}},
+
+    # -- Target 8: young-age trajectory-anchor recalibration (#135/#138/#140/#142)
+    #    The mean-function anchors (p_slope_*) and eta were re-centred toward the
+    #    young-age empirical/normative band; Targets 1-7 never vary these. Each
+    #    variant reverts to the pre-recalibration vague prior so the recalibration
+    #    can be shown not to drive the young-age conclusions.
+    # VG10 (DS joint understood anchors, aligned in #142): revert both understood
+    # anchors to the pre-recalibration vague band, and un-widen eta_u (which was
+    # raised 0.4 -> 0.6 specifically to offset the anchor pull-down).
+    ("vg10", "u-anchor-broad"): {"suffix": "u-anchor-broad", "scalar": {
+        "p_slope_low_u_alpha": 1.0, "p_slope_low_u_beta": 10.0,
+        "p_slope_hi_u_alpha": 1.1, "p_slope_hi_u_beta": 1.1}},
+    ("vg10", "eta-u-narrow"): {"suffix": "eta-u-narrow", "scalar": {"eta_u_sigma": 0.4}},
+
+    # VG11 (TD spoken anchors, #138): revert the (norm-anchored) spoken band and eta.
+    ("vg11", "anchor-broad"): {"suffix": "anchor-broad", "scalar": {
+        "p_slope_low_alpha": 1.0, "p_slope_low_beta": 15.0,
+        "p_slope_hi_alpha": 1.5, "p_slope_hi_beta": 1.1}},
+    ("vg11", "eta-narrow"): {"suffix": "eta-narrow", "scalar": {"eta_sigma": 0.4}},
+
+    # VG12 (TD understood anchors, #138): the 12 mo LOW anchor is Wordbank-norm
+    # matched (test it reverts cleanly); the 26 mo HIGH anchor has NO CDI
+    # comprehension norm (WS is production-only) — its broad variant is the key
+    # un-normed sensitivity test.
+    ("vg12", "lo-anchor-broad"): {"suffix": "lo-anchor-broad", "scalar": {
+        "p_slope_low_alpha": 1.0, "p_slope_low_beta": 20.0}},
+    ("vg12", "hi-anchor-broad"): {"suffix": "hi-anchor-broad", "scalar": {
+        "p_slope_hi_alpha": 1.1, "p_slope_hi_beta": 1.1}},
+    ("vg12", "eta-narrow"): {"suffix": "eta-narrow", "scalar": {"eta_sigma": 0.4}},
 }
 
 
