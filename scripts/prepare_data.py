@@ -192,11 +192,13 @@ merged_df = pd.concat(
 )
 
 console.print(
-    f"[green]Merged dataset:[/green] {len(merged_df):,} rows × {len(merged_df.columns)} cols"
+    f"[green]Raw merged rows (pre-guard):[/green] {len(merged_df):,} rows × {len(merged_df.columns)} cols"
 )
-console.print("[green]Saving merged dataset to CSV…[/green]")
 
-merged_df.to_csv("./data/vocab_data_merged.csv", index=False)
+# NB: vocab_data_merged.csv is written further down FROM the vocab_combined view
+# — i.e. the analysis-ready data the models actually read (post form-ceiling
+# guard and us_01 WS-comprehension guard), not this raw pre-guard concat. This
+# keeps the CSV from diverging from what load_combined_data returns (issue #131).
 
 console.print("[green]Creating DuckDB database and tables…[/green]")
 
@@ -317,14 +319,21 @@ con.execute(
 # and regression-tested alongside load_combined_data.
 con.execute(vocab_combined_view_sql())
 
+# Export the analysis-ready data (exactly what the models read via
+# load_combined_data) so vocab_data_merged.csv reflects the guarded view rather
+# than the raw pre-guard concat (issue #131 §3).
+analysis_df = con.execute("SELECT * FROM vocab_combined").df()
+analysis_df.to_csv("./data/vocab_data_merged.csv", index=False)
+
 con.close()
 
 key_value_table(
     "Data preparation complete",
     [
-        ("Merged CSV", "./data/vocab_data_merged.csv"),
+        ("Merged CSV (analysis view)", "./data/vocab_data_merged.csv"),
         ("DuckDB database", db_path),
-        ("Total merged rows", f"{len(merged_df):,}"),
+        ("Raw merged rows (pre-guard)", f"{len(merged_df):,}"),
+        ("Analysis rows (post-guard view)", f"{len(analysis_df):,}"),
         ("Elapsed", format_duration(time.perf_counter() - _started)),
     ],
 )
