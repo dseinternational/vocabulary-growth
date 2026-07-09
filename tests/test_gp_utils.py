@@ -21,6 +21,7 @@ from vocab_growth.models.gp_utils import (
     GPGrid,
     intercept_and_gp,
     make_kappa_of_z,
+    tent_and_gp,
     trend_and_gp,
 )
 
@@ -134,6 +135,34 @@ def test_intercept_and_gp_intercept_is_free_no_slope():
     assert "intercept_sign" in free  # intercept-only mean is a free RV
     assert "slope_sign" not in det  # no slope for the signed trajectory
     assert "ell_sign" in det
+
+
+def test_tent_and_gp_three_anchors_no_intercept():
+    def call(X):
+        tent_and_gp(
+            cfg_low=pz.Beta(alpha=2, beta=20),
+            cfg_mid=pz.Beta(alpha=3, beta=4),
+            cfg_hi=pz.Beta(alpha=2, beta=16),
+            z_low=-1.0,
+            z_mid=0.0,
+            z_hi=1.5,
+            cfg_ell=pz.Beta(alpha=2, beta=2),
+            cfg_eta=pz.HalfNormal(sigma=1.0),
+            suffix="_sign",
+            X_all_z_data=X,
+            grid=_GRID,
+            store_deterministic=False,
+        )
+
+    m = _model_with(call)
+    free = {v.name for v in m.free_RVs}
+    det = {d.name for d in m.deterministics}
+    # Three anchor RVs (young / peak / old); no intercept-only intercept_sign.
+    assert {"p_slope_low_sign", "p_slope_mid_sign", "p_slope_hi_sign"} <= free
+    assert "intercept_sign" not in free
+    # Two segment slopes are stored Deterministics; no single slope_sign.
+    assert {"slope_up_sign", "slope_dn_sign"} <= det
+    assert "slope_sign" not in det
 
 
 # --- get_hsgp_hyperparams -----------------------------------------------------

@@ -157,28 +157,49 @@ Review notes:
 
 ### Signed ratio prior
 
-VG14 and VG15 model signing as
-`r(a) = P(sign | understood)`. The current signed mean is intercept-only:
+VG14 and VG15 model signing as `r(a) = P(sign | understood)`, whose developmental
+trajectory is a **hump** — near zero at young ages, peaking in the preschool years,
+then receding as words move into speech. The signed mean is therefore a
+**three-anchor "tent"**: Beta priors on `r` at a young, a peak and an old reference
+age (`sign_anchor_ages = (15, 36, 96)` months), joined by two logit-linear segments
+meeting at the peak anchor and clamped flat beyond the outer anchors (see
+[`gp_utils.tent_and_gp`](../../src/vocab_growth/models/gp_utils.py)).
 
-```text
-intercept_sign ~ Normal(logit(0.15), 0.75)
-```
+| Anchor | Age   | Distribution  | `r` median | 5-95%        |
+| ------ | ----- | ------------- | ---------- | ------------ |
+| young  | 15 mo | `Beta(2, 20)` | 0.08       | [0.02, 0.21] |
+| peak   | 36 mo | `Beta(3, 4)`  | 0.42       | [0.15, 0.72] |
+| old    | 96 mo | `Beta(2, 16)` | 0.11       | [0.02, 0.26] |
 
-On the probability scale this gives a median signed ratio of about 0.15, with a
-5-95% interval of about 0.05-0.38 before adding the signed GP. If all 810 words
-were understood, this would correspond to roughly 120 signed words at the
-intercept level, with a 5-95% range of about 39-302 words.
+Because the peak sits at the middle anchor age by construction, the full
+prior-predictive `r(a)` median is a **hill** — rising to ~0.42 at ~36 mo, declining
+to ~0.11 — and the implied words-signed median is a gentle hill (peaking ~55 words at
+~54-60 mo) rather than the monotonic rise an intercept-only mean produced. The GP
+(`eta_sign ~ HalfNormal(0.4)`) now only carries smooth departures.
 
 Review notes:
 
-- Earlier signed-anchor specifications were too restrictive or produced
-  implausible extrapolation below the signing data floor. The current
-  intercept-only specification is a structural response to that failure.
-- The sign GP, not a monotone signed slope, carries the rise-then-fall pattern.
-- The signed prior is partly informed by earlier VG14/VG15 model criticism and
-  refits. It should be labelled as a correction from the prior-review workflow,
-  not as independent external evidence.
-- The rationale and sensitivity history are documented in
+- **Why a hump, not an intercept or a slope.** An intercept-only mean gave a _flat_
+  prior-median `r`, so words signed = understood × `r` rose monotonically (reviewer
+  pushback: the median should be hill-shaped). A free monotone _slope_ extrapolated
+  to a spurious ~58% signed at 12 mo. The three-anchor tent gives the hill directly
+  and, being concave, sends `r` low at _both_ the young and old ends — avoiding the
+  young-extrapolation failure.
+- **Anchor ages/levels are independent, not data-fit.** Signing peaks around _mental_
+  age ~17 months (Miller 1992 via Clibbens: signed vocabulary ~2× spoken there,
+  declining by MA ~26 mo), which at a DS developmental quotient ~0.5 is chronological
+  ~34 mo — hence the ~36-month peak anchor. The inverted-U shape is confirmed by
+  Zampini (parabolic gesture trajectory). DS children retain signs _longer_ than TD
+  (Te Kaat-van den Os review) and `uk_06` has real 60-115 mo signers, so the old
+  anchor stays modest (~0.11), not near-zero. The peak _level_ is kept broad because
+  the peak _age_ is only weakly identifiable from the data.
+- Since the mean now carries the hump, `eta_sign` reverts to the standard ~0.4 (it
+  was inflated to ~1.0 only to force a hump out of a flat mean). VG15 additionally
+  anchors the signed GP at 54 mo, so the tent supplies the hump and the GP deviates
+  around it.
+- Independence: Miller (US) / Clibbens (UK) are independent of the training data;
+  Zampini (Italian) overlaps `it_01`, so it is cited for the _shape_ only. Shape and
+  sensitivity history in
   [`notes/202606151700-vg14-signed-ratio-shape-and-p-any-bias.md`](../../notes/202606151700-vg14-signed-ratio-shape-and-p-any-bias.md).
 
 ### GP length-scale and amplitude priors
@@ -193,12 +214,12 @@ ell_months = ell_low + (ell_high - ell_low) * ell_unit
 
 The common range is 6-18 months.
 
-| Use                                 | Distribution                 | Observable interpretation                                          |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------ |
-| Standard U, spoken, and `q` smooths | `ell_unit ~ Beta(3, 3)`      | Median length-scale about 12 months; 5-95% about 8.3-15.7 months.  |
-| Signed-ratio smooth                 | `ell_unit_sign ~ Beta(2, 5)` | Median length-scale about 9.2 months; 5-95% about 6.8-13.0 months. |
-| Standard GP amplitude               | `eta ~ HalfNormal(0.4)`      | Median logit-scale deviation about 0.27; 95% about 0.78.           |
-| Signed GP amplitude                 | `eta_sign ~ HalfNormal(1.0)` | Median logit-scale deviation about 0.67; 95% about 1.96.           |
+| Use                                 | Distribution                 | Observable interpretation                                                                              |
+| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Standard U, spoken, and `q` smooths | `ell_unit ~ Beta(3, 3)`      | Median length-scale about 12 months; 5-95% about 8.3-15.7 months.                                      |
+| Signed-ratio smooth                 | `ell_unit_sign ~ Beta(2, 5)` | Median length-scale about 9.2 months; 5-95% about 6.8-13.0 months.                                     |
+| Standard GP amplitude               | `eta ~ HalfNormal(0.4)`      | Median logit-scale deviation about 0.27; 95% about 0.78.                                               |
+| Signed GP amplitude                 | `eta_sign ~ HalfNormal(0.4)` | Median about 0.27; 95% about 0.78 (reverted to standard — the three-anchor mean now carries the hump). |
 
 Review notes:
 
@@ -487,25 +508,27 @@ from the prior predictive only (no posterior sampling). The `prior_samples_*`,
 `prior_predictions` and `prior_predictive_checks` plots in each model's output
 directory were reviewed against the checklist below.
 
-| Check                           | Finding                                                                                                                                                                                                                                                                         |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Young-age floor                 | Plausible. Every trajectory family places prior-predictive mass near zero at the youngest ages (spoken and signed at 8-12 months, understood a little higher); no prior draw forces a high count at young ages.                                                                 |
-| Old-age ceiling                 | Plausible. Understood and spoken curves approach the 810-word ceiling only gradually and only for the fastest draws; the bulk of the prior mass stays well below saturation across the query range, so the ceiling is reachable but not imposed.                                |
-| Smoothness                      | Appropriate. The HSGP produces smooth curves with individual-draw wiggle, admitting both near-linear and gently curved trajectories without high-frequency oscillation.                                                                                                         |
-| `q(a)` (speak given understood) | Plausible. The prior band is a smooth 0-to-1 sigmoid rising from about 0.05 at the youngest ages toward about 0.9 by ~100 months, with no mass piling implausibly at the bounds.                                                                                                |
-| `r(a)` (sign given understood)  | Deliberately broad. The intercept-only mean plus GP spans roughly 0-1 with most mass low-to-mid and a visible narrowing ("waist") at the 54-month GP anchor — the intended weakly-informative signed prior (data set the level, the GP carries the hump); no piling at 0 or 1.  |
-| Random-effect heterogeneity     | Plausible. At the observation level the study/subject random effects widen the prior-predictive cloud enough to cover the observed between-study and between-child spread without implying implausible extremes on the probability scale.                                       |
-| Simulated count spread          | Plausible. The prior-predictive count clouds bracket the observed counts for every outcome (understood, spoken, signed) before the data are seen — neither too narrow (which would fight the data) nor degenerate at 0 or 810.                                                  |
-| VG15 signing / four-cell        | Plausible. Signed counts stay low with a broad, hump-capable upper tail (matching the sparse signing data); the `log_psi ~ Normal(0.3, 0.5)` association prior spans the independence reference `psi = 1`, so the four-cell composition is not prior-forced toward association. |
+| Check                           | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Young-age floor                 | Plausible. Every trajectory family places prior-predictive mass near zero at the youngest ages (spoken and signed at 8-12 months, understood a little higher); no prior draw forces a high count at young ages.                                                                                                                                                                                                                                |
+| Old-age ceiling                 | Plausible. Understood and spoken curves approach the 810-word ceiling only gradually and only for the fastest draws; the bulk of the prior mass stays well below saturation across the query range, so the ceiling is reachable but not imposed.                                                                                                                                                                                               |
+| Smoothness                      | Appropriate. The HSGP produces smooth curves with individual-draw wiggle, admitting both near-linear and gently curved trajectories without high-frequency oscillation.                                                                                                                                                                                                                                                                        |
+| `q(a)` (speak given understood) | Plausible. The prior band is a smooth 0-to-1 sigmoid rising from about 0.05 at the youngest ages toward about 0.9 by ~100 months, with no mass piling implausibly at the bounds.                                                                                                                                                                                                                                                               |
+| `r(a)` (sign given understood)  | Re-specified as a three-anchor hump after this audit. The audited intercept-only mean gave a flat median (words signed = understood x r therefore rose monotonically); the signed mean is now a tent through young / peak / old anchors (`r` ~0.08 / ~0.42 / ~0.11 at 15 / 36 / 96 mo), so the prior median is a hill peaking ~0.42 at ~36 mo and the words-signed median is a gentle hill. The 54-month GP-anchor "waist" (VG15) is retained. |
+| Random-effect heterogeneity     | Plausible. At the observation level the study/subject random effects widen the prior-predictive cloud enough to cover the observed between-study and between-child spread without implying implausible extremes on the probability scale.                                                                                                                                                                                                      |
+| Simulated count spread          | Plausible. The prior-predictive count clouds bracket the observed counts for every outcome (understood, spoken, signed) before the data are seen — neither too narrow (which would fight the data) nor degenerate at 0 or 810.                                                                                                                                                                                                                 |
+| VG15 signing / four-cell        | Plausible. Signed counts stay low with a broad, hump-capable upper tail (matching the sparse signing data); the `log_psi ~ Normal(0.3, 0.5)` association prior spans the independence reference `psi = 1`, so the four-cell composition is not prior-forced toward association.                                                                                                                                                                |
 
-**Conclusion.** The priors pass the prior-predictive audit: they encode the
-developmental floor and a reachable-but-not-imposed ceiling, keep the production
-and signed ratios in plausible ranges, and generate count spreads that bracket
-the observed data without dominating it. The signed-ratio prior is the broadest
-by design and the association prior is weakly positive but spans independence.
-No prior required revision on prior-predictive grounds. Evidence: each model's
-`prior_samples_*.png` under `output/models/<model>-<config>/`, regenerated by
-`scripts/prior_predictive_audit.py`.
+**Conclusion.** The priors encode the developmental floor and a
+reachable-but-not-imposed ceiling, keep the production ratio in a plausible range,
+and generate count spreads that bracket the observed data without dominating it;
+the association prior is weakly positive but spans independence. The one prior
+since revised on prior-predictive grounds is the **signed ratio**: this audit's
+`r(a)` had a flat, floor-hugging median (~14% of mass below 0.05), and it was
+re-specified as a three-anchor hump (a tent through young / peak / old anchors) so
+the prior median is a hill — see the "Signed ratio prior" section. Evidence: each
+model's `prior_samples_*.png` under `output/models/<model>-<config>/`, regenerated
+by `scripts/prior_predictive_audit.py`.
 
 ## Sensitivity targets
 
@@ -516,7 +539,7 @@ report makes robustness claims:
 | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | VG10/VG15 posterior-informed `q` anchors                                                                          | These are intentionally tighter and informed by VG07.                                                                                                                                                                                                | Baseline broad `q` anchors; slightly wider posterior-informed anchors.                                                                                                                                                                 |
 | Signed GP amplitude and length-scale                                                                              | Signing data are sparse and the hump is GP-driven.                                                                                                                                                                                                   | Wider/narrower `eta_sign`; standard `ell_unit_sign ~ Beta(3, 3)`; shorter length-scale alternative.                                                                                                                                    |
-| Signed intercept prior                                                                                            | The signed level was previously prior-dominated under another parameterisation.                                                                                                                                                                      | Wider `Normal(logit(0.15), 1.0)`; shifted medians such as 0.10 and 0.20.                                                                                                                                                               |
+| Signed hump anchors (peak / old)                                                                                  | Three-anchor tent; the peak _age_ is only weakly identifiable, and the old anchor is the words-fall (Miller) vs plateau (uk_06) knob.                                                                                                                | Lower/higher peak level (`Beta(2, 6)` / `Beta(4, 3)`); higher old anchor (`Beta(2, 8)`); shifted peak age (`sign_anchor_ages`).                                                                                                        |
 | Kappa priors                                                                                                      | Dispersion can dominate predictive uncertainty, especially near floor or ceiling.                                                                                                                                                                    | Broader `kappa_min`; flatter age trend; non-monotone or constant-kappa comparison where feasible.                                                                                                                                      |
 | Random-effect scales                                                                                              | Study and subject effects can trade off with global age curves.                                                                                                                                                                                      | Wider `tau` prior; narrower `tau` prior; study-only or no-subject variants where already supported by flags.                                                                                                                           |
 | VG15 `psi`                                                                                                        | Identified from sparse four-cell data and prior is weakly positive.                                                                                                                                                                                  | Neutral `log_psi ~ Normal(0, 0.5)`; broader `Normal(0, 1)`; stronger positive prior only as an explicit data-informed sensitivity.                                                                                                     |
@@ -542,9 +565,13 @@ are not neutral defaults and need explicit labelling.
 - The baseline `q` anchors are deliberately broad.
 - VG10 and VG15 tighten `q` using earlier posterior information to stabilise a
   weakly identified trajectory decomposition.
-- The signed-ratio prior is the result of an explicit prior-predictive failure
-  and correction: the current intercept-only mean avoids a misleading monotone
-  signed slope, while the GP carries the signing hump.
+- The signed-ratio prior is a three-anchor hump (a tent through young / peak / old
+  reference ages), so its prior median is a hill — replacing the intercept-only mean
+  (flat median) and avoiding the monotone-slope young-extrapolation failure. The
+  anchor ages/levels come from the independent DS sign literature (peak ~mental age
+  17 mo ≈ chronological ~36 mo; Miller/Clibbens, Zampini, Te Kaat-van den Os), not
+  the in-sample data; `eta_sign` reverts to the standard ~0.4 since the mean now
+  carries the hump.
 - The shared kappa prior encodes substantial extra-binomial heterogeneity and a
   monotone increase in heterogeneity with age.
 - Random-effect scale priors allow meaningful study and subject differences and

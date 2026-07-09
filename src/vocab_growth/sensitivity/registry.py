@@ -25,15 +25,8 @@ varied in *separate* one-factor variants so the attribution stays clean.
 
 from __future__ import annotations
 
-import math
-
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.sensitivity.overrides import make_variant
-
-
-def _logit(p: float) -> float:
-    return math.log(p / (1.0 - p))
-
 
 # (model_key, variant_name) -> {"suffix": str, "scalar"?: dict, "kappa"?: dict}
 VARIANTS: dict[tuple[str, str], dict] = {
@@ -49,17 +42,24 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_hi_q_alpha": 2.0, "p_slope_hi_q_beta": 1.2}},
 
     # -- Target 2: signed GP amplitude & length-scale (VG15) --
-    ("vg15", "etasign-wide"): {"suffix": "etasign-wide", "scalar": {"eta_sign_sigma": 1.5}},
-    ("vg15", "etasign-narrow"): {"suffix": "etasign-narrow", "scalar": {"eta_sign_sigma": 0.5}},
+    # Bracket the new default eta_sign=0.4 (the three-anchor mean carries the hump,
+    # so the GP amplitude is back to the standard scale).
+    ("vg15", "etasign-wide"): {"suffix": "etasign-wide", "scalar": {"eta_sign_sigma": 0.7}},
+    ("vg15", "etasign-narrow"): {"suffix": "etasign-narrow", "scalar": {"eta_sign_sigma": 0.2}},
     ("vg15", "ellsign-beta33"): {"suffix": "ellsign-beta33", "scalar": {
         "ell_unit_sign_alpha": 3.0, "ell_unit_sign_beta": 3.0}},
     ("vg15", "ellsign-short"): {"suffix": "ellsign-short", "scalar": {
         "ell_unit_sign_alpha": 1.5, "ell_unit_sign_beta": 6.0}},
 
-    # -- Target 3: signed intercept prior (VG15) --
-    ("vg15", "sign-int-wide"): {"suffix": "sign-int-wide", "scalar": {"intercept_sign_sigma": 1.0}},
-    ("vg15", "sign-int-lo10"): {"suffix": "sign-int-lo10", "scalar": {"intercept_sign_mu": _logit(0.10)}},
-    ("vg15", "sign-int-hi20"): {"suffix": "sign-int-hi20", "scalar": {"intercept_sign_mu": _logit(0.20)}},
+    # -- Target 3: signed hump anchors (VG15 three-anchor signed mean) --
+    # Peak level is the key uncertain quantity (peak AGE is only weakly identified);
+    # the old anchor is the Miller-vs-uk_06 "words fall vs plateau" knob.
+    ("vg15", "sign-peak-lo"): {"suffix": "sign-peak-lo", "scalar": {
+        "p_slope_mid_sign_alpha": 2.0, "p_slope_mid_sign_beta": 6.0}},  # peak r ~0.26 (vs ~0.42)
+    ("vg15", "sign-peak-hi"): {"suffix": "sign-peak-hi", "scalar": {
+        "p_slope_mid_sign_alpha": 4.0, "p_slope_mid_sign_beta": 3.0}},  # peak r ~0.58
+    ("vg15", "sign-old-hi"): {"suffix": "sign-old-hi", "scalar": {
+        "p_slope_hi_sign_alpha": 2.0, "p_slope_hi_sign_beta": 8.0}},  # old r ~0.18 (words plateau)
 
     # -- Target 4: kappa (dispersion): VG10 (U/S) and VG15 (adds sign) --
     ("vg10", "kappa-broadfloor"): {"suffix": "kappa-broadfloor", "kappa": {

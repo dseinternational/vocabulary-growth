@@ -11,6 +11,7 @@ callout
 Caselli
 centered
 centile
+Clibbens
 CLPM
 color
 Counterintuitively
@@ -67,6 +68,7 @@ preliz
 pyplot
 pytest
 rankdir
+recentred
 recomputation
 reflow
 reparameterisation
