@@ -45,6 +45,7 @@ Lewandowsky
 LLM
 logit
 LOSO
+matplotlib
 McElreath
 MCMC
 Mervis
@@ -63,6 +64,7 @@ orcid
 overfitting
 parameterisation
 preliz
+pyplot
 pytest
 rankdir
 recomputation
