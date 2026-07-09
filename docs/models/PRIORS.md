@@ -63,7 +63,7 @@ which models this review must cover.
 | VG07             | DS         | understood + spoken          | VG05 plus study random-effect scales.                                                                              |
 | VG08             | DS         | understood + spoken          | VG07 plus subject random effects on understood.                                                                    |
 | VG09             | DS         | understood + spoken          | VG08 plus subject random effects on `q`; diagnostic ridge motivates VG10.                                          |
-| VG10             | DS         | understood + spoken          | VG09 plus posterior-informed `q` anchors and GP anchoring.                                                         |
+| VG10             | DS         | understood + spoken          | VG09 plus per-draw GP anchoring at a reference age (Option D).                                                     |
 | VG11             | TD         | spoken                       | VG03 plus study random effects, full TD data, GP anchoring.                                                        |
 | VG12             | TD         | understood                   | VG04 plus study random effects, full TD data, GP anchoring.                                                        |
 | VG13             | TD         | understood + spoken          | Young TD bivariate model, study random effects, GP anchoring.                                                      |
@@ -83,20 +83,20 @@ the model machinery is shared:
 - Beta-Binomial `kappa` priors are the same.
 - Study and subject random-effect scale priors are the same where those effects
   exist.
-- Baseline `q(a) = P(speak | understood)` priors are the same for TD and DS
-  bivariate models, except for the posterior-informed VG10/VG15 `q` anchors.
+- Baseline `q(a) = P(speak | understood)` priors are the same across the DS joint
+  models (VG05, VG07-VG10, VG14-VG16); young-TD VG13 uses lower anchors.
 
 The main TD/DS differences are concentrated in the anchor ages and in a few
 anchor distributions:
 
-| Prior area            | DS                                                                                      | TD                                                                            | Interpretation                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Anchor ages           | Usually 24 and 84 months.                                                               | Usually 12 and 26 months; VG13 uses 10 and 16 months.                         | Priors are placed over different developmental windows.                                                            |
-| Spoken low anchor     | `Beta(1, 25)` at 24 months in VG01.                                                     | `Beta(1, 30)` at 12 months in VG03/VG11.                                      | Both concentrate near the floor after the young-age prior-predictive recalibration.                                |
-| Understood low anchor | `Beta(1, 7)` at 24 months in VG02; `Beta(1, 10)` in the DS joint models.                | `Beta(1.2, 8)` at 12 months in VG04/VG12; `Beta(1, 15)` at 10 months in VG13. | The TD understood low anchor was recalibrated up off the floor (TD comprehension is already substantial young).    |
-| High anchor           | Usually `Beta(1.1, 1.1)` at 84 months.                                                  | Usually `Beta(1.3, 1.3)` at 26 months; VG13 uses `Beta(2, 6)` at 16 months.   | The TD high anchors were softened toward the middle from a more optimistic prior; DS high-age priors remain broad. |
-| Baseline `q` anchors  | `Beta(1, 1.5)` low and `Beta(2, 1.2)` high in VG05-VG09 and VG14; tighter in VG10/VG15. | `Beta(1, 10)` low and `Beta(2, 7)` high in VG13.                              | VG13's young-TD production ratio is far below the DS window, so it no longer inherits the DS defaults.             |
-| Signing priors        | DS-only in VG14/VG15.                                                                   | Not modelled.                                                                 | There is no TD signing counterpart.                                                                                |
+| Prior area            | DS                                                                                               | TD                                                                            | Interpretation                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Anchor ages           | Usually 24 and 84 months.                                                                        | Usually 12 and 26 months; VG13 uses 10 and 16 months.                         | Priors are placed over different developmental windows.                                                            |
+| Spoken low anchor     | `Beta(1, 25)` at 24 months in VG01.                                                              | `Beta(1, 30)` at 12 months in VG03/VG11.                                      | Both concentrate near the floor after the young-age prior-predictive recalibration.                                |
+| Understood low anchor | `Beta(1, 7)` at 24 months in VG02; `Beta(1, 10)` in the DS joint models.                         | `Beta(1.2, 8)` at 12 months in VG04/VG12; `Beta(1, 15)` at 10 months in VG13. | The TD understood low anchor was recalibrated up off the floor (TD comprehension is already substantial young).    |
+| High anchor           | Usually `Beta(1.1, 1.1)` at 84 months.                                                           | Usually `Beta(1.3, 1.3)` at 26 months; VG13 uses `Beta(2, 6)` at 16 months.   | The TD high anchors were softened toward the middle from a more optimistic prior; DS high-age priors remain broad. |
+| Baseline `q` anchors  | `Beta(2, 12)` low and `Beta(3, 2)` high across the DS joint models (VG05, VG07-VG10, VG14-VG16). | `Beta(1, 10)` low and `Beta(2, 7)` high in VG13.                              | Weakly-informative; VG13's young-TD production ratio sits lower still.                                             |
+| Signing priors        | DS-only in VG14/VG15.                                                                            | Not modelled.                                                                 | There is no TD signing counterpart.                                                                                |
 
 Review notes:
 
@@ -121,24 +121,22 @@ by 810 gives the expected number of words out of the common reference inventory.
 For `q`, the anchor is a fraction of understood words, so it should not be read
 as a direct word count without also considering `p_U(a)`.
 
-| Prior use                              | Models                      | Distribution     | Observable interpretation                                              |
-| -------------------------------------- | --------------------------- | ---------------- | ---------------------------------------------------------------------- |
-| Low-age DS spoken anchor               | VG01                        | `Beta(1, 25)`    | Median 0.027, 5-95% 0.002-0.113, or about 22 words median out of 810.  |
-| Low-age TD spoken anchor               | VG03, VG11                  | `Beta(1, 30)`    | Median 0.023, 5-95% 0.002-0.095, or about 19 words median out of 810.  |
-| Low-age DS understood anchor (single)  | VG02                        | `Beta(1, 7)`     | Median 0.094, 5-95% 0.007-0.348, or about 76 words median out of 810.  |
-| Low-age DS understood anchor (joint)   | VG05, VG07-VG10, VG14, VG15 | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259, or about 54 words median out of 810.  |
-| Low-age TD understood anchor           | VG04, VG12                  | `Beta(1.2, 8)`   | Median 0.104, 5-95% 0.011-0.341, or about 84 words median out of 810.  |
-| Low-age young-TD understood anchor     | VG13                        | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 810.  |
-| High-age DS single anchor (VG01/VG02)  | VG01, VG02                  | `Beta(2, 1.5)`   | Median 0.586, 5-95% 0.168-0.924, or about 475 words median out of 810. |
-| High-age DS understood anchor (joint)  | VG05, VG07-VG10, VG14, VG15 | `Beta(1.1, 1.1)` | Median 0.500, 5-95% 0.060-0.940, or about 405 words median out of 810. |
-| High-age TD single/U anchor            | VG03, VG04, VG11, VG12      | `Beta(1.3, 1.3)` | Median 0.500, 5-95% 0.079-0.921, or about 405 words median out of 810. |
-| High-age young-TD understood anchor    | VG13                        | `Beta(2, 6)`     | Median 0.228, 5-95% 0.053-0.521, or about 185 words median out of 810. |
-| Baseline low-age `q` anchor            | VG05-VG09, VG14             | `Beta(1, 1.5)`   | Median 0.370, 5-95% 0.034-0.864 of understood words.                   |
-| Young-TD low-age `q` anchor            | VG13                        | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259 of understood words.                   |
-| Baseline high-age `q` anchor           | VG05-VG09, VG14             | `Beta(2, 1.2)`   | Median 0.654, 5-95% 0.197-0.956 of understood words.                   |
-| Young-TD high-age `q` anchor           | VG13                        | `Beta(2, 7)`     | Median 0.201, 5-95% 0.046-0.471 of understood words.                   |
-| Posterior-informed low-age `q` anchor  | VG10, VG15                  | `Beta(3, 22)`    | Median 0.110, 5-95% 0.035-0.240 of understood words.                   |
-| Posterior-informed high-age `q` anchor | VG10, VG15                  | `Beta(20, 4)`    | Median 0.843, 5-95% 0.696-0.938 of understood words.                   |
+| Prior use                             | Models                      | Distribution     | Observable interpretation                                              |
+| ------------------------------------- | --------------------------- | ---------------- | ---------------------------------------------------------------------- |
+| Low-age DS spoken anchor              | VG01                        | `Beta(1, 25)`    | Median 0.027, 5-95% 0.002-0.113, or about 22 words median out of 810.  |
+| Low-age TD spoken anchor              | VG03, VG11                  | `Beta(1, 30)`    | Median 0.023, 5-95% 0.002-0.095, or about 19 words median out of 810.  |
+| Low-age DS understood anchor (single) | VG02                        | `Beta(1, 7)`     | Median 0.094, 5-95% 0.007-0.348, or about 76 words median out of 810.  |
+| Low-age DS understood anchor (joint)  | VG05, VG07-VG10, VG14, VG15 | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259, or about 54 words median out of 810.  |
+| Low-age TD understood anchor          | VG04, VG12                  | `Beta(1.2, 8)`   | Median 0.104, 5-95% 0.011-0.341, or about 84 words median out of 810.  |
+| Low-age young-TD understood anchor    | VG13                        | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 810.  |
+| High-age DS single anchor (VG01/VG02) | VG01, VG02                  | `Beta(2, 1.5)`   | Median 0.586, 5-95% 0.168-0.924, or about 475 words median out of 810. |
+| High-age DS understood anchor (joint) | VG05, VG07-VG10, VG14, VG15 | `Beta(1.1, 1.1)` | Median 0.500, 5-95% 0.060-0.940, or about 405 words median out of 810. |
+| High-age TD single/U anchor           | VG03, VG04, VG11, VG12      | `Beta(1.3, 1.3)` | Median 0.500, 5-95% 0.079-0.921, or about 405 words median out of 810. |
+| High-age young-TD understood anchor   | VG13                        | `Beta(2, 6)`     | Median 0.228, 5-95% 0.053-0.521, or about 185 words median out of 810. |
+| DS-joint low-age `q` anchor           | VG05, VG07-VG10, VG14-VG16  | `Beta(2, 12)`    | Median 0.126, 5-95% 0.028-0.316 of understood words.                   |
+| Young-TD low-age `q` anchor           | VG13                        | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259 of understood words.                   |
+| DS-joint high-age `q` anchor          | VG05, VG07-VG10, VG14-VG16  | `Beta(3, 2)`     | Median 0.614, 5-95% 0.249-0.902 of understood words.                   |
+| Young-TD high-age `q` anchor          | VG13                        | `Beta(2, 7)`     | Median 0.201, 5-95% 0.046-0.471 of understood words.                   |
 
 Review notes:
 
@@ -148,11 +146,17 @@ Review notes:
 - The high-age DS `Beta(1.1, 1.1)` anchor is deliberately broad. It prevents the
   prior from declaring either low or high later vocabulary impossible, but it can
   interact with the GP and random effects in sparse age regions.
-- The baseline `q` anchor priors are very broad. They are weak regularisation,
-  not strong developmental knowledge.
-- VG10 and VG15 use tighter `q` anchors informed by the VG07 posterior. These
-  should be labelled as posterior-informed regularisation from overlapping data,
-  not independent prior evidence. The rationale is documented in
+- The DS-joint `q` anchors are weakly-informative and encode only the
+  developmental direction (few understood words spoken early, a majority by school
+  age). `q_low` is centred at the independent TD `q(~12mo) ≈ 0.12`; `q_high` has no
+  independent DS source, so it is deliberately broad (5-95% ~0.25-0.90) and lets
+  the data set the 84-month level.
+- These replace the earlier `Beta(3, 22)` / `Beta(20, 4)` anchors, which were read
+  off the VG07 posterior and then propagated across the DS-joint family — using a
+  model's own posterior (fit to the same DS data) to set its prior. That
+  prior-data double-dipping is removed; the `Beta(20, 4)` high anchor in particular
+  was the tightest prior in the family with no independent basis. The history is
+  documented in
   [`notes/202605131500-vg09-structural-options.md`](../../notes/202605131500-vg09-structural-options.md).
 
 ### Signed ratio prior
@@ -193,17 +197,24 @@ ell_months = ell_low + (ell_high - ell_low) * ell_unit
 
 The common range is 6-18 months.
 
-| Use                                 | Distribution                 | Observable interpretation                                          |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------ |
-| Standard U, spoken, and `q` smooths | `ell_unit ~ Beta(3, 3)`      | Median length-scale about 12 months; 5-95% about 8.3-15.7 months.  |
-| Signed-ratio smooth                 | `ell_unit_sign ~ Beta(2, 5)` | Median length-scale about 9.2 months; 5-95% about 6.8-13.0 months. |
-| Standard GP amplitude               | `eta ~ HalfNormal(0.4)`      | Median logit-scale deviation about 0.27; 95% about 0.78.           |
-| Signed GP amplitude                 | `eta_sign ~ HalfNormal(1.0)` | Median logit-scale deviation about 0.67; 95% about 1.96.           |
+| Use                                 | Distribution                 | Observable interpretation                                                                |
+| ----------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| Standard U, spoken, and `q` smooths | `ell_unit ~ Beta(3, 3)`      | Median length-scale about 12 months; 5-95% about 8.3-15.7 months.                        |
+| Signed-ratio smooth                 | `ell_unit_sign ~ Beta(2, 5)` | Median length-scale about 9.2 months; 5-95% about 6.8-13.0 months.                       |
+| Standard GP amplitude               | `eta ~ HalfNormal(0.4)`      | Median logit-scale deviation about 0.27; 95% about 0.78.                                 |
+| `q`-ratio GP amplitude              | `eta_q ~ HalfNormal(0.20)`   | Median logit-scale deviation about 0.13; 95% about 0.39. Tightened from 0.4 (see below). |
+| Signed GP amplitude                 | `eta_sign ~ HalfNormal(1.0)` | Median logit-scale deviation about 0.67; 95% about 1.96.                                 |
 
 Review notes:
 
 - The standard length-scale prior encodes smooth developmental departures rather
   than rapid month-to-month oscillation.
+- The `q`-ratio GP amplitude `eta_q` was tightened from 0.4 to 0.20. Broadening the
+  `q` anchors (removing the double-dipping) surfaced a weakly-identified `q`
+  slope/intercept ridge in the subject-RE-on-`q` models (VG09/VG10/VG15/VG16);
+  tightening `eta_q` curbs the GP-vs-linear-trend competition and restores mixing
+  (VG10 `test` min ESS 120 → 450, divergences 6 → 2) without re-introducing any
+  data-informed prior. It is a smoothness assumption on `q`, not a data-tuned value.
 - The signed length-scale is shorter and its amplitude is larger because signing
   needs to express a hump that can rise and fall over the observed age window.
 - The signed GP prior is a key sensitivity target because signed data are sparse
@@ -383,12 +394,13 @@ not a within-child median):
 | 16           |                0.19 |
 | 18           |                0.26 |
 
-The baseline `q` anchors (`Beta(1, 1.5)` / `Beta(2, 1.2)`, medians 0.37 / 0.65)
-sit roughly 3× above this at young ages. VG13 no longer inherits these — it now uses `Beta(1, 10)` / `Beta(2, 7)` (medians 0.067 / 0.201), matching the empirical TD ratio above. The **posterior-informed** VG10/VG15
-low-age `q` anchor, `Beta(3, 22)` (median 0.110), matches the independent TD
-`q(10–12 mo) ≈ 0.12` almost exactly. This upgrades the VG10/VG15 tightening from
-purely internal regularisation (from the VG07 posterior) to a choice
-_corroborated by independent TD norms_.
+The DS-joint low-age `q` anchor, `Beta(2, 12)` (median 0.126), is centred on this
+independent TD `q(10–12 mo) ≈ 0.12` — an independent corroboration of the _level_,
+not a value read from the fitted DS data. VG13 uses lower `Beta(1, 10)` / `Beta(2, 7)`
+(medians 0.067 / 0.201), matching the younger empirical TD ratio above. The high-age
+DS `q` anchor, `Beta(3, 2)` (median 0.61), has no independent source and is
+deliberately broad (5-95% ~0.25-0.90), so the DS data — not the prior — set the
+84-month level.
 
 ### DS anchor priors vs independent cohorts
 
@@ -514,7 +526,7 @@ report makes robustness claims:
 
 | Target                                                                                                            | Why it matters                                                                                                                                                                                                                                       | Suggested alternatives                                                                                                                                                                                                                 |
 | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| VG10/VG15 posterior-informed `q` anchors                                                                          | These are intentionally tighter and informed by VG07.                                                                                                                                                                                                | Baseline broad `q` anchors; slightly wider posterior-informed anchors.                                                                                                                                                                 |
+| DS-joint `q` anchors (esp. `q_high`)                                                                              | Weakly-informative, broadened off the VG07-posterior values; `q_high` has no independent DS source.                                                                                                                                                  | The former `Beta(3, 22)` / `Beta(20, 4)` as a revert check; narrower/wider `q_high` such as `Beta(4, 2)` or `Beta(2, 1.5)`.                                                                                                            |
 | Signed GP amplitude and length-scale                                                                              | Signing data are sparse and the hump is GP-driven.                                                                                                                                                                                                   | Wider/narrower `eta_sign`; standard `ell_unit_sign ~ Beta(3, 3)`; shorter length-scale alternative.                                                                                                                                    |
 | Signed intercept prior                                                                                            | The signed level was previously prior-dominated under another parameterisation.                                                                                                                                                                      | Wider `Normal(logit(0.15), 1.0)`; shifted medians such as 0.10 and 0.20.                                                                                                                                                               |
 | Kappa priors                                                                                                      | Dispersion can dominate predictive uncertainty, especially near floor or ceiling.                                                                                                                                                                    | Broader `kappa_min`; flatter age trend; non-monotone or constant-kappa comparison where feasible.                                                                                                                                      |
@@ -540,8 +552,9 @@ are not neutral defaults and need explicit labelling.
 - The anchor priors encode developmental floor expectations at young ages and
   broad uncertainty at older ages.
 - The baseline `q` anchors are deliberately broad.
-- VG10 and VG15 tighten `q` using earlier posterior information to stabilise a
-  weakly identified trajectory decomposition.
+- The DS-joint `q` anchors are weakly-informative, broadened off the
+  VG07-posterior-derived `Beta(3, 22)` / `Beta(20, 4)` to remove prior-data
+  double-dipping; `q_high` is deliberately broad as it has no independent DS source.
 - The signed-ratio prior is the result of an explicit prior-predictive failure
   and correction: the current intercept-only mean avoids a misleading monotone
   signed slope, while the GP carries the signing hump.
