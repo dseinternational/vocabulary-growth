@@ -37,7 +37,7 @@ def _logit(p: float) -> float:
 
 # (model_key, variant_name) -> {"suffix": str, "scalar"?: dict, "kappa"?: dict}
 VARIANTS: dict[tuple[str, str], dict] = {
-    # -- Target 1: VG10/VG15 posterior-informed q anchors --
+    # -- Target 1: VG10/VG15 DS-joint q anchors (weakly-informative, broadened off the VG07-posterior values by #155) --
     ("vg10", "q-broad"): {"suffix": "q-broad", "scalar": {
         "p_slope_low_q_alpha": 1.0, "p_slope_low_q_beta": 1.5,
         "p_slope_hi_q_alpha": 2.0, "p_slope_hi_q_beta": 1.2}},

@@ -1,5 +1,5 @@
 ---
-title: "Model VG10: VG09 + tighter q anchor priors + GP anchored at reference age - children with Down syndrome"
+title: "Model VG10: VG09 + GP anchored at reference age - children with Down syndrome"
 
 date: now
 date-format: "YYYY-MM-DD HH:mm:ss Z"
@@ -16,7 +16,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; `q`-anchor prior descriptions corrected by Claude Code/Opus 4.8).
 :::
 
 ```{python}
@@ -64,10 +64,9 @@ print(":::")
 
 VG10 is a structural variant of VG09 introduced to test whether the marginal `r_hat` / `ess_tail` issues observed on the q-trajectory hyperparameters under VG09 reflect a redundancy between the linear mean trend, the HSGP correction, and the subject random intercepts.
 
-Two changes relative to VG09:
+The one structural change relative to VG09 is the **GP anchor constraint (Option D).** Both `g_u` and `g_q` are reparameterised as `eta · (g_unit − g_unit(a_ref))` so that every posterior draw of the GP passes through zero at the reference age `a_ref = 54` months. This removes the per-draw redundancy between the linear intercept and a constant component of the GP.
 
-1. **Tighter q-anchor priors (Option A).** `p_slope_low_q ~ Beta(3, 22)` (mean ≈ 0.12) and `p_slope_hi_q ~ Beta(20, 4)` (mean ≈ 0.83), informed by the VG07 posterior (no subject REs on q).
-2. **GP anchor constraint (Option D).** Both `g_u` and `g_q` are reparameterised as `eta · (g_unit − g_unit(a_ref))` so that every posterior draw of the GP passes through zero at the reference age `a_ref = 54` months. This removes the per-draw redundancy between the linear intercept and a constant component of the GP.
+The `q(a)` anchors are the shared, weakly-informative DS-joint family priors — `p_slope_low_q ~ Beta(2, 12)` (median ≈ 0.13) and `p_slope_hi_q ~ Beta(3, 2)` (median ≈ 0.61) — identical to VG09, together with the tightened GP amplitude `eta_q ~ HalfNormal(0.20)`. (VG10 was originally introduced with additionally *tighter* `q` anchors read off the VG07 posterior — `Beta(3, 22)` / `Beta(20, 4)`, "Option A" — but [#155](https://github.com/dseinternational/vocabulary-growth/pull/155) broadened those back across the DS-joint family to remove the prior-data double-dipping, so the `q` anchors now match VG09 and the GP anchor is the sole distinction.)
 
 All other model components (study REs, subject REs on u and q, dispersion priors, likelihood) are identical to VG09. See `notes/202605131500-vg09-structural-options.md`.
 
@@ -78,7 +77,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 810 possible words. The structure follows VG09; the only differences are the tightened q-anchor priors and the GP anchor constraint:
+We jointly model words understood and words spoken as bounded count outcomes out of 810 possible words. The structure follows VG09; the only difference is the GP anchor constraint:
 
 $$f_U(a, s, i) = \text{intercept}_U + \text{slope}_U \cdot a_z + \tilde g_U(a) + \delta_U[s] + \delta^{\text{subj}}_U[i]$$
 $$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + \tilde g_q(a) + \delta_q[s] + \delta^{\text{subj}}_q[i]$$
@@ -97,8 +96,8 @@ where $\tilde g_U(a) = \eta_U \cdot (\tilde u_U(a) - \tilde u_U(a_{\text{ref}}))
 
 ::: {.callout-note title="What changed from VG09"}
 
-- **Tighter `q` anchors:** posterior-informed regularisation from the VG07 fit.
-- **GP anchoring:** both GPs are constrained to be zero at 54 months on every draw.
+- **GP anchoring:** both GPs are constrained to be zero at 54 months on every draw — the one structural change from VG09.
+- **`q` anchors:** unchanged from VG09 (the shared weakly-informative `Beta(2, 12)` / `Beta(3, 2)` DS-joint priors).
 - **Hierarchy:** study and subject random intercepts remain on both understood and `q`.
 - **Purpose:** reduce the trend/GP/random-effect redundancy that made VG09 harder to sample.
 
@@ -114,7 +113,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The understood priors match VG09. The production-ratio anchors are intentionally tighter than the VG05-VG09 defaults: they are informed by the VG07 posterior and should be labelled as data-informed regularisation. They are used to stabilise the decomposition of spoken vocabulary into understood vocabulary times `q(a)`, not as independent prior evidence.
+The understood priors match VG09. The production-ratio (`q`) anchors are the shared, weakly-informative DS-joint family priors: `p_slope_low_q ~ Beta(2, 12)` (median ≈ 0.13) and `p_slope_hi_q ~ Beta(3, 2)` (median ≈ 0.61). `q_low` is centred on the independent TD `q(~12 mo) ≈ 0.12`; `q_high` has no independent DS source, so it is deliberately broad (5-95% ≈ 0.25-0.90) and lets the data set the 84-month level. These replaced the earlier `Beta(3, 22)` / `Beta(20, 4)` anchors, which had been read off the VG07 posterior — using a model's own posterior, fit to the same DS data, to set its prior — so they are weakly-informative rather than data-informed regularisation. Stabilisation of the `q` decomposition instead comes from the tightened GP amplitude `eta_q ~ HalfNormal(0.20)` and the GP anchor constraint, not from a data-informed anchor.
 
 ### Understood trajectory
 
@@ -154,7 +153,7 @@ The understood priors match VG09. The production-ratio anchors are intentionally
 
 ## Prior predictive checks
 
-These checks should demonstrate that the tightened `q` anchors still allow plausible spoken trajectories and comprehension-production gaps over 12-90 months. If the prior predictive spoken curves are too narrow, the stabilising prior may be doing too much substantive work.
+These checks should demonstrate that the weakly-informative `q` anchors together with the tightened GP amplitude `eta_q` and the GP anchor constraint still allow plausible spoken trajectories and comprehension-production gaps over 12-90 months. If the prior predictive spoken curves are too narrow, the stabilising priors may be doing too much substantive work.
 
 ### Prior samples -- words understood
 

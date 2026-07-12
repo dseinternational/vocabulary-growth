@@ -16,7 +16,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; `q`-anchor prior descriptions corrected by Claude Code/Opus 4.8).
 :::
 
 ```{python}
@@ -70,7 +70,7 @@ This model (issue #49, Option 3) estimates the **within-understood association**
 - **Outcomes:** words understood, spoken, signed, and four-cell sign/speech composition.
 - **Association:** scalar Plackett odds ratio `psi`, identified mainly from `uk_02`.
 - **Hierarchy:** study and subject random intercepts on understood, `q`, and signing.
-- **Stabilisation:** VG10-style tightened `q` anchors and GP anchors at 54 months.
+- **Stabilisation:** VG10-style GP anchors at 54 months, with the tightened `q`-GP amplitude `eta_q`.
 
 :::
 
@@ -103,7 +103,7 @@ which sits _below_ VG14's independence upper bound $p_U(1-(1-r)(1-q))$ whenever 
 
 **Study random intercepts** ($\delta_u, \delta_q, \delta_\text{sign} \sim \text{Normal}(0,\tau)$ per study, the VG07–VG10 pattern) sit on $f_U$, $g$, $h$ at the observation level, so the reported age curves (population level) are separated from study composition — which made VG14's signed peak unidentifiable.
 
-**Subject random intercepts** ($\delta_{u,\text{subj}}, \delta_{q,\text{subj}}, \delta_{\text{sign},\text{subj}}$, non-centred, also observation-level) are added on all three trajectories, so within-child repeated measurements are not treated as independent. They improve out-of-sample fit substantially (LOO ELPD; mostly understood and spoken, where repeats are dense). Signing is the sparsest modality but still carries repeated-subject structure (uk_01/02/04/05), so the sign-subject scale $\tau_{\text{subj,sign}}$ is strongly data-identified (it lands well above its prior — large between-child variation in signing). Adding a third level term to each predictor sharpens the **VG10 stabilisation** ported here: (A) the $q$ age anchors use the tighter VG10 priors, and (D) each GP is **anchored to pass through zero at the reference age (54 months) for every draw**, removing the GP↔intercept level redundancy that otherwise lets the linear/intercept term, the GP, and the random effects all encode the same global level. The signed intercept prior is left wide (it is already data-informed); Option D does the disambiguation. The reported population curves set every random effect to zero, so they are unchanged in interpretation.
+**Subject random intercepts** ($\delta_{u,\text{subj}}, \delta_{q,\text{subj}}, \delta_{\text{sign},\text{subj}}$, non-centred, also observation-level) are added on all three trajectories, so within-child repeated measurements are not treated as independent. They improve out-of-sample fit substantially (LOO ELPD; mostly understood and spoken, where repeats are dense). Signing is the sparsest modality but still carries repeated-subject structure (uk_01/02/04/05), so the sign-subject scale $\tau_{\text{subj,sign}}$ is strongly data-identified (it lands well above its prior — large between-child variation in signing). Adding a third level term to each predictor sharpens the **VG10 stabilisation** ported here: each GP is **anchored to pass through zero at the reference age (54 months) for every draw** (Option D), removing the GP↔intercept level redundancy that otherwise lets the linear/intercept term, the GP, and the random effects all encode the same global level, and the `q`-GP amplitude `eta_q` is tightened to `HalfNormal(0.20)` as a smoothness prior. The `q` age anchors themselves are the shared weakly-informative DS-joint priors (`Beta(2, 12)` / `Beta(3, 2)`), matching VG09 and VG10; VG10's original tighter, VG07-posterior-derived anchors were broadened by [#155](https://github.com/dseinternational/vocabulary-growth/pull/155) to remove the prior-data double-dipping. The signed intercept prior is left wide (it is already data-informed); Option D does the disambiguation. The reported population curves set every random effect to zero, so they are unchanged in interpretation.
 
 The association $\psi$ is deliberately kept **decoupled** from the subject random effects: the four-cell likelihood is fed the population+study marginals only. $\psi$ is identified from ~62 uk_02 cross-tab rows (≈34 children), and the per-child sign offset is co-identified with $\psi$ from those same rows; letting it into the four-cell composition would make the headline association pivot on a thinly-identified random effect (it rises from ≈1.8 to ≈2.8, driven almost entirely by the sign RE). $\psi$ here is therefore a **population-conditioned** within-understood odds ratio, comparable to the study-RE-only VG15.
 
@@ -125,7 +125,7 @@ The association $\psi$ is identified by the ~60 uk_02 rows with the four-cell cr
 
 ## Priors
 
-VG15 inherits the DS understood priors from the bivariate lineage, the signed-ratio prior from VG14, and the VG10 posterior-informed `q` anchors. The `q` anchors and the weakly positive `log_psi` prior are data-informed regularisation, not independent external evidence; they should be carried into sensitivity checks.
+VG15 inherits the DS understood priors from the bivariate lineage, the signed-ratio prior from VG14, and the shared, weakly-informative DS-joint `q` anchors (`Beta(2, 12)` low, `Beta(3, 2)` high). The weakly positive `log_psi` prior is data-informed regularisation, not independent external evidence, and should be carried into sensitivity checks.
 
 ### Understood trajectory
 
@@ -139,7 +139,7 @@ VG15 inherits the DS understood priors from the bivariate lineage, the signed-ra
 
 ### Production ratio
 
-The `q(a)` anchors are tightened relative to VG05-VG09 and VG14: the low-age anchor uses `Beta(3, 22)` and the high-age anchor uses `Beta(20, 4)`. These priors stabilise the same hierarchy and GP anchoring strategy used in VG10.
+The `q(a)` anchors are the shared, weakly-informative DS-joint family priors, common to VG05, VG07-VG10 and VG14-VG16: the low-age anchor uses `Beta(2, 12)` (median ≈ 0.13, centred on the independent TD `q(~12 mo) ≈ 0.12`) and the high-age anchor uses `Beta(3, 2)` (median ≈ 0.61, deliberately broad with no independent DS source, so the data set the 84-month level). Stabilisation of the `q` decomposition comes from the tightened GP amplitude `eta_q ~ HalfNormal(0.20)` and the per-draw GP anchor at 54 months (the VG10 strategy), not from a data-informed anchor.
 
 ![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
@@ -190,13 +190,13 @@ Study and subject random-intercept scales use HalfNormal(0.5) priors on the logi
 
 ::: {.callout-note title="Sensitivity targets"}
 
-Prior sensitivity should focus on the posterior-informed `q` anchors, signed GP amplitude and length-scale, signed intercept, random-effect scales, `log_psi`, and the Dirichlet-Multinomial concentration prior.
+Prior sensitivity should focus on the weakly-informative `q` anchors (especially the broad `q_high`), signed GP amplitude and length-scale, signed intercept, random-effect scales, `log_psi`, and the Dirichlet-Multinomial concentration prior.
 
 :::
 
 ## Prior predictive checks
 
-These checks should show that the model can generate plausible understood, spoken, signed, and total-expressive trajectories before seeing the data. The key VG15-specific questions are whether the prior allows a signing hump, whether `p_any` is not forced close to the independence bound, and whether `q(a)` remains plausible under the tightened VG10-style anchors.
+These checks should show that the model can generate plausible understood, spoken, signed, and total-expressive trajectories before seeing the data. The key VG15-specific questions are whether the prior allows a signing hump, whether `p_any` is not forced close to the independence bound, and whether `q(a)` remains plausible under the weakly-informative `q` anchors with the tightened `eta_q` and the VG10-style GP anchor.
 
 ### Prior samples -- words understood
 

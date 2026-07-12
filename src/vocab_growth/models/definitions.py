@@ -733,8 +733,8 @@ VG10 = BivariateModelDefinition(
     model_id="VG10",
     config_name="age-understood-spoken-ds-re-subj-uq-anchored",
     banner=(
-        "Fitting Model VG10: VG09 + tighter q anchor priors + GP anchored at"
-        " reference age (A -> U, A -> S, U -> S) - Down syndrome"
+        "Fitting Model VG10: VG09 + GP anchored at reference age"
+        " (A -> U, A -> S, U -> S) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
     n_trials=810,

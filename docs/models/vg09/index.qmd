@@ -16,7 +16,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; VG10 `q`-anchor reference corrected by Claude Code/Opus 4.8).
 :::
 
 ```{python}
@@ -199,7 +199,7 @@ _style_diagnostics(diagnostics)
 
 ::: {.callout-note title="Diagnostic focus"}
 
-VG09 is ridge-prone. Focus on the `q` GP length-scale and amplitude, `tau_q`, `tau_subj_q`, and `kappa_s`. Weak diagnostics here are the reason VG10 adds tighter `q` anchors and GP anchoring.
+VG09 is ridge-prone. Focus on the `q` GP length-scale and amplitude, `tau_q`, `tau_subj_q`, and `kappa_s`. Weak diagnostics here are the reason VG10 adds the per-draw GP anchoring (and why the DS-joint family tightened the `q`-GP amplitude `eta_q`).
 
 :::
 
