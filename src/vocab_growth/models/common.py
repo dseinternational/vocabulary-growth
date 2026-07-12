@@ -831,7 +831,7 @@ def diagnostics(
         var_names=var_names,
         round_to=round_to,
         ci_prob=context.reporting.ci_prob,
-        ci_kind="hdi",
+        ci_kind=context.reporting.interval_kind,
     )
 
     diagnostics_df.to_csv(
@@ -899,7 +899,7 @@ def diagnostics(
         context.trace,
         var_names=posterior_var_names,
         point_estimate="median",
-        ci_kind="hdi",
+        ci_kind=context.reporting.interval_kind,
         ci_prob=context.reporting.ci_prob,
     )
     plt.savefig(
