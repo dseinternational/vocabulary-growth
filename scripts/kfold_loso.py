@@ -172,7 +172,8 @@ def fit_fold(
         model_name=f"KFOLD-{label}",
         config_name=definition.config_name,
         output_root_dir=KFOLD_TMP_DIR,
-        hdi=0.90,
+        ci_prob=0.90,
+        interval_kind="hdi",
     )
     if os.path.exists(reporting_cfg.output_dir):
         shutil.rmtree(reporting_cfg.output_dir)

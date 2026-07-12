@@ -830,7 +830,7 @@ def diagnostics(
         context.trace,
         var_names=var_names,
         round_to=round_to,
-        ci_prob=context.reporting.hdi,
+        ci_prob=context.reporting.ci_prob,
         ci_kind="hdi",
     )
 
@@ -900,7 +900,7 @@ def diagnostics(
         var_names=posterior_var_names,
         point_estimate="median",
         ci_kind="hdi",
-        ci_prob=context.reporting.hdi,
+        ci_prob=context.reporting.ci_prob,
     )
     plt.savefig(
         os.path.join(context.reporting.output_dir, "posterior_plot.png"), dpi=300
@@ -991,7 +991,7 @@ def posterior_summary(context: ModelFitContext):
         context.model_samples.p_query,
         context.model_samples.y_query,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
     )
 
     dataframe_table(
@@ -1015,7 +1015,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         X_query=context.model_samples.X_query,
         y_query=context.model_samples.y_query,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_count_distributions",
         x_label=outcome_label,
@@ -1065,7 +1065,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.X_plot,
         context.model_samples.f_plot,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate",
     )
@@ -1074,7 +1074,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.X_plot,
         context.model_samples.f_plot,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         smooth=True,
         savgol_window_length=15,
         savgol_polyorder=3,
@@ -1089,7 +1089,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.X_query,
         context.model_samples.kappa_query,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="posterior_kappa",
     )
@@ -1160,7 +1160,7 @@ def _plot_and_print_dist(context, dist, name):
     context.plots[name] = plot_dist.plot_distribution(
         dist, context.reporting.output_dir, name
     )
-    summary = dist.summary(mass=context.reporting.hdi)
+    summary = dist.summary(mass=context.reporting.ci_prob)
     console.print(f"  [yellow]{name}[/yellow]: {summary}")
 
 
@@ -1327,7 +1327,8 @@ def run_fit_pipeline(
             model_name=definition.model_id,
             config_name=definition.config_name,
             output_root_dir=local_env.output_root(),
-            hdi=0.90,
+            ci_prob=0.90,
+            interval_kind="hdi",
         ),
         sampling=sampling.get_sampling_configuration(config),
     )

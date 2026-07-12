@@ -1013,7 +1013,7 @@ def posterior_summary(context: BivariateContext):
     """Compute and store the posterior summary tables at query ages."""
     samples = context.model_samples
     n_trials = context.model_data.n_trials
-    hdi_prob = context.reporting.hdi
+    hdi_prob = context.reporting.ci_prob
     has_subject_re = any(
         name in context.model_variables for name in ("tau_subj_u", "tau_subj_q")
     )
@@ -1663,7 +1663,7 @@ def _run_bivariate_joint_plots(
 
     fig = plot_production_rate(
         samples,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="production_rate",
     )
@@ -1675,7 +1675,7 @@ def _run_bivariate_joint_plots(
     fig = plot_production_rate_by_understood(
         samples,
         n_trials=definition.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="production_rate_by_understood",
     )
@@ -1697,7 +1697,7 @@ def _run_bivariate_joint_plots(
     fig = plot_comprehension_production_gap(
         samples,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="comprehension_production_gap",
     )
@@ -1731,7 +1731,7 @@ def _run_bivariate_joint_plots(
     fig = plot_spoken_given_understood(
         samples,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="spoken_given_understood",
     )
@@ -1750,7 +1750,7 @@ def _run_bivariate_joint_plots(
         x_obs=analysis_df.loc[has_u, "age"],
         y_obs=analysis_df.loc[has_u, "understood"],
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         suffix="u",
         outcome_label="Words understood",
@@ -1769,7 +1769,7 @@ def _run_bivariate_joint_plots(
         x_obs=analysis_df.loc[has_s, "age"],
         y_obs=analysis_df.loc[has_s, "spoken"],
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.hdi,
+        hdi_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         suffix="s",
         outcome_label="Words spoken",

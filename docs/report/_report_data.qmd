@@ -12,26 +12,59 @@ derived from definitions.py so paths cannot drift from the code.
 from pathlib import Path
 
 import pandas as pd
+from dse_research_utils.report.data import ReportData
+from dse_research_utils.report.data import num as _num
+from dse_research_utils.report.data import show_or_pending as _show_or_pending
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 FIG_ROOT = Path("figures")
 _DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
 
+# Shared per-model artefact reader (dse_research_utils) over this report's curated
+# figures/<MODEL_ID>-<config_name> store; the directory is fixed per model (registry-
+# derived) so the resolver ignores the config argument.
+_report = ReportData(lambda model_id, _config: FIG_ROOT / _DIR_BY_ID[model_id])
+
 
 def model_dir(model_id):
-    return FIG_ROOT / _DIR_BY_ID[model_id]
+    return _report.model_dir(model_id)
 
 
 def load_summary(model_id, name):
     """Posterior-summary / data CSV for a model, or None if not present."""
-    p = model_dir(model_id) / f"{name}.csv"
-    return pd.read_csv(p) if p.exists() else None
+    return _report.load_summary(model_id, name)
+
+
+def load_json(model_id, name):
+    """Parsed JSON artefact for a model (e.g. the convergence gate), or None."""
+    return _report.load_json(model_id, name)
 
 
 def fig(model_id, filename):
     """Relative path to a figure for embedding."""
-    return str(model_dir(model_id) / filename)
+    return _report.fig(model_id, filename)
 
+
+def summary_value(model_id, summary, column):
+    """Single value from the first row of a summary, or None."""
+    return _report.summary_value(model_id, summary, column)
+
+
+def val(model_id, summary, age_months, column):
+    """Single value from a summary at (or nearest to) an age, or None."""
+    return _report.value_at(model_id, summary, column, at=age_months, key="age_months")
+
+
+def show_or_pending(df, what):
+    return _show_or_pending(df, what, hint="its output is present under `docs/report/figures/`")
+
+
+def num(value, fmt="{:.0f}"):
+    """Format a value for prose, or an em dash when it is missing."""
+    return _num(value, fmt)
+
+
+# --- Report-specific helpers (kept local) -----------------------------------
 
 # Cross-model DS/TD comparison artefacts (figures/comparisons/, synced from
 # output/comparisons/). Schemas vary per file, so access is by (match_col, value).
@@ -53,23 +86,6 @@ def comp_at(name, match_col, match_val, col):
     return row[col]
 
 
-def val(model_id, summary, age_months, column):
-    """Single value from a summary at (or nearest to) an age, or None."""
-    df = load_summary(model_id, summary)
-    if df is None or "age_months" not in df or column not in df:
-        return None
-    row = df.iloc[(df["age_months"] - age_months).abs().argmin()]
-    return row[column]
-
-
-def summary_value(model_id, summary, column):
-    """Single value from the first row of a summary, or None."""
-    df = load_summary(model_id, summary)
-    if df is None or df.empty or column not in df:
-        return None
-    return df[column].iloc[0]
-
-
 def words(model_id, summary, age_months, column="Ey_median"):
     """Expected word count at an age, rounded to a whole word (str for prose)."""
     v = val(model_id, summary, age_months, column)
@@ -78,13 +94,14 @@ def words(model_id, summary, age_months, column="Ey_median"):
 
 # Columns to surface, in order, when present (posterior_summary_*.csv schema:
 # age_months; Ey_* = expected count, typical child; Y_* = predictive, individual).
+# The engines report 90% HDIs (ReportingConfiguration ci_prob=0.90, interval_kind="hdi").
 _COUNT_COLS = {
     "age_months": "Age (mo)",
     "Ey_median": "Expected",
-    "Ey_hdi_lo": "Expected 94% lo",
-    "Ey_hdi_hi": "Expected 94% hi",
-    "Y_hdi_lo": "Individual 94% lo",
-    "Y_hdi_hi": "Individual 94% hi",
+    "Ey_hdi_lo": "Expected 90% lo",
+    "Ey_hdi_hi": "Expected 90% hi",
+    "Y_hdi_lo": "Individual 90% lo",
+    "Y_hdi_hi": "Individual 90% hi",
 }
 
 
@@ -96,30 +113,6 @@ def format_counts(df):
     num = out.select_dtypes("number").columns
     out[num] = out[num].round(0).astype("Int64", errors="ignore")
     return out
-
-
-def show_or_pending(df, what):
-    if df is None:
-        from IPython.display import Markdown
-
-        return Markdown(
-            f"> **Pending fit** — {what} will appear here once the model has been "
-            f"fitted and its output is present under `docs/report/figures/`."
-        )
-    return df
-
-
-def load_json(model_id, name):
-    """Parsed JSON artefact for a model (e.g. the convergence gate), or None."""
-    import json
-
-    p = model_dir(model_id) / f"{name}.json"
-    return json.loads(p.read_text()) if p.exists() else None
-
-
-def num(value, fmt="{:.0f}"):
-    """Format a value for prose, or an em dash when it is missing."""
-    return "—" if value is None else fmt.format(value)
 
 
 def summary_num(model_id, summary, column, fmt="{:.0f}"):

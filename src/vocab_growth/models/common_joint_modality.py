@@ -1198,7 +1198,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
 def posterior_summary(context: JointContext):
     s = context.model_samples
     n_trials = context.model_data.n_trials
-    hdi = context.reporting.hdi
+    hdi = context.reporting.ci_prob
     od = context.reporting.output_dir
 
     def probability_summary(X, draws, prefix, label):
@@ -1272,7 +1272,7 @@ def _run_joint_plots(context: JointContext):
     s = context.model_samples
     n_trials = context.model_data.n_trials
     od = context.reporting.output_dir
-    hdi = context.reporting.hdi
+    hdi = context.reporting.ci_prob
     X = s.X_plot
 
     # 1) Data-identified p_any vs independence upper bound (expected counts)
