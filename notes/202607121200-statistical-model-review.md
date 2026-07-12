@@ -96,7 +96,7 @@ This is the most important thing to understand about the joint models, and the
 code comments it honestly. When a child has both understood and spoken recorded,
 the two counts enter as **two separate Beta-Binomial marginals** coupled only
 through the shared latent means (`p_S = p_U·q`); they are treated as
-conditionally independent given those means. The item-level joint — *which* of the
+conditionally independent given those means. The item-level joint — _which_ of the
 understood words the child also speaks — is not modelled (most sources report only
 marginal totals). This is a composite/pseudo-likelihood. Consequence: the
 posterior for the **means** (`p_U`, `q`, `p_S`) is well-behaved and interpretable,
@@ -118,7 +118,7 @@ before coding, which correctly prevents cross-study ID collisions (verified in
 GP passes through zero at a reference age. This is a legitimate device to remove the
 statistical redundancy between the linear trend, the GP, and the intercepts (a
 "ridge" in the posterior) that otherwise degrades sampling once random intercepts add
-another level-carrying term. It changes the *parameterisation*, not the model
+another level-carrying term. It changes the _parameterisation_, not the model
 family. Correctly implemented in `gp_utils._gp_from_mean`.
 
 **Estimand nuance (applies to every RE model).** Plot/query trajectories are reported
@@ -157,15 +157,15 @@ view (DS) plus the Wordbank export (TD). The key facts I verified:
 
 Empirical trajectories by age band (verified, understood/spoken as fraction of 810):
 
-| Age band (mo) | n | U/810 | S/810 | q = S/U (median) | sign/U (median, n) |
-|---|---|---|---|---|---|
-| 8–18  | 127 | 0.04 | 0.00 | 0.00 | 0.00 (32) |
-| 18–24 | 140 | 0.12 | 0.01 | 0.03 | 0.07 (60) |
-| 24–36 | 267 | 0.25 | 0.04 | 0.08 | 0.29 (128) |
-| 36–48 | 245 | 0.36 | 0.14 | 0.24 | 0.40 (72) |
-| 48–60 | 167 | 0.39 | 0.23 | 0.27 | 0.53 (21) |
-| 60–72 | 132 | 0.45 | 0.34 | 0.65 | 0.59 (5) |
-| 72–115| 109 | 0.58 | 0.46 | 0.65 | 0.04 (7) |
+| Age band (mo) | n   | U/810 | S/810 | q = S/U (median) | sign/U (median, n) |
+| ------------- | --- | ----- | ----- | ---------------- | ------------------ |
+| 8–18          | 127 | 0.04  | 0.00  | 0.00             | 0.00 (32)          |
+| 18–24         | 140 | 0.12  | 0.01  | 0.03             | 0.07 (60)          |
+| 24–36         | 267 | 0.25  | 0.04  | 0.08             | 0.29 (128)         |
+| 36–48         | 245 | 0.36  | 0.14  | 0.24             | 0.40 (72)          |
+| 48–60         | 167 | 0.39  | 0.23  | 0.27             | 0.53 (21)          |
+| 60–72         | 132 | 0.45  | 0.34  | 0.65             | 0.59 (5)           |
+| 72–115        | 109 | 0.58  | 0.46  | 0.65             | 0.04 (7)           |
 
 Two things jump out and drive interpretation: (a) understood observations thin
 dramatically past 60 months (only 18 understood counts above 72 mo), so the
@@ -185,7 +185,7 @@ an empirical ~30. They are weakly informative and roughly data-consistent.
 **(A) Cross-instrument pooling onto a fixed n = 810 — the single biggest caveat.**
 Every likelihood uses `n_trials = 810`, but the raw counts come from checklists that
 can be much shorter. A child assessed on the 416-item Oxford CDI is modelled as
-"successes out of 810," so that study is *structurally censored* at 416/810 ≈ 0.51 of
+"successes out of 810," so that study is _structurally censored_ at 416/810 ≈ 0.51 of
 the reference scale, and MB-CDI WG at 396/810 ≈ 0.49. Study random intercepts
 (VG07+) absorb a **constant logit-level shift** between forms, but a fixed
 multiplicative ceiling is not a constant logit shift — it bites only at high
@@ -201,7 +201,7 @@ per-form `n_trials`) rather than treating a 416-count as 416/810.
 
 **(B) The `us_01` `production ≤ 100` cap.** An undocumented legacy filter drops the
 highest-production rows on the Edgin/Wordbank DS subset (8/87 WG, 24/109 WS rows in
-the current export). This biases DS spoken *downward* precisely at the ages where the
+the current export). This biases DS spoken _downward_ precisely at the ages where the
 strongest talkers sit. The code flags it as pending review; I agree it is a real, if
 localised, bias and should be resolved or justified.
 
@@ -229,8 +229,8 @@ population-relative (≈ null) estimate should be reported as headline.
 
 **(G) VG14's `p_any` is an upper bound only under positive item-level association.**
 `p_any = p_U·(r + q − r·q)` assumes sign ⟂ speak given understood. If DS children
-*substitute* signs for not-yet-spoken words (negative item-level correlation),
-independence would *underestimate* total expressive vocabulary. The uk_02 four-cell
+_substitute_ signs for not-yet-spoken words (negative item-level correlation),
+independence would _underestimate_ total expressive vocabulary. The uk_02 four-cell
 data show a positive association (`psi > 1`), so "upper bound" holds empirically —
 but it is data-contingent, and VG15 replaces the assumption with a directly estimated
 association. Trust VG15's `p_any`, not VG14's.
@@ -260,6 +260,7 @@ Each entry: **purpose / questions**, **methodology specifics** (beyond the share
 core), **interpretation**, and **model-specific assessment**.
 
 ### VG01 — DS, spoken (baseline)
+
 - **Purpose.** Establish the baseline chronological-age → words-spoken trajectory for
   children with Down syndrome. Questions: how does expressive vocabulary grow with
   age; when is growth fastest; how uncertain is it, especially at older ages?
@@ -276,6 +277,7 @@ core), **interpretation**, and **model-specific assessment**.
   supersede it.
 
 ### VG02 — DS, understood (baseline)
+
 - **Purpose.** Baseline age → words-understood trajectory for DS. Comprehension is the
   scaffolding for the joint models.
 - **Methodology.** As VG01 but understood; low anchor `Beta(1,7)` (~101 words at 24 mo)
@@ -288,6 +290,7 @@ core), **interpretation**, and **model-specific assessment**.
   comprehension norm is the honest weak point and is disclosed.
 
 ### VG03 — TD, spoken (baseline)
+
 - **Purpose.** Typically-developing counterpart to VG01, for DS-vs-TD contrasts.
 - **Methodology.** Anchors at 12 & 26 months (the TD-relevant window), anchored to
   published Wordbank deciles (spoken median ~11/810 at 12 mo). Uses WG + Oxford CDI +
@@ -299,6 +302,7 @@ core), **interpretation**, and **model-specific assessment**.
   full-data hierarchical replacement, so VG03 is a baseline.
 
 ### VG04 — TD, understood (baseline)
+
 - **Purpose.** TD counterpart to VG02.
 - **Methodology.** 12-month understood anchored to the Wordbank comprehension norm
   (`Beta(1.2,8)`, ~84/810); the 26-month high anchor has **no** independent CDI
@@ -307,6 +311,7 @@ core), **interpretation**, and **model-specific assessment**.
 - **Assessment.** Correct; VG12 is the full-data hierarchical replacement.
 
 ### VG05 — DS, understood + spoken (joint baseline)
+
 - **Purpose.** First joint model: estimate comprehension, production, and the
   **production ratio `q(a) = P(speak | understood)`** together. Questions: what
   fraction of understood words can a DS child say, and how does that fraction grow?
@@ -319,6 +324,7 @@ core), **interpretation**, and **model-specific assessment**.
   0.5% violation rate). No-hierarchy caveats (§3E) apply; superseded by VG07–VG10.
 
 ### VG07 — VG05 + study random intercepts
+
 - **Purpose.** Absorb systematic level differences between the pooled source studies.
 - **Methodology.** Non-centred study REs `δ_u`, `δ_q` on both latent trajectories.
 - **Interpretation.** `q` and the trajectories now represent a "typical study"
@@ -327,6 +333,7 @@ core), **interpretation**, and **model-specific assessment**.
 - **Assessment.** Correct; the natural first hierarchical step.
 
 ### VG08 — VG07 + subject REs on understood
+
 - **Purpose.** Separate stable between-child differences from within-child change for
   the many repeated-measures children.
 - **Methodology.** Adds non-centred subject REs on `f_U`. Posterior-predictive uses a
@@ -334,7 +341,8 @@ core), **interpretation**, and **model-specific assessment**.
 - **Assessment.** Correct and important given 377/609 children have repeats.
 
 ### VG09 — VG08 + subject REs on `q`
-- **Purpose.** Allow stable between-child differences in the *production ratio*, not
+
+- **Purpose.** Allow stable between-child differences in the _production ratio_, not
   just comprehension.
 - **Methodology.** Adds subject REs on `h` (the `q` logit). Note `eta_q_sigma` is
   tightened to 0.20 to curb the GP-vs-slope/intercept competition on `q`.
@@ -343,11 +351,12 @@ core), **interpretation**, and **model-specific assessment**.
   trend, `q` GP, and the `q` intercepts, which motivated VG10.
 
 ### VG10 — VG09 + tighter `q` anchors + GP anchoring at 54 mo
+
 - **Purpose.** The **preferred** DS joint (understood+spoken) model. Same structure as
   VG09 but with the sampler pathology resolved.
 - **Methodology.** GP anchored to zero at 54 months on both trajectories (§1.5),
   removing the trend/GP/intercept ridge; `q` anchor priors broadened but kept
-  weakly-informative (the code notes they are deliberately *not* double-dipped from a
+  weakly-informative (the code notes they are deliberately _not_ double-dipped from a
   posterior). This is a parameterisation change, not a different model.
 - **Interpretation.** Use VG10 for the headline DS understood/spoken/`q` story. Report
   both the population and new-child estimand columns.
@@ -355,6 +364,7 @@ core), **interpretation**, and **model-specific assessment**.
   care taken to avoid double-dipping the priors is commendable.
 
 ### VG11 — TD, spoken, with study REs + GP anchor at 19 mo
+
 - **Purpose.** Full-data hierarchical replacement for VG03.
 - **Methodology.** Study (dataset/lab) REs, no subsampling, drop studies with < 200
   observations (`min_study_observations`), GP anchored at 19 months. Population
@@ -363,12 +373,14 @@ core), **interpretation**, and **model-specific assessment**.
   it lets all qualifying observations contribute while absorbing between-lab level.
 
 ### VG12 — TD, understood, with study REs + GP anchor at 19 mo
+
 - **Purpose.** Full-data hierarchical replacement for VG04.
 - **Methodology.** As VG11 for comprehension (WG + Oxford CDI). The 26-month high
   anchor remains a named sensitivity target (no independent comprehension norm).
 - **Assessment.** Correct; the disclosed weak point is the un-normed high anchor.
 
 ### VG13 — TD, understood + spoken (joint), 8–18 months
+
 - **Purpose.** The TD joint model used for DS-vs-TD comparison, replacing retired VG06.
 - **Methodology.** Restricted to 8–18 months, where WG (8–18) and Oxford CDI (12–25)
   are dense and the WS production-proxy bias is avoided entirely. Study REs, GP anchor
@@ -383,6 +395,7 @@ core), **interpretation**, and **model-specific assessment**.
   proportions are low in this window.
 
 ### VG14 — DS, understood + spoken + signed (trivariate)
+
 - **Purpose.** Add signing as a third modality; estimate the signed ratio
   `r(a) = P(sign | understood)` and a **total expressive** vocabulary `p_any`.
 - **Methodology.** Adds `r = σ(g_sign)` with an **intercept-only mean + GP** (no age
@@ -401,6 +414,7 @@ core), **interpretation**, and **model-specific assessment**.
   the transparent starting point and VG15 as the trustworthy version.
 
 ### VG15 — DS joint sign/speech with a data-identified association (the flagship)
+
 - **Purpose.** Replace VG14's independence assumption with a **directly estimated
   within-understood sign–speech association**, yielding a data-identified `p_any`, and
   add full hierarchy. Question: given a word is understood, how do signing and
@@ -413,7 +427,7 @@ core), **interpretation**, and **model-specific assessment**.
   `(S − disc)/(2(psi−1))` but numerically stable and continuous at `psi = 1` (returns
   `r·q`, i.e. independence). Correct. The cross-tab is fit with a
   **Dirichlet-Multinomial** (concentration `conc`) on the uk_02 four-cell counts, and a
-  three-cell (within-*produced*) Dirichlet-Multinomial on nz_01 (which has no
+  three-cell (within-_produced_) Dirichlet-Multinomial on nz_01 (which has no
   comprehension, so the "neither" cell is dropped and the composition renormalised over
   {sign-only, speak-only, both}). Both cross-tab terms share `psi`, so the two sources
   jointly identify it. Study REs on all three trajectories, optional subject REs (on by
@@ -421,7 +435,7 @@ core), **interpretation**, and **model-specific assessment**.
   identified) is reported **alongside** the independence bound `p_any_indep` — excellent
   practice, letting the reader see how much the estimated association moves the total.
 - **Key identification decision (correct and worth stating).** `psi` is fed the
-  **population+study** marginals, deliberately *excluding* the subject sign-RE. The
+  **population+study** marginals, deliberately _excluding_ the subject sign-RE. The
   reason (recorded in a note and verified in code): the per-child sign offset is co-
   identified with `psi` from the same ~62 uk_02 rows / 34 children, and letting it into
   the cross-tab composition makes `psi` pivot on a thinly-identified random effect
@@ -440,12 +454,13 @@ core), **interpretation**, and **model-specific assessment**.
   bridging assumption (the `include_nz01_cells` flag lets you test its pull on `psi`).
 
 ### VG16 — VG09 + a within-child receptive→expressive cross-lag
-- **Purpose.** Ask a dynamic question: does a child's *earlier* comprehension standing
-  predict their *later* production conversion `q` (earlier receptive → later
+
+- **Purpose.** Ask a dynamic question: does a child's _earlier_ comprehension standing
+  predict their _later_ production conversion `q` (earlier receptive → later
   expressive)?
 - **Methodology.** For each observation the child's immediately-earlier understood wave
   is the lag source; `x_lag = has_lag · (observed prior understood logit − model-expected
-  baseline)` enters the current `q` logit as `beta_lag · x_lag`. The baseline is
+baseline)` enters the current `q` logit as `beta_lag · x_lag`. The baseline is
   configurable: **within-child** (subtract the child's own subject intercept → RI-CLPM
   within effect) or **population-relative** (subtract only population+study → blends
   within/between). The headline VG16 uses the **population-relative** baseline.
@@ -473,6 +488,7 @@ The engines already produce a strong set (`plot_posterior_predictive_*`,
 is most instructive to lead with, and a few additions I would make:
 
 **Most instructive existing artefacts:**
+
 - **`posterior_summary` `P(Y≤k)` columns** at query ages — the most clinically legible
   output. "At 36 months, P(spoken ≤ 10 words) = …" communicates far more than a mean.
 - **Production ratio `q(a)` and `q` vs words-understood** — the core scientific quantity
@@ -483,7 +499,7 @@ is most instructive to lead with, and a few additions I would make:
   draws (read those medians as conditional).
 - **Comprehension-matched DS-vs-TD contrasts** (`expressive_specific_delay`,
   `comprehension_equivalent_age`) — the right way to ask "is DS production delayed
-  *beyond* its comprehension delay," removing the timescale confound. This is arguably
+  _beyond_ its comprehension delay," removing the timescale confound. This is arguably
   the study's most important comparative output.
 - **VG15 four-cell composition and `p_any` vs `p_any_indep`** — shows the association's
   practical effect on total expressive vocabulary.
@@ -491,6 +507,7 @@ is most instructive to lead with, and a few additions I would make:
   spread with age (the clinical "children fan out" message).
 
 **Additions worth making:**
+
 1. **Always shade unsupported age/level regions** (`comparison.shade_unsupported`) on
    every trajectory plot — especially DS understood past ~60 mo and the signed-ratio
    tail, where estimates are prior/GP-driven (§3I). This is the single highest-value
