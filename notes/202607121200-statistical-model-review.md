@@ -29,9 +29,14 @@ anchor ages, an HSGP for smooth nonlinear departures, and the
 framework, and the harder pieces (non-centred random effects, GP anchoring, the
 Plackett association, the Dirichlet-Multinomial cross-tab, the disjoint-posterior
 DS-vs-TD contrasts) are implemented correctly. The substantive risks are not
-coding errors; they are **modelling-assumption** risks, and the most important one
-is the same for almost every model: **pooling raw counts from checklists of
-different lengths onto a single 810-item scale.** Details below.
+coding errors; they are **modelling-assumption** risks. The one that looked most
+serious on first read — **pooling raw counts from checklists of different lengths
+onto a single 810-item scale** — is substantially defused once the instruments'
+nested (MacArthur-derived, near-complete-overlap) structure and a direct dual-form
+equating check are taken into account (§3A). The assumption risks that remain worth
+holding in mind are the optimistic uncertainty of the no-hierarchy models, the
+prior-driven old-age and signed tails, and VG16's within-child cross-lag. Details
+below.
 
 ---
 
@@ -145,7 +150,10 @@ view (DS) plus the Wordbank export (TD). The key facts I verified:
 - **Instrument ceilings differ** and are recorded in `survey_vocab_max`: DSE
   checklist = 810, Oxford CDI = 416, MB-CDI WG = 396, WS = 680, NZCDI = 675.
   A form-ceiling guard drops only counts strictly above their form's native
-  ceiling (data-entry errors); legitimate ceiling observations are kept.
+  ceiling (data-entry errors); legitimate ceiling observations are kept. The forms
+  are all MacArthur-CDI-derived with near-complete item overlap — the longer lists
+  are extensions of the shorter ones — which is what makes scoring every count
+  against the common 810-item frame defensible despite the differing lengths (§3A).
 - **WS comprehension is excluded** (both TD and the us_01/Edgin DS subset) because
   on WS/TEDS forms `comprehension == production` by data convention — it is a
   production proxy, not an independent measurement. WS still contributes production.
@@ -182,22 +190,79 @@ an empirical ~30. They are weakly informative and roughly data-consistent.
 
 ## 3. Cross-cutting soundness findings (my independent assessment)
 
-**(A) Cross-instrument pooling onto a fixed n = 810 — the single biggest caveat.**
-Every likelihood uses `n_trials = 810`, but the raw counts come from checklists that
-can be much shorter. A child assessed on the 416-item Oxford CDI is modelled as
-"successes out of 810," so that study is _structurally censored_ at 416/810 ≈ 0.51 of
-the reference scale, and MB-CDI WG at 396/810 ≈ 0.49. Study random intercepts
-(VG07+) absorb a **constant logit-level shift** between forms, but a fixed
-multiplicative ceiling is not a constant logit shift — it bites only at high
-proportions and older ages, exactly where DS children on the 810-item DSE form keep
-rising while a shorter form cannot follow. The single-outcome baselines (VG01–VG04)
-and the non-hierarchical joint models (VG05, VG14) have **no** study effects, so this
-heterogeneity is only soaked up by overdispersion there. This is the deepest threat
-to cross-study and DS-vs-TD comparisons. It is partially mitigated (ceiling guard +
-study REs) and partially acknowledged in the code, but the residual
-scale-incommensurability remains and should be stated prominently in any headline. A
-cleaner future fix would rescale each form's count to the 810 frame (or use a
-per-form `n_trials`) rather than treating a 416-count as 416/810.
+**(A) Cross-instrument pooling onto a fixed n = 810 — investigated, and largely
+defused.** Every likelihood uses `n_trials = 810`, but the raw counts come from
+checklists of different lengths (DSE 810, Oxford CDI 416, MB-CDI WG 396, WS 680,
+NZCDI 675), and 72% of DS observations come from a form shorter than 810. On first
+read this looked like the deepest threat to cross-study and DS-vs-TD comparisons: a
+child assessed on the 416-item Oxford CDI can score at most 416, so that study
+appears _structurally censored_ at 416/810 ≈ 0.51, and a fixed multiplicative ceiling
+is not a constant logit shift, so the study random intercepts (VG07+) cannot fully
+absorb it. Two facts — one structural, one empirical — substantially reduce this
+concern.
+
+_The instruments are nested._ They are all MacArthur-CDI-derived with near-complete
+item overlap; the longer lists are extensions of the shorter ones, and the extension
+items are the rarer / later-acquired words. Two consequences follow. First, genuine
+top-censoring is rare: only ~4% of understood and ~1% of spoken counts reach 90% of
+their form's own ceiling, and only 3 understood observations sit exactly at it —
+because forms are administered roughly matched to ability, children seldom run into
+the top of the form. Second, and more decisive, the words _not_ on a short form are
+the hard words, which an ability-matched child mostly does not know and would score
+≈0 on anyway. So a raw short-form count entered as k/810 is close to the child's true
+full-inventory fraction — a slight undercount (the few off-form words they do know),
+not the factor-of-two deflation that "fraction of the form" (per-form `n_trials`)
+would imply.
+
+_A direct dual-form check, then a full crosswalk model, confirm it._ The uk_02 study
+administered both the DSE (810) and Oxford (416) forms. Ten children have both **at
+the same age** (concurrent administration): their raw DSE-to-Oxford count ratio is
+**median 1.14** for understood — close to the identity fixed-810 assumes (ratio ≈ 1.0)
+and nowhere near the length ratio 810/416 = 1.95 a per-form rescaling assumes. To use
+all **34** dual-form children (most measured on the two forms a few months apart) I
+fitted a small Bayesian measurement model: a shared per-child latent DSE-frame
+trajectory (population age trend + child random intercept), each form observed at its
+own age through the correct Beta-Binomial denominator (810 vs 416), and a logit-scale
+form offset as the crosswalk (80 understood / 82 spoken observations; converged,
+r-hat 1.00). The age-adjusted count ratio R = DSE-count / Oxford-count, with 90% HDIs:
+
+| Age (mo) | R understood, 90% HDI | R spoken, 90% HDI |
+| -------- | --------------------- | ----------------- |
+| 25       | 0.85 [0.72, 0.99]     | 0.86 [0.69, 1.08] |
+| 31       | 0.96 [0.83, 1.11]     | 0.89 [0.72, 1.11] |
+| 37       | 1.10 [0.98, 1.24]     | 0.94 [0.77, 1.16] |
+| 43       | 1.25 [1.13, 1.38]     | 1.03 [0.86, 1.25] |
+| 49       | 1.40 [1.27, 1.53]     | 1.17 [0.98, 1.38] |
+
+Two things stand out. First, the crosswalk is **not a single number**: a constant
+logit offset already produces a count ratio that climbs with vocabulary level (and so
+with age) as the shorter Oxford form saturates — R ≈ 1 at young ages / low vocabulary,
+rising above 1 by school age. For understood there is no age trend _beyond_ this
+mechanical one (the explicit age-by-offset term's 90% HDI [−0.12, +0.59] includes 0).
+Second, the per-form hypothesis (R = 1.95) is excluded across the whole range
+(P(R < 1.95) = 1.00), while R ≈ 1 (fixed-810) sits inside the interval at the
+young/low end. So fixed-810 is essentially exact where the short forms are actually
+administered — the 416-item forms cluster at ~22–37-month medians (§2) — and the
+undercount only grows at older ages, where almost no short-form data exist. Spoken
+behaves the same, R ≈ 1 at the centre; its counts are small and noisier (the raw
+concurrent ratio of 1.46 was an upward-biased ratio of small counts, corrected here),
+and it carries a mild but credible extra age trend.
+
+_Revised assessment._ Fixed-810 is not merely the more defensible of the two naive
+choices — it is close to correct across the range that matters, and a per-form
+`n_trials` would over-correct badly (R ≈ 1.95 is ruled out everywhere). The residual
+is a small, level-dependent bias for short-form studies — near zero at the young ages
+where those forms are used (if anything a marginal over-count, R just below 1),
+becoming a mild undercount only at older ages where almost no short-form data exist —
+and is absorbed as a level offset by the study REs (VG07+) either way; it remains
+unabsorbed only in the non-hierarchical models
+(VG01/VG02/VG05/VG14, §3E) and, mildly, at the Oxford ceiling. If a correction were
+ever wanted, the estimated crosswalk above — a small, age-dependent per-form scaling,
+**not** per-form `n_trials` — is the instrument, but its expected effect on the fitted
+trajectories is minor. Caveats: the equating rests on 34 children from one study, with
+real scatter and a few DSE-below-Oxford counts (impossible under exact nesting), so
+the overlap is near-complete-not-exact plus administration noise (separate
+form-filling, recall, fatigue on the longer form).
 
 **(B) The `us_01` `production ≤ 100` cap.** An undocumented legacy filter drops the
 highest-production rows on the Edgin/Wordbank DS subset (8/87 WG, 24/109 WS rows in
@@ -597,10 +662,16 @@ pattern as vocabulary grows; VG16's within-child cross-lag is a spurious
   code and (where possible) the data.
 - The residual risks are **assumptions, not errors**, and the codebase is unusually
   honest about most of them in comments and notes. The ones to keep at the front of the
-  mind: (A) pooling different-length checklists onto n = 810; (B) the undocumented
-  `us_01` production cap; (E) optimistic uncertainty in the no-hierarchy models
-  (VG01/02/05/**14**); (I) prior-driven old-age and signed-tail regions; and (F) VG16's
-  unidentified within-child cross-lag.
+  mind: (E) optimistic uncertainty in the no-hierarchy models (VG01/02/05/**14**);
+  (I) prior-driven old-age and signed-tail regions; (F) VG16's unidentified
+  within-child cross-lag; and (B) the undocumented `us_01` production cap. The
+  cross-instrument n = 810 pooling (A), which first looked like the biggest of these,
+  is **largely defused** — the instruments are nested MacArthur derivatives, and an
+  age-adjusted crosswalk fitted to all 34 uk_02 dual-form children puts the fixed-810
+  count ratio at R ≈ 1 where short forms are actually administered (rising to ~1.4 only
+  by school age, where little short-form data exist) and rules out the per-form
+  alternative (R = 1.95) everywhere. The residual is a small, level-dependent
+  undercount the study REs mostly absorb (§3A).
 - Preferred models for headline claims: **VG10** (DS understood + spoken), **VG12/VG11**
   (TD understood/spoken), **VG13** (TD joint, 8–18 mo), **VG15** (DS sign/speech and
   total expressive). VG01–VG05, VG07–VG09 and VG14 are best framed as the development
