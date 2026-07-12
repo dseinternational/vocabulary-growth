@@ -16,8 +16,10 @@ graph shape the helpers must reproduce:
   and that the trace-memory engines (trivariate / joint) do **not** store them;
 - that the q-side latent is ``h_all`` and never ``f_q_all`` (the latent name is
   passed explicitly, not derived from the suffix); and
-- that the signed trajectory's ``intercept_sign`` is a free RV (intercept-only
-  mean), not a slope-derived ``Deterministic``.
+- that the signed trajectory uses a three-anchor tent mean: three free anchor RVs
+  (``p_slope_low_sign`` / ``p_slope_mid_sign`` / ``p_slope_hi_sign``) and two
+  segment-slope ``Deterministic``\\ s (``slope_up_sign`` / ``slope_dn_sign``), with
+  no intercept-only ``intercept_sign`` and no single ``slope_sign``.
 
 Builds the real models, so they need the prepared DuckDB; they skip cleanly when
 it is absent (the CI fit job runs ``prepare_data`` first, but bare ``pytest`` may
@@ -129,8 +131,11 @@ def test_trivariate_vg14_graph(tmp_path, monkeypatch):
     assert {"g_u", "f_u_all", "g_q", "h_all"}.isdisjoint(det)
     # The slope/intercept/ell scalars are still stored.
     assert {"slope_u", "slope_q", "ell_u", "ell_q", "ell_sign"} <= det
-    # Signed mean is intercept-only -> a free RV, not a slope-derived Deterministic.
-    assert "intercept_sign" in free
+    # Signed mean is a three-anchor tent -> three free anchor RVs + two segment
+    # slopes as Deterministics; no intercept-only intercept_sign, no single slope.
+    assert {"p_slope_low_sign", "p_slope_mid_sign", "p_slope_hi_sign"} <= free
+    assert "intercept_sign" not in free
+    assert {"slope_up_sign", "slope_dn_sign"} <= det
     assert "slope_sign" not in det
 
 
@@ -138,5 +143,7 @@ def test_joint_vg15_graph(tmp_path, monkeypatch):
     free, det, _ = _names(_build("VG15", tmp_path, monkeypatch))
     assert {"g_u", "f_u_all", "g_q", "h_all"}.isdisjoint(det)
     assert {"slope_u", "slope_q", "ell_sign"} <= det
-    assert "intercept_sign" in free
+    assert {"p_slope_low_sign", "p_slope_mid_sign", "p_slope_hi_sign"} <= free
+    assert "intercept_sign" not in free
+    assert {"slope_up_sign", "slope_dn_sign"} <= det
     assert "slope_sign" not in det

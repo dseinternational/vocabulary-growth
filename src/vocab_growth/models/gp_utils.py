@@ -164,6 +164,72 @@ def intercept_and_gp(
     )
 
 
+def tent_and_gp(
+    *,
+    cfg_low,
+    cfg_mid,
+    cfg_hi,
+    z_low,
+    z_mid,
+    z_hi,
+    cfg_ell,
+    cfg_eta,
+    suffix,
+    X_all_z_data,
+    grid,
+    store_deterministic,
+    latent_name=None,
+    anchor_idx=None,
+):
+    """Three-anchor "tent" mean (rise to a peak anchor, then decline) + HSGP.
+
+    Used for the signed ratio ``r(a) = P(sign | understood)``, whose developmental
+    trajectory is a hump — near zero at young ages, peaking in the preschool years,
+    then receding as words move into speech — rather than the monotone trend of
+    ``U``/``q``. Three Beta anchors give ``r`` at a young, a peak and an old
+    reference age (``z_low < z_mid < z_hi`` on the standardised-age scale); the mean
+    is two logit-linear segments meeting at the peak anchor, **clamped flat beyond
+    the outer anchors** so it does not extrapolate to implausible values. The peak
+    therefore sits at the middle anchor age by construction, and the GP carries
+    smooth departures. Otherwise identical to :func:`trend_and_gp`; ``anchor_idx``
+    (Option D) still centres the GP through zero at that grid row.
+    """
+    p_low = cfg_low.to_pymc(f"p_slope_low{suffix}")
+    p_mid = cfg_mid.to_pymc(f"p_slope_mid{suffix}")
+    p_hi = cfg_hi.to_pymc(f"p_slope_hi{suffix}")
+    slope_up = pm.Deterministic(
+        f"slope_up{suffix}", (logit(p_mid) - logit(p_low)) / (z_mid - z_low)
+    )
+    slope_dn = pm.Deterministic(
+        f"slope_dn{suffix}", (logit(p_hi) - logit(p_mid)) / (z_hi - z_mid)
+    )
+    zc = X_all_z_data[:, 0]
+    mean_tent = pm.math.switch(
+        zc <= z_low,
+        logit(p_low),
+        pm.math.switch(
+            zc <= z_mid,
+            logit(p_low) + slope_up * (zc - z_low),
+            pm.math.switch(
+                zc <= z_hi,
+                logit(p_mid) + slope_dn * (zc - z_mid),
+                logit(p_hi),
+            ),
+        ),
+    )
+    return _gp_from_mean(
+        mean_tent,
+        cfg_ell=cfg_ell,
+        cfg_eta=cfg_eta,
+        suffix=suffix,
+        X_all_z_data=X_all_z_data,
+        grid=grid,
+        store_deterministic=store_deterministic,
+        latent_name=latent_name,
+        anchor_idx=anchor_idx,
+    )
+
+
 def _gp_from_mean(
     mean_trend,
     *,

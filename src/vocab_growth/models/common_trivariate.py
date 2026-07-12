@@ -67,7 +67,7 @@ from vocab_growth.models.definitions import TrivariateModelDefinition
 from vocab_growth.models.gp_utils import (
     GPGrid,
     build_kappa_of_z,
-    intercept_and_gp,
+    tent_and_gp,
     trend_and_gp,
 )
 from vocab_growth.plotting import (
@@ -121,10 +121,13 @@ class TrivariateModelConfiguration(BaseModelConfiguration):
     ell_unit_q_dist: Continuous
     eta_q_dist: Continuous
 
-    # Signed ratio (r) priors — intercept-only mean (no age slope)
-    intercept_sign_dist: Continuous
+    # Signed ratio (r) priors — three-anchor hump (young / peak / old)
+    p_slope_low_sign_dist: Continuous
+    p_slope_mid_sign_dist: Continuous
+    p_slope_hi_sign_dist: Continuous
     ell_unit_sign_dist: Continuous
     eta_sign_dist: Continuous
+    sign_anchor_ages: tuple[float, float, float]
 
     # Kappa priors — understood
     kappa_min_u_dist: Continuous
@@ -370,12 +373,22 @@ def configure_trivariate_priors(
     eta_sign_dist = pz.HalfNormal(sigma=definition.eta_sign_sigma)
     _plot_and_print_dist(context, eta_sign_dist, "eta_sign_dist")
 
-    # Intercept-only signed mean (no age slope): a single weakly-informative
-    # intercept on the logit scale lets the data set the signed level / tail.
-    intercept_sign_dist = pz.Normal(
-        mu=definition.intercept_sign_mu, sigma=definition.intercept_sign_sigma
+    # Three-anchor hump signed mean (young / peak / old): Beta priors on r at three
+    # reference ages, interpolated as a tent meeting at the peak (gp_utils.tent_and_gp).
+    p_slope_low_sign_dist = pz.Beta(
+        alpha=definition.p_slope_low_sign_alpha, beta=definition.p_slope_low_sign_beta
     )
-    _plot_and_print_dist(context, intercept_sign_dist, "intercept_sign_dist")
+    _plot_and_print_dist(context, p_slope_low_sign_dist, "p_slope_low_sign_dist")
+
+    p_slope_mid_sign_dist = pz.Beta(
+        alpha=definition.p_slope_mid_sign_alpha, beta=definition.p_slope_mid_sign_beta
+    )
+    _plot_and_print_dist(context, p_slope_mid_sign_dist, "p_slope_mid_sign_dist")
+
+    p_slope_hi_sign_dist = pz.Beta(
+        alpha=definition.p_slope_hi_sign_alpha, beta=definition.p_slope_hi_sign_beta
+    )
+    _plot_and_print_dist(context, p_slope_hi_sign_dist, "p_slope_hi_sign_dist")
 
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
@@ -433,10 +446,13 @@ def configure_trivariate_priors(
         p_slope_hi_q_dist=p_slope_hi_q_dist,
         ell_unit_q_dist=ell_unit_q_dist,
         eta_q_dist=eta_q_dist,
-        # Signed rate (intercept-only mean)
-        intercept_sign_dist=intercept_sign_dist,
+        # Signed rate (three-anchor hump mean)
+        p_slope_low_sign_dist=p_slope_low_sign_dist,
+        p_slope_mid_sign_dist=p_slope_mid_sign_dist,
+        p_slope_hi_sign_dist=p_slope_hi_sign_dist,
         ell_unit_sign_dist=ell_unit_sign_dist,
         eta_sign_dist=eta_sign_dist,
+        sign_anchor_ages=definition.sign_anchor_ages,
         # Kappa — understood
         kappa_min_u_dist=kappa_min_u_dist,
         a_kappa_u_dist=a_kappa_u_dist,
@@ -631,12 +647,18 @@ def build_model(context: TrivariateContext):
         )
 
         # ---- Signed ratio: g_sign(a) -> r(a) = sigmoid(g_sign(a)) ----
-        # Intercept-only mean (no age slope): structurally prevents a free slope
-        # from extrapolating the signed ratio below the data floor (< ~18 mo),
-        # while a wide intercept prior lets the data set the level. The GP carries
-        # the age-varying (rise-then-fall) shape.
-        g_sign_all = intercept_and_gp(
-            cfg_intercept=config.intercept_sign_dist,
+        # Three-anchor "tent" mean (young / peak / old): r(a) is a developmental
+        # hump, so the mean rises to the peak anchor then declines (clamped flat
+        # outside), giving a hill-shaped prior median rather than the flat median an
+        # intercept-only mean gives. The GP carries smooth departures.
+        sa_young, sa_peak, sa_old = config.sign_anchor_ages
+        g_sign_all = tent_and_gp(
+            cfg_low=config.p_slope_low_sign_dist,
+            cfg_mid=config.p_slope_mid_sign_dist,
+            cfg_hi=config.p_slope_hi_sign_dist,
+            z_low=(sa_young - X_obs_mean) / X_obs_std,
+            z_mid=(sa_peak - X_obs_mean) / X_obs_std,
+            z_hi=(sa_old - X_obs_mean) / X_obs_std,
             cfg_ell=config.ell_unit_sign_dist,
             cfg_eta=config.eta_sign_dist,
             suffix="_sign",

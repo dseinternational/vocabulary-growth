@@ -139,13 +139,17 @@ The understood and spoken-ratio priors follow the baseline DS bivariate structur
 
 ### Signed ratio
 
-The empirical signed fraction of understood words is a **hump** — near zero below ~24 months, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean trend is **intercept-only** (no age slope): this structurally prevents a free slope from extrapolating the ratio below the data floor (< ~18 months), so the level no longer needs a tight prior. A single weakly-informative intercept (`intercept_sign`, logit scale) lets the data set the signed level and old-age tail, while the GP — given a **looser amplitude** (`eta_sign`) and a **shorter lengthscale** than the spoken ratio — carries the rise-then-fall shape.
+The empirical signed fraction of understood words is a **hump** — near zero below ~24 months, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean is therefore a **three-anchor "tent"**: Beta priors on `r` at a young, a peak and an old reference age (`sign_anchor_ages`), joined by two logit-linear segments meeting at the peak anchor and clamped flat outside, so the prior median is itself a hill (peak at the middle anchor age by construction) rather than the flat line an intercept-only mean gives or the spurious young extrapolation a monotone slope gives. The anchor ages/levels come from the independent DS sign literature (peak ~mental age 17 months ≈ chronological ~34 months; Miller/Clibbens, Zampini, Te Kaat-van den Os); the GP now only carries **smooth departures**, so its amplitude (`eta_sign`) reverts toward the standard level.
 
 ![Lengthscale prior `ell_unit_sign_dist`](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
 
 ![Amplitude prior `eta_sign_dist`](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
 
-![Signed-ratio mean intercept prior `intercept_sign_dist` (logit scale, intercept-only mean)](intercept_sign_dist.png){#fig-intercept-sign .lightbox fig-align="left"}
+![Signed-ratio young anchor prior `p_slope_low_sign_dist`](p_slope_low_sign_dist.png){#fig-sign-low .lightbox fig-align="left"}
+
+![Signed-ratio peak anchor prior `p_slope_mid_sign_dist`](p_slope_mid_sign_dist.png){#fig-sign-mid .lightbox fig-align="left"}
+
+![Signed-ratio old anchor prior `p_slope_hi_sign_dist`](p_slope_hi_sign_dist.png){#fig-sign-hi .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- understood
 

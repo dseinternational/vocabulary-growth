@@ -151,13 +151,13 @@ The `q(a)` anchors are the shared, weakly-informative DS-joint family priors, co
 
 ### Signed ratio
 
-The signed mean is intercept-only. A shorter signed GP length-scale and larger signed GP amplitude let the prior express a signing rise and later decline without imposing a monotone signed slope.
+The signed mean is a three-anchor "tent" (young / peak / old reference ages joined by two logit-linear segments meeting at the peak anchor, clamped flat outside), so the prior median is a hill — a signing rise then decline — with the peak at the middle anchor age by construction. The GP (anchored at 54 months) carries smooth departures around it; the signed GP amplitude reverts toward the standard level now that the mean carries the hump.
 
 ![Lengthscale prior `ell_unit_sign_dist`](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
 
 ![Amplitude prior `eta_sign_dist`](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
 
-![`intercept_sign_dist` (signed mean is intercept-only)](intercept_sign_dist.png){#fig-intercept-sign .lightbox fig-align="left"}
+![Signed-ratio young / peak / old anchor priors `p_slope_{low,mid,hi}_sign_dist`](p_slope_mid_sign_dist.png){#fig-sign-anchors .lightbox fig-align="left"}
 
 ### Random-effect scales
 

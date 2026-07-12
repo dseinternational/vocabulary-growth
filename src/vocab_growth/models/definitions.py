@@ -288,20 +288,35 @@ class TrivariateModelDefinition:
     p_slope_hi_q_alpha: float = 2.0
     p_slope_hi_q_beta: float = 1.2
 
-    # -- Signed ratio (r) mean prior (intercept-only) --
-    # The empirical signed/understood ratio is a *hump* (near zero < 24 mo, peak
-    # in the preschool years, receding after), not a monotone trend. The signed
-    # mean trend is INTERCEPT-ONLY (no age slope) — this structurally removes the
-    # original "free slope tilts down and extrapolates to a spurious ~58% signed
-    # at 12 mo" failure mode, so the level no longer needs a tight prior. A single
-    # weakly-informative intercept (logit scale) lets the data set the signed
-    # level and old-age tail; the GP (eta_sign, below) carries the rise-then-fall.
-    intercept_sign_mu: float = math.log(0.15 / 0.85)
-    """Normal mu for the signed-ratio intercept (logit scale, ~0.15)."""
-    intercept_sign_sigma: float = 0.75
-    """Normal sigma for the signed-ratio intercept (logit scale). Wide enough to
-    span a broad signed level once combined with the GP; calibrated against the
-    prior-predictive r(a) band (broad, not piling at 0 or 1)."""
+    # -- Signed ratio (r) mean prior: THREE-ANCHOR HUMP --
+    # r(a) = P(sign | understood) is a developmental HUMP: near zero at young ages
+    # (signing just emerging), peaking in the preschool years, then receding as words
+    # move into speech. It is anchored at THREE reference ages (sign_anchor_ages) —
+    # young / peak / old — with the mean built as two logit-linear segments meeting
+    # at the peak anchor, clamped flat outside (see gp_utils.tent_and_gp). This makes
+    # the prior MEDIAN a hill — unlike the intercept-only mean (flat median, so words
+    # signed = understood x r rose monotonically) and unlike a free monotone slope
+    # (which extrapolated to a spurious ~58% signed at 12 mo). The GP now only models
+    # smooth departures, so eta_sign reverts toward standard (below).
+    #
+    # Anchor ages/levels come from the INDEPENDENT DS sign literature, not the fitted
+    # data: signing peaks ~mental age 17 mo (Miller 1992 via Clibbens: signed = 2x
+    # spoken there, declining by MA ~26 mo) which at a DS DQ ~0.5 is chronological
+    # ~34 mo; the inverted-U shape is confirmed by Zampini (parabolic gesture
+    # trajectory); DS retain signs longer than TD (Te Kaat-van den Os review), so the
+    # old anchor stays modest (not near-zero) and uk_06 has real 60-115 mo signers.
+    # The peak LEVEL is kept broad because the peak AGE is only weakly identifiable.
+    sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
+    """Young / peak / old reference ages (months) for the signed-ratio hump."""
+    p_slope_low_sign_alpha: float = 2.0
+    p_slope_low_sign_beta: float = 20.0
+    """Young anchor r(~15 mo): Beta(2, 20), median ~0.08 (signing just emerging)."""
+    p_slope_mid_sign_alpha: float = 3.0
+    p_slope_mid_sign_beta: float = 4.0
+    """Peak anchor r(~36 mo): Beta(3, 4), median ~0.42, broad 5-95% ~[0.15, 0.72]."""
+    p_slope_hi_sign_alpha: float = 2.0
+    p_slope_hi_sign_beta: float = 16.0
+    """Old anchor r(~96 mo): Beta(2, 16), median ~0.11 (declined, but not to zero)."""
 
     # -- Shared GP / amplitude priors --
     ell_unit_u_alpha: float = 3.0
@@ -317,10 +332,11 @@ class TrivariateModelDefinition:
     # spike is too sparse/overdispersed to pull the population ratio there.)
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
-    eta_sign_sigma: float = 1.0
-    """HalfNormal scale for the signed-ratio GP amplitude. Loosened well above
-    the spoken-ratio level so the GP has the amplitude to bend the (flat-mean)
-    signed ratio into the empirical rise-then-fall hump on the logit scale."""
+    eta_sign_sigma: float = 0.4
+    """HalfNormal scale for the signed-ratio GP amplitude. Reverted to the standard
+    ~0.4 now that the three-anchor mean carries the rise-then-fall hump: the GP only
+    needs to model smooth departures. (It was inflated to ~1.0 only to force a hump
+    out of a flat intercept-only mean; that hack is no longer needed.)"""
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
@@ -387,15 +403,27 @@ class JointModelDefinition:
     p_slope_hi_q_alpha: float = 2.0
     p_slope_hi_q_beta: float = 1.2
 
-    # -- Sign-given-understood (r) mean prior (intercept-only, matching VG14) --
-    # The signed mean is intercept-only (no age slope): a free slope would
-    # extrapolate below the data floor (< ~18 mo). A single weakly-informative
-    # intercept lets the data set the grand-mean level; the study REs carry
-    # between-study level differences and the GP carries the rise-then-fall hump.
-    intercept_sign_mu: float = math.log(0.15 / 0.85)
-    """Normal mu for the signed-ratio intercept (logit scale, ~0.15)."""
-    intercept_sign_sigma: float = 0.75
-    """Normal sigma for the signed-ratio intercept (logit scale)."""
+    # -- Sign-given-understood (r) mean prior: THREE-ANCHOR HUMP (matching VG14) --
+    # r(a) = P(sign | understood) is a developmental hump (near zero young, peaking
+    # in the preschool years, receding as words move into speech), anchored at three
+    # reference ages (sign_anchor_ages) and built as a tent meeting at the peak
+    # anchor (gp_utils.tent_and_gp) so the prior median is a hill. Anchor ages/levels
+    # come from the independent DS sign literature (peak ~MA 17 mo ~= chronological
+    # ~34 mo, Miller/Clibbens; inverted-U shape, Zampini; DS retain signs longer,
+    # Te Kaat) — see the VG14 (TrivariateModelDefinition) comment for the full
+    # rationale. Study REs carry between-study level; the GP (anchored at 54 mo,
+    # below) carries smooth departures.
+    sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
+    """Young / peak / old reference ages (months) for the signed-ratio hump."""
+    p_slope_low_sign_alpha: float = 2.0
+    p_slope_low_sign_beta: float = 20.0
+    """Young anchor r(~15 mo): Beta(2, 20), median ~0.08 (signing just emerging)."""
+    p_slope_mid_sign_alpha: float = 3.0
+    p_slope_mid_sign_beta: float = 4.0
+    """Peak anchor r(~36 mo): Beta(3, 4), median ~0.42, broad 5-95% ~[0.15, 0.72]."""
+    p_slope_hi_sign_alpha: float = 2.0
+    p_slope_hi_sign_beta: float = 16.0
+    """Old anchor r(~96 mo): Beta(2, 16), median ~0.11 (declined, but not to zero)."""
 
     # -- Shared GP / amplitude priors (sign GP looser + shorter, per VG14) --
     ell_unit_u_alpha: float = 3.0
@@ -406,7 +434,7 @@ class JointModelDefinition:
     eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
-    eta_sign_sigma: float = 1.0
+    eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
@@ -946,11 +974,11 @@ VG15 = JointModelDefinition(
     # weakly-informative (q_low ~ Beta(2,12) at the independent TD q ~= 0.12
     # centre; q_high ~ Beta(3,2) broad, no independent DS source), replacing the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). The u anchors are left
-    # unchanged, matching VG10. The signed mean is intercept-only, so there is no
-    # signed slope anchor to tighten; intercept_sign_sigma is left at 0.75 — it is
-    # already data-informed (posterior sd ~0.48 < prior in #54's freeing fix), and
-    # Option D (below) removes the GP<->intercept ridge without re-tightening the
-    # freed level.
+    # unchanged, matching VG10. The signed mean is a three-anchor hump (tent),
+    # inherited from the JointModelDefinition dataclass defaults (young/peak/old
+    # sign anchors + GP), so there is no monotone signed slope to tighten; the
+    # anchors set the level and the GP carries smooth departures. Option D (below)
+    # removes the GP<->intercept ridge.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
     p_slope_hi_q_alpha=3.0,

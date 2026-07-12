@@ -86,7 +86,7 @@ from vocab_growth.models.definitions import JointModelDefinition
 from vocab_growth.models.gp_utils import (
     GPGrid,
     build_kappa_of_z,
-    intercept_and_gp,
+    tent_and_gp,
     trend_and_gp,
 )
 from vocab_growth.plotting import (
@@ -138,8 +138,10 @@ class JointModelConfiguration(BaseModelConfiguration):
     ell_unit_q_dist: Continuous
     eta_q_dist: Continuous
 
-    # Sign-given-understood ratio (r) priors — intercept-only mean (no age slope)
-    intercept_sign_dist: Continuous
+    # Sign-given-understood ratio (r) priors — three-anchor hump (young/peak/old)
+    p_slope_low_sign_dist: Continuous
+    p_slope_mid_sign_dist: Continuous
+    p_slope_hi_sign_dist: Continuous
     ell_unit_sign_dist: Continuous
     eta_sign_dist: Continuous
 
@@ -481,12 +483,11 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
     heading("Sign-given-understood (r) priors", style="bold cyan")
     ell_unit_sign_dist = beta(definition.ell_unit_sign_alpha, definition.ell_unit_sign_beta, "ell_unit_sign_dist")
     eta_sign_dist = halfnormal(definition.eta_sign_sigma, "eta_sign_dist")
-    # Intercept-only signed mean (no age slope): one weakly-informative intercept
-    # on the logit scale; the study REs carry between-study level, the GP the hump.
-    intercept_sign_dist = pz.Normal(
-        mu=definition.intercept_sign_mu, sigma=definition.intercept_sign_sigma
-    )
-    _plot_and_print_dist(context, intercept_sign_dist, "intercept_sign_dist")
+    # Three-anchor hump signed mean (young/peak/old): Beta priors on r at three
+    # reference ages, interpolated as a tent meeting at the peak (gp_utils.tent_and_gp).
+    p_slope_low_sign_dist = beta(definition.p_slope_low_sign_alpha, definition.p_slope_low_sign_beta, "p_slope_low_sign_dist")
+    p_slope_mid_sign_dist = beta(definition.p_slope_mid_sign_alpha, definition.p_slope_mid_sign_beta, "p_slope_mid_sign_dist")
+    p_slope_hi_sign_dist = beta(definition.p_slope_hi_sign_alpha, definition.p_slope_hi_sign_beta, "p_slope_hi_sign_dist")
 
     def kappa_block(kp, suffix):
         heading(f"Kappa priors — {suffix}", style="bold cyan")
@@ -521,7 +522,9 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         p_slope_hi_q_dist=p_slope_hi_q_dist,
         ell_unit_q_dist=ell_unit_q_dist,
         eta_q_dist=eta_q_dist,
-        intercept_sign_dist=intercept_sign_dist,
+        p_slope_low_sign_dist=p_slope_low_sign_dist,
+        p_slope_mid_sign_dist=p_slope_mid_sign_dist,
+        p_slope_hi_sign_dist=p_slope_hi_sign_dist,
         ell_unit_sign_dist=ell_unit_sign_dist,
         eta_sign_dist=eta_sign_dist,
         kappa_min_u_dist=kappa_min_u_dist,
@@ -790,10 +793,18 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_q else None,
         )
-        # Signed marginal: intercept-only mean (no age slope) + GP hump; the
-        # study random intercept delta_sign is added at obs level below.
-        g_all = intercept_and_gp(
-            cfg_intercept=config.intercept_sign_dist,
+        # Signed marginal: three-anchor "tent" hump mean (young/peak/old) + GP; the
+        # study random intercept delta_sign is added at obs level below. The GP is
+        # anchored at 54 mo (anchor_g_sign) so the tent supplies the hump and the GP
+        # only deviates around it.
+        sa_young, sa_peak, sa_old = definition.sign_anchor_ages
+        g_all = tent_and_gp(
+            cfg_low=config.p_slope_low_sign_dist,
+            cfg_mid=config.p_slope_mid_sign_dist,
+            cfg_hi=config.p_slope_hi_sign_dist,
+            z_low=(sa_young - X_mean) / X_std,
+            z_mid=(sa_peak - X_mean) / X_std,
+            z_hi=(sa_old - X_mean) / X_std,
             cfg_ell=config.ell_unit_sign_dist,
             cfg_eta=config.eta_sign_dist,
             suffix="_sign",
