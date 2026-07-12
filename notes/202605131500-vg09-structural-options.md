@@ -25,6 +25,8 @@ This is why the flagged parameters cluster on exactly the components that overla
 
 ## Options
 
+> **Correction (2026-07-12, Claude Code/Opus 4.8, re [#155](https://github.com/dseinternational/vocabulary-growth/pull/155)):** the specific values proposed below were superseded. The VG07-posterior-derived Option A anchors (`Beta(3, 22)` / `Beta(20, 4)`) were adopted in VG10 but later judged prior-data double-dipping and **broadened** across the DS-joint family to the weakly-informative, non-double-dipping `Beta(2, 12)` (low) / `Beta(3, 2)` (high). The Option B `eta_q` tightening was adopted at `HalfNormal(0.20)` (not the `HalfNormal(0.15)` floated below) to tame the `q`-GP ridge that broadening the anchors surfaced. Option D (the per-draw GP anchor) remains VG10's structural fix. The options below are preserved as the original proposal record; the current priors live in [`docs/models/PRIORS.md`](../docs/models/PRIORS.md) and `src/vocab_growth/models/definitions.py`.
+
 ### Option A — Tighten the anchor-Beta priors (smallest change)
 
 Current priors are essentially diffuse:

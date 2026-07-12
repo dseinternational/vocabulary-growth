@@ -59,6 +59,8 @@ VG02 ~5 m, VG05 ~17 m, VG07 ~20 m, VG08 ~18 m, VG09 ~15 m, VG10 ~16 m, VG14
 | VG14     | trivariate (+signed)           |     1.001 |             0 |          6,628 |           0 |
 | VG15     | joint four-cell sign/speech    |     1.005 |             0 |            911 |           0 |
 
+> **Correction (2026-07-12, Claude Code/Opus 4.8, re [#155](https://github.com/dseinternational/vocabulary-growth/pull/155)):** the VG10 row's "+ tighter q anchors" label reflects the pre-#155 configuration fitted for this 2026-06-27 snapshot. #155 (2026-07-09) later broadened the DS-joint `q` anchors to the weakly-informative `Beta(2,12)` / `Beta(3,2)` and tightened `eta_q` to `HalfNormal(0.20)`; VG10 now differs from VG09 only by the GP anchor. The convergence numbers in this table are from the earlier rep fit and were not re-run here.
+
 **Zero divergences across all nine models.** Convergence is clean everywhere
 except **VG09**, which shows mild non-convergence (max R̂ 1.021 on 4 parameters,
 min ESS ~420) — consistent with its known sampler difficulty as the model
