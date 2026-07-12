@@ -106,7 +106,8 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
             model_name="TEST_VG15_DATA",
             config_name="test",
             output_root_dir=str(tmp_path),
-            hdi=0.90,
+            ci_prob=0.90,
+            interval_kind="hdi",
         ),
         sampling=sampling.get_sampling_configuration("test"),
     )

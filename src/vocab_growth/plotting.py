@@ -284,7 +284,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     nq = len(X_query)
     axis_max = n_trials if count_axis_max is None else count_axis_max
 
-    # ETI quantile levels matching context.reporting.hdi mass (e.g., 0.90 -> [0.05, 0.95])
+    # ETI quantile levels matching context.reporting.ci_prob mass (e.g., 0.90 -> [0.05, 0.95])
     if eti_prob is not None:
         q_lo = (1.0 - eti_prob) / 2.0
         q_hi = 1.0 - q_lo

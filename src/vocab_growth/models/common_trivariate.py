@@ -1331,7 +1331,7 @@ def posterior_summary(context: TrivariateContext):
     """Compute and store the posterior summary tables at query ages."""
     samples = context.model_samples
     n_trials = context.model_data.n_trials
-    hdi_prob = context.reporting.hdi
+    hdi_prob = context.reporting.ci_prob
 
     # Understood summary
     summary_u = posterior_analysis.posterior_summary_table(
@@ -1953,7 +1953,7 @@ def _run_trivariate_plots(context: TrivariateContext):
     has_s = analysis_df["spoken"].notna()
     has_sign = analysis_df["signed"].notna()
     n_trials = context.model_data.n_trials
-    hdi_prob = context.reporting.hdi
+    hdi_prob = context.reporting.ci_prob
     output_dir = context.reporting.output_dir
 
     # ---- Joint trajectory (understood, spoken, signed) ----
