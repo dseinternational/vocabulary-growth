@@ -20,6 +20,8 @@ Issue #59 asks for two things on the joint sign/speech engine
    the reference age (54 mo), applied to all three GPs, so the GP passes through
    zero there for every draw and no longer competes with the intercept/RE level.
 
+> **Correction (2026-07-12, Claude Code/Opus 4.8, re [#155](https://github.com/dseinternational/vocabulary-growth/pull/155)):** item 2(A) is superseded. The `Beta(3,22)` / `Beta(20,4)` $q$ anchors described here (the VG10 values at the time of this note) were later judged prior-data double-dipping and **broadened** across the DS-joint family (VG05, VG07–VG10, VG14–VG16) to the weakly-informative `Beta(2,12)` (low) / `Beta(3,2)` (high). The GP-vs-linear-trend ridge that broadening surfaced is now curbed by tightening `eta_q` to `HalfNormal(0.20)`; item 2(D) (the GP anchor) is unchanged. Current priors: [`docs/models/PRIORS.md`](../docs/models/PRIORS.md) and `src/vocab_growth/models/definitions.py`.
+
 All changes are gated by flags on `JointModelDefinition` (defaults off, so the
 engine reduces exactly to the merged VG15); `VG15` turns them on. A `holdout`
 column is honoured (K-fold LOSO ready); absent it, behaviour is unchanged.

@@ -178,7 +178,7 @@ class BivariateModelDefinition:
     eta_u_sigma: float = 0.4
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.4
+    eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
@@ -324,7 +324,7 @@ class TrivariateModelDefinition:
     eta_u_sigma: float = 0.4
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.4
+    eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
     # Signed GP favours a shorter lengthscale (~9 mo) than U/q so the signing
     # peak can stand apart from the post-60 mo collapse to near-zero, rather than
     # being smoothed into a monotone decline. (Shorter still only adds wiggle
@@ -431,7 +431,7 @@ class JointModelDefinition:
     eta_u_sigma: float = 0.6  # aligned with the recalibrated VG02 understood trajectory
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.4
+    eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
     eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
@@ -645,12 +645,14 @@ VG05 = BivariateModelDefinition(
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=1.5,
     eta_u_sigma=0.6,
-    # q anchors: adopt VG10/VG15's data-informed tight priors (the loose
-    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09).
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # q anchors (weakly-informative, non-double-dipping): broadened from the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
+    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
+    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
 )
 
 VG07 = BivariateModelDefinition(
@@ -673,14 +675,14 @@ VG07 = BivariateModelDefinition(
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=1.5,
     eta_u_sigma=0.6,
-    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
-    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
-    # compounding with U to overshoot spoken; the tight priors track the
-    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # q anchors (weakly-informative, non-double-dipping): broadened from the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
+    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
+    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
 )
@@ -705,14 +707,14 @@ VG08 = BivariateModelDefinition(
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=1.5,
     eta_u_sigma=0.6,
-    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
-    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
-    # compounding with U to overshoot spoken; the tight priors track the
-    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # q anchors (weakly-informative, non-double-dipping): broadened from the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
+    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
+    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -739,14 +741,14 @@ VG09 = BivariateModelDefinition(
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=1.5,
     eta_u_sigma=0.6,
-    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
-    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
-    # compounding with U to overshoot spoken; the tight priors track the
-    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # q anchors (weakly-informative, non-double-dipping): broadened from the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
+    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
+    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -759,8 +761,8 @@ VG10 = BivariateModelDefinition(
     model_id="VG10",
     config_name="age-understood-spoken-ds-re-subj-uq-anchored",
     banner=(
-        "Fitting Model VG10: VG09 + tighter q anchor priors + GP anchored at"
-        " reference age (A -> U, A -> S, U -> S) - Down syndrome"
+        "Fitting Model VG10: VG09 + GP anchored at reference age"
+        " (A -> U, A -> S, U -> S) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
     n_trials=810,
@@ -775,11 +777,14 @@ VG10 = BivariateModelDefinition(
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=1.5,
     eta_u_sigma=0.6,
-    # Tighter q-anchor priors (Option A) — informed by VG07 posterior
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # q anchors (weakly-informative, non-double-dipping): broadened from the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
+    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
+    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -935,12 +940,14 @@ VG14 = TrivariateModelDefinition(
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=1.5,
     eta_u_sigma=0.6,
-    # Spoken ratio q: adopt VG10/VG15's data-informed tight priors (the loose
-    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09).
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # Spoken ratio q (weakly-informative, non-double-dipping): broadened from the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
+    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
+    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
     # Signed ratio r: intercept-only mean (data-set level) + loosened GP
     #   (eta_sign=1.0) carrying the rise-then-fall hump (see dataclass).
     # uk_06 signed included by default (include_uk06=True); kappa_sign default.
@@ -963,17 +970,19 @@ VG15 = JointModelDefinition(
     # study random intercepts on f_U/g/h (tau_*=0.5).
     #
     # Issue #59 — subject random intercepts throughout + VG10 stabilisation:
-    # Option A (ported from VG10): tighter q anchor priors, informed by the VG07
-    # posterior (mean ~0.12 at 24 mo, ~0.83 at 84 mo). The u anchors are left
-    # unchanged, matching VG10. The signed mean is intercept-only, so there is no
-    # signed slope anchor to tighten; the signed intercept is recentred off the floor
-    # (mu = logit 0.30, sigma 0.60) with eta_sign lightly reduced to 0.85 (keeps
-    # heavy-signer coverage) — reporting-run prior review; see the
-    # JointModelDefinition dataclass comment. Option D (below) removes the GP<->intercept ridge.
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # Option A (ported from VG10), now broadened: the q anchors are
+    # weakly-informative (q_low ~ Beta(2,12) at the independent TD q ~= 0.12
+    # centre; q_high ~ Beta(3,2) broad, no independent DS source), replacing the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). The u anchors are left
+    # unchanged, matching VG10. The signed mean is a three-anchor hump (tent),
+    # inherited from the JointModelDefinition dataclass defaults (young/peak/old
+    # sign anchors + GP), so there is no monotone signed slope to tighten; the
+    # anchors set the level and the GP carries smooth departures. Option D (below)
+    # removes the GP<->intercept ridge.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
     # Subject random intercepts on all three trajectories. Signed data has more
     # repeated-subject structure than first feared (substantial repeats across
     # uk_01/02/04/05), so the sign-subject RE is strongly data-identified — its
@@ -1023,14 +1032,14 @@ VG16 = BivariateModelDefinition(
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=1.5,
     eta_u_sigma=0.6,
-    # q anchors: adopt VG10/VG15's data-informed tight priors. The loose
-    # bivariate defaults centred q ~0.4 at 24 mo against an empirical ~0.09,
-    # compounding with U to overshoot spoken; the tight priors track the
-    # empirical q (~0.09 at 24 mo, ~0.83 by 84 mo).
-    p_slope_low_q_alpha=3.0,
-    p_slope_low_q_beta=22.0,
-    p_slope_hi_q_alpha=20.0,
-    p_slope_hi_q_beta=4.0,
+    # q anchors (weakly-informative, non-double-dipping): broadened from the
+    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
+    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
+    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    p_slope_low_q_alpha=2.0,
+    p_slope_low_q_beta=12.0,
+    p_slope_hi_q_alpha=3.0,
+    p_slope_hi_q_beta=2.0,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,

@@ -177,12 +177,16 @@ templates for rendered model outputs.
 
 ### VG10: DS joint with VG09 hierarchy plus stabilisation
 
-- Model description is good. Add a clear "what changed from VG09" block:
-  posterior-informed `q` anchors and per-draw GP anchors at 54 months.
-- Priors need stronger labelling: the tightened `q` priors are informed by VG07
-  posterior evidence and are not independent external priors.
-- Prior predictive checks should demonstrate that tightened `q` priors still
-  allow plausible spoken trajectories and gaps over 12-90 months.
+- Model description is good. Add a clear "what changed from VG09" block: the
+  per-draw GP anchor at 54 months (the `q` anchors now match VG09).
+- Priors need accurate labelling: the `q` anchors are the shared
+  weakly-informative DS-joint priors, not posterior-informed regularisation.
+  #155 broadened the earlier VG07-posterior-derived anchors to remove the
+  prior-data double-dipping; stabilisation now comes from the tightened GP
+  amplitude `eta_q` and the GP anchor.
+- Prior predictive checks should demonstrate that the weakly-informative `q`
+  anchors with the tightened `eta_q` still allow plausible spoken trajectories
+  and gaps over 12-90 months.
 - Diagnostics should explicitly report whether the VG09 geometry issue is
   resolved: R-hat/ESS for `q` hyperparameters, random-effect scales, and pair
   plots around the anchored GP components.

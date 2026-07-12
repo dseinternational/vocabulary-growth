@@ -54,7 +54,7 @@ The three axes that distinguish the models:
 | [VG07](vg07/index.qmd) | DS         | Understood + spoken (joint)  | VG05 + study random intercepts.                                                                                                                                                                                           |
 | [VG08](vg08/index.qmd) | DS         | Understood + spoken (joint)  | VG07 + subject random intercepts on understood.                                                                                                                                                                           |
 | [VG09](vg09/index.qmd) | DS         | Understood + spoken (joint)  | VG08 + subject random intercepts on the production ratio `q`.                                                                                                                                                             |
-| [VG10](vg10/index.qmd) | DS         | Understood + spoken (joint)  | VG09 + tighter `q`-anchor priors + per-draw GP anchor at 54 months (stabilisation).                                                                                                                                       |
+| [VG10](vg10/index.qmd) | DS         | Understood + spoken (joint)  | VG09 + per-draw GP anchor at 54 months (stabilisation); `q` anchors match VG09.                                                                                                                                           |
 | [VG11](vg11/index.qmd) | TD         | Spoken                       | VG03 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).                                                                                                            |
 | [VG12](vg12/index.qmd) | TD         | Understood                   | VG04 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).                                                                                                            |
 | [VG13](vg13/index.qmd) | TD         | Understood + spoken (joint)  | Young TD joint model, ages 8–18 months only; study random intercepts + GP anchor at 13 months.                                                                                                                            |
@@ -133,10 +133,13 @@ model:
 - **VG08** — adds **subject random intercepts on understood**.
 - **VG09** — extends subject random intercepts to the **production ratio `q`** as
   well.
-- **VG10** — the same structure as VG09, plus **tighter `q`-anchor priors**
-  (informed by the VG07 posterior) and a **per-draw GP anchor at 54 months**.
-  These changes were introduced to resolve sampling diagnostics on the
-  `q`-trajectory hyperparameters by removing the trend/GP/intercept redundancy.
+- **VG10** — the same structure as VG09, plus a **per-draw GP anchor at 54
+  months**, introduced to resolve sampling diagnostics on the `q`-trajectory
+  hyperparameters by removing the trend/GP/intercept redundancy. (VG10 was
+  originally also given tighter, VG07-posterior-informed `q` anchors; #155
+  broadened those back to the shared weakly-informative DS-joint values to remove
+  the prior-data double-dipping, so the `q` anchors now match VG09 and the GP
+  anchor is the only structural difference.)
 
 ### Joint understood + spoken, typically developing (VG13; VG06 retired)
 
@@ -169,6 +172,7 @@ qualifying observations can contribute.
   **within-understood sign–speech association** (`psi`, a scalar Plackett odds
   ratio identified from the four-cell sign/speak cross-tabulation in the `uk_02`
   dataset). It adds **study and subject random intercepts on all three
-  trajectories** and carries VG10's stabilisation (tighter `q` anchors + GP
-  anchoring at 54 months), yielding a **data-identified** total expressive
-  vocabulary rather than VG14's independence-based bound.
+  trajectories** and carries VG10's stabilisation (per-draw GP anchor at 54
+  months with the tightened `q`-GP amplitude `eta_q`), yielding a
+  **data-identified** total expressive vocabulary rather than VG14's
+  independence-based bound.
