@@ -45,7 +45,8 @@ def vg07_model(tmp_path, monkeypatch):
             model_name=VG07.model_id,
             config_name=VG07.config_name,
             output_root_dir=str(tmp_path),
-            hdi=0.90,
+            ci_prob=0.90,
+            interval_kind="hdi",
         ),
         sampling=sampling.get_sampling_configuration("dev"),
     )

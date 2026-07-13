@@ -58,7 +58,8 @@ def _build(model_id, tmp_path, monkeypatch):
             model_name=d.model_id,
             config_name=d.config_name,
             output_root_dir=str(tmp_path),
-            hdi=0.90,
+            ci_prob=0.90,
+            interval_kind="hdi",
         ),
         sampling=sampling.get_sampling_configuration("dev"),
     )

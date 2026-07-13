@@ -102,7 +102,8 @@ def _prepare_context(tmp_path, monkeypatch, definition):
             model_name="TEST_VG15_NZ01",
             config_name="test",
             output_root_dir=str(tmp_path),
-            hdi=0.90,
+            ci_prob=0.90,
+            interval_kind="hdi",
         ),
         sampling=sampling.get_sampling_configuration("test"),
     )

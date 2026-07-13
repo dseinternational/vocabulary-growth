@@ -94,7 +94,8 @@ def _build_holdout_model(tmp_path, monkeypatch, definition=VG07):
             model_name="TEST_VG07_HOLDOUT",
             config_name="test",
             output_root_dir=str(tmp_path),
-            hdi=0.90,
+            ci_prob=0.90,
+            interval_kind="hdi",
         ),
         sampling=sampling.get_sampling_configuration("test"),
     )
