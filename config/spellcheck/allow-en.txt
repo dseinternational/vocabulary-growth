@@ -100,3 +100,9 @@ Wordbank
 xarray
 Zampini
 zygosity
+datatree
+Duffen
+hightune
+resumable
+rhat
+vars

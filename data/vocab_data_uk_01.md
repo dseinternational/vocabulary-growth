@@ -105,6 +105,53 @@ This data was collected during the 1990s through to 2000.
 
 <!-- spellchecker: enable -->
 
+## Measurement and column semantics
+
+> [!NOTE]
+> This section was drafted by an LLM-based AI tool (Claude Code/Opus 4.8), from a
+> review of the uk_01 study write-up and the data (2026-07-13).
+
+uk_01 is a Down syndrome study (~218 children, ages ~1–9 y, Sarah Duffen Centre,
+Portsmouth) using the MacArthur-Bates CDI — Words & Gestures (396-word checklist) and
+Words & Sentences (689 words, including the 396); the two were combined for the vocabulary
+analysis. The per-item columns carry a `c` / `v` / `s` suffix per semantic category:
+**c = comprehension** (understands), **v = vocalised** (says), **s = signed**. Signing
+was recorded as a **per-word add-on question** ("indicate if the child _signs_ the
+word"), and — per the write-up — was added to **only some** questionnaires.
+
+Summary columns (verified against the category counts):
+
+| Column       | Meaning in uk_01                                                        |
+| ------------ | ----------------------------------------------------------------------- |
+| `understood` | words understood (comprehension)                                        |
+| `spoken`     | **vocalised** words (words the child says) = sum of the `v` categories  |
+| `signed`     | **signed-only** words (signed but not vocalised) — see note below       |
+| `produced`   | **total expressive union** = `spoken + signed` (each word once)         |
+
+### `produced` is a de-duplicated union — NOT a double-count
+
+The study reports total production as **"vocalised and signed-only words"** (Table 9,
+"Total Population (Vocalised)" vs **"Signers (Vocalised + Signed)"**) — i.e. spoken words
+plus words signed-but-not-spoken, each word counted once. In the data `produced` (a
+source column) equals `spoken + signed` for every row, which matches that union **iff
+`signed` is the signed-only count** — so uk_01's `signed` is read as signed-only. A word
+both said and signed is counted once (in `spoken`), so `produced` does **not**
+double-count. Caveat: word-level say/sign overlap is not in this aggregated file (only
+category counts), so the de-duplication is taken from the study's definition, not
+re-derived here.
+
+### ⚠️ `signed` is defined differently here than in uk_02 / nz_01
+
+uk_01's `signed` = **signed-only** (excludes words also spoken). In `uk_02` and `nz_01`,
+`signed` = **total signed**, including words also spoken (verified: uk_02
+`signed == signed_only + signed_spoken`; nz_01 `signed == signs-only + both`). This is
+immaterial for `produced` (all three yield the correct union) but **does** bias the
+signing models VG14/VG15, whose signed ratio `r(a) = P(sign | understood)` treats
+`signed` as total sign use — uk_01's `r` is understated relative to uk_02/nz_01.
+Harmonising `signed` across studies (or deriving uk_01's total-signed from the original
+word-level forms) is needed before cross-study signed-ratio comparisons. See
+`notes/202607121753-reporting-config-fit-run-and-findings.md`.
+
 ## License
 
 This data is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) — see `LICENSE` for details.
