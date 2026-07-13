@@ -60,22 +60,27 @@ memory-heavy. So:
 - **TD models** (`vg03 vg04 vg13 vg11 vg12`): **strictly one at a time** — the
   full-data TD fits can OOM if stacked.
 
-### Config choice for the full-data TD models (`rep-lite` is usually enough)
+### Config choice for the full-data TD models (`rep-lite` is validated for these)
 
 The full-data TD fits dominate wall time (`vg11`: 16,235 obs, ~9 h at `rep`; `vg12`:
 ~6,000 obs). At those sample sizes the posterior is **likelihood-dominated** and ESS
 accumulates fast — `vg11`'s `rep` fit reached **min ESS ≈ 9,850, ~25× the 400 target**,
-so raw draws are nowhere near the binding constraint. **Consider fitting these large
-models at `--config rep-lite`** (4 chains / 4000 tune / 4000 draws, same
-`target_accept = 0.95`): it keeps reporting-grade rigour (ESS still clears 400 with wide
-margin), should give materially identical estimates, and cuts ~⅓ off the wall time.
+so raw draws are nowhere near the binding constraint. **Fit these large models at
+`--config rep-lite`** (4 chains / 4000 tune / 4000 draws, same `target_accept = 0.95`):
+it keeps reporting-grade rigour (ESS still clears 400 with wide margin), gives materially
+identical estimates, and cuts ~⅓ off the wall time.
+
+**Validated (2026-07-13, vg11).** Fitting vg11 both ways confirmed it: expected-word
+trajectories agreed to **max 0.27 words (≤ 0.11%)** across the 9–30 mo grid, HDI widths
+were essentially unchanged (ratio 0.99), `rep-lite` min ESS was 4,461 (~11× target), and
+wall time fell from **9 h 17 m** (`rep`) to **5 h 59 m** (`rep-lite`), a ~35 % saving.
+`rep-lite` even cleared the strict 0-divergence gate that `rep` missed by one (favourable
+sampling luck, not a guarantee).
 
 Caveats: `rep-lite` keeps `target_accept`, so it does **not** trade away divergence
 control — but it has fewer tuning steps, so it won't _fix_ a divergence (and could nudge
 the count up slightly). It is a wall-time optimisation, not a convergence fix. And the
 small DS models are fast at `rep` anyway, so this only pays off on the big-data models.
-**Validate once** before adopting as standard: fit one large model both ways and confirm
-the headline trajectories/contrasts agree within MC error.
 
 > [!IMPORTANT]
 > Concurrent fits require **read-only DuckDB connections**

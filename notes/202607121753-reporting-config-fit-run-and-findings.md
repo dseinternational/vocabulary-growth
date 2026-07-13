@@ -172,7 +172,10 @@ VG18 (total expressive `produced` by sign-group) — full-data OR 1.65 was an ar
 heterogeneous `produced` definition; the clean de-dup-union studies (uk_01/uk_02/nz_01)
 give signer-vs-non-signer **OR 0.93, null**. uk_01 `produced` confirmed a de-dup union
 (`signed` = signed-only); cross-study `signed`-definition inconsistency flagged for
-VG14/VG15 (task). vg11 `rep-lite` vs `rep` validation queued.
+VG14/VG15 (task). vg11 `rep-lite` vs `rep` validation **done (2026-07-13): validated** —
+trajectories agree to ≤ 0.27 words (≤ 0.11%) across 9–30 mo, HDI widths unchanged (ratio
+0.99), `rep-lite` min ESS 4,461 (0 divergences), wall time 5 h 59 m vs 9 h 17 m (~35%
+saving). Runbook now recommends `rep-lite` for the big-data TD models.
 
 ## Follow-ups
 
