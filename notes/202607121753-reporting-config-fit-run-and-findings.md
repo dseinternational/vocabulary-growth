@@ -143,7 +143,7 @@ Convergence of the models of record (true, unrounded diagnostics):
 | vg08  | DS joint + subj RE           | 1.00973   | 704     | 0   | PASS (borderline)  | rep             |
 | vg09  | DS joint + q RE              | 1.00643   | 1169    | 0   | PASS               | rep-hightune    |
 | vg10  | DS anchored joint            | 1.00563   | 1630    | 0   | PASS               | rep-hightune    |
-| vg11  | TD spoken (full)             | 1.00041   | 9851    | 1   | **REVIEW (1 div)** | rep             |
+| vg11  | TD spoken (full)             | 1.00041   | 9851    | 1   | **KEEP (1 div, accepted)** | rep    |
 | vg12  | TD understood (full)         | 1.00093   | 10619   | 0   | PASS               | rep             |
 | vg13  | TD joint (young)             | 1.00225   | 2308    | 0   | PASS               | rep-hightune (ta 0.99) |
 | vg14  | DS + signing                 | 1.00262   | 3698    | 0   | PASS               | rep             |
@@ -152,7 +152,10 @@ Convergence of the models of record (true, unrounded diagnostics):
 
 **14 / 15 PASS.** Only **vg11** fails the strict 0-divergence gate — by **one**
 divergence, with R-hat 1.00041 / ESS 9851 otherwise excellent; not auto-refit (~10 h for
-1 div). **User decision pending:** accept with caveat vs refit at higher target_accept.
+1 div). **Decision (2026-07-13): KEEP** — accepted with caveat. A single divergence
+against 16,000 post-warmup draws, with R-hat and ESS far inside the gates, does not
+materially threaten the posterior; the ~10 h cost of a higher-`target_accept` refit is
+not warranted. This `rep` fit is the model of record.
 Five models needed `rep-hightune` refits: vg09/vg10/vg15/vg16 (understood-GP R-hat ridge),
 vg13 (27→0 divergences at target_accept 0.99). Originals preserved under `preconv-backup/`.
 

@@ -116,7 +116,8 @@ report).
 - All counts use the common **810-word** scale, separately **validated** as an
   appropriate denominator (report Methods).
 - Convergence: 14 of 15 models pass all diagnostic gates; VG11 has a single divergence
-  (otherwise excellent) pending a keep-or-refit decision.
+  (otherwise excellent — R-hat 1.0004, ESS ~9,850), reviewed and **accepted** as the
+  model of record.
 
 ## Bottom line
 
