@@ -64,17 +64,17 @@ Recomputing true (unrounded) R-hat over the posterior revealed that the rounded
 gate had **falsely passed** several DS joint/hierarchical models. All failures are
 the **understood-trajectory GP block** (`g_u` / `g_unit_u` / `g_unit_u_hsgp_coeffs`
 / `slope_u` / `p_slope_low_u`) — the trend/GP/intercept redundancy the VG10 GP
-anchor addresses for the *q*-GP, here on the *understood* GP.
+anchor addresses for the _q_-GP, here on the _understood_ GP.
 
-| Model | gate R-hat (rounded) | true R-hat (`rep`) | true min ESS | verdict |
-| ----- | -------------------- | ------------------ | ------------ | ------- |
-| vg01  | 1.0 | 1.00120 | 5856 | PASS (genuine) |
-| vg08  | 1.0 | 1.00973 | 704  | PASS (borderline) |
-| vg14  | 1.0 | 1.00262 | 3698 | PASS (genuine) |
-| vg09  | 1.0 | **1.01385** | 417 | FALSE PASS → refit |
-| vg15  | 1.0 | **1.01072** | 600 | FALSE PASS → refit |
-| vg16  | 1.0 | **1.02417** | 379 | FALSE PASS (R-hat + ESS) → refit |
-| vg10  | 1.0 (native) | **1.01131** | 640 | FAIL → refit |
+| Model | gate R-hat (rounded) | true R-hat (`rep`) | true min ESS | verdict                          |
+| ----- | -------------------- | ------------------ | ------------ | -------------------------------- |
+| vg01  | 1.0                  | 1.00120            | 5856         | PASS (genuine)                   |
+| vg08  | 1.0                  | 1.00973            | 704          | PASS (borderline)                |
+| vg14  | 1.0                  | 1.00262            | 3698         | PASS (genuine)                   |
+| vg09  | 1.0                  | **1.01385**        | 417          | FALSE PASS → refit               |
+| vg15  | 1.0                  | **1.01072**        | 600          | FALSE PASS → refit               |
+| vg16  | 1.0                  | **1.02417**        | 379          | FALSE PASS (R-hat + ESS) → refit |
+| vg10  | 1.0 (native)         | **1.01131**        | 640          | FAIL → refit                     |
 
 ### Remediation — `rep-hightune` refits (user-requested)
 
@@ -84,12 +84,12 @@ sampling config (`refit_hightune.py`, no source edits). Non-converged originals
 preserved under `/scratch/vg-output/preconv-backup/`; converged refits become the
 models of record.
 
-| Model | `rep` true R-hat | `rep-hightune` R-hat | result |
-| ----- | ---------------- | -------------------- | ------ |
-| vg09  | 1.01385 | **1.00643** | CONVERGED |
-| vg16  | 1.02417 | **1.00889** | CONVERGED |
-| vg15  | 1.01072 | _(refit sampling)_ | pending |
-| vg10  | 1.01131 | _(refit sampling)_ | pending |
+| Model | `rep` true R-hat | `rep-hightune` R-hat | result    |
+| ----- | ---------------- | -------------------- | --------- |
+| vg09  | 1.01385          | **1.00643**          | CONVERGED |
+| vg16  | 1.02417          | **1.00889**          | CONVERGED |
+| vg15  | 1.01072          | _(refit sampling)_   | pending   |
+| vg10  | 1.01131          | _(refit sampling)_   | pending   |
 
 ## Finding B — fixed-810 denominator is VALIDATED (not a bias); per-form over-corrects
 
@@ -116,12 +116,12 @@ investigated and defused this.
   small residual is near zero at the young ages where short forms are used and mild
   only in the non-hierarchical baselines (VG01/VG02/VG05/VG14).
 
-**Outcome:** fixed-810 retained as a *validated* approximation. No re-fit, no
+**Outcome:** fixed-810 retained as a _validated_ approximation. No re-fit, no
 likelihood change. `docs/report/methods-data.qmd` (§Measures) updated to state the
 finding (replacing the "sensitivity follow-up" placeholder); #149 closes on this run
 (step 4 doc), with the earlier "adopt per-row" issue comment retracted.
 
-**Process lesson:** consult `notes/` (the existing model review) *before* running a
+**Process lesson:** consult `notes/` (the existing model review) _before_ running a
 new experiment — the answer was already on record.
 
 ## Final results
@@ -132,23 +132,23 @@ sequential TD), plus the convergence refits overlapping. Longest single fit vg11
 
 Convergence of the models of record (true, unrounded diagnostics):
 
-| Model | population / outcome         | max R-hat | min ESS | div | verdict            | config          |
-| ----- | ---------------------------- | --------- | ------- | --- | ------------------ | --------------- |
-| vg01  | DS spoken                    | 1.00120   | 5856    | 0   | PASS               | rep             |
-| vg02  | DS understood                | 1.00072   | 8536    | 0   | PASS               | rep             |
-| vg03  | TD spoken                    | 1.00044   | 8647    | 0   | PASS               | rep             |
-| vg04  | TD understood                | 1.00069   | 10416   | 0   | PASS               | rep             |
-| vg05  | DS joint                     | 1.00104   | 5594    | 0   | PASS               | rep             |
-| vg07  | DS joint + study RE          | 1.00209   | 4429    | 0   | PASS               | rep             |
-| vg08  | DS joint + subj RE           | 1.00973   | 704     | 0   | PASS (borderline)  | rep             |
-| vg09  | DS joint + q RE              | 1.00643   | 1169    | 0   | PASS               | rep-hightune    |
-| vg10  | DS anchored joint            | 1.00563   | 1630    | 0   | PASS               | rep-hightune    |
-| vg11  | TD spoken (full)             | 1.00041   | 9851    | 1   | **KEEP (1 div, accepted)** | rep    |
-| vg12  | TD understood (full)         | 1.00093   | 10619   | 0   | PASS               | rep             |
-| vg13  | TD joint (young)             | 1.00225   | 2308    | 0   | PASS               | rep-hightune (ta 0.99) |
-| vg14  | DS + signing                 | 1.00262   | 3698    | 0   | PASS               | rep             |
-| vg15  | DS sign–speech               | 1.00339   | 1691    | 0   | PASS               | rep-hightune    |
-| vg16  | DS cross-lag                 | 1.00889   | 957     | 0   | PASS               | rep-hightune    |
+| Model | population / outcome | max R-hat | min ESS | div | verdict                    | config                 |
+| ----- | -------------------- | --------- | ------- | --- | -------------------------- | ---------------------- |
+| vg01  | DS spoken            | 1.00120   | 5856    | 0   | PASS                       | rep                    |
+| vg02  | DS understood        | 1.00072   | 8536    | 0   | PASS                       | rep                    |
+| vg03  | TD spoken            | 1.00044   | 8647    | 0   | PASS                       | rep                    |
+| vg04  | TD understood        | 1.00069   | 10416   | 0   | PASS                       | rep                    |
+| vg05  | DS joint             | 1.00104   | 5594    | 0   | PASS                       | rep                    |
+| vg07  | DS joint + study RE  | 1.00209   | 4429    | 0   | PASS                       | rep                    |
+| vg08  | DS joint + subj RE   | 1.00973   | 704     | 0   | PASS (borderline)          | rep                    |
+| vg09  | DS joint + q RE      | 1.00643   | 1169    | 0   | PASS                       | rep-hightune           |
+| vg10  | DS anchored joint    | 1.00563   | 1630    | 0   | PASS                       | rep-hightune           |
+| vg11  | TD spoken (full)     | 1.00041   | 9851    | 1   | **KEEP (1 div, accepted)** | rep                    |
+| vg12  | TD understood (full) | 1.00093   | 10619   | 0   | PASS                       | rep                    |
+| vg13  | TD joint (young)     | 1.00225   | 2308    | 0   | PASS                       | rep-hightune (ta 0.99) |
+| vg14  | DS + signing         | 1.00262   | 3698    | 0   | PASS                       | rep                    |
+| vg15  | DS sign–speech       | 1.00339   | 1691    | 0   | PASS                       | rep-hightune           |
+| vg16  | DS cross-lag         | 1.00889   | 957     | 0   | PASS                       | rep-hightune           |
 
 **14 / 15 PASS.** Only **vg11** fails the strict 0-divergence gate — by **one**
 divergence, with R-hat 1.00041 / ESS 9851 otherwise excellent; not auto-refit (~10 h for
@@ -181,7 +181,7 @@ VG14/VG15 (task). vg11 `rep-lite` vs `rep` validation queued.
   `test` to match the variants), vg10/vg11/vg12/vg15; priority `vg12 hi-anchor-broad`.
   To run after this run is written up.
 - If a denominator correction is ever wanted (it is not, per Finding B), the
-  instrument is the §3A age-dependent per-form *scaling* crosswalk, not per-form
+  instrument is the §3A age-dependent per-form _scaling_ crosswalk, not per-form
   `n_trials`.
 
 ## Reproduction / artefacts
