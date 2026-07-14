@@ -336,7 +336,7 @@ def load_combined_data(max_age_months=None):
     """
     age_limit = max_age_months if max_age_months is not None else 1200
 
-    with duckdb.connect(VOCABULARY_DATA_PATH) as con:
+    with duckdb.connect(VOCABULARY_DATA_PATH, read_only=True) as con:
         df = con.execute(
             """
             SELECT
@@ -418,7 +418,7 @@ def load_data(
         params.append(list(languages))
         language_clause = f"AND language IN ${len(params)}"
 
-    with duckdb.connect(VOCABULARY_DATA_PATH) as con:
+    with duckdb.connect(VOCABULARY_DATA_PATH, read_only=True) as con:
         td_df = (
             con.execute(
                 f"""
