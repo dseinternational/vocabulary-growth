@@ -13,10 +13,13 @@ and the gate-payload-driven console banner.
 import numpy as np
 import preliz as pz
 import pymc as pm
+import pytest
 
 from vocab_growth.models.common import (
+    ConvergenceGateError,
     _report_diagnostic_warnings,
     diagnostics_var_names,
+    enforce_convergence_gate,
 )
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 
@@ -113,3 +116,28 @@ def test_banner_claims_nothing_when_gate_scan_failed(capsys):
     out = capsys.readouterr().out
     assert "✓" not in out
     assert "⚠" not in out
+
+
+def test_reporting_fit_fails_closed_and_retains_marker(tmp_path):
+    payload = _payload(rhat_failing=["theta[0]"], max_rhat=1.03)
+
+    with pytest.raises(ConvergenceGateError):
+        enforce_convergence_gate(
+            payload,
+            sampling_config_name="rep",
+            output_dir=str(tmp_path),
+        )
+
+    marker = tmp_path / "CONVERGENCE_FAILED.txt"
+    assert marker.exists()
+    assert "must not proceed" in marker.read_text()
+
+
+def test_development_fit_reports_but_does_not_raise(tmp_path):
+    enforce_convergence_gate(
+        _payload(ess_failing=["theta[0]"], min_ess=100),
+        sampling_config_name="dev",
+        output_dir=str(tmp_path),
+    )
+
+    assert not (tmp_path / "CONVERGENCE_FAILED.txt").exists()

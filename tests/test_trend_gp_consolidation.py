@@ -109,7 +109,9 @@ def test_common_vg01_graph(tmp_path, monkeypatch):
 def test_univariate_re_vg11_graph(tmp_path, monkeypatch):
     free, det, _ = _names(_build("VG11", tmp_path, monkeypatch))
     assert {"p_slope_low", "p_slope_hi", "ell_unit", "eta"} <= free
+    assert {"tau_subject", "delta_subject_raw"} <= free
     assert {"slope", "intercept", "ell", "g", "f_all"} <= det
+    assert "delta_subject" in det
 
 
 def test_bivariate_vg05_graph(tmp_path, monkeypatch):

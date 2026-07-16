@@ -55,6 +55,7 @@ from vocab_growth.models.common_bivariate import (
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
 from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
+from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.reporting import (
     dataframe_table,
     key_value_table,
@@ -76,7 +77,11 @@ def prepare_bivariate_re_data(
 ):
     """Load and prepare data for a bivariate model with study random effects."""
     columns = ["age", "understood", "spoken", "study"]
-    use_subject_codes = definition.use_subject_re_u or definition.use_subject_re_q
+    use_subject_codes = (
+        definition.use_subject_re_u
+        or definition.use_subject_re_q
+        or definition.one_observation_per_subject
+    )
     if use_subject_codes:
         columns = columns + ["subject_id"]
 
@@ -97,6 +102,12 @@ def prepare_bivariate_re_data(
     analysis_df, dropped_studies = vocab_data_utils.filter_studies_by_min_obs(
         analysis_df, definition.min_study_observations
     )
+    n_before_single_administration = len(analysis_df)
+    if definition.one_observation_per_subject:
+        analysis_df = vocab_data_utils.select_one_observation_per_subject(
+            analysis_df,
+            random_seed=definition.random_seed,
+        )
 
     # Create integer study codes
     unique_studies = sorted(analysis_df["study"].unique())
@@ -152,6 +163,13 @@ def prepare_bivariate_re_data(
         counts.append(("Subjects", n_subjects))
         counts.append(("Subjects with single observation", n_singletons))
         counts.append(("Subjects with repeated observations", n_subjects - n_singletons))
+    if definition.one_observation_per_subject:
+        counts.append(
+            (
+                "Single-administration sensitivity",
+                f"{n_before_single_administration} -> {len(analysis_df)} rows",
+            )
+        )
     key_value_table("Observation counts", counts)
     dataframe_table(desc, title="Descriptive statistics")
 
@@ -267,18 +285,23 @@ def build_model_re(
     y_u_observed = np.asarray(
         analysis_df.loc[has_u_train, "understood"], dtype=int
     )
-    y_s_observed = np.asarray(
-        analysis_df.loc[has_s_train, "spoken"], dtype=int
-    )
     study_codes = np.asarray(analysis_df["study_code"], dtype=int)
 
     idx_u = np.where(has_u_train)[0]
-    idx_s = np.where(has_s_train)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_s = len(y_s_observed)
     n_trials = context.model_data.n_trials
+    spoken_spec = nested_outcome_spec(
+        analysis_df,
+        parent_col="understood",
+        outcome_col="spoken",
+        n_trials=n_trials,
+        eligible_mask=~holdout,
+    )
+    y_s_observed = spoken_spec.observed
+    idx_s = spoken_spec.indices
+    n_s = spoken_spec.n_observed
     n_studies = int(study_codes.max()) + 1
 
     use_subject_re_u = bool(definition.use_subject_re_u)
@@ -326,6 +349,9 @@ def build_model_re(
         ("Total observations", n),
         ("Understood observed", n_u),
         ("Spoken observed", n_s),
+        ("Spoken conditional on understood", spoken_spec.n_conditional),
+        ("Spoken marginal fallback", spoken_spec.n_marginal),
+        ("Spoken > understood violations", spoken_spec.n_parent_violations),
         ("n_trials", n_trials),
         ("n_studies", n_studies),
     ]
@@ -431,6 +457,14 @@ def build_model_re(
         # has_*_train == has_*, so standard fits are unchanged.
         _ = pm.Data("obs_u_mask", has_u_train.astype(int), dims=("obs_id",))
         _ = pm.Data("obs_s_mask", has_s_train.astype(int), dims=("obs_id",))
+        s_likelihood_n = pm.Data(
+            "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
+        )
+        s_is_conditional = pm.Data(
+            "s_is_conditional",
+            spoken_spec.is_conditional.astype(int),
+            dims=("obs_s_id",),
+        )
 
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
 
@@ -669,12 +703,10 @@ def build_model_re(
         # Likelihoods — separate observation indices
         # ============================================================
         #
-        # Composite marginal (pseudo-)likelihood: understood and spoken enter as
-        # two separate Beta-Binomial marginals, coupled only through the shared
-        # latent means (p_S = p_U * q) plus the study/subject random intercepts.
-        # The counts are treated as conditionally independent given those means;
-        # the item-level joint distribution is not modelled. See methods-models.qmd,
-        # "Joint outcomes and production ratios".
+        # Nested likelihood: where both outcomes are observed and S <= U,
+        # spoken is modelled as S | U with U trials and mean q. Spoken-only rows
+        # and source-data violations retain a marginal likelihood over the full
+        # inventory with mean p_U * q.
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]
@@ -692,14 +724,18 @@ def build_model_re(
         )
 
         # Spoken likelihood (only where observed)
-        p_s_obs_sel = p_s_obs[idx_s]
-        p_s_obs_clip = pm.math.clip(p_s_obs_sel, EPSILON, 1 - EPSILON)
-        alpha_s = p_s_obs_clip * kappa_s_obs[idx_s]
-        beta_s = (1 - p_s_obs_clip) * kappa_s_obs[idx_s]
+        p_s_likelihood = pm.math.switch(
+            s_is_conditional,
+            q_obs[idx_s],
+            p_s_obs[idx_s],
+        )
+        p_s_likelihood = pm.math.clip(p_s_likelihood, EPSILON, 1 - EPSILON)
+        alpha_s = p_s_likelihood * kappa_s_obs[idx_s]
+        beta_s = (1 - p_s_likelihood) * kappa_s_obs[idx_s]
 
         _ = pm.BetaBinomial(
             "y_s_obs",
-            n=n_trials,
+            n=s_likelihood_n,
             alpha=alpha_s,
             beta=beta_s,
             observed=y_s_observed,

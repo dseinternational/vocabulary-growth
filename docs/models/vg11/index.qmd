@@ -1,5 +1,5 @@
 ---
-title: "Model VG11: Words spoken (TD) with dataset-level study random intercepts"
+title: "Model VG11: Words spoken (TD) with dataset and child random intercepts"
 
 date: now
 date-format: "YYYY-MM-DD HH:mm:ss Z"
@@ -62,7 +62,7 @@ if _approximate:
 print(":::")
 ```
 
-This model examines how age influences spoken words ($A \rightarrow S$) in typically developing children, extending VG03 with dataset-level study random intercepts to account for between-lab variation in the Wordbank data.
+This model examines the cross-sectional association between age and spoken words in typically developing children, extending VG03 with dataset and child random intercepts to account for between-lab variation and repeated Wordbank administrations.
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -71,14 +71,14 @@ import pandas as pd
 
 ## Statistical model
 
-We model the number of words spoken as a bounded count outcome out of an 810-word reference inventory. The expected proportion of words spoken is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend, a Gaussian process term (anchored at 19 months to remove the GP–intercept ridge), and a dataset-level study random intercept. Study intercepts are modelled with a non-centred Normal parameterisation and absorbed at the observation level only; plot and query predictions use the population-level trajectory. To account for extra variation between children, we use a Beta-Binomial likelihood with age-varying dispersion. Wordbank WG, Oxford CDI, and Words & Sentences rows contribute spoken observations.
+We model the number of words spoken as a bounded count outcome out of an 810-word reference inventory. The expected proportion of words spoken is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend, a Gaussian process term anchored at 19 months, a dataset intercept, and a child intercept. Both random-effect blocks use non-centred Normal parameterisations. Population-level means set the random effects to zero; predictive count trajectories sample one new-child intercept per posterior draw. A Beta-Binomial likelihood with age-varying dispersion accounts for residual extra-binomial variation. Wordbank WG, Oxford CDI, and Words & Sentences rows contribute spoken observations, and a fixed-seed sensitivity retains one administration per child.
 
 ::: {.callout-note title="Model at a glance"}
 
 - **Population:** typically developing children.
 - **Outcome:** words spoken out of the common 810-word reference inventory.
 - **Data handling:** full TD data rather than the VG03 subsample; datasets with fewer than 200 observations are filtered.
-- **Hierarchy:** dataset-level study random intercepts.
+- **Hierarchy:** dataset and child random intercepts; one-administration-per-child sensitivity.
 - **Stabilisation:** the GP is anchored at 19 months.
 
 :::
@@ -93,7 +93,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The trajectory priors match the TD spoken baseline anchors at 12 and 26 months. The study random-effect scale uses a HalfNormal(0.5) prior on the logit scale. The 19-month GP anchor is a stabilisation constraint that separates the GP level from the intercept and study effects; it is not a substantive claim that development changes uniquely at 19 months.
+The trajectory priors match the TD spoken baseline anchors at 12 and 26 months. The dataset and child random-effect scales each use a HalfNormal(0.5) prior on the logit scale. The 19-month GP anchor is a stabilisation constraint that separates the GP level from the intercept and random effects; it is not a substantive claim that development changes uniquely at 19 months.
 
 ### Lengthscale
 
@@ -213,9 +213,9 @@ Smoothed:
 
 ![plot_posterior_predictive_median_trend_smoothed](plot_posterior_predictive_median_trend_smoothed.png){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
 
-### Estimated learning rate
+### Cross-sectional age derivative
 
-The posterior distribution of the estimated learning rate (estimated gain in spoken words per month) across age.
+The posterior distribution of the derivative of expected spoken words with respect to age, in words per month. This is a cross-sectional derivative of the fitted population trajectory, not a within-child learning rate.
 
 ![expected_learning_rate](expected_learning_rate.png){#fig-expected-learning-rate .lightbox fig-align="left"}
 

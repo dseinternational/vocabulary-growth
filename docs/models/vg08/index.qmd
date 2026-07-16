@@ -265,7 +265,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
 
@@ -308,7 +308,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 

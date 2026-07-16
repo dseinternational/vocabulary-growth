@@ -71,7 +71,7 @@ import pandas as pd
 
 ## Statistical model
 
-We model words understood and words spoken as bounded count outcomes out of an 810-word reference inventory, restricted to children aged 8-18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP). Both GPs are anchored at 13 months to remove the GP-intercept ridge. Dataset-level study random intercepts are added to both trajectories on the logit scale using a non-centred parameterisation, with the same marginal distribution as $\delta_U[s], \delta_q[s] \sim \text{Normal}(0,\tau)$. These study effects are absorbed at the observation level only; plot and query predictions use the population-level trajectory with study effects set to zero. Separate Beta-Binomial likelihoods with age-varying dispersion account for extra-binomial variability in both outcomes.
+We model words understood and words spoken as bounded count outcomes out of an 810-word reference inventory, restricted to children aged 8-18 months. The understood trajectory and the production ratio $q = p_S / p_U$ are each modelled as smooth functions of age (linear trend + HSGP). Both GPs are anchored at 13 months to remove the GP-intercept ridge. Dataset-level and child-level random intercepts are added to both trajectories on the logit scale using non-centred parameterisations, so repeated administrations of the same child are not treated as independent children. Plot and query means use the population-level trajectory with random effects set to zero, while predictive count trajectories include one newly sampled child effect per posterior draw. Paired counts use the nested factorisation $P(U)P(S\mid U)$; spoken-only records retain the marginal $P(S)$ fallback. A fixed-seed sensitivity retains one administration per child and disables the child effects.
 
 ::: {.callout-note title="Model at a glance"}
 
@@ -223,11 +223,11 @@ The expected difference in word counts between understanding and production.
 
 ## Receptive → expressive (cross-sectional)
 
-**Does receptive vocabulary predict expressive vocabulary, cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child *says* is the number they *understand* scaled by $q(a)$,
+**How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child *says* is the number they *understand* scaled by $q(a)$,
 
 $$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
 
-So receptive vocabulary predicts expressive vocabulary with an age-dependent slope $q(a)$ — the expected number of words spoken per word understood. The figure below reads this off directly: for typically-developing children across the 8–18 month window, it maps words understood (x-axis) to the predicted words spoken (y-axis), with the shaded band the 90% HDI on $q(a)$ and the dashed line the ceiling (a child cannot say more distinct words than they understand). The per-age posterior of $q(a)$ (median and HDI) is tabulated under [Production ratio](#production-ratio) above.
+Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — not evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. The figure below reads the fitted association directly across the 8–18 month window, with the shaded band the 90% HDI on $q(a)$ and the dashed line the ceiling. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
 
 ![Predicted words spoken given words understood, by age](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
 
@@ -264,7 +264,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_u")
 
 ![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_u](expected_learning_rate_u.png){#fig-learning-rate-u .lightbox fig-align="left"}
 
@@ -305,7 +305,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_s](expected_learning_rate_s.png){#fig-learning-rate-s .lightbox fig-align="left"}
 

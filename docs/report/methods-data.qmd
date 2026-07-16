@@ -4,7 +4,7 @@ abstract: "This chapter describes the data behind the analyses: parent-report vo
 ---
 
 ::: {.callout-note}
-The "Data sources" inventory below was drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+This document includes content drafted by LLM-based AI tools (Claude Code/Opus 4.8 and Codex/GPT-5).
 :::
 
 ## Data sources {#sec-data}
@@ -43,4 +43,4 @@ Each source's native checklist ceiling is recorded in the data as `survey_vocab_
 
 Wordbank Words & Sentences (WS) records are treated as **production-only** because the WS comprehension field is a production proxy rather than an independent comprehension measurement. TD spoken-only models can use WS production counts, but TD bivariate models that estimate both understood and spoken vocabulary exclude WS rows and rely on WG and Oxford CDI observations for the comprehension-production gap.
 
-The us_01 Edgin Down syndrome Wordbank subset carries a further inclusion rule: rows are kept only where production is at most 100 words (`US_01_MAX_PRODUCTION`), a legacy cap retained pending review of its rationale. In the 2026-07 export this excludes 8 of 87 Words & Gestures rows and 24 of 109 Words & Sentences rows from that subset.
+The former us_01 Edgin inclusion rule that retained only production counts at or below 100 words has been removed. It had no documented measurement or sampling rationale, excluded 8 of 87 Words & Gestures records and 24 of 109 Words & Sentences records in the 2026-07 export, and conflicted with the source study's use of standard CDI production scores: one Down syndrome subgroup had a reported mean of 275.5 words (SD 198.2) [@edgin2015sleep]. All us_01 counts that satisfy the source-form ceiling guard are therefore retained. Eighteen Words & Sentences records are exactly at that form's 680-word ceiling; these are kept as valid but potentially ceiling-censored observations and must be exposed in calibration and sensitivity reporting rather than removed by an arbitrary threshold.

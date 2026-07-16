@@ -20,9 +20,10 @@ counts is
           - log(n_chain * n_draw)
 
 where the inner log p is the Beta-Binomial log-pmf summed over the
-subject's held-out (understood, spoken) observations, and the outer
-logsumexp marginalises over the joint posterior over hyperparameters and
-held-out REs.
+subject's held-out outcomes. Spoken counts use the nested S | U likelihood
+when the observed counts are logically nested, and the marginal spoken
+likelihood otherwise. The outer logsumexp marginalises over the joint posterior
+over hyperparameters and held-out REs.
 
 Outputs:
 
@@ -204,6 +205,7 @@ def holdout_subject_elpds(
     """Marginal predictive log-density per held-out subject."""
     p_u_obs = trace.posterior["p_u_obs"].values
     p_s_obs = trace.posterior["p_s_obs"].values
+    q_obs = trace.posterior["q_obs"].values
     kappa_u_obs = trace.posterior["kappa_u_obs"].values
     kappa_s_obs = trace.posterior["kappa_s_obs"].values
 
@@ -223,9 +225,21 @@ def holdout_subject_elpds(
                 log_lik += betabinom.logpmf(y, N_TRIALS, p * k, (1 - p) * k)
             if pd.notna(row["spoken"]):
                 y = int(row["spoken"])
-                p = np.clip(p_s_obs[:, :, idx], 1e-12, 1 - 1e-12)
+                understood_is_usable = (
+                    pd.notna(row["understood"])
+                    and 0 <= row["understood"] <= N_TRIALS
+                    and y <= row["understood"]
+                )
+                if understood_is_usable:
+                    spoken_trials = int(row["understood"])
+                    p = np.clip(q_obs[:, :, idx], 1e-12, 1 - 1e-12)
+                else:
+                    spoken_trials = N_TRIALS
+                    p = np.clip(p_s_obs[:, :, idx], 1e-12, 1 - 1e-12)
                 k = kappa_s_obs[:, :, idx]
-                log_lik += betabinom.logpmf(y, N_TRIALS, p * k, (1 - p) * k)
+                log_lik += betabinom.logpmf(
+                    y, spoken_trials, p * k, (1 - p) * k
+                )
         elpd[s_code] = float(logsumexp(log_lik.ravel()) - log_NK)
     return elpd
 

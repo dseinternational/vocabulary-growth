@@ -124,9 +124,17 @@ r(a) = P(\text{sign} \mid \text{understood}) = \sigma(g_{\text{sign}}(a)),
 p_{\text{Sign}}(a) = p_U(a)\,r(a) .
 $$
 
-The signed mean $g_{\text{sign}}$ is **intercept-only** (no age slope) plus a GP: a free age slope extrapolates the signed ratio below the data floor at young ages, so the GP alone carries the empirical rise-then-fall hump. Each marginal outcome has its own Beta-Binomial likelihood with its own age-varying dispersion (@sec-betabinomial, @sec-kappa).
+The signed mean $g_{\text{sign}}$ is a three-anchor, piecewise logit-linear **tent** with young, peak and older reference levels, plus a GP for smooth departures. This allows a signing rise and decline without making the GP alone carry the entire shape. Each outcome retains its own age-varying dispersion (@sec-betabinomial, @sec-kappa).
 
-The outcomes share the latent means $p_U$, $q$ and $r$, but each enters the likelihood as its own marginal Beta-Binomial, so the joint likelihood is a **composite (pseudo-)likelihood**: it couples the outcomes only through those shared means and treats the marginal *counts* as conditionally independent given them. It does not model the item-level joint distribution — which specific understood words a child also speaks or signs — and so mildly over-counts the information that shared words contribute across marginals. The one place item-level structure is modelled directly is the uk_02 four-cell cross-tabulation in VG15 (the Plackett $\psi$ and Dirichlet-Multinomial, below), which identifies the sign–speech overlap within understood words. Elsewhere the composite marginal likelihood is a deliberate simplification — appropriate because most sources report only marginal totals — and LOO comparisons and interval widths should be read with this mild between-marginal dependence in mind.
+For rows where understood and spoken counts are both available and satisfy $0 \le S_i \le U_i \le N$, the likelihood is a coherent factorisation,
+
+$$
+U_i \sim \mathrm{BetaBinomial}(N,p_{U,i},\kappa_{U,i}), \qquad S_i\mid U_i \sim \mathrm{BetaBinomial}(U_i,q_i,\kappa_{S,i}).
+$$
+
+The signing models use the parallel conditional likelihood $\mathrm{Sign}_i\mid U_i \sim \mathrm{BetaBinomial}(U_i,r_i,\kappa_{\mathrm{Sign},i})$. Thus $q$ and $r$ are genuine conditional proportions for paired, logically nested counts rather than ratios imposed only on marginal means. When the understood count is unavailable, the child outcome remains usable through the marginal fallback $S_i\sim\mathrm{BetaBinomial}(N,p_{U,i}q_i,\kappa_{S,i})$ (and analogously for signing). A recorded child count greater than understood is retained through that fallback and counted as a source-data violation in the fit log rather than silently discarded. In VG15, rows with the richer uk_02 four-cell table use the Dirichlet-Multinomial composition term instead of duplicate spoken and signed likelihood contributions; the understood likelihood remains because the four-cell model is conditional on its observed total.
+
+The signing outcome is also harmonised before fitting. `uk_01` records sign-only words and cannot identify total signed vocabulary from the committed aggregate data, while the construct of the `uk_06` signing field remains unverified. Their understood and spoken values are retained, but their signing values are masked in the primary VG14, VG15 and VG17 analyses. Explicit sensitivity variants can reintroduce either source; they are not silently pooled with the comparable total-sign measures.
 
 ### Study and subject random intercepts {#sec-randomeffects}
 
@@ -139,6 +147,8 @@ f_\bullet(z_i) \;\to\; f_\bullet(z_i) + \delta^{\text{study}}_{\bullet,\,s(i)} +
 $$
 
 implemented non-centred, where $s(i)$ and $j(i)$ index the study and subject of observation $i$. Study intercepts absorb between-lab/between-study level differences; subject intercepts stop within-child repeated measurements being treated as independent. **The reported population curves set every random effect to zero**, so their interpretation is unchanged. Tiny studies can be trimmed before fitting (`min_study_observations`) to avoid near-unidentified intercepts.
+
+The TD hierarchical models apply the same repeated-measures rule. VG11 and VG12 include a child intercept on their single outcome, and VG13 includes child intercepts on both $p_U$ and $q$. A fixed-seed sensitivity retains one randomly selected administration per study-specific child and disables the child effects, providing a cheaper check that conclusions do not depend on treating repeat administrations as additional independent children.
 
 ### Gaussian-process anchoring {#sec-gpanchor}
 
@@ -172,3 +182,9 @@ which sits below an independence-based upper bound whenever $\psi > 1$.
 ::: {.callout-important}
 $\psi$ is a **single scalar**, identified from a small four-cell cross-tab, and is treated as **descriptive / exploratory** throughout this report. See @sec-findings-signing <!-- findings-signing --> for its scope and caveats.
 :::
+
+### Validation and publication gate {#sec-validation-gate}
+
+Every fit writes `fit_manifest.json` immediately after preparing its analysis frame. The manifest records the exact model definition and priors, sampling configuration and seed, prepared-row counts by source and outcome, a SHA-256 hash of the prepared analysis frame, the Git revision and dirty state, Python/platform details, and installed package versions. This makes a fitted artefact traceable to the code and filtered data that produced it.
+
+Validation is layered rather than reduced to a single fit statistic: prior predictive checks assess whether the priors generate plausible trajectories; posterior predictive checks compare replicated counts with observed age-stratified distributions; PSIS-LOO and leave-one-subject-out comparisons assess relative prediction where their assumptions are appropriate; source, prior and single-administration sensitivities test the main measurement and dependence decisions; and independent developmental norms are reserved for external calibration rather than prior tuning where possible. Reporting-quality (`rep` and `rep-lite`) runs are fail-closed: if any sampled parameter has $\hat R>1.01$, bulk or tail ESS below 400, or the convergence scan itself fails, diagnostic artefacts and a `CONVERGENCE_FAILED.txt` marker are retained but posterior summaries and report-generation stages do not run. Development and test fits remain explicitly provisional and report the same warnings without being treated as publication artefacts.

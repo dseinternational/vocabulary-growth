@@ -30,15 +30,16 @@ to the us_01/Edgin DS block of the ``vocab_combined`` view
 WORDBANK_SPOKEN_ONLY_FORMS = ("WS",)
 """Wordbank forms that contribute production observations only."""
 
-US_01_MAX_PRODUCTION = 100
-"""Production cap on the us_01/Edgin DS Wordbank subset.
+SIGNED_ONLY_STUDIES = ("uk_01",)
+"""Studies whose ``signed`` field excludes words that are also spoken.
 
-Inherited from the initial import with no recorded rationale; rows above the
-threshold are kept out until their source form and eligibility can be
-revalidated (in the 2026-07 export it drops the highest-production
-administrations: 8/87 WG and 24/109 WS English DS rows). See
-``notes/202607061200-us01-edgin-ws-comprehension-issue.md``.
+The signing models estimate total sign use, so these fields are not comparable
+without item-level re-derivation.  Keep the source rows for understood/spoken
+outcomes while masking only their ``signed`` value by default.
 """
+
+UNCERTAIN_SIGN_STUDIES = ("uk_06",)
+"""Studies whose signing-field construct has not yet been source-verified."""
 
 ENGLISH_LANGUAGES = (
     "English (American)",
@@ -52,6 +53,70 @@ The ``wordbank_child`` table now holds the full multi-language Wordbank export.
 Queries restrict to these English variants by default; pass a wider ``languages``
 set (or ``None`` for all languages) to the loaders to widen the scope later.
 """
+
+
+def mask_incomparable_signed_outcomes(
+    df: pd.DataFrame,
+    *,
+    include_signed_only: bool = False,
+    include_uncertain: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Mask signing fields that do not identify comparable total sign use.
+
+    The returned frame is a copy.  Understood and spoken observations from the
+    affected studies are retained; only ``signed`` is set missing.  The counts
+    report how many observed signing values were removed from each study so fit
+    logs and provenance make the source restriction explicit.
+    """
+    required = {"study", "signed"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Signing-source harmonisation requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    out = df.copy()
+    excluded: list[str] = []
+    if not include_signed_only:
+        excluded.extend(SIGNED_ONLY_STUDIES)
+    if not include_uncertain:
+        excluded.extend(UNCERTAIN_SIGN_STUDIES)
+
+    dropped: dict[str, int] = {}
+    for study in excluded:
+        mask = (out["study"] == study) & out["signed"].notna()
+        dropped[study] = int(mask.sum())
+        out.loc[mask, "signed"] = float("nan")
+    return out, dropped
+
+
+def select_one_observation_per_subject(
+    df: pd.DataFrame,
+    *,
+    random_seed: int,
+    study_col: str = "study",
+    subject_col: str = "subject_id",
+) -> pd.DataFrame:
+    """Retain one reproducibly sampled administration per study-specific child.
+
+    Random selection avoids systematically retaining the earliest or latest
+    assessment. The original row order is restored after sampling so downstream
+    coding and diagnostics remain deterministic.
+    """
+    required = {study_col, subject_col}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Single-administration selection requires columns: "
+            + ", ".join(sorted(missing))
+        )
+    if df[subject_col].isna().any():
+        raise ValueError("Cannot select one administration when subject IDs are missing.")
+
+    shuffled = df.sample(frac=1.0, random_state=random_seed)
+    selected = shuffled.drop_duplicates([study_col, subject_col], keep="first")
+    return selected.sort_index().reset_index(drop=True)
 
 
 def filter_studies_by_min_obs(
@@ -220,9 +285,6 @@ def vocab_combined_view_sql() -> str:
     WHERE dataset_name = 'Edgin'
       AND language IN ({english_sql_list})
       AND lower(health_conditions) = 'down syndrome'
-      -- Legacy production cap (see US_01_MAX_PRODUCTION); kept as-is pending
-      -- review of its rationale, per the 2026-07-06 note above.
-      AND production <= {US_01_MAX_PRODUCTION}
     UNION ALL
     SELECT 'uk_03'                           as study,
            vuk2025.subject_id,

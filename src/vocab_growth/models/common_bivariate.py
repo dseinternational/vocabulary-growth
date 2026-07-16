@@ -38,6 +38,7 @@ from vocab_growth.models.build_utils import (
     standardize_ages,
     validate_ell_bounds,
 )
+from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
     BaseModelConfiguration,
     ModelFitContext,
@@ -51,6 +52,7 @@ from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
 from vocab_growth.models.definitions import BivariateModelDefinition
 from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
+from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.plotting import (
     _save_csv,
     plot_comprehension_production_gap,
@@ -361,15 +363,21 @@ def build_model(context: BivariateContext):
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
-    y_s_observed = np.asarray(analysis_df.loc[has_s, "spoken"], dtype=int)
 
     idx_u = np.where(has_u)[0]
-    idx_s = np.where(has_s)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_s = len(y_s_observed)
     n_trials = context.model_data.n_trials
+    spoken_spec = nested_outcome_spec(
+        analysis_df,
+        parent_col="understood",
+        outcome_col="spoken",
+        n_trials=n_trials,
+    )
+    y_s_observed = spoken_spec.observed
+    idx_s = spoken_spec.indices
+    n_s = spoken_spec.n_observed
 
     # Validate
     if not np.all(y_u_observed >= 0):
@@ -390,6 +398,9 @@ def build_model(context: BivariateContext):
             ("Total observations", n),
             ("Understood observed", n_u),
             ("Spoken observed", n_s),
+            ("Spoken conditional on understood", spoken_spec.n_conditional),
+            ("Spoken marginal fallback", spoken_spec.n_marginal),
+            ("Spoken > understood violations", spoken_spec.n_parent_violations),
             ("n_trials", n_trials),
             ("Age mean (months)", X_obs_mean),
             ("Age std (months)", X_obs_std),
@@ -468,6 +479,14 @@ def build_model(context: BivariateContext):
         # Store masks and indices as constant data for extraction
         _ = pm.Data("obs_u_mask", has_u.astype(int), dims=("obs_id",))
         _ = pm.Data("obs_s_mask", has_s.astype(int), dims=("obs_id",))
+        s_likelihood_n = pm.Data(
+            "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
+        )
+        s_is_conditional = pm.Data(
+            "s_is_conditional",
+            spoken_spec.is_conditional.astype(int),
+            dims=("obs_s_id",),
+        )
 
         # Shared trend + HSGP builder (gp_utils); graph byte-identical to the
         # inlined form (stores g_u/f_u_all and g_q/h_all + the slope/intercept/ell).
@@ -543,7 +562,7 @@ def build_model(context: BivariateContext):
         _ = pm.Deterministic("h_plot", h_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic("h_query", h_all[i_query0:i_query1], dims=("query_id",))
 
-        _ = pm.Deterministic("q_obs", q_all[i_obs0:i_obs1], dims=("obs_id",))
+        q_obs = pm.Deterministic("q_obs", q_all[i_obs0:i_obs1], dims=("obs_id",))
         _ = pm.Deterministic("q_plot", q_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic("q_query", q_all[i_query0:i_query1], dims=("query_id",))
 
@@ -610,13 +629,10 @@ def build_model(context: BivariateContext):
         # Likelihoods — separate observation indices
         # ============================================================
         #
-        # Composite marginal (pseudo-)likelihood: understood and spoken enter as
-        # two separate Beta-Binomial marginals, coupled only through the shared
-        # latent means (p_S = p_U * q). The counts are treated as conditionally
-        # independent given those means; the item-level joint distribution (which
-        # understood words a child also speaks) is not modelled, as most sources
-        # report only marginal totals. See methods-models.qmd, "Joint outcomes
-        # and production ratios", for the estimand implications.
+        # Nested likelihood: where both outcomes are observed and S <= U,
+        # spoken is modelled as S | U with U trials and mean q. Spoken-only rows
+        # and source-data violations retain a marginal likelihood over the full
+        # inventory with mean p_U * q.
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]
@@ -634,14 +650,18 @@ def build_model(context: BivariateContext):
         )
 
         # Spoken likelihood (only where observed)
-        p_s_obs_sel = p_s_obs[idx_s]
-        p_s_obs_clip = pm.math.clip(p_s_obs_sel, EPSILON, 1 - EPSILON)
-        alpha_s = p_s_obs_clip * kappa_s_obs[idx_s]
-        beta_s = (1 - p_s_obs_clip) * kappa_s_obs[idx_s]
+        p_s_likelihood = pm.math.switch(
+            s_is_conditional,
+            q_obs[idx_s],
+            p_s_obs[idx_s],
+        )
+        p_s_likelihood = pm.math.clip(p_s_likelihood, EPSILON, 1 - EPSILON)
+        alpha_s = p_s_likelihood * kappa_s_obs[idx_s]
+        beta_s = (1 - p_s_likelihood) * kappa_s_obs[idx_s]
 
         _ = pm.BetaBinomial(
             "y_s_obs",
-            n=n_trials,
+            n=s_likelihood_n,
             alpha=alpha_s,
             beta=beta_s,
             observed=y_s_observed,
@@ -903,8 +923,9 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
     kappa_u_plot = context.model_variables["kappa_u_plot"]
     kappa_u_query = context.model_variables["kappa_u_query"]
 
-    p_s_plot = context.model_variables["p_s_plot"]
     p_s_query = context.model_variables["p_s_query"]
+    q_plot = context.model_variables["q_plot"]
+    q_query = context.model_variables["q_query"]
     kappa_s_plot = context.model_variables["kappa_s_plot"]
     kappa_s_query = context.model_variables["kappa_s_query"]
 
@@ -929,15 +950,11 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             h_plot_var = context.model_variables["h_plot"]
             h_query_var = context.model_variables["h_query"]
             delta_q_marg = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q)
-            q_plot_marg = pm.math.sigmoid(h_plot_var + delta_q_marg)
-            q_query_marg = pm.math.sigmoid(h_query_var + delta_q_marg)
-            p_s_plot = p_u_plot * q_plot_marg
-            p_s_query = p_u_query * q_query_marg
+            q_plot = pm.math.sigmoid(h_plot_var + delta_q_marg)
+            q_query = pm.math.sigmoid(h_query_var + delta_q_marg)
+            p_s_query = p_u_query * q_query
         elif use_subject_re_u:
             # Marginal U but not q: rebuild p_s from new p_u and original q.
-            q_plot = context.model_variables["q_plot"]
-            q_query = context.model_variables["q_query"]
-            p_s_plot = p_u_plot * q_plot
             p_s_query = p_u_query * q_query
 
         pm.Deterministic(
@@ -949,7 +966,7 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
 
         # Understood — plot
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        y_u_plot = pm.BetaBinomial(
             "y_u_plot",
             n=n_trials,
             alpha=p_u_plot_clip * kappa_u_plot,
@@ -958,7 +975,7 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
         )
         # Understood — query
         p_u_query_clip = pm.math.clip(p_u_query, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        y_u_query = pm.BetaBinomial(
             "y_u_query",
             n=n_trials,
             alpha=p_u_query_clip * kappa_u_query,
@@ -966,21 +983,21 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             dims=("query_id",),
         )
         # Spoken — plot
-        p_s_plot_clip = pm.math.clip(p_s_plot, EPSILON, 1 - EPSILON)
+        q_plot_clip = pm.math.clip(q_plot, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
             "y_s_plot",
-            n=n_trials,
-            alpha=p_s_plot_clip * kappa_s_plot,
-            beta=(1 - p_s_plot_clip) * kappa_s_plot,
+            n=y_u_plot,
+            alpha=q_plot_clip * kappa_s_plot,
+            beta=(1 - q_plot_clip) * kappa_s_plot,
             dims=("plot_id",),
         )
         # Spoken — query
-        p_s_query_clip = pm.math.clip(p_s_query, EPSILON, 1 - EPSILON)
+        q_query_clip = pm.math.clip(q_query, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
             "y_s_query",
-            n=n_trials,
-            alpha=p_s_query_clip * kappa_s_query,
-            beta=(1 - p_s_query_clip) * kappa_s_query,
+            n=y_u_query,
+            alpha=q_query_clip * kappa_s_query,
+            beta=(1 - q_query_clip) * kappa_s_query,
             dims=("query_id",),
         )
 
@@ -1002,6 +1019,17 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
         )
 
     context.set_trace(trace)
+
+    calibration_df = write_trace_calibration(
+        trace,
+        context.analysis_df,
+        context.reporting.output_dir,
+        (
+            ("understood", "y_u_obs", "obs_u_mask"),
+            ("spoken", "y_s_obs", "obs_s_mask"),
+        ),
+    )
+    context.dataframes["posterior_predictive_calibration"] = calibration_df
 
     trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
 
