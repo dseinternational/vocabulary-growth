@@ -30,6 +30,9 @@ to the us_01/Edgin DS block of the ``vocab_combined`` view
 WORDBANK_SPOKEN_ONLY_FORMS = ("WS",)
 """Wordbank forms that contribute production observations only."""
 
+US01_WS_VOCAB_MAX = 680
+"""Native vocabulary ceiling of the us_01 Words & Sentences form."""
+
 SIGNED_ONLY_STUDIES = ("uk_01",)
 """Studies whose ``signed`` field excludes words that are also spoken.
 
@@ -115,6 +118,33 @@ def validate_subject_ids(
         )
 
 
+def exclude_us01_spoken_ceiling_rows(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, int]:
+    """Drop us_01 Words & Sentences observations at its 680-word ceiling.
+
+    This is a sensitivity-analysis transformation, not a primary inclusion
+    rule. It isolates the 18 potentially right-censored Edgin WS observations
+    identified in the 2026-07 export. All Words & Gestures observations,
+    including a valid count at its separate 396-word ceiling, remain present.
+    """
+    required = {"study", "spoken", "survey_vocab_max"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "us_01 ceiling sensitivity requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    at_ws_ceiling = (
+        df["study"].eq("us_01")
+        & df["spoken"].notna()
+        & df["survey_vocab_max"].eq(US01_WS_VOCAB_MAX)
+        & df["spoken"].eq(US01_WS_VOCAB_MAX)
+    )
+    return df.loc[~at_ws_ceiling].reset_index(drop=True), int(at_ws_ceiling.sum())
+
+
 def select_one_observation_per_subject(
     df: pd.DataFrame,
     *,
@@ -134,6 +164,10 @@ def select_one_observation_per_subject(
         raise KeyError(
             "Single-administration selection requires columns: "
             + ", ".join(sorted(missing))
+        )
+    if not df.index.is_unique:
+        raise ValueError(
+            "Single-administration selection requires a unique dataframe index."
         )
     validate_subject_ids(df, subject_col=subject_col)
 
@@ -431,7 +465,8 @@ def load_combined_data(max_age_months=None):
                 age,
                 understood,
                 spoken,
-                signed
+                signed,
+                survey_vocab_max
             FROM vocab_combined
             WHERE age <= $1
             """,

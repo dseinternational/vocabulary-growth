@@ -34,6 +34,21 @@ naive run hits. Distilled from the 2026-07-12 run
 
 ## 1. Fit
 
+### Batch failure semantics
+
+`python scripts/fit_model.py all --config rep --render --upload` treats convergence as a per-model fitting failure and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, renders the models that passed, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. Other exceptions still abort immediately. The canonical `run_replication.sh` path remains resumable and invokes one model at a time.
+
+### us_01 ceiling-censoring sensitivity
+
+After the VG10 and VG15 baselines pass, fit and compare the registered `us01-ceiling-excluded` variants. These variants remove only the 18 us_01 Words & Sentences observations at the 680-word form ceiling; they retain the valid Words & Gestures observation at its separate 396-word ceiling.
+
+```bash
+python scripts/fit_sensitivity.py vg10 us01-ceiling-excluded --config rep
+python scripts/fit_sensitivity.py vg15 us01-ceiling-excluded --config rep
+python scripts/compare_sensitivity.py vg10 --variant us01-ceiling-excluded
+python scripts/compare_sensitivity.py vg15 --variant us01-ceiling-excluded
+```
+
 ### Default (sequential, resumable)
 
 ```bash

@@ -71,7 +71,7 @@ import pandas as pd
 
 ## Statistical model
 
-The mean structure follows VG09 — words understood and spoken as bounded counts out of 810, with $p_S(a) = p_U(a)\,q(a)$ and study + subject random intercepts on both the understood logit $f_U$ and the production-ratio logit $h$. VG16 adds one **population cross-lag coefficient** $\beta$ to the production-ratio logit:
+The mean structure follows VG09, with $p_S(a) = p_U(a)\,q(a)$ and study + subject random intercepts on both the understood logit $f_U$ and the production-ratio logit $h$. Words understood use the common 810-word reference inventory; paired, logically nested spoken counts use $S\mid U \sim \operatorname{BetaBinomial}(U,q,\kappa_S)$, with the marginal 810-word fallback reserved for rows without a usable understood count. VG16 adds one **population cross-lag coefficient** $\beta$ to the production-ratio logit:
 
 $$h(a, s, i) = \text{intercept}_q + \text{slope}_q\,a_z + g_q(a) + \delta_q[s] + \delta^{\text{subj}}_q[i] + \beta\,x^{\text{lag}}_i$$
 

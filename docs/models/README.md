@@ -63,14 +63,15 @@ The three axes that distinguish the models:
 | [VG15](vg15/index.qmd) | DS         | Understood + spoken + signed | VG14 + within-understood sign–speech association `psi` + study & subject random intercepts + VG10 stabilisation.                                                                                                          |
 | [VG16](vg16/index.qmd) | DS         | Understood + spoken          | VG09 + a within-child cross-lag (prior understood → current `q`): earlier receptive → later expressive. Population-relative headline (≈ null); the within-child (RI-CLPM) contrast is biased by short-T with 2-wave data. |
 
+### Exploratory, unregistered prototypes
+
+VG17 and VG18 are exploratory sign-group comparison modules. They are deliberately excluded from `MODEL_REGISTRY`, `fit_model.py all`, and the numbered model inventory because they have not yet passed the specification and reporting workflow required of registered models. VG17 still uses the same harmonised signing-source rules as the registered signing models so exploratory comparisons cannot silently reintroduce non-comparable fields.
+
 ## Shared architecture
 
 Despite their differences, every model is built from the same components:
 
-- **Outcome** — each vocabulary count is treated as a bounded count out of an
-  **810-item common reference inventory**, so DS and TD counts sit on a
-  comparable scale regardless of which checklist (MB-CDI Words & Gestures, Words
-  & Sentences, Oxford CDI, etc.) produced them.
+- **Outcome** — every model reports vocabulary on an **810-item common reference inventory**, so DS and TD estimates sit on a comparable scale regardless of which checklist (MB-CDI Words & Gestures, Words & Sentences, Oxford CDI, etc.) produced them. Univariate, understood and marginal-fallback likelihoods use that 810-item denominator; paired, logically nested spoken and signed likelihoods use the observed understood count as their denominator.
 - **Likelihood** — a **Beta-Binomial** with **age-varying dispersion**, so the
   degree of between-child heterogeneity can change across development rather than
   being fixed. In joint models, paired spoken and signed counts are modelled conditionally on the observed understood count; rows without usable understood data retain a marginal Beta-Binomial fallback.

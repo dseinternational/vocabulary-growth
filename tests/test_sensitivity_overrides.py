@@ -63,13 +63,14 @@ def test_replace_kappa_overrides_only_named_fields():
 
 def test_registry_counts_and_models():
     # 27 §7 targets + 7 Target-8 young-age anchor variants (#146), two
-    # source-harmonisation variants, and three repeated-measures sensitivities.
-    assert len(VARIANTS) == 39
-    assert len(variants_for("vg10")) == 10
+    # signing-source variants, two ceiling-censoring variants, and three
+    # repeated-measures sensitivities.
+    assert len(VARIANTS) == 41
+    assert len(variants_for("vg10")) == 11
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1
-    assert len(variants_for("vg15")) == 19
+    assert len(variants_for("vg15")) == 20
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -86,13 +87,18 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 19
+    assert len(all_vg15) == 20
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 19
+    assert len({d.config_name for d in all_vg15}) == 20
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
     assert (psi.log_psi_mu, psi.log_psi_sigma) == (0.0, 0.5)
+
+    (vg10_ceiling,) = build_variant("vg10", "us01-ceiling-excluded")
+    (vg15_ceiling,) = build_variant("vg15", "us01-ceiling-excluded")
+    assert vg10_ceiling.exclude_us01_spoken_ceiling
+    assert vg15_ceiling.exclude_us01_spoken_ceiling
 
 
 def test_build_variant_rejects_unknown():

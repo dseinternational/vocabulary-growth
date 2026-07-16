@@ -70,7 +70,14 @@ def nested_outcome_spec(
         if eligible.shape != (len(df),):
             raise ValueError("eligible_mask must have one value per dataframe row.")
 
-    outcome_numeric = pd.to_numeric(df[outcome_col], errors="coerce")
+    outcome_raw = df[outcome_col]
+    outcome_numeric = pd.to_numeric(outcome_raw, errors="coerce")
+    unparseable = outcome_raw.notna() & outcome_numeric.isna()
+    if unparseable.any():
+        raise ValueError(
+            f"{outcome_col} contains {int(unparseable.sum())} non-numeric "
+            "observed count(s)."
+        )
     observed_mask = eligible & outcome_numeric.notna().to_numpy()
     indices = np.flatnonzero(observed_mask)
     observed_values = outcome_numeric.iloc[indices].to_numpy(dtype=float)

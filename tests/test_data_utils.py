@@ -67,12 +67,90 @@ def test_select_one_observation_per_subject_is_reproducible_and_study_scoped():
     assert not selected_a.duplicated(["study", "subject_id"]).any()
 
 
+def test_select_one_observation_requires_unique_index():
+    frame = pd.DataFrame(
+        {
+            "study": ["A", "A"],
+            "subject_id": ["1", "1"],
+            "age": [10, 12],
+        },
+        index=[0, 0],
+    )
+
+    with pytest.raises(ValueError, match="unique dataframe index"):
+        data_utils.select_one_observation_per_subject(frame, random_seed=47)
+
+
 @pytest.mark.parametrize("subject_id", [None, np.nan, "", "   "])
 def test_validate_subject_ids_rejects_missing_or_blank_values(subject_id):
     frame = pd.DataFrame({"study": ["A"], "subject_id": [subject_id]})
 
     with pytest.raises(ValueError, match="non-missing subject ID"):
         data_utils.validate_subject_ids(frame)
+
+
+def test_us01_ceiling_sensitivity_excludes_only_ws_ceiling_rows():
+    frame = pd.DataFrame(
+        {
+            "study": ["us_01", "us_01", "us_01", "uk_04"],
+            "spoken": [680, 679, 396, 416],
+            "survey_vocab_max": [680, 680, 396, 416],
+        }
+    )
+
+    filtered, count = data_utils.exclude_us01_spoken_ceiling_rows(frame)
+
+    assert count == 1
+    assert filtered[["study", "spoken"]].to_records(index=False).tolist() == [
+        ("us_01", 679),
+        ("us_01", 396),
+        ("uk_04", 416),
+    ]
+
+
+def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            "INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    "WS",
+                    "English (American)",
+                    "Edgin",
+                    "d05",
+                    None,
+                    30,
+                    680,
+                    680,
+                    False,
+                    "Down syndrome",
+                ),
+                (
+                    "WG",
+                    "English (American)",
+                    "Edgin",
+                    "d06",
+                    None,
+                    20,
+                    396,
+                    396,
+                    False,
+                    "Down syndrome",
+                ),
+            ],
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+    frame = data_utils.load_data(
+        Population.DOWN_SYNDROME,
+        columns=["study", "spoken", "survey_vocab_max"],
+    )
+
+    filtered, count = data_utils.exclude_us01_spoken_ceiling_rows(frame)
+
+    assert count == 1
+    assert 680 not in filtered["spoken"].tolist()
+    assert 396 in filtered["spoken"].tolist()
 
 
 def test_td_bivariate_data_excludes_ws_before_sampling(tmp_path, monkeypatch):
@@ -173,6 +251,7 @@ def test_ds_us01_keeps_valid_rows_above_legacy_100_cap(tmp_path, monkeypatch):
     us01 = _load_us01(tmp_path, monkeypatch)
 
     assert sorted(us01["spoken"].tolist()) == [12, 77, 120, 150]
+    assert set(us01["survey_vocab_max"].dropna().astype(int)) == {396, 680}
 
 
 def test_form_ceiling_guard_drops_counts_above_survey_vocab_max(tmp_path, monkeypatch):

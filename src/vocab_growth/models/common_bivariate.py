@@ -180,13 +180,21 @@ def prepare_bivariate_data(
     definition: BivariateModelDefinition,
 ):
     """Load and prepare data for a bivariate model from its definition."""
+    columns = ["age", "understood", "spoken"]
+    if definition.exclude_us01_spoken_ceiling:
+        columns.extend(["study", "survey_vocab_max"])
     df = vocab_data_utils.load_data(
         population=definition.population,
-        columns=["age", "understood", "spoken"],
+        columns=columns,
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
     )
-    analysis_df = df[["age", "understood", "spoken"]].copy()
+    ceiling_rows_excluded = 0
+    if definition.exclude_us01_spoken_ceiling:
+        df, ceiling_rows_excluded = (
+            vocab_data_utils.exclude_us01_spoken_ceiling_rows(df)
+        )
+    analysis_df = df[columns].copy()
 
     # Keep rows where at least one outcome is observed (and age is present)
     analysis_df = analysis_df.dropna(subset=["age"])
@@ -194,7 +202,9 @@ def prepare_bivariate_data(
     has_s = analysis_df["spoken"].notna()
     analysis_df = analysis_df[has_u | has_s].reset_index(drop=True)
 
-    desc = descriptive_stats.describe_all(analysis_df, alpha=0.05)
+    desc = descriptive_stats.describe_all(
+        analysis_df[["age", "understood", "spoken"]], alpha=0.05
+    )
 
     n = len(analysis_df)
     n_u = int(analysis_df["understood"].notna().sum())
@@ -203,17 +213,17 @@ def prepare_bivariate_data(
         (analysis_df["understood"].notna() & analysis_df["spoken"].notna()).sum()
     )
 
-    key_value_table(
-        "Observation counts",
-        [
-            ("Total observations", n),
-            ("Understood observed", n_u),
-            ("Spoken observed", n_s),
-            ("Both observed", n_both),
-            ("Understood only", n_u - n_both),
-            ("Spoken only", n_s - n_both),
-        ],
-    )
+    counts: list[tuple[str, object]] = [
+        ("Total observations", n),
+        ("Understood observed", n_u),
+        ("Spoken observed", n_s),
+        ("Both observed", n_both),
+        ("Understood only", n_u - n_both),
+        ("Spoken only", n_s - n_both),
+    ]
+    if definition.exclude_us01_spoken_ceiling:
+        counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
+    key_value_table("Observation counts", counts)
     dataframe_table(desc, title="Descriptive statistics")
 
     # Create a BinomialModelData for the context interface (using understood as primary)
@@ -375,6 +385,8 @@ def build_model(context: BivariateContext):
         outcome_col="spoken",
         n_trials=n_trials,
     )
+    if not np.array_equal(spoken_spec.indices, np.flatnonzero(has_s)):
+        raise ValueError("Spoken likelihood rows do not match the observed-data mask.")
     y_s_observed = spoken_spec.observed
     idx_s = spoken_spec.indices
     n_s = spoken_spec.n_observed

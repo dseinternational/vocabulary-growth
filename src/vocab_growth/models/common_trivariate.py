@@ -507,6 +507,10 @@ def build_model(context: TrivariateContext):
         outcome_col="signed",
         n_trials=n_trials,
     )
+    if not np.array_equal(spoken_spec.indices, np.flatnonzero(has_s)):
+        raise ValueError("Spoken likelihood rows do not match the observed-data mask.")
+    if not np.array_equal(signed_spec.indices, np.flatnonzero(has_sign)):
+        raise ValueError("Signed likelihood rows do not match the observed-data mask.")
     y_s_observed = spoken_spec.observed
     y_sign_observed = signed_spec.observed
     idx_s = spoken_spec.indices

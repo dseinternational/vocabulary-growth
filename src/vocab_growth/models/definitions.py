@@ -244,6 +244,9 @@ class BivariateModelDefinition:
     # -- Data age filtering --
     max_age_months: int | None = None
     """Upper bound on age (inclusive, months) for data loading. None = no limit."""
+    exclude_us01_spoken_ceiling: bool = False
+    """Exclude us_01 WS spoken counts at the 680-word ceiling. This is a
+    source-censoring sensitivity only; primary models retain these valid rows."""
 
     @property
     def model_type(self) -> ModelType:
@@ -508,6 +511,9 @@ class JointModelDefinition:
     """Re-include uk_01's signed-only field for a source-sensitivity fit."""
     include_uk06: bool = False
     """Re-include uk_06's unverified signing field for a source-sensitivity fit."""
+    exclude_us01_spoken_ceiling: bool = False
+    """Exclude us_01 WS spoken counts at the 680-word ceiling. This is a
+    source-censoring sensitivity only; primary models retain these valid rows."""
 
     # -- nz_01 (Foster-Cohen) produced cross-tab inclusion --
     include_nz01_cells: bool = True

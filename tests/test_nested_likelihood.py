@@ -60,3 +60,15 @@ def test_nested_outcome_spec_rejects_invalid_child_counts(spoken):
             outcome_col="spoken",
             n_trials=810,
         )
+
+
+def test_nested_outcome_spec_rejects_non_numeric_observed_child_count():
+    df = pd.DataFrame({"understood": [100], "spoken": ["not-a-count"]})
+
+    with pytest.raises(ValueError, match="non-numeric observed count"):
+        nested_outcome_spec(
+            df,
+            parent_col="understood",
+            outcome_col="spoken",
+            n_trials=810,
+        )

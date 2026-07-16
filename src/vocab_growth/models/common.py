@@ -955,7 +955,10 @@ def diagnostics(
             console.print(loocv_by_name[var_name])
 
 
-def sample_posterior_predictive(context: ModelFitContext):
+def sample_posterior_predictive(
+    context: ModelFitContext,
+    definition: UnivariateModelDefinition | None = None,
+):
     """
     Sample from the posterior predictive distribution.
     """
@@ -1003,7 +1006,13 @@ def sample_posterior_predictive(context: ModelFitContext):
         trace,
         context.analysis_df,
         context.reporting.output_dir,
-        (("outcome", "y_obs", None),),
+        (
+            (
+                definition.outcome.value if definition is not None else "outcome",
+                "y_obs",
+                None,
+            ),
+        ),
     )
     context.dataframes["posterior_predictive_calibration"] = calibration_df
 
@@ -1206,10 +1215,24 @@ _REPORTING_CONFIGS = {
     "reporting-lite",
     "rep_lite",
 }
+_NON_REPORTING_CONFIGS = {"dev", "development", "test", "testing"}
 
 
 class ConvergenceGateError(RuntimeError):
     """Raised when a reporting-quality fit fails convergence checks."""
+
+
+def is_reporting_quality_config(sampling_config_name: str) -> bool:
+    """Classify a known sampling tier without silently accepting new aliases."""
+    name = sampling_config_name.strip().lower()
+    if name in _REPORTING_CONFIGS:
+        return True
+    if name in _NON_REPORTING_CONFIGS:
+        return False
+    raise ValueError(
+        f"Sampling configuration {sampling_config_name!r} has no convergence-gate "
+        "classification. Add it explicitly before fitting."
+    )
 
 
 def enforce_convergence_gate(
@@ -1219,7 +1242,7 @@ def enforce_convergence_gate(
     output_dir: str,
 ) -> None:
     """Stop reporting pipelines whose reporting-quality posterior did not converge."""
-    if sampling_config_name not in _REPORTING_CONFIGS:
+    if not is_reporting_quality_config(sampling_config_name):
         return
 
     scan_failed = (
@@ -1409,11 +1432,18 @@ def _git_metadata() -> dict[str, object]:
         return result.stdout.strip()
 
     commit = run_git("rev-parse", "HEAD")
-    branch = run_git("branch", "--show-current")
+    branch_result = run_git("branch", "--show-current")
+    if branch_result is None:
+        branch = None
+        detached = None
+    else:
+        branch = branch_result or None
+        detached = not bool(branch_result)
     status = run_git("status", "--porcelain", "--untracked-files=normal")
     return {
         "commit": commit,
         "branch": branch,
+        "detached": detached,
         "dirty": None if status is None else bool(status),
     }
 
@@ -1501,6 +1531,7 @@ def run_fit_pipeline(
     ``fn`` takes the freshly-created ``context`` (typically a closure binding
     the engine's ``definition``).
     """
+    is_reporting_quality_config(config)
     run_banner(definition.banner, subtitle=f"sampling config: {config}")
 
     env_info.report_environment_info()
@@ -1573,7 +1604,10 @@ def fit_single_outcome_model(
             ),
             ("Posterior sampling", sample),
             ("Diagnostics", diagnostics),
-            ("Posterior predictions", sample_posterior_predictive),
+            (
+                "Posterior predictions",
+                lambda ctx: sample_posterior_predictive(ctx, definition),
+            ),
             ("Posterior summary", posterior_summary),
             (
                 "Plots",

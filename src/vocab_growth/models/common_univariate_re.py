@@ -481,7 +481,7 @@ def sample_posterior_predictive_re(
 ) -> None:
     """Sample a coherent trajectory for one new child when subject REs are used."""
     if not definition.use_subject_re:
-        _base_sample_posterior_predictive(context)
+        _base_sample_posterior_predictive(context, definition)
         return
 
     f_plot = context.model_variables["f_plot"]

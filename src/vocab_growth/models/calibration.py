@@ -17,6 +17,7 @@ def predictive_calibration_table(
     *,
     interval_probs: tuple[float, ...] = (0.50, 0.80, 0.90),
     age_band_months: int = 12,
+    observation_chunk_size: int = 256,
 ) -> pd.DataFrame:
     """Summarise predictive coverage and discrete probability-integral transforms.
 
@@ -25,7 +26,7 @@ def predictive_calibration_table(
     which is a deterministic diagnostic suitable for a discrete count outcome.
     """
     observed = np.asarray(observed, dtype=float)
-    predictive = np.asarray(predictive, dtype=float)
+    predictive = np.asarray(predictive)
     ages = np.asarray(ages, dtype=float)
     if predictive.ndim != 2:
         raise ValueError("predictive must have shape (observation, sample).")
@@ -35,6 +36,37 @@ def predictive_calibration_table(
         raise ValueError("age_band_months must be positive.")
     if not interval_probs or any(not 0 < prob < 1 for prob in interval_probs):
         raise ValueError("interval_probs must contain probabilities between 0 and 1.")
+    if observation_chunk_size <= 0:
+        raise ValueError("observation_chunk_size must be positive.")
+    if observed.size == 0 or predictive.shape[1] == 0:
+        raise ValueError("calibration requires observations and predictive samples.")
+
+    n_observations = observed.size
+    predictive_mean = np.empty(n_observations, dtype=float)
+    predictive_zero_rate = np.empty(n_observations, dtype=float)
+    pit = np.empty(n_observations, dtype=float)
+    coverage_by_prob = {
+        prob: np.empty(n_observations, dtype=bool) for prob in interval_probs
+    }
+    width_by_prob = {
+        prob: np.empty(n_observations, dtype=float) for prob in interval_probs
+    }
+
+    for start in range(0, n_observations, observation_chunk_size):
+        stop = min(start + observation_chunk_size, n_observations)
+        y = observed[start:stop]
+        y_rep = predictive[start:stop]
+        predictive_mean[start:stop] = y_rep.mean(axis=1)
+        predictive_zero_rate[start:stop] = np.mean(y_rep == 0, axis=1)
+        pit[start:stop] = np.mean(y_rep < y[:, None], axis=1) + 0.5 * np.mean(
+            y_rep == y[:, None], axis=1
+        )
+        for prob in interval_probs:
+            tail = (1 - prob) / 2
+            lower = np.quantile(y_rep, tail, axis=1)
+            upper = np.quantile(y_rep, 1 - tail, axis=1)
+            coverage_by_prob[prob][start:stop] = (y >= lower) & (y <= upper)
+            width_by_prob[prob][start:stop] = upper - lower
 
     age_starts = np.floor(ages / age_band_months).astype(int) * age_band_months
     groups: list[tuple[str, np.ndarray]] = [("all", np.ones(observed.size, dtype=bool))]
@@ -49,32 +81,28 @@ def predictive_calibration_table(
     rows: list[dict[str, float | int | str]] = []
     for age_band, mask in groups:
         y = observed[mask]
-        y_rep = predictive[mask]
-        pit = np.mean(y_rep < y[:, None], axis=1) + 0.5 * np.mean(
-            y_rep == y[:, None], axis=1
-        )
+        pit_group = pit[mask]
         shared = {
             "age_band_months": age_band,
             "n_observations": int(mask.sum()),
             "observed_mean": float(y.mean()),
-            "predictive_mean": float(y_rep.mean()),
-            "mean_error": float(y_rep.mean() - y.mean()),
+            "predictive_mean": float(predictive_mean[mask].mean()),
+            "mean_error": float(predictive_mean[mask].mean() - y.mean()),
             "observed_zero_rate": float(np.mean(y == 0)),
-            "predictive_zero_rate": float(np.mean(y_rep == 0)),
-            "mid_pit_mean": float(pit.mean()),
-            "mid_pit_variance": float(pit.var()),
-            "mid_pit_extreme_rate": float(np.mean((pit < 0.05) | (pit > 0.95))),
+            "predictive_zero_rate": float(predictive_zero_rate[mask].mean()),
+            "mid_pit_mean": float(pit_group.mean()),
+            "mid_pit_variance": float(pit_group.var()),
+            "mid_pit_extreme_rate": float(
+                np.mean((pit_group < 0.05) | (pit_group > 0.95))
+            ),
         }
         for prob in interval_probs:
-            tail = (1 - prob) / 2
-            lower = np.quantile(y_rep, tail, axis=1)
-            upper = np.quantile(y_rep, 1 - tail, axis=1)
             rows.append(
                 {
                     **shared,
                     "interval_probability": prob,
-                    "empirical_coverage": float(np.mean((y >= lower) & (y <= upper))),
-                    "mean_interval_width": float(np.mean(upper - lower)),
+                    "empirical_coverage": float(coverage_by_prob[prob][mask].mean()),
+                    "mean_interval_width": float(width_by_prob[prob][mask].mean()),
                 }
             )
     return pd.DataFrame(rows)
@@ -110,7 +138,7 @@ def write_trace_calibration(
                 f"found {observation_dims}."
             )
         observation_dim = observation_dims[0]
-        predictive = np.asarray(
+        predictive = (
             replicated.stack(sample=("chain", "draw"))
             .transpose(observation_dim, "sample")
             .values

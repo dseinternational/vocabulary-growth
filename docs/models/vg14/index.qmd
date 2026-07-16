@@ -82,7 +82,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood, words spoken and words signed as bounded count outcomes out of 810 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale.
+We model words understood on the 810-word reference inventory and, for paired logically nested rows, model spoken and signed words conditionally on the observed understood count. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale.
 
 The two expressive modalities are derived as fractions of the understood vocabulary:
 

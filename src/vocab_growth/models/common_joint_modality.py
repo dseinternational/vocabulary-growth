@@ -304,6 +304,8 @@ def prepare_joint_data(
     merged_columns = ["study", "age", "understood", "spoken", "signed"]
     if use_subject_codes:
         merged_columns = merged_columns + ["subject_id"]
+    if definition.exclude_us01_spoken_ceiling:
+        merged_columns = merged_columns + ["survey_vocab_max"]
 
     merged = vocab_data_utils.load_data(
         population=definition.population,
@@ -354,6 +356,11 @@ def prepare_joint_data(
         frames.append(_load_nz01_produced_cells())
     analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
+    ceiling_rows_excluded = 0
+    if definition.exclude_us01_spoken_ceiling:
+        analysis_df, ceiling_rows_excluded = (
+            vocab_data_utils.exclude_us01_spoken_ceiling_rows(analysis_df)
+        )
 
     analysis_df, sign_source_dropped = (
         vocab_data_utils.mask_incomparable_signed_outcomes(
@@ -421,6 +428,8 @@ def prepare_joint_data(
         ("uk_06 unverified signed rows dropped", sign_source_dropped.get("uk_06", 0)),
         ("include_nz01_cells", definition.include_nz01_cells),
     ]
+    if definition.exclude_us01_spoken_ceiling:
+        counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
     if n_subjects is not None:
         n_singletons = int((analysis_df.groupby("subject_code").size() == 1).sum())
         # Subjects contributing at least one signed observation (the modality that
@@ -626,6 +635,12 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         n_trials=n_trials,
         eligible_mask=marginal_outcome_eligible,
     )
+    expected_spoken = marginal_outcome_eligible & df["spoken"].notna().to_numpy()
+    expected_signed = marginal_outcome_eligible & df["signed"].notna().to_numpy()
+    if not np.array_equal(spoken_spec.indices, np.flatnonzero(expected_spoken)):
+        raise ValueError("Spoken likelihood rows do not match the marginal-data mask.")
+    if not np.array_equal(signed_spec.indices, np.flatnonzero(expected_signed)):
+        raise ValueError("Signed likelihood rows do not match the marginal-data mask.")
     idx_s = spoken_spec.indices
     idx_sign = signed_spec.indices
     y_s = spoken_spec.observed

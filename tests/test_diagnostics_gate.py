@@ -20,6 +20,7 @@ from vocab_growth.models.common import (
     _report_diagnostic_warnings,
     diagnostics_var_names,
     enforce_convergence_gate,
+    is_reporting_quality_config,
 )
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 
@@ -141,3 +142,22 @@ def test_development_fit_reports_but_does_not_raise(tmp_path):
     )
 
     assert not (tmp_path / "CONVERGENCE_FAILED.txt").exists()
+
+
+def test_sampling_config_classification_is_explicit():
+    assert is_reporting_quality_config("rep")
+    assert is_reporting_quality_config("reporting-lite")
+    assert not is_reporting_quality_config("dev")
+    assert not is_reporting_quality_config("testing")
+
+    with pytest.raises(ValueError, match="no convergence-gate classification"):
+        is_reporting_quality_config("new-upstream-tier")
+
+
+def test_unknown_sampling_tier_cannot_bypass_gate(tmp_path):
+    with pytest.raises(ValueError, match="no convergence-gate classification"):
+        enforce_convergence_gate(
+            _payload(),
+            sampling_config_name="new-upstream-tier",
+            output_dir=str(tmp_path),
+        )

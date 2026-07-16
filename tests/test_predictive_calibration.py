@@ -4,6 +4,7 @@
 """Tests for quantitative posterior-predictive calibration summaries."""
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from vocab_growth.models.calibration import predictive_calibration_table
@@ -37,3 +38,22 @@ def test_predictive_calibration_rejects_misaligned_inputs():
             predictive=np.ones((2, 4)),
             ages=np.array([10]),
         )
+
+
+def test_predictive_calibration_chunking_preserves_results():
+    observed = np.array([0, 2, 4, 6])
+    predictive = np.array(
+        [[0, 0, 1, 1], [1, 2, 2, 3], [3, 4, 4, 5], [5, 6, 6, 7]],
+        dtype=np.int16,
+    )
+    ages = np.array([8, 10, 14, 18])
+
+    expected = predictive_calibration_table(observed, predictive, ages)
+    chunked = predictive_calibration_table(
+        observed,
+        predictive,
+        ages,
+        observation_chunk_size=1,
+    )
+
+    pd.testing.assert_frame_equal(chunked, expected)

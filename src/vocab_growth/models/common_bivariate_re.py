@@ -84,6 +84,8 @@ def prepare_bivariate_re_data(
     )
     if use_subject_codes:
         columns = columns + ["subject_id"]
+    if definition.exclude_us01_spoken_ceiling:
+        columns = columns + ["survey_vocab_max"]
 
     df = vocab_data_utils.load_data(
         population=definition.population,
@@ -92,6 +94,11 @@ def prepare_bivariate_re_data(
         random_seed=definition.random_seed,
         max_age_months=definition.max_age_months,
     )
+    ceiling_rows_excluded = 0
+    if definition.exclude_us01_spoken_ceiling:
+        df, ceiling_rows_excluded = (
+            vocab_data_utils.exclude_us01_spoken_ceiling_rows(df)
+        )
     analysis_df = df[columns].copy()
 
     # Keep rows where at least one outcome is observed (and age is present)
@@ -172,6 +179,8 @@ def prepare_bivariate_re_data(
                 f"{n_before_single_administration} -> {len(analysis_df)} rows",
             )
         )
+    if definition.exclude_us01_spoken_ceiling:
+        counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
     key_value_table("Observation counts", counts)
     dataframe_table(desc, title="Descriptive statistics")
 
@@ -301,6 +310,8 @@ def build_model_re(
         n_trials=n_trials,
         eligible_mask=~holdout,
     )
+    if not np.array_equal(spoken_spec.indices, np.flatnonzero(has_s_train)):
+        raise ValueError("Spoken likelihood rows do not match the training-data mask.")
     y_s_observed = spoken_spec.observed
     idx_s = spoken_spec.indices
     n_s = spoken_spec.n_observed

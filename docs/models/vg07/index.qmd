@@ -71,7 +71,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 810 possible words. The model follows the same production-ratio reparameterization as VG05, but adds study-level random intercepts:
+Words understood use a Beta-Binomial likelihood on the common 810-word reference inventory. For paired, logically nested rows, spoken words use the conditional likelihood $S\mid U \sim \operatorname{BetaBinomial}(U,q,\kappa_S)$; rows without a usable understood count retain the marginal 810-word fallback. The model follows the same production-ratio reparameterization as VG05, but adds study-level random intercepts:
 
 $$f_U(a, s) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s]$$
 $$h(a, s) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s]$$
