@@ -71,7 +71,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 810 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only one outcome is available are retained using separate observation indices.
+We jointly model words understood on the 810-word reference inventory and words spoken conditionally on the observed understood count when the two measurements are logically nested. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. When both counts are available and $S\le U$, the likelihood factorises as $P(U)P(S\mid U)$: understood uses a Beta-Binomial over 810 words and spoken uses a Beta-Binomial over the observed $U$ words with mean $q(a)$. Spoken-only records and source-data violations retain a marginal Beta-Binomial over 810 words with mean $p_U(a)q(a)$.
 
 ::: {.callout-note title="Model at a glance"}
 
@@ -211,11 +211,11 @@ The expected difference in word counts between understanding and production.
 
 ## Receptive → expressive (cross-sectional)
 
-**Does receptive vocabulary predict expressive vocabulary, cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child *says* is the number they *understand* scaled by $q(a)$,
+**How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child *says* is the number they *understand* scaled by $q(a)$,
 
 $$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
 
-So receptive vocabulary predicts expressive vocabulary with an age-dependent slope $q(a)$ — the expected number of words spoken per word understood. The figure below reads this off directly: for children with Down syndrome at several ages, it maps words understood (x-axis) to the predicted words spoken (y-axis), with the shaded band the 90% HDI on $q(a)$ and the dashed line the ceiling (a child cannot say more distinct words than they understand). The per-age posterior of $q(a)$ (median and HDI) is tabulated under [Production ratio](#production-ratio) above.
+Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — not evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. The figure below reads the fitted association directly: for children with Down syndrome at several ages, it maps words understood (x-axis) to expected words spoken (y-axis), with the shaded band the 90% HDI on $q(a)$ and the dashed line the ceiling. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
 
 ![Predicted words spoken given words understood, by age](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
 
@@ -254,7 +254,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
 
@@ -297,7 +297,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 

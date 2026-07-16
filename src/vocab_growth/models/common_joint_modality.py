@@ -28,15 +28,14 @@ Latent scale (all out of N = 810 checklist words, the DSE reference inventory):
     pi_neither  = 1 - r - q + pi_both
     p_any(a)    = p_U(a) * (r + q - pi_both)   # total expressive (data-identified)
 
-Likelihoods (a composite marginal / pseudo-likelihood — the three word-count
-outcomes enter as separate marginal Beta-Binomials coupled only through the
-shared latent means p_U, q, r; they are treated as conditionally independent
-given those means and item-level joint structure is NOT modelled here, except
-by the uk_02 four-cell term below. See methods-models.qmd, "Joint outcomes and
-production ratios", for the full discussion):
+Likelihoods use the observed understood count as the denominator for spoken
+and signed outcomes when the counts are jointly available and logically
+nested. Rows without a usable understood count retain a marginal likelihood.
+The uk_02 rows with a four-cell cross-tabulation use that joint composition
+term instead of duplicate spoken and signed likelihood contributions:
     - understood ~ BetaBinomial(810, p_U)              (all DS studies)
-    - spoken     ~ BetaBinomial(810, p_U * q)          (marginal-only rows)
-    - signed     ~ BetaBinomial(810, p_U * r)          (uk_01/04/05/06 + uk_02 marginal-only)
+    - spoken | understood ~ BetaBinomial(understood, q)
+    - signed | understood ~ BetaBinomial(understood, r)
     - uk_02 four cells ~ DirichletMultinomial(total, conc * [pi_*])  (the one
       item-level joint term; identifies psi)
 
@@ -71,6 +70,7 @@ from vocab_growth.models.build_utils import (
     standardize_ages,
     validate_ell_bounds,
 )
+from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
     BaseModelConfiguration,
     ModelFitContext,
@@ -89,6 +89,7 @@ from vocab_growth.models.gp_utils import (
     tent_and_gp,
     trend_and_gp,
 )
+from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.plotting import (
     _save_csv,
     plot_prior_samples,
@@ -303,6 +304,8 @@ def prepare_joint_data(
     merged_columns = ["study", "age", "understood", "spoken", "signed"]
     if use_subject_codes:
         merged_columns = merged_columns + ["subject_id"]
+    if definition.exclude_us01_spoken_ceiling:
+        merged_columns = merged_columns + ["survey_vocab_max"]
 
     merged = vocab_data_utils.load_data(
         population=definition.population,
@@ -314,8 +317,6 @@ def prepare_joint_data(
     other = merged[~merged["study"].isin([UK02_STUDY_ID, NZ01_STUDY_ID])].copy()
 
     four, marg = _load_uk02_four_cell()
-    include_uk06 = definition.include_uk06
-
     # uk_02 four-cell rows: the four-cell sum is the authoritative understood
     # total; cells feed the DM; marginal spoken/signed are set NaN because they
     # are subsumed by the DM and would otherwise be double counted.
@@ -355,11 +356,19 @@ def prepare_joint_data(
         frames.append(_load_nz01_produced_cells())
     analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
+    ceiling_rows_excluded = 0
+    if definition.exclude_us01_spoken_ceiling:
+        analysis_df, ceiling_rows_excluded = (
+            vocab_data_utils.exclude_us01_spoken_ceiling_rows(analysis_df)
+        )
 
-    # Drop uk_06 signed unless included (its understood/spoken stay).
-    if not include_uk06:
-        m = (analysis_df["study"] == "uk_06") & analysis_df["signed"].notna()
-        analysis_df.loc[m, "signed"] = np.nan
+    analysis_df, sign_source_dropped = (
+        vocab_data_utils.mask_incomparable_signed_outcomes(
+            analysis_df,
+            include_signed_only=definition.include_uk01_signed,
+            include_uncertain=definition.include_uk06,
+        )
+    )
 
     has_prod_obs = (
         analysis_df["prod_signed_spoken"].notna()
@@ -374,6 +383,8 @@ def prepare_joint_data(
         | has_prod_obs
     )
     analysis_df = analysis_df[has_any_observation].reset_index(drop=True)
+    if use_subject_codes:
+        vocab_data_utils.validate_subject_ids(analysis_df)
 
     # Integer study codes (sorted for stability).
     unique_studies = sorted(analysis_df["study"].unique())
@@ -411,9 +422,14 @@ def prepare_joint_data(
         ("Signed observed (marginal)", n_sign),
         ("uk_02 four-cell rows (DM)", n_cells),
         ("nz_01 produced-cell rows (DM)", n_prod),
-        ("include_uk06", include_uk06),
+        ("include_uk01_signed", definition.include_uk01_signed),
+        ("uk_01 signed-only rows dropped", sign_source_dropped.get("uk_01", 0)),
+        ("include_uk06", definition.include_uk06),
+        ("uk_06 unverified signed rows dropped", sign_source_dropped.get("uk_06", 0)),
         ("include_nz01_cells", definition.include_nz01_cells),
     ]
+    if definition.exclude_us01_spoken_ceiling:
+        counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
     if n_subjects is not None:
         n_singletons = int((analysis_df.groupby("subject_code").size() == 1).sum())
         # Subjects contributing at least one signed observation (the modality that
@@ -587,8 +603,6 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     n_trials = context.model_data.n_trials
 
     has_u = df["understood"].notna().values
-    has_s = df["spoken"].notna().values
-    has_sign = df["signed"].notna().values
     has_cells = df["signed_spoken"].notna().values
 
     # Optional held-out rows (K-fold LOSO): kept in obs space so their latents are
@@ -600,18 +614,41 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     else:
         holdout = np.zeros(len(df), dtype=bool)
     has_u_t = has_u & ~holdout
-    has_s_t = has_s & ~holdout
-    has_sign_t = has_sign & ~holdout
     has_cells_t = has_cells & ~holdout
 
     idx_u = np.where(has_u_t)[0]
-    idx_s = np.where(has_s_t)[0]
-    idx_sign = np.where(has_sign_t)[0]
     idx_cells = np.where(has_cells_t)[0]
 
     y_u = np.asarray(df.loc[has_u_t, "understood"], dtype=int)
-    y_s = np.asarray(df.loc[has_s_t, "spoken"], dtype=int)
-    y_sign = np.asarray(df.loc[has_sign_t, "signed"], dtype=int)
+    marginal_outcome_eligible = ~holdout & ~has_cells
+    spoken_spec = nested_outcome_spec(
+        df,
+        parent_col="understood",
+        outcome_col="spoken",
+        n_trials=n_trials,
+        eligible_mask=marginal_outcome_eligible,
+    )
+    signed_spec = nested_outcome_spec(
+        df,
+        parent_col="understood",
+        outcome_col="signed",
+        n_trials=n_trials,
+        eligible_mask=marginal_outcome_eligible,
+    )
+    expected_spoken = marginal_outcome_eligible & df["spoken"].notna().to_numpy()
+    expected_signed = marginal_outcome_eligible & df["signed"].notna().to_numpy()
+    if not np.array_equal(spoken_spec.indices, np.flatnonzero(expected_spoken)):
+        raise ValueError("Spoken likelihood rows do not match the marginal-data mask.")
+    if not np.array_equal(signed_spec.indices, np.flatnonzero(expected_signed)):
+        raise ValueError("Signed likelihood rows do not match the marginal-data mask.")
+    idx_s = spoken_spec.indices
+    idx_sign = signed_spec.indices
+    y_s = spoken_spec.observed
+    y_sign = signed_spec.observed
+    has_s_likelihood = np.zeros(len(df), dtype=bool)
+    has_sign_likelihood = np.zeros(len(df), dtype=bool)
+    has_s_likelihood[idx_s] = True
+    has_sign_likelihood[idx_sign] = True
 
     cell_counts = np.asarray(
         df.loc[has_cells_t, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
@@ -713,6 +750,9 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         ("Total observations", n),
         ("Studies", n_studies),
         ("Understood / spoken / signed / cells", f"{len(idx_u)} / {len(idx_s)} / {len(idx_sign)} / {len(idx_cells)}"),
+        ("Spoken conditional / marginal", f"{spoken_spec.n_conditional} / {spoken_spec.n_marginal}"),
+        ("Signed conditional / marginal", f"{signed_spec.n_conditional} / {signed_spec.n_marginal}"),
+        ("Child > understood violations (spoken/signed)", f"{spoken_spec.n_parent_violations} / {signed_spec.n_parent_violations}"),
         ("n_trials", n_trials),
         ("Age mean / std", (round(X_mean, 1), round(X_std, 1))),
         ("HSGP m / L", (M, L)),
@@ -759,6 +799,27 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
         _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
         _ = pm.Data("obs_prod_mask", has_prod_t.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_u_mask", has_u_t.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_s_mask", has_s_likelihood.astype(int), dims=("obs_id",))
+        _ = pm.Data(
+            "obs_sign_mask", has_sign_likelihood.astype(int), dims=("obs_id",)
+        )
+        s_likelihood_n = pm.Data(
+            "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
+        )
+        s_is_conditional = pm.Data(
+            "s_is_conditional",
+            spoken_spec.is_conditional.astype(int),
+            dims=("obs_s_id",),
+        )
+        sign_likelihood_n = pm.Data(
+            "sign_likelihood_n", signed_spec.trials, dims=("obs_sign_id",)
+        )
+        sign_is_conditional = pm.Data(
+            "sign_is_conditional",
+            signed_spec.is_conditional.astype(int),
+            dims=("obs_sign_id",),
+        )
 
         # Latent full-grid trajectories (plain tensors), built by the shared
         # gp_utils helpers. Option D anchors each GP (per-draw zero at the
@@ -904,16 +965,26 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         pm.BetaBinomial("y_u_obs", n=n_trials, alpha=p_u_sel * k_u, beta=(1 - p_u_sel) * k_u,
                         observed=y_u, dims="obs_u_id")
 
-        # Spoken marginal (p_U * q)
-        p_s_sel = pm.math.clip((p_u_obs * q_obs)[idx_s], EPSILON, 1 - EPSILON)
+        # Spoken: nested where U is usable, otherwise marginal over the inventory.
+        p_s_sel = pm.math.switch(
+            s_is_conditional,
+            q_obs[idx_s],
+            (p_u_obs * q_obs)[idx_s],
+        )
+        p_s_sel = pm.math.clip(p_s_sel, EPSILON, 1 - EPSILON)
         k_s = kappa_s_obs[idx_s]
-        pm.BetaBinomial("y_s_obs", n=n_trials, alpha=p_s_sel * k_s, beta=(1 - p_s_sel) * k_s,
+        pm.BetaBinomial("y_s_obs", n=s_likelihood_n, alpha=p_s_sel * k_s, beta=(1 - p_s_sel) * k_s,
                         observed=y_s, dims="obs_s_id")
 
-        # Signed marginal (p_U * r)
-        p_sign_sel = pm.math.clip((p_u_obs * r_obs)[idx_sign], EPSILON, 1 - EPSILON)
+        # Signed: nested where U is usable, otherwise marginal over the inventory.
+        p_sign_sel = pm.math.switch(
+            sign_is_conditional,
+            r_obs[idx_sign],
+            (p_u_obs * r_obs)[idx_sign],
+        )
+        p_sign_sel = pm.math.clip(p_sign_sel, EPSILON, 1 - EPSILON)
         k_sign = kappa_sign_obs[idx_sign]
-        pm.BetaBinomial("y_sign_obs", n=n_trials, alpha=p_sign_sel * k_sign, beta=(1 - p_sign_sel) * k_sign,
+        pm.BetaBinomial("y_sign_obs", n=sign_likelihood_n, alpha=p_sign_sel * k_sign, beta=(1 - p_sign_sel) * k_sign,
                         observed=y_sign, dims="obs_sign_id")
 
         # uk_02 four cells (Dirichlet-Multinomial), within-understood composition.
@@ -1080,8 +1151,8 @@ def diagnostics(context: JointContext):
         round_to=4,
         loo_var_names=(
             ("y_u_obs", "words understood"),
-            ("y_s_obs", "words spoken (marginal)"),
-            ("y_sign_obs", "words signed (marginal)"),
+            ("y_s_obs", "words spoken"),
+            ("y_sign_obs", "words signed"),
         ),
     )
 
@@ -1125,6 +1196,17 @@ def sample_posterior_predictive(context: JointContext, definition=None):
             random_seed=context.sampling.random_seed,
         )
     context.set_trace(trace)
+    calibration_df = write_trace_calibration(
+        trace,
+        context.analysis_df,
+        context.reporting.output_dir,
+        (
+            ("understood", "y_u_obs", "obs_u_mask"),
+            ("spoken", "y_s_obs", "obs_s_mask"),
+            ("signed", "y_sign_obs", "obs_sign_mask"),
+        ),
+    )
+    context.dataframes["posterior_predictive_calibration"] = calibration_df
     trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
 
     # Observed uk_02 four-cell counts / ages. Use the stored training mask so

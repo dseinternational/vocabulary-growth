@@ -13,7 +13,7 @@ import dataclasses
 
 import pytest
 
-from vocab_growth.models.definitions import VG10, VG11, VG12, VG15
+from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15
 from vocab_growth.sensitivity.overrides import make_variant, replace_kappa
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
@@ -62,25 +62,43 @@ def test_replace_kappa_overrides_only_named_fields():
 
 
 def test_registry_counts_and_models():
-    # 27 §7 targets + 7 Target-8 young-age anchor variants (#146): vg10 +2,
-    # vg11 +2, vg12 +3.
-    assert len(VARIANTS) == 34
-    assert len(variants_for("vg10")) == 10
-    assert len(variants_for("vg11")) == 4
-    assert len(variants_for("vg12")) == 3
-    assert len(variants_for("vg15")) == 17
-    assert "vg13" not in {m for (m, _) in VARIANTS}  # excluded (too heavy)
+    # 27 §7 targets + 7 Target-8 young-age anchor variants (#146), two
+    # signing-source variants, two ceiling-censoring variants, and three
+    # repeated-measures sensitivities.
+    assert len(VARIANTS) == 41
+    assert len(variants_for("vg10")) == 11
+    assert len(variants_for("vg11")) == 5
+    assert len(variants_for("vg12")) == 4
+    assert len(variants_for("vg13")) == 1
+    assert len(variants_for("vg15")) == 20
+
+
+def test_td_models_account_for_repeated_children_by_default():
+    assert VG11.use_subject_re
+    assert VG12.use_subject_re
+    assert VG13.use_subject_re_u
+    assert VG13.use_subject_re_q
+
+    (single_vg13,) = build_variant("vg13", "single-admin")
+    assert single_vg13.one_observation_per_subject
+    assert not single_vg13.use_subject_re_u
+    assert not single_vg13.use_subject_re_q
 
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 17
+    assert len(all_vg15) == 20
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 17
+    assert len({d.config_name for d in all_vg15}) == 20
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
     assert (psi.log_psi_mu, psi.log_psi_sigma) == (0.0, 0.5)
+
+    (vg10_ceiling,) = build_variant("vg10", "us01-ceiling-excluded")
+    (vg15_ceiling,) = build_variant("vg15", "us01-ceiling-excluded")
+    assert vg10_ceiling.exclude_us01_spoken_ceiling
+    assert vg15_ceiling.exclude_us01_spoken_ceiling
 
 
 def test_build_variant_rejects_unknown():
@@ -95,6 +113,12 @@ def test_variants_are_single_factor_or_documented_pairs():
     # (sanity that replace preserved the class), and changes at least one field.
     for (model_key, name) in VARIANTS:
         (v,) = build_variant(model_key, name)
-        base = {"vg10": VG10, "vg11": VG11, "vg12": VG12, "vg15": VG15}[model_key]
+        base = {
+            "vg10": VG10,
+            "vg11": VG11,
+            "vg12": VG12,
+            "vg13": VG13,
+            "vg15": VG15,
+        }[model_key]
         assert v.model_type == base.model_type
         assert dataclasses.asdict(v) != dataclasses.asdict(base)

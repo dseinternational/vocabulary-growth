@@ -70,6 +70,10 @@ def _prepare(outcome="spoken", studies=None):
     df = df[df[outcome].notna() & df["age"].between(AGE_LO, AGE_HI)].copy()
     if studies is not None:
         df = df[df["study"].isin(list(studies))].copy()
+    # Classify sign groups only from sources whose field represents total sign
+    # use.  uk_01 is signed-only and uk_06 is not source-verified; both remain in
+    # the outcome model as the explicit "unknown" reference group.
+    df, _ = vocab_data_utils.mask_incomparable_signed_outcomes(df)
     # sign group: unknown (no sign data) / non-signer (signed==0) / signer (signed>0)
     sg = np.where(df["signed"].isna(), 0, np.where(df["signed"] > 0, 2, 1))
     df["sign_group"] = sg.astype(int)

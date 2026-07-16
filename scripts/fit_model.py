@@ -15,6 +15,10 @@ from multiprocessing import freeze_support
 import dse_research_utils.environment.setup as setup
 
 from vocab_growth import environment as env
+from vocab_growth.models.common import (
+    ConvergenceGateError,
+    is_reporting_quality_config,
+)
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting import (
     console,
@@ -24,6 +28,23 @@ from vocab_growth.reporting import (
     pipeline_summary,
 )
 from vocab_growth.storage import upload_to_blob_storage
+
+
+def _fit_selected_models(selected, config: str):
+    """Fit every selected model while collecting convergence-gate failures."""
+    contexts = []
+    timings: dict[str, float] = {}
+    failures: dict[str, str] = {}
+    for name, module in selected:
+        model_started = time.perf_counter()
+        try:
+            contexts.append(module.fit(config))
+        except ConvergenceGateError as exc:
+            failures[name] = str(exc)
+        finally:
+            timings[name] = time.perf_counter() - model_started
+    return contexts, timings, failures
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -106,7 +127,7 @@ if __name__ == "__main__":
 
     # Disk preflight: reporting-config traces are >10 GB each, so fail fast
     # before a multi-hour sample if the volume can't hold the output.
-    heavy = args.config in {"rep", "rep-lite"}
+    heavy = is_reporting_quality_config(args.config)
     env.preflight_disk(
         (20.0 if heavy else 2.0) * len(selected),
         env.output_root(),
@@ -114,12 +135,9 @@ if __name__ == "__main__":
     )
 
     run_started = time.perf_counter()
-    per_model_timings: dict[str, float] = {}
-    contexts = []
-    for name, module in selected:
-        model_started = time.perf_counter()
-        contexts.append(module.fit(args.config))
-        per_model_timings[name] = time.perf_counter() - model_started
+    contexts, per_model_timings, gate_failures = _fit_selected_models(
+        selected, args.config
+    )
 
     if args.render:
         for context in contexts:
@@ -127,7 +145,12 @@ if __name__ == "__main__":
             heading(f"Rendering Quarto output: {qmd_path}")
             subprocess.run(["quarto", "render", qmd_path], check=True)
 
-    if args.upload:
+    if args.upload and gate_failures:
+        console.print(
+            "[bold yellow]Upload skipped:[/bold yellow] at least one selected model "
+            "failed the convergence gate; no partial batch was published."
+        )
+    elif args.upload:
         for context in contexts:
             upload_to_blob_storage(
                 context.reporting.output_dir,
@@ -141,3 +164,9 @@ if __name__ == "__main__":
         f"[dim]Total run wall time: "
         f"{format_duration(time.perf_counter() - run_started)}[/dim]"
     )
+    if gate_failures:
+        key_value_table(
+            "Convergence gate failures",
+            [(name, reason) for name, reason in gate_failures.items()],
+        )
+        sys.exit(1)

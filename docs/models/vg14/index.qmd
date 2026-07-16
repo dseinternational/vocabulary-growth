@@ -69,7 +69,8 @@ This model adds **signing** as a third production modality alongside speaking. I
 - **Population:** children with Down syndrome.
 - **Outcomes:** words understood, spoken, and signed.
 - **Decomposition:** spoken and signed vocabularies are each modelled as fractions of understood vocabulary.
-- **Signing structure:** signed ratio has an intercept-only mean plus GP, not a monotone age slope.
+- **Signing structure:** signed ratio has a three-anchor tent mean plus GP, allowing a rise and decline.
+- **Source harmonisation:** `uk_01` sign-only and unverified `uk_06` signing values are masked in the primary analysis and available only as sensitivities.
 - **Total expressive vocabulary:** `p_any` is an independence-based upper bound, not a data-identified union.
 
 :::
@@ -81,7 +82,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood, words spoken and words signed as bounded count outcomes out of 810 possible words. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale.
+We model words understood on the 810-word reference inventory and, for paired logically nested rows, model spoken and signed words conditionally on the observed understood count. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale.
 
 The two expressive modalities are derived as fractions of the understood vocabulary:
 
@@ -89,7 +90,7 @@ $$
 p_S(a) = p_U(a) \cdot q(a), \qquad p_\text{Sign}(a) = p_U(a) \cdot r(a),
 $$
 
-where $q(a) = \text{sigmoid}(h(a))$ is the **production ratio** (the fraction of understood words that are spoken at age $a$) and $r(a) = \text{sigmoid}(g_\text{sign}(a))$ is the **signed ratio** (the fraction of understood words that are signed). Since $q(a), r(a) \in (0, 1)$, this enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction. The understood trajectory $f_U(a)$ and spoken-ratio trajectory $h(a)$ each have a linear trend plus a Gaussian process. The signed-ratio trajectory instead has an intercept-only mean plus a Gaussian process; this avoids imposing a monotone signing slope and lets the GP carry the observed rise-and-fall pattern. Separate Beta-Binomial likelihoods with age-varying dispersion are used for each outcome. Observations where only some outcomes are available are retained using separate observation indices.
+where $q(a) = \text{sigmoid}(h(a))$ is the **production ratio** (the fraction of understood words that are spoken at age $a$) and $r(a) = \text{sigmoid}(g_\text{sign}(a))$ is the **signed ratio** (the fraction of understood words that are signed). Since $q(a), r(a) \in (0, 1)$, this enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction. The understood trajectory $f_U(a)$ and spoken-ratio trajectory $h(a)$ each have a linear trend plus a Gaussian process. The signed-ratio trajectory uses a three-anchor tent mean plus a Gaussian process for smooth departures. For paired, logically nested observations, spoken and signed counts are modelled conditionally on the observed understood count; records without usable understood data retain marginal Beta-Binomial likelihoods over the full inventory. `uk_01` and `uk_06` remain available for understood/spoken estimation, but their signing fields are masked in the primary model.
 
 ### Total expressive vocabulary
 
@@ -115,7 +116,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The understood and spoken-ratio priors follow the baseline DS bivariate structure. The signed-ratio prior is different by design: it uses an intercept-only signed mean, a shorter signed GP length-scale, and a larger signed GP amplitude so the prior can express a signing hump without forcing a monotone developmental trend. The signed prior should therefore be judged mainly through prior predictive trajectories for `r(a)` and signed counts, not by the intercept plot alone.
+The understood and spoken-ratio priors follow the baseline DS bivariate structure. The signed-ratio prior is different by design: its three-anchor tent mean expresses the broad signing hump, while the GP captures smooth departures. The signed prior should therefore be judged through prior predictive trajectories for `r(a)` and signed counts, including sensitivity to the anchor levels and source restrictions.
 
 ### Understood trajectory
 
@@ -276,7 +277,7 @@ The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ is the fraction of understoo
 
 ::: {.callout-warning title="The peak age and the decline are study-confounded — not a precise developmental fact"}
 
-The fitted curve peaks at ~24–30 months and then declines, but **the peak age and the recede are not identifiable from these data with this model.** Signing production is only observed from ~18 months, and the data thin out after ~54 months (the curve is shaded outside that window as extrapolation). Critically, the 48–60-month window — where the empirical ratio looks highest — is **entirely from a single study (`uk_02`), whose children are heavy signers**; the population ratio is still _rising_ there, and only collapses once the sample switches to `uk_01` (near-zero signers) after ~56 months. The apparent "peak then recede" is therefore largely a between-study boundary, not a within-child developmental recede. VG14 has **no study random effects** (it mirrors VG05), so the age curve cannot separate "this age signs more" from "`uk_02` children sign more." The proper fix, if peak timing matters, is study random intercepts on the signed block (the VG07–VG10 pattern) or the planned VG15 — not more tuning or data exclusion.
+The peak age and any later decline are not identifiable precisely from VG14. Comparable total-sign observations are sparse at the edges of the age range, and this baseline has no study random effects, so its age curve cannot reliably separate developmental change from source composition. The primary analysis now excludes the non-comparable `uk_01` sign-only field and the unverified `uk_06` signing field; earlier numerical descriptions that relied on those records require refitting and must not be interpreted as current estimates. VG15 is the preferred signing model when study composition and sign-speech overlap matter.
 
 :::
 
@@ -289,7 +290,7 @@ summary_r
 
 ## Sign → speech hand-off
 
-The signed ratio $r(a)$ against the spoken ratio $q(a)$ on a single axis. The robust result is the **crossover at ~39 months**: early on a larger share of understood words is signed than spoken, and by the late preschool years the rising spoken fraction overtakes the signed fraction — the sign-to-speech hand-off. (As above, the exact signed peak and the post-peak decline are study-confounded and should not be read as a precise developmental month; ages outside the ~18–54-month signing-data window are shaded as extrapolation.)
+The signed ratio $r(a)$ against the spoken ratio $q(a)$ on a single axis. This comparison estimates whether and when the fraction of understood words that are signed is overtaken by the fraction that are spoken. The previous ~39-month crossover estimate is stale after harmonising the signing sources and changing the likelihood, so the direction and timing must be re-estimated before being reported. The plot derives its extrapolation shading from the youngest and oldest comparable signing observations in the prepared analysis data; this boundary does not imply that support is dense or compositionally stable between those ages.
 
 ![Signed ratio r(a) vs production ratio q(a)](sign_speech_crossover.png){#fig-crossover .lightbox fig-align="left"}
 
@@ -334,7 +335,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
 
@@ -377,7 +378,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 
@@ -420,7 +421,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_sign_smoothed](posterior_predictive_median_trend_sign_smoothed.png){#fig-trend-sign-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_sign](expected_learning_rate_sign.png){#fig-rate-sign .lightbox fig-align="left"}
 

@@ -52,6 +52,7 @@ from vocab_growth.models.build_utils import (
     standardize_ages,
     validate_ell_bounds,
 )
+from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
     BaseModelConfiguration,
     ModelFitContext,
@@ -70,6 +71,7 @@ from vocab_growth.models.gp_utils import (
     tent_and_gp,
     trend_and_gp,
 )
+from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.plotting import (
     _save_csv,
     plot_comprehension_production_gap,
@@ -88,16 +90,6 @@ from vocab_growth.reporting import (
 )
 
 EPSILON = math_constants.EPSILON
-
-# Study identifier (in the merged `vocab_combined` view) for the uk_06 dataset.
-# The `include_uk06` flag controls whether uk_06's `signed` counts are included in
-# the signed likelihood (useful for sensitivity checks / coding comparability).
-UK06_STUDY_ID = "uk_06"
-
-# Age window (months) over which signing production is actually observed in the
-# data; the reported signed-ratio / crossover curves shade ages outside this as
-# extrapolation (no signing data < ~18 mo; data thins out past ~54 mo).
-SIGNED_SUPPORT_MONTHS = (18.0, 54.0)
 
 
 # ============================================================
@@ -253,15 +245,13 @@ def prepare_trivariate_data(
         max_age_months=definition.max_age_months,
     )
 
-    # Optionally drop uk_06 `signed` from the signed likelihood (sensitivity / coding
-    # comparability check). When dropped, uk_06's understood/spoken counts are retained.
-    n_uk06_dropped = 0
-    if not definition.include_uk06:
-        uk06_signed = (df["study"] == UK06_STUDY_ID) & df["signed"].notna()
-        n_uk06_dropped = int(uk06_signed.sum())
-        df.loc[uk06_signed, "signed"] = np.nan
+    df, sign_source_dropped = vocab_data_utils.mask_incomparable_signed_outcomes(
+        df,
+        include_signed_only=definition.include_uk01_signed,
+        include_uncertain=definition.include_uk06,
+    )
 
-    analysis_df = df[["age", "understood", "spoken", "signed"]].copy()
+    analysis_df = df[["study", "age", "understood", "spoken", "signed"]].copy()
 
     # Keep rows where at least one outcome is observed (and age is present)
     analysis_df = analysis_df.dropna(subset=["age"])
@@ -284,7 +274,16 @@ def prepare_trivariate_data(
             ("Understood observed", n_u),
             ("Spoken observed", n_s),
             ("Signed observed", n_sign),
-            (f"uk_06 signed dropped (include_uk06={definition.include_uk06})", n_uk06_dropped),
+            (
+                f"uk_01 signed-only dropped "
+                f"(include_uk01_signed={definition.include_uk01_signed})",
+                sign_source_dropped.get("uk_01", 0),
+            ),
+            (
+                f"uk_06 unverified signed dropped "
+                f"(include_uk06={definition.include_uk06})",
+                sign_source_dropped.get("uk_06", 0),
+            ),
         ],
     )
     dataframe_table(desc, title="Descriptive statistics")
@@ -490,18 +489,34 @@ def build_model(context: TrivariateContext):
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
-    y_s_observed = np.asarray(analysis_df.loc[has_s, "spoken"], dtype=int)
-    y_sign_observed = np.asarray(analysis_df.loc[has_sign, "signed"], dtype=int)
 
     idx_u = np.where(has_u)[0]
-    idx_s = np.where(has_s)[0]
-    idx_sign = np.where(has_sign)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_s = len(y_s_observed)
-    n_sign = len(y_sign_observed)
     n_trials = context.model_data.n_trials
+    spoken_spec = nested_outcome_spec(
+        analysis_df,
+        parent_col="understood",
+        outcome_col="spoken",
+        n_trials=n_trials,
+    )
+    signed_spec = nested_outcome_spec(
+        analysis_df,
+        parent_col="understood",
+        outcome_col="signed",
+        n_trials=n_trials,
+    )
+    if not np.array_equal(spoken_spec.indices, np.flatnonzero(has_s)):
+        raise ValueError("Spoken likelihood rows do not match the observed-data mask.")
+    if not np.array_equal(signed_spec.indices, np.flatnonzero(has_sign)):
+        raise ValueError("Signed likelihood rows do not match the observed-data mask.")
+    y_s_observed = spoken_spec.observed
+    y_sign_observed = signed_spec.observed
+    idx_s = spoken_spec.indices
+    idx_sign = signed_spec.indices
+    n_s = spoken_spec.n_observed
+    n_sign = signed_spec.n_observed
 
     # Validate
     if not np.all(y_u_observed >= 0):
@@ -526,7 +541,13 @@ def build_model(context: TrivariateContext):
             ("Total observations", n),
             ("Understood observed", n_u),
             ("Spoken observed", n_s),
+            ("Spoken conditional on understood", spoken_spec.n_conditional),
+            ("Spoken marginal fallback", spoken_spec.n_marginal),
+            ("Spoken > understood violations", spoken_spec.n_parent_violations),
             ("Signed observed", n_sign),
+            ("Signed conditional on understood", signed_spec.n_conditional),
+            ("Signed marginal fallback", signed_spec.n_marginal),
+            ("Signed > understood violations", signed_spec.n_parent_violations),
             ("n_trials", n_trials),
             ("Age mean (months)", X_obs_mean),
             ("Age std (months)", X_obs_std),
@@ -607,6 +628,22 @@ def build_model(context: TrivariateContext):
         _ = pm.Data("obs_u_mask", has_u.astype(int), dims=("obs_id",))
         _ = pm.Data("obs_s_mask", has_s.astype(int), dims=("obs_id",))
         _ = pm.Data("obs_sign_mask", has_sign.astype(int), dims=("obs_id",))
+        s_likelihood_n = pm.Data(
+            "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
+        )
+        s_is_conditional = pm.Data(
+            "s_is_conditional",
+            spoken_spec.is_conditional.astype(int),
+            dims=("obs_s_id",),
+        )
+        sign_likelihood_n = pm.Data(
+            "sign_likelihood_n", signed_spec.trials, dims=("obs_sign_id",)
+        )
+        sign_is_conditional = pm.Data(
+            "sign_is_conditional",
+            signed_spec.is_conditional.astype(int),
+            dims=("obs_sign_id",),
+        )
 
         # Shared trend + HSGP builder (gp_utils); graph byte-identical to the
         # inlined form. Full-grid (n_all,) latents are returned as plain tensors
@@ -708,7 +745,7 @@ def build_model(context: TrivariateContext):
         _ = pm.Deterministic("h_plot", h_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic("h_query", h_all[i_query0:i_query1], dims=("query_id",))
 
-        _ = pm.Deterministic("q_obs", q_all[i_obs0:i_obs1], dims=("obs_id",))
+        q_obs = pm.Deterministic("q_obs", q_all[i_obs0:i_obs1], dims=("obs_id",))
         _ = pm.Deterministic("q_plot", q_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic("q_query", q_all[i_query0:i_query1], dims=("query_id",))
 
@@ -736,7 +773,7 @@ def build_model(context: TrivariateContext):
             "g_sign_query", g_sign_all[i_query0:i_query1], dims=("query_id",)
         )
 
-        _ = pm.Deterministic("r_obs", r_all[i_obs0:i_obs1], dims=("obs_id",))
+        r_obs = pm.Deterministic("r_obs", r_all[i_obs0:i_obs1], dims=("obs_id",))
         _ = pm.Deterministic("r_plot", r_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic("r_query", r_all[i_query0:i_query1], dims=("query_id",))
 
@@ -840,14 +877,10 @@ def build_model(context: TrivariateContext):
         # Likelihoods — separate observation indices
         # ============================================================
         #
-        # Composite marginal (pseudo-)likelihood: understood, spoken and signed
-        # enter as three separate Beta-Binomial marginals, coupled only through
-        # the shared latent means (p_S = p_U * q, p_Sign = p_U * r). The counts
-        # are treated as conditionally independent given those means; the
-        # item-level joint distribution is not modelled here (VG15's uk_02
-        # four-cell term does that). This is distinct from the p_any
-        # conditional-independence assumption noted in the module docstring. See
-        # methods-models.qmd, "Joint outcomes and production ratios".
+        # Nested likelihoods: where a child outcome and understood are both
+        # observed and logically nested, S | U and Sign | U use U trials with
+        # means q and r. Rows without a usable U count retain marginal
+        # likelihoods over the full inventory.
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]
@@ -865,14 +898,18 @@ def build_model(context: TrivariateContext):
         )
 
         # Spoken likelihood (only where observed)
-        p_s_obs_sel = p_s_obs[idx_s]
-        p_s_obs_clip = pm.math.clip(p_s_obs_sel, EPSILON, 1 - EPSILON)
-        alpha_s = p_s_obs_clip * kappa_s_obs[idx_s]
-        beta_s = (1 - p_s_obs_clip) * kappa_s_obs[idx_s]
+        p_s_likelihood = pm.math.switch(
+            s_is_conditional,
+            q_obs[idx_s],
+            p_s_obs[idx_s],
+        )
+        p_s_likelihood = pm.math.clip(p_s_likelihood, EPSILON, 1 - EPSILON)
+        alpha_s = p_s_likelihood * kappa_s_obs[idx_s]
+        beta_s = (1 - p_s_likelihood) * kappa_s_obs[idx_s]
 
         _ = pm.BetaBinomial(
             "y_s_obs",
-            n=n_trials,
+            n=s_likelihood_n,
             alpha=alpha_s,
             beta=beta_s,
             observed=y_s_observed,
@@ -880,14 +917,18 @@ def build_model(context: TrivariateContext):
         )
 
         # Signed likelihood (only where observed)
-        p_sign_obs_sel = p_sign_obs[idx_sign]
-        p_sign_obs_clip = pm.math.clip(p_sign_obs_sel, EPSILON, 1 - EPSILON)
-        alpha_sign = p_sign_obs_clip * kappa_sign_obs[idx_sign]
-        beta_sign = (1 - p_sign_obs_clip) * kappa_sign_obs[idx_sign]
+        p_sign_likelihood = pm.math.switch(
+            sign_is_conditional,
+            r_obs[idx_sign],
+            p_sign_obs[idx_sign],
+        )
+        p_sign_likelihood = pm.math.clip(p_sign_likelihood, EPSILON, 1 - EPSILON)
+        alpha_sign = p_sign_likelihood * kappa_sign_obs[idx_sign]
+        beta_sign = (1 - p_sign_likelihood) * kappa_sign_obs[idx_sign]
 
         _ = pm.BetaBinomial(
             "y_sign_obs",
-            n=n_trials,
+            n=sign_likelihood_n,
             alpha=alpha_sign,
             beta=beta_sign,
             observed=y_sign_observed,
@@ -1224,20 +1265,20 @@ def sample_posterior_predictive(context: TrivariateContext, definition=None):
     kappa_u_plot = context.model_variables["kappa_u_plot"]
     kappa_u_query = context.model_variables["kappa_u_query"]
 
-    p_s_plot = context.model_variables["p_s_plot"]
-    p_s_query = context.model_variables["p_s_query"]
+    q_plot = context.model_variables["q_plot"]
+    q_query = context.model_variables["q_query"]
     kappa_s_plot = context.model_variables["kappa_s_plot"]
     kappa_s_query = context.model_variables["kappa_s_query"]
 
-    p_sign_plot = context.model_variables["p_sign_plot"]
-    p_sign_query = context.model_variables["p_sign_query"]
+    r_plot = context.model_variables["r_plot"]
+    r_query = context.model_variables["r_query"]
     kappa_sign_plot = context.model_variables["kappa_sign_plot"]
     kappa_sign_query = context.model_variables["kappa_sign_query"]
 
     with context.model:
         # Understood — plot / query
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        y_u_plot = pm.BetaBinomial(
             "y_u_plot",
             n=n_trials,
             alpha=p_u_plot_clip * kappa_u_plot,
@@ -1245,7 +1286,7 @@ def sample_posterior_predictive(context: TrivariateContext, definition=None):
             dims=("plot_id",),
         )
         p_u_query_clip = pm.math.clip(p_u_query, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        y_u_query = pm.BetaBinomial(
             "y_u_query",
             n=n_trials,
             alpha=p_u_query_clip * kappa_u_query,
@@ -1253,37 +1294,37 @@ def sample_posterior_predictive(context: TrivariateContext, definition=None):
             dims=("query_id",),
         )
         # Spoken — plot / query
-        p_s_plot_clip = pm.math.clip(p_s_plot, EPSILON, 1 - EPSILON)
+        q_plot_clip = pm.math.clip(q_plot, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
             "y_s_plot",
-            n=n_trials,
-            alpha=p_s_plot_clip * kappa_s_plot,
-            beta=(1 - p_s_plot_clip) * kappa_s_plot,
+            n=y_u_plot,
+            alpha=q_plot_clip * kappa_s_plot,
+            beta=(1 - q_plot_clip) * kappa_s_plot,
             dims=("plot_id",),
         )
-        p_s_query_clip = pm.math.clip(p_s_query, EPSILON, 1 - EPSILON)
+        q_query_clip = pm.math.clip(q_query, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
             "y_s_query",
-            n=n_trials,
-            alpha=p_s_query_clip * kappa_s_query,
-            beta=(1 - p_s_query_clip) * kappa_s_query,
+            n=y_u_query,
+            alpha=q_query_clip * kappa_s_query,
+            beta=(1 - q_query_clip) * kappa_s_query,
             dims=("query_id",),
         )
         # Signed — plot / query
-        p_sign_plot_clip = pm.math.clip(p_sign_plot, EPSILON, 1 - EPSILON)
+        r_plot_clip = pm.math.clip(r_plot, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
             "y_sign_plot",
-            n=n_trials,
-            alpha=p_sign_plot_clip * kappa_sign_plot,
-            beta=(1 - p_sign_plot_clip) * kappa_sign_plot,
+            n=y_u_plot,
+            alpha=r_plot_clip * kappa_sign_plot,
+            beta=(1 - r_plot_clip) * kappa_sign_plot,
             dims=("plot_id",),
         )
-        p_sign_query_clip = pm.math.clip(p_sign_query, EPSILON, 1 - EPSILON)
+        r_query_clip = pm.math.clip(r_query, EPSILON, 1 - EPSILON)
         pm.BetaBinomial(
             "y_sign_query",
-            n=n_trials,
-            alpha=p_sign_query_clip * kappa_sign_query,
-            beta=(1 - p_sign_query_clip) * kappa_sign_query,
+            n=y_u_query,
+            alpha=r_query_clip * kappa_sign_query,
+            beta=(1 - r_query_clip) * kappa_sign_query,
             dims=("query_id",),
         )
 
@@ -1306,6 +1347,18 @@ def sample_posterior_predictive(context: TrivariateContext, definition=None):
         )
 
     context.set_trace(trace)
+
+    calibration_df = write_trace_calibration(
+        trace,
+        context.analysis_df,
+        context.reporting.output_dir,
+        (
+            ("understood", "y_u_obs", "obs_u_mask"),
+            ("spoken", "y_s_obs", "obs_s_mask"),
+            ("signed", "y_sign_obs", "obs_sign_mask"),
+        ),
+    )
+    context.dataframes["posterior_predictive_calibration"] = calibration_df
 
     trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
 
@@ -1527,7 +1580,7 @@ def _shade_extrapolation(ax, support_range):
         return
     lo, hi = support_range
     x0, x1 = ax.get_xlim()
-    label = "extrapolation (no/sparse signing data)"
+    label = "extrapolation (outside observed signing ages)"
     if x0 < lo:
         ax.axvspan(x0, lo, color="grey", alpha=0.12, lw=0, label=label)
         label = None
@@ -1952,6 +2005,12 @@ def _run_trivariate_plots(context: TrivariateContext):
     has_u = analysis_df["understood"].notna()
     has_s = analysis_df["spoken"].notna()
     has_sign = analysis_df["signed"].notna()
+    sign_ages = analysis_df.loc[has_sign, "age"].dropna()
+    signing_support_range = (
+        (float(sign_ages.min()), float(sign_ages.max()))
+        if not sign_ages.empty
+        else None
+    )
     n_trials = context.model_data.n_trials
     hdi_prob = context.reporting.ci_prob
     output_dir = context.reporting.output_dir
@@ -1987,7 +2046,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         hdi_prob=hdi_prob,
         output_dir=output_dir,
         filename="signed_rate",
-        support_range=SIGNED_SUPPORT_MONTHS,
+        support_range=signing_support_range,
     )
     context.plots["signed_rate"] = fig
     plt.close(fig)
@@ -1998,7 +2057,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         hdi_prob=hdi_prob,
         output_dir=output_dir,
         filename="sign_speech_crossover",
-        support_range=SIGNED_SUPPORT_MONTHS,
+        support_range=signing_support_range,
     )
     context.plots["sign_speech_crossover"] = fig
     plt.close(fig)

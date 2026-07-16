@@ -71,7 +71,7 @@ import pandas as pd
 
 ## Statistical model
 
-We jointly model words understood and words spoken as bounded count outcomes out of 810 possible words. The model follows the same production-ratio reparameterization as VG05, but adds study-level random intercepts:
+Words understood use a Beta-Binomial likelihood on the common 810-word reference inventory. For paired, logically nested rows, spoken words use the conditional likelihood $S\mid U \sim \operatorname{BetaBinomial}(U,q,\kappa_S)$; rows without a usable understood count retain the marginal 810-word fallback. The model follows the same production-ratio reparameterization as VG05, but adds study-level random intercepts:
 
 $$f_U(a, s) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s]$$
 $$h(a, s) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s]$$
@@ -249,7 +249,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
 
@@ -292,7 +292,7 @@ Smoothed:
 
 ![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
-### Learning rate
+### Cross-sectional age derivative
 
 ![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 

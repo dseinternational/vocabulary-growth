@@ -115,6 +115,16 @@ class UnivariateModelDefinition:
     intercepts (None = keep all). Trims tiny, near-unidentified study intercepts
     that add parameters without informing the estimates."""
 
+    # -- Subject-level clustering --
+    use_subject_re: bool = False
+    """If True, add a subject-level random intercept to account for repeated
+    assessments of the same child."""
+    tau_subject_sigma: float = 0.5
+    """HalfNormal scale for the subject intercept SD (logit scale)."""
+    one_observation_per_subject: bool = False
+    """If True, retain one reproducibly sampled administration per subject. This
+    is a clustering sensitivity analysis, not the default estimand."""
+
     # -- GP anchor constraint (per-draw zero at reference age) --
     anchor_g_at_ref: bool = False
     """If True, constrain the GP to equal zero at the reference age for every draw."""
@@ -203,6 +213,9 @@ class BivariateModelDefinition:
     """If True, add subject-level random intercepts on the production ratio q."""
     tau_subj_q_sigma: float = 0.5
     """HalfNormal scale for subject intercept SD on q (logit scale)."""
+    one_observation_per_subject: bool = False
+    """If True, retain one reproducibly sampled administration per subject. This
+    provides a cheap sensitivity analysis for repeated-measures dependence."""
 
     # -- Within-child cross-lag (VG16, issue #113) --
     use_cross_lag: bool = False
@@ -231,6 +244,9 @@ class BivariateModelDefinition:
     # -- Data age filtering --
     max_age_months: int | None = None
     """Upper bound on age (inclusive, months) for data loading. None = no limit."""
+    exclude_us01_spoken_ceiling: bool = False
+    """Exclude us_01 WS spoken counts at the 680-word ceiling. This is a
+    source-censoring sensitivity only; primary models retain these valid rows."""
 
     @property
     def model_type(self) -> ModelType:
@@ -344,13 +360,20 @@ class TrivariateModelDefinition:
     kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Signed data inclusion --
-    include_uk06: bool = True
-    """If True (default), the uk_06 'signed' counts are included in the signed
-    likelihood. uk_06 records a real signing-production count (11 obs at 60-115
-    mo, often comparable to or exceeding spoken — signing implies understanding,
-    so 'understands-and-signs' is a sign), not a comprehension measure. The flag
-    is kept for reversibility; the open question is whether uk_06's signed counts
-    are coded comparably to uk_02/04/05 (no field dictionary), not the construct."""
+    include_uk01_signed: bool = False
+    """Re-include uk_01's signed-only count as if it were total sign use.
+
+    False by default because uk_01 excludes words that are also spoken, whereas
+    the model estimand and the other sources use total signed vocabulary.  This
+    switch exists only for a source-sensitivity comparison.
+    """
+    include_uk06: bool = False
+    """Re-include uk_06's unverified signing field.
+
+    False by default until its field dictionary confirms comparability with the
+    total-sign construct.  Understood and spoken uk_06 observations remain in the
+    fit regardless of this flag.
+    """
 
     # -- Data age filtering --
     max_age_months: int | None = None
@@ -484,7 +507,13 @@ class JointModelDefinition:
     of slope_anchors."""
 
     # -- Signed data inclusion (inherits VG14's decision) --
-    include_uk06: bool = True
+    include_uk01_signed: bool = False
+    """Re-include uk_01's signed-only field for a source-sensitivity fit."""
+    include_uk06: bool = False
+    """Re-include uk_06's unverified signing field for a source-sensitivity fit."""
+    exclude_us01_spoken_ceiling: bool = False
+    """Exclude us_01 WS spoken counts at the 680-word ceiling. This is a
+    source-censoring sensitivity only; primary models retain these valid rows."""
 
     # -- nz_01 (Foster-Cohen) produced cross-tab inclusion --
     include_nz01_cells: bool = True
@@ -824,6 +853,8 @@ VG11 = UnivariateModelDefinition(
     # Drop datasets with <200 observations (issue #55): roughly halves the study
     # count while retaining >97% of observations.
     min_study_observations=200,
+    use_subject_re=True,
+    tau_subject_sigma=0.5,
     # Anchor the GP at the midpoint of slope_anchors (19 months) to remove the
     # GP–intercept ridge that arises when study REs are present.
     anchor_g_at_ref=True,
@@ -859,6 +890,8 @@ VG12 = UnivariateModelDefinition(
     # Drop datasets with <200 observations (issue #55): roughly halves the study
     # count while retaining >97% of observations.
     min_study_observations=200,
+    use_subject_re=True,
+    tau_subject_sigma=0.5,
     # Anchor the GP at the midpoint of slope_anchors (19 months).
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
@@ -915,6 +948,10 @@ VG13 = BivariateModelDefinition(
     # Drop datasets with <200 observations (issue #55): roughly halves the study
     # count while retaining >97% of observations.
     min_study_observations=200,
+    use_subject_re_u=True,
+    tau_subj_u_sigma=0.5,
+    use_subject_re_q=True,
+    tau_subj_q_sigma=0.5,
     # Anchor GPs at the midpoint of slope_anchors (13 months)
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,
@@ -948,9 +985,9 @@ VG14 = TrivariateModelDefinition(
     p_slope_low_q_beta=12.0,
     p_slope_hi_q_alpha=3.0,
     p_slope_hi_q_beta=2.0,
-    # Signed ratio r: intercept-only mean (data-set level) + loosened GP
-    #   (eta_sign=1.0) carrying the rise-then-fall hump (see dataclass).
-    # uk_06 signed included by default (include_uk06=True); kappa_sign default.
+    # Signed ratio r uses the three-anchor tent + GP defined above.  uk_01's
+    # signed-only field and uk_06's unverified field are excluded from the signed
+    # likelihood by default; their understood/spoken observations remain.
 )
 
 VG15 = JointModelDefinition(

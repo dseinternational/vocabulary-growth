@@ -1,11 +1,12 @@
 # Model inventory
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and Codex/GPT-5).
 
 > [!WARNING]
 > This is work in progress. All models and their output are preliminary and likely
 > to change as the models evolve and further data are received.
+> The nested outcome likelihood, TD repeated-measures correction, signing-source harmonisation, and Edgin inclusion revision from issue #163 require new reporting-quality fits. Numerical prose derived from older traces is stale until those fits pass the convergence gate and the reports are regenerated.
 
 This document lists every model in the `vocab_growth` family, what each one
 targets, and how the models relate to one another. It is a map, not a
@@ -55,24 +56,25 @@ The three axes that distinguish the models:
 | [VG08](vg08/index.qmd) | DS         | Understood + spoken (joint)  | VG07 + subject random intercepts on understood.                                                                                                                                                                           |
 | [VG09](vg09/index.qmd) | DS         | Understood + spoken (joint)  | VG08 + subject random intercepts on the production ratio `q`.                                                                                                                                                             |
 | [VG10](vg10/index.qmd) | DS         | Understood + spoken (joint)  | VG09 + per-draw GP anchor at 54 months (stabilisation); `q` anchors match VG09.                                                                                                                                           |
-| [VG11](vg11/index.qmd) | TD         | Spoken                       | VG03 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).                                                                                                            |
-| [VG12](vg12/index.qmd) | TD         | Understood                   | VG04 + dataset-level study random intercepts + GP anchor at 19 months (uses full data instead of subsampling).                                                                                                            |
-| [VG13](vg13/index.qmd) | TD         | Understood + spoken (joint)  | Young TD joint model, ages 8–18 months only; study random intercepts + GP anchor at 13 months.                                                                                                                            |
+| [VG11](vg11/index.qmd) | TD         | Spoken                       | VG03 + dataset and child random intercepts + GP anchor at 19 months; one-administration-per-child sensitivity available.                                                                                                  |
+| [VG12](vg12/index.qmd) | TD         | Understood                   | VG04 + dataset and child random intercepts + GP anchor at 19 months; one-administration-per-child sensitivity available.                                                                                                  |
+| [VG13](vg13/index.qmd) | TD         | Understood + spoken (joint)  | Young TD joint model, ages 8–18 months; dataset and child random intercepts on understood and `q` + GP anchor at 13 months.                                                                                               |
 | [VG14](vg14/index.qmd) | DS         | Understood + spoken + signed | Adds signing as a third ratio `r(a)`; total expressive vocabulary derived assuming sign/speech independence given age.                                                                                                    |
 | [VG15](vg15/index.qmd) | DS         | Understood + spoken + signed | VG14 + within-understood sign–speech association `psi` + study & subject random intercepts + VG10 stabilisation.                                                                                                          |
 | [VG16](vg16/index.qmd) | DS         | Understood + spoken          | VG09 + a within-child cross-lag (prior understood → current `q`): earlier receptive → later expressive. Population-relative headline (≈ null); the within-child (RI-CLPM) contrast is biased by short-T with 2-wave data. |
+
+### Exploratory, unregistered prototypes
+
+VG17 and VG18 are exploratory sign-group comparison modules. They are deliberately excluded from `MODEL_REGISTRY`, `fit_model.py all`, and the numbered model inventory because they have not yet passed the specification and reporting workflow required of registered models. VG17 still uses the same harmonised signing-source rules as the registered signing models so exploratory comparisons cannot silently reintroduce non-comparable fields.
 
 ## Shared architecture
 
 Despite their differences, every model is built from the same components:
 
-- **Outcome** — each vocabulary count is treated as a bounded count out of an
-  **810-item common reference inventory**, so DS and TD counts sit on a
-  comparable scale regardless of which checklist (MB-CDI Words & Gestures, Words
-  & Sentences, Oxford CDI, etc.) produced them.
+- **Outcome** — every model reports vocabulary on an **810-item common reference inventory**, so DS and TD estimates sit on a comparable scale regardless of which checklist (MB-CDI Words & Gestures, Words & Sentences, Oxford CDI, etc.) produced them. Univariate, understood and marginal-fallback likelihoods use that 810-item denominator; paired, logically nested spoken and signed likelihoods use the observed understood count as their denominator.
 - **Likelihood** — a **Beta-Binomial** with **age-varying dispersion**, so the
   degree of between-child heterogeneity can change across development rather than
-  being fixed.
+  being fixed. In joint models, paired spoken and signed counts are modelled conditionally on the observed understood count; rows without usable understood data retain a marginal Beta-Binomial fallback.
 - **Mean trajectory** — on the logit scale, the expected proportion is a
   **linear developmental trend plus a Hilbert-Space Gaussian Process (HSGP)**
   term that captures smooth nonlinear departures from the trend. The linear trend
@@ -96,6 +98,8 @@ expressed as an age-varying fraction of comprehension:
 This decomposition keeps spoken and signed vocabulary bounded by comprehension by
 construction, and lets the models report directly on quantities of practical
 interest (how much of what a child understands they can also say or sign).
+
+The primary signing analyses mask `uk_01` signing values because that source records sign-only rather than total signed words, and mask `uk_06` signing values pending source verification. Their understood and spoken outcomes remain in the models; explicit sensitivity variants can reintroduce either signing source.
 
 ### Random intercepts and GP anchoring
 

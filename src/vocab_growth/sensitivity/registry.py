@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Prior-sensitivity variant registry for the prior review (issue #89 §7).
+"""Sensitivity variant registry for model robustness analyses.
 
 Each entry maps ``(model_key, variant_name)`` to a config-name suffix and the
 hyperparameter overrides that define one alternative-prior variant of a model of
@@ -10,12 +10,15 @@ record. ``build_variant`` materialises the variant definition(s) via
 
 The matrix covers the seven §7 sensitivity targets plus Target 8 — the young-age
 trajectory-anchor recalibration (#135/#138/#140/#142) — on the models of record
-(VG10, VG11, VG12, VG15). VG12 (TD understood RE) is included for Target 8
+(VG10, VG11, VG12, VG13, VG15). VG12 (TD understood RE) is included for Target 8
 because it carries the 26-month understood high anchor, which has no independent
-CDI comprehension norm (WS is production-only). **VG13 is intentionally
-excluded** — it keeps ~7,920 observations and does not converge at the ``test``
-tier in a reasonable time; its random-effect / kappa priors are covered
-transitively by VG10 (same engine) and VG11 (typically-developing study REs).
+CDI comprehension norm (WS is production-only). VG13 is included only for the
+single-administration clustering sensitivity; this deliberately reduces rather
+than multiplies the cost of its large repeated-measures fit.
+
+Source-measurement variants also test the signing-source inclusion decisions and
+the influence of the 18 us_01 Words & Sentences observations at their 680-word
+form ceiling. Primary models continue to retain those valid ceiling counts.
 
 Co-identified priors are kept as whole units per variant: a Beta anchor moves
 both ``alpha`` and ``beta`` together (mean = α/(α+β), concentration = α+β), and
@@ -60,6 +63,10 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_mid_sign_alpha": 4.0, "p_slope_mid_sign_beta": 3.0}},  # peak r ~0.58
     ("vg15", "sign-old-hi"): {"suffix": "sign-old-hi", "scalar": {
         "p_slope_hi_sign_alpha": 2.0, "p_slope_hi_sign_beta": 8.0}},  # old r ~0.18 (words plateau)
+    ("vg15", "sign-include-uk01"): {"suffix": "sign-include-uk01", "scalar": {
+        "include_uk01_signed": True}},
+    ("vg15", "sign-include-uk06"): {"suffix": "sign-include-uk06", "scalar": {
+        "include_uk06": True}},
 
     # -- Target 4: kappa (dispersion): VG10 (U/S) and VG15 (adds sign) --
     ("vg10", "kappa-broadfloor"): {"suffix": "kappa-broadfloor", "kappa": {
@@ -81,12 +88,29 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "tau_subj_u_sigma": 0.25, "tau_subj_q_sigma": 0.25}},
     ("vg10", "no-subject"): {"suffix": "no-subject", "scalar": {
         "use_subject_re_u": False, "use_subject_re_q": False}},
-    ("vg11", "tau-wide"): {"suffix": "tau-wide", "scalar": {"tau_study_sigma": 1.0}},
-    ("vg11", "tau-narrow"): {"suffix": "tau-narrow", "scalar": {"tau_study_sigma": 0.25}},
+    ("vg10", "us01-ceiling-excluded"): {
+        "suffix": "us01-ceiling-excluded",
+        "scalar": {"exclude_us01_spoken_ceiling": True},
+    },
+    ("vg11", "tau-wide"): {"suffix": "tau-wide", "scalar": {
+        "tau_study_sigma": 1.0, "tau_subject_sigma": 1.0}},
+    ("vg11", "tau-narrow"): {"suffix": "tau-narrow", "scalar": {
+        "tau_study_sigma": 0.25, "tau_subject_sigma": 0.25}},
+    ("vg11", "single-admin"): {"suffix": "single-admin", "scalar": {
+        "one_observation_per_subject": True, "use_subject_re": False}},
+    ("vg12", "single-admin"): {"suffix": "single-admin", "scalar": {
+        "one_observation_per_subject": True, "use_subject_re": False}},
+    ("vg13", "single-admin"): {"suffix": "single-admin", "scalar": {
+        "one_observation_per_subject": True,
+        "use_subject_re_u": False, "use_subject_re_q": False}},
     ("vg15", "tau-wide"): {"suffix": "tau-wide", "scalar": {
         "tau_u_sigma": 1.0, "tau_q_sigma": 1.0, "tau_sign_sigma": 1.0}},
     ("vg15", "sign-study-only"): {"suffix": "sign-study-only", "scalar": {
         "use_subject_re_sign": False}},
+    ("vg15", "us01-ceiling-excluded"): {
+        "suffix": "us01-ceiling-excluded",
+        "scalar": {"exclude_us01_spoken_ceiling": True},
+    },
 
     # -- Target 6: VG15 psi (association) --
     ("vg15", "psi-neutral"): {"suffix": "psi-neutral", "scalar": {"log_psi_mu": 0.0, "log_psi_sigma": 0.5}},

@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Summarise prior-sensitivity variants against the model of record (issue #89 §7).
+"""Summarise registered sensitivity variants against the model of record.
 
 Usage:
     python scripts/compare_sensitivity.py <model> [--variant all|<name>] [--out CSV]
@@ -32,7 +32,7 @@ def _model_dir(model_key: str, suffix: str | None = None) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("model", help="Model key (vg10, vg11, vg12, vg15).")
+    parser.add_argument("model", help="Model key (vg10, vg11, vg12, vg13, vg15).")
     parser.add_argument("--variant", default="all", help="Variant name or 'all' (default).")
     parser.add_argument("--out", default=None, help="Robustness-matrix CSV path.")
     args = parser.parse_args()
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     out = args.out or os.path.join(detail_dir, f"robustness_matrix_{args.model}.csv")
     matrix.to_csv(out, index=False)
 
-    heading(f"Prior-sensitivity robustness — {args.model}")
+    heading(f"Sensitivity robustness — {args.model}")
     dataframe_table(
         matrix[
             ["variant", "verdict", "max_abs_delta", "n_within_hdi", "n_checked", "max_rhat", "min_ess"]

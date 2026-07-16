@@ -5,12 +5,19 @@
 Shared dataclasses and pipeline functions for the vocabulary growth model family.
 """
 
+import hashlib
+import json
 import os
+import platform
 import shutil
+import subprocess
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
+from datetime import UTC, datetime
+from enum import Enum
+from importlib import metadata as importlib_metadata
 from typing import Generic, TypeVar
 
 import arviz as az
@@ -48,6 +55,7 @@ from vocab_growth.models.build_utils import (
     standardize_ages,
     validate_ell_bounds,
 )
+from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.definitions import UnivariateModelDefinition
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
 from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
@@ -153,6 +161,7 @@ S = TypeVar("S", default=ModelSamples)
 class ModelFitContext(Generic[C, S]):
     reporting: reporting.ReportingConfiguration
     sampling: sampling.SamplingConfiguration
+    sampling_config_name: str = "unknown"
     execution_context: str = field(default_factory=env_info.get_execution_context)
     plots: dict[str, Figure] = field(default_factory=dict)
     dataframes: dict[str, pd.DataFrame] = field(default_factory=dict)
@@ -908,6 +917,21 @@ def diagnostics(
     context.plots["posterior_plot"] = plt.gcf()
     plt.close()
 
+    try:
+        enforce_convergence_gate(
+            gate_summary,
+            sampling_config_name=context.sampling_config_name,
+            output_dir=context.reporting.output_dir,
+        )
+    except ConvergenceGateError:
+        # A failed reporting fit never reaches posterior-predictive sampling,
+        # which normally writes trace.nc. Preserve the posterior here so the
+        # convergence failure can be investigated and reproduced.
+        context.trace.to_netcdf(
+            os.path.join(context.reporting.output_dir, "trace.nc")
+        )
+        raise
+
     # Pareto-smoothed importance sampling
 
     with context.model:
@@ -931,7 +955,10 @@ def diagnostics(
             console.print(loocv_by_name[var_name])
 
 
-def sample_posterior_predictive(context: ModelFitContext):
+def sample_posterior_predictive(
+    context: ModelFitContext,
+    definition: UnivariateModelDefinition | None = None,
+):
     """
     Sample from the posterior predictive distribution.
     """
@@ -974,6 +1001,20 @@ def sample_posterior_predictive(context: ModelFitContext):
         )
 
     context.set_trace(trace)
+
+    calibration_df = write_trace_calibration(
+        trace,
+        context.analysis_df,
+        context.reporting.output_dir,
+        (
+            (
+                definition.outcome.value if definition is not None else "outcome",
+                "y_obs",
+                None,
+            ),
+        ),
+    )
+    context.dataframes["posterior_predictive_calibration"] = calibration_df
 
     trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
 
@@ -1166,6 +1207,72 @@ def _plot_and_print_dist(context, dist, name):
 
 _RHAT_WARN = 1.01
 _ESS_WARN = 400
+_REPORTING_CONFIGS = {
+    "reporting",
+    "report",
+    "rep",
+    "rep-lite",
+    "reporting-lite",
+    "rep_lite",
+}
+_NON_REPORTING_CONFIGS = {"dev", "development", "test", "testing"}
+
+
+class ConvergenceGateError(RuntimeError):
+    """Raised when a reporting-quality fit fails convergence checks."""
+
+
+def is_reporting_quality_config(sampling_config_name: str) -> bool:
+    """Classify a known sampling tier without silently accepting new aliases."""
+    name = sampling_config_name.strip().lower()
+    if name in _REPORTING_CONFIGS:
+        return True
+    if name in _NON_REPORTING_CONFIGS:
+        return False
+    raise ValueError(
+        f"Sampling configuration {sampling_config_name!r} has no convergence-gate "
+        "classification. Add it explicitly before fitting."
+    )
+
+
+def enforce_convergence_gate(
+    gate_summary: dict,
+    *,
+    sampling_config_name: str,
+    output_dir: str,
+) -> None:
+    """Stop reporting pipelines whose reporting-quality posterior did not converge."""
+    if not is_reporting_quality_config(sampling_config_name):
+        return
+
+    scan_failed = (
+        gate_summary.get("max_rhat") is None
+        or gate_summary.get("min_ess") is None
+    )
+    rhat_failing = gate_summary.get("rhat_failing") or []
+    ess_failing = gate_summary.get("ess_failing") or []
+    if not scan_failed and not rhat_failing and not ess_failing:
+        return
+
+    if scan_failed:
+        reason = "The R-hat/ESS convergence scan did not complete."
+    else:
+        reason = (
+            f"The convergence gate found {len(rhat_failing)} R-hat failure(s) "
+            f"and {len(ess_failing)} ESS failure(s)."
+        )
+    failure_path = os.path.join(output_dir, "CONVERGENCE_FAILED.txt")
+    with open(failure_path, "w", encoding="utf-8") as failure_file:
+        failure_file.write(
+            reason
+            + "\nPosterior summaries, report generation, rendering, and upload must "
+            "not proceed until the model is refitted successfully.\n"
+        )
+    raise ConvergenceGateError(
+        reason
+        + " Diagnostic artefacts were retained, but downstream publication artefacts "
+        "were stopped."
+    )
 
 
 def _report_diagnostic_warnings(gate_summary: dict) -> None:
@@ -1298,6 +1405,115 @@ def configure_univariate_priors(
     context.set_model_config(config)
 
 
+def _json_default(value):
+    """Serialise enums and uncommon configuration values in fit manifests."""
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, np.generic):
+        return value.item()
+    return str(value)
+
+
+def _git_metadata() -> dict[str, object]:
+    """Return the repository revision and dirty state without requiring Git."""
+
+    def run_git(*args: str) -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", *args],
+                cwd=local_env.ROOT_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result.stdout.strip()
+
+    commit = run_git("rev-parse", "HEAD")
+    branch_result = run_git("branch", "--show-current")
+    if branch_result is None:
+        branch = None
+        detached = None
+    else:
+        branch = branch_result or None
+        detached = not bool(branch_result)
+    status = run_git("status", "--porcelain", "--untracked-files=normal")
+    return {
+        "commit": commit,
+        "branch": branch,
+        "detached": detached,
+        "dirty": None if status is None else bool(status),
+    }
+
+
+def _analysis_data_hash(df: pd.DataFrame) -> str:
+    """Hash the exact prepared analysis frame, including schema and row order."""
+    digest = hashlib.sha256()
+    schema = [(str(column), str(dtype)) for column, dtype in df.dtypes.items()]
+    digest.update(json.dumps(schema, separators=(",", ":")).encode("utf-8"))
+    row_hashes = pd.util.hash_pandas_object(df, index=True, categorize=True)
+    digest.update(row_hashes.to_numpy(dtype=np.uint64).tobytes())
+    return f"sha256:{digest.hexdigest()}"
+
+
+def write_fit_manifest(context: ModelFitContext, definition) -> None:
+    """Write a machine-readable provenance manifest for the prepared fit."""
+    analysis_df = context.analysis_df
+    source_counts = (
+        {
+            str(source): int(count)
+            for source, count in analysis_df.groupby("study", dropna=False)
+            .size()
+            .items()
+        }
+        if "study" in analysis_df.columns
+        else {}
+    )
+    outcome_counts = {
+        column: int(analysis_df[column].notna().sum())
+        for column in ("understood", "spoken", "signed")
+        if column in analysis_df.columns
+    }
+    packages = {
+        name: distribution.version
+        for distribution in importlib_metadata.distributions()
+        if (name := distribution.metadata.get("Name"))
+    }
+    manifest = {
+        "schema_version": 1,
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "model": {
+            "model_id": definition.model_id,
+            "config_name": definition.config_name,
+            "definition": asdict(definition) if is_dataclass(definition) else str(definition),
+        },
+        "sampling": {
+            "configuration_name": context.sampling_config_name,
+            "parameters": asdict(context.sampling),
+        },
+        "data": {
+            "rows": len(analysis_df),
+            "columns": list(analysis_df.columns),
+            "n_trials": context.model_data.n_trials,
+            "analysis_frame_hash": _analysis_data_hash(analysis_df),
+            "source_row_counts": source_counts,
+            "observed_outcome_counts": outcome_counts,
+        },
+        "code": _git_metadata(),
+        "runtime": {
+            "python": sys.version,
+            "platform": platform.platform(),
+            "packages": dict(sorted(packages.items(), key=lambda item: item[0].lower())),
+        },
+    }
+    manifest_path = os.path.join(context.reporting.output_dir, "fit_manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as manifest_file:
+        json.dump(manifest, manifest_file, indent=2, sort_keys=True, default=_json_default)
+        manifest_file.write("\n")
+
+
 def run_fit_pipeline(
     config: str,
     definition,
@@ -1315,6 +1531,7 @@ def run_fit_pipeline(
     ``fn`` takes the freshly-created ``context`` (typically a closure binding
     the engine's ``definition``).
     """
+    is_reporting_quality_config(config)
     run_banner(definition.banner, subtitle=f"sampling config: {config}")
 
     env_info.report_environment_info()
@@ -1331,6 +1548,7 @@ def run_fit_pipeline(
             interval_kind="hdi",
         ),
         sampling=sampling.get_sampling_configuration(config),
+        sampling_config_name=config,
     )
 
     if os.path.exists(context.reporting.output_dir):
@@ -1341,9 +1559,11 @@ def run_fit_pipeline(
     timings = context.timings
     run_started = time.perf_counter()
 
-    for name, fn in stages:
+    for stage_index, (name, fn) in enumerate(stages):
         with section(name, timings=timings):
             fn(context)
+            if stage_index == 0:
+                write_fit_manifest(context, definition)
 
     pipeline_summary(
         f"Pipeline summary — {context.reporting.model_label}", timings
@@ -1384,7 +1604,10 @@ def fit_single_outcome_model(
             ),
             ("Posterior sampling", sample),
             ("Diagnostics", diagnostics),
-            ("Posterior predictions", sample_posterior_predictive),
+            (
+                "Posterior predictions",
+                lambda ctx: sample_posterior_predictive(ctx, definition),
+            ),
             ("Posterior summary", posterior_summary),
             (
                 "Plots",

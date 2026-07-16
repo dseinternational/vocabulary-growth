@@ -18,6 +18,7 @@ This module is the shared pipeline for VG11 (TD spoken) and VG12 (TD understood)
 """
 
 import os
+import sys
 
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.statistics.descriptive as descriptive_stats
@@ -33,10 +34,12 @@ from vocab_growth.models.build_utils import (
     standardize_ages,
     validate_ell_bounds,
 )
+from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
     ModelFitContext,
     configure_univariate_priors,
     diagnostics,
+    extract_model_samples,
     get_hsgp_hyperparams,
     posterior_summary,
     prior_predictive_checks,
@@ -45,7 +48,9 @@ from vocab_growth.models.common import (
     run_fit_pipeline,
     run_standard_plots,
     sample,
-    sample_posterior_predictive,
+)
+from vocab_growth.models.common import (
+    sample_posterior_predictive as _base_sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
 from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
@@ -77,7 +82,12 @@ def prepare_univariate_re_data(
     meaningful than CDI form (WG / WS).
     """
     y_col = definition.outcome.value
+    use_subject_codes = (
+        definition.use_subject_re or definition.one_observation_per_subject
+    )
     columns = ["age", y_col, "study"]
+    if use_subject_codes:
+        columns.append("subject_id")
 
     df = vocab_data_utils.load_data(
         population=definition.population,
@@ -89,12 +99,37 @@ def prepare_univariate_re_data(
     analysis_df, dropped_studies = vocab_data_utils.filter_studies_by_min_obs(
         analysis_df, definition.min_study_observations
     )
+    if use_subject_codes:
+        vocab_data_utils.validate_subject_ids(analysis_df)
+    n_before_single_administration = len(analysis_df)
+    if definition.one_observation_per_subject:
+        analysis_df = vocab_data_utils.select_one_observation_per_subject(
+            analysis_df,
+            random_seed=definition.random_seed,
+        )
 
     # Integer study codes (sorted for reproducibility)
     unique_studies = sorted(analysis_df["study"].unique())
     study_map = {s: i for i, s in enumerate(unique_studies)}
     analysis_df["study_code"] = analysis_df["study"].map(study_map).astype(int)
     n_studies = len(unique_studies)
+
+    n_subjects: int | None = None
+    n_repeated_subjects: int | None = None
+    if use_subject_codes:
+        subject_keys = (
+            analysis_df["study"].astype(str)
+            + "::"
+            + analysis_df["subject_id"].astype(str)
+        )
+        analysis_df["subject_key"] = subject_keys
+        unique_subjects = sorted(subject_keys.unique())
+        subject_map = {subject: i for i, subject in enumerate(unique_subjects)}
+        analysis_df["subject_code"] = subject_keys.map(subject_map).astype(int)
+        n_subjects = len(unique_subjects)
+        n_repeated_subjects = int(
+            (analysis_df.groupby("subject_code").size() > 1).sum()
+        )
 
     desc = descriptive_stats.describe_all(analysis_df[["age", y_col]], alpha=0.05)
 
@@ -113,6 +148,20 @@ def prepare_univariate_re_data(
         ("Sample fraction", definition.sample_fraction),
         ("Studies", f"{n_studies} ({', '.join(map(str, unique_studies))})"),
     ]
+    if n_subjects is not None:
+        data_rows.extend(
+            [
+                ("Subjects", n_subjects),
+                ("Subjects with repeated observations", n_repeated_subjects),
+            ]
+        )
+    if definition.one_observation_per_subject:
+        data_rows.append(
+            (
+                "Single-administration sensitivity",
+                f"{n_before_single_administration} -> {len(analysis_df)} rows",
+            )
+        )
     if definition.min_study_observations:
         data_rows.append(
             (
@@ -178,6 +227,13 @@ def build_univariate_re_model(
     n = len(X_obs)
     n_trials = context.model_data.n_trials
     n_studies = int(study_codes.max()) + 1
+    use_subject_re = bool(definition.use_subject_re)
+    if use_subject_re:
+        subject_codes = np.asarray(analysis_df["subject_code"], dtype=int)
+        n_subjects = int(subject_codes.max()) + 1
+    else:
+        subject_codes = None
+        n_subjects = 0
 
     # Validate
     if not np.all(y_obs >= 0):
@@ -188,9 +244,7 @@ def build_univariate_re_model(
     # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
-    key_value_table(
-        "Build configuration",
-        [
+    build_rows: list[tuple[str, object]] = [
             ("Number of observations", n),
             ("Number of trials (n_trials)", n_trials),
             ("Number of studies", n_studies),
@@ -201,8 +255,15 @@ def build_univariate_re_model(
             ("Age median (months)", float(np.median(X_obs))),
             ("Age mean (months)", X_obs_mean),
             ("Age std (months)", X_obs_std),
-        ],
-    )
+    ]
+    if use_subject_re:
+        build_rows.extend(
+            [
+                ("Subject random intercept", True),
+                ("Number of subjects", n_subjects),
+            ]
+        )
+    key_value_table("Build configuration", build_rows)
 
     # Plot / query grids (standardised), with the optional reference-age anchor
     # row — see models.build_utils.construct_age_grids.
@@ -263,6 +324,8 @@ def build_univariate_re_model(
         "study_id": np.arange(n_studies),
         "x_dim": np.arange(1),
     }
+    if use_subject_re:
+        coords["subject_id"] = np.arange(n_subjects)
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -275,6 +338,10 @@ def build_univariate_re_model(
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
 
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
+        if use_subject_re:
+            subject_obs = pm.Data(
+                "subject_obs", subject_codes, dims=("obs_id",)
+            )
 
         # ============================================================
         # Mean developmental trajectory + HSGP deviation
@@ -310,12 +377,28 @@ def build_univariate_re_model(
         delta_raw = pm.Normal("delta_raw", mu=0.0, sigma=1.0, dims="study_id")
         delta = pm.Deterministic("delta", tau * delta_raw, dims="study_id")
 
+        if use_subject_re:
+            tau_subject = pm.HalfNormal(
+                "tau_subject", sigma=definition.tau_subject_sigma
+            )
+            delta_subject_raw = pm.Normal(
+                "delta_subject_raw", mu=0.0, sigma=1.0, dims="subject_id"
+            )
+            delta_subject = pm.Deterministic(
+                "delta_subject",
+                tau_subject * delta_subject_raw,
+                dims="subject_id",
+            )
+            subject_shift = delta_subject[subject_obs]
+        else:
+            subject_shift = 0.0
+
         # ============================================================
         # Observation-level quantities (with study shift)
         # ============================================================
 
         # Add study shift to obs-level predictor only
-        f_obs_re = f_all[i_obs0:i_obs1] + delta[study_obs]
+        f_obs_re = f_all[i_obs0:i_obs1] + delta[study_obs] + subject_shift
 
         f_obs = pm.Deterministic("f_obs", f_obs_re, dims=("obs_id",))
         p_obs = pm.Deterministic("p_obs", pm.math.sigmoid(f_obs), dims=("obs_id",))
@@ -388,6 +471,69 @@ def build_univariate_re_model(
 
 
 # ============================================================
+# Posterior predictive sampling
+# ============================================================
+
+
+def sample_posterior_predictive_re(
+    context: UnivariateREContext,
+    definition: UnivariateModelDefinition,
+) -> None:
+    """Sample a coherent trajectory for one new child when subject REs are used."""
+    if not definition.use_subject_re:
+        _base_sample_posterior_predictive(context, definition)
+        return
+
+    f_plot = context.model_variables["f_plot"]
+    f_query = context.model_variables["f_query"]
+    kappa_plot = context.model_variables["kappa_plot"]
+    kappa_query = context.model_variables["kappa_query"]
+    tau_subject = context.model_variables["tau_subject"]
+
+    with context.model:
+        new_subject_shift = pm.Normal(
+            "_delta_subject_marg", mu=0.0, sigma=tau_subject
+        )
+        p_plot = pm.math.sigmoid(f_plot + new_subject_shift)
+        p_query = pm.math.sigmoid(f_query + new_subject_shift)
+
+        p_plot = pm.math.clip(p_plot, EPSILON, 1 - EPSILON)
+        p_query = pm.math.clip(p_query, EPSILON, 1 - EPSILON)
+        pm.BetaBinomial(
+            "y_plot",
+            n=context.model_data.n_trials,
+            alpha=p_plot * kappa_plot,
+            beta=(1 - p_plot) * kappa_plot,
+            dims=("plot_id",),
+        )
+        pm.BetaBinomial(
+            "y_query",
+            n=context.model_data.n_trials,
+            alpha=p_query * kappa_query,
+            beta=(1 - p_query) * kappa_query,
+            dims=("query_id",),
+        )
+        trace = pm.sample_posterior_predictive(
+            context.trace,
+            var_names=["y_plot", "y_query", "y_obs"],
+            extend_inferencedata=True,
+            progressbar=sys.stdout.isatty(),
+            random_seed=context.sampling.random_seed,
+        )
+
+    context.set_trace(trace)
+    calibration_df = write_trace_calibration(
+        trace,
+        context.analysis_df,
+        context.reporting.output_dir,
+        ((definition.outcome.value, "y_obs", None),),
+    )
+    context.dataframes["posterior_predictive_calibration"] = calibration_df
+    trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
+    context.set_model_samples(extract_model_samples(trace))
+
+
+# ============================================================
 # Fit orchestration
 # ============================================================
 
@@ -430,7 +576,10 @@ def fit_univariate_re_model(
             ),
             ("Posterior sampling", sample),
             ("Diagnostics", diagnostics),
-            ("Posterior predictions", sample_posterior_predictive),
+            (
+                "Posterior predictions",
+                lambda ctx: sample_posterior_predictive_re(ctx, definition),
+            ),
             ("Posterior summary", posterior_summary),
             (
                 "Plots",

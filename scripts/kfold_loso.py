@@ -20,9 +20,10 @@ counts is
           - log(n_chain * n_draw)
 
 where the inner log p is the Beta-Binomial log-pmf summed over the
-subject's held-out (understood, spoken) observations, and the outer
-logsumexp marginalises over the joint posterior over hyperparameters and
-held-out REs.
+subject's held-out outcomes. Spoken counts use the nested S | U likelihood
+when the observed counts are logically nested, and the marginal spoken
+likelihood otherwise. The outer logsumexp marginalises over the joint posterior
+over hyperparameters and held-out REs.
 
 Outputs:
 
@@ -57,6 +58,7 @@ from vocab_growth.models.common_bivariate import (
 )
 from vocab_growth.models.common_bivariate_re import build_model_re
 from vocab_growth.models.definitions import VG07, VG08, VG09, BivariateModelDefinition
+from vocab_growth.models.likelihood_utils import nested_outcome_spec
 
 # Derive the Beta-Binomial trial count from the model definitions rather than a
 # literal (issue #131). All three compared models share the common 810-item
@@ -93,6 +95,7 @@ def load_analysis_frame() -> pd.DataFrame:
     has_u = analysis_df["understood"].notna()
     has_s = analysis_df["spoken"].notna()
     analysis_df = analysis_df[has_u | has_s].reset_index(drop=True)
+    data_utils.validate_subject_ids(analysis_df)
 
     unique_studies = sorted(analysis_df["study"].unique())
     study_map = {s: i for i, s in enumerate(unique_studies)}
@@ -204,6 +207,7 @@ def holdout_subject_elpds(
     """Marginal predictive log-density per held-out subject."""
     p_u_obs = trace.posterior["p_u_obs"].values
     p_s_obs = trace.posterior["p_s_obs"].values
+    q_obs = trace.posterior["q_obs"].values
     kappa_u_obs = trace.posterior["kappa_u_obs"].values
     kappa_s_obs = trace.posterior["kappa_s_obs"].values
 
@@ -211,21 +215,40 @@ def holdout_subject_elpds(
     log_NK = math.log(n_chain * n_draw)
     elpd: dict[int, float] = {}
 
+    spoken_spec = nested_outcome_spec(
+        analysis_df,
+        parent_col="understood",
+        outcome_col="spoken",
+        n_trials=N_TRIALS,
+    )
+    spoken_observed = np.full(len(analysis_df), -1, dtype=int)
+    spoken_trials = np.full(len(analysis_df), N_TRIALS, dtype=int)
+    spoken_is_conditional = np.zeros(len(analysis_df), dtype=bool)
+    spoken_observed[spoken_spec.indices] = spoken_spec.observed
+    spoken_trials[spoken_spec.indices] = spoken_spec.trials
+    spoken_is_conditional[spoken_spec.indices] = spoken_spec.is_conditional
+
     holdout_set = set(int(s) for s in holdout_subject_codes)
+    subject_codes = analysis_df["subject_code"].to_numpy(dtype=int)
     for s_code in holdout_set:
-        rows = analysis_df[analysis_df["subject_code"] == s_code]
         log_lik = np.zeros((n_chain, n_draw), dtype=np.float64)
-        for idx, row in rows.iterrows():
+        for idx in np.flatnonzero(subject_codes == s_code):
+            row = analysis_df.iloc[idx]
             if pd.notna(row["understood"]):
                 y = int(row["understood"])
                 p = np.clip(p_u_obs[:, :, idx], 1e-12, 1 - 1e-12)
                 k = kappa_u_obs[:, :, idx]
                 log_lik += betabinom.logpmf(y, N_TRIALS, p * k, (1 - p) * k)
             if pd.notna(row["spoken"]):
-                y = int(row["spoken"])
-                p = np.clip(p_s_obs[:, :, idx], 1e-12, 1 - 1e-12)
+                y = spoken_observed[idx]
+                if spoken_is_conditional[idx]:
+                    p = np.clip(q_obs[:, :, idx], 1e-12, 1 - 1e-12)
+                else:
+                    p = np.clip(p_s_obs[:, :, idx], 1e-12, 1 - 1e-12)
                 k = kappa_s_obs[:, :, idx]
-                log_lik += betabinom.logpmf(y, N_TRIALS, p * k, (1 - p) * k)
+                log_lik += betabinom.logpmf(
+                    y, spoken_trials[idx], p * k, (1 - p) * k
+                )
         elpd[s_code] = float(logsumexp(log_lik.ravel()) - log_NK)
     return elpd
 

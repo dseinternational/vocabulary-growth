@@ -2,10 +2,155 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import duckdb
+import numpy as np
 import pandas as pd
+import pytest
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth.models.definitions import Population
+
+
+def test_mask_incomparable_signed_outcomes_preserves_other_outcomes():
+    frame = pd.DataFrame(
+        {
+            "study": ["uk_01", "uk_06", "uk_04"],
+            "understood": [100, 110, 120],
+            "spoken": [40, 50, 60],
+            "signed": [20, 30, 40],
+        }
+    )
+
+    masked, dropped = data_utils.mask_incomparable_signed_outcomes(frame)
+
+    assert dropped == {"uk_01": 1, "uk_06": 1}
+    assert masked["understood"].tolist() == frame["understood"].tolist()
+    assert masked["spoken"].tolist() == frame["spoken"].tolist()
+    assert np.isnan(masked.loc[0, "signed"])
+    assert np.isnan(masked.loc[1, "signed"])
+    assert masked.loc[2, "signed"] == 40
+    assert frame["signed"].tolist() == [20, 30, 40]
+
+
+def test_mask_incomparable_signed_outcomes_can_reinclude_sources():
+    frame = pd.DataFrame(
+        {"study": ["uk_01", "uk_06"], "signed": [20, 30]}
+    )
+
+    kept, dropped = data_utils.mask_incomparable_signed_outcomes(
+        frame,
+        include_signed_only=True,
+        include_uncertain=True,
+    )
+
+    assert dropped == {}
+    assert kept["signed"].tolist() == [20, 30]
+
+
+def test_select_one_observation_per_subject_is_reproducible_and_study_scoped():
+    frame = pd.DataFrame(
+        {
+            "study": ["A", "A", "A", "B", "B"],
+            "subject_id": ["1", "1", "2", "1", "1"],
+            "age": [10, 12, 11, 9, 13],
+        }
+    )
+
+    selected_a = data_utils.select_one_observation_per_subject(
+        frame, random_seed=47
+    )
+    selected_b = data_utils.select_one_observation_per_subject(
+        frame, random_seed=47
+    )
+
+    pd.testing.assert_frame_equal(selected_a, selected_b)
+    assert len(selected_a) == 3
+    assert not selected_a.duplicated(["study", "subject_id"]).any()
+
+
+def test_select_one_observation_requires_unique_index():
+    frame = pd.DataFrame(
+        {
+            "study": ["A", "A"],
+            "subject_id": ["1", "1"],
+            "age": [10, 12],
+        },
+        index=[0, 0],
+    )
+
+    with pytest.raises(ValueError, match="unique dataframe index"):
+        data_utils.select_one_observation_per_subject(frame, random_seed=47)
+
+
+@pytest.mark.parametrize("subject_id", [None, np.nan, "", "   "])
+def test_validate_subject_ids_rejects_missing_or_blank_values(subject_id):
+    frame = pd.DataFrame({"study": ["A"], "subject_id": [subject_id]})
+
+    with pytest.raises(ValueError, match="non-missing subject ID"):
+        data_utils.validate_subject_ids(frame)
+
+
+def test_us01_ceiling_sensitivity_excludes_only_ws_ceiling_rows():
+    frame = pd.DataFrame(
+        {
+            "study": ["us_01", "us_01", "us_01", "uk_04"],
+            "spoken": [680, 679, 396, 416],
+            "survey_vocab_max": [680, 680, 396, 416],
+        }
+    )
+
+    filtered, count = data_utils.exclude_us01_spoken_ceiling_rows(frame)
+
+    assert count == 1
+    assert filtered[["study", "spoken"]].to_records(index=False).tolist() == [
+        ("us_01", 679),
+        ("us_01", 396),
+        ("uk_04", 416),
+    ]
+
+
+def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            "INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    "WS",
+                    "English (American)",
+                    "Edgin",
+                    "d05",
+                    None,
+                    30,
+                    680,
+                    680,
+                    False,
+                    "Down syndrome",
+                ),
+                (
+                    "WG",
+                    "English (American)",
+                    "Edgin",
+                    "d06",
+                    None,
+                    20,
+                    396,
+                    396,
+                    False,
+                    "Down syndrome",
+                ),
+            ],
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+    frame = data_utils.load_data(
+        Population.DOWN_SYNDROME,
+        columns=["study", "spoken", "survey_vocab_max"],
+    )
+
+    filtered, count = data_utils.exclude_us01_spoken_ceiling_rows(frame)
+
+    assert count == 1
+    assert 680 not in filtered["spoken"].tolist()
+    assert 396 in filtered["spoken"].tolist()
 
 
 def test_td_bivariate_data_excludes_ws_before_sampling(tmp_path, monkeypatch):
@@ -102,10 +247,11 @@ def test_ds_us01_no_row_carries_the_ws_production_proxy_as_understood(
     assert not (bivariate["understood"] == bivariate["spoken"]).any()
 
 
-def test_ds_us01_production_cap_excludes_rows_above_100(tmp_path, monkeypatch):
+def test_ds_us01_keeps_valid_rows_above_legacy_100_cap(tmp_path, monkeypatch):
     us01 = _load_us01(tmp_path, monkeypatch)
 
-    assert sorted(us01["spoken"].tolist()) == [12, 77]
+    assert sorted(us01["spoken"].tolist()) == [12, 77, 120, 150]
+    assert set(us01["survey_vocab_max"].dropna().astype(int)) == {396, 680}
 
 
 def test_form_ceiling_guard_drops_counts_above_survey_vocab_max(tmp_path, monkeypatch):
@@ -223,8 +369,7 @@ def _create_vocab_db(tmp_path):
                 # us_01 / Edgin Down syndrome rows, feeding the vocab_combined
                 # view: WG comprehension is an independent measure; WS
                 # comprehension is a production proxy and must not become
-                # `understood`; production > 100 rows are excluded by the
-                # legacy cap in the view.
+                # `understood`; valid production > 100 rows remain included.
                 ("WG",         "English (American)",  "Edgin",           "d01", "F",  14.0,  40,  12, False, "Down syndrome"),
                 ("WS",         "English (American)",  "Edgin",           "d02", "M",  24.0,  77,  77, False, "Down syndrome"),
                 ("WS",         "English (American)",  "Edgin",           "d03", None, 29.0, 150, 150, False, "Down syndrome"),
