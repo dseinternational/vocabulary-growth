@@ -91,6 +91,30 @@ def mask_incomparable_signed_outcomes(
     return out, dropped
 
 
+def validate_subject_ids(
+    df: pd.DataFrame,
+    *,
+    subject_col: str = "subject_id",
+) -> None:
+    """Require a non-missing, non-blank subject identifier on every row.
+
+    Repeated-measures models namespace identifiers by study. Converting missing
+    identifiers to strings would otherwise merge unrelated rows into a single
+    synthetic ``"nan"`` subject and silently invalidate the clustering.
+    """
+    if subject_col not in df.columns:
+        raise KeyError(f"Subject clustering requires column: {subject_col}")
+
+    subject_ids = df[subject_col]
+    blank = subject_ids.astype("string").str.strip().eq("").fillna(False)
+    invalid = subject_ids.isna() | blank
+    if invalid.any():
+        raise ValueError(
+            "Subject clustering requires a non-missing subject ID for every "
+            f"analysis row; found {int(invalid.sum())} invalid row(s)."
+        )
+
+
 def select_one_observation_per_subject(
     df: pd.DataFrame,
     *,
@@ -111,8 +135,7 @@ def select_one_observation_per_subject(
             "Single-administration selection requires columns: "
             + ", ".join(sorted(missing))
         )
-    if df[subject_col].isna().any():
-        raise ValueError("Cannot select one administration when subject IDs are missing.")
+    validate_subject_ids(df, subject_col=subject_col)
 
     shuffled = df.sample(frac=1.0, random_state=random_seed)
     selected = shuffled.drop_duplicates([study_col, subject_col], keep="first")

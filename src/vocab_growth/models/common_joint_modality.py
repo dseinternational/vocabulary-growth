@@ -376,6 +376,8 @@ def prepare_joint_data(
         | has_prod_obs
     )
     analysis_df = analysis_df[has_any_observation].reset_index(drop=True)
+    if use_subject_codes:
+        vocab_data_utils.validate_subject_ids(analysis_df)
 
     # Integer study codes (sorted for stability).
     unique_studies = sorted(analysis_df["study"].unique())

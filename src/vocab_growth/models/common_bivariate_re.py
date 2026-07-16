@@ -102,6 +102,8 @@ def prepare_bivariate_re_data(
     analysis_df, dropped_studies = vocab_data_utils.filter_studies_by_min_obs(
         analysis_df, definition.min_study_observations
     )
+    if use_subject_codes:
+        vocab_data_utils.validate_subject_ids(analysis_df)
     n_before_single_administration = len(analysis_df)
     if definition.one_observation_per_subject:
         analysis_df = vocab_data_utils.select_one_observation_per_subject(

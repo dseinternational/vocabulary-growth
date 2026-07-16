@@ -4,6 +4,7 @@
 import duckdb
 import numpy as np
 import pandas as pd
+import pytest
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth.models.definitions import Population
@@ -64,6 +65,14 @@ def test_select_one_observation_per_subject_is_reproducible_and_study_scoped():
     pd.testing.assert_frame_equal(selected_a, selected_b)
     assert len(selected_a) == 3
     assert not selected_a.duplicated(["study", "subject_id"]).any()
+
+
+@pytest.mark.parametrize("subject_id", [None, np.nan, "", "   "])
+def test_validate_subject_ids_rejects_missing_or_blank_values(subject_id):
+    frame = pd.DataFrame({"study": ["A"], "subject_id": [subject_id]})
+
+    with pytest.raises(ValueError, match="non-missing subject ID"):
+        data_utils.validate_subject_ids(frame)
 
 
 def test_td_bivariate_data_excludes_ws_before_sampling(tmp_path, monkeypatch):
