@@ -804,6 +804,54 @@ def diagnostics_var_names(model) -> tuple[list[str], list[str]]:
     return summary_var_names, gate_var_names
 
 
+def _loo_dropping_degenerate(idata, var_name=None):
+    """Compute PSIS-LOO, excluding observations with a constant pointwise
+    log-likelihood.
+
+    The nested joint likelihood models a paired outcome (spoken/signed)
+    conditionally on the observed *understood* count as its denominator, so a
+    row with ``understood == 0`` gives that outcome a structurally constant
+    (``n = 0``) log-likelihood across every draw. PSIS requires the pointwise
+    log-likelihood to vary across draws — arviz-stats raises
+    ``"All tail values are the same"`` on such degenerate points. Those
+    observations carry no information about the paired outcome, so they are
+    dropped from that outcome's LOO. Because the drop is deterministic (it keys
+    off ``n = 0`` alone), every joint model excludes the *same* observations,
+    keeping the per-outcome elpd comparable across models (``loo_compare``).
+
+    Returns ``(loo, n_dropped)``.
+    """
+    ll = idata.log_likelihood
+    name = var_name if var_name is not None else list(ll.data_vars)[0]
+    da = ll[name]
+    sample_dims = [d for d in ("chain", "draw") if d in da.dims]
+    obs_dims = [d for d in da.dims if d not in sample_dims]
+    n_dropped = 0
+    loo_source = idata
+    if len(obs_dims) == 1:
+        # A structurally constant (n = 0) log-likelihood is numerically ~0 with
+        # only floating-point noise, so its across-draw variance is ~1e-33, not
+        # exactly zero. Genuinely informative observations vary by orders of
+        # magnitude more (variance >> 1e-6), so 1e-12 cleanly separates the two.
+        keep = (da.var(dim=sample_dims) > 1e-12).values
+        n_dropped = int(keep.size) - int(keep.sum())
+        if n_dropped:
+            # ``idata`` is an xarray ``DataTree`` (arviz >= 1.2); ``copy`` is
+            # shallow by default, so the (large) posterior/sample_stats groups
+            # share buffers with the original rather than being duplicated —
+            # only the tree structure is copied. Reassigning the sliced
+            # (``isel`` view) log-likelihood therefore does not mutate the
+            # caller's ``idata``, so repeated per-outcome calls stay independent.
+            loo_source = idata.copy(deep=False)
+            loo_source["log_likelihood"] = loo_source["log_likelihood"].isel(
+                {obs_dims[0]: keep}
+            )
+    # Compute LOO for the resolved ``name`` (not the raw ``var_name``): when
+    # ``var_name`` is None, ``az.loo`` rejects a log-likelihood group holding
+    # more than one array, so keep the LOO target identical to the drop target.
+    return az.loo(loo_source, var_name=name), n_dropped
+
+
 def diagnostics(
     context: ModelFitContext,
     *,
@@ -940,15 +988,26 @@ def diagnostics(
     context.set_trace(trace)
 
     if loo_var_names is None:
-        loocv = az.loo(context.trace)
+        loocv, n_dropped = _loo_dropping_degenerate(context.trace)
+        if n_dropped:
+            console.print(
+                f"[yellow]LOO: dropped {n_dropped} degenerate "
+                f"(constant log-likelihood) observation(s).[/yellow]"
+            )
         context.set_loocv(loocv)
         heading("LOO-CV", style="bold cyan")
         console.print(loocv)
     else:
-        loocv_by_name = {
-            var_name: az.loo(context.trace, var_name=var_name)
-            for var_name, _label in loo_var_names
-        }
+        loocv_by_name = {}
+        for var_name, label in loo_var_names:
+            loocv_by_name[var_name], n_dropped = _loo_dropping_degenerate(
+                context.trace, var_name=var_name
+            )
+            if n_dropped:
+                console.print(
+                    f"[yellow]LOO ({label}): dropped {n_dropped} degenerate "
+                    f"(constant log-likelihood) observation(s).[/yellow]"
+                )
         context.set_loocv(loocv_by_name)
         for var_name, label in loo_var_names:
             heading(f"LOO-CV — {label}", style="bold cyan")

@@ -165,7 +165,10 @@ run_step() {  # name  command...
 
 # Does model <key> already have a completed trace.nc?
 has_trace() {
-  [ -n "$(find "$OUT_ROOT/models" -maxdepth 2 -iname trace.nc -ipath "*/${1^^}-*" 2>/dev/null | head -1)" ]
+  # -ipath is already case-insensitive, so no need for ${1^^} (a bash-4
+  # uppercase expansion that errors as "bad substitution" on macOS bash 3.2 and
+  # silently broke skip-on-resume there).
+  [ -n "$(find "$OUT_ROOT/models" -maxdepth 2 -iname trace.nc -ipath "*/${1}-*" 2>/dev/null | head -1)" ]
 }
 
 on_exit() {
