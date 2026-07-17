@@ -31,7 +31,7 @@ from vocab_growth.data_utils import load_data
 from vocab_growth.models.definitions import Population
 
 MODEL_DIR = os.path.join(env.models_output_dir(), "VG07-age-understood-spoken-ds-re")
-HDI_PROB = 0.90
+HDI_PROB = 0.89
 
 
 def study_labels() -> list[str]:
@@ -49,8 +49,8 @@ def _summary_row(label: str, samples: np.ndarray) -> dict:
         "mean": float(np.mean(samples)),
         "median": float(np.median(samples)),
         "sd": float(np.std(samples)),
-        "hdi_lo": float(hdi[0]),
-        "hdi_hi": float(hdi[1]),
+        "ci_lo": float(hdi[0]),
+        "ci_hi": float(hdi[1]),
     }
 
 
@@ -110,7 +110,7 @@ def main() -> None:
         ax.set_yticks(y_positions)
         ax.set_yticklabels(labels)
         ax.set_title(title)
-        ax.set_xlabel("Posterior median (90% HDI)")
+        ax.set_xlabel("Posterior median (89% HDI)")
 
     fig.suptitle(
         "VG07 — study random intercepts (DS, n=10 studies)", fontweight="bold",

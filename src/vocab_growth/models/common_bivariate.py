@@ -15,7 +15,6 @@ import os
 import sys
 from dataclasses import dataclass
 
-import arviz as az
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
@@ -30,6 +29,7 @@ import xarray as xr
 from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
+import vocab_growth.intervals as intervals
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 from vocab_growth.models.build_utils import (
@@ -1053,7 +1053,7 @@ def posterior_summary(context: BivariateContext):
     """Compute and store the posterior summary tables at query ages."""
     samples = context.model_samples
     n_trials = context.model_data.n_trials
-    hdi_prob = context.reporting.ci_prob
+    ci_prob = context.reporting.ci_prob
     has_subject_re = any(
         name in context.model_variables for name in ("tau_subj_u", "tau_subj_q")
     )
@@ -1064,7 +1064,7 @@ def posterior_summary(context: BivariateContext):
         samples.p_u_query,
         samples.y_u_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
     )
     if has_subject_re:
         summary_u = posterior_analysis.add_probability_estimand_columns(
@@ -1072,7 +1072,7 @@ def posterior_summary(context: BivariateContext):
             samples.p_u_query,
             samples.p_u_query_subject_marginal,
             n_trials=n_trials,
-            hdi_prob=hdi_prob,
+            ci_prob=ci_prob,
         )
     dataframe_table(
         summary_u, title="Posterior summary — words understood", show_index=False
@@ -1089,7 +1089,7 @@ def posterior_summary(context: BivariateContext):
         samples.p_s_query,
         samples.y_s_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
     )
     if has_subject_re:
         summary_s = posterior_analysis.add_probability_estimand_columns(
@@ -1097,7 +1097,7 @@ def posterior_summary(context: BivariateContext):
             samples.p_s_query,
             samples.p_s_query_subject_marginal,
             n_trials=n_trials,
-            hdi_prob=hdi_prob,
+            ci_prob=ci_prob,
         )
     dataframe_table(
         summary_s, title="Posterior summary — words spoken", show_index=False
@@ -1108,16 +1108,16 @@ def posterior_summary(context: BivariateContext):
         index=False,
     )
 
-    # Production rate summary
-    q_query_median = np.median(samples.q_query, axis=1)
-    q_query_hdi = az.hdi(samples.q_query, prob=hdi_prob)
-
-    summary_q = pd.DataFrame(
-        {
-            "age_months": samples.X_query,
-            "q_median": q_query_median,
-            "q_hdi_lo": q_query_hdi[:, 0],
-            "q_hdi_hi": q_query_hdi[:, 1],
+    # Production rate summary (equal-tailed; q is a bounded ratio)
+    summary_q = intervals.summarise(
+        samples.q_query, samples.X_query, name="q_query", outer=ci_prob, sample_axis=1
+    ).rename(
+        columns={
+            "median": "q_median",
+            "ci50_lo": "q_ci50_lo",
+            "ci50_hi": "q_ci50_hi",
+            "ci_lo": "q_ci_lo",
+            "ci_hi": "q_ci_hi",
         }
     )
     dataframe_table(
@@ -1144,26 +1144,28 @@ def plot_understood_spoken_trajectory(
     """Plot both understood and spoken posterior predictive median trends on one figure."""
     X_plot = samples.X_plot
 
+    outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
+
     # Understood
     y_u_median = np.quantile(samples.y_u_plot, 0.50, axis=1)
-    y_u_90 = np.quantile(samples.y_u_plot, [0.05, 0.95], axis=1).T
-    y_u_50 = np.quantile(samples.y_u_plot, [0.25, 0.75], axis=1).T
+    y_u_ci = intervals.bands(samples.y_u_plot, outer, "eti", sample_axis=1)
+    y_u_ci50 = intervals.bands(samples.y_u_plot, inner, "eti", sample_axis=1)
 
     # Spoken
     y_s_median = np.quantile(samples.y_s_plot, 0.50, axis=1)
-    y_s_90 = np.quantile(samples.y_s_plot, [0.05, 0.95], axis=1).T
-    y_s_50 = np.quantile(samples.y_s_plot, [0.25, 0.75], axis=1).T
+    y_s_ci = intervals.bands(samples.y_s_plot, outer, "eti", sample_axis=1)
+    y_s_ci50 = intervals.bands(samples.y_s_plot, inner, "eti", sample_axis=1)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     # Understood bands
-    ax.fill_between(X_plot, y_u_90[:, 0], y_u_90[:, 1], alpha=0.15, color="C0")
-    ax.fill_between(X_plot, y_u_50[:, 0], y_u_50[:, 1], alpha=0.25, color="C0")
+    ax.fill_between(X_plot, y_u_ci[:, 0], y_u_ci[:, 1], alpha=0.15, color="C0")
+    ax.fill_between(X_plot, y_u_ci50[:, 0], y_u_ci50[:, 1], alpha=0.25, color="C0")
     ax.plot(X_plot, y_u_median, lw=3, color="C0", label="Words understood (median)")
 
     # Spoken bands
-    ax.fill_between(X_plot, y_s_90[:, 0], y_s_90[:, 1], alpha=0.15, color="C1")
-    ax.fill_between(X_plot, y_s_50[:, 0], y_s_50[:, 1], alpha=0.25, color="C1")
+    ax.fill_between(X_plot, y_s_ci[:, 0], y_s_ci[:, 1], alpha=0.15, color="C1")
+    ax.fill_between(X_plot, y_s_ci50[:, 0], y_s_ci50[:, 1], alpha=0.25, color="C1")
     ax.plot(X_plot, y_s_median, lw=3, color="C1", label="Words spoken (median)")
 
     # Observed data
@@ -1186,15 +1188,15 @@ def plot_understood_spoken_trajectory(
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
             "understood_median": y_u_median,
-            "understood_p05": y_u_90[:, 0],
-            "understood_p95": y_u_90[:, 1],
-            "understood_p25": y_u_50[:, 0],
-            "understood_p75": y_u_50[:, 1],
+            "understood_ci50_lo": y_u_ci50[:, 0],
+            "understood_ci50_hi": y_u_ci50[:, 1],
+            "understood_ci_lo": y_u_ci[:, 0],
+            "understood_ci_hi": y_u_ci[:, 1],
             "spoken_median": y_s_median,
-            "spoken_p05": y_s_90[:, 0],
-            "spoken_p95": y_s_90[:, 1],
-            "spoken_p25": y_s_50[:, 0],
-            "spoken_p75": y_s_50[:, 1],
+            "spoken_ci50_lo": y_s_ci50[:, 0],
+            "spoken_ci50_hi": y_s_ci50[:, 1],
+            "spoken_ci_lo": y_s_ci[:, 0],
+            "spoken_ci_hi": y_s_ci[:, 1],
         }), output_dir, filename)
 
     return fig
@@ -1206,29 +1208,31 @@ def plot_understood_spoken_trajectory_hdi(
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot understood and spoken posterior predictive medians with 50% and 75% HDI bands."""
+    """Plot understood and spoken posterior predictive medians with 50% and 89% intervals."""
     X_plot = samples.X_plot
+    outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
+    pct = int(round(outer * 100))
 
-    # Understood HDI bands
+    # Understood bands (equal-tailed)
     y_u_median = np.median(samples.y_u_plot, axis=1)
-    y_u_hdi_75 = az.hdi(samples.y_u_plot, prob=0.75)
-    y_u_hdi_50 = az.hdi(samples.y_u_plot, prob=0.50)
+    y_u_ci = intervals.bands(samples.y_u_plot, outer, "eti", sample_axis=1)
+    y_u_ci50 = intervals.bands(samples.y_u_plot, inner, "eti", sample_axis=1)
 
-    # Spoken HDI bands
+    # Spoken bands (equal-tailed)
     y_s_median = np.median(samples.y_s_plot, axis=1)
-    y_s_hdi_75 = az.hdi(samples.y_s_plot, prob=0.75)
-    y_s_hdi_50 = az.hdi(samples.y_s_plot, prob=0.50)
+    y_s_ci = intervals.bands(samples.y_s_plot, outer, "eti", sample_axis=1)
+    y_s_ci50 = intervals.bands(samples.y_s_plot, inner, "eti", sample_axis=1)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     # Understood bands
-    ax.fill_between(X_plot, y_u_hdi_75[:, 0], y_u_hdi_75[:, 1], alpha=0.15, color="C0", label="Words understood (75% HDI)")
-    ax.fill_between(X_plot, y_u_hdi_50[:, 0], y_u_hdi_50[:, 1], alpha=0.25, color="C0", label="Words understood (50% HDI)")
+    ax.fill_between(X_plot, y_u_ci[:, 0], y_u_ci[:, 1], alpha=0.15, color="C0", label=f"Words understood ({pct}% interval)")
+    ax.fill_between(X_plot, y_u_ci50[:, 0], y_u_ci50[:, 1], alpha=0.25, color="C0", label="Words understood (50% interval)")
     ax.plot(X_plot, y_u_median, lw=3, color="C0", label="Words understood (median)")
 
     # Spoken bands
-    ax.fill_between(X_plot, y_s_hdi_75[:, 0], y_s_hdi_75[:, 1], alpha=0.15, color="C1", label="Words spoken (75% HDI)")
-    ax.fill_between(X_plot, y_s_hdi_50[:, 0], y_s_hdi_50[:, 1], alpha=0.25, color="C1", label="Words spoken (50% HDI)")
+    ax.fill_between(X_plot, y_s_ci[:, 0], y_s_ci[:, 1], alpha=0.15, color="C1", label=f"Words spoken ({pct}% interval)")
+    ax.fill_between(X_plot, y_s_ci50[:, 0], y_s_ci50[:, 1], alpha=0.25, color="C1", label="Words spoken (50% interval)")
     ax.plot(X_plot, y_s_median, lw=3, color="C1", label="Words spoken (median)")
 
     ax.set_xlabel("Age (months)")
@@ -1242,15 +1246,15 @@ def plot_understood_spoken_trajectory_hdi(
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
             "understood_median": y_u_median,
-            "understood_hdi75_lo": y_u_hdi_75[:, 0],
-            "understood_hdi75_hi": y_u_hdi_75[:, 1],
-            "understood_hdi50_lo": y_u_hdi_50[:, 0],
-            "understood_hdi50_hi": y_u_hdi_50[:, 1],
+            "understood_ci50_lo": y_u_ci50[:, 0],
+            "understood_ci50_hi": y_u_ci50[:, 1],
+            "understood_ci_lo": y_u_ci[:, 0],
+            "understood_ci_hi": y_u_ci[:, 1],
             "spoken_median": y_s_median,
-            "spoken_hdi75_lo": y_s_hdi_75[:, 0],
-            "spoken_hdi75_hi": y_s_hdi_75[:, 1],
-            "spoken_hdi50_lo": y_s_hdi_50[:, 0],
-            "spoken_hdi50_hi": y_s_hdi_50[:, 1],
+            "spoken_ci50_lo": y_s_ci50[:, 0],
+            "spoken_ci50_hi": y_s_ci50[:, 1],
+            "spoken_ci_lo": y_s_ci[:, 0],
+            "spoken_ci_hi": y_s_ci[:, 1],
         }), output_dir, filename)
 
     return fig
@@ -1259,7 +1263,8 @@ def plot_understood_spoken_trajectory_hdi(
 def plot_production_rate_by_understood(
     samples: BivariateModelSamples,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
 ):
@@ -1269,32 +1274,25 @@ def plot_production_rate_by_understood(
 
     x_words = np.median(p_u_plot, axis=1) * n_trials
     q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot, prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot, prob=0.75)
-    q_hdi_50 = az.hdi(q_plot, prob=0.50)
+    q_ci = intervals.bands(q_plot, ci_prob, interval_kind, sample_axis=1)
+    q_ci50 = intervals.bands(q_plot, intervals.INNER_CI_PROB, interval_kind, sample_axis=1)
+    pct = int(round(ci_prob * 100))
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     ax.fill_between(
         x_words,
-        q_hdi[:, 0],
-        q_hdi[:, 1],
+        q_ci[:, 0],
+        q_ci[:, 1],
         alpha=0.20,
-        label=f"{int(hdi_prob * 100)}% HDI",
+        label=f"{pct}% interval",
     )
     ax.fill_between(
         x_words,
-        q_hdi_75[:, 0],
-        q_hdi_75[:, 1],
-        alpha=0.25,
-        label="75% HDI",
-    )
-    ax.fill_between(
-        x_words,
-        q_hdi_50[:, 0],
-        q_hdi_50[:, 1],
+        q_ci50[:, 0],
+        q_ci50[:, 1],
         alpha=0.30,
-        label="50% HDI",
+        label="50% interval",
     )
     ax.plot(x_words, q_median, lw=3, label="Median q")
 
@@ -1310,12 +1308,10 @@ def plot_production_rate_by_understood(
         _save_csv(pd.DataFrame({
             "words_understood": x_words,
             "q_median": q_median,
-            "hdi_lo": q_hdi[:, 0],
-            "hdi_hi": q_hdi[:, 1],
-            "hdi75_lo": q_hdi_75[:, 0],
-            "hdi75_hi": q_hdi_75[:, 1],
-            "hdi50_lo": q_hdi_50[:, 0],
-            "hdi50_hi": q_hdi_50[:, 1],
+            "ci50_lo": q_ci50[:, 0],
+            "ci50_hi": q_ci50[:, 1],
+            "ci_lo": q_ci[:, 0],
+            "ci_hi": q_ci[:, 1],
         }), output_dir, filename)
 
     return fig
@@ -1326,7 +1322,7 @@ def plot_production_rate_predictive(
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot posterior predictive spoken/understood count ratio with 50% and 75% HDI bands.
+    """Plot posterior predictive spoken/understood count ratio with 50% and 89% intervals.
 
     Uses posterior predictive counts (y_s / y_u). Samples where y_u == 0 are
     excluded per age point before computing summary statistics.
@@ -1334,39 +1330,41 @@ def plot_production_rate_predictive(
     X_plot = samples.X_plot
     y_u = samples.y_u_plot  # (n_plot, n_samples)
     y_s = samples.y_s_plot
+    outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
+    pct = int(round(outer * 100))
 
     n_ages = y_u.shape[0]
     ratio_median = np.empty(n_ages)
-    ratio_hdi_75 = np.empty((n_ages, 2))
-    ratio_hdi_50 = np.empty((n_ages, 2))
+    ratio_ci = np.empty((n_ages, 2))
+    ratio_ci50 = np.empty((n_ages, 2))
 
     for i in range(n_ages):
         mask = y_u[i] > 0
         if mask.sum() < 10:
             ratio_median[i] = np.nan
-            ratio_hdi_75[i] = np.nan
-            ratio_hdi_50[i] = np.nan
+            ratio_ci[i] = np.nan
+            ratio_ci50[i] = np.nan
             continue
         ratio_i = y_s[i, mask] / y_u[i, mask]
         ratio_median[i] = np.median(ratio_i)
-        ratio_hdi_75[i] = az.hdi(ratio_i, prob=0.75)
-        ratio_hdi_50[i] = az.hdi(ratio_i, prob=0.50)
+        ratio_ci[i] = intervals.interval_1d(ratio_i, outer, "eti")
+        ratio_ci50[i] = intervals.interval_1d(ratio_i, inner, "eti")
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     ax.fill_between(
         X_plot,
-        ratio_hdi_75[:, 0],
-        ratio_hdi_75[:, 1],
+        ratio_ci[:, 0],
+        ratio_ci[:, 1],
         alpha=0.20,
-        label="75% HDI",
+        label=f"{pct}% interval",
     )
     ax.fill_between(
         X_plot,
-        ratio_hdi_50[:, 0],
-        ratio_hdi_50[:, 1],
+        ratio_ci50[:, 0],
+        ratio_ci50[:, 1],
         alpha=0.30,
-        label="50% HDI",
+        label="50% interval",
     )
     ax.plot(X_plot, ratio_median, lw=3, label="Median")
 
@@ -1383,10 +1381,10 @@ def plot_production_rate_predictive(
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
             "ratio_median": ratio_median,
-            "hdi75_lo": ratio_hdi_75[:, 0],
-            "hdi75_hi": ratio_hdi_75[:, 1],
-            "hdi50_lo": ratio_hdi_50[:, 0],
-            "hdi50_hi": ratio_hdi_50[:, 1],
+            "ci50_lo": ratio_ci50[:, 0],
+            "ci50_hi": ratio_ci50[:, 1],
+            "ci_lo": ratio_ci[:, 0],
+            "ci_hi": ratio_ci[:, 1],
         }), output_dir, filename)
 
     return fig
@@ -1487,7 +1485,8 @@ def plot_understood_vs_spoken_predictive(
 def plot_spoken_given_understood(
     samples: BivariateModelSamples,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
 ):
@@ -1515,7 +1514,7 @@ def plot_spoken_given_understood(
     for k, j in enumerate(sel):
         q_samps = q_query[j, :]
         q_med = float(np.median(q_samps))
-        q_lo, q_hi = az.hdi(q_samps, prob=hdi_prob)
+        q_lo, q_hi = intervals.interval_1d(q_samps, ci_prob, interval_kind)
         color = f"C{k}"
         ax.fill_between(
             understood, understood * q_lo, understood * q_hi, alpha=0.15, color=color
@@ -1531,8 +1530,8 @@ def plot_spoken_given_understood(
             "age_months": int(round(float(ages[j]))),
             "words_understood": understood,
             "spoken_median": understood * q_med,
-            "spoken_hdi_lo": understood * q_lo,
-            "spoken_hdi_hi": understood * q_hi,
+            "spoken_ci_lo": understood * q_lo,
+            "spoken_ci_hi": understood * q_hi,
         }))
 
     ax.plot(
@@ -1570,7 +1569,7 @@ def _run_bivariate_outcome_plots(
     x_obs: pd.Series,
     y_obs: pd.Series,
     n_trials: int,
-    hdi_prob: float,
+    ci_prob: float,
     output_dir: str,
     suffix: str,
     outcome_label: str,
@@ -1581,7 +1580,7 @@ def _run_bivariate_outcome_plots(
         X_query=samples.X_query,
         y_query=y_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"posterior_predictive_count_distributions_{suffix}",
         x_label=f"{outcome_label} (count)",
@@ -1635,7 +1634,7 @@ def _run_bivariate_outcome_plots(
         samples.X_plot,
         f_plot,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"expected_learning_rate_{suffix}",
         y_label=f"Estimated {outcome_label.lower()} gain per month",
@@ -1645,7 +1644,7 @@ def _run_bivariate_outcome_plots(
         samples.X_plot,
         f_plot,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         smooth=True,
         savgol_window_length=15,
         savgol_polyorder=3,
@@ -1661,7 +1660,7 @@ def _run_bivariate_outcome_plots(
         samples.X_query,
         kappa_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"posterior_kappa_{suffix}",
     )
@@ -1703,7 +1702,7 @@ def _run_bivariate_joint_plots(
 
     fig = plot_production_rate(
         samples,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="production_rate",
     )
@@ -1715,7 +1714,7 @@ def _run_bivariate_joint_plots(
     fig = plot_production_rate_by_understood(
         samples,
         n_trials=definition.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="production_rate_by_understood",
     )
@@ -1737,7 +1736,7 @@ def _run_bivariate_joint_plots(
     fig = plot_comprehension_production_gap(
         samples,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="comprehension_production_gap",
     )
@@ -1771,7 +1770,7 @@ def _run_bivariate_joint_plots(
     fig = plot_spoken_given_understood(
         samples,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="spoken_given_understood",
     )
@@ -1790,7 +1789,7 @@ def _run_bivariate_joint_plots(
         x_obs=analysis_df.loc[has_u, "age"],
         y_obs=analysis_df.loc[has_u, "understood"],
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         suffix="u",
         outcome_label="Words understood",
@@ -1809,7 +1808,7 @@ def _run_bivariate_joint_plots(
         x_obs=analysis_df.loc[has_s, "age"],
         y_obs=analysis_df.loc[has_s, "spoken"],
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         suffix="s",
         outcome_label="Words spoken",

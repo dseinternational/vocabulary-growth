@@ -44,8 +44,8 @@ def _context(definition) -> ModelFitContext:
             model_name=definition.model_id,
             config_name=definition.config_name,
             output_root_dir=env.output_root(),
-            ci_prob=0.90,
-            interval_kind="hdi",
+            ci_prob=0.89,
+            interval_kind="eti",
         ),
         sampling=sampling.get_sampling_configuration("dev"),
     )

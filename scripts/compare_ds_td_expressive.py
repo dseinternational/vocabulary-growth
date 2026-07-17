@@ -172,7 +172,7 @@ def run_expressive_delay() -> None:
     print("  Δ_exp(N) — extra months DS is behind on production vs comprehension:")
     for _, r in dexp[dexp["coverage"] >= MIN_COVERAGE].iterrows():
         print(f"    N={int(r['words']):>3}: {r['median']:5.1f} "
-              f"[{r['hdi90_lo']:.1f}, {r['hdi90_hi']:.1f}]  P(>0)={r['p_gt0']:.2f}")
+              f"[{r['ci_lo']:.1f}, {r['ci_hi']:.1f}]  P(>0)={r['p_gt0']:.2f}")
 
 
 # ----------------------------------------------------------------------------
@@ -271,15 +271,15 @@ def run_peak_growth() -> None:
         peak_td = C.peak_growth_age(a_td, p_td * n)
         cen_ds = float(np.mean((peak_ds <= a_ds[0] + 1e-6) | (peak_ds >= a_ds[-1] - 1e-6)))
         cen_td = float(np.mean((peak_td <= a_td[0] + 1e-6) | (peak_td >= a_td[-1] - 1e-6)))
-        lo_ds, hi_ds = C.hdi_from_samples(peak_ds, 0.90)
-        lo_td, hi_td = C.hdi_from_samples(peak_td, 0.90)
+        lo_ds, hi_ds = C.hdi_from_samples(peak_ds, 0.89)
+        lo_td, hi_td = C.hdi_from_samples(peak_td, 0.89)
         out_rows.append({
             "outcome": outcome,
             "peak_age_DS_median": float(np.nanmedian(peak_ds)),
-            "peak_age_DS_hdi90_lo": lo_ds, "peak_age_DS_hdi90_hi": hi_ds,
+            "peak_age_DS_ci_lo": lo_ds, "peak_age_DS_ci_hi": hi_ds,
             "peak_age_DS_boundary_frac": cen_ds,
             "peak_age_TD_median": float(np.nanmedian(peak_td)),
-            "peak_age_TD_hdi90_lo": lo_td, "peak_age_TD_hdi90_hi": hi_td,
+            "peak_age_TD_ci_lo": lo_td, "peak_age_TD_ci_hi": hi_td,
             "peak_age_TD_boundary_frac": cen_td,
         })
         print(f"  {outcome:>10}: DS peak ~{np.nanmedian(peak_ds):.0f} mo "

@@ -39,6 +39,7 @@ import pytensor.tensor as pt
 
 import vocab_growth.data_utils as vocab_data_utils
 from vocab_growth import environment as env
+from vocab_growth import intervals
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -211,15 +212,15 @@ def fit(config: str = "test", outcome="spoken", label="VG17", subdir="VG17-age-s
     max_rhat = float(np.nanmax(summ["r_hat"].values))
     print(f"[{label}] sampled: divergences={ndiv}, contrasts max R-hat={max_rhat:.4f}", flush=True)
 
-    # contrasts on logit + odds-ratio scale, 90% HDI
+    # contrasts on logit + odds-ratio scale, 89% equal-tailed interval
     post = idata.posterior
     rows = []
     for c in contrasts:
         v = post[c].values.ravel()
-        hdi = np.asarray(az.hdi(v, prob=0.90)).ravel()
-        rows.append((c, v.mean(), hdi[0], hdi[1], np.exp(v.mean()),
+        lo, hi = intervals.interval_1d(v, intervals.DEFAULT_CI_PROB, "eti")
+        rows.append((c, v.mean(), lo, hi, np.exp(v.mean()),
                      float((v > 0).mean())))
-    tab = pd.DataFrame(rows, columns=["contrast", "logit_mean", "hdi5", "hdi95", "odds_ratio", "P(>0)"])
+    tab = pd.DataFrame(rows, columns=["contrast", "logit_mean", "ci_lo", "ci_hi", "odds_ratio", "P(>0)"])
     tab.to_csv(os.path.join(out_dir, "sign_group_contrasts.csv"), index=False)
     print(f"\n[{label}] sign-group contrasts (logit; +ve = more {outcome} than unknown reference):")
     print(tab.to_string(index=False), flush=True)

@@ -13,7 +13,7 @@ Every joint model in this report writes spoken vocabulary as a fraction of under
 
 ## Comprehension leads production in Down syndrome
 
-Across the Down syndrome age range the production ratio stays well below 1 and rises with age (@fig-ds-q): children understand many more words than they say, and the gap narrows only gradually as they get older. The posterior median and 90% HDI of $q(a)$ by age:
+Across the Down syndrome age range the production ratio stays well below 1 and rises with age (@fig-ds-q): children understand many more words than they say, and the gap narrows only gradually as they get older. The posterior median and 89% interval of $q(a)$ by age:
 
 ```{python}
 #| label: tbl-ds-q
@@ -38,7 +38,7 @@ import pandas as pd
 _q = comp_load("ds_td_comprehension_q_at_U")
 _q = _q[_q["dq_coverage"] >= 0.80].copy()
 _tab = _q[
-    ["words", "q_TD_median", "q_DS_median", "dq_median", "dq_hdi90_lo", "dq_hdi90_hi", "dq_p_gt0"]
+    ["words", "q_TD_median", "q_DS_median", "dq_median", "dq_ci_lo", "dq_ci_hi", "dq_p_gt0"]
 ].round(3)
 _tab.columns = [
     "Words understood", "TD q", "DS q", "Δq (TD−DS)", "HDI 90% lo", "HDI 90% hi", "P(TD>DS)"
@@ -48,9 +48,9 @@ _tab.reset_index(drop=True)
 
 ![Spoken fraction given words understood, $q(U = N)$: typically-developing (TD) vs Down syndrome (DS).](figures/comparisons/ds_td_comprehension_q_at_U.png){#fig-q-at-u}
 
-![Difference $\Delta q(U = N) = q_{\text{TD}} - q_{\text{DS}}$ at matched comprehension, with 90% HDI.](figures/comparisons/ds_td_comprehension_dq.png){#fig-dq}
+![Difference $\Delta q(U = N) = q_{\text{TD}} - q_{\text{DS}}$ at matched comprehension, with 89% interval.](figures/comparisons/ds_td_comprehension_dq.png){#fig-dq}
 
-At matched comprehension, typically-developing children say a **larger fraction** of the words they understand than children with Down syndrome. The difference $\Delta q = q_{\text{TD}} - q_{\text{DS}}$ is credibly positive from roughly 50 to 150 understood words (90% HDI excluding 0, $P(\text{TD}>\text{DS}) \ge 0.96$), peaks around +0.13, and narrows to uncertain by about 200 words (@fig-dq). So the comprehension–production gap is **disproportionately larger in Down syndrome at lower vocabulary levels, and converges towards the typically-developing pattern as vocabulary grows**. In this large pooled sample this differs from the smaller-study suggestion of a typically-developing-like pattern in Down syndrome.
+At matched comprehension, typically-developing children say a **larger fraction** of the words they understand than children with Down syndrome. The difference $\Delta q = q_{\text{TD}} - q_{\text{DS}}$ is credibly positive from roughly 50 to 150 understood words (89% interval excluding 0, $P(\text{TD}>\text{DS}) \ge 0.96$), peaks around +0.13, and narrows to uncertain by about 200 words (@fig-dq). So the comprehension–production gap is **disproportionately larger in Down syndrome at lower vocabulary levels, and converges towards the typically-developing pattern as vocabulary grows**. In this large pooled sample this differs from the smaller-study suggestion of a typically-developing-like pattern in Down syndrome.
 
 ## Limitations
 

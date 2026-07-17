@@ -248,16 +248,15 @@ def main() -> None:
         # y_arr: (N, n_query). Quantiles across draws per age. Round to the
         # nearest integer count rather than truncating (floor), which would
         # bias every reported count downward.
+        # Equal-tailed 89% (outer) and 50% (inner) intervals, matching the
+        # posterior-summary schema (see vocab_growth.intervals).
+        q_lo = (1.0 - 0.89) / 2.0
         y_median = np.rint(np.median(y_arr, axis=0)).astype(int)
-        y_lo = np.rint(np.quantile(y_arr, 0.05, axis=0)).astype(int)
-        y_hi = np.rint(np.quantile(y_arr, 0.95, axis=0)).astype(int)
         df["Y_median"] = y_median
-        df["Y_hdi_lo"] = y_lo
-        df["Y_hdi_hi"] = y_hi
-        df["Y_p05"] = y_lo
-        df["Y_p95"] = y_hi
-        df["Y_p25"] = np.rint(np.quantile(y_arr, 0.25, axis=0)).astype(int)
-        df["Y_p75"] = np.rint(np.quantile(y_arr, 0.75, axis=0)).astype(int)
+        df["Y_ci50_lo"] = np.rint(np.quantile(y_arr, 0.25, axis=0)).astype(int)
+        df["Y_ci50_hi"] = np.rint(np.quantile(y_arr, 0.75, axis=0)).astype(int)
+        df["Y_ci_lo"] = np.rint(np.quantile(y_arr, q_lo, axis=0)).astype(int)
+        df["Y_ci_hi"] = np.rint(np.quantile(y_arr, 1.0 - q_lo, axis=0)).astype(int)
         for c in cutoffs:
             col = f"P(Y={c})" if c == 0 else f"P(Y<={c})"
             df[col] = (y_arr <= c).mean(axis=0)

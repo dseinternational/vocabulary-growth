@@ -104,7 +104,7 @@ diagnostics.loc[diagnostics.index.str.contains("beta_lag", case=False)]
 
 ::: {.callout-important title="Within-child contrast and the short-T bias"}
 
-The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's *own* understood intercept — was fit as a diagnostic. With the two-wave-dominated data it is **strongly and spuriously negative** (dev-tier $\beta \approx -0.60$, 90% HDI $[-0.85, -0.35]$): a **short-T (Nickell-type) / errors-in-variables artifact** of regressing on a lag tied to the child's own random intercept, *not* evidence that comprehension suppresses later production. The bias-robust population-relative headline above avoids that circularity and is essentially null at dev-tier ($\beta \approx +0.05$, HDI spanning 0). Sharpening the within-child estimate (latent-AR understood; restricting to the ≥3-wave children) is deferred to v2. See the scoping note (§5).
+The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's *own* understood intercept — was fit as a diagnostic. With the two-wave-dominated data it is **strongly and spuriously negative** (dev-tier $\beta \approx -0.60$, 89% interval $[-0.85, -0.35]$): a **short-T (Nickell-type) / errors-in-variables artifact** of regressing on a lag tied to the child's own random intercept, *not* evidence that comprehension suppresses later production. The bias-robust population-relative headline above avoids that circularity and is essentially null at dev-tier ($\beta \approx +0.05$, interval spanning 0). Sharpening the within-child estimate (latent-AR understood; restricting to the ≥3-wave children) is deferred to v2. See the scoping note (§5).
 
 :::
 
@@ -131,7 +131,7 @@ diagnostics
 
 ![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Joint posterior predictive trajectory with 50% and 75% HDI bands](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
+![Joint posterior predictive trajectory with 50% and 89% intervals](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
 
 ## Production ratio
 

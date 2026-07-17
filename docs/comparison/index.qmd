@@ -51,20 +51,20 @@ def _hdi(m, lo, hi, dec=0):
 
 
 def band_at(df, idxcol, idxval, prefix, dec=0, cov_col=None, cov_min=0.80):
-    """Format 'median [hdi90_lo, hdi90_hi]' for `prefix` at the row nearest idxval."""
+    """Format 'median [ci_lo, ci_hi]' for `prefix` at the row nearest idxval."""
     r = _nearest(df, idxcol, idxval)
     if cov_col is not None and float(r.get(cov_col, 1.0)) < cov_min:
         return "—"
     m = r[f"{prefix}_median"]
-    return _hdi(m, r[f"{prefix}_hdi90_lo"], r[f"{prefix}_hdi90_hi"], dec)
+    return _hdi(m, r[f"{prefix}_ci_lo"], r[f"{prefix}_ci_hi"], dec)
 
 
 def plain_at(df, idxcol, idxval, dec=0, cov_min=0.80):
-    """Format 'median [hdi90_lo, hdi90_hi]' for a single unprefixed series."""
+    """Format 'median [ci_lo, ci_hi]' for a single unprefixed series."""
     r = _nearest(df, idxcol, idxval)
     if "coverage" in df.columns and float(r.get("coverage", 1.0)) < cov_min:
         return "—"
-    return _hdi(r["median"], r["hdi90_lo"], r["hdi90_hi"], dec)
+    return _hdi(r["median"], r["ci_lo"], r["ci_hi"], dec)
 ```
 
 ## Method and scope
@@ -157,10 +157,10 @@ for outcome in ("understood", "spoken"):
     rows.append({
         "Outcome": outcome,
         "DS peak (mo)": f"{r['peak_age_DS_median']:.0f} "
-                        f"[{r['peak_age_DS_hdi90_lo']:.0f}, {r['peak_age_DS_hdi90_hi']:.0f}]",
+                        f"[{r['peak_age_DS_ci_lo']:.0f}, {r['peak_age_DS_ci_hi']:.0f}]",
         "DS censored": f"{r['peak_age_DS_boundary_frac']:.0%}",
         "TD peak (mo)": f"{r['peak_age_TD_median']:.0f} "
-                        f"[{r['peak_age_TD_hdi90_lo']:.0f}, {r['peak_age_TD_hdi90_hi']:.0f}]",
+                        f"[{r['peak_age_TD_ci_lo']:.0f}, {r['peak_age_TD_ci_hi']:.0f}]",
     })
 pd.DataFrame(rows).set_index("Outcome")
 ```

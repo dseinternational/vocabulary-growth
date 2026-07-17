@@ -186,7 +186,7 @@ For this model the main geometry checks are the study-effect scales, the anchore
 
 ![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Joint posterior predictive trajectory with 50% and 75% HDI bands](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
+![Joint posterior predictive trajectory with 50% and 89% intervals](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
 
 ::: {.callout-warning title="Age restriction"}
 
@@ -227,7 +227,7 @@ The expected difference in word counts between understanding and production.
 
 $$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
 
-Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — not evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. The figure below reads the fitted association directly across the 8–18 month window, with the shaded band the 90% HDI on $q(a)$ and the dashed line the ceiling. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
+Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — not evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. The figure below reads the fitted association directly across the 8–18 month window, with the shaded band the 89% interval on $q(a)$ and the dashed line the ceiling. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
 
 ![Predicted words spoken given words understood, by age](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
 

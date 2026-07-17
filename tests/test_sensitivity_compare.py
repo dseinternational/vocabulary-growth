@@ -40,15 +40,15 @@ def test_summarise_tolerates_mixed_bool_none_hdi_column(tmp_path):
 def _write_vg15_outputs(dirpath, q_median, p_any_median, ey_any_median, psi_median, p_psi_gt_1):
     pd.DataFrame({
         "age_months": [30], "q_median": [q_median],
-        "q_hdi_lo": [0.4], "q_hdi_hi": [0.6],
+        "q_ci_lo": [0.4], "q_ci_hi": [0.6],
     }).to_csv(dirpath / "posterior_summary_q.csv", index=False)
     pd.DataFrame({
         "age_months": [30], "p_any_median": [p_any_median],
-        "p_any_hdi_lo": [0.2], "p_any_hdi_hi": [0.4],
+        "p_any_ci_lo": [0.2], "p_any_ci_hi": [0.4],
         "Ey_any_median": [ey_any_median],
     }).to_csv(dirpath / "posterior_summary_p_any.csv", index=False)
     pd.DataFrame({
-        "psi_median": [psi_median], "psi_hdi_lo": [1.2], "psi_hdi_hi": [1.9],
+        "psi_median": [psi_median], "psi_ci_lo": [1.2], "psi_ci_hi": [1.9],
         "P_psi_gt_1": [p_psi_gt_1],
     }).to_csv(dirpath / "posterior_summary_psi.csv", index=False)
 

@@ -1091,7 +1091,8 @@ def posterior_summary(context: ModelFitContext):
         context.model_samples.p_query,
         context.model_samples.y_query,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
+        interval_kind=context.reporting.interval_kind,
     )
 
     dataframe_table(
@@ -1115,7 +1116,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         X_query=context.model_samples.X_query,
         y_query=context.model_samples.y_query,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_count_distributions",
         x_label=outcome_label,
@@ -1165,7 +1166,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.X_plot,
         context.model_samples.f_plot,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate",
     )
@@ -1174,7 +1175,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.X_plot,
         context.model_samples.f_plot,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         smooth=True,
         savgol_window_length=15,
         savgol_polyorder=3,
@@ -1189,7 +1190,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.X_query,
         context.model_samples.kappa_query,
         n_trials=context.model_data.n_trials,
-        hdi_prob=context.reporting.ci_prob,
+        ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="posterior_kappa",
     )
@@ -1603,8 +1604,8 @@ def run_fit_pipeline(
             model_name=definition.model_id,
             config_name=definition.config_name,
             output_root_dir=local_env.output_root(),
-            ci_prob=0.90,
-            interval_kind="hdi",
+            ci_prob=0.89,
+            interval_kind="eti",
         ),
         sampling=sampling.get_sampling_configuration(config),
         sampling_config_name=config,

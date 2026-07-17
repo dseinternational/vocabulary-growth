@@ -84,6 +84,10 @@ Despite their differences, every model is built from the same components:
   iterative Bayesian workflow (prior predictive checks → sampling → diagnostics →
   posterior predictive checks → summaries and plots).
 
+### Interval reporting convention
+
+Every model reports the posterior **median** with an inner **50%** and an outer **89%** credible interval, alongside the **full posterior** (density and posterior-predictive plots). Intervals are **equal-tailed (ETI, percentile-based) by default**; a documented short-list of strongly skewed or boundary-censored estimands — the sign–speech association `psi`, the Beta-Binomial concentration/dispersion `kappa`, and milestone/peak ages — is reported with **highest-density intervals (HDI)** instead. The single source of truth is `vocab_growth.intervals` (`DEFAULT_CI_PROB = 0.89`, `INNER_CI_PROB = 0.50`, `HDI_ESTIMANDS`), carried through the shared `ReportingConfiguration(ci_prob=0.89, interval_kind="eti")`. 89% is a deliberately non-special width: it is not a decision threshold, and its 5.5th/94.5th-percentile limits are more MCMC-stable than the 2.5th/97.5th limits of a 95% interval (McElreath 2020; Kruschke 2021, _Bayesian Analysis Reporting Guidelines_). Summary-table and plot-sidecar CSVs use the columns `*_ci50_lo`/`*_ci50_hi` (inner) and `*_ci_lo`/`*_ci_hi` (outer).
+
 ### Structural decomposition (joint models)
 
 The joint models do not model each outcome independently. Instead, production is

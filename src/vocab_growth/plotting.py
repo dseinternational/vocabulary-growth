@@ -4,15 +4,15 @@
 import os
 from typing import Protocol
 
-import arviz as az
 import dse_research_utils.plot.predictive as plot_predictive
 import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import xarray as xr
 from matplotlib.figure import Figure
 from scipy.signal import savgol_filter
+
+import vocab_growth.intervals as intervals
 
 
 def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
@@ -39,16 +39,18 @@ def _save_png_svg(
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
 
 
-def _hdi_by_sample(values: np.ndarray, prob: float) -> np.ndarray:
-    """Compute HDI over posterior samples for each plot point."""
-    values_da = xr.DataArray(values, dims=("sample", "plot"))
-    return az.hdi(values_da, prob=prob, dim="sample").to_numpy()
+def _interval_by_sample(
+    values: np.ndarray, prob: float, kind: intervals.IntervalKind = "eti"
+) -> np.ndarray:
+    """Per-plot-point credible interval over posterior samples (axis 0)."""
+    return intervals.bands(values, prob, kind, sample_axis=0)
 
 
-def _hdi_by_row(values: np.ndarray, prob: float) -> np.ndarray:
-    """Compute HDI over the second axis for each row of ``values``."""
-    values_da = xr.DataArray(np.asarray(values).T, dims=("sample", "point"))
-    return az.hdi(values_da, prob=prob, dim="sample").to_numpy()
+def _interval_by_row(
+    values: np.ndarray, prob: float, kind: intervals.IntervalKind = "eti"
+) -> np.ndarray:
+    """Per-row credible interval over the second (sample) axis of ``values``."""
+    return intervals.bands(values, prob, kind, sample_axis=1)
 
 
 # ------------------------------------------------------------
@@ -180,10 +182,8 @@ def _draw_ppc_count_distribution(
     draws: np.ndarray,
     n_trials: int,
     bin_width: int,
-    hdi_prob: float,
-    eti_prob: float | None,
-    q_lo: float,
-    q_hi: float,
+    ci_prob: float,
+    interval_kind: intervals.IntervalKind,
     count_axis_max: int | None = None,
 ) -> None:
     """Draw one query age's posterior predictive count distribution on ``ax``.
@@ -207,32 +207,27 @@ def _draw_ppc_count_distribution(
     pmf_bins = counts / counts.sum()
 
     med = np.median(draws)
-    hdi = az.hdi(draws, prob=hdi_prob)  # (lo, hi)
+    kind_label = "HDI" if interval_kind == "hdi" else "ETI"
+    pct = int(round(ci_prob * 100))
+    lo, hi = intervals.interval_1d(draws, ci_prob, interval_kind)
+    lo50, hi50 = intervals.interval_1d(draws, intervals.INNER_CI_PROB, interval_kind)
 
     ylim_max = max(pmf_bins.max() * 1.08, 0.25)
 
-    # HDI
+    # Outer + inner credible interval
     ax.fill_betweenx(
-        [0, ylim_max * 0.96], hdi[0], hdi[1], color=plot_styles.COLOUR_GREEN, alpha=0.10
+        [0, ylim_max * 0.96], lo, hi, color=plot_styles.COLOUR_GREEN, alpha=0.10
+    )
+    ax.fill_betweenx(
+        [0, ylim_max * 0.96], lo50, hi50, color=plot_styles.COLOUR_GREEN, alpha=0.18
     )
     ax.text(
-        hdi[1] + label_off,
+        hi + label_off,
         ylim_max * 0.9,
-        f"{int(hdi_prob*100)}% HPDI: {hdi[0]:.0f} to {hdi[1]:.0f}",
+        f"{pct}% {kind_label}: {lo:.0f} to {hi:.0f}",
         color=plot_styles.COLOUR_GREEN,
         ha="center",
     )
-
-    if eti_prob is not None:
-        eti_lo, eti_hi = np.quantile(draws, [q_lo, q_hi])
-        ax.fill_betweenx([0, ylim_max * 0.96], eti_lo, eti_hi, color=plot_styles.COLOUR_ORANGE, alpha=0.10)
-        ax.text(
-            eti_hi + label_off,
-            ylim_max * 0.82,
-            f"{int(eti_prob*100)}% ETI: {eti_lo:.0f} to {eti_hi:.0f}",
-            color=plot_styles.COLOUR_ORANGE,
-            ha="center",
-        )
 
     # PMF histogram
     ax.bar(centres, pmf_bins, width=bin_width, color=plot_styles.COLOUR_BLUE, align="center")
@@ -261,8 +256,8 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     n_trials: int,
     bin_width: int = 5,
     plot_cols: int = 2,
-    hdi_prob: float = 0.89,
-    eti_prob: float | None = None,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
     x_label: str = "Word count",
@@ -284,20 +279,13 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     nq = len(X_query)
     axis_max = n_trials if count_axis_max is None else count_axis_max
 
-    # ETI quantile levels matching context.reporting.ci_prob mass (e.g., 0.90 -> [0.05, 0.95])
-    if eti_prob is not None:
-        q_lo = (1.0 - eti_prob) / 2.0
-        q_hi = 1.0 - q_lo
-    else:
-        q_lo, q_hi = 0, 0
-
     plot_rows = int(np.ceil(nq / plot_cols))
     fig, axes = plt.subplots(plot_rows, plot_cols, figsize=(10, 3.8 * plot_rows), sharex=False)
     axes = np.atleast_1d(axes).ravel()
 
     for j, age in enumerate(X_query):
         _draw_ppc_count_distribution(
-            axes[j], age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi,
+            axes[j], age, y_query[j, :], n_trials, bin_width, ci_prob, interval_kind,
             axis_max,
         )
 
@@ -317,7 +305,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
         for j, age in enumerate(X_query):
             fig_i, ax_i = plt.subplots(figsize=_iso_a_landscape_figsize())
             _draw_ppc_count_distribution(
-                ax_i, age, y_query[j, :], n_trials, bin_width, hdi_prob, eti_prob, q_lo, q_hi,
+                ax_i, age, y_query[j, :], n_trials, bin_width, ci_prob, interval_kind,
                 axis_max,
             )
             ax_i.set_xlabel(f"{x_label} (bins of {bin_width})")
@@ -329,11 +317,12 @@ def plot_posterior_predictive_count_distributions_by_query_age(
         for j, age in enumerate(X_query):
             draws = y_query[j, :].astype(int)
             med = np.median(draws)
-            hdi_bounds = az.hdi(draws, prob=hdi_prob)
-            row = {"age_months": age, "median": med, "hdi_lo": hdi_bounds[0], "hdi_hi": hdi_bounds[1]}
-            if eti_prob is not None:
-                row["eti_lo"], row["eti_hi"] = np.quantile(draws, [q_lo, q_hi])
-            rows.append(row)
+            lo50, hi50 = intervals.interval_1d(draws, intervals.INNER_CI_PROB, interval_kind)
+            lo, hi = intervals.interval_1d(draws, ci_prob, interval_kind)
+            rows.append({
+                "age_months": age, "median": med,
+                "ci50_lo": lo50, "ci50_hi": hi50, "ci_lo": lo, "ci_hi": hi,
+            })
         _save_csv(pd.DataFrame(rows), output_dir, filename)
 
     return fig
@@ -621,9 +610,11 @@ def plot_posterior_predictive_median_trend(
 
     y_plot_samples_median = np.quantile(y_plot, 0.50, axis=1)
 
-    predictive_interval_1 = np.quantile(y_plot, [0.05, 0.95], axis=1).T
-    predictive_interval_2 = np.quantile(y_plot, [0.25, 0.75], axis=1).T
-    predictive_interval_3 = np.quantile(y_plot, [0.375, 0.625], axis=1).T
+    # Predictive bands are equal-tailed (percentile) intervals; outer 89%, inner 50%.
+    outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
+    predictive_interval_outer = intervals.bands(y_plot, outer, "eti", sample_axis=1)
+    predictive_interval_inner = intervals.bands(y_plot, inner, "eti", sample_axis=1)
+    outer_pct = int(round(outer * 100))
 
     # Optional smoothing for display
     y_plot_samples_median_plot = _maybe_savgol(
@@ -633,82 +624,39 @@ def plot_posterior_predictive_median_trend(
         polyorder=savgol_polyorder,
     )
 
-    if smooth and smooth_intervals:
-        predictive_interval_1_plot = np.column_stack(
+    def _smooth_band(band: np.ndarray) -> np.ndarray:
+        if not (smooth and smooth_intervals):
+            return band
+        return np.column_stack(
             [
                 _maybe_savgol(
-                    predictive_interval_1[:, 0],
+                    band[:, k],
                     smooth=True,
                     window_length=savgol_window_length,
                     polyorder=savgol_polyorder,
-                ),
-                _maybe_savgol(
-                    predictive_interval_1[:, 1],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
+                )
+                for k in (0, 1)
             ]
         )
-        predictive_interval_2_plot = np.column_stack(
-            [
-                _maybe_savgol(
-                    predictive_interval_2[:, 0],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-                _maybe_savgol(
-                    predictive_interval_2[:, 1],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-            ]
-        )
-        predictive_interval_3_plot = np.column_stack(
-            [
-                _maybe_savgol(
-                    predictive_interval_3[:, 0],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-                _maybe_savgol(
-                    predictive_interval_3[:, 1],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-            ]
-        )
-    else:
-        predictive_interval_1_plot = predictive_interval_1
-        predictive_interval_2_plot = predictive_interval_2
-        predictive_interval_3_plot = predictive_interval_3
+
+    predictive_interval_outer_plot = _smooth_band(predictive_interval_outer)
+    predictive_interval_inner_plot = _smooth_band(predictive_interval_inner)
 
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
     plt.fill_between(
         X_plot,
-        predictive_interval_1_plot[:, 0],
-        predictive_interval_1_plot[:, 1],
+        predictive_interval_outer_plot[:, 0],
+        predictive_interval_outer_plot[:, 1],
         alpha=0.20,
-        label="90% predictive percentile interval (equal-tailed)",
+        label=f"{outer_pct}% predictive interval (equal-tailed)",
     )
     plt.fill_between(
         X_plot,
-        predictive_interval_2_plot[:, 0],
-        predictive_interval_2_plot[:, 1],
+        predictive_interval_inner_plot[:, 0],
+        predictive_interval_inner_plot[:, 1],
         alpha=0.30,
-        label="50% predictive percentile interval (equal-tailed)",
-    )
-    plt.fill_between(
-        X_plot,
-        predictive_interval_3_plot[:, 0],
-        predictive_interval_3_plot[:, 1],
-        alpha=0.40,
-        label="25% predictive percentile interval (equal-tailed)",
+        label="50% predictive interval (equal-tailed)",
     )
     plt.plot(
         X_plot,
@@ -734,12 +682,10 @@ def plot_posterior_predictive_median_trend(
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
             "median": y_plot_samples_median,
-            "p05": predictive_interval_1[:, 0],
-            "p95": predictive_interval_1[:, 1],
-            "p25": predictive_interval_2[:, 0],
-            "p75": predictive_interval_2[:, 1],
-            "p375": predictive_interval_3[:, 0],
-            "p625": predictive_interval_3[:, 1],
+            "ci50_lo": predictive_interval_inner[:, 0],
+            "ci50_hi": predictive_interval_inner[:, 1],
+            "ci_lo": predictive_interval_outer[:, 0],
+            "ci_hi": predictive_interval_outer[:, 1],
         }), output_dir, filename)
 
     return plt.gcf()
@@ -749,7 +695,8 @@ def plot_expected_learning_rate(
     X_plot: np.ndarray,
     f_plot: np.ndarray,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
     smooth: bool = False,
@@ -778,8 +725,10 @@ def plot_expected_learning_rate(
         shape ``(n_plot, n_samples)``.
     n_trials
         Maximum count / checklist size.
-    hdi_prob
-        Probability mass for the outer HDI band.
+    ci_prob
+        Outer interval probability mass (default 0.89).
+    interval_kind
+        Interval convention: ``"eti"`` (equal-tailed, default) or ``"hdi"``.
     output_dir
         Directory to save figure files.
     filename
@@ -830,9 +779,8 @@ def plot_expected_learning_rate(
 
     # Posterior summaries across draws, per age point
     median_rate = np.median(rate, axis=0)
-    hdi_rate = _hdi_by_sample(rate, prob=hdi_prob)
-    hdi_75_rate = _hdi_by_sample(rate, prob=0.75)
-    hdi_50_rate = _hdi_by_sample(rate, prob=0.50)
+    ci_rate = _interval_by_sample(rate, ci_prob, interval_kind)
+    ci50_rate = _interval_by_sample(rate, intervals.INNER_CI_PROB, interval_kind)
 
     # Optional smoothing for display
     median_rate_plot = _maybe_savgol(
@@ -842,82 +790,40 @@ def plot_expected_learning_rate(
         polyorder=savgol_polyorder,
     )
 
-    if smooth and smooth_intervals:
-        hdi_rate_plot = np.column_stack(
+    def _smooth_band(band: np.ndarray) -> np.ndarray:
+        if not (smooth and smooth_intervals):
+            return band
+        return np.column_stack(
             [
                 _maybe_savgol(
-                    hdi_rate[:, 0],
+                    band[:, k],
                     smooth=True,
                     window_length=savgol_window_length,
                     polyorder=savgol_polyorder,
-                ),
-                _maybe_savgol(
-                    hdi_rate[:, 1],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
+                )
+                for k in (0, 1)
             ]
         )
-        hdi_75_rate_plot = np.column_stack(
-            [
-                _maybe_savgol(
-                    hdi_75_rate[:, 0],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-                _maybe_savgol(
-                    hdi_75_rate[:, 1],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-            ]
-        )
-        hdi_50_rate_plot = np.column_stack(
-            [
-                _maybe_savgol(
-                    hdi_50_rate[:, 0],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-                _maybe_savgol(
-                    hdi_50_rate[:, 1],
-                    smooth=True,
-                    window_length=savgol_window_length,
-                    polyorder=savgol_polyorder,
-                ),
-            ]
-        )
-    else:
-        hdi_rate_plot = hdi_rate
-        hdi_75_rate_plot = hdi_75_rate
-        hdi_50_rate_plot = hdi_50_rate
+
+    ci_rate_plot = _smooth_band(ci_rate)
+    ci50_rate_plot = _smooth_band(ci50_rate)
+    pct = int(round(ci_prob * 100))
 
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
     plt.fill_between(
         x_plot_values,
-        hdi_rate_plot[:, 0],
-        hdi_rate_plot[:, 1],
+        ci_rate_plot[:, 0],
+        ci_rate_plot[:, 1],
         alpha=0.20,
-        label=f"{int(hdi_prob * 100)}% HDI",
+        label=f"{pct}% interval",
     )
     plt.fill_between(
         x_plot_values,
-        hdi_75_rate_plot[:, 0],
-        hdi_75_rate_plot[:, 1],
-        alpha=0.25,
-        label="75% HDI",
-    )
-    plt.fill_between(
-        x_plot_values,
-        hdi_50_rate_plot[:, 0],
-        hdi_50_rate_plot[:, 1],
+        ci50_rate_plot[:, 0],
+        ci50_rate_plot[:, 1],
         alpha=0.30,
-        label="50% HDI",
+        label="50% interval",
     )
     plt.plot(
         x_plot_values,
@@ -935,12 +841,10 @@ def plot_expected_learning_rate(
         _save_csv(pd.DataFrame({
             "age_months": x_plot_values,
             "median_rate": median_rate,
-            "hdi_lo": hdi_rate[:, 0],
-            "hdi_hi": hdi_rate[:, 1],
-            "hdi75_lo": hdi_75_rate[:, 0],
-            "hdi75_hi": hdi_75_rate[:, 1],
-            "hdi50_lo": hdi_50_rate[:, 0],
-            "hdi50_hi": hdi_50_rate[:, 1],
+            "ci50_lo": ci50_rate[:, 0],
+            "ci50_hi": ci50_rate[:, 1],
+            "ci_lo": ci_rate[:, 0],
+            "ci_hi": ci_rate[:, 1],
         }), output_dir, filename)
 
     return plt.gcf()
@@ -952,7 +856,8 @@ def plot_posterior_kappa(
     X_query: np.ndarray,
     kappa_query: np.ndarray,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "hdi",
     output_dir: str | None = None,
     filename: str | None = None,
 ) -> tuple[Figure, pd.DataFrame, pd.DataFrame]:
@@ -974,8 +879,10 @@ def plot_posterior_kappa(
         shape ``(n_query, n_samples)``.
     n_trials
         Maximum count / checklist size.
-    hdi_prob
-        Probability mass for the credible band.
+    ci_prob
+        Interval probability mass (default 0.89).
+    interval_kind
+        Interval convention: ``"hdi"`` (default for κ) or ``"eti"``.
     output_dir
         Directory to save figure files.
     filename
@@ -993,15 +900,22 @@ def plot_posterior_kappa(
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
     kappa_query_samps = np.asarray(kappa_query)
 
+    inner = intervals.INNER_CI_PROB
+    kind_label = "HDI" if interval_kind == "hdi" else "interval"
+    pct = int(round(ci_prob * 100))
+
     # --- Plot grid ---
     kappa_plot_med = np.quantile(kappa_plot_samps, 0.5, axis=1)
-    kappa_plot_hdi = _hdi_by_row(kappa_plot_samps, hdi_prob)
-    kappa_plot_lo = kappa_plot_hdi[:, 0]
-    kappa_plot_hi = kappa_plot_hdi[:, 1]
+    kappa_plot_ci = _interval_by_row(kappa_plot_samps, ci_prob, interval_kind)
+    kappa_plot_ci50 = _interval_by_row(kappa_plot_samps, inner, interval_kind)
+    kappa_plot_lo = kappa_plot_ci[:, 0]
+    kappa_plot_hi = kappa_plot_ci[:, 1]
 
     df_kappa_plot = pd.DataFrame(
         {
             "age_months": X_plot,
+            "kappa_ci50_lo": kappa_plot_ci50[:, 0],
+            "kappa_ci50_hi": kappa_plot_ci50[:, 1],
             "kappa_lo": kappa_plot_lo,
             "kappa_median": kappa_plot_med,
             "kappa_hi": kappa_plot_hi,
@@ -1013,13 +927,16 @@ def plot_posterior_kappa(
     # --- Query ages ---
 
     kappa_query_med = np.quantile(kappa_query_samps, 0.5, axis=1)
-    kappa_query_hdi = _hdi_by_row(kappa_query_samps, hdi_prob)
-    kappa_query_lo = kappa_query_hdi[:, 0]
-    kappa_query_hi = kappa_query_hdi[:, 1]
+    kappa_query_ci = _interval_by_row(kappa_query_samps, ci_prob, interval_kind)
+    kappa_query_ci50 = _interval_by_row(kappa_query_samps, inner, interval_kind)
+    kappa_query_lo = kappa_query_ci[:, 0]
+    kappa_query_hi = kappa_query_ci[:, 1]
 
     df_kappa_query = pd.DataFrame(
         {
             "age_months": X_query,
+            "kappa_ci50_lo": kappa_query_ci50[:, 0],
+            "kappa_ci50_hi": kappa_query_ci50[:, 1],
             "kappa_lo": kappa_query_lo,
             "kappa_median": kappa_query_med,
             "kappa_hi": kappa_query_hi,
@@ -1037,8 +954,15 @@ def plot_posterior_kappa(
         X_plot,
         kappa_plot_lo,
         kappa_plot_hi,
-        alpha=0.25,
-        label=f"{int(hdi_prob * 100)}% HDI",
+        alpha=0.18,
+        label=f"{pct}% {kind_label}",
+    )
+    ax.fill_between(
+        X_plot,
+        kappa_plot_ci50[:, 0],
+        kappa_plot_ci50[:, 1],
+        alpha=0.28,
+        label=f"50% {kind_label}",
     )
     ax.plot(X_plot, kappa_plot_med, lw=2.5, label="Median κ(age)")
 
@@ -1071,7 +995,8 @@ class _RatioGapSamples(Protocol):
 
 def plot_production_rate(
     samples: _RatioGapSamples,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
 ) -> Figure:
@@ -1080,32 +1005,25 @@ def plot_production_rate(
     q_plot = samples.q_plot
 
     q_median = np.median(q_plot, axis=1)
-    q_hdi = az.hdi(q_plot, prob=hdi_prob)
-    q_hdi_75 = az.hdi(q_plot, prob=0.75)
-    q_hdi_50 = az.hdi(q_plot, prob=0.50)
+    q_ci = intervals.bands(q_plot, ci_prob, interval_kind, sample_axis=1)
+    q_ci50 = intervals.bands(q_plot, intervals.INNER_CI_PROB, interval_kind, sample_axis=1)
+    pct = int(round(ci_prob * 100))
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     ax.fill_between(
         X_plot,
-        q_hdi[:, 0],
-        q_hdi[:, 1],
+        q_ci[:, 0],
+        q_ci[:, 1],
         alpha=0.20,
-        label=f"{int(hdi_prob * 100)}% HDI",
+        label=f"{pct}% interval",
     )
     ax.fill_between(
         X_plot,
-        q_hdi_75[:, 0],
-        q_hdi_75[:, 1],
-        alpha=0.25,
-        label="75% HDI",
-    )
-    ax.fill_between(
-        X_plot,
-        q_hdi_50[:, 0],
-        q_hdi_50[:, 1],
+        q_ci50[:, 0],
+        q_ci50[:, 1],
         alpha=0.30,
-        label="50% HDI",
+        label="50% interval",
     )
     ax.plot(X_plot, q_median, lw=3, label="Median q(a)")
 
@@ -1122,12 +1040,10 @@ def plot_production_rate(
                 {
                     "age_months": X_plot,
                     "q_median": q_median,
-                    "hdi_lo": q_hdi[:, 0],
-                    "hdi_hi": q_hdi[:, 1],
-                    "hdi75_lo": q_hdi_75[:, 0],
-                    "hdi75_hi": q_hdi_75[:, 1],
-                    "hdi50_lo": q_hdi_50[:, 0],
-                    "hdi50_hi": q_hdi_50[:, 1],
+                    "ci50_lo": q_ci50[:, 0],
+                    "ci50_hi": q_ci50[:, 1],
+                    "ci_lo": q_ci[:, 0],
+                    "ci_hi": q_ci[:, 1],
                 }
             ),
             output_dir,
@@ -1140,7 +1056,8 @@ def plot_production_rate(
 def plot_comprehension_production_gap(
     samples: _RatioGapSamples,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
 ) -> Figure:
@@ -1149,24 +1066,25 @@ def plot_comprehension_production_gap(
     gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
 
     gap_median = np.median(gap, axis=1)
-    gap_hdi = az.hdi(gap, prob=hdi_prob)
-    gap_hdi_50 = az.hdi(gap, prob=0.50)
+    gap_ci = intervals.bands(gap, ci_prob, interval_kind, sample_axis=1)
+    gap_ci50 = intervals.bands(gap, intervals.INNER_CI_PROB, interval_kind, sample_axis=1)
+    pct = int(round(ci_prob * 100))
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     ax.fill_between(
         X_plot,
-        gap_hdi[:, 0],
-        gap_hdi[:, 1],
+        gap_ci[:, 0],
+        gap_ci[:, 1],
         alpha=0.20,
-        label=f"{int(hdi_prob * 100)}% HDI",
+        label=f"{pct}% interval",
     )
     ax.fill_between(
         X_plot,
-        gap_hdi_50[:, 0],
-        gap_hdi_50[:, 1],
+        gap_ci50[:, 0],
+        gap_ci50[:, 1],
         alpha=0.30,
-        label="50% HDI",
+        label="50% interval",
     )
     ax.plot(X_plot, gap_median, lw=3, label="Median gap")
 
@@ -1182,10 +1100,10 @@ def plot_comprehension_production_gap(
                 {
                     "age_months": X_plot,
                     "gap_median": gap_median,
-                    "hdi_lo": gap_hdi[:, 0],
-                    "hdi_hi": gap_hdi[:, 1],
-                    "hdi50_lo": gap_hdi_50[:, 0],
-                    "hdi50_hi": gap_hdi_50[:, 1],
+                    "ci50_lo": gap_ci50[:, 0],
+                    "ci50_hi": gap_ci50[:, 1],
+                    "ci_lo": gap_ci[:, 0],
+                    "ci_hi": gap_ci[:, 1],
                 }
             ),
             output_dir,

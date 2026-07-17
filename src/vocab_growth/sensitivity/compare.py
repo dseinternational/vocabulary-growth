@@ -4,7 +4,8 @@
 """Compare a prior-sensitivity variant fit against its baseline (issue #89 §7).
 
 The robustness criterion is: does each headline quantity of the variant stay
-within the *baseline's* 90% HDI (the engines report 90%, not 94%)? The loader is
+within the *baseline's* 89% interval (the engines report an 89% interval by
+default; see :mod:`vocab_growth.intervals`)? The loader is
 spec-driven and tolerant of absent files, so it handles both CSV dialects with no
 special-casing — the bivariate/univariate engines write ``Ey``/``q``/``gap``
 series, the joint engine writes ``q``/``r``/``p_any``/``psi`` + the four-cell
@@ -23,18 +24,18 @@ import pandas as pd
 RHAT_MAX = 1.01
 ESS_THRESHOLD = 400
 
-# (quantity, filename, median_col, hdi_lo_col | None, hdi_hi_col | None).
+# (quantity, filename, median_col, ci_lo_col | None, ci_hi_col | None).
 # A series is loaded only if its file exists and carries the median column, so
 # each engine contributes exactly the series it emits.
 _SERIES: tuple[tuple[str, str, str, str | None, str | None], ...] = (
-    ("Ey_understood", "posterior_summary_u.csv", "Ey_median", "Ey_hdi_lo", "Ey_hdi_hi"),
-    ("Ey_spoken", "posterior_summary_s.csv", "Ey_median", "Ey_hdi_lo", "Ey_hdi_hi"),
-    ("Ey", "posterior_summary.csv", "Ey_median", "Ey_hdi_lo", "Ey_hdi_hi"),
-    ("q", "posterior_summary_q.csv", "q_median", "q_hdi_lo", "q_hdi_hi"),
-    ("r", "posterior_summary_r.csv", "r_median", "r_hdi_lo", "r_hdi_hi"),
-    ("p_any", "posterior_summary_p_any.csv", "p_any_median", "p_any_hdi_lo", "p_any_hdi_hi"),
+    ("Ey_understood", "posterior_summary_u.csv", "Ey_median", "Ey_ci_lo", "Ey_ci_hi"),
+    ("Ey_spoken", "posterior_summary_s.csv", "Ey_median", "Ey_ci_lo", "Ey_ci_hi"),
+    ("Ey", "posterior_summary.csv", "Ey_median", "Ey_ci_lo", "Ey_ci_hi"),
+    ("q", "posterior_summary_q.csv", "q_median", "q_ci_lo", "q_ci_hi"),
+    ("r", "posterior_summary_r.csv", "r_median", "r_ci_lo", "r_ci_hi"),
+    ("p_any", "posterior_summary_p_any.csv", "p_any_median", "p_any_ci_lo", "p_any_ci_hi"),
     ("Ey_any", "posterior_summary_p_any.csv", "Ey_any_median", None, None),
-    ("gap", "comprehension_production_gap.csv", "gap_median", "hdi_lo", "hdi_hi"),
+    ("gap", "comprehension_production_gap.csv", "gap_median", "ci_lo", "ci_hi"),
 )
 
 
@@ -66,8 +67,8 @@ def load_psi(dirpath: str) -> dict[str, float] | None:
     r = df.iloc[0]
     return {
         "psi_median": float(r["psi_median"]),
-        "psi_hdi_lo": float(r["psi_hdi_lo"]),
-        "psi_hdi_hi": float(r["psi_hdi_hi"]),
+        "psi_hdi_lo": float(r["psi_ci_lo"]),
+        "psi_hdi_hi": float(r["psi_ci_hi"]),
         "P_psi_gt_1": float(r["P_psi_gt_1"]),
     }
 
@@ -143,7 +144,7 @@ def summarise(comparison: pd.DataFrame, variant_dir: str, label: str) -> dict:
     if converged is False:
         verdict = "NON-CONVERGED (not assessed)"
     elif not outside:
-        verdict = "robust (all within baseline 90% HDI)"
+        verdict = "robust (all within baseline 89% interval)"
     else:
         verdict = "sensitive: " + ", ".join(outside)
     return {

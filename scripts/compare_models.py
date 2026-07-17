@@ -81,10 +81,10 @@ def _q_vs_understood_crossings(series: list[tuple[str, pd.DataFrame]]) -> pd.Dat
                 "threshold": thresh,
                 "n_understood_at_median": first_crossing(
                     df["words_understood"].to_numpy(), df["q_median"].to_numpy(), thresh),
-                "n_understood_at_hdi_lo": first_crossing(
-                    df["words_understood"].to_numpy(), df["hdi_lo"].to_numpy(), thresh),
-                "n_understood_at_hdi_hi": first_crossing(
-                    df["words_understood"].to_numpy(), df["hdi_hi"].to_numpy(), thresh),
+                "n_understood_at_ci_lo": first_crossing(
+                    df["words_understood"].to_numpy(), df["ci_lo"].to_numpy(), thresh),
+                "n_understood_at_ci_hi": first_crossing(
+                    df["words_understood"].to_numpy(), df["ci_hi"].to_numpy(), thresh),
             })
     return pd.DataFrame(rows)
 
@@ -96,10 +96,10 @@ def ds_td_q_vs_understood() -> None:
     td = _read("vg13", "production_rate_by_understood.csv")
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    ax.fill_between(td["words_understood"], td["hdi_lo"], td["hdi_hi"],
-                    color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 90% HDI")
-    ax.fill_between(ds_vg09["words_understood"], ds_vg09["hdi_lo"], ds_vg09["hdi_hi"],
-                    color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 90% HDI")
+    ax.fill_between(td["words_understood"], td["ci_lo"], td["ci_hi"],
+                    color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 89% interval")
+    ax.fill_between(ds_vg09["words_understood"], ds_vg09["ci_lo"], ds_vg09["ci_hi"],
+                    color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 89% interval")
     ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5,
             label="TD median q (VG13)")
     ax.plot(ds_vg09["words_understood"], ds_vg09["q_median"], color=DS_COLOUR, lw=2.5,
@@ -126,9 +126,9 @@ def ds_td_q_vs_understood() -> None:
 def _merge_q_by_age(frames: list[tuple[str, pd.DataFrame]]) -> pd.DataFrame:
     merged = None
     for tag, df in frames:
-        cols = df[["age_months", "q_median", "q_hdi_lo", "q_hdi_hi"]].rename(
-            columns={"q_median": f"{tag}_median", "q_hdi_lo": f"{tag}_hdi_lo",
-                     "q_hdi_hi": f"{tag}_hdi_hi"})
+        cols = df[["age_months", "q_median", "q_ci_lo", "q_ci_hi"]].rename(
+            columns={"q_median": f"{tag}_median", "q_ci_lo": f"{tag}_ci_lo",
+                     "q_ci_hi": f"{tag}_ci_hi"})
         merged = cols if merged is None else merged.merge(cols, on="age_months", how="outer")
     return merged.sort_values("age_months")
 
@@ -142,8 +142,8 @@ def vg07_vg09_vg10_q_by_age() -> None:
     ]
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     for label, df, colour in series:
-        ax.fill_between(df["age_months"], df["q_hdi_lo"], df["q_hdi_hi"],
-                        color=colour, alpha=0.15, linewidth=0, label=f"{label} 90% HDI")
+        ax.fill_between(df["age_months"], df["q_ci_lo"], df["q_ci_hi"],
+                        color=colour, alpha=0.15, linewidth=0, label=f"{label} 89% interval")
         ax.plot(df["age_months"], df["q_median"], color=colour, lw=2.5, label=f"{label} median")
     ax.axhline(0.5, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
     ax.axhline(0.9, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
@@ -165,10 +165,10 @@ def ds_td_q_by_age_vg10() -> None:
     ds = _read("vg10", "posterior_summary_q.csv")
     td = _read("vg13", "posterior_summary_q.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    ax.fill_between(td["age_months"], td["q_hdi_lo"], td["q_hdi_hi"],
-                    color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 90% HDI")
-    ax.fill_between(ds["age_months"], ds["q_hdi_lo"], ds["q_hdi_hi"],
-                    color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 90% HDI")
+    ax.fill_between(td["age_months"], td["q_ci_lo"], td["q_ci_hi"],
+                    color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 89% interval")
+    ax.fill_between(ds["age_months"], ds["q_ci_lo"], ds["q_ci_hi"],
+                    color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 89% interval")
     ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG13)")
     ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG10)")
     for thresh in (0.5, 0.9):
@@ -194,16 +194,16 @@ def ds_td_q_vs_understood_vg10() -> None:
     td = _read("vg13", "production_rate_by_understood.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    ax.fill_between(td["words_understood"], td["hdi_lo"], td["hdi_hi"],
-                    color=TD_COLOUR, alpha=0.15, linewidth=0, label="TD (VG13) 90% HDI")
-    ax.fill_between(td["words_understood"], td["hdi50_lo"], td["hdi50_hi"],
-                    color=TD_COLOUR, alpha=0.30, linewidth=0, label="TD (VG13) 50% HDI")
+    ax.fill_between(td["words_understood"], td["ci_lo"], td["ci_hi"],
+                    color=TD_COLOUR, alpha=0.15, linewidth=0, label="TD (VG13) 89% interval")
+    ax.fill_between(td["words_understood"], td["ci50_lo"], td["ci50_hi"],
+                    color=TD_COLOUR, alpha=0.30, linewidth=0, label="TD (VG13) 50% interval")
     ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD (VG13) median")
 
-    ax.fill_between(ds["words_understood"], ds["hdi_lo"], ds["hdi_hi"],
-                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG10) 90% HDI")
-    ax.fill_between(ds["words_understood"], ds["hdi50_lo"], ds["hdi50_hi"],
-                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG10) 50% HDI")
+    ax.fill_between(ds["words_understood"], ds["ci_lo"], ds["ci_hi"],
+                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG10) 89% interval")
+    ax.fill_between(ds["words_understood"], ds["ci50_lo"], ds["ci50_hi"],
+                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG10) 50% interval")
     ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS (VG10) median")
 
     for thresh in (0.5, 0.9):
