@@ -67,6 +67,7 @@ orcid
 overfitting
 parameterisation
 preliz
+PyMC
 pyplot
 pytest
 rankdir

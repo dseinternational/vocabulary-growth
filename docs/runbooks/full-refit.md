@@ -75,7 +75,19 @@ memory-heavy. So:
 - **TD models** (`vg03 vg04 vg13 vg11 vg12`): **strictly one at a time** — the
   full-data TD fits can OOM if stacked.
 
-### Config choice for the full-data TD models (`rep-lite` is validated for these)
+### Config choice for the full-data TD models
+
+> [!WARNING]
+> **Superseded for the hierarchical TD models (2026-07-17, post-#164).** #164 added
+> child (subject) random effects to `vg11`/`vg12`/`vg13` (the #163 P1 fix; their output
+> dirs are now `…-td-re`), making them hierarchical. They now carry the same
+> trend/GP/study-intercept ridge the DS models have, and **`rep-lite` no longer
+> converges them**: `vg11` failed at `rep-lite` with max R-hat 1.023 / min ESS 164 on the
+> trend/GP/study-RE block (not the per-child effects). **Fit `vg11`/`vg12`/`vg13` at
+> `rep-hightune`** (tune 12000 / draws 8000 / 6 chains; `target_accept 0.99` for `vg13`,
+> which also has divergences) — e.g. via `scripts/refit_hightune.py`. The `rep-lite`
+> guidance below was validated only on the _pre-#164, non-hierarchical_ TD models and is
+> retained for history. (See `notes/202607170935-full-refit-vm-run-147-163.md`.)
 
 The full-data TD fits dominate wall time (`vg11`: 16,235 obs, ~9 h at `rep`; `vg12`:
 ~6,000 obs). At those sample sizes the posterior is **likelihood-dominated** and ESS
@@ -137,6 +149,14 @@ redundancy the VG10 GP anchor addresses for the `q`-GP, here on the understood G
 Remedy: refit with heavier tuning (**tune 12000 / draws 8000 / target_accept 0.97**,
 6 chains), which cleared all four in the 2026-07-12 run (e.g. vg16 1.024 → 1.009).
 Back up the non-converged output first; the refit becomes the model of record.
+
+> [!NOTE]
+> **Update (2026-07-17, post-#164/#161):** this DS understood-GP ridge did **not** recur —
+> all ten DS models passed R-hat/ESS at plain `rep` (max R-hat 1.0066), so no DS
+> `rep-hightune` refits were needed. **Re-assess the DS family empirically** rather than
+> assuming hightune. The ridge now surfaces instead on the **hierarchical TD models**
+> (`vg11`/`vg12`/`vg13`) — see the TD config warning above. (`vg13` additionally needs
+> `target_accept 0.99` for divergences, as in July.)
 
 ## 3. Render + comparisons
 
