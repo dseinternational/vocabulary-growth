@@ -836,11 +836,20 @@ def _loo_dropping_degenerate(idata, var_name=None):
         keep = (da.var(dim=sample_dims) > 1e-12).values
         n_dropped = int(keep.size) - int(keep.sum())
         if n_dropped:
-            loo_source = idata.copy()
+            # ``idata`` is an xarray ``DataTree`` (arviz >= 1.2); ``copy`` is
+            # shallow by default, so the (large) posterior/sample_stats groups
+            # share buffers with the original rather than being duplicated —
+            # only the tree structure is copied. Reassigning the sliced
+            # (``isel`` view) log-likelihood therefore does not mutate the
+            # caller's ``idata``, so repeated per-outcome calls stay independent.
+            loo_source = idata.copy(deep=False)
             loo_source["log_likelihood"] = loo_source["log_likelihood"].isel(
                 {obs_dims[0]: keep}
             )
-    return az.loo(loo_source, var_name=var_name), n_dropped
+    # Compute LOO for the resolved ``name`` (not the raw ``var_name``): when
+    # ``var_name`` is None, ``az.loo`` rejects a log-likelihood group holding
+    # more than one array, so keep the LOO target identical to the drop target.
+    return az.loo(loo_source, var_name=name), n_dropped
 
 
 def diagnostics(
