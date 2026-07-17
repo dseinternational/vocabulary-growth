@@ -23,10 +23,10 @@ Full replication refit of every registered model (VG01–VG16) on the current 81
 
 ## Model split
 
-| Config     | Models                                                                 |
-| ---------- | ---------------------------------------------------------------------- |
-| `rep`      | vg01 vg02 vg03 vg04 vg05 vg07 vg08 vg09 vg10 vg13 vg14 vg15 vg16 (13)   |
-| `rep-lite` | vg11 vg12 (2 — full-data TD)                                            |
+| Config     | Models                                                                |
+| ---------- | --------------------------------------------------------------------- |
+| `rep`      | vg01 vg02 vg03 vg04 vg05 vg07 vg08 vg09 vg10 vg13 vg14 vg15 vg16 (13) |
+| `rep-lite` | vg11 vg12 (2 — full-data TD)                                          |
 
 ## Progress log
 
@@ -44,7 +44,7 @@ Full replication refit of every registered model (VG01–VG16) on the current 81
 
 **Blast radius.** Every joint/multivariate model: `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg13`, `vg14`, `vg15`, `vg16` (9 of 15). The 6 univariate models (`vg01`–`vg04` done; `vg11`/`vg12` pending) are unaffected. Crash occurs **after** sampling, in `diagnostics`, which runs **before** the posterior-predictive stage that writes `trace.nc` — so a failed joint fit **loses its trace** (no cheap recompute).
 
-**Fix (implemented 2026-07-17).** `common.py` now computes each per-outcome LOO through a helper `_loo_dropping_degenerate(idata, var_name)` that drops observations whose pointwise log-likelihood is constant across draws before calling `az.loo`. The drop is deterministic (keyed off the structural `n = 0` degeneracy alone), so every joint model excludes the *same* observations and the per-outcome elpd stays comparable across models for `loo_compare`. Threshold: across-draw variance ≤ `1e-12` — the degenerate points sit at ~`1e-33` (numerically-zero log-lik plus fp noise) while genuinely informative observations have variance ≫ `1e-6`, so the two are cleanly separated (an initial `np.finfo(float).tiny` threshold was far too small and dropped nothing). Verified end-to-end: a `dev` fit of `vg05` reported "dropped 14 degenerate … observation(s)", computed LOO for both outcomes, and completed the full pipeline (exit 0). `ruff` clean; `tests/test_diagnostics_gate.py` passes.
+**Fix (implemented 2026-07-17).** `common.py` now computes each per-outcome LOO through a helper `_loo_dropping_degenerate(idata, var_name)` that drops observations whose pointwise log-likelihood is constant across draws before calling `az.loo`. The drop is deterministic (keyed off the structural `n = 0` degeneracy alone), so every joint model excludes the _same_ observations and the per-outcome elpd stays comparable across models for `loo_compare`. Threshold: across-draw variance ≤ `1e-12` — the degenerate points sit at ~`1e-33` (numerically-zero log-lik plus fp noise) while genuinely informative observations have variance ≫ `1e-6`, so the two are cleanly separated (an initial `np.finfo(float).tiny` threshold was far too small and dropped nothing). Verified end-to-end: a `dev` fit of `vg05` reported "dropped 14 degenerate … observation(s)", computed LOO for both outcomes, and completed the full pipeline (exit 0). `ruff` clean; `tests/test_diagnostics_gate.py` passes.
 
 **Working-tree change, flagged for review** (as with the 2026-07-12 DuckDB-lock fix): `src/vocab_growth/models/common.py`. Follow-up: a dedicated regression test for `_loo_dropping_degenerate` (deferred — needs a joint-trace fixture) and a proper PR.
 
