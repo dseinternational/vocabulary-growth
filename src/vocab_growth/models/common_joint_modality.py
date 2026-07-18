@@ -1356,10 +1356,13 @@ def posterior_summary(context: JointContext):
 
     # psi summary (HDI: psi is a right-skewed association ratio)
     psi = s.psi
+    psi_lo50, psi_hi50 = intervals.interval_1d(psi, inner, "hdi")
     psi_lo, psi_hi = intervals.interval_1d(psi, ci_prob, "hdi")
     pct = int(round(ci_prob * 100))
     psi_df = pd.DataFrame({
         "psi_median": [float(np.median(psi))],
+        "psi_ci50_lo": [float(psi_lo50)],
+        "psi_ci50_hi": [float(psi_hi50)],
         "psi_ci_lo": [float(psi_lo)],
         "psi_ci_hi": [float(psi_hi)],
         "P_psi_gt_1": [float((psi > 1).mean())],

@@ -916,9 +916,9 @@ def plot_posterior_kappa(
             "age_months": X_plot,
             "kappa_ci50_lo": kappa_plot_ci50[:, 0],
             "kappa_ci50_hi": kappa_plot_ci50[:, 1],
-            "kappa_lo": kappa_plot_lo,
+            "kappa_ci_lo": kappa_plot_lo,
             "kappa_median": kappa_plot_med,
-            "kappa_hi": kappa_plot_hi,
+            "kappa_ci_hi": kappa_plot_hi,
             "rho_median": 1.0 / (kappa_plot_med + 1.0),
             "vif_median": (n_trials + kappa_plot_med) / (1.0 + kappa_plot_med),
         }
@@ -937,9 +937,9 @@ def plot_posterior_kappa(
             "age_months": X_query,
             "kappa_ci50_lo": kappa_query_ci50[:, 0],
             "kappa_ci50_hi": kappa_query_ci50[:, 1],
-            "kappa_lo": kappa_query_lo,
+            "kappa_ci_lo": kappa_query_lo,
             "kappa_median": kappa_query_med,
-            "kappa_hi": kappa_query_hi,
+            "kappa_ci_hi": kappa_query_hi,
             "rho_median": np.median(1.0 / (kappa_query_samps + 1.0), axis=1),
             "vif_median": np.median(
                 (n_trials + kappa_query_samps) / (1.0 + kappa_query_samps), axis=1

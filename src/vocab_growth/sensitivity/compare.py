@@ -34,9 +34,14 @@ _SERIES: tuple[tuple[str, str, str, str | None, str | None], ...] = (
     ("q", "posterior_summary_q.csv", "q_median", "q_ci_lo", "q_ci_hi"),
     ("r", "posterior_summary_r.csv", "r_median", "r_ci_lo", "r_ci_hi"),
     ("p_any", "posterior_summary_p_any.csv", "p_any_median", "p_any_ci_lo", "p_any_ci_hi"),
-    ("Ey_any", "posterior_summary_p_any.csv", "Ey_any_median", None, None),
+    ("Ey_any", "posterior_summary_p_any.csv", "Ey_any_median", "Ey_any_ci_lo", "Ey_any_ci_hi"),
     ("gap", "comprehension_production_gap.csv", "gap_median", "ci_lo", "ci_hi"),
 )
+
+# All loaded series are equal-tailed; only the psi scalar (loaded separately) is
+# reported with a highest-density interval, so the comparison table carries an
+# ``interval_kind`` column to keep the mixed table honest.
+_SERIES_INTERVAL_KIND = "eti"
 
 
 def _read(dirpath: str, name: str) -> pd.DataFrame | None:
@@ -45,7 +50,7 @@ def _read(dirpath: str, name: str) -> pd.DataFrame | None:
 
 
 def load_headlines(dirpath: str) -> dict[str, pd.DataFrame]:
-    """Return ``{quantity: DataFrame[age_months, median, hdi_lo, hdi_hi]}`` for
+    """Return ``{quantity: DataFrame[age_months, median, ci_lo, ci_hi]}`` for
     every headline series present in ``dirpath`` (missing series are skipped)."""
     out: dict[str, pd.DataFrame] = {}
     for qty, fname, mcol, lo, hi in _SERIES:
@@ -53,8 +58,8 @@ def load_headlines(dirpath: str) -> dict[str, pd.DataFrame]:
         if df is None or mcol not in df.columns or "age_months" not in df.columns:
             continue
         frame = pd.DataFrame({"age_months": df["age_months"], "median": df[mcol]})
-        frame["hdi_lo"] = df[lo] if (lo and lo in df.columns) else np.nan
-        frame["hdi_hi"] = df[hi] if (hi and hi in df.columns) else np.nan
+        frame["ci_lo"] = df[lo] if (lo and lo in df.columns) else np.nan
+        frame["ci_hi"] = df[hi] if (hi and hi in df.columns) else np.nan
         out[qty] = frame
     return out
 
@@ -67,8 +72,8 @@ def load_psi(dirpath: str) -> dict[str, float] | None:
     r = df.iloc[0]
     return {
         "psi_median": float(r["psi_median"]),
-        "psi_hdi_lo": float(r["psi_ci_lo"]),
-        "psi_hdi_hi": float(r["psi_ci_hi"]),
+        "psi_ci_lo": float(r["psi_ci_lo"]),
+        "psi_ci_hi": float(r["psi_ci_hi"]),
         "P_psi_gt_1": float(r["P_psi_gt_1"]),
     }
 
@@ -91,9 +96,10 @@ def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
     """Per-quantity, per-age comparison of a variant against its baseline.
 
     Columns: ``quantity, age_months, base_median, var_median, delta,
-    base_hdi_lo, base_hdi_hi, within_baseline_hdi`` (``age_months = -1`` for the
-    ψ / P(ψ>1) scalars). ``within_baseline_hdi`` is ``None`` where the series
-    carries no HDI (``Ey_any``, ``P_psi_gt_1``, four-cell).
+    base_ci_lo, base_ci_hi, within_baseline_ci, interval_kind`` (``age_months =
+    -1`` for the ψ / P(ψ>1) scalars). ``within_baseline_ci`` is ``None`` where the
+    series carries no interval (``P_psi_gt_1``, four-cell). ``interval_kind`` is
+    ``"eti"`` for the equal-tailed series and ``"hdi"`` for the ψ scalar.
     """
     base, var = load_headlines(baseline_dir), load_headlines(variant_dir)
     rows: list[dict] = []
@@ -102,12 +108,13 @@ def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
         v = var[qty].set_index("age_months")
         for age in b.index.intersection(v.index):
             bm, vm = float(b.loc[age, "median"]), float(v.loc[age, "median"])
-            lo, hi = b.loc[age, "hdi_lo"], b.loc[age, "hdi_hi"]
+            lo, hi = b.loc[age, "ci_lo"], b.loc[age, "ci_hi"]
             within = bool(lo <= vm <= hi) if pd.notna(lo) and pd.notna(hi) else None
             rows.append({
                 "quantity": qty, "age_months": int(age),
                 "base_median": bm, "var_median": vm, "delta": vm - bm,
-                "base_hdi_lo": lo, "base_hdi_hi": hi, "within_baseline_hdi": within,
+                "base_ci_lo": lo, "base_ci_hi": hi, "within_baseline_ci": within,
+                "interval_kind": _SERIES_INTERVAL_KIND,
             })
     pb, pv = load_psi(baseline_dir), load_psi(variant_dir)
     if pb and pv:
@@ -115,16 +122,18 @@ def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
             "quantity": "psi", "age_months": -1,
             "base_median": pb["psi_median"], "var_median": pv["psi_median"],
             "delta": pv["psi_median"] - pb["psi_median"],
-            "base_hdi_lo": pb["psi_hdi_lo"], "base_hdi_hi": pb["psi_hdi_hi"],
-            "within_baseline_hdi": bool(
-                pb["psi_hdi_lo"] <= pv["psi_median"] <= pb["psi_hdi_hi"]
+            "base_ci_lo": pb["psi_ci_lo"], "base_ci_hi": pb["psi_ci_hi"],
+            "within_baseline_ci": bool(
+                pb["psi_ci_lo"] <= pv["psi_median"] <= pb["psi_ci_hi"]
             ),
+            "interval_kind": "hdi",
         })
         rows.append({
             "quantity": "P_psi_gt_1", "age_months": -1,
             "base_median": pb["P_psi_gt_1"], "var_median": pv["P_psi_gt_1"],
             "delta": pv["P_psi_gt_1"] - pb["P_psi_gt_1"],
-            "base_hdi_lo": np.nan, "base_hdi_hi": np.nan, "within_baseline_hdi": None,
+            "base_ci_lo": np.nan, "base_ci_hi": np.nan, "within_baseline_ci": None,
+            "interval_kind": None,
         })
     return pd.DataFrame(rows)
 
@@ -132,11 +141,11 @@ def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
 def summarise(comparison: pd.DataFrame, variant_dir: str, label: str) -> dict:
     """One-row robustness verdict for a variant (feeds the §7 matrix)."""
     converged, max_rhat, min_ess = diagnostics_gate(variant_dir)
-    checked = comparison.dropna(subset=["within_baseline_hdi"])
-    # The column mixes Python bools with None (Ey_any / P_psi_gt_1 rows), so it
+    checked = comparison.dropna(subset=["within_baseline_ci"])
+    # The column mixes Python bools with None (P_psi_gt_1 / four-cell rows), so it
     # is object dtype even after dropna; ~ on object bools yields -2/-1, not a
     # mask. Coerce before inverting.
-    within = checked["within_baseline_hdi"].astype(bool)
+    within = checked["within_baseline_ci"].astype(bool)
     n_within = int(within.sum())
     n_checked = int(len(checked))
     outside = sorted(checked.loc[~within, "quantity"].unique().tolist())
@@ -152,9 +161,9 @@ def summarise(comparison: pd.DataFrame, variant_dir: str, label: str) -> dict:
         "converged": converged,
         "max_rhat": max_rhat,
         "min_ess": min_ess,
-        "n_within_hdi": n_within,
+        "n_within_ci": n_within,
         "n_checked": n_checked,
-        "quantities_outside_hdi": ", ".join(outside),
+        "quantities_outside_ci": ", ".join(outside),
         "max_abs_delta": max_abs_delta,
         "verdict": verdict,
     }
