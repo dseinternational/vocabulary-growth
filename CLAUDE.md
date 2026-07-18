@@ -1,5 +1,8 @@
 # Agent Instructions
 
+> [!NOTE]
+> Maintained with assistance from LLM-based AI tools, including OpenAI Codex/GPT-5.
+
 > **Keep in sync:** This file, `CLAUDE.md`, and `.github/copilot-instructions.md` share the same content. When updating one, update all three.
 
 ## Project overview
@@ -8,16 +11,17 @@ This project is an exploratory study of vocabulary development in children with 
 
 The Python package `vocab_growth` (in `src/vocab_growth/`) defines a series of PyMC models that are fitted to vocabulary assessment data aggregated from multiple international studies. Reports are authored in Quarto (`.qmd`).
 
-This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.5.0` (see [Environment setup](#environment-setup)); a commented local-dev override in `environment.yml` lets you point at a sibling `../research/src/python` checkout instead.
+This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.7.0` (see [Environment setup](#environment-setup)); a commented local-dev override in `environment.yml` lets you point at a sibling `../research/src/python` checkout instead.
 
 ## Environment setup
 
 Hybrid two-layer environment (shared across DSE research repos):
 
 - **Compiled core** — the scientific stack (`numpy`/`scipy`/`pandas`/`pymc`/`nutpie`/`jax`/`arviz`, …) comes from **conda-forge** and must match the canonical spec shipped in `dse-research-utils` (`data/environment-core.yml`) so it cannot drift across repos. Verify with `dse-check-env environment.yml`.
-- **Pip layer** — the pure-Python tail and the shared library. `dse-research-utils` installs from the public git tag `v0.5.0` (`dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.5.0#subdirectory=src/python`); the package itself installs editable (`-e ./`).
+- **Pip layer** — the pure-Python tail and the shared library. `dse-research-utils` installs from the public git tag `v0.7.0` (`dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.7.0#subdirectory=src/python`); the package itself installs editable (`-e ./`).
 
 - **Python environment**: Conda/mamba (environment name `dse-vocab-growth`), Python 3.14, channel `conda-forge`. Create with `mamba env create -f environment.yml`; update with `conda env update -f environment.yml`.
+- **Exact replication**: `conda-lock.yml` pins the compiled environment for `linux-64` and `osx-arm64`; `requirements-pip.lock` pins the pip layer. See `docs/runbooks/environment-locks.md`. Refresh both with `scripts/lock_environment.py` only after an intentional dependency change.
 - **Windows**: there is no conda-forge `jax`/`jaxlib` win-64 build, so the stack cannot solve natively — use **WSL** (Ubuntu, linux-64).
 - **Local dev against research**: comment the `dse-research-utils[...] @ git+…` line in `environment.yml`'s pip block and uncomment the `-e ../research/src/python[...]` override.
 - **GPU**: opt-in overlay (`jax[cuda]`); the base env is CPU-only and cross-platform.
@@ -65,12 +69,13 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 ### Fit a model
 
 ```bash
-python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload] [--output-dir <dir>]
+python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>]
 ```
 
 - `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
-- `--render`: render the Quarto model output after fitting.
+- `--render`: render the Quarto model output after the completed fit is atomically promoted. A rendering failure leaves the fit complete and available for a later `--render-only` retry.
+- `--render-only`: validate and render an existing compatible fit without sampling again.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
 - `--output-dir`: root directory for model output. Overrides the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable; both fall back to the repository-local `output/`.
 
@@ -79,10 +84,10 @@ Output (traces, figures, summary tables) is written to `<output-root>/models/<mo
 ### Sync report figures
 
 ```bash
-python scripts/sync_report_figures.py [--output-dir <dir>]
+python scripts/sync_report_figures.py [--config <config>] [--output-dir <dir>]
 ```
 
-Copies the plots (`.svg`/`.png`) and summary tables (`.csv`) from the output root's `models/` and `comparisons/` (same resolution as above) into `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
+Validates the model definition, sampling configuration, raw-data fingerprint, complete lifecycle state, reporting quality, clean fit provenance and rendered model report before atomically replacing cached plots (`.svg`/`.png`) and summary tables (`.csv`) from the output root's `models/` and `comparisons/` in `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. `--allow-provisional` keeps lifecycle/model/sampling checks for local dev/test work while relaxing publication provenance. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
 
 ## Architecture
 
@@ -104,7 +109,7 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 
 The full, canonical list of models -- each model's population, outcome, structure, and purpose -- is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
 
-There are currently sixteen models (`VG01`-`VG16`), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), and cross-lag structures.
+There are currently fifteen registered models (`VG01`-`VG16`, with retired `VG06` omitted), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), and cross-lag structures.
 
 ### Shared utilities (`dse_research_utils`)
 

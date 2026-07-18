@@ -1,7 +1,7 @@
 # Runbook: full reporting-config refit of all models
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5).
 
 How to refit the whole `VG01`–`VG16` family at reporting quality (`rep`) on a
 large VM, render every report, and produce comparisons — with the pitfalls that a
@@ -30,13 +30,13 @@ naive run hits. Distilled from the 2026-07-12 run
 - Disk: `rep` traces are ~4–15 GB **each**. Budget ~20 GB × n_models and redirect
   output off the checkout: `--output-dir <scratch>` or `DSE_VOCAB_GROWTH_OUTPUT_DIR`.
   The report figure cache (`docs/report/figures/`) always stays in the checkout.
-- `rep` config = 6 chains / 6 cores / 6000 tune / 6000 draws / `target_accept` 0.95.
+- `rep` config = 6 chains / 6000 tune / 6000 draws / `target_accept` 0.95. The number of parallel cores is chosen for the host and does not affect fit compatibility.
 
 ## 1. Fit
 
 ### Batch failure semantics
 
-`python scripts/fit_model.py all --config rep --render --upload` treats convergence as a per-model fitting failure and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, renders the models that passed, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. Other exceptions still abort immediately. The canonical `run_replication.sh` path remains resumable and invokes one model at a time.
+`python scripts/fit_model.py all --config rep --render --upload` treats convergence and rendering as per-model failures and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, atomically promotes every successful fit before rendering it, continues rendering after an individual Quarto failure, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. A render failure leaves the completed fit available for `--render-only`; other fitting exceptions still abort immediately. The canonical `run_replication.sh` path remains resumable and invokes one model at a time.
 
 ### us_01 ceiling-censoring sensitivity
 
@@ -55,9 +55,7 @@ python scripts/compare_sensitivity.py vg15 --variant us01-ceiling-excluded
 scripts/run_replication.sh --config rep --output-dir <scratch>
 ```
 
-Idempotent: a model whose `trace.nc` exists is skipped (`--fresh` to force). It
-fits+renders each model, runs comparisons, syncs figures, renders the report and
-comparison book, and (optionally) uploads. Estimate ~15–25 h sequential.
+Idempotent: a model is skipped only when its state is `complete` and its model definition, requested sampling tier and minimum statistical effort, raw-data fingerprint, and Git commit match the current run (`--fresh` forces a refit). Host-dependent `cores` is ignored; a documented high-tuning refit is compatible when its draws, tuning iterations, chains and target acceptance meet or exceed the tier. A trace file by itself is never treated as complete. The script refuses to start from a dirty checkout, fits models, validates the set once, retries per-model rendering without resampling, runs comparisons, atomically synchronises figures, renders the report and comparison book, and optionally uploads. Development/test runs use provisional figure sync and do not upload. Any required-step failure stops all downstream comparison and publication phases and leaves a `FAILED` marker in the run log directory; an entirely successful run leaves `SUCCESS`. Estimate approximately 15–25 hours sequentially.
 
 ### Parallel fitting on a large VM
 
@@ -161,14 +159,14 @@ Back up the non-converged output first; the refit becomes the model of record.
 ## 3. Render + comparisons
 
 ```bash
-python scripts/sync_report_figures.py --output-dir <scratch>   # feeds docs/report/figures/
+python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # validates fits, then feeds docs/report/figures/
 # comparisons (consume fitted traces/summaries):
 for c in loo_compare loso_compare compare_models compare_ds_td \
          compare_ds_td_trajectories compare_ds_td_expressive \
          compare_ds_td_latency compare_ds_td_q_overlap compare_ds_td_re; do
   python scripts/$c.py
 done
-python scripts/sync_report_figures.py --output-dir <scratch>   # re-sync comparison artefacts
+python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re-sync comparison artefacts
 quarto render docs/report
 # the comparison book reads its CSV/PNG artefacts by BARE filename from its own dir,
 # and sync_report_figures only populates docs/report/figures/ — so stage them first:
@@ -176,8 +174,7 @@ cp <scratch>/comparisons/* docs/comparison/                    # (gitignored)
 quarto render docs/comparison/index.qmd
 ```
 
-Per-model reports render during `fit_model.py --render`; if you fit without
-`--render`, render each `<scratch>/models/<MODEL>/index.qmd` directly. **Gotcha:**
+Per-model reports render after successful fits during `fit_model.py --render`; if a render fails, retry it without resampling using `python scripts/fit_model.py <model> --config rep --render-only --output-dir <scratch>`. **Gotcha:**
 rendering a model report whose output dir is **outside the git checkout** (e.g. a
 scratch `--output-dir`) makes quarto exit non-zero on the `code-links: [repo]`
 post-processor ("not a GitHub project") — the HTML is still produced and complete;
@@ -186,8 +183,8 @@ in-repo `output/`.
 
 ## 4. Completion checklist
 
-- [ ] All registered models have a `trace.nc` and PASS the gate on **unrounded**
-      diagnostics (R-hat ≤ 1.01, ESS ≥ 400, 0 divergences, BFMI ≥ 0.3).
+- [ ] `python scripts/check_fit.py all --config rep --purpose publish --output-dir <scratch>` passes; this includes complete lifecycle state, compatible provenance, reporting configuration, clean fit source state, rendered output, and `trace.nc` for every registered model.
+- [ ] All registered models PASS the gate on **unrounded** diagnostics (R-hat ≤ 1.01, ESS ≥ 400, 0 divergences, BFMI ≥ 0.3).
 - [ ] Understood-GP-ridge models refit with heavier tuning if needed.
 - [ ] `sync_report_figures.py` run; all model reports + `docs/report` +
       `docs/comparison` render clean.

@@ -12,10 +12,10 @@
 # Key properties
 #   * Detached: --detach re-execs under setsid so an SSH drop can't kill it.
 #   * Conda-safe: activates the env explicitly (setsid shells don't do this).
-#   * Per-model isolation: each model fits in its own subprocess, so one
-#     failure is logged and skipped rather than aborting the whole run.
-#   * Idempotent / resumable: a model whose trace.nc already exists is skipped
-#     (override with --fresh). Re-running after any interruption resumes.
+#   * Per-model isolation: each model fits in its own subprocess, while any
+#     failure stops comparisons, rendering, and publication for the batch.
+#   * Idempotent / resumable: only complete output made with the requested
+#     sampling tier, model definition, data, and Git revision is skipped.
 #   * Upload decoupled from fitting: a broken blob credential can never sink a
 #     multi-hour fit. Uploads run last, using the az CLI credential (see below).
 #   * Full logging: timestamped, tee'd terminal log + a per-step status TSV,
@@ -37,7 +37,7 @@ Usage: scripts/run_replication.sh [options]
   --output-dir <d>   Output root (overrides $DSE_VOCAB_GROWTH_OUTPUT_DIR)
   --log-dir <d>      Where to write run logs (default: <output>/replication-logs)
   --env <name>       Conda env name (default: dse-vocab-growth)
-  --fresh            Refit even if trace.nc exists (default: resume/skip)
+  --fresh            Refit even if compatible complete output exists
   --include-kfold    Also run kfold_loso.py (expensive; refits per fold)
   --no-descriptives  Skip prepare_data + descriptive report
   --no-fit           Skip the fitting phase
@@ -86,12 +86,32 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+case "$CONFIG" in
+  dev|development|test|testing) PROVISIONAL_SYNC=1 ;;
+  rep|report|reporting|rep-lite|reporting-lite|rep_lite) PROVISIONAL_SYNC=0 ;;
+  *) echo "Unknown sampling config: $CONFIG" >&2; usage; exit 1 ;;
+esac
+if [ "$PROVISIONAL_SYNC" = 1 ] && [ "$DO_UPLOAD" = 1 ]; then
+  echo "Development/test replication does not publish; disabling upload." >&2
+  DO_UPLOAD=0
+fi
+
 # ---------------------------------------------------------------------------
 # Paths + conda (setsid/non-login shells do NOT activate conda automatically)
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO"
+
+# Exact replication must start from a clean checkout. Check before creating
+# logs or fitted output so the preflight itself cannot dirty the repository.
+GIT_STATUS="$(git status --porcelain --untracked-files=normal)" \
+  || { echo "Could not inspect Git checkout state." >&2; exit 1; }
+if [ -n "$GIT_STATUS" ]; then
+  echo "Replication requires a clean Git checkout; commit, stash, or remove these changes:" >&2
+  printf '%s\n' "$GIT_STATUS" >&2
+  exit 1
+fi
 
 if [ -z "${CONDA_PREFIX:-}" ] || [ "$(basename "${CONDA_PREFIX:-}")" != "$CONDA_ENV" ]; then
   # shellcheck disable=SC1091
@@ -144,6 +164,7 @@ ln -sfn "$RUN_DIR" "$LOG_DIR/latest"
 LOG="$RUN_DIR/run.log"
 STATUS="$RUN_DIR/status.tsv"
 : > "$STATUS"
+RUN_FAILED=0
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -159,22 +180,32 @@ run_step() {  # name  command...
   if "$@" >>"$LOG" 2>&1; then
     log "<<< OK    $name ($((SECONDS - t0))s)"; mark "$name" "OK"; return 0
   else
-    local rc=$?; log "!!! FAIL  $name rc=$rc ($((SECONDS - t0))s)"; mark "$name" "FAIL rc=$rc"; return $rc
+    local rc=$?; RUN_FAILED=1; log "!!! FAIL  $name rc=$rc ($((SECONDS - t0))s)"; mark "$name" "FAIL rc=$rc"; return $rc
   fi
 }
 
-# Does model <key> already have a completed trace.nc?
-has_trace() {
-  # -ipath is already case-insensitive, so no need for ${1^^} (a bash-4
-  # uppercase expansion that errors as "bad substitution" on macOS bash 3.2 and
-  # silently broke skip-on-resume there).
-  [ -n "$(find "$OUT_ROOT/models" -maxdepth 2 -iname trace.nc -ipath "*/${1}-*" 2>/dev/null | head -1)" ]
+# Is model <key> complete and exactly compatible with this replication run?
+has_compatible_fit() {
+  python scripts/check_fit.py "$1" --config "$CONFIG" --purpose resume \
+    --output-dir "$OUT_ROOT" >>"$LOG" 2>&1
+}
+
+stop_if_failed() {
+  if [ "$RUN_FAILED" = "1" ]; then
+    log "Stopping before downstream phases because at least one required step failed."
+    exit 1
+  fi
 }
 
 on_exit() {
+  local rc=$?
   log "===== RUN ENDED ====="
   log "Status summary:"; column -t -s $'\t' "$STATUS" 2>/dev/null | tee -a "$LOG"
-  touch "$RUN_DIR/DONE"
+  if [ "$rc" = "0" ] && [ "$RUN_FAILED" = "0" ]; then
+    touch "$RUN_DIR/SUCCESS"
+  else
+    touch "$RUN_DIR/FAILED"
+  fi
 }
 trap on_exit EXIT
 
@@ -195,16 +226,28 @@ log "phases: descriptives=$DO_DESCRIPTIVES fit=$DO_FIT compare=$DO_COMPARE rende
 if [ "$DO_DESCRIPTIVES" = 1 ]; then
   run_step "prepare_data"       python scripts/prepare_data.py
   run_step "descriptive_report" python scripts/generate_descriptive_report.py
+  stop_if_failed
 fi
 
-# 2. Fit each model independently, render each. Upload is deferred to phase 5.
+# 2. Fit each model independently. Rendering is a separate, retryable phase.
 if [ "$DO_FIT" = 1 ]; then
   for m in $MODELS; do
-    if [ "$FRESH" = 0 ] && has_trace "$m"; then
-      log "=== SKIP fit_$m (trace.nc present; use --fresh to refit) ==="; mark "fit_$m" "SKIP"; continue
+    if [ "$FRESH" = 0 ] && has_compatible_fit "$m"; then
+      log "=== SKIP fit_$m (complete compatible fit; use --fresh to refit) ==="; mark "fit_$m" "SKIP"; continue
     fi
-    run_step "fit_$m" python scripts/fit_model.py "$m" --config "$CONFIG" --render
+    run_step "fit_$m" python scripts/fit_model.py "$m" --config "$CONFIG"
   done
+  stop_if_failed
+fi
+
+# Verify all inputs before read-only comparisons or publication. This also
+# protects --no-fit runs from consuming stale or development-quality traces.
+if [ "$DO_COMPARE" = 1 ] || [ "$DO_RENDER" = 1 ] || [ "$DO_UPLOAD" = 1 ]; then
+  # Validate the whole set in one process so Git/data provenance is computed once.
+  # shellcheck disable=SC2086
+  run_step "validate_models" python scripts/check_fit.py $MODELS --config "$CONFIG" \
+    --purpose resume --output-dir "$OUT_ROOT"
+  stop_if_failed
 fi
 
 # 3. Read-only comparisons (consume fitted traces / summaries).
@@ -215,20 +258,30 @@ if [ "$DO_COMPARE" = 1 ]; then
   for c in $CMP; do
     run_step "cmp_$c" python "scripts/$c.py"
   done
+  stop_if_failed
 fi
 
-# 4. Sync figures into the report cache, then render.
+# 4. Retry model-output rendering, sync figures, then render the combined reports.
 if [ "$DO_RENDER" = 1 ]; then
-  run_step "sync_figures"      python scripts/sync_report_figures.py
+  for m in $MODELS; do
+    run_step "render_model_$m" python scripts/fit_model.py "$m" --config "$CONFIG" \
+      --render-only --output-dir "$OUT_ROOT"
+  done
+  stop_if_failed
+  SYNC_ARGS=(--config "$CONFIG" --output-dir "$OUT_ROOT")
+  [ "$PROVISIONAL_SYNC" = 1 ] && SYNC_ARGS+=(--allow-provisional)
+  run_step "sync_figures"      python scripts/sync_report_figures.py "${SYNC_ARGS[@]}"
   run_step "render_report"     quarto render docs/report
   run_step "render_comparison" quarto render docs/comparison/index.qmd
+  stop_if_failed
 fi
 
 # 5. Upload model output (traces excluded), per-model so one failure is isolated.
 if [ "$DO_UPLOAD" = 1 ]; then
   for m in $MODELS; do
-    run_step "upload_$m" python scripts/upload.py "$m"
+    run_step "upload_$m" python scripts/upload.py "$m" --config "$CONFIG"
   done
+  stop_if_failed
 fi
 
 log "===== REPLICATION RUN COMPLETE ====="

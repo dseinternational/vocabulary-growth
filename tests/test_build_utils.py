@@ -90,7 +90,13 @@ AGES_QUERY = [12, 24, 36]
 SLOPE_ANCHORS = (24, 84)
 
 
-def _grids(*, use_gp_anchor=False, gp_anchor_age_months=None):
+def _grids(
+    *,
+    use_gp_anchor=False,
+    gp_anchor_age_months=None,
+    ages_query=AGES_QUERY,
+    gp_domain_months=None,
+):
     X = np.linspace(8.0, 60.0, 40).reshape(-1, 1)
     mean, std, X_z = standardize_ages(X)
     grids = construct_age_grids(
@@ -99,10 +105,11 @@ def _grids(*, use_gp_anchor=False, gp_anchor_age_months=None):
         X_obs_mean=mean,
         X_obs_std=std,
         n_plot=N_PLOT,
-        ages_query=AGES_QUERY,
+        ages_query=ages_query,
         slope_anchors=SLOPE_ANCHORS,
         use_gp_anchor=use_gp_anchor,
         gp_anchor_age_months=gp_anchor_age_months,
+        gp_domain_months=gp_domain_months,
     )
     return X, mean, std, grids
 
@@ -141,6 +148,27 @@ def test_construct_age_grids_blocks_are_zscored():
         g.X_all_z[n + N_PLOT : n + N_PLOT + len(AGES_QUERY)],
         (g.X_query - mean) / std,
     )
+
+
+def test_construct_age_grids_separates_hsgp_domain_from_query_grid():
+    _, _, _, first = _grids(ages_query=[12, 24])
+    _, _, _, second = _grids(ages_query=[12, 24, 48])
+
+    np.testing.assert_allclose(first.X_gp_domain_z, second.X_gp_domain_z)
+
+
+def test_construct_age_grids_uses_explicit_hsgp_domain():
+    _, mean, std, grids = _grids(gp_domain_months=(6, 90))
+
+    np.testing.assert_allclose(
+        grids.X_gp_domain_z,
+        (np.array([[6.0], [90.0]]) - mean) / std,
+    )
+
+
+def test_construct_age_grids_rejects_query_outside_hsgp_domain():
+    with pytest.raises(ValueError, match="must lie inside gp_domain_months"):
+        _grids(ages_query=[6, 24], gp_domain_months=(8, 60))
 
 
 def test_construct_age_grids_anchor_default_midpoint():

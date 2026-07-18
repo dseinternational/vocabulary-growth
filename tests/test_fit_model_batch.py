@@ -44,3 +44,26 @@ def test_batch_continues_after_convergence_failure():
     assert contexts == ["first", "last"]
     assert set(timings) == {"first", "bad", "last"}
     assert failures == {"bad": "did not converge"}
+
+
+def test_batch_render_continues_after_one_model_fails(monkeypatch):
+    calls: list[str] = []
+    contexts = [
+        SimpleNamespace(
+            reporting=SimpleNamespace(model_name=name, output_dir=f"/{name}")
+        )
+        for name in ("first", "bad", "last")
+    ]
+
+    def render(output_dir):
+        calls.append(output_dir)
+        if output_dir == "/bad":
+            raise RuntimeError("quarto failed")
+
+    monkeypatch.setattr(_MODULE, "_render_output", render)
+
+    timings, failures = _MODULE._render_contexts(contexts)
+
+    assert calls == ["/first", "/bad", "/last"]
+    assert set(timings) == {"first", "bad", "last"}
+    assert failures == {"bad": "RuntimeError: quarto failed"}

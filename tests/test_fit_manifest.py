@@ -13,9 +13,9 @@ import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pandas as pd
 
+from vocab_growth.fit_artifacts import git_metadata
 from vocab_growth.models.common import (
     ModelFitContext,
-    _git_metadata,
     write_fit_manifest,
 )
 from vocab_growth.models.definitions import VG01
@@ -64,6 +64,7 @@ def test_write_fit_manifest_records_data_code_and_sampling(tmp_path):
     assert manifest["data"]["analysis_frame_hash"].startswith("sha256:")
     assert "commit" in manifest["code"]
     assert "pymc" in {name.lower() for name in manifest["runtime"]["packages"]}
+    assert isinstance(manifest["runtime"]["direct_package_origins"], dict)
 
 
 def test_git_metadata_records_detached_head_as_null(monkeypatch):
@@ -82,9 +83,9 @@ def test_git_metadata_records_detached_head_as_null(monkeypatch):
             stderr="",
         )
 
-    monkeypatch.setattr("vocab_growth.models.common.subprocess.run", fake_run)
+    monkeypatch.setattr("vocab_growth.fit_artifacts.subprocess.run", fake_run)
 
-    metadata = _git_metadata()
+    metadata = git_metadata("/repo")
 
     assert metadata == {
         "commit": "abc123",
@@ -99,9 +100,9 @@ def test_git_metadata_distinguishes_unavailable_git(monkeypatch):
         del command, kwargs
         raise OSError("git unavailable")
 
-    monkeypatch.setattr("vocab_growth.models.common.subprocess.run", fail_run)
+    monkeypatch.setattr("vocab_growth.fit_artifacts.subprocess.run", fail_run)
 
-    metadata = _git_metadata()
+    metadata = git_metadata("/repo")
 
     assert metadata == {
         "commit": None,

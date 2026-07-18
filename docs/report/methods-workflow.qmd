@@ -4,7 +4,7 @@ abstract: "*This chapter describes the iterative Bayesian workflow used to devel
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5).
 :::
 
 <!--
@@ -15,11 +15,13 @@ inference in intro.qmd (Part I); this chapter is the operational workflow.
 
 ## The iterative workflow
 
-**TODO**: summarise the Bayesian workflow [@gelmanBayesianWorkflow2020] as applied here — build simple, check, extend, compare — and forward-reference the two development lineages (@sec-lineage-ds, @sec-lineage-signing) that instantiate it.
+We use the iterative Bayesian workflow described by @gelmanBayesianWorkflow2020: specify a transparent model, simulate from its priors, fit it, inspect computation and predictive behaviour, identify a concrete inadequacy, and only then add complexity. The numbered models preserve that development history. A later number is not automatically better; an extension must solve a named problem and survive the same checks as its predecessor. The model inventory records which models are development steps, references, or candidates for substantive reporting.
 
 ## Fitting pipeline and sampling configurations
 
-**TODO**: PyMC with the nutpie sampler; the `fit(config)` pipeline stages (data prep → build → prior predictive → MCMC → diagnostics → posterior predictive → summary → plots → report); the `dev` / `test` / `rep` sampling configurations and which results in this report are `rep`-quality. (Full reproduction in Appendix D.)
+Models are defined in PyMC and sampled with NUTS through nutpie. Every registered model follows the same ordered pipeline: prepare data; construct priors and hyperparameters; build the probability model; run prior predictive checks; sample the posterior; calculate diagnostics; run posterior predictive checks; summarise the posterior; produce plots; and prepare the model report. The `dev` configuration uses short chains for quick code development, `test` supports stronger integration checks, and `rep` produces reporting-quality fits. Development and test output may be useful for debugging but cannot source numerical claims in this report.
+
+Each fit is first written to an isolated staging directory. A machine-readable state file records whether it is initialising, running, complete, or failed. Only after the statistical pipeline succeeds is the staged directory atomically promoted to the canonical model-output location. Quarto rendering then runs against that promoted fit as a separate, retryable step: a rendering failure cannot discard a completed multi-hour fit. If the statistical pipeline fails, the preceding complete fit remains in place and the failed staging output is retained separately for diagnosis.
 
 ## Validation checks
 
@@ -27,7 +29,7 @@ Every model in this report is held to the same checks; the per-model evidence is
 
 ### Prior predictive checks
 
-**TODO**: what we require of the priors before fitting (plausible age–vocabulary curves: low counts young, smooth change, widening spread with age, no mass on impossible values).
+Before observing the study outcomes, we draw trajectories and replicated vocabulary scores from the prior model. We require bounded scores, plausible levels at the youngest and oldest relevant ages, developmental changes that are smooth on a realistic time scale, and enough dispersion to represent heterogeneous children without assigning substantial probability to implausible extremes. A prior predictive failure is addressed by revising the scientific assumptions or their parameterisation, not by inspecting the posterior and quietly selecting a prior that reproduces the fitted result.
 
 ### Convergence diagnostics
 
@@ -37,7 +39,7 @@ Bulk and tail ESS are both gated because they govern different summaries: bulk-E
 
 ### Posterior predictive checks
 
-**TODO**: how fitted models are checked against observed counts (PMF/CDF overlays, count distributions by age, the four-cell PPC for the signing model).
+Posterior predictive checks generate replicated outcomes from each fitted model and compare them with the observations. We inspect probability-mass and cumulative-distribution overlays, the distribution of bounded counts across age, and age-specific summaries. For joint models we check understood and produced outcomes together, including violations and fallback rows in the nested likelihood. The signing model additionally checks the four sign-by-speech cells used to identify their association. A model can pass sampler diagnostics yet fail these checks: convergence shows that computation characterised the specified posterior, not that the specification adequately represents the data.
 
 ### Reporting estimates: lead with the interval
 
@@ -60,8 +62,8 @@ A later model is said to **supersede** an earlier one only on two combined groun
 1. **Tabulated out-of-sample comparison** — LOO / expected log pointwise predictive density (ELPD), reported as a comparison table with standard errors of the difference, so the improvement is quantified rather than asserted.
 2. **Identified structural issue** — a concrete, named modelling problem in the earlier model that the later one resolves (e.g. study composition confounding a population curve; a GP↔intercept identifiability ridge; an independence assumption that is not data-identified).
 
-**TODO**: present the master model-comparison table here (or cross-reference the per-lineage tables in Part III), and define the status taxonomy used throughout — *model of record*, *development step*, *TD reference*, *superseded* — enforced as a rule that superseded models never source a number in the findings (see Appendix A for the full register).
+The status taxonomy is: **model of record**, the current source for a stated estimand; **development step**, retained to show how structure was added but not preferred for headline estimates; **TD reference**, a typically-developing comparison model with a distinct population role; and **superseded**, replaced after a documented structural or data problem. A superseded model never supplies a number in the findings. The inventory in Appendix A is the source of truth for these roles; lineage-specific comparison tables report the relevant ELPD evidence rather than collapsing models with different populations or outcomes into one inappropriate ranking.
 
 ## Provenance and reproducibility
 
-**TODO**: the per-render provenance stamp (model id + git revision + sampling configuration, generated rather than hand-written) carried by every result chapter; `freeze: true` for pinned editions; the relationship to the live per-fit dashboards in `docs/models/vgNN`. (Full detail in Appendix D.)
+Every fit carries a generated manifest containing the complete registered model definition, sampling configuration and parameters, prepared-data fingerprint and source counts, raw-input fingerprint, Git commit and dirty state, Python and operating-system details, and installed package versions. Resume checks require the requested sampling tier, model definition, raw data, and Git revision to match; the existence of `trace.nc` is not sufficient. Sampling checks compare statistical effort rather than machine layout: draws, tuning iterations, chains and target acceptance must meet or exceed the named tier, while the host-dependent number of parallel cores is ignored. This permits a documented higher-tuning refit without accepting a weaker fit. Figure synchronisation and upload additionally require an explicitly complete, convergence-passing, reporting-quality fit with a rendered report and clean recorded source state. A later documentation-only commit does not invalidate that fit for publication, because the fit's own revision remains recorded in its manifest. Quarto's `freeze: true` preserves executed report cells for a pinned edition, while the per-model dashboards under `docs/models/vgNN` remain the detailed diagnostic record. Full reproduction commands and completion checks are given in Appendix D.

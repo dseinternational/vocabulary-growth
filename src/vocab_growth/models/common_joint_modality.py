@@ -727,6 +727,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         slope_anchors=config.slope_anchors,
         use_gp_anchor=use_gp_anchor,
         gp_anchor_age_months=definition.gp_anchor_age_months,
+        gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
     X_query = grids.X_query
@@ -740,7 +741,9 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
     ell_low_z = ell_low_months / X_std
     ell_high_z = ell_high_months / X_std
-    L, M = get_hsgp_hyperparams(X_all_z, (ell_low_z, ell_high_z))
+    L, M = get_hsgp_hyperparams(
+        grids.X_gp_domain_z, (ell_low_z, ell_high_z)
+    )
 
     sa_z, sb_z = slope_anchor_logit_coeffs(
         config.slope_anchors, X_obs_mean=X_mean, X_obs_std=X_std
@@ -1524,7 +1527,10 @@ def _run_joint_plots(context: JointContext):
 # ============================================================
 
 
-def fit_joint_model(config: str, definition: JointModelDefinition) -> JointContext:
+def fit_joint_model(
+    config: str,
+    definition: JointModelDefinition,
+) -> JointContext:
     """Shared fit pipeline for the joint sign/speech model (VG15)."""
     return run_fit_pipeline(
         config,

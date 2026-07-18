@@ -66,6 +66,7 @@ book:
       chapters:
         - methods-data.qmd
         - methods-models.qmd
+        - tutorial-model-walkthrough.qmd
         - methods-workflow.qmd
     - part: "Results"
       chapters:

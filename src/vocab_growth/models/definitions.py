@@ -15,7 +15,8 @@ diagnostics and fit orchestration shared from common.py across all of them.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 
 
@@ -93,6 +94,10 @@ class UnivariateModelDefinition:
     p_slope_hi_alpha: float
     p_slope_hi_beta: float
 
+    gp_domain_months: tuple[float, float] | None = None
+    """Fixed HSGP age domain. ``None`` uses the observed age range; reporting
+    query ages never determine the approximation domain."""
+
     # -- TD-specific data parameters --
     sample_fraction: float = 1.0
     """Fraction of TD data to subsample (1.0 = no subsampling)."""
@@ -169,6 +174,10 @@ class BivariateModelDefinition:
     p_slope_low_u_beta: float
     p_slope_hi_u_alpha: float
     p_slope_hi_u_beta: float
+
+    gp_domain_months: tuple[float, float] | None = None
+    """Fixed HSGP age domain. ``None`` uses the observed age range; reporting
+    query ages never determine the approximation domain."""
 
     # -- Production ratio (q) slope priors --
     p_slope_low_q_alpha: float = 1.0
@@ -298,6 +307,10 @@ class TrivariateModelDefinition:
     p_slope_hi_u_alpha: float
     p_slope_hi_u_beta: float
 
+    gp_domain_months: tuple[float, float] | None = None
+    """Fixed HSGP age domain. ``None`` uses the observed age range; reporting
+    query ages never determine the approximation domain."""
+
     # -- Production ratio (q) slope priors --
     p_slope_low_q_alpha: float = 1.0
     p_slope_low_q_beta: float = 1.5
@@ -413,6 +426,9 @@ class JointModelDefinition:
     n_trials: int
     slope_anchors: tuple[float, float]
     ages_query: list[int]
+    gp_domain_months: tuple[float, float] | None = None
+    """Fixed HSGP age domain. ``None`` uses the observed age range; reporting
+    query ages never determine the approximation domain."""
 
     # -- Understood (U) slope priors (aligned with the recalibrated VG02 / VG05) --
     p_slope_low_u_alpha: float = 1.0
@@ -533,6 +549,10 @@ class JointModelDefinition:
 # Model instances
 # ============================================================
 
+_DS_GP_DOMAIN_MONTHS = (8, 115)
+_TD_GP_DOMAIN_MONTHS = (8, 30)
+_YOUNG_TD_GP_DOMAIN_MONTHS = (8, 18)
+
 VG01 = UnivariateModelDefinition(
     model_id="VG01",
     config_name="age-spoken-ds",
@@ -542,6 +562,7 @@ VG01 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     p_slope_low_alpha=1.0,
     # Independent anchor — Berglund et al. (2001, Table 3; 330 DS children,
     # confirmed non-overlapping with the training data): DS spoken vocabulary is
@@ -573,6 +594,7 @@ VG02 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     p_slope_low_alpha=1.0,
     # Data-informed regularisation — NOT independently anchored. DS comprehension
     # at chronological age has no independent source in the current library
@@ -605,6 +627,9 @@ VG03 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    # Pin the established 8-30 month TD reporting domain explicitly so
+    # query-grid edits cannot resize the approximation.
+    gp_domain_months=_TD_GP_DOMAIN_MONTHS,
     # Independent anchor — Wordbank US-English TD normative deciles (published
     # percentiles, not the training rows): spoken median ~11 words/810 at 12 mo,
     # ~349 at 26 mo (docs/models/PRIORS.md, "TD anchor priors vs Wordbank norms").
@@ -635,6 +660,9 @@ VG04 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    # Comprehension observations end at 25 months, but the declared reporting
+    # range reaches 30. This preserves the existing 8-30 month HSGP domain.
+    gp_domain_months=_TD_GP_DOMAIN_MONTHS,
     # 12 mo understood low anchor — independent Wordbank TD norm: comprehension
     # median ~84 words/810 at 12 mo. Beta(1.2, 8) matches at median ~84 (the
     # in-sample mean ~82 corroborates); the old Beta(1,20) centred it at ~28, well
@@ -665,6 +693,7 @@ VG05 = BivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
     # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
     # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
@@ -695,6 +724,7 @@ VG07 = BivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
     # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
     # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
@@ -727,6 +757,7 @@ VG08 = BivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
     # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
     # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
@@ -761,6 +792,7 @@ VG09 = BivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
     # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
     # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
@@ -797,6 +829,7 @@ VG10 = BivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
     # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
     # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
@@ -838,6 +871,7 @@ VG11 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    gp_domain_months=_TD_GP_DOMAIN_MONTHS,
     # Spoken trajectory priors shared with VG03 (see the note there): lower the
     # 12 mo anchor for delayed TD production, soften the 26 mo anchor, widen eta.
     p_slope_low_alpha=1.0,
@@ -873,6 +907,9 @@ VG12 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    # As in VG04, observed comprehension ends at 25 months while reporting
+    # reaches 30; this preserves the established 8-30 month HSGP domain.
+    gp_domain_months=_TD_GP_DOMAIN_MONTHS,
     # Understood trajectory priors shared with VG04 (see the note there): the
     # 12 mo low anchor is anchored to the independent Wordbank comprehension norm
     # (~83 words), while the 26 mo high anchor has no independent CDI norm (WS is
@@ -914,6 +951,7 @@ VG13 = BivariateModelDefinition(
     max_age_months=18,
     slope_anchors=(10, 16),
     ages_query=[8, 10, 12, 14, 16, 18],
+    gp_domain_months=_YOUNG_TD_GP_DOMAIN_MONTHS,
     # Understood trajectory — Wordbank TD normative medians (published deciles):
     # ~50 words/810 at 10 mo, ~180 at 16 mo. Beta(1,15) (10 mo, median ~36) sits a
     # touch below the norm floor by design (Fenson: percentiles are unstable where
@@ -969,6 +1007,7 @@ VG14 = TrivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood trajectory: matches VG05 — anchors aligned with the recalibrated
     # VG02 (#135): raise the 24 mo anchor (Beta(1,10) -> Beta(1,7)), soften the
     # near-uniform 84 mo anchor (Beta(1.1,1.1) -> Beta(2,1.5)), widen eta_u to 0.6.
@@ -1002,6 +1041,7 @@ VG15 = JointModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # r/q/p_U priors seeded from the (uk_06-included) VG14 fit (see dataclass
     # defaults); psi ~ logNormal(0.3, 0.5) (weakly positive, spans independence);
     # study random intercepts on f_U/g/h (tau_*=0.5).
@@ -1060,6 +1100,7 @@ VG16 = BivariateModelDefinition(
     n_trials=810,
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors aligned with the recalibrated VG02 (#135): raise the
     # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
     # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
@@ -1117,3 +1158,117 @@ MODEL_REGISTRY: dict[
     "vg15": VG15,
     "vg16": VG16,
 }
+
+
+def _validate_positive_scale_fields(value, *, path: str) -> None:
+    """Recursively validate distribution shape and scale parameters."""
+    if not is_dataclass(value) or isinstance(value, type):
+        return
+    for item in fields(value):
+        field_value = getattr(value, item.name)
+        field_path = f"{path}.{item.name}"
+        if is_dataclass(field_value):
+            _validate_positive_scale_fields(field_value, path=field_path)
+        elif item.name.endswith(("_alpha", "_beta", "_sigma")):
+            if (
+                not isinstance(field_value, (int, float))
+                or not math.isfinite(field_value)
+                or field_value <= 0
+            ):
+                raise ValueError(f"{field_path} must be positive; got {field_value!r}.")
+
+
+def validate_model_definition(definition) -> None:
+    """Fail early when a declarative model specification is internally invalid."""
+    prefix = getattr(definition, "model_id", type(definition).__name__)
+    if not re.fullmatch(r"VG\d{2}", definition.model_id):
+        raise ValueError(f"{prefix}.model_id must have the form VG01.")
+    if not re.fullmatch(r"[A-Za-z0-9]+(?:[A-Za-z0-9_-]*[A-Za-z0-9])?", definition.config_name):
+        raise ValueError(f"{prefix}.config_name must be a non-empty path-safe label.")
+    if definition.n_trials <= 0:
+        raise ValueError(f"{prefix}.n_trials must be positive.")
+    if (
+        len(definition.slope_anchors) != 2
+        or not all(math.isfinite(age) for age in definition.slope_anchors)
+        or not (definition.slope_anchors[0] < definition.slope_anchors[1])
+    ):
+        raise ValueError(f"{prefix}.slope_anchors must be ordered (low, high).")
+    if not definition.ages_query:
+        raise ValueError(f"{prefix}.ages_query must not be empty.")
+    if not all(
+        isinstance(age, (int, float)) and math.isfinite(age)
+        for age in definition.ages_query
+    ) or list(definition.ages_query) != sorted(set(definition.ages_query)):
+        raise ValueError(f"{prefix}.ages_query must be sorted with no duplicates.")
+    if definition.n_plot <= 0:
+        raise ValueError(f"{prefix}.n_plot must be positive.")
+    if len(definition.ell_months_range) != 2 or not (
+        0 < definition.ell_months_range[0] < definition.ell_months_range[1]
+    ):
+        raise ValueError(
+            f"{prefix}.ell_months_range must be positive and ordered (low, high)."
+        )
+
+    domain = definition.gp_domain_months
+    if domain is not None:
+        if (
+            len(domain) != 2
+            or not all(math.isfinite(age) for age in domain)
+            or not (domain[0] < domain[1])
+        ):
+            raise ValueError(f"{prefix}.gp_domain_months must be ordered (low, high).")
+        required_ages = [*definition.ages_query, *definition.slope_anchors]
+        anchor_age = getattr(definition, "gp_anchor_age_months", None)
+        if anchor_age is not None:
+            required_ages.append(anchor_age)
+        sign_anchors = getattr(definition, "sign_anchor_ages", ())
+        required_ages.extend(sign_anchors)
+        if min(required_ages) < domain[0] or max(required_ages) > domain[1]:
+            raise ValueError(f"{prefix} reference and query ages must lie in its GP domain.")
+
+    sample_fraction = getattr(definition, "sample_fraction", 1.0)
+    if not math.isfinite(sample_fraction) or not 0 < sample_fraction <= 1:
+        raise ValueError(f"{prefix}.sample_fraction must be in (0, 1].")
+    min_study = getattr(definition, "min_study_observations", None)
+    if min_study is not None and min_study <= 0:
+        raise ValueError(f"{prefix}.min_study_observations must be positive.")
+    max_age = getattr(definition, "max_age_months", None)
+    if max_age is not None and max_age <= 0:
+        raise ValueError(f"{prefix}.max_age_months must be positive.")
+    sign_anchors = getattr(definition, "sign_anchor_ages", None)
+    if sign_anchors is not None and (
+        len(sign_anchors) != 3
+        or not all(math.isfinite(age) for age in sign_anchors)
+        or tuple(sign_anchors) != tuple(sorted(sign_anchors))
+    ):
+        raise ValueError(f"{prefix}.sign_anchor_ages must be three ordered ages.")
+    if getattr(definition, "lag_baseline", "within") not in {"within", "population"}:
+        raise ValueError(f"{prefix}.lag_baseline must be 'within' or 'population'.")
+    if getattr(definition, "use_cross_lag", False) and not getattr(
+        definition, "use_subject_re_u", False
+    ):
+        raise ValueError(f"{prefix} cross-lag requires use_subject_re_u=True.")
+
+    _validate_positive_scale_fields(definition, path=prefix)
+
+
+def validate_model_registry() -> None:
+    """Validate every registered specification and registry key at import time."""
+    labels: set[str] = set()
+    for key, definition in MODEL_REGISTRY.items():
+        validate_model_definition(definition)
+        if definition.gp_domain_months is None:
+            raise ValueError(
+                f"Registered model {definition.model_id} must declare gp_domain_months."
+            )
+        if key != definition.model_id.lower():
+            raise ValueError(
+                f"Registry key {key!r} does not match {definition.model_id!r}."
+            )
+        label = f"{definition.model_id}-{definition.config_name}"
+        if label in labels:
+            raise ValueError(f"Duplicate model output label: {label}.")
+        labels.add(label)
+
+
+validate_model_registry()

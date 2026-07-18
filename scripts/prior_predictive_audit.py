@@ -66,7 +66,7 @@ def audit(model_key: str) -> str:
     elif mt == ModelType.UNIVARIATE:
         common.prepare_univariate_data(ctx, d)
         common.configure_univariate_priors(ctx, d)
-        common.build_model(ctx)
+        common.build_model(ctx, d)
         common.prior_predictive_checks(ctx, d.outcome.value, d.outcome_label)
     elif mt == ModelType.BIVARIATE:
         if model_key in _BIVARIATE_RE:
@@ -76,12 +76,12 @@ def audit(model_key: str) -> str:
         else:
             cb.prepare_bivariate_data(ctx, d)
             cb.configure_bivariate_priors(ctx, d)
-            cb.build_model(ctx)
+            cb.build_model(ctx, d)
         cb.prior_predictive_checks(ctx)
     elif mt == ModelType.TRIVARIATE:
         ct.prepare_trivariate_data(ctx, d)
         ct.configure_trivariate_priors(ctx, d)
-        ct.build_model(ctx)
+        ct.build_model(ctx, d)
         ct.prior_predictive_checks(ctx)
     elif mt == ModelType.JOINT:
         cj.prepare_joint_data(ctx, d)

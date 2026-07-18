@@ -361,7 +361,10 @@ def configure_bivariate_priors(
 # ============================================================
 
 
-def build_model(context: BivariateContext):
+def build_model(
+    context: BivariateContext,
+    definition: BivariateModelDefinition,
+):
     """Build the bivariate PyMC model."""
     config = context.model_config
 
@@ -432,6 +435,7 @@ def build_model(context: BivariateContext):
         n_plot=config.n_plot,
         ages_query=config.ages_query,
         slope_anchors=config.slope_anchors,
+        gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
     X_query = grids.X_query
@@ -446,7 +450,7 @@ def build_model(context: BivariateContext):
     ell_high_z = ell_high_months / X_obs_std
     ell_range_z = (ell_low_z, ell_high_z)
 
-    L, M = get_hsgp_hyperparams(X_all_z, ell_range_z)
+    L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
     # Slope anchors
     slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
@@ -1837,7 +1841,10 @@ def fit_bivariate_model(
                 "Priors and hyperparameters",
                 lambda ctx: configure_bivariate_priors(ctx, definition),
             ),
-            ("Model definition and initialisation", build_model),
+            (
+                "Model definition and initialisation",
+                lambda ctx: build_model(ctx, definition),
+            ),
             ("Prior predictive checks", prior_predictive_checks),
             ("Posterior sampling", sample),
             ("Diagnostics", diagnostics),

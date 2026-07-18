@@ -10,13 +10,11 @@ import json
 import os
 import platform
 import shutil
-import subprocess
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
 from importlib import metadata as importlib_metadata
 from typing import Generic, TypeVar
 
@@ -49,6 +47,18 @@ import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
+from vocab_growth.fit_artifacts import (
+    FIT_MANIFEST_FILENAME,
+    create_staging_root,
+    git_metadata,
+    is_reporting_quality_config,
+    normalise_for_json,
+    promote_staged_fit,
+    retain_failed_fit,
+    source_data_hash,
+    write_fit_state,
+    write_json_atomic,
+)
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -282,7 +292,7 @@ PACKAGE_LIST = [
 
 
 def get_hsgp_hyperparams(
-    X_all_z,
+    X_gp_domain_z,
     ell_range_z,
 ):
     """
@@ -290,11 +300,9 @@ def get_hsgp_hyperparams(
 
     Parameters
     ----------
-    X_all_z : np.ndarray
-        Standardised ages for the full evaluation grid the HSGP basis is
-        evaluated on (observed + plot + query + anchor points), shape (n, 1).
-        Passing only the observed ages under-covers the domain whenever the
-        query grid extends beyond the observed range.
+    X_gp_domain_z : np.ndarray
+        Standardised lower and upper endpoints of the declared HSGP age domain,
+        shape (2, 1). Reporting query ages are deliberately excluded.
     ell_range_z : tuple of float
         Length-scale range in z-score scale.
 
@@ -304,8 +312,8 @@ def get_hsgp_hyperparams(
         ``(L, M)`` where ``L`` is the HSGP boundary and ``M`` is the basis
         size, each wrapped in a single-element list (one per input dim).
     """
-    x_min = float(np.min(X_all_z))
-    x_max = float(np.max(X_all_z))
+    x_min = float(np.min(X_gp_domain_z))
+    x_max = float(np.max(X_gp_domain_z))
 
     ell_low_z = ell_range_z[0]
     ell_high_z = ell_range_z[1]
@@ -487,7 +495,10 @@ def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
     return model_samples
 
 
-def build_model(context: ModelFitContext):
+def build_model(
+    context: ModelFitContext,
+    definition: UnivariateModelDefinition,
+):
     """
     Builds vocabulary growth model.
     """
@@ -543,6 +554,7 @@ def build_model(context: ModelFitContext):
         n_plot=context.model_config.n_plot,
         ages_query=context.model_config.ages_query,
         slope_anchors=context.model_config.slope_anchors,
+        gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
     X_plot_z = grids.X_plot_z
@@ -561,7 +573,7 @@ def build_model(context: ModelFitContext):
     ell_range_z = (ell_low_z, ell_high_z)
 
     L, M = get_hsgp_hyperparams(
-        X_all_z,
+        grids.X_gp_domain_z,
         ell_range_z,
     )
 
@@ -1198,30 +1210,13 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
 
 def report(context: ModelFitContext):
     """
-    Copy output artefacts to the report directory.
+    Copy the model's Quarto source into its fitted output directory.
+
+    The technical report's figure cache is deliberately refreshed only by
+    ``scripts/sync_report_figures.py`` after all selected fits have passed the
+    publication checks. This prevents a failed replacement fit from partially
+    changing the report cache.
     """
-
-    REPORT_OUTPUT_DIR = os.path.join(
-        local_env.REPORT_FIGS_DIR, context.reporting.model_label
-    )
-
-    if os.path.exists(REPORT_OUTPUT_DIR):
-        shutil.rmtree(REPORT_OUTPUT_DIR)
-
-    os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
-
-    copied = 0
-    for filename in os.listdir(context.reporting.output_dir):
-        if not (
-            filename.endswith(".png")
-            or filename.endswith(".svg")
-            or filename.endswith(".csv")
-        ):
-            continue
-        source_file = os.path.join(context.reporting.output_dir, filename)
-        dest_file = os.path.join(REPORT_OUTPUT_DIR, filename)
-        shutil.copy(source_file, dest_file)
-        copied += 1
 
     model_output_md_source = os.path.join(
         local_env.DOCS_DIR, "models", context.reporting.model_name.lower(), "index.qmd"
@@ -1240,9 +1235,11 @@ def report(context: ModelFitContext):
         "Artefacts",
         [
             ("Output directory", context.reporting.output_dir),
-            ("Report figures directory", REPORT_OUTPUT_DIR),
-            ("Figures / tables copied", copied),
             ("Quarto document", model_output_md_dest),
+            (
+                "Technical report cache",
+                "Run scripts/sync_report_figures.py after validated fits complete",
+            ),
         ],
     )
 
@@ -1267,32 +1264,10 @@ def _plot_and_print_dist(context, dist, name):
 
 _RHAT_WARN = 1.01
 _ESS_WARN = 400
-_REPORTING_CONFIGS = {
-    "reporting",
-    "report",
-    "rep",
-    "rep-lite",
-    "reporting-lite",
-    "rep_lite",
-}
-_NON_REPORTING_CONFIGS = {"dev", "development", "test", "testing"}
 
 
 class ConvergenceGateError(RuntimeError):
     """Raised when a reporting-quality fit fails convergence checks."""
-
-
-def is_reporting_quality_config(sampling_config_name: str) -> bool:
-    """Classify a known sampling tier without silently accepting new aliases."""
-    name = sampling_config_name.strip().lower()
-    if name in _REPORTING_CONFIGS:
-        return True
-    if name in _NON_REPORTING_CONFIGS:
-        return False
-    raise ValueError(
-        f"Sampling configuration {sampling_config_name!r} has no convergence-gate "
-        "classification. Add it explicitly before fitting."
-    )
 
 
 def enforce_convergence_gate(
@@ -1465,49 +1440,6 @@ def configure_univariate_priors(
     context.set_model_config(config)
 
 
-def _json_default(value):
-    """Serialise enums and uncommon configuration values in fit manifests."""
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, np.generic):
-        return value.item()
-    return str(value)
-
-
-def _git_metadata() -> dict[str, object]:
-    """Return the repository revision and dirty state without requiring Git."""
-
-    def run_git(*args: str) -> str | None:
-        try:
-            result = subprocess.run(
-                ["git", *args],
-                cwd=local_env.ROOT_DIR,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return result.stdout.strip()
-
-    commit = run_git("rev-parse", "HEAD")
-    branch_result = run_git("branch", "--show-current")
-    if branch_result is None:
-        branch = None
-        detached = None
-    else:
-        branch = branch_result or None
-        detached = not bool(branch_result)
-    status = run_git("status", "--porcelain", "--untracked-files=normal")
-    return {
-        "commit": commit,
-        "branch": branch,
-        "detached": detached,
-        "dirty": None if status is None else bool(status),
-    }
-
-
 def _analysis_data_hash(df: pd.DataFrame) -> str:
     """Hash the exact prepared analysis frame, including schema and row order."""
     digest = hashlib.sha256()
@@ -1536,18 +1468,26 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
         for column in ("understood", "spoken", "signed")
         if column in analysis_df.columns
     }
-    packages = {
-        name: distribution.version
-        for distribution in importlib_metadata.distributions()
-        if (name := distribution.metadata.get("Name"))
-    }
+    packages: dict[str, str] = {}
+    direct_origins: dict[str, object] = {}
+    for distribution in importlib_metadata.distributions():
+        name = distribution.metadata.get("Name")
+        if not name:
+            continue
+        packages[name] = distribution.version
+        direct_url = distribution.read_text("direct_url.json")
+        if direct_url:
+            try:
+                direct_origins[name] = json.loads(direct_url)
+            except json.JSONDecodeError:
+                direct_origins[name] = {"unparsed": direct_url.strip()}
     manifest = {
         "schema_version": 1,
         "created_at_utc": datetime.now(UTC).isoformat(),
         "model": {
             "model_id": definition.model_id,
             "config_name": definition.config_name,
-            "definition": asdict(definition) if is_dataclass(definition) else str(definition),
+            "definition": normalise_for_json(definition),
         },
         "sampling": {
             "configuration_name": context.sampling_config_name,
@@ -1558,20 +1498,22 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
             "columns": list(analysis_df.columns),
             "n_trials": context.model_data.n_trials,
             "analysis_frame_hash": _analysis_data_hash(analysis_df),
+            "source_data_hash": source_data_hash(local_env.DATA_DIR),
             "source_row_counts": source_counts,
             "observed_outcome_counts": outcome_counts,
         },
-        "code": _git_metadata(),
+        "code": git_metadata(local_env.ROOT_DIR),
         "runtime": {
             "python": sys.version,
             "platform": platform.platform(),
             "packages": dict(sorted(packages.items(), key=lambda item: item[0].lower())),
+            "direct_package_origins": dict(
+                sorted(direct_origins.items(), key=lambda item: item[0].lower())
+            ),
         },
     }
-    manifest_path = os.path.join(context.reporting.output_dir, "fit_manifest.json")
-    with open(manifest_path, "w", encoding="utf-8") as manifest_file:
-        json.dump(manifest, manifest_file, indent=2, sort_keys=True, default=_json_default)
-        manifest_file.write("\n")
+    manifest_path = os.path.join(context.reporting.output_dir, FIT_MANIFEST_FILENAME)
+    write_json_atomic(manifest_path, manifest)
 
 
 def run_fit_pipeline(
@@ -1599,11 +1541,20 @@ def run_fit_pipeline(
     console.print()
     package_metadata.report_package_versions(PACKAGE_LIST)
 
+    output_root = local_env.output_root()
+    canonical_reporting = reporting.ReportingConfiguration(
+        model_name=definition.model_id,
+        config_name=definition.config_name,
+        output_root_dir=output_root,
+        ci_prob=0.89,
+        interval_kind="eti",
+    )
+    staging_root = create_staging_root(output_root, canonical_reporting.model_label)
     context = ModelFitContext(
         reporting=reporting.ReportingConfiguration(
             model_name=definition.model_id,
             config_name=definition.config_name,
-            output_root_dir=local_env.output_root(),
+            output_root_dir=staging_root,
             ci_prob=0.89,
             interval_kind="eti",
         ),
@@ -1611,23 +1562,74 @@ def run_fit_pipeline(
         sampling_config_name=config,
     )
 
-    if os.path.exists(context.reporting.output_dir):
-        shutil.rmtree(context.reporting.output_dir)
-
     os.makedirs(context.reporting.output_dir, exist_ok=True)
+    write_fit_state(
+        context.reporting.output_dir,
+        "initialising",
+        model_id=definition.model_id,
+        config_name=definition.config_name,
+        sampling_config_name=config,
+    )
 
     timings = context.timings
     run_started = time.perf_counter()
 
-    for stage_index, (name, fn) in enumerate(stages):
-        with section(name, timings=timings):
-            fn(context)
-            if stage_index == 0:
-                write_fit_manifest(context, definition)
+    try:
+        for stage_index, (name, fn) in enumerate(stages):
+            write_fit_state(
+                context.reporting.output_dir,
+                "running",
+                model_id=definition.model_id,
+                config_name=definition.config_name,
+                sampling_config_name=config,
+                stage=name,
+            )
+            with section(name, timings=timings):
+                fn(context)
+                if stage_index == 0:
+                    write_fit_manifest(context, definition)
 
-    pipeline_summary(
-        f"Pipeline summary — {context.reporting.model_label}", timings
-    )
+        required_paths = [
+            os.path.join(context.reporting.output_dir, FIT_MANIFEST_FILENAME),
+            os.path.join(context.reporting.output_dir, "trace.nc"),
+        ]
+        missing = [path for path in required_paths if not os.path.isfile(path)]
+        if missing:
+            raise RuntimeError(
+                "Fit pipeline reached finalisation without required artefact(s): "
+                + ", ".join(os.path.basename(path) for path in missing)
+            )
+        write_fit_state(
+            context.reporting.output_dir,
+            "complete",
+            model_id=definition.model_id,
+            config_name=definition.config_name,
+            sampling_config_name=config,
+        )
+        promote_staged_fit(
+            context.reporting.output_dir,
+            canonical_reporting.output_dir,
+        )
+        context.reporting.output_root_dir = output_root
+    except BaseException as exc:
+        if os.path.isdir(context.reporting.output_dir):
+            write_fit_state(
+                context.reporting.output_dir,
+                "failed",
+                model_id=definition.model_id,
+                config_name=definition.config_name,
+                sampling_config_name=config,
+                error=exc,
+            )
+            retained = retain_failed_fit(context.reporting.output_dir, output_root)
+            if retained is not None:
+                console.print(f"[yellow]Failed fit retained for diagnosis: {retained}[/yellow]")
+        raise
+    finally:
+        if os.path.isdir(staging_root):
+            shutil.rmtree(staging_root)
+
+    pipeline_summary(f"Pipeline summary — {context.reporting.model_label}", timings)
     console.print(
         f"[dim]Total wall time: "
         f"{vg_reporting.format_duration(time.perf_counter() - run_started)}[/dim]"
@@ -1655,7 +1657,10 @@ def fit_single_outcome_model(
                 "Priors and hyperparameters",
                 lambda ctx: configure_univariate_priors(ctx, definition),
             ),
-            ("Model definition and initialisation", build_model),
+            (
+                "Model definition and initialisation",
+                lambda ctx: build_model(ctx, definition),
+            ),
             (
                 "Prior predictive checks",
                 lambda ctx: prior_predictive_checks(

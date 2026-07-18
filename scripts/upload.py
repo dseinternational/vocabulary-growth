@@ -6,12 +6,18 @@ Upload model output to Azure Blob Storage.
 
 import argparse
 import os
+from dataclasses import asdict
 
+import dse_research_utils.statistics.models.sampling as sampling
 from rich import print
 
 from vocab_growth import environment as local_env
+from vocab_growth.fit_artifacts import (
+    fit_validation_kwargs,
+    source_data_hash,
+)
 from vocab_growth.models.definitions import MODEL_REGISTRY
-from vocab_growth.storage import upload_to_blob_storage
+from vocab_growth.storage import upload_to_blob_storage, validate_fit_for_upload
 
 # Registry-derived so a newly added model is uploadable without editing this
 # file (key -> (model_id, config_name), matching every model's output folder
@@ -33,6 +39,11 @@ if __name__ == "__main__":
         "--include-traces",
         action="store_true",
         help="Include trace files (.nc) in the upload (excluded by default).",
+    )
+    parser.add_argument(
+        "--config",
+        default="rep",
+        help="Expected reporting sampling configuration (default: rep).",
     )
     parser.add_argument(
         "--output-dir",
@@ -57,6 +68,9 @@ if __name__ == "__main__":
         print(f"[bold red]Unknown model: {args.model}[/bold red]")
         exit(1)
 
+    expected_sampling = sampling.get_sampling_configuration(args.config)
+    current_source_hash = source_data_hash(local_env.DATA_DIR)
+    upload_plan = []
     for model_id, (model_name, config_name) in to_upload:
         model_label = f"{model_name}-{config_name}"
         output_dir = os.path.join(local_env.models_output_dir(), model_label)
@@ -68,6 +82,20 @@ if __name__ == "__main__":
             print("Run fit_model.py first to generate model output.")
             exit(1)
 
+        definition = MODEL_REGISTRY[model_id]
+        validation_kwargs = fit_validation_kwargs(
+            "publish",
+            expected_definition=definition,
+            expected_sampling_config_name=args.config,
+            expected_sampling_parameters=asdict(expected_sampling),
+            current_source_data_hash=current_source_hash,
+        )
+        validated_output = validate_fit_for_upload(output_dir, validation_kwargs)
+        upload_plan.append((validated_output, model_label))
+
+    for validated_output, model_label in upload_plan:
         upload_to_blob_storage(
-            output_dir, model_label, include_traces=args.include_traces
+            validated_output,
+            model_label,
+            include_traces=args.include_traces,
         )
