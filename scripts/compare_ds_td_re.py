@@ -25,7 +25,7 @@ Estimands, per outcome, written to the configured comparisons dir (default
 ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
 
 * ``ds_td_<outcome>_re_expected_words.csv``   — TD & DS expected words, the
-  difference δ(a)=TD-DS (+90/50% HDI, P(TD>DS)) and the ratio.
+  difference δ(a)=TD-DS (+89/50% interval, P(TD>DS)) and the ratio.
 * ``ds_td_<outcome>_re_learning_rate.csv``    — dY/da for each population and
   the difference Δ(a) (words/month).
 * ``ds_td_<outcome>_re_attainment_delay.csv`` — D(v)=age_DS(v)-age_TD(v): how
@@ -372,7 +372,7 @@ def _print_summary(outcome, ew, lr, ad, disp, disp_ds_lab) -> None:
     print("  Attainment delay D(v) (months DS behind TD), coverage-filtered:")
     for _, r in ad[ad["coverage"] >= MIN_COVERAGE].iterrows():
         print(f"    {int(r['words']):>3} words: {r['median']:5.1f} "
-              f"[{r['hdi90_lo']:.1f}, {r['hdi90_hi']:.1f}]")
+              f"[{r['ci_lo']:.1f}, {r['ci_hi']:.1f}]")
     print(f"  Dispersion contrasts at key ages (DS={disp_ds_lab}, study-RE only):")
     for a in KEY_AGES:
         print(f"    {a:>2} mo: kappa TD={_at_age(disp,a,'kappa_TD_median'):4.1f} "
@@ -438,7 +438,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
         print(f"    U={int(r['words']):>3}: TD q={r['q_TD_median']:.2f}  "
               f"DS q={r['q_DS_median']:.2f}  "
               f"Δq(TD-DS)={r['dq_median']:+.2f} "
-              f"[{r['dq_hdi90_lo']:+.2f}, {r['dq_hdi90_hi']:+.2f}]  "
+              f"[{r['dq_ci_lo']:+.2f}, {r['dq_ci_hi']:+.2f}]  "
               f"P(TD>DS)={r['dq_p_gt0']:.2f}")
 
 

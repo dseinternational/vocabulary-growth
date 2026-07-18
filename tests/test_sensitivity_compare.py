@@ -17,21 +17,21 @@ import pandas as pd
 from vocab_growth.sensitivity.compare import compare_dirs, summarise
 
 
-def test_summarise_tolerates_mixed_bool_none_hdi_column(tmp_path):
-    # Hand-built frame in the VG15 shape: object-dtype within_baseline_hdi
-    # mixing True/False/None.
+def test_summarise_tolerates_mixed_bool_none_ci_column(tmp_path):
+    # Hand-built frame in the VG15 shape: object-dtype within_baseline_ci
+    # mixing True/False/None (the interval-less P_psi_gt_1 / four-cell rows).
     comparison = pd.DataFrame([
-        {"quantity": "q", "age_months": 30, "delta": -0.05, "within_baseline_hdi": True},
-        {"quantity": "psi", "age_months": -1, "delta": 0.4, "within_baseline_hdi": False},
-        {"quantity": "Ey_any", "age_months": 30, "delta": 20.0, "within_baseline_hdi": None},
-        {"quantity": "P_psi_gt_1", "age_months": -1, "delta": -0.01, "within_baseline_hdi": None},
+        {"quantity": "q", "age_months": 30, "delta": -0.05, "within_baseline_ci": True},
+        {"quantity": "psi", "age_months": -1, "delta": 0.4, "within_baseline_ci": False},
+        {"quantity": "four_cell", "age_months": 30, "delta": 20.0, "within_baseline_ci": None},
+        {"quantity": "P_psi_gt_1", "age_months": -1, "delta": -0.01, "within_baseline_ci": None},
     ])
-    assert comparison["within_baseline_hdi"].dtype == object  # the failing shape
+    assert comparison["within_baseline_ci"].dtype == object  # the failing shape
 
     row = summarise(comparison, str(tmp_path), label="vg15-variant")
     assert row["n_checked"] == 2
-    assert row["n_within_hdi"] == 1
-    assert row["quantities_outside_hdi"] == "psi"
+    assert row["n_within_ci"] == 1
+    assert row["quantities_outside_ci"] == "psi"
     assert row["verdict"] == "sensitive: psi"
     # Unchecked (None) rows still count towards the magnitude summary.
     assert row["max_abs_delta"] == 20.0
@@ -40,15 +40,16 @@ def test_summarise_tolerates_mixed_bool_none_hdi_column(tmp_path):
 def _write_vg15_outputs(dirpath, q_median, p_any_median, ey_any_median, psi_median, p_psi_gt_1):
     pd.DataFrame({
         "age_months": [30], "q_median": [q_median],
-        "q_hdi_lo": [0.4], "q_hdi_hi": [0.6],
+        "q_ci_lo": [0.4], "q_ci_hi": [0.6],
     }).to_csv(dirpath / "posterior_summary_q.csv", index=False)
     pd.DataFrame({
         "age_months": [30], "p_any_median": [p_any_median],
-        "p_any_hdi_lo": [0.2], "p_any_hdi_hi": [0.4],
+        "p_any_ci_lo": [0.2], "p_any_ci_hi": [0.4],
         "Ey_any_median": [ey_any_median],
+        "Ey_any_ci_lo": [ey_any_median - 30.0], "Ey_any_ci_hi": [ey_any_median + 30.0],
     }).to_csv(dirpath / "posterior_summary_p_any.csv", index=False)
     pd.DataFrame({
-        "psi_median": [psi_median], "psi_hdi_lo": [1.2], "psi_hdi_hi": [1.9],
+        "psi_median": [psi_median], "psi_ci_lo": [1.2], "psi_ci_hi": [1.9],
         "P_psi_gt_1": [p_psi_gt_1],
     }).to_csv(dirpath / "posterior_summary_psi.csv", index=False)
 
@@ -58,7 +59,8 @@ def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
     base_dir.mkdir(), var_dir.mkdir()
     _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
                         ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
-    # q shifts outside the baseline HDI; p_any and psi stay within.
+    # q shifts outside the baseline 89% interval; p_any, Ey_any and psi stay within
+    # (base Ey_any interval is [90, 150]; the variant median 120 sits inside it).
     _write_vg15_outputs(var_dir, q_median=0.7, p_any_median=0.35,
                         ey_any_median=120.0, psi_median=1.6, p_psi_gt_1=0.98)
     pd.DataFrame({
@@ -66,9 +68,10 @@ def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
     }).to_csv(var_dir / "diagnostics.csv", index=False)
 
     comparison = compare_dirs(str(base_dir), str(var_dir))
-    by_qty = comparison.set_index("quantity")["within_baseline_hdi"]
-    # The HDI-less series carry None, so the column is object dtype.
-    assert by_qty["Ey_any"] is None
+    by_qty = comparison.set_index("quantity")["within_baseline_ci"]
+    # Ey_any now carries an interval and is assessed; only the interval-less
+    # P_psi_gt_1 row stays None, so the column is still object dtype.
+    assert by_qty["Ey_any"] is True
     assert by_qty["P_psi_gt_1"] is None
     assert by_qty["q"] is False
     assert by_qty["p_any"] is True
@@ -76,7 +79,7 @@ def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
 
     row = summarise(comparison, str(var_dir), label="vg15-variant")
     assert row["converged"] is True
-    assert row["n_checked"] == 3
-    assert row["n_within_hdi"] == 2
-    assert row["quantities_outside_hdi"] == "q"
+    assert row["n_checked"] == 4
+    assert row["n_within_ci"] == 3
+    assert row["quantities_outside_ci"] == "q"
     assert row["verdict"] == "sensitive: q"

@@ -4,7 +4,7 @@
 Compute time-to-milestone tables for every fitted model.
 
 For each target word count we report the posterior **age at which the population
-trajectory first reaches it**, summarised as the median and 90% HDI of the
+trajectory first reaches it**, summarised as the median and 89% HDI of the
 *per-draw* crossing age (median-of-crossings). This is the statistically correct
 inversion: it draws each posterior trajectory, finds where that draw crosses the
 target, and summarises those ages — as opposed to inverting the median/HDI count
@@ -64,24 +64,24 @@ BIVARIATE = {
 
 
 def plot_milestone(table: pd.DataFrame, title: str, out_base: str) -> None:
-    """Plot the median milestone age (with 90% HDI) against each target count."""
+    """Plot the median milestone age (with 89% HDI) against each target count."""
     t = table.dropna(subset=["age_median"])
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     if not t.empty:
         yerr = [
-            (t["age_median"] - t["age_hdi_lo"]).to_numpy(),
-            (t["age_hdi_hi"] - t["age_median"]).to_numpy(),
+            (t["age_median"] - t["age_ci_lo"]).to_numpy(),
+            (t["age_ci_hi"] - t["age_median"]).to_numpy(),
         ]
         ax.errorbar(
             t["target_words"], t["age_median"], yerr=yerr,
             fmt="o-", color=plot_styles.COLOUR_BLUE, lw=2, capsize=4,
-            label="Median age (90% HDI)",
+            label="Median age (89% HDI)",
         )
         for _, r in t.iterrows():
             if r["prop_reaching"] < 0.999:
                 ax.annotate(
                     f"{r['prop_reaching']:.0%} of draws",
-                    (r["target_words"], r["age_hdi_hi"]),
+                    (r["target_words"], r["age_ci_hi"]),
                     textcoords="offset points", xytext=(0, 6),
                     ha="center", fontsize=7, color=plot_styles.LINE_COLOUR,
                 )

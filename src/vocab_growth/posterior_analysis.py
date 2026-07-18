@@ -1,11 +1,20 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Post-processing: posterior summaries, learning rate, kappa summaries."""
+"""Post-processing: posterior summaries, learning rate, kappa summaries.
 
-import dse_research_utils.statistics.intervals as stats_intervals
+Interval columns follow the project convention (see :mod:`vocab_growth.intervals`
+and ``docs/models/README.md``): the posterior median with an inner 50%
+(``*_ci50_lo``/``*_ci50_hi``) and an outer 89% (``*_ci_lo``/``*_ci_hi``)
+credible interval. Counts and probabilities are summarised with equal-tailed
+intervals (ETI); the ``interval_kind`` argument threads the reporting config's
+kind through so the tables stay consistent with the plots and diagnostics.
+"""
+
 import numpy as np
 import pandas as pd
+
+from vocab_growth import intervals
 
 
 def extract_posterior(trace, name, dim):
@@ -58,7 +67,9 @@ def add_probability_estimand_columns(
     p_subject_marginal: np.ndarray,
     *,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    inner_ci_prob: float = intervals.INNER_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
 ) -> pd.DataFrame:
     """Add explicit population and new-child p/Ey columns to a summary table.
 
@@ -68,23 +79,28 @@ def add_probability_estimand_columns(
     target a new-child distribution that integrates over subject-level
     variability. This helper makes both estimands visible without changing the
     existing column contract.
+
+    Each block emits the median with an inner (``*_ci50_*``) and outer
+    (``*_ci_*``) interval at the project convention (:mod:`vocab_growth.intervals`).
     """
     out = summary.copy()
 
     def add_block(prefix: str, draws: np.ndarray) -> None:
         ey = draws * n_trials
-        p_hdi = np.array(
-            [stats_intervals.hdi_1d(row, hdi_prob=hdi_prob) for row in draws]
-        )
-        ey_hdi = np.array(
-            [stats_intervals.hdi_1d(row, hdi_prob=hdi_prob) for row in ey]
-        )
+        p_outer = intervals.bands(draws, ci_prob, interval_kind, sample_axis=1)
+        p_inner = intervals.bands(draws, inner_ci_prob, interval_kind, sample_axis=1)
+        ey_outer = intervals.bands(ey, ci_prob, interval_kind, sample_axis=1)
+        ey_inner = intervals.bands(ey, inner_ci_prob, interval_kind, sample_axis=1)
         out[f"p_{prefix}_median"] = np.median(draws, axis=1)
-        out[f"p_{prefix}_hdi_lo"] = p_hdi[:, 0]
-        out[f"p_{prefix}_hdi_hi"] = p_hdi[:, 1]
+        out[f"p_{prefix}_ci50_lo"] = p_inner[:, 0]
+        out[f"p_{prefix}_ci50_hi"] = p_inner[:, 1]
+        out[f"p_{prefix}_ci_lo"] = p_outer[:, 0]
+        out[f"p_{prefix}_ci_hi"] = p_outer[:, 1]
         out[f"Ey_{prefix}_median"] = np.median(ey, axis=1)
-        out[f"Ey_{prefix}_hdi_lo"] = ey_hdi[:, 0]
-        out[f"Ey_{prefix}_hdi_hi"] = ey_hdi[:, 1]
+        out[f"Ey_{prefix}_ci50_lo"] = ey_inner[:, 0]
+        out[f"Ey_{prefix}_ci50_hi"] = ey_inner[:, 1]
+        out[f"Ey_{prefix}_ci_lo"] = ey_outer[:, 0]
+        out[f"Ey_{prefix}_ci_hi"] = ey_outer[:, 1]
 
     add_block("population", p_population)
     add_block("subject_marginal", p_subject_marginal)
@@ -96,10 +112,17 @@ def posterior_summary_table(
     p_query: np.ndarray,
     y_query: np.ndarray,
     n_trials: int,
-    hdi_prob: float = 0.90
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    inner_ci_prob: float = intervals.INNER_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
 ) -> pd.DataFrame:
     """
     Build the posterior summary DataFrame at query ages.
+
+    Each estimand (latent proportion ``p``, expected count ``Ey``, new-child
+    predictive count ``Y``) is summarised by its median with an inner
+    (``*_ci50_*``) and outer (``*_ci_*``) credible interval at the project
+    convention (:mod:`vocab_growth.intervals`).
 
     Parameters
     ----------
@@ -111,8 +134,12 @@ def posterior_summary_table(
         Posterior predictive word counts for each query age.
     n_trials : int
         Maximum score.
-    hdi_prob : float
-        HDI probability mass.
+    ci_prob : float
+        Outer interval probability mass (default 0.89).
+    inner_ci_prob : float
+        Inner interval probability mass (default 0.50).
+    interval_kind : {"eti", "hdi"}
+        Interval convention; counts/proportions default to equal-tailed.
 
     Returns
     -------
@@ -124,21 +151,30 @@ def posterior_summary_table(
         y = y_query[j, :]
         Ey = p * n_trials
 
-        p_lo, p_hi = stats_intervals.hdi_1d(p, hdi_prob=hdi_prob)
-        Ey_lo, Ey_hi = stats_intervals.hdi_1d(Ey, hdi_prob=hdi_prob)
-        y_lo, y_hi = stats_intervals.hdi_1d(y, hdi_prob=hdi_prob)
+        p_lo, p_hi = intervals.interval_1d(p, ci_prob, interval_kind)
+        p_lo50, p_hi50 = intervals.interval_1d(p, inner_ci_prob, interval_kind)
+        Ey_lo, Ey_hi = intervals.interval_1d(Ey, ci_prob, interval_kind)
+        Ey_lo50, Ey_hi50 = intervals.interval_1d(Ey, inner_ci_prob, interval_kind)
+        y_lo, y_hi = intervals.interval_1d(y, ci_prob, interval_kind)
+        y_lo50, y_hi50 = intervals.interval_1d(y, inner_ci_prob, interval_kind)
 
         rows.append({
             "age_months": float(a),
             "p_median": float(np.median(p)),
-            "p_hdi_lo": p_lo,
-            "p_hdi_hi": p_hi,
+            "p_ci50_lo": p_lo50,
+            "p_ci50_hi": p_hi50,
+            "p_ci_lo": p_lo,
+            "p_ci_hi": p_hi,
             "Ey_median": float(np.median(Ey)),
-            "Ey_hdi_lo": Ey_lo,
-            "Ey_hdi_hi": Ey_hi,
+            "Ey_ci50_lo": Ey_lo50,
+            "Ey_ci50_hi": Ey_hi50,
+            "Ey_ci_lo": Ey_lo,
+            "Ey_ci_hi": Ey_hi,
             "Y_median": float(np.median(y)),
-            "Y_hdi_lo": y_lo,
-            "Y_hdi_hi": y_hi,
+            "Y_ci50_lo": y_lo50,
+            "Y_ci50_hi": y_hi50,
+            "Y_ci_lo": y_lo,
+            "Y_ci_hi": y_hi,
             "P(Y=0)": float((y == 0).mean()),
             "P(Y<=5)": float((y <= 5).mean()),
             "P(Y<=10)": float((y <= 10).mean()),

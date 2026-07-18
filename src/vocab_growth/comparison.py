@@ -40,6 +40,7 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth import environment as env
+from vocab_growth import intervals
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
 DEFAULT_MILESTONES = (25, 50, 100, 200, 400)
@@ -237,7 +238,7 @@ def hdi_from_samples(x: np.ndarray, prob: float) -> tuple[float, float]:
 
 
 def summarise_per_N(samples: np.ndarray, grid: np.ndarray) -> pd.DataFrame:
-    """Median + 50%/90% HDI across draws (axis 0) per grid column, with coverage.
+    """Median + 50%/89% interval across draws (axis 0) per grid column, with coverage.
 
     Thin alias of :func:`summarise_draws` with ``grid_name="N"`` — kept as a
     separate name for the (many) call sites that read as "per N words".
@@ -297,7 +298,7 @@ def milestone_table(
     W: np.ndarray,
     ages: np.ndarray,
     targets=DEFAULT_MILESTONES,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
 ) -> pd.DataFrame:
     """Posterior age at which the trajectory first reaches each target word count.
 
@@ -325,14 +326,18 @@ def milestone_table(
         if reached.size == 0:
             rows.append({
                 "target_words": target, "age_median": None,
-                "age_hdi_lo": None, "age_hdi_hi": None, "prop_reaching": prop,
+                "age_ci50_lo": None, "age_ci50_hi": None,
+                "age_ci_lo": None, "age_ci_hi": None, "prop_reaching": prop,
             })
             continue
-        lo, hi = hdi_from_samples(reached, hdi_prob)
+        # Milestone ages are boundary-censored/skewed -> highest-density interval.
+        lo, hi = hdi_from_samples(reached, ci_prob)
+        lo50, hi50 = hdi_from_samples(reached, intervals.INNER_CI_PROB)
         rows.append({
             "target_words": target,
             "age_median": float(np.median(reached)),
-            "age_hdi_lo": lo, "age_hdi_hi": hi, "prop_reaching": round(prop, 3),
+            "age_ci50_lo": lo50, "age_ci50_hi": hi50,
+            "age_ci_lo": lo, "age_ci_hi": hi, "prop_reaching": round(prop, 3),
         })
     return pd.DataFrame(rows)
 
@@ -341,19 +346,20 @@ def milestone_table(
 # Plot helpers
 # ----------------------------------------------------------------------------
 def overlay_age_curves(title, series, out_base, *, ylabel="Expected words"):
-    """Overlay Ey_median + Ey_hdi bands from posterior_summary-shaped frames.
+    """Overlay Ey_median + Ey interval bands from posterior_summary-shaped frames.
 
     ``series`` is a list of ``(label, dataframe, colour)``; each frame needs
-    ``age_months``, ``Ey_median``, ``Ey_hdi_lo``, ``Ey_hdi_hi``.
+    ``age_months``, ``Ey_median``, ``Ey_ci_lo``, ``Ey_ci_hi``.
     """
     import dse_research_utils.plot.styles as plot_styles
     import matplotlib.pyplot as plt
 
+    pct = int(round(intervals.DEFAULT_CI_PROB * 100))
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     for label, df, colour in series:
         ax.fill_between(
-            df["age_months"], df["Ey_hdi_lo"], df["Ey_hdi_hi"],
-            color=colour, alpha=0.18, linewidth=0, label=f"{label} 90% HDI",
+            df["age_months"], df["Ey_ci_lo"], df["Ey_ci_hi"],
+            color=colour, alpha=0.18, linewidth=0, label=f"{label} {pct}% interval",
         )
         ax.plot(
             df["age_months"], df["Ey_median"], color=colour, lw=2.5,
@@ -373,30 +379,31 @@ def plot_summary_band(
     ax, df: pd.DataFrame, x_col: str, label: str, colour: str,
     *, min_coverage: float = DEFAULT_MIN_COVERAGE, show_50: bool = True,
 ) -> None:
-    """Plot a median line with 90% (and optionally 50%) HDI bands from a
+    """Plot a median line with an 89% (and optionally 50%) interval band from a
     :func:`summarise_per_N`-shaped frame, dropping low-coverage grid points."""
+    pct = int(round(intervals.DEFAULT_CI_PROB * 100))
     df_ok = df[df["coverage"] >= min_coverage] if "coverage" in df else df
     if df_ok.empty:
         return
     if len(df_ok) == 1:
         # Too few points for a band/line — show the single identified estimate as
-        # a point with its 90% HDI so the figure is never silently empty.
+        # a point with its interval so the figure is never silently empty.
         r = df_ok.iloc[0]
         ax.errorbar(
             [r[x_col]], [r["median"]],
-            yerr=[[r["median"] - r["hdi90_lo"]], [r["hdi90_hi"] - r["median"]]],
+            yerr=[[r["median"] - r["ci_lo"]], [r["ci_hi"] - r["median"]]],
             fmt="o", color=colour, capsize=4, markersize=7,
-            label=f"{label} median (90% HDI)",
+            label=f"{label} median ({pct}% interval)",
         )
         return
     ax.fill_between(
-        df_ok[x_col], df_ok["hdi90_lo"], df_ok["hdi90_hi"],
-        color=colour, alpha=0.15, linewidth=0, label=f"{label} 90% HDI",
+        df_ok[x_col], df_ok["ci_lo"], df_ok["ci_hi"],
+        color=colour, alpha=0.15, linewidth=0, label=f"{label} {pct}% interval",
     )
     if show_50:
         ax.fill_between(
-            df_ok[x_col], df_ok["hdi50_lo"], df_ok["hdi50_hi"],
-            color=colour, alpha=0.30, linewidth=0, label=f"{label} 50% HDI",
+            df_ok[x_col], df_ok["ci50_lo"], df_ok["ci50_hi"],
+            color=colour, alpha=0.30, linewidth=0, label=f"{label} 50% interval",
         )
     ax.plot(df_ok[x_col], df_ok["median"], color=colour, lw=2.5, label=f"{label} median")
 
@@ -533,11 +540,13 @@ def summarise_draws(
     *,
     with_p_gt0: bool = False,
 ) -> pd.DataFrame:
-    """Median + 50%/90% HDI per grid column (over axis 0), NaN-aware.
+    """Median + inner-50%/outer-89% equal-tailed interval per grid column, NaN-aware.
 
-    Adds ``coverage`` (fraction of non-NaN draws) and, when ``with_p_gt0``,
-    the posterior probability ``P(contrast > 0)``.
+    Contrasts and ratios are summarised with equal-tailed intervals (the project
+    default). Adds ``coverage`` (fraction of non-NaN draws) and, when
+    ``with_p_gt0``, the posterior probability ``P(contrast > 0)``.
     """
+    outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
     rows = []
     n_draw = samples.shape[0]
     for i, g in enumerate(grid):
@@ -547,18 +556,18 @@ def summarise_draws(
         row: dict[str, float] = {grid_name: float(g), "coverage": n_valid / n_draw}
         if n_valid == 0:
             row.update(
-                median=np.nan, hdi50_lo=np.nan, hdi50_hi=np.nan,
-                hdi90_lo=np.nan, hdi90_hi=np.nan,
+                median=np.nan, ci50_lo=np.nan, ci50_hi=np.nan,
+                ci_lo=np.nan, ci_hi=np.nan,
             )
             if with_p_gt0:
                 row["p_gt0"] = np.nan
         else:
             c = col[valid]
-            l50, u50 = hdi_from_samples(c, 0.50)
-            l90, u90 = hdi_from_samples(c, 0.90)
+            l50, u50 = intervals.interval_1d(c, inner, "eti")
+            l89, u89 = intervals.interval_1d(c, outer, "eti")
             row.update(
-                median=float(np.median(c)), hdi50_lo=l50, hdi50_hi=u50,
-                hdi90_lo=l90, hdi90_hi=u90,
+                median=float(np.median(c)), ci50_lo=l50, ci50_hi=u50,
+                ci_lo=l89, ci_hi=u89,
             )
             if with_p_gt0:
                 row["p_gt0"] = float(np.mean(c > 0.0))

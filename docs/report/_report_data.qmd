@@ -93,15 +93,19 @@ def words(model_id, summary, age_months, column="Ey_median"):
 
 
 # Columns to surface, in order, when present (posterior_summary_*.csv schema:
-# age_months; Ey_* = expected count, typical child; Y_* = predictive, individual).
-# The engines report 90% HDIs (ReportingConfiguration ci_prob=0.90, interval_kind="hdi").
+# age_months; Ey_* = expected count, typical child; Y_* = predictive, individual;
+# ci50_* = inner 50% interval, ci_* = outer 89% interval).
+# The engines report a median with a 50% and an 89% equal-tailed interval
+# (ReportingConfiguration ci_prob=0.89, interval_kind="eti"; see vocab_growth.intervals).
 _COUNT_COLS = {
     "age_months": "Age (mo)",
     "Ey_median": "Expected",
-    "Ey_hdi_lo": "Expected 90% lo",
-    "Ey_hdi_hi": "Expected 90% hi",
-    "Y_hdi_lo": "Individual 90% lo",
-    "Y_hdi_hi": "Individual 90% hi",
+    "Ey_ci50_lo": "Expected 50% lo",
+    "Ey_ci50_hi": "Expected 50% hi",
+    "Ey_ci_lo": "Expected 89% lo",
+    "Ey_ci_hi": "Expected 89% hi",
+    "Y_ci_lo": "Individual 89% lo",
+    "Y_ci_hi": "Individual 89% hi",
 }
 
 

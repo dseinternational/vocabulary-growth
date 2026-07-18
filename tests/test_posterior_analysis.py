@@ -50,9 +50,10 @@ def test_extract_posterior_predictive_is_integer():
 
 N_SAMPLES = 2000
 EXPECTED_COLUMNS = {
-    "age_months", "p_median", "p_hdi_lo", "p_hdi_hi",
-    "Ey_median", "Ey_hdi_lo", "Ey_hdi_hi",
-    "Y_median", "Y_hdi_lo", "Y_hdi_hi",
+    "age_months",
+    "p_median", "p_ci50_lo", "p_ci50_hi", "p_ci_lo", "p_ci_hi",
+    "Ey_median", "Ey_ci50_lo", "Ey_ci50_hi", "Ey_ci_lo", "Ey_ci_hi",
+    "Y_median", "Y_ci50_lo", "Y_ci50_hi", "Y_ci_lo", "Y_ci_hi",
     "P(Y=0)", "P(Y<=5)", "P(Y<=400)", "P(Y>400)",
 }
 
@@ -62,7 +63,7 @@ def _summary():
     X_query = np.array([24, 12])
     p_query = np.vstack([np.full(N_SAMPLES, 0.5), np.full(N_SAMPLES, 0.25)])
     y_query = np.vstack([np.full(N_SAMPLES, 400), np.zeros(N_SAMPLES, dtype=int)])
-    return posterior_summary_table(X_query, p_query, y_query, n_trials=800, hdi_prob=0.90)
+    return posterior_summary_table(X_query, p_query, y_query, n_trials=800, ci_prob=0.89)
 
 
 def test_posterior_summary_columns_and_sorting():
@@ -108,7 +109,7 @@ def test_add_probability_estimand_columns_makes_population_and_subject_explicit(
         p_population,
         p_subject,
         n_trials=800,
-        hdi_prob=0.90,
+        ci_prob=0.89,
     )
 
     row = out[out["age_months"] == 12.0].iloc[0]

@@ -49,7 +49,6 @@ import os
 import sys
 from dataclasses import dataclass
 
-import arviz as az
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
@@ -64,6 +63,7 @@ from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
+import vocab_growth.intervals as intervals
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -1280,31 +1280,46 @@ def sample_posterior_predictive(context: JointContext, definition=None):
 def posterior_summary(context: JointContext):
     s = context.model_samples
     n_trials = context.model_data.n_trials
-    hdi = context.reporting.ci_prob
+    ci_prob = context.reporting.ci_prob
+    ci_kind = context.reporting.interval_kind
+    inner = intervals.INNER_CI_PROB
     od = context.reporting.output_dir
 
     def probability_summary(X, draws, prefix, label):
-        h = az.hdi(draws, prob=hdi)
         Ey = draws * n_trials
-        Ey_h = az.hdi(Ey, prob=hdi)
+        p_o = intervals.bands(draws, ci_prob, ci_kind, sample_axis=1)
+        p_i = intervals.bands(draws, inner, ci_kind, sample_axis=1)
+        Ey_o = intervals.bands(Ey, ci_prob, ci_kind, sample_axis=1)
+        Ey_i = intervals.bands(Ey, inner, ci_kind, sample_axis=1)
         d = pd.DataFrame({
             "age_months": X,
             f"p_{prefix}_median": np.median(draws, axis=1),
-            f"p_{prefix}_hdi_lo": h[:, 0],
-            f"p_{prefix}_hdi_hi": h[:, 1],
+            f"p_{prefix}_ci50_lo": p_i[:, 0],
+            f"p_{prefix}_ci50_hi": p_i[:, 1],
+            f"p_{prefix}_ci_lo": p_o[:, 0],
+            f"p_{prefix}_ci_hi": p_o[:, 1],
             f"Ey_{prefix}_median": np.median(Ey, axis=1),
-            f"Ey_{prefix}_hdi_lo": Ey_h[:, 0],
-            f"Ey_{prefix}_hdi_hi": Ey_h[:, 1],
+            f"Ey_{prefix}_ci50_lo": Ey_i[:, 0],
+            f"Ey_{prefix}_ci50_hi": Ey_i[:, 1],
+            f"Ey_{prefix}_ci_lo": Ey_o[:, 0],
+            f"Ey_{prefix}_ci_hi": Ey_o[:, 1],
         })
         d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
         dataframe_table(d.round(3), title=label, show_index=False)
         return d
 
     def ratio_summary(X, draws, prefix):
-        med = np.median(draws, axis=1)
-        h = az.hdi(draws, prob=hdi)
-        d = pd.DataFrame({"age_months": X, f"{prefix}_median": med,
-                          f"{prefix}_hdi_lo": h[:, 0], f"{prefix}_hdi_hi": h[:, 1]})
+        d = intervals.summarise(
+            draws, X, name=f"{prefix}_query", outer=ci_prob, sample_axis=1
+        ).rename(
+            columns={
+                "median": f"{prefix}_median",
+                "ci50_lo": f"{prefix}_ci50_lo",
+                "ci50_hi": f"{prefix}_ci50_hi",
+                "ci_lo": f"{prefix}_ci_lo",
+                "ci_hi": f"{prefix}_ci_hi",
+            }
+        )
         d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
         return d
 
@@ -1317,30 +1332,45 @@ def posterior_summary(context: JointContext):
     # Data-identified p_any vs independence (expected counts)
     Ey = s.p_any_query * n_trials
     Ey_i = s.p_any_indep_query * n_trials
+    p_any_o = intervals.bands(s.p_any_query, ci_prob, ci_kind, sample_axis=1)
+    p_any_in = intervals.bands(s.p_any_query, inner, ci_kind, sample_axis=1)
+    Ey_o = intervals.bands(Ey, ci_prob, ci_kind, sample_axis=1)
+    Ey_in = intervals.bands(Ey, inner, ci_kind, sample_axis=1)
     pany = pd.DataFrame({
         "age_months": s.X_query,
         "p_any_median": np.median(s.p_any_query, axis=1),
-        "p_any_hdi_lo": az.hdi(s.p_any_query, prob=hdi)[:, 0],
-        "p_any_hdi_hi": az.hdi(s.p_any_query, prob=hdi)[:, 1],
+        "p_any_ci50_lo": p_any_in[:, 0],
+        "p_any_ci50_hi": p_any_in[:, 1],
+        "p_any_ci_lo": p_any_o[:, 0],
+        "p_any_ci_hi": p_any_o[:, 1],
         "Ey_any_median": np.median(Ey, axis=1),
+        "Ey_any_ci50_lo": Ey_in[:, 0],
+        "Ey_any_ci50_hi": Ey_in[:, 1],
+        "Ey_any_ci_lo": Ey_o[:, 0],
+        "Ey_any_ci_hi": Ey_o[:, 1],
         "p_any_indep_median": np.median(s.p_any_indep_query, axis=1),
         "Ey_any_indep_median": np.median(Ey_i, axis=1),
     })
     pany.to_csv(os.path.join(od, "posterior_summary_p_any.csv"), index=False)
     dataframe_table(pany.round(3), title="Total expressive p_any (identified vs independence)", show_index=False)
 
-    # psi summary
+    # psi summary (HDI: psi is a right-skewed association ratio)
     psi = s.psi
+    psi_lo50, psi_hi50 = intervals.interval_1d(psi, inner, "hdi")
+    psi_lo, psi_hi = intervals.interval_1d(psi, ci_prob, "hdi")
+    pct = int(round(ci_prob * 100))
     psi_df = pd.DataFrame({
         "psi_median": [float(np.median(psi))],
-        "psi_hdi_lo": [float(az.hdi(psi, prob=hdi)[0])],
-        "psi_hdi_hi": [float(az.hdi(psi, prob=hdi)[1])],
+        "psi_ci50_lo": [float(psi_lo50)],
+        "psi_ci50_hi": [float(psi_hi50)],
+        "psi_ci_lo": [float(psi_lo)],
+        "psi_ci_hi": [float(psi_hi)],
         "P_psi_gt_1": [float((psi > 1).mean())],
     })
     psi_df.to_csv(os.path.join(od, "posterior_summary_psi.csv"), index=False)
     key_value_table("Association psi", [
         ("psi median", round(float(np.median(psi)), 3)),
-        ("psi 90% HDI", (round(float(az.hdi(psi, prob=hdi)[0]), 3), round(float(az.hdi(psi, prob=hdi)[1]), 3))),
+        (f"psi {pct}% HDI", (round(float(psi_lo), 3), round(float(psi_hi), 3))),
         ("P(psi > 1)", round(float((psi > 1).mean()), 3)),
     ])
 
@@ -1354,13 +1384,14 @@ def _run_joint_plots(context: JointContext):
     s = context.model_samples
     n_trials = context.model_data.n_trials
     od = context.reporting.output_dir
-    hdi = context.reporting.ci_prob
+    ci_prob = context.reporting.ci_prob
+    ci_kind = context.reporting.interval_kind
     X = s.X_plot
 
     # 1) Data-identified p_any vs independence upper bound (expected counts)
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     id_med = np.median(s.p_any_plot, axis=1) * n_trials
-    id_hdi = az.hdi(s.p_any_plot, prob=hdi) * n_trials
+    id_hdi = intervals.bands(s.p_any_plot * n_trials, ci_prob, ci_kind, sample_axis=1)
     ind_med = np.median(s.p_any_indep_plot, axis=1) * n_trials
     ax.fill_between(X, id_hdi[:, 0], id_hdi[:, 1], alpha=0.20, color="C0")
     ax.plot(X, id_med, lw=3, color="C0", label="Data-identified p_any (median)")
@@ -1374,7 +1405,7 @@ def _run_joint_plots(context: JointContext):
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.png"), dpi=300)
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.svg"))
     _save_csv(pd.DataFrame({"age_months": X, "identified_median": id_med,
-                            "identified_hdi_lo": id_hdi[:, 0], "identified_hdi_hi": id_hdi[:, 1],
+                            "identified_ci_lo": id_hdi[:, 0], "identified_ci_hi": id_hdi[:, 1],
                             "independence_median": ind_med}), od, "p_any_identified_vs_bound")
     context.plots["p_any_identified_vs_bound"] = fig
     plt.close(fig)
@@ -1417,7 +1448,7 @@ def _run_joint_plots(context: JointContext):
     # 4) signed rate r(a) and spoken rate q(a), population level
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     r_med = np.median(s.r_plot, axis=1)
-    r_hdi = az.hdi(s.r_plot, prob=hdi)
+    r_hdi = intervals.bands(s.r_plot, ci_prob, ci_kind, sample_axis=1)
     q_med = np.median(s.q_plot, axis=1)
     ax.fill_between(X, r_hdi[:, 0], r_hdi[:, 1], alpha=0.18, color="C2")
     ax.plot(X, r_med, lw=3, color="C2", label="r(a) signed")
@@ -1437,7 +1468,7 @@ def _run_joint_plots(context: JointContext):
     obs_tot = s.cell_obs.sum(axis=0)  # (4,)
     pred_tot = s.cell_pred.sum(axis=0)  # (4, n_samples)
     pred_med = np.median(pred_tot, axis=1)
-    lo, hi = 100 * (1 - hdi) / 2, 100 * (1 + hdi) / 2
+    lo, hi = 100 * (1 - ci_prob) / 2, 100 * (1 + ci_prob) / 2
     pred_lo = np.percentile(pred_tot, lo, axis=1)
     pred_hi = np.percentile(pred_tot, hi, axis=1)
     yerr = np.vstack([pred_med - pred_lo, pred_hi - pred_med])
@@ -1461,7 +1492,7 @@ def _run_joint_plots(context: JointContext):
         obs_tot = s.prod_cell_obs.sum(axis=0)  # (3,)
         pred_tot = s.prod_cell_pred.sum(axis=0)  # (3, n_samples)
         pred_med = np.median(pred_tot, axis=1)
-        lo, hi = 100 * (1 - hdi) / 2, 100 * (1 + hdi) / 2
+        lo, hi = 100 * (1 - ci_prob) / 2, 100 * (1 + ci_prob) / 2
         pred_lo = np.percentile(pred_tot, lo, axis=1)
         pred_hi = np.percentile(pred_tot, hi, axis=1)
         yerr = np.vstack([pred_med - pred_lo, pred_hi - pred_med])

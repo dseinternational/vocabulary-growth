@@ -45,11 +45,11 @@ N_TRIALS = 810
 
 def plot_joint_panel(ax, df: pd.DataFrame, title: str) -> None:
     ax.fill_between(
-        df["age_months"], df["understood_p05"], df["understood_p95"],
+        df["age_months"], df["understood_ci_lo"], df["understood_ci_hi"],
         alpha=0.15, color=UNDERSTOOD_COLOUR,
     )
     ax.fill_between(
-        df["age_months"], df["understood_p25"], df["understood_p75"],
+        df["age_months"], df["understood_ci50_lo"], df["understood_ci50_hi"],
         alpha=0.25, color=UNDERSTOOD_COLOUR,
     )
     ax.plot(
@@ -58,11 +58,11 @@ def plot_joint_panel(ax, df: pd.DataFrame, title: str) -> None:
     )
 
     ax.fill_between(
-        df["age_months"], df["spoken_p05"], df["spoken_p95"],
+        df["age_months"], df["spoken_ci_lo"], df["spoken_ci_hi"],
         alpha=0.15, color=SPOKEN_COLOUR,
     )
     ax.fill_between(
-        df["age_months"], df["spoken_p25"], df["spoken_p75"],
+        df["age_months"], df["spoken_ci50_lo"], df["spoken_ci50_hi"],
         alpha=0.25, color=SPOKEN_COLOUR,
     )
     ax.plot(
@@ -78,14 +78,14 @@ def plot_joint_panel(ax, df: pd.DataFrame, title: str) -> None:
     ax.legend(loc="upper left", frameon=True)
 
 
-def plot_gap_panel(ax, df: pd.DataFrame, title: str, hdi_prob: int = 90) -> None:
+def plot_gap_panel(ax, df: pd.DataFrame, title: str, ci_pct: int = 89) -> None:
     ax.fill_between(
-        df["age_months"], df["hdi_lo"], df["hdi_hi"],
-        alpha=0.20, color="C2", label=f"{hdi_prob}% HDI",
+        df["age_months"], df["ci_lo"], df["ci_hi"],
+        alpha=0.20, color="C2", label=f"{ci_pct}% interval",
     )
     ax.fill_between(
-        df["age_months"], df["hdi50_lo"], df["hdi50_hi"],
-        alpha=0.30, color="C2", label="50% HDI",
+        df["age_months"], df["ci50_lo"], df["ci50_hi"],
+        alpha=0.30, color="C2", label="50% interval",
     )
     ax.plot(df["age_months"], df["gap_median"], lw=3, color="C2", label="Median gap")
 

@@ -88,7 +88,7 @@ def test_summarise_per_N_coverage_and_columns():
     samples[:50, 1] = np.nan  # half-missing middle column
     df = comparison.summarise_per_N(samples, np.array([10.0, 20.0, 30.0]))
     assert list(df["coverage"]) == [1.0, 0.5, 1.0]
-    assert {"median", "hdi50_lo", "hdi90_hi"}.issubset(df.columns)
+    assert {"median", "ci50_lo", "ci_hi"}.issubset(df.columns)
 
 
 # ---- analyses ----
@@ -137,12 +137,12 @@ def test_milestone_table_is_median_of_crossings():
         [0.0, 100.0, 200.0, 300.0],  # crosses 100 at age 10
         [0.0, 50.0, 100.0, 150.0],   # crosses 100 at age 20
     ])
-    tbl = comparison.milestone_table(W, ages, targets=[100], hdi_prob=0.90)
+    tbl = comparison.milestone_table(W, ages, targets=[100], ci_prob=0.89)
     row = tbl.iloc[0]
     assert row["target_words"] == 100
     assert np.isclose(row["age_median"], 10.0)   # median of {5, 10, 20}
     assert row["prop_reaching"] == 1.0
-    assert row["age_hdi_lo"] <= 10.0 <= row["age_hdi_hi"]
+    assert row["age_ci_lo"] <= 10.0 <= row["age_ci_hi"]
 
 
 def test_milestone_table_flags_unreached_and_below_support():

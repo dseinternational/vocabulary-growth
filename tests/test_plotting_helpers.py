@@ -74,13 +74,14 @@ def test_plot_posterior_kappa_reports_hdi_not_equal_tailed_interval():
         X_query=np.array([12.0]),
         kappa_query=kappa,
         n_trials=800,
-        hdi_prob=0.60,
+        ci_prob=0.60,
+        interval_kind="hdi",
     )
 
     # The 60% HDI excludes the far outlier; the equal-tailed 60% upper bound would
     # be much larger for this deliberately skewed sample.
-    assert df_plot.loc[0, "kappa_hi"] < 10.0
-    assert df_query.loc[0, "kappa_hi"] < 10.0
+    assert df_plot.loc[0, "kappa_ci_hi"] < 10.0
+    assert df_query.loc[0, "kappa_ci_hi"] < 10.0
 
 
 @pytest.mark.parametrize("n", [5, 7, 15, 21, 100])

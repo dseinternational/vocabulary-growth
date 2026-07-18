@@ -186,7 +186,7 @@ Check `tau_subj_u`, `tau_u`, the understood GP level, and `kappa_u`. If the subj
 
 ![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Joint posterior predictive trajectory with 50% and 75% HDI bands](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
+![Joint posterior predictive trajectory with 50% and 89% intervals](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
 
 ## Production ratio
 

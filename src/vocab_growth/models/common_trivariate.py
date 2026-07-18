@@ -28,7 +28,6 @@ import os
 import sys
 from dataclasses import dataclass
 
-import arviz as az
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
@@ -44,6 +43,7 @@ from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
+import vocab_growth.intervals as intervals
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 from vocab_growth.models.build_utils import (
@@ -1366,17 +1366,15 @@ def sample_posterior_predictive(context: TrivariateContext, definition=None):
     context.set_model_samples(sample_data)
 
 
-def _ratio_summary(X_query, ratio_query, hdi_prob):
-    """Median + HDI summary for a ratio (q or r) at query ages."""
-    median = np.median(ratio_query, axis=1)
-    hdi = az.hdi(ratio_query, prob=hdi_prob)
-    return pd.DataFrame(
-        {
-            "age_months": X_query,
-            "median": median,
-            "hdi_lo": hdi[:, 0],
-            "hdi_hi": hdi[:, 1],
-        }
+def _ratio_summary(X_query, ratio_query, ci_prob, interval_kind="eti"):
+    """Median + inner-50%/outer credible interval for a ratio (q or r).
+
+    Ratios are summarised with the reporting config's interval kind (ETI by
+    default). Columns follow the neutral ``ci``/``ci50`` schema
+    (:mod:`vocab_growth.intervals`).
+    """
+    return intervals.summarise(
+        ratio_query, X_query, kind=interval_kind, outer=ci_prob, sample_axis=1
     )
 
 
@@ -1384,7 +1382,8 @@ def posterior_summary(context: TrivariateContext):
     """Compute and store the posterior summary tables at query ages."""
     samples = context.model_samples
     n_trials = context.model_data.n_trials
-    hdi_prob = context.reporting.ci_prob
+    ci_prob = context.reporting.ci_prob
+    ci_kind = context.reporting.interval_kind
 
     # Understood summary
     summary_u = posterior_analysis.posterior_summary_table(
@@ -1392,7 +1391,8 @@ def posterior_summary(context: TrivariateContext):
         samples.p_u_query,
         samples.y_u_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
+        interval_kind=ci_kind,
     )
     dataframe_table(
         summary_u, title="Posterior summary — words understood", show_index=False
@@ -1409,7 +1409,8 @@ def posterior_summary(context: TrivariateContext):
         samples.p_s_query,
         samples.y_s_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
+        interval_kind=ci_kind,
     )
     dataframe_table(
         summary_s, title="Posterior summary — words spoken", show_index=False
@@ -1426,7 +1427,8 @@ def posterior_summary(context: TrivariateContext):
         samples.p_sign_query,
         samples.y_sign_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
+        interval_kind=ci_kind,
     )
     dataframe_table(
         summary_sign, title="Posterior summary — words signed", show_index=False
@@ -1438,9 +1440,15 @@ def posterior_summary(context: TrivariateContext):
     )
 
     # Production rate q(a) summary
-    summary_q = _ratio_summary(samples.X_query, samples.q_query, hdi_prob)
+    summary_q = _ratio_summary(samples.X_query, samples.q_query, ci_prob, ci_kind)
     summary_q = summary_q.rename(
-        columns={"median": "q_median", "hdi_lo": "q_hdi_lo", "hdi_hi": "q_hdi_hi"}
+        columns={
+            "median": "q_median",
+            "ci50_lo": "q_ci50_lo",
+            "ci50_hi": "q_ci50_hi",
+            "ci_lo": "q_ci_lo",
+            "ci_hi": "q_ci_hi",
+        }
     )
     dataframe_table(
         summary_q, title="Posterior summary — production rate q(a)", show_index=False
@@ -1452,9 +1460,15 @@ def posterior_summary(context: TrivariateContext):
     )
 
     # Signed rate r(a) summary
-    summary_r = _ratio_summary(samples.X_query, samples.r_query, hdi_prob)
+    summary_r = _ratio_summary(samples.X_query, samples.r_query, ci_prob, ci_kind)
     summary_r = summary_r.rename(
-        columns={"median": "r_median", "hdi_lo": "r_hdi_lo", "hdi_hi": "r_hdi_hi"}
+        columns={
+            "median": "r_median",
+            "ci50_lo": "r_ci50_lo",
+            "ci50_hi": "r_ci50_hi",
+            "ci_lo": "r_ci_lo",
+            "ci_hi": "r_ci_hi",
+        }
     )
     dataframe_table(
         summary_r, title="Posterior summary — signed rate r(a)", show_index=False
@@ -1468,19 +1482,24 @@ def posterior_summary(context: TrivariateContext):
     # Total expressive vocabulary p_any(a) summary (expected count; no
     # predictive count node exists for this derived quantity).
     Ey_any = samples.p_any_query * n_trials
-    Ey_any_median = np.median(Ey_any, axis=1)
-    Ey_any_hdi = az.hdi(Ey_any, prob=hdi_prob)
-    p_any_median = np.median(samples.p_any_query, axis=1)
-    p_any_hdi = az.hdi(samples.p_any_query, prob=hdi_prob)
+    inner = intervals.INNER_CI_PROB
+    p_any_out = intervals.bands(samples.p_any_query, ci_prob, ci_kind, sample_axis=1)
+    p_any_in = intervals.bands(samples.p_any_query, inner, ci_kind, sample_axis=1)
+    Ey_any_out = intervals.bands(Ey_any, ci_prob, ci_kind, sample_axis=1)
+    Ey_any_in = intervals.bands(Ey_any, inner, ci_kind, sample_axis=1)
     summary_p_any = pd.DataFrame(
         {
             "age_months": samples.X_query,
-            "p_any_median": p_any_median,
-            "p_any_hdi_lo": p_any_hdi[:, 0],
-            "p_any_hdi_hi": p_any_hdi[:, 1],
-            "Ey_any_median": Ey_any_median,
-            "Ey_any_hdi_lo": Ey_any_hdi[:, 0],
-            "Ey_any_hdi_hi": Ey_any_hdi[:, 1],
+            "p_any_median": np.median(samples.p_any_query, axis=1),
+            "p_any_ci50_lo": p_any_in[:, 0],
+            "p_any_ci50_hi": p_any_in[:, 1],
+            "p_any_ci_lo": p_any_out[:, 0],
+            "p_any_ci_hi": p_any_out[:, 1],
+            "Ey_any_median": np.median(Ey_any, axis=1),
+            "Ey_any_ci50_lo": Ey_any_in[:, 0],
+            "Ey_any_ci50_hi": Ey_any_in[:, 1],
+            "Ey_any_ci_lo": Ey_any_out[:, 0],
+            "Ey_any_ci_hi": Ey_any_out[:, 1],
         }
     )
     dataframe_table(
@@ -1509,24 +1528,31 @@ def plot_understood_spoken_signed_trajectory(
     """Plot understood, spoken and signed posterior predictive median trends."""
     X_plot = samples.X_plot
 
+    outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
     y_u_median = np.quantile(samples.y_u_plot, 0.50, axis=1)
-    y_u_90 = np.quantile(samples.y_u_plot, [0.05, 0.95], axis=1).T
+    y_u_ci = intervals.bands(samples.y_u_plot, outer, "eti", sample_axis=1)
+    y_u_ci50 = intervals.bands(samples.y_u_plot, inner, "eti", sample_axis=1)
 
     y_s_median = np.quantile(samples.y_s_plot, 0.50, axis=1)
-    y_s_90 = np.quantile(samples.y_s_plot, [0.05, 0.95], axis=1).T
+    y_s_ci = intervals.bands(samples.y_s_plot, outer, "eti", sample_axis=1)
+    y_s_ci50 = intervals.bands(samples.y_s_plot, inner, "eti", sample_axis=1)
 
     y_sign_median = np.quantile(samples.y_sign_plot, 0.50, axis=1)
-    y_sign_90 = np.quantile(samples.y_sign_plot, [0.05, 0.95], axis=1).T
+    y_sign_ci = intervals.bands(samples.y_sign_plot, outer, "eti", sample_axis=1)
+    y_sign_ci50 = intervals.bands(samples.y_sign_plot, inner, "eti", sample_axis=1)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    ax.fill_between(X_plot, y_u_90[:, 0], y_u_90[:, 1], alpha=0.15, color="C0")
+    ax.fill_between(X_plot, y_u_ci[:, 0], y_u_ci[:, 1], alpha=0.12, color="C0")
+    ax.fill_between(X_plot, y_u_ci50[:, 0], y_u_ci50[:, 1], alpha=0.22, color="C0")
     ax.plot(X_plot, y_u_median, lw=3, color="C0", label="Words understood (median)")
 
-    ax.fill_between(X_plot, y_s_90[:, 0], y_s_90[:, 1], alpha=0.15, color="C1")
+    ax.fill_between(X_plot, y_s_ci[:, 0], y_s_ci[:, 1], alpha=0.12, color="C1")
+    ax.fill_between(X_plot, y_s_ci50[:, 0], y_s_ci50[:, 1], alpha=0.22, color="C1")
     ax.plot(X_plot, y_s_median, lw=3, color="C1", label="Words spoken (median)")
 
-    ax.fill_between(X_plot, y_sign_90[:, 0], y_sign_90[:, 1], alpha=0.15, color="C2")
+    ax.fill_between(X_plot, y_sign_ci[:, 0], y_sign_ci[:, 1], alpha=0.12, color="C2")
+    ax.fill_between(X_plot, y_sign_ci50[:, 0], y_sign_ci50[:, 1], alpha=0.22, color="C2")
     ax.plot(X_plot, y_sign_median, lw=3, color="C2", label="Words signed (median)")
 
     # Observed data
@@ -1557,14 +1583,20 @@ def plot_understood_spoken_signed_trajectory(
                 {
                     "age_months": X_plot,
                     "understood_median": y_u_median,
-                    "understood_p05": y_u_90[:, 0],
-                    "understood_p95": y_u_90[:, 1],
+                    "understood_ci50_lo": y_u_ci50[:, 0],
+                    "understood_ci50_hi": y_u_ci50[:, 1],
+                    "understood_ci_lo": y_u_ci[:, 0],
+                    "understood_ci_hi": y_u_ci[:, 1],
                     "spoken_median": y_s_median,
-                    "spoken_p05": y_s_90[:, 0],
-                    "spoken_p95": y_s_90[:, 1],
+                    "spoken_ci50_lo": y_s_ci50[:, 0],
+                    "spoken_ci50_hi": y_s_ci50[:, 1],
+                    "spoken_ci_lo": y_s_ci[:, 0],
+                    "spoken_ci_hi": y_s_ci[:, 1],
                     "signed_median": y_sign_median,
-                    "signed_p05": y_sign_90[:, 0],
-                    "signed_p95": y_sign_90[:, 1],
+                    "signed_ci50_lo": y_sign_ci50[:, 0],
+                    "signed_ci50_hi": y_sign_ci50[:, 1],
+                    "signed_ci_lo": y_sign_ci[:, 0],
+                    "signed_ci_hi": y_sign_ci[:, 1],
                 }
             ),
             output_dir,
@@ -1591,7 +1623,8 @@ def _shade_extrapolation(ax, support_range):
 
 def plot_signed_rate(
     samples: TrivariateModelSamples,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
     support_range: tuple[float, float] | None = None,
@@ -1601,17 +1634,14 @@ def plot_signed_rate(
     r_plot = samples.r_plot
 
     r_median = np.median(r_plot, axis=1)
-    r_hdi = az.hdi(r_plot, prob=hdi_prob)
-    r_hdi_75 = az.hdi(r_plot, prob=0.75)
-    r_hdi_50 = az.hdi(r_plot, prob=0.50)
+    r_ci = intervals.bands(r_plot, ci_prob, interval_kind, sample_axis=1)
+    r_ci50 = intervals.bands(r_plot, intervals.INNER_CI_PROB, interval_kind, sample_axis=1)
+    pct = int(round(ci_prob * 100))
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    ax.fill_between(
-        X_plot, r_hdi[:, 0], r_hdi[:, 1], alpha=0.20, label=f"{int(hdi_prob * 100)}% HDI"
-    )
-    ax.fill_between(X_plot, r_hdi_75[:, 0], r_hdi_75[:, 1], alpha=0.25, label="75% HDI")
-    ax.fill_between(X_plot, r_hdi_50[:, 0], r_hdi_50[:, 1], alpha=0.30, label="50% HDI")
+    ax.fill_between(X_plot, r_ci[:, 0], r_ci[:, 1], alpha=0.20, label=f"{pct}% interval")
+    ax.fill_between(X_plot, r_ci50[:, 0], r_ci50[:, 1], alpha=0.30, label="50% interval")
     ax.plot(X_plot, r_median, lw=3, label="Median r(a)")
 
     ax.set_xlabel("Age (months)")
@@ -1629,12 +1659,10 @@ def plot_signed_rate(
                 {
                     "age_months": X_plot,
                     "r_median": r_median,
-                    "hdi_lo": r_hdi[:, 0],
-                    "hdi_hi": r_hdi[:, 1],
-                    "hdi75_lo": r_hdi_75[:, 0],
-                    "hdi75_hi": r_hdi_75[:, 1],
-                    "hdi50_lo": r_hdi_50[:, 0],
-                    "hdi50_hi": r_hdi_50[:, 1],
+                    "ci50_lo": r_ci50[:, 0],
+                    "ci50_hi": r_ci50[:, 1],
+                    "ci_lo": r_ci[:, 0],
+                    "ci_hi": r_ci[:, 1],
                 }
             ),
             output_dir,
@@ -1646,7 +1674,8 @@ def plot_signed_rate(
 
 def plot_sign_speech_crossover(
     samples: TrivariateModelSamples,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
     support_range: tuple[float, float] | None = None,
@@ -1655,9 +1684,9 @@ def plot_sign_speech_crossover(
     X_plot = samples.X_plot
 
     q_median = np.median(samples.q_plot, axis=1)
-    q_hdi = az.hdi(samples.q_plot, prob=hdi_prob)
+    q_hdi = intervals.bands(samples.q_plot, ci_prob, interval_kind, sample_axis=1)
     r_median = np.median(samples.r_plot, axis=1)
-    r_hdi = az.hdi(samples.r_plot, prob=hdi_prob)
+    r_hdi = intervals.bands(samples.r_plot, ci_prob, interval_kind, sample_axis=1)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1686,11 +1715,11 @@ def plot_sign_speech_crossover(
                 {
                     "age_months": X_plot,
                     "q_median": q_median,
-                    "q_hdi_lo": q_hdi[:, 0],
-                    "q_hdi_hi": q_hdi[:, 1],
+                    "q_ci_lo": q_hdi[:, 0],
+                    "q_ci_hi": q_hdi[:, 1],
                     "r_median": r_median,
-                    "r_hdi_lo": r_hdi[:, 0],
-                    "r_hdi_hi": r_hdi[:, 1],
+                    "r_ci_lo": r_hdi[:, 0],
+                    "r_ci_hi": r_hdi[:, 1],
                 }
             ),
             output_dir,
@@ -1703,7 +1732,8 @@ def plot_sign_speech_crossover(
 def plot_modality_trajectories(
     samples: TrivariateModelSamples,
     n_trials: int,
-    hdi_prob: float = 0.90,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
 ):
@@ -1714,7 +1744,9 @@ def plot_modality_trajectories(
     E_s = np.median(samples.p_s_plot, axis=1) * n_trials
     E_sign = np.median(samples.p_sign_plot, axis=1) * n_trials
     E_any = np.median(samples.p_any_plot, axis=1) * n_trials
-    any_hdi = az.hdi(samples.p_any_plot, prob=hdi_prob) * n_trials
+    any_hdi = intervals.bands(
+        samples.p_any_plot * n_trials, ci_prob, interval_kind, sample_axis=1
+    )
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1741,8 +1773,8 @@ def plot_modality_trajectories(
                     "spoken_median": E_s,
                     "signed_median": E_sign,
                     "any_median": E_any,
-                    "any_hdi_lo": any_hdi[:, 0],
-                    "any_hdi_hi": any_hdi[:, 1],
+                    "any_ci_lo": any_hdi[:, 0],
+                    "any_ci_hi": any_hdi[:, 1],
                 }
             ),
             output_dir,
@@ -1767,7 +1799,7 @@ def _run_trivariate_outcome_plots(
     x_obs: pd.Series,
     y_obs: pd.Series,
     n_trials: int,
-    hdi_prob: float,
+    ci_prob: float,
     output_dir: str,
     suffix: str,
     outcome_label: str,
@@ -1778,7 +1810,7 @@ def _run_trivariate_outcome_plots(
         X_query=samples.X_query,
         y_query=y_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"posterior_predictive_count_distributions_{suffix}",
         x_label=f"{outcome_label} (count)",
@@ -1832,7 +1864,7 @@ def _run_trivariate_outcome_plots(
         samples.X_plot,
         f_plot,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"expected_learning_rate_{suffix}",
         y_label=f"Estimated {outcome_label.lower()} gain per month",
@@ -1842,7 +1874,7 @@ def _run_trivariate_outcome_plots(
         samples.X_plot,
         f_plot,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         smooth=True,
         savgol_window_length=15,
         savgol_polyorder=3,
@@ -1858,7 +1890,7 @@ def _run_trivariate_outcome_plots(
         samples.X_query,
         kappa_query,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"posterior_kappa_{suffix}",
     )
@@ -1905,7 +1937,8 @@ def plot_p_any_validation(
     union_draws = samples.p_any_plot[mask] / samples.p_u_plot[mask]
     Xw = X[mask]
     union_med = np.median(union_draws, axis=1)
-    union_hdi = az.hdi(union_draws, prob=0.90)
+    union_ci = intervals.bands(union_draws, intervals.DEFAULT_CI_PROB, "eti", sample_axis=1)
+    union_pct = int(round(intervals.DEFAULT_CI_PROB * 100))
 
     # Binned observed union (4-month bins, >= 3 children per bin)
     edges = np.arange(lo, hi + 4, 4)
@@ -1919,8 +1952,8 @@ def plot_p_any_validation(
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(
-        Xw, union_hdi[:, 0], union_hdi[:, 1], alpha=0.20, color="C3",
-        label="VG14 p_any / p_U (90% HDI, independence)",
+        Xw, union_ci[:, 0], union_ci[:, 1], alpha=0.20, color="C3",
+        label=f"VG14 p_any / p_U ({union_pct}% interval, independence)",
     )
     ax.plot(Xw, union_med, lw=3, color="C3", label="VG14 p_any / p_U (median)")
     ax.scatter(
@@ -1960,8 +1993,8 @@ def plot_p_any_validation(
                 {
                     "age_months": Xw,
                     "model_union_median": union_med,
-                    "model_union_hdi_lo": union_hdi[:, 0],
-                    "model_union_hdi_hi": union_hdi[:, 1],
+                    "model_union_ci_lo": union_ci[:, 0],
+                    "model_union_ci_hi": union_ci[:, 1],
                 }
             ),
             output_dir,
@@ -2012,7 +2045,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         else None
     )
     n_trials = context.model_data.n_trials
-    hdi_prob = context.reporting.ci_prob
+    ci_prob = context.reporting.ci_prob
     output_dir = context.reporting.output_dir
 
     # ---- Joint trajectory (understood, spoken, signed) ----
@@ -2026,7 +2059,7 @@ def _run_trivariate_plots(context: TrivariateContext):
     fig = plot_modality_trajectories(
         samples,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename="modality_trajectories",
     )
@@ -2035,7 +2068,7 @@ def _run_trivariate_plots(context: TrivariateContext):
 
     # ---- Production rate q(a) ----
     fig = plot_production_rate(
-        samples, hdi_prob=hdi_prob, output_dir=output_dir, filename="production_rate"
+        samples, ci_prob=ci_prob, output_dir=output_dir, filename="production_rate"
     )
     context.plots["production_rate"] = fig
     plt.close(fig)
@@ -2043,7 +2076,7 @@ def _run_trivariate_plots(context: TrivariateContext):
     # ---- Signed rate r(a) (extrapolation outside signing support shaded) ----
     fig = plot_signed_rate(
         samples,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename="signed_rate",
         support_range=signing_support_range,
@@ -2054,7 +2087,7 @@ def _run_trivariate_plots(context: TrivariateContext):
     # ---- Sign -> speech crossover ----
     fig = plot_sign_speech_crossover(
         samples,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename="sign_speech_crossover",
         support_range=signing_support_range,
@@ -2074,7 +2107,7 @@ def _run_trivariate_plots(context: TrivariateContext):
     fig = plot_comprehension_production_gap(
         samples,
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         filename="comprehension_production_gap",
     )
@@ -2092,7 +2125,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         x_obs=analysis_df.loc[has_u, "age"],
         y_obs=analysis_df.loc[has_u, "understood"],
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         suffix="u",
         outcome_label="Words understood",
@@ -2110,7 +2143,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         x_obs=analysis_df.loc[has_s, "age"],
         y_obs=analysis_df.loc[has_s, "spoken"],
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         suffix="s",
         outcome_label="Words spoken",
@@ -2128,7 +2161,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         x_obs=analysis_df.loc[has_sign, "age"],
         y_obs=analysis_df.loc[has_sign, "signed"],
         n_trials=n_trials,
-        hdi_prob=hdi_prob,
+        ci_prob=ci_prob,
         output_dir=output_dir,
         suffix="sign",
         outcome_label="Words signed",

@@ -7,7 +7,7 @@ Usage:
 
 Resolves the baseline fit (``output/models/<id>-<config_name>/``) and each
 variant fit (``…-<suffix>/``) from the registry, compares headline quantities
-(are they inside the baseline's 90% HDI?), writes a per-variant detail CSV plus a
+(are they inside the baseline's 89% interval?), writes a per-variant detail CSV plus a
 ``robustness_matrix_<model>.csv`` under ``output/comparisons/sensitivity/``, and
 prints the matrix. Variant fits that are missing are skipped with a note.
 """
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     heading(f"Sensitivity robustness — {args.model}")
     dataframe_table(
         matrix[
-            ["variant", "verdict", "max_abs_delta", "n_within_hdi", "n_checked", "max_rhat", "min_ess"]
+            ["variant", "verdict", "max_abs_delta", "n_within_ci", "n_checked", "max_rhat", "min_ess"]
         ],
         title="Robustness matrix",
         show_index=False,
