@@ -50,6 +50,7 @@ LOSO
 matplotlib
 McElreath
 MCMC
+MCSE
 Mervis
 Miniforge
 modeling
