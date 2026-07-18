@@ -21,7 +21,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 FIT_MANIFEST_FILENAME = "fit_manifest.json"
 FIT_STATE_FILENAME = "fit_state.json"
@@ -73,7 +73,7 @@ def read_json(path: str | os.PathLike[str]) -> dict[str, Any]:
     return payload
 
 
-def _write_json_atomic(path: str, payload: dict[str, Any]) -> None:
+def write_json_atomic(path: str, payload: dict[str, Any]) -> None:
     """Write metadata atomically so interruption cannot leave partial JSON."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     temporary = f"{path}.{uuid.uuid4().hex}.tmp"
@@ -105,16 +105,19 @@ def write_fit_state(
     path = os.path.join(output_dir, FIT_STATE_FILENAME)
     now = datetime.now(UTC).isoformat()
     started_at = now
+    previous_stage = None
     if os.path.isfile(path):
         try:
-            started_at = read_json(path).get("started_at_utc", now)
+            previous = read_json(path)
+            started_at = previous.get("started_at_utc", now)
+            previous_stage = previous.get("stage")
         except FitValidationError:
             pass
 
     payload: dict[str, Any] = {
         "schema_version": 1,
         "state": state,
-        "stage": stage,
+        "stage": previous_stage if stage is None else stage,
         "model_id": model_id,
         "config_name": config_name,
         "sampling_configuration": sampling_config_name,
@@ -127,7 +130,7 @@ def write_fit_state(
             "type": type(error).__name__,
             "message": str(error),
         }
-    _write_json_atomic(path, payload)
+    write_json_atomic(path, payload)
 
 
 def git_metadata(repo_dir: str) -> dict[str, object]:
@@ -195,6 +198,106 @@ def is_reporting_quality_config(sampling_config_name: str) -> bool:
     )
 
 
+def _sampling_parameter_errors(
+    recorded: Any,
+    expected: Any,
+) -> list[str]:
+    """Compare sampling settings by statistical strength, not machine layout.
+
+    ``cores`` controls local parallelism but does not change the requested
+    chains or draws, so it is deliberately ignored. Reporting fits may use
+    documented high-tuning overrides; draws, tuning iterations, chains and
+    target acceptance are therefore minimum requirements. Other settings,
+    including the random seed, must match exactly.
+    """
+    recorded_payload = normalise_for_json(recorded)
+    expected_payload = normalise_for_json(expected)
+    if not isinstance(recorded_payload, dict) or not isinstance(expected_payload, dict):
+        return ["Sampling parameters are not recorded as a JSON object."]
+
+    errors: list[str] = []
+    minimum_fields = {"draws", "tune", "chains", "target_accept"}
+    ignored_fields = {"cores"}
+    for field in sorted(minimum_fields):
+        recorded_value = recorded_payload.get(field)
+        expected_value = expected_payload.get(field)
+        if not isinstance(recorded_value, (int, float)) or not isinstance(
+            expected_value, (int, float)
+        ):
+            errors.append(f"Sampling parameter {field!r} is missing or non-numeric.")
+        elif recorded_value < expected_value:
+            errors.append(
+                f"Sampling parameter {field!r} is {recorded_value!r}; "
+                f"at least {expected_value!r} is required."
+            )
+
+    exact_fields = set(expected_payload) - minimum_fields - ignored_fields
+    for field in sorted(exact_fields):
+        if recorded_payload.get(field) != expected_payload.get(field):
+            errors.append(
+                f"Sampling parameter {field!r} is {recorded_payload.get(field)!r}; "
+                f"expected {expected_payload.get(field)!r}."
+            )
+    return errors
+
+
+FitValidationPurpose = Literal[
+    "resume",
+    "render",
+    "sync",
+    "provisional-sync",
+    "publish",
+]
+
+
+def fit_validation_kwargs(
+    purpose: FitValidationPurpose,
+    *,
+    expected_definition: Any,
+    expected_sampling_config_name: str,
+    expected_sampling_parameters: Any,
+    current_git: dict[str, object] | None = None,
+    current_source_data_hash: str | None = None,
+) -> dict[str, Any]:
+    """Build one documented validation policy for each artefact consumer.
+
+    Resume is intentionally strict about the current code and raw data because
+    downstream computations would otherwise mix revisions. Publication instead
+    checks that the fit itself came from a clean revision; later documentation
+    commits do not invalidate an already complete fit. Provisional local syncs
+    retain lifecycle/model/sampling checks while allowing exploratory code and
+    data changes.
+    """
+    kwargs: dict[str, Any] = {
+        "expected_definition": expected_definition,
+        "expected_sampling_config_name": expected_sampling_config_name,
+        "expected_sampling_parameters": expected_sampling_parameters,
+    }
+    if purpose == "provisional-sync":
+        return kwargs
+
+    if current_source_data_hash is None:
+        raise ValueError(f"{purpose} validation requires the current source-data hash.")
+    kwargs["expected_source_data_hash"] = current_source_data_hash
+
+    if purpose == "resume":
+        if current_git is None:
+            raise ValueError("resume validation requires current Git metadata.")
+        kwargs.update(
+            expected_git=current_git,
+            require_clean_checkout=True,
+        )
+    elif purpose in {"sync", "publish"}:
+        kwargs.update(
+            require_reporting_quality=True,
+            require_rendered_report=True,
+            require_clean_fit=True,
+        )
+    elif purpose != "render":
+        raise ValueError(f"Unknown fit-validation purpose: {purpose!r}.")
+    return kwargs
+
+
 def validate_fit_output(
     output_dir: str,
     *,
@@ -206,6 +309,7 @@ def validate_fit_output(
     require_reporting_quality: bool = False,
     require_rendered_report: bool = False,
     require_clean_fit: bool = False,
+    require_clean_checkout: bool = False,
 ) -> list[str]:
     """Return every reason that fitted output is unsuitable for its intended use."""
     errors: list[str] = []
@@ -251,10 +355,12 @@ def validate_fit_output(
             "Sampling configuration mismatch: "
             f"found {recorded_sampling_name!r}, expected {expected_sampling_config_name!r}."
         )
-    if expected_sampling_parameters is not None and sampling_payload.get(
-        "parameters"
-    ) != normalise_for_json(expected_sampling_parameters):
-        errors.append("Sampling parameters differ from the current configuration.")
+    if expected_sampling_parameters is not None:
+        errors.extend(
+            _sampling_parameter_errors(
+                sampling_payload.get("parameters"), expected_sampling_parameters
+            )
+        )
 
     data_payload = manifest.get("data", {})
     if (
@@ -265,10 +371,11 @@ def validate_fit_output(
 
     code_payload = manifest.get("code", {})
     if expected_git is not None:
-        if expected_git.get("dirty") is not False:
-            errors.append("The current checkout is dirty, so an exact resume is unsafe.")
         if code_payload.get("commit") != expected_git.get("commit"):
             errors.append("The current Git commit differs from the commit used for this fit.")
+    if require_clean_checkout:
+        if expected_git is None or expected_git.get("dirty") is not False:
+            errors.append("The current checkout is dirty, so an exact resume is unsafe.")
     if require_clean_fit and code_payload.get("dirty") is not False:
         errors.append("The fit was produced from a dirty or unverifiable checkout.")
 

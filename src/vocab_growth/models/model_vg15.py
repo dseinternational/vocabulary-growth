@@ -22,5 +22,5 @@ from vocab_growth.models.common_joint_modality import (
 from vocab_growth.models.definitions import VG15
 
 
-def fit(config: str, *, render: bool = False) -> JointContext:
-    return fit_joint_model(config, VG15, render=render)
+def fit(config: str) -> JointContext:
+    return fit_joint_model(config, VG15)

@@ -34,15 +34,18 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import tempfile
+import uuid
 from dataclasses import asdict
 
 import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
-    git_metadata,
-    require_valid_fit,
+    FitValidationError,
+    fit_validation_kwargs,
     source_data_hash,
+    validate_fit_output,
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
@@ -50,14 +53,33 @@ COPY_EXTS = (".svg", ".png", ".csv")
 
 
 def _sync_dir(src: str, dst: str) -> int:
-    """Copy allowlisted files from ``src`` into ``dst`` (created if needed)."""
-    os.makedirs(dst, exist_ok=True)
+    """Replace ``dst`` with an allowlisted snapshot of ``src``."""
+    parent = os.path.dirname(dst)
+    os.makedirs(parent, exist_ok=True)
+    staged = tempfile.mkdtemp(prefix=f".{os.path.basename(dst)}-", dir=parent)
+    backup = os.path.join(parent, f".{os.path.basename(dst)}-backup-{uuid.uuid4().hex}")
     copied = 0
-    for name in os.listdir(src):
-        s = os.path.join(src, name)
-        if os.path.isfile(s) and name.lower().endswith(COPY_EXTS):
-            shutil.copy2(s, os.path.join(dst, name))
-            copied += 1
+    try:
+        for name in os.listdir(src):
+            source = os.path.join(src, name)
+            if os.path.isfile(source) and name.lower().endswith(COPY_EXTS):
+                shutil.copy2(source, os.path.join(staged, name))
+                copied += 1
+
+        had_destination = os.path.exists(dst)
+        if had_destination:
+            os.replace(dst, backup)
+        try:
+            os.replace(staged, dst)
+        except BaseException:
+            if had_destination and os.path.exists(backup):
+                os.replace(backup, dst)
+            raise
+        if had_destination:
+            shutil.rmtree(backup)
+    finally:
+        if os.path.isdir(staged):
+            shutil.rmtree(staged)
     return copied
 
 
@@ -90,9 +112,11 @@ def main() -> None:
     parser.add_argument(
         "--allow-provisional",
         action="store_true",
-        help="Allow complete dev/test fits in the local cache (never used by replication).",
+        help="Allow complete dev/test fits in the local cache.",
     )
     args = parser.parse_args()
+    if args.models_only and args.comparisons_only:
+        parser.error("Choose --models-only or --comparisons-only, not both.")
 
     env.set_output_root(args.output_dir)
     models_dir = env.models_output_dir()
@@ -104,27 +128,50 @@ def main() -> None:
         f"{definition.model_id}-{definition.config_name}": definition
         for definition in MODEL_REGISTRY.values()
     }
-    expected_sampling = sampling.get_sampling_configuration(args.config)
-    current_git = git_metadata(env.ROOT_DIR)
-    current_source_hash = source_data_hash(env.DATA_DIR)
+    model_sources: list[tuple[str, str]] = []
 
     if not args.comparisons_only:
         if os.path.isdir(models_dir):
+            expected_sampling = sampling.get_sampling_configuration(args.config)
+            current_source_hash = (
+                None if args.allow_provisional else source_data_hash(env.DATA_DIR)
+            )
+            validation_failures: list[tuple[str, list[str]]] = []
             for name in sorted(os.listdir(models_dir)):
                 src = os.path.join(models_dir, name)
                 definition = definitions_by_label.get(name)
-                if not os.path.isdir(src) or definition is None:
+                if not os.path.isdir(src):
+                    print(f"[skip] non-directory model output: {name}")
                     continue
-                require_valid_fit(
+                if definition is None:
+                    print(f"[skip] unregistered model output: {name}")
+                    continue
+                errors = validate_fit_output(
                     src,
-                    expected_definition=definition,
-                    expected_sampling_config_name=args.config,
-                    expected_sampling_parameters=asdict(expected_sampling),
-                    expected_git=current_git,
-                    expected_source_data_hash=current_source_hash,
-                    require_reporting_quality=not args.allow_provisional,
-                    require_clean_fit=not args.allow_provisional,
+                    **fit_validation_kwargs(
+                        "provisional-sync" if args.allow_provisional else "sync",
+                        expected_definition=definition,
+                        expected_sampling_config_name=args.config,
+                        expected_sampling_parameters=asdict(expected_sampling),
+                        current_source_data_hash=current_source_hash,
+                    ),
                 )
+                if errors:
+                    validation_failures.append((name, errors))
+                else:
+                    model_sources.append((name, src))
+
+            if validation_failures:
+                for name, errors in validation_failures:
+                    print(f"[invalid] {name}")
+                    for error in errors:
+                        print(f"  - {error}")
+                raise FitValidationError(
+                    "No report figures were changed because one or more model "
+                    "outputs failed validation."
+                )
+
+            for name, src in model_sources:
                 n = _sync_dir(src, os.path.join(env.REPORT_FIGS_DIR, name))
                 total += n
                 print(f"  {name}: {n} files")

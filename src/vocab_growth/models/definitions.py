@@ -1183,7 +1183,7 @@ def validate_model_definition(definition) -> None:
     prefix = getattr(definition, "model_id", type(definition).__name__)
     if not re.fullmatch(r"VG\d{2}", definition.model_id):
         raise ValueError(f"{prefix}.model_id must have the form VG01.")
-    if not definition.config_name or any(char.isspace() for char in definition.config_name):
+    if not re.fullmatch(r"[A-Za-z0-9]+(?:[A-Za-z0-9_-]*[A-Za-z0-9])?", definition.config_name):
         raise ValueError(f"{prefix}.config_name must be a non-empty path-safe label.")
     if definition.n_trials <= 0:
         raise ValueError(f"{prefix}.n_trials must be positive.")

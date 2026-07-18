@@ -10,13 +10,11 @@ import json
 import os
 import platform
 import shutil
-import subprocess
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
 from importlib import metadata as importlib_metadata
 from typing import Generic, TypeVar
 
@@ -52,11 +50,14 @@ import vocab_growth.reporting as vg_reporting
 from vocab_growth.fit_artifacts import (
     FIT_MANIFEST_FILENAME,
     create_staging_root,
+    git_metadata,
     is_reporting_quality_config,
+    normalise_for_json,
     promote_staged_fit,
     retain_failed_fit,
     source_data_hash,
     write_fit_state,
+    write_json_atomic,
 )
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -494,7 +495,10 @@ def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
     return model_samples
 
 
-def build_model(context: ModelFitContext, definition=None):
+def build_model(
+    context: ModelFitContext,
+    definition: UnivariateModelDefinition,
+):
     """
     Builds vocabulary growth model.
     """
@@ -550,9 +554,7 @@ def build_model(context: ModelFitContext, definition=None):
         n_plot=context.model_config.n_plot,
         ages_query=context.model_config.ages_query,
         slope_anchors=context.model_config.slope_anchors,
-        gp_domain_months=(
-            definition.gp_domain_months if definition is not None else None
-        ),
+        gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
     X_plot_z = grids.X_plot_z
@@ -1438,49 +1440,6 @@ def configure_univariate_priors(
     context.set_model_config(config)
 
 
-def _json_default(value):
-    """Serialise enums and uncommon configuration values in fit manifests."""
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, np.generic):
-        return value.item()
-    return str(value)
-
-
-def _git_metadata() -> dict[str, object]:
-    """Return the repository revision and dirty state without requiring Git."""
-
-    def run_git(*args: str) -> str | None:
-        try:
-            result = subprocess.run(
-                ["git", *args],
-                cwd=local_env.ROOT_DIR,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return result.stdout.strip()
-
-    commit = run_git("rev-parse", "HEAD")
-    branch_result = run_git("branch", "--show-current")
-    if branch_result is None:
-        branch = None
-        detached = None
-    else:
-        branch = branch_result or None
-        detached = not bool(branch_result)
-    status = run_git("status", "--porcelain", "--untracked-files=normal")
-    return {
-        "commit": commit,
-        "branch": branch,
-        "detached": detached,
-        "dirty": None if status is None else bool(status),
-    }
-
-
 def _analysis_data_hash(df: pd.DataFrame) -> str:
     """Hash the exact prepared analysis frame, including schema and row order."""
     digest = hashlib.sha256()
@@ -1528,7 +1487,7 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
         "model": {
             "model_id": definition.model_id,
             "config_name": definition.config_name,
-            "definition": asdict(definition) if is_dataclass(definition) else str(definition),
+            "definition": normalise_for_json(definition),
         },
         "sampling": {
             "configuration_name": context.sampling_config_name,
@@ -1543,7 +1502,7 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
             "source_row_counts": source_counts,
             "observed_outcome_counts": outcome_counts,
         },
-        "code": _git_metadata(),
+        "code": git_metadata(local_env.ROOT_DIR),
         "runtime": {
             "python": sys.version,
             "platform": platform.platform(),
@@ -1554,9 +1513,7 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
         },
     }
     manifest_path = os.path.join(context.reporting.output_dir, FIT_MANIFEST_FILENAME)
-    with open(manifest_path, "w", encoding="utf-8") as manifest_file:
-        json.dump(manifest, manifest_file, indent=2, sort_keys=True, default=_json_default)
-        manifest_file.write("\n")
+    write_json_atomic(manifest_path, manifest)
 
 
 def run_fit_pipeline(
@@ -1564,7 +1521,6 @@ def run_fit_pipeline(
     definition,
     *,
     stages: list[tuple[str, Callable[[ModelFitContext], None]]],
-    render: bool = False,
 ) -> ModelFitContext:
     """Shared fit-pipeline scaffold used by every engine's ``fit_*_model``.
 
@@ -1633,19 +1589,6 @@ def run_fit_pipeline(
                 if stage_index == 0:
                     write_fit_manifest(context, definition)
 
-        if render:
-            qmd_path = os.path.join(context.reporting.output_dir, "index.qmd")
-            write_fit_state(
-                context.reporting.output_dir,
-                "running",
-                model_id=definition.model_id,
-                config_name=definition.config_name,
-                sampling_config_name=config,
-                stage="Render Quarto output",
-            )
-            with section("Render Quarto output", timings=timings):
-                subprocess.run(["quarto", "render", qmd_path], check=True)
-
         required_paths = [
             os.path.join(context.reporting.output_dir, FIT_MANIFEST_FILENAME),
             os.path.join(context.reporting.output_dir, "trace.nc"),
@@ -1656,11 +1599,6 @@ def run_fit_pipeline(
                 "Fit pipeline reached finalisation without required artefact(s): "
                 + ", ".join(os.path.basename(path) for path in missing)
             )
-        if render and not os.path.isfile(
-            os.path.join(context.reporting.output_dir, "index.html")
-        ):
-            raise RuntimeError("Quarto render completed without producing index.html.")
-
         write_fit_state(
             context.reporting.output_dir,
             "complete",
@@ -1703,8 +1641,6 @@ def run_fit_pipeline(
 def fit_single_outcome_model(
     config: str,
     definition: UnivariateModelDefinition,
-    *,
-    render: bool = False,
 ) -> ModelFitContext:
     """
     Shared fit pipeline for single-outcome models (VG01-VG04).
@@ -1715,7 +1651,6 @@ def fit_single_outcome_model(
     return run_fit_pipeline(
         config,
         definition,
-        render=render,
         stages=[
             ("Prepare data", lambda ctx: prepare_univariate_data(ctx, definition)),
             (

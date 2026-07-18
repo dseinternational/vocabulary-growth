@@ -361,7 +361,10 @@ def configure_bivariate_priors(
 # ============================================================
 
 
-def build_model(context: BivariateContext, definition=None):
+def build_model(
+    context: BivariateContext,
+    definition: BivariateModelDefinition,
+):
     """Build the bivariate PyMC model."""
     config = context.model_config
 
@@ -432,9 +435,7 @@ def build_model(context: BivariateContext, definition=None):
         n_plot=config.n_plot,
         ages_query=config.ages_query,
         slope_anchors=config.slope_anchors,
-        gp_domain_months=(
-            definition.gp_domain_months if definition is not None else None
-        ),
+        gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
     X_query = grids.X_query
@@ -1827,8 +1828,6 @@ def _run_bivariate_joint_plots(
 def fit_bivariate_model(
     config: str,
     definition: BivariateModelDefinition,
-    *,
-    render: bool = False,
 ) -> BivariateContext:
     """
     Shared fit pipeline for bivariate models (e.g. VG05, VG07-VG10, VG13).
@@ -1836,7 +1835,6 @@ def fit_bivariate_model(
     return run_fit_pipeline(
         config,
         definition,
-        render=render,
         stages=[
             ("Prepare data", lambda ctx: prepare_bivariate_data(ctx, definition)),
             (

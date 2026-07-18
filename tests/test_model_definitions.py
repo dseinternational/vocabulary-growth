@@ -33,6 +33,14 @@ def test_definition_rejects_unsorted_query_ages():
         validate_model_definition(invalid)
 
 
+@pytest.mark.parametrize("config_name", ["../escape", "nested/path", r"nested\path", ".."])
+def test_definition_rejects_unsafe_output_path_label(config_name):
+    invalid = replace(VG01, config_name=config_name)
+
+    with pytest.raises(ValueError, match="path-safe"):
+        validate_model_definition(invalid)
+
+
 def test_definition_rejects_reference_age_outside_explicit_gp_domain():
     invalid = replace(VG01, gp_domain_months=(20, 80))
 

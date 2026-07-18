@@ -17,6 +17,7 @@ import pytest
 
 from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
+    fit_validation_kwargs,
     normalise_for_json,
     promote_staged_fit,
     validate_fit_output,
@@ -86,6 +87,101 @@ def test_publish_validation_accepts_complete_compatible_reporting_fit(tmp_path):
     assert errors == []
 
 
+def test_sampling_compatibility_ignores_cores_and_accepts_stronger_tuning(tmp_path):
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+    manifest_path = output_dir / "fit_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sampling"]["parameters"].update(
+        cores=1,
+        draws=8000,
+        tune=12000,
+        target_accept=0.99,
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    errors = validate_fit_output(
+        str(output_dir),
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("rep")
+        ),
+    )
+
+    assert errors == []
+
+
+def test_sampling_compatibility_rejects_less_effort_than_named_tier(tmp_path):
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+    manifest_path = output_dir / "fit_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sampling"]["parameters"]["draws"] = 500
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    errors = validate_fit_output(
+        str(output_dir),
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("rep")
+        ),
+    )
+
+    assert any("draws" in error and "at least" in error for error in errors)
+
+
+def test_publish_policy_does_not_require_current_commit_to_match(tmp_path):
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+
+    kwargs = fit_validation_kwargs(
+        "publish",
+        expected_definition=VG01,
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("rep")
+        ),
+        current_git={"commit": "later-commit", "dirty": False},
+        current_source_data_hash="sha256:data",
+    )
+
+    assert "expected_git" not in kwargs
+    assert validate_fit_output(str(output_dir), **kwargs) == []
+
+
+def test_resume_policy_requires_matching_clean_current_checkout(tmp_path):
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+
+    kwargs = fit_validation_kwargs(
+        "resume",
+        expected_definition=VG01,
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("rep")
+        ),
+        current_git={"commit": "later-commit", "dirty": True},
+        current_source_data_hash="sha256:data",
+    )
+    errors = validate_fit_output(str(output_dir), **kwargs)
+
+    assert any("Git commit" in error for error in errors)
+    assert any("current checkout is dirty" in error for error in errors)
+
+
+def test_provisional_sync_skips_current_git_and_data_expectations():
+    kwargs = fit_validation_kwargs(
+        "provisional-sync",
+        expected_definition=VG01,
+        expected_sampling_config_name="dev",
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("dev")
+        ),
+    )
+
+    assert "expected_git" not in kwargs
+    assert "expected_source_data_hash" not in kwargs
+
+
 def test_publish_validation_rejects_development_trace_even_when_complete(tmp_path):
     output_dir = tmp_path / "fit"
     _write_complete_output(output_dir, sampling_name="dev")
@@ -109,6 +205,29 @@ def test_trace_without_complete_state_is_not_resumable(tmp_path):
 
     assert any("fit_state.json" in error for error in errors)
     assert any("fit_manifest.json" in error for error in errors)
+
+
+def test_terminal_fit_state_preserves_last_running_stage(tmp_path):
+    output_dir = tmp_path / "fit"
+    write_fit_state(
+        str(output_dir),
+        "running",
+        model_id=VG01.model_id,
+        config_name=VG01.config_name,
+        sampling_config_name="rep",
+        stage="Posterior sampling",
+    )
+    write_fit_state(
+        str(output_dir),
+        "failed",
+        model_id=VG01.model_id,
+        config_name=VG01.config_name,
+        sampling_config_name="rep",
+        error=RuntimeError("stopped"),
+    )
+
+    state = json.loads((output_dir / "fit_state.json").read_text(encoding="utf-8"))
+    assert state["stage"] == "Posterior sampling"
 
 
 def test_promote_staged_fit_replaces_canonical_only_at_completion(tmp_path):

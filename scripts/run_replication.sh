@@ -86,12 +86,32 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+case "$CONFIG" in
+  dev|development|test|testing) PROVISIONAL_SYNC=1 ;;
+  rep|report|reporting|rep-lite|reporting-lite|rep_lite) PROVISIONAL_SYNC=0 ;;
+  *) echo "Unknown sampling config: $CONFIG" >&2; usage; exit 1 ;;
+esac
+if [ "$PROVISIONAL_SYNC" = 1 ] && [ "$DO_UPLOAD" = 1 ]; then
+  echo "Development/test replication does not publish; disabling upload." >&2
+  DO_UPLOAD=0
+fi
+
 # ---------------------------------------------------------------------------
 # Paths + conda (setsid/non-login shells do NOT activate conda automatically)
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO"
+
+# Exact replication must start from a clean checkout. Check before creating
+# logs or fitted output so the preflight itself cannot dirty the repository.
+GIT_STATUS="$(git status --porcelain --untracked-files=normal)" \
+  || { echo "Could not inspect Git checkout state." >&2; exit 1; }
+if [ -n "$GIT_STATUS" ]; then
+  echo "Replication requires a clean Git checkout; commit, stash, or remove these changes:" >&2
+  printf '%s\n' "$GIT_STATUS" >&2
+  exit 1
+fi
 
 if [ -z "${CONDA_PREFIX:-}" ] || [ "$(basename "${CONDA_PREFIX:-}")" != "$CONDA_ENV" ]; then
   # shellcheck disable=SC1091
@@ -209,13 +229,13 @@ if [ "$DO_DESCRIPTIVES" = 1 ]; then
   stop_if_failed
 fi
 
-# 2. Fit each model independently, render each. Upload is deferred to phase 5.
+# 2. Fit each model independently. Rendering is a separate, retryable phase.
 if [ "$DO_FIT" = 1 ]; then
   for m in $MODELS; do
     if [ "$FRESH" = 0 ] && has_compatible_fit "$m"; then
       log "=== SKIP fit_$m (complete compatible fit; use --fresh to refit) ==="; mark "fit_$m" "SKIP"; continue
     fi
-    run_step "fit_$m" python scripts/fit_model.py "$m" --config "$CONFIG" --render
+    run_step "fit_$m" python scripts/fit_model.py "$m" --config "$CONFIG"
   done
   stop_if_failed
 fi
@@ -223,10 +243,10 @@ fi
 # Verify all inputs before read-only comparisons or publication. This also
 # protects --no-fit runs from consuming stale or development-quality traces.
 if [ "$DO_COMPARE" = 1 ] || [ "$DO_RENDER" = 1 ] || [ "$DO_UPLOAD" = 1 ]; then
-  for m in $MODELS; do
-    run_step "validate_$m" python scripts/check_fit.py "$m" --config "$CONFIG" \
-      --purpose resume --output-dir "$OUT_ROOT"
-  done
+  # Validate the whole set in one process so Git/data provenance is computed once.
+  # shellcheck disable=SC2086
+  run_step "validate_models" python scripts/check_fit.py $MODELS --config "$CONFIG" \
+    --purpose resume --output-dir "$OUT_ROOT"
   stop_if_failed
 fi
 
@@ -241,9 +261,16 @@ if [ "$DO_COMPARE" = 1 ]; then
   stop_if_failed
 fi
 
-# 4. Sync figures into the report cache, then render.
+# 4. Retry model-output rendering, sync figures, then render the combined reports.
 if [ "$DO_RENDER" = 1 ]; then
-  run_step "sync_figures"      python scripts/sync_report_figures.py --config "$CONFIG"
+  for m in $MODELS; do
+    run_step "render_model_$m" python scripts/fit_model.py "$m" --config "$CONFIG" \
+      --render-only --output-dir "$OUT_ROOT"
+  done
+  stop_if_failed
+  SYNC_ARGS=(--config "$CONFIG" --output-dir "$OUT_ROOT")
+  [ "$PROVISIONAL_SYNC" = 1 ] && SYNC_ARGS+=(--allow-provisional)
+  run_step "sync_figures"      python scripts/sync_report_figures.py "${SYNC_ARGS[@]}"
   run_step "render_report"     quarto render docs/report
   run_step "render_comparison" quarto render docs/comparison/index.qmd
   stop_if_failed

@@ -542,8 +542,6 @@ def sample_posterior_predictive_re(
 def fit_univariate_re_model(
     config: str,
     definition: UnivariateModelDefinition,
-    *,
-    render: bool = False,
 ) -> UnivariateREContext:
     """Fit pipeline for a univariate model with study random intercepts.
 
@@ -558,7 +556,6 @@ def fit_univariate_re_model(
     return run_fit_pipeline(
         config,
         definition,
-        render=render,
         stages=[
             (
                 "Prepare data",

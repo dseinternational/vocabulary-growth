@@ -22,14 +22,14 @@ def test_batch_continues_after_convergence_failure():
     calls: list[str] = []
 
     def fit_ok(name):
-        def fit(config, *, render=False):
-            calls.append(f"{name}:{config}:{render}")
+        def fit(config):
+            calls.append(f"{name}:{config}")
             return name
 
         return SimpleNamespace(fit=fit)
 
-    def fit_fails(config, *, render=False):
-        calls.append(f"bad:{config}:{render}")
+    def fit_fails(config):
+        calls.append(f"bad:{config}")
         raise ConvergenceGateError("did not converge")
 
     selected = [
@@ -38,11 +38,32 @@ def test_batch_continues_after_convergence_failure():
         ("last", fit_ok("last")),
     ]
 
-    contexts, timings, failures = _MODULE._fit_selected_models(
-        selected, "rep", render=True
-    )
+    contexts, timings, failures = _MODULE._fit_selected_models(selected, "rep")
 
-    assert calls == ["first:rep:True", "bad:rep:True", "last:rep:True"]
+    assert calls == ["first:rep", "bad:rep", "last:rep"]
     assert contexts == ["first", "last"]
     assert set(timings) == {"first", "bad", "last"}
     assert failures == {"bad": "did not converge"}
+
+
+def test_batch_render_continues_after_one_model_fails(monkeypatch):
+    calls: list[str] = []
+    contexts = [
+        SimpleNamespace(
+            reporting=SimpleNamespace(model_name=name, output_dir=f"/{name}")
+        )
+        for name in ("first", "bad", "last")
+    ]
+
+    def render(output_dir):
+        calls.append(output_dir)
+        if output_dir == "/bad":
+            raise RuntimeError("quarto failed")
+
+    monkeypatch.setattr(_MODULE, "_render_output", render)
+
+    timings, failures = _MODULE._render_contexts(contexts)
+
+    assert calls == ["/first", "/bad", "/last"]
+    assert set(timings) == {"first", "bad", "last"}
+    assert failures == {"bad": "RuntimeError: quarto failed"}

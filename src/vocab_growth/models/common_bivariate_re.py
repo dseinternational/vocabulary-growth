@@ -773,8 +773,6 @@ def build_model_re(
 def fit_bivariate_re_model(
     config: str,
     definition: BivariateModelDefinition,
-    *,
-    render: bool = False,
 ) -> BivariateREContext:
     """
     Fit pipeline for bivariate model with study random intercepts (VG07).
@@ -782,7 +780,6 @@ def fit_bivariate_re_model(
     return run_fit_pipeline(
         config,
         definition,
-        render=render,
         stages=[
             (
                 "Prepare data",

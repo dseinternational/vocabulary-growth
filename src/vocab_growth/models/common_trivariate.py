@@ -476,7 +476,10 @@ def configure_trivariate_priors(
 # ============================================================
 
 
-def build_model(context: TrivariateContext, definition=None):
+def build_model(
+    context: TrivariateContext,
+    definition: TrivariateModelDefinition,
+):
     """Build the trivariate PyMC model."""
     config = context.model_config
 
@@ -567,9 +570,7 @@ def build_model(context: TrivariateContext, definition=None):
         n_plot=config.n_plot,
         ages_query=config.ages_query,
         slope_anchors=config.slope_anchors,
-        gp_domain_months=(
-            definition.gp_domain_months if definition is not None else None
-        ),
+        gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
     X_query = grids.X_query
@@ -2180,8 +2181,6 @@ def _run_trivariate_plots(context: TrivariateContext):
 def fit_trivariate_model(
     config: str,
     definition: TrivariateModelDefinition,
-    *,
-    render: bool = False,
 ) -> TrivariateContext:
     """
     Shared fit pipeline for the trivariate model (VG14).
@@ -2189,7 +2188,6 @@ def fit_trivariate_model(
     return run_fit_pipeline(
         config,
         definition,
-        render=render,
         stages=[
             ("Prepare data", lambda ctx: prepare_trivariate_data(ctx, definition)),
             (

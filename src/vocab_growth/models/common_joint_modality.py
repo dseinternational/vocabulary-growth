@@ -1530,14 +1530,11 @@ def _run_joint_plots(context: JointContext):
 def fit_joint_model(
     config: str,
     definition: JointModelDefinition,
-    *,
-    render: bool = False,
 ) -> JointContext:
     """Shared fit pipeline for the joint sign/speech model (VG15)."""
     return run_fit_pipeline(
         config,
         definition,
-        render=render,
         stages=[
             ("Prepare data", lambda ctx: prepare_joint_data(ctx, definition)),
             (

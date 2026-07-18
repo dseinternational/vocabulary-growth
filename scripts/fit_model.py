@@ -6,13 +6,25 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 
 import argparse
 import importlib
+import os
+import subprocess
 import sys
 import time
+from dataclasses import asdict
 from multiprocessing import freeze_support
+from types import SimpleNamespace
 
 import dse_research_utils.environment.setup as setup
+import dse_research_utils.statistics.models.reporting as model_reporting
+import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import (
+    FitValidationError,
+    fit_validation_kwargs,
+    require_valid_fit,
+    source_data_hash,
+)
 from vocab_growth.models.common import (
     ConvergenceGateError,
     is_reporting_quality_config,
@@ -24,10 +36,10 @@ from vocab_growth.reporting import (
     key_value_table,
     pipeline_summary,
 )
-from vocab_growth.storage import upload_to_blob_storage
+from vocab_growth.storage import upload_to_blob_storage, validate_fit_for_upload
 
 
-def _fit_selected_models(selected, config: str, *, render: bool = False):
+def _fit_selected_models(selected, config: str):
     """Fit every selected model while collecting convergence-gate failures."""
     contexts = []
     timings: dict[str, float] = {}
@@ -35,12 +47,98 @@ def _fit_selected_models(selected, config: str, *, render: bool = False):
     for name, module in selected:
         model_started = time.perf_counter()
         try:
-            contexts.append(module.fit(config, render=render))
+            contexts.append(module.fit(config))
         except ConvergenceGateError as exc:
             failures[name] = str(exc)
         finally:
             timings[name] = time.perf_counter() - model_started
     return contexts, timings, failures
+
+
+def _render_output(output_dir: str) -> None:
+    """Render one already-promoted fit without changing its lifecycle state."""
+    qmd_path = os.path.join(output_dir, "index.qmd")
+    if not os.path.isfile(qmd_path):
+        raise FileNotFoundError(f"Quarto source is missing: {qmd_path}")
+    subprocess.run(["quarto", "render", qmd_path], check=True)
+    if not os.path.isfile(os.path.join(output_dir, "index.html")):
+        raise RuntimeError("Quarto render completed without producing index.html.")
+
+
+def _render_contexts(contexts):
+    """Render all successful fits, collecting failures without stopping the batch."""
+    timings: dict[str, float] = {}
+    failures: dict[str, str] = {}
+    for context in contexts:
+        name = context.reporting.model_name.lower()
+        render_started = time.perf_counter()
+        try:
+            _render_output(context.reporting.output_dir)
+        except Exception as exc:
+            failures[name] = f"{type(exc).__name__}: {exc}"
+        finally:
+            timings[name] = time.perf_counter() - render_started
+    return timings, failures
+
+
+def _existing_contexts(selected, config: str):
+    """Resolve compatible promoted fits for a render-only retry."""
+    expected_sampling = sampling.get_sampling_configuration(config)
+    current_source_hash = source_data_hash(env.DATA_DIR)
+    contexts = []
+    failures: dict[str, str] = {}
+    for name, _module in selected:
+        definition = MODEL_REGISTRY[name]
+        model_reporting_config = model_reporting.ReportingConfiguration(
+            model_name=definition.model_id,
+            config_name=definition.config_name,
+            output_root_dir=env.output_root(),
+            ci_prob=0.89,
+            interval_kind="eti",
+        )
+        try:
+            require_valid_fit(
+                model_reporting_config.output_dir,
+                **fit_validation_kwargs(
+                    "render",
+                    expected_definition=definition,
+                    expected_sampling_config_name=config,
+                    expected_sampling_parameters=asdict(expected_sampling),
+                    current_source_data_hash=current_source_hash,
+                ),
+            )
+        except FitValidationError as exc:
+            failures[name] = str(exc)
+        else:
+            contexts.append(SimpleNamespace(reporting=model_reporting_config))
+    return contexts, failures
+
+
+def _publication_plan(contexts, config: str):
+    """Validate the complete upload set before publishing any model."""
+    expected_sampling = sampling.get_sampling_configuration(config)
+    current_source_hash = source_data_hash(env.DATA_DIR)
+    plan = []
+    failures: dict[str, str] = {}
+    for context in contexts:
+        name = context.reporting.model_name.lower()
+        definition = MODEL_REGISTRY[name]
+        validation_kwargs = fit_validation_kwargs(
+            "publish",
+            expected_definition=definition,
+            expected_sampling_config_name=config,
+            expected_sampling_parameters=asdict(expected_sampling),
+            current_source_data_hash=current_source_hash,
+        )
+        try:
+            validated_output = validate_fit_for_upload(
+                context.reporting.output_dir, validation_kwargs
+            )
+        except FitValidationError as exc:
+            failures[name] = str(exc)
+        else:
+            plan.append((context, validated_output))
+    return plan, failures
 
 
 if __name__ == "__main__":
@@ -56,6 +154,11 @@ if __name__ == "__main__":
         "--render",
         action="store_true",
         help="Render the Quarto model output after fitting",
+    )
+    parser.add_argument(
+        "--render-only",
+        action="store_true",
+        help="Render an existing compatible fit without sampling again.",
     )
     parser.add_argument(
         "--upload",
@@ -82,8 +185,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.upload and not args.render:
+    if args.render and args.render_only:
+        parser.error("Choose --render or --render-only, not both.")
+    if args.upload and not (args.render or args.render_only):
         parser.error("--upload requires --render so only complete reports are published.")
+    if args.upload and not is_reporting_quality_config(args.config):
+        parser.error("--upload requires a reporting-quality sampling configuration.")
 
     # Resolve the output root before any output path is computed — and before
     # init_script(), in case script setup ever reads an output location.
@@ -118,7 +225,8 @@ if __name__ == "__main__":
         [
             ("Models to fit", ", ".join(name for name, _ in selected)),
             ("Sampling config", args.config),
-            ("Render Quarto", args.render),
+            ("Fit models", not args.render_only),
+            ("Render Quarto", args.render or args.render_only),
             ("Upload to blob storage", args.upload),
             ("Include traces in upload", args.include_traces),
             ("Output root", env.output_root()),
@@ -127,40 +235,59 @@ if __name__ == "__main__":
 
     # Disk preflight: reporting-config traces are >10 GB each, so fail fast
     # before a multi-hour sample if the volume can't hold the output.
-    heavy = is_reporting_quality_config(args.config)
-    env.preflight_disk(
-        (20.0 if heavy else 2.0) * len(selected),
-        env.output_root(),
-        label=f"{len(selected)} fit(s) [{args.config}]",
-    )
+    if not args.render_only:
+        heavy = is_reporting_quality_config(args.config)
+        env.preflight_disk(
+            (20.0 if heavy else 2.0) * len(selected),
+            env.output_root(),
+            label=f"{len(selected)} fit(s) [{args.config}]",
+        )
 
     run_started = time.perf_counter()
-    contexts, per_model_timings, gate_failures = _fit_selected_models(
-        selected, args.config, render=args.render
-    )
+    if args.render_only:
+        contexts, failures = _existing_contexts(selected, args.config)
+        per_model_timings = {}
+    else:
+        contexts, per_model_timings, failures = _fit_selected_models(
+            selected, args.config
+        )
 
-    if args.upload and gate_failures:
+    render_timings: dict[str, float] = {}
+    if args.render or args.render_only:
+        render_timings, render_failures = _render_contexts(contexts)
+        failures.update(render_failures)
+
+    publication_plan = []
+    if args.upload and not failures:
+        publication_plan, publication_failures = _publication_plan(
+            contexts, args.config
+        )
+        failures.update(publication_failures)
+
+    if args.upload and failures:
         console.print(
             "[bold yellow]Upload skipped:[/bold yellow] at least one selected model "
-            "failed the convergence gate; no partial batch was published."
+            "failed fitting, validation, or rendering; no partial batch was published."
         )
     elif args.upload:
-        for context in contexts:
+        for context, validated_output in publication_plan:
             upload_to_blob_storage(
-                context.reporting.output_dir,
+                validated_output,
                 context.reporting.model_label,
                 include_traces=args.include_traces,
             )
 
-    if len(selected) > 1:
+    if len(selected) > 1 and per_model_timings:
         pipeline_summary("Run summary — all models", per_model_timings)
+    if len(selected) > 1 and render_timings:
+        pipeline_summary("Render summary — all models", render_timings)
     console.print(
         f"[dim]Total run wall time: "
         f"{format_duration(time.perf_counter() - run_started)}[/dim]"
     )
-    if gate_failures:
+    if failures:
         key_value_table(
-            "Convergence gate failures",
-            [(name, reason) for name, reason in gate_failures.items()],
+            "Fit, validation, or render failures",
+            [(name, reason) for name, reason in failures.items()],
         )
         sys.exit(1)

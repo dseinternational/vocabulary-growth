@@ -17,5 +17,5 @@ from vocab_growth.models.common_trivariate import (
 from vocab_growth.models.definitions import VG14
 
 
-def fit(config: str, *, render: bool = False) -> TrivariateContext:
-    return fit_trivariate_model(config, VG14, render=render)
+def fit(config: str) -> TrivariateContext:
+    return fit_trivariate_model(config, VG14)

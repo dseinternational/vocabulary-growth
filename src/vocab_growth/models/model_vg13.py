@@ -17,5 +17,5 @@ from vocab_growth.models.common_bivariate_re import (
 from vocab_growth.models.definitions import VG13
 
 
-def fit(config: str, *, render: bool = False) -> BivariateREContext:
-    return fit_bivariate_re_model(config, VG13, render=render)
+def fit(config: str) -> BivariateREContext:
+    return fit_bivariate_re_model(config, VG13)

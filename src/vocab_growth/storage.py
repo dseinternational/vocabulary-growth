@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 from vocab_growth.fit_artifacts import require_valid_fit
 from vocab_growth.reporting import (
@@ -13,8 +15,24 @@ from vocab_growth.reporting import (
 DEFAULT_PROJECT = "vocabulary-growth"
 
 
-def upload_to_blob_storage(
+@dataclass(frozen=True)
+class ValidatedFitOutput:
+    """Path token returned only after publication validation succeeds."""
+
+    output_dir: str
+
+
+def validate_fit_for_upload(
     output_dir: str,
+    validation_kwargs: dict[str, Any],
+) -> ValidatedFitOutput:
+    """Validate once before a batch uploads any model output."""
+    require_valid_fit(output_dir, **validation_kwargs)
+    return ValidatedFitOutput(output_dir=output_dir)
+
+
+def upload_to_blob_storage(
+    validated_output: ValidatedFitOutput,
     model_label: str,
     *,
     include_traces: bool = False,
@@ -38,12 +56,7 @@ def upload_to_blob_storage(
     """
     from dse_research_utils.storage.azure import upload_directory_to_blob_storage
 
-    require_valid_fit(
-        output_dir,
-        require_reporting_quality=True,
-        require_rendered_report=True,
-        require_clean_fit=True,
-    )
+    output_dir = validated_output.output_dir
 
     heading(f"Uploading {model_label} to Azure Blob Storage")
     key_value_table(

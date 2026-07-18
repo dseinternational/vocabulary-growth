@@ -69,12 +69,13 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 ### Fit a model
 
 ```bash
-python scripts/fit_model.py <model_id> [--config <config>] [--render] [--upload] [--output-dir <dir>]
+python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>]
 ```
 
 - `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
-- `--render`: render the Quarto model output before atomically promoting it to the canonical output directory.
+- `--render`: render the Quarto model output after the completed fit is atomically promoted. A rendering failure leaves the fit complete and available for a later `--render-only` retry.
+- `--render-only`: validate and render an existing compatible fit without sampling again.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
 - `--output-dir`: root directory for model output. Overrides the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable; both fall back to the repository-local `output/`.
 
@@ -86,7 +87,7 @@ Output (traces, figures, summary tables) is written to `<output-root>/models/<mo
 python scripts/sync_report_figures.py [--config <config>] [--output-dir <dir>]
 ```
 
-Validates the model definition, sampling configuration, raw-data fingerprint, Git revision and complete lifecycle state, then copies plots (`.svg`/`.png`) and summary tables (`.csv`) from the output root's `models/` and `comparisons/` into `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
+Validates the model definition, sampling configuration, raw-data fingerprint, complete lifecycle state, reporting quality, clean fit provenance and rendered model report before atomically replacing cached plots (`.svg`/`.png`) and summary tables (`.csv`) from the output root's `models/` and `comparisons/` in `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. `--allow-provisional` keeps lifecycle/model/sampling checks for local dev/test work while relaxing publication provenance. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
 
 ## Architecture
 
