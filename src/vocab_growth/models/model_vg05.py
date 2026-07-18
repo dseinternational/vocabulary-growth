@@ -10,5 +10,5 @@ from vocab_growth.models.common_bivariate import BivariateContext, fit_bivariate
 from vocab_growth.models.definitions import VG05
 
 
-def fit(config: str) -> BivariateContext:
-    return fit_bivariate_model(config, VG05)
+def fit(config: str, *, render: bool = False) -> BivariateContext:
+    return fit_bivariate_model(config, VG05, render=render)

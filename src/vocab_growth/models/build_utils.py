@@ -58,6 +58,8 @@ class AgeGrids:
     X_plot_z: np.ndarray
     X_query: np.ndarray
     X_query_z: np.ndarray
+    X_gp_domain_z: np.ndarray
+    """Two endpoints used only to size the HSGP approximation domain."""
     X_all_z: np.ndarray
     n_plot: int
     n_query: int
@@ -80,6 +82,7 @@ def construct_age_grids(
     slope_anchors,
     use_gp_anchor: bool = False,
     gp_anchor_age_months: float | None = None,
+    gp_domain_months: tuple[float, float] | None = None,
 ) -> AgeGrids:
     """Build the plot/query grids and the stacked standardised grid ``X_all_z``.
 
@@ -90,6 +93,12 @@ def construct_age_grids(
     at ``gp_anchor_age_months`` (defaulting to the midpoint of ``slope_anchors``
     when not given), matching the reference-age anchoring used by the random-
     effects and joint engines.
+
+    HSGP basis sizing is deliberately separated from the evaluation grid. If
+    ``gp_domain_months`` is omitted, the observed age range is the domain; an
+    explicit pair can instead fix it in the model definition. Plot, query, and
+    anchor points must lie inside that domain. Therefore changing a reporting
+    query cannot silently change the HSGP approximation itself.
     """
     X_plot = np.linspace(X_obs.min(), X_obs.max(), n_plot).reshape(-1, 1)
     X_plot_z = (X_plot - X_obs_mean) / X_obs_std
@@ -118,6 +127,32 @@ def construct_age_grids(
         X_all_z = np.vstack([X_obs_z, X_plot_z, X_query_z])
         i_anchor = None
 
+    if gp_domain_months is None:
+        domain_low = float(np.min(X_obs))
+        domain_high = float(np.max(X_obs))
+    else:
+        if len(gp_domain_months) != 2:
+            raise ValueError("gp_domain_months must contain exactly two ages.")
+        domain_low = float(gp_domain_months[0])
+        domain_high = float(gp_domain_months[1])
+        if not np.isfinite(domain_low) or not np.isfinite(domain_high):
+            raise ValueError("gp_domain_months must contain finite ages.")
+        if domain_high <= domain_low:
+            raise ValueError("gp_domain_months must be ordered (low, high).")
+
+    evaluation_ages = [float(np.min(X_obs)), float(np.max(X_obs))]
+    evaluation_ages.extend(float(age) for age in np.asarray(X_query).ravel())
+    if anchor_age_months is not None:
+        evaluation_ages.append(anchor_age_months)
+    if min(evaluation_ages) < domain_low or max(evaluation_ages) > domain_high:
+        raise ValueError(
+            "Observed, query, and GP-anchor ages must lie inside gp_domain_months "
+            f"[{domain_low}, {domain_high}]."
+        )
+    X_gp_domain_z = (
+        np.array([[domain_low], [domain_high]], dtype=float) - X_obs_mean
+    ) / X_obs_std
+
     n_all = X_all_z.shape[0]
 
     return AgeGrids(
@@ -125,6 +160,7 @@ def construct_age_grids(
         X_plot_z=X_plot_z,
         X_query=X_query,
         X_query_z=X_query_z,
+        X_gp_domain_z=X_gp_domain_z,
         X_all_z=X_all_z,
         n_plot=n_plot_actual,
         n_query=n_query,

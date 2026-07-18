@@ -15,5 +15,5 @@ from vocab_growth.models.common_univariate_re import (
 from vocab_growth.models.definitions import VG11
 
 
-def fit(config: str) -> UnivariateREContext:
-    return fit_univariate_re_model(config, VG11)
+def fit(config: str, *, render: bool = False) -> UnivariateREContext:
+    return fit_univariate_re_model(config, VG11, render=render)

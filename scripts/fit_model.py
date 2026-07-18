@@ -6,8 +6,6 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 
 import argparse
 import importlib
-import os
-import subprocess
 import sys
 import time
 from multiprocessing import freeze_support
@@ -23,14 +21,13 @@ from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting import (
     console,
     format_duration,
-    heading,
     key_value_table,
     pipeline_summary,
 )
 from vocab_growth.storage import upload_to_blob_storage
 
 
-def _fit_selected_models(selected, config: str):
+def _fit_selected_models(selected, config: str, *, render: bool = False):
     """Fit every selected model while collecting convergence-gate failures."""
     contexts = []
     timings: dict[str, float] = {}
@@ -38,7 +35,7 @@ def _fit_selected_models(selected, config: str):
     for name, module in selected:
         model_started = time.perf_counter()
         try:
-            contexts.append(module.fit(config))
+            contexts.append(module.fit(config, render=render))
         except ConvergenceGateError as exc:
             failures[name] = str(exc)
         finally:
@@ -84,6 +81,9 @@ if __name__ == "__main__":
     freeze_support()
 
     args = parser.parse_args()
+
+    if args.upload and not args.render:
+        parser.error("--upload requires --render so only complete reports are published.")
 
     # Resolve the output root before any output path is computed — and before
     # init_script(), in case script setup ever reads an output location.
@@ -136,14 +136,8 @@ if __name__ == "__main__":
 
     run_started = time.perf_counter()
     contexts, per_model_timings, gate_failures = _fit_selected_models(
-        selected, args.config
+        selected, args.config, render=args.render
     )
-
-    if args.render:
-        for context in contexts:
-            qmd_path = os.path.join(context.reporting.output_dir, "index.qmd")
-            heading(f"Rendering Quarto output: {qmd_path}")
-            subprocess.run(["quarto", "render", qmd_path], check=True)
 
     if args.upload and gate_failures:
         console.print(

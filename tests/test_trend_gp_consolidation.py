@@ -40,9 +40,11 @@ from vocab_growth.models import common_joint_modality as cj
 from vocab_growth.models import common_trivariate as ct
 from vocab_growth.models import common_univariate_re as cur
 from vocab_growth.models.common import ModelFitContext
-from vocab_growth.models.definitions import VG01, VG05, VG10, VG11, VG14, VG15
+from vocab_growth.models.definitions import (
+    MODEL_REGISTRY,
+)
 
-_DEFS = {"VG01": VG01, "VG05": VG05, "VG10": VG10, "VG11": VG11, "VG14": VG14, "VG15": VG15}
+_DEFS = {definition.model_id: definition for definition in MODEL_REGISTRY.values()}
 
 
 def _build(model_id, tmp_path, monkeypatch):
@@ -64,31 +66,40 @@ def _build(model_id, tmp_path, monkeypatch):
         sampling=sampling.get_sampling_configuration("dev"),
     )
     os.makedirs(ctx.reporting.output_dir, exist_ok=True)
-    if model_id == "VG01":
+    if model_id in {"VG01", "VG02", "VG03", "VG04"}:
         common.prepare_univariate_data(ctx, d)
         common.configure_univariate_priors(ctx, d)
-        common.build_model(ctx)
-    elif model_id == "VG11":
+        common.build_model(ctx, d)
+    elif model_id in {"VG11", "VG12"}:
         cur.prepare_univariate_re_data(ctx, d)
         common.configure_univariate_priors(ctx, d)
         cur.build_univariate_re_model(ctx, d)
     elif model_id == "VG05":
         cb.prepare_bivariate_data(ctx, d)
         cb.configure_bivariate_priors(ctx, d)
-        cb.build_model(ctx)
-    elif model_id == "VG10":
+        cb.build_model(ctx, d)
+    elif model_id in {"VG07", "VG08", "VG09", "VG10", "VG13", "VG16"}:
         cbr.prepare_bivariate_re_data(ctx, d)
         cb.configure_bivariate_priors(ctx, d)
         cbr.build_model_re(ctx, d)
     elif model_id == "VG14":
         ct.prepare_trivariate_data(ctx, d)
         ct.configure_trivariate_priors(ctx, d)
-        ct.build_model(ctx)
+        ct.build_model(ctx, d)
     elif model_id == "VG15":
         cj.prepare_joint_data(ctx, d)
         cj.configure_joint_priors(ctx, d)
         cj.build_model(ctx, d)
     return ctx.model
+
+
+@pytest.mark.parametrize("model_id", _DEFS)
+def test_every_registered_model_builds(model_id, tmp_path, monkeypatch):
+    """Catch registry combinations that definition-only validation cannot see."""
+    model = _build(model_id, tmp_path, monkeypatch)
+
+    assert model.free_RVs
+    assert model.observed_RVs
 
 
 def _names(m):

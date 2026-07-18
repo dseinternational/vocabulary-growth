@@ -1,7 +1,7 @@
 # Runbook: full reporting-config refit of all models
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5).
 
 How to refit the whole `VG01`–`VG16` family at reporting quality (`rep`) on a
 large VM, render every report, and produce comparisons — with the pitfalls that a
@@ -55,9 +55,7 @@ python scripts/compare_sensitivity.py vg15 --variant us01-ceiling-excluded
 scripts/run_replication.sh --config rep --output-dir <scratch>
 ```
 
-Idempotent: a model whose `trace.nc` exists is skipped (`--fresh` to force). It
-fits+renders each model, runs comparisons, syncs figures, renders the report and
-comparison book, and (optionally) uploads. Estimate ~15–25 h sequential.
+Idempotent: a model is skipped only when its state is `complete` and its model definition, requested sampling configuration and parameters, raw-data fingerprint, and Git commit match the current run (`--fresh` forces a refit). A trace file by itself is never treated as complete. The script fits and renders each model, runs comparisons, synchronises figures, renders the report and comparison book, and optionally uploads. Any required-step failure stops all downstream comparison and publication phases and leaves a `FAILED` marker in the run log directory; an entirely successful run leaves `SUCCESS`. Estimate approximately 15–25 hours sequentially.
 
 ### Parallel fitting on a large VM
 
@@ -161,14 +159,14 @@ Back up the non-converged output first; the refit becomes the model of record.
 ## 3. Render + comparisons
 
 ```bash
-python scripts/sync_report_figures.py --output-dir <scratch>   # feeds docs/report/figures/
+python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # validates fits, then feeds docs/report/figures/
 # comparisons (consume fitted traces/summaries):
 for c in loo_compare loso_compare compare_models compare_ds_td \
          compare_ds_td_trajectories compare_ds_td_expressive \
          compare_ds_td_latency compare_ds_td_q_overlap compare_ds_td_re; do
   python scripts/$c.py
 done
-python scripts/sync_report_figures.py --output-dir <scratch>   # re-sync comparison artefacts
+python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re-sync comparison artefacts
 quarto render docs/report
 # the comparison book reads its CSV/PNG artefacts by BARE filename from its own dir,
 # and sync_report_figures only populates docs/report/figures/ — so stage them first:
@@ -186,8 +184,8 @@ in-repo `output/`.
 
 ## 4. Completion checklist
 
-- [ ] All registered models have a `trace.nc` and PASS the gate on **unrounded**
-      diagnostics (R-hat ≤ 1.01, ESS ≥ 400, 0 divergences, BFMI ≥ 0.3).
+- [ ] `python scripts/check_fit.py <model> --config rep --purpose publish --output-dir <scratch>` passes for every registered model; this includes complete lifecycle state, compatible provenance, reporting configuration, clean source state, rendered output, and `trace.nc`.
+- [ ] All registered models PASS the gate on **unrounded** diagnostics (R-hat ≤ 1.01, ESS ≥ 400, 0 divergences, BFMI ≥ 0.3).
 - [ ] Understood-GP-ridge models refit with heavier tuning if needed.
 - [ ] `sync_report_figures.py` run; all model reports + `docs/report` +
       `docs/comparison` render clean.

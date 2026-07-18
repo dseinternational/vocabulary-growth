@@ -9,5 +9,5 @@ from vocab_growth.models.common import ModelFitContext, fit_single_outcome_model
 from vocab_growth.models.definitions import VG01
 
 
-def fit(config: str) -> ModelFitContext:
-    return fit_single_outcome_model(config, VG01)
+def fit(config: str, *, render: bool = False) -> ModelFitContext:
+    return fit_single_outcome_model(config, VG01, render=render)

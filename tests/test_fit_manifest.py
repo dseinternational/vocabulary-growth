@@ -64,6 +64,7 @@ def test_write_fit_manifest_records_data_code_and_sampling(tmp_path):
     assert manifest["data"]["analysis_frame_hash"].startswith("sha256:")
     assert "commit" in manifest["code"]
     assert "pymc" in {name.lower() for name in manifest["runtime"]["packages"]}
+    assert isinstance(manifest["runtime"]["direct_package_origins"], dict)
 
 
 def test_git_metadata_records_detached_head_as_null(monkeypatch):

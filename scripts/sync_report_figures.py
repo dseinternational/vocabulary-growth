@@ -34,8 +34,17 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+from dataclasses import asdict
+
+import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import (
+    git_metadata,
+    require_valid_fit,
+    source_data_hash,
+)
+from vocab_growth.models.definitions import MODEL_REGISTRY
 
 COPY_EXTS = (".svg", ".png", ".csv")
 
@@ -73,6 +82,16 @@ def main() -> None:
             "$DSE_VOCAB_GROWTH_OUTPUT_DIR; default: <repo>/output)."
         ),
     )
+    parser.add_argument(
+        "--config",
+        default="rep",
+        help="Expected sampling configuration for model artefacts (default: rep).",
+    )
+    parser.add_argument(
+        "--allow-provisional",
+        action="store_true",
+        help="Allow complete dev/test fits in the local cache (never used by replication).",
+    )
     args = parser.parse_args()
 
     env.set_output_root(args.output_dir)
@@ -81,15 +100,34 @@ def main() -> None:
     print(f"[output] reading fitted output from {env.output_root()}")
 
     total = 0
+    definitions_by_label = {
+        f"{definition.model_id}-{definition.config_name}": definition
+        for definition in MODEL_REGISTRY.values()
+    }
+    expected_sampling = sampling.get_sampling_configuration(args.config)
+    current_git = git_metadata(env.ROOT_DIR)
+    current_source_hash = source_data_hash(env.DATA_DIR)
 
     if not args.comparisons_only:
         if os.path.isdir(models_dir):
             for name in sorted(os.listdir(models_dir)):
                 src = os.path.join(models_dir, name)
-                if os.path.isdir(src):
-                    n = _sync_dir(src, os.path.join(env.REPORT_FIGS_DIR, name))
-                    total += n
-                    print(f"  {name}: {n} files")
+                definition = definitions_by_label.get(name)
+                if not os.path.isdir(src) or definition is None:
+                    continue
+                require_valid_fit(
+                    src,
+                    expected_definition=definition,
+                    expected_sampling_config_name=args.config,
+                    expected_sampling_parameters=asdict(expected_sampling),
+                    expected_git=current_git,
+                    expected_source_data_hash=current_source_hash,
+                    require_reporting_quality=not args.allow_provisional,
+                    require_clean_fit=not args.allow_provisional,
+                )
+                n = _sync_dir(src, os.path.join(env.REPORT_FIGS_DIR, name))
+                total += n
+                print(f"  {name}: {n} files")
         else:
             print(f"[skip] no models output dir: {models_dir}")
 

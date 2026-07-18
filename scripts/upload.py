@@ -6,10 +6,13 @@ Upload model output to Azure Blob Storage.
 
 import argparse
 import os
+from dataclasses import asdict
 
+import dse_research_utils.statistics.models.sampling as sampling
 from rich import print
 
 from vocab_growth import environment as local_env
+from vocab_growth.fit_artifacts import git_metadata, require_valid_fit, source_data_hash
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.storage import upload_to_blob_storage
 
@@ -33,6 +36,11 @@ if __name__ == "__main__":
         "--include-traces",
         action="store_true",
         help="Include trace files (.nc) in the upload (excluded by default).",
+    )
+    parser.add_argument(
+        "--config",
+        default="rep",
+        help="Expected reporting sampling configuration (default: rep).",
     )
     parser.add_argument(
         "--output-dir",
@@ -67,6 +75,20 @@ if __name__ == "__main__":
             )
             print("Run fit_model.py first to generate model output.")
             exit(1)
+
+        definition = MODEL_REGISTRY[model_id]
+        expected_sampling = sampling.get_sampling_configuration(args.config)
+        require_valid_fit(
+            output_dir,
+            expected_definition=definition,
+            expected_sampling_config_name=args.config,
+            expected_sampling_parameters=asdict(expected_sampling),
+            expected_git=git_metadata(local_env.ROOT_DIR),
+            expected_source_data_hash=source_data_hash(local_env.DATA_DIR),
+            require_reporting_quality=True,
+            require_rendered_report=True,
+            require_clean_fit=True,
+        )
 
         upload_to_blob_storage(
             output_dir, model_label, include_traces=args.include_traces

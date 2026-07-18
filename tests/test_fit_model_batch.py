@@ -22,14 +22,14 @@ def test_batch_continues_after_convergence_failure():
     calls: list[str] = []
 
     def fit_ok(name):
-        def fit(config):
-            calls.append(f"{name}:{config}")
+        def fit(config, *, render=False):
+            calls.append(f"{name}:{config}:{render}")
             return name
 
         return SimpleNamespace(fit=fit)
 
-    def fit_fails(config):
-        calls.append(f"bad:{config}")
+    def fit_fails(config, *, render=False):
+        calls.append(f"bad:{config}:{render}")
         raise ConvergenceGateError("did not converge")
 
     selected = [
@@ -38,9 +38,11 @@ def test_batch_continues_after_convergence_failure():
         ("last", fit_ok("last")),
     ]
 
-    contexts, timings, failures = _MODULE._fit_selected_models(selected, "rep")
+    contexts, timings, failures = _MODULE._fit_selected_models(
+        selected, "rep", render=True
+    )
 
-    assert calls == ["first:rep", "bad:rep", "last:rep"]
+    assert calls == ["first:rep:True", "bad:rep:True", "last:rep:True"]
     assert contexts == ["first", "last"]
     assert set(timings) == {"first", "bad", "last"}
     assert failures == {"bad": "did not converge"}

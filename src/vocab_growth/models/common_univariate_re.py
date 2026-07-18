@@ -278,6 +278,7 @@ def build_univariate_re_model(
         slope_anchors=config.slope_anchors,
         use_gp_anchor=anchor_g,
         gp_anchor_age_months=definition.gp_anchor_age_months,
+        gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
     X_query = grids.X_query
@@ -294,7 +295,7 @@ def build_univariate_re_model(
     ell_high_z = ell_high_months / X_obs_std
     ell_range_z = (ell_low_z, ell_high_z)
 
-    L, M = get_hsgp_hyperparams(X_all_z, ell_range_z)
+    L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
     # Slope anchors
     slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
@@ -541,6 +542,8 @@ def sample_posterior_predictive_re(
 def fit_univariate_re_model(
     config: str,
     definition: UnivariateModelDefinition,
+    *,
+    render: bool = False,
 ) -> UnivariateREContext:
     """Fit pipeline for a univariate model with study random intercepts.
 
@@ -555,6 +558,7 @@ def fit_univariate_re_model(
     return run_fit_pipeline(
         config,
         definition,
+        render=render,
         stages=[
             (
                 "Prepare data",
