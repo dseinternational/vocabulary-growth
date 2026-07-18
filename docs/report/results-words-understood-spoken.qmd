@@ -41,7 +41,7 @@ _tab = _q[
     ["words", "q_TD_median", "q_DS_median", "dq_median", "dq_ci_lo", "dq_ci_hi", "dq_p_gt0"]
 ].round(3)
 _tab.columns = [
-    "Words understood", "TD q", "DS q", "Δq (TD−DS)", "HDI 90% lo", "HDI 90% hi", "P(TD>DS)"
+    "Words understood", "TD q", "DS q", "Δq (TD−DS)", "89% lo", "89% hi", "P(TD>DS)"
 ]
 _tab.reset_index(drop=True)
 ```

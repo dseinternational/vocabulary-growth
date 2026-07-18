@@ -1333,12 +1333,21 @@ def posterior_summary(context: JointContext):
     Ey = s.p_any_query * n_trials
     Ey_i = s.p_any_indep_query * n_trials
     p_any_o = intervals.bands(s.p_any_query, ci_prob, ci_kind, sample_axis=1)
+    p_any_in = intervals.bands(s.p_any_query, inner, ci_kind, sample_axis=1)
+    Ey_o = intervals.bands(Ey, ci_prob, ci_kind, sample_axis=1)
+    Ey_in = intervals.bands(Ey, inner, ci_kind, sample_axis=1)
     pany = pd.DataFrame({
         "age_months": s.X_query,
         "p_any_median": np.median(s.p_any_query, axis=1),
+        "p_any_ci50_lo": p_any_in[:, 0],
+        "p_any_ci50_hi": p_any_in[:, 1],
         "p_any_ci_lo": p_any_o[:, 0],
         "p_any_ci_hi": p_any_o[:, 1],
         "Ey_any_median": np.median(Ey, axis=1),
+        "Ey_any_ci50_lo": Ey_in[:, 0],
+        "Ey_any_ci50_hi": Ey_in[:, 1],
+        "Ey_any_ci_lo": Ey_o[:, 0],
+        "Ey_any_ci_hi": Ey_o[:, 1],
         "p_any_indep_median": np.median(s.p_any_indep_query, axis=1),
         "Ey_any_indep_median": np.median(Ey_i, axis=1),
     })
