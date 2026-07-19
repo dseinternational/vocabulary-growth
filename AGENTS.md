@@ -11,14 +11,14 @@ This project is an exploratory study of vocabulary development in children with 
 
 The Python package `vocab_growth` (in `src/vocab_growth/`) defines a series of PyMC models that are fitted to vocabulary assessment data aggregated from multiple international studies. Reports are authored in Quarto (`.qmd`).
 
-This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.7.0` (see [Environment setup](#environment-setup)); a commented local-dev override in `environment.yml` lets you point at a sibling `../research/src/python` checkout instead.
+This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.7.1` (see [Environment setup](#environment-setup)); a commented local-dev override in `environment.yml` lets you point at a sibling `../research/src/python` checkout instead.
 
 ## Environment setup
 
 Hybrid two-layer environment (shared across DSE research repos):
 
 - **Compiled core** — the scientific stack (`numpy`/`scipy`/`pandas`/`pymc`/`nutpie`/`jax`/`arviz`, …) comes from **conda-forge** and must match the canonical spec shipped in `dse-research-utils` (`data/environment-core.yml`) so it cannot drift across repos. Verify with `dse-check-env environment.yml`.
-- **Pip layer** — the pure-Python tail and the shared library. `dse-research-utils` installs from the public git tag `v0.7.0` (`dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.7.0#subdirectory=src/python`); the package itself installs editable (`-e ./`).
+- **Pip layer** — the pure-Python tail and the shared library. `dse-research-utils` installs from the public git tag `v0.7.1` (`dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.7.1#subdirectory=src/python`); the package itself installs editable (`-e ./`).
 
 - **Python environment**: Conda/mamba (environment name `dse-vocab-growth`), Python 3.14, channel `conda-forge`. Create with `mamba env create -f environment.yml`; update with `conda env update -f environment.yml`.
 - **Exact replication**: `conda-lock.yml` pins the compiled environment for `linux-64` and `osx-arm64`; `requirements-pip.lock` pins the pip layer. See `docs/runbooks/environment-locks.md`. Refresh both with `scripts/lock_environment.py` only after an intentional dependency change.
