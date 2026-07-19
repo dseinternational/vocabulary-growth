@@ -6,14 +6,14 @@ dependencies:
   # Must match dse-research-utils' data/environment-core.yml exactly. Verify:
   #   dse-check-env environment.yml
   - python=3.14.6
-  - numpy>=2.4.6,<2.5 # numba 0.65.1 requires numpy <2.5; lift the cap when numba supports 2.5
+  - numpy>=2.4.6,<2.5 # pymc>=6.1.0 -> pytensor 3.1.x -> numba<=0.65.1 -> numpy<2.5
   - scipy>=1.18.0
   - pandas>=3.0.3
-  - numba>=0.65.1
+  - numba>=0.58,<=0.65.1 # pytensor 3.x caps numba; this is what pymc>=6.1.0 commits us to
   - matplotlib>=3.11.0
   - scikit-learn>=1.9.0
   - statsmodels>=0.14.6
-  - pymc>=6.0.1 # pulls pytensor + a C toolchain from conda-forge
+  - pymc>=6.1.0 # pulls pytensor + a C toolchain from conda-forge; forces pytensor >=3.1.2 -> numba <=0.65.1 -> numpy <2.5
   - nutpie>=0.16.11
   - numpyro>=0.21.0
   - jax>=0.10.2 # CPU build; GPU acceleration via an environment-gpu.yml overlay
