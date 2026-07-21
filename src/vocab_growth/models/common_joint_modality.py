@@ -878,18 +878,20 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             anchor_idx=i_anchor if anchor_g_sign else None,
         )
 
-        # Study random intercepts (non-centred), applied at obs level only.
+        # Study random intercepts (non-centred, sum-to-zero), applied at obs level
+        # only. Sum-to-zero on the unit offsets removes the intercept vs
+        # study-RE-mean ridge; the tau * z scaling keeps the non-centring.
         tau_u = pm.HalfNormal("tau_u", sigma=config.tau_u_sigma)
         tau_q = pm.HalfNormal("tau_q", sigma=config.tau_q_sigma)
         tau_sign = pm.HalfNormal("tau_sign", sigma=config.tau_sign_sigma)
         delta_u = pm.Deterministic(
-            "delta_u", tau_u * pm.Normal("z_u", 0.0, 1.0, dims="study_id"), dims="study_id"
+            "delta_u", tau_u * pm.ZeroSumNormal("z_u", sigma=1.0, dims="study_id"), dims="study_id"
         )
         delta_q = pm.Deterministic(
-            "delta_q", tau_q * pm.Normal("z_q", 0.0, 1.0, dims="study_id"), dims="study_id"
+            "delta_q", tau_q * pm.ZeroSumNormal("z_q", sigma=1.0, dims="study_id"), dims="study_id"
         )
         delta_sign = pm.Deterministic(
-            "delta_sign", tau_sign * pm.Normal("z_sign", 0.0, 1.0, dims="study_id"), dims="study_id"
+            "delta_sign", tau_sign * pm.ZeroSumNormal("z_sign", sigma=1.0, dims="study_id"), dims="study_id"
         )
 
         # Subject random intercepts (non-centred), applied at obs level only. Each

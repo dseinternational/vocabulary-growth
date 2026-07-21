@@ -371,11 +371,15 @@ def build_univariate_re_model(
         )
 
         # ============================================================
-        # Study-level random intercepts (non-centred parameterisation)
+        # Study-level random intercepts (non-centred, sum-to-zero)
         # ============================================================
 
+        # Sum-to-zero on the unit offsets (delta_raw) removes the intercept vs
+        # study-RE-mean ridge: with few studies an unconstrained mean trades off
+        # against the global intercept/slope (R-hat failure at rep-hightune). The
+        # tau * raw scaling keeps the funnel-avoiding non-centring of issue #65.
         tau = pm.HalfNormal("tau", sigma=definition.tau_study_sigma)
-        delta_raw = pm.Normal("delta_raw", mu=0.0, sigma=1.0, dims="study_id")
+        delta_raw = pm.ZeroSumNormal("delta_raw", sigma=1.0, dims="study_id")
         delta = pm.Deterministic("delta", tau * delta_raw, dims="study_id")
 
         if use_subject_re:

@@ -531,17 +531,21 @@ def build_model_re(
         # Study-level random intercepts
         # ============================================================
 
-        # Non-centred (delta = tau * z, z ~ Normal(0, 1)) for HMC-friendly
-        # geometry with few studies — consistent with the subject REs below and
-        # the rest of the codebase. Mathematically identical to the centred form;
-        # the public names delta_u/delta_q/tau_u/tau_q are preserved (downstream
-        # scripts extract them by name from the trace). See issue #65.
+        # Non-centred, sum-to-zero (delta = tau * z, z ~ ZeroSumNormal(1)) for
+        # HMC-friendly geometry with few studies — consistent with the subject REs
+        # below and the rest of the codebase. The tau * raw scaling keeps the
+        # funnel-avoiding non-centring of issue #65; the sum-to-zero constraint on
+        # the unit offsets additionally removes the intercept vs study-RE-mean
+        # ridge (with few studies an unconstrained mean trades off against the
+        # global intercept/slope, an R-hat failure). The public names
+        # delta_u/delta_q/tau_u/tau_q are preserved (downstream scripts extract
+        # them by name from the trace).
         tau_u = pm.HalfNormal("tau_u", sigma=definition.tau_u_sigma)
-        delta_u_raw = pm.Normal("delta_u_raw", mu=0.0, sigma=1.0, dims="study_id")
+        delta_u_raw = pm.ZeroSumNormal("delta_u_raw", sigma=1.0, dims="study_id")
         delta_u = pm.Deterministic("delta_u", tau_u * delta_u_raw, dims="study_id")
 
         tau_q = pm.HalfNormal("tau_q", sigma=definition.tau_q_sigma)
-        delta_q_raw = pm.Normal("delta_q_raw", mu=0.0, sigma=1.0, dims="study_id")
+        delta_q_raw = pm.ZeroSumNormal("delta_q_raw", sigma=1.0, dims="study_id")
         delta_q = pm.Deterministic("delta_q", tau_q * delta_q_raw, dims="study_id")
 
         # ============================================================
