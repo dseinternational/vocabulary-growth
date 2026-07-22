@@ -18,10 +18,10 @@ Restart of the deliberately-paused 2026-07-17 run (`202607170935-full-refit-vm-r
 
 ## Model split
 
-| Config         | Models                                                        | n   |
-| -------------- | ------------------------------------------------------------- | --- |
-| `rep`          | vg01 vg02 vg03 vg04 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16   | 12  |
-| `rep-hightune` | vg11 vg12 (ta 0.95), vg13 (ta 0.99)                           | 3   |
+| Config         | Models                                                      | n   |
+| -------------- | ----------------------------------------------------------- | --- |
+| `rep`          | vg01 vg02 vg03 vg04 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 | 12  |
+| `rep-hightune` | vg11 vg12 (ta 0.95), vg13 (ta 0.99)                         | 3   |
 
 ## Plan (scope confirmed by user 2026-07-19)
 
@@ -53,7 +53,7 @@ Restart of the deliberately-paused 2026-07-17 run (`202607170935-full-refit-vm-r
 
 ## Incident 3: vg13 failed the R-hat gate at standard hightune (2026-07-20 17:14 UTC)
 
-- **vg13** (young TD joint, 5,406 rows, 4 studies) **failed** at tune 12000 / draws 8000 / ta 0.99: **6 R-hat failures, max 1.0135**, 0 ESS failures, **0 divergences**, min BFMI 0.284. Failing params: `p_slope_low_u`, `p_slope_hi_u`, `intercept_u`, `delta_u_raw[0/2/3]` — the **understood trend/intercept + study random-intercept ridge**. ESS min 459 (barely passing) → slow-but-valid mixing of a weakly-identified block (few studies, narrow 8–18 mo age band). This is the first *post-#164* (hierarchical) vg13 hightune attempt; July's ta-0.99 success was on the pre-#164 model.
+- **vg13** (young TD joint, 5,406 rows, 4 studies) **failed** at tune 12000 / draws 8000 / ta 0.99: **6 R-hat failures, max 1.0135**, 0 ESS failures, **0 divergences**, min BFMI 0.284. Failing params: `p_slope_low_u`, `p_slope_hi_u`, `intercept_u`, `delta_u_raw[0/2/3]` — the **understood trend/intercept + study random-intercept ridge**. ESS min 459 (barely passing) → slow-but-valid mixing of a weakly-identified block (few studies, narrow 8–18 mo age band). This is the first _post-#164_ (hierarchical) vg13 hightune attempt; July's ta-0.99 success was on the pre-#164 model.
 - **Diagnosis:** 0 divergences ⇒ not a step-size problem; the lever is more tuning + more draws (ridge mixing), not higher ta.
 - **Retry (queued):** tune 20000 / draws 12000 / ta 0.99 / chains 6, via `fit_vg13_strong.sh` (`vgvg13.service`), which **waits for vg11 to finish first** — vg13's 39 GB trace makes it as memory-heavy as vg11, so they cannot co-reside on the 251 GB box.
 - **If the strong retry still fails (>1.01):** genuine decision point for the user — (a) accept-with-caveat and document vg13's understood-trend block as marginally non-converged, (b) exclude vg13 from the published set, or (c) reparameterise (sum-to-zero/non-centred study REs — a code change). Not doing any of these unilaterally.
@@ -83,7 +83,7 @@ Restart of the deliberately-paused 2026-07-17 run (`202607170935-full-refit-vm-r
 ## Reparam validated; vg13 needs hightune ta 0.99 for a DIFFERENT block (2026-07-21 ~12:02 UTC)
 
 - **The sum-to-zero reparam WORKED.** vg13's failing parameters changed completely: from the study-RE ridge (`p_slope_*_u`, `intercept_u`, `delta_u_raw[...]`) to the **dispersion block** (`kappa_min_u`, `a_kappa_u`, `b_kappa_mag_u`, `b_kappa_u`). The ridge is gone. All 6 DS RE models refit clean at plain rep (e.g. vg08 maxRhat 1.0026, BFMI 0.53, dirty=False @ b563586).
-- **vg13 at plain rep FAILED** on the dispersion block: max R-hat 1.037, min ESS 107, **28 divergences**, BFMI 0.264. This is vg13's *separate, known* difficulty (age-varying dispersion on a narrow young-TD age range) — the same block that needed **ta 0.99** in July. Plain rep (tune 6000, ta 0.95) can't clear it.
+- **vg13 at plain rep FAILED** on the dispersion block: max R-hat 1.037, min ESS 107, **28 divergences**, BFMI 0.264. This is vg13's _separate, known_ difficulty (age-varying dispersion on a narrow young-TD age range) — the same block that needed **ta 0.99** in July. Plain rep (tune 6000, ta 0.95) can't clear it.
 - **Plan:** refit vg13 at **hightune ta 0.99** (tune 12000 / draws 8000) on the reparam code — with the ridge gone, the heavy tuning + high ta should now resolve the dispersion (previously hightune was consumed fighting the ridge). Memory-OK at draws 8000 (~39 GB), run alone.
 - **vg11, vg12 still fitting at plain rep** — awaiting their verdicts to see if they also need ta 0.99 or pass at rep.
 
@@ -95,11 +95,13 @@ Restart of the deliberately-paused 2026-07-17 run (`202607170935-full-refit-vm-r
 ## Current status + next steps (as of 2026-07-21 ~13:00 UTC)
 
 **Complete & publishable (13/15), all `dirty=False`:**
+
 - Baselines/unaffected @ 3e6f61d: vg01, vg02, vg03, vg04, vg05, vg14.
 - Study-RE models refit @ b563586 (sum-to-zero): vg07, vg08, vg09, vg10, vg15, vg16.
 - Soft caveats only (pass hard gate): vg01 (3 div), vg02 (1 div).
 
 **Outstanding (TD trio) — need reparam + hightune:**
+
 - vg12 (TD understood): fail at rep on trend/GP (1.013) → refit hightune tune 12000 / draws 8000 / ta 0.97.
 - vg13 (TD joint young): fail at rep on dispersion + 28 div (1.037) → refit hightune tune 12000 / draws 8000 / **ta 0.99**.
 - vg11 (TD spoken, 16k obs): fitting at plain rep now; if it fails on trend/GP → refit hightune tune 12000 / **draws 6000** (memory) / ta 0.97.
