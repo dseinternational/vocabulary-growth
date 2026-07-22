@@ -258,7 +258,18 @@ def _gp_from_mean(
     hsgp = pm.gp.HSGP(cov_func=cov, m=grid.M, L=grid.L)
     g_unit = hsgp.prior(f"g_unit{suffix}", X=X_all_z_data, dims="all_id")
     if anchor_idx is not None:
-        g_unit = g_unit - g_unit[anchor_idx]
+        # Orthogonalise the GP deviation against the linear trend: remove its
+        # constant AND linear-in-age components over the grid, so `g` carries only
+        # nonlinear curvature. The old single-point anchor (``g_unit -
+        # g_unit[anchor_idx]``) removed only the level trade-off with the
+        # intercept; the GP could still tilt linearly and alias with ``slope`` — an
+        # R-hat ridge on ``p_slope_*``/``slope``/``g_unit_hsgp_coeffs`` that heavier
+        # tuning does not fix (it worsened for vg12 at hightune). Zeroing the mean
+        # and linear slope of ``g_unit`` decouples it from intercept + slope.
+        z = X_all_z_data[:, 0]
+        zc = z - z.mean()
+        g_unit = g_unit - g_unit.mean()
+        g_unit = g_unit - ((zc * g_unit).sum() / (zc * zc).sum()) * zc
     if store_deterministic:
         g = pm.Deterministic(f"g{suffix}", eta * g_unit, dims=("all_id",))
         return pm.Deterministic(latent_name, mean_trend + g, dims=("all_id",))
