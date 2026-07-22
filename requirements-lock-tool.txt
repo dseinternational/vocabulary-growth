@@ -1,1 +1,1 @@
-conda-lock==3.0.4
+conda-lock==4.0.2
