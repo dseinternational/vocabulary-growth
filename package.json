@@ -19,7 +19,7 @@
   "devDependencies": {
     "@cspell/dict-it-it": "3.1.6",
     "cspell": "10.0.1",
-    "prettier": "3.9.5"
+    "prettier": "3.9.6"
   },
   "scripts": {
     "spellcheck": "cspell --show-suggestions --show-context \"**/*.md\" \"docs/**/*.qmd\"",
