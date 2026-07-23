@@ -27,7 +27,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pymc as pm
+import pytensor.tensor as pt
 from dse_research_utils.statistics.models.pymc_utils import logit
+from pytensor.tensor.linalg import solve as pt_solve
 
 
 def make_kappa_of_z(kappa_min, a_kappa, b_kappa):
@@ -96,18 +98,20 @@ def trend_and_gp(
     store_deterministic,
     latent_name=None,
     anchor_idx=None,
+    n_obs=None,
 ):
     """Logit-linear trend + HSGP deviation; return the full-grid latent.
 
-    Emits exactly the ops previously inlined in every engine, so it moves no
-    random-variable creation and cannot change the model graph. ``suffix`` carries
-    its own leading underscore (``""`` for single-outcome engines; ``"_u"`` /
-    ``"_q"`` / ``"_sign"`` otherwise). When ``store_deterministic`` is true the GP
-    value ``g{suffix}`` and the latent ``latent_name`` are stored as named
-    ``Deterministic``\\ s (``dims=("all_id",)``); otherwise a plain tensor is
-    returned (the trace-memory discipline used by the trivariate / joint engines).
-    ``anchor_idx`` (Option D) centres the GP to pass through zero at that grid row
-    for every draw.
+    ``suffix`` carries its own leading underscore (``""`` for single-outcome
+    engines; ``"_u"`` / ``"_q"`` / ``"_sign"`` otherwise). When
+    ``store_deterministic`` is true the GP value ``g{suffix}`` and the latent
+    ``latent_name`` are stored as named ``Deterministic``\\ s (``dims=("all_id",)``);
+    otherwise a plain tensor is returned (the trace-memory discipline used by the
+    trivariate / joint engines). When ``anchor_idx`` is set the GP is
+    orthogonalised against this mean's identifiable basis ``[1, z]`` (coefficients
+    fitted on the first ``n_obs`` observed rows only) and pinned to zero at the
+    reference-age anchor row — so it carries only nonlinear curvature and its level
+    is fixed against ``intercept``/``slope`` (see :func:`_gp_from_mean`).
     """
     p_lo = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_hi = cfg_hi.to_pymc(f"p_slope_hi{suffix}")
@@ -117,7 +121,9 @@ def trend_and_gp(
     intercept = pm.Deterministic(
         f"intercept{suffix}", logit(p_lo) - slope * grid.sa_z
     )
-    mean_trend = intercept + slope * X_all_z_data[:, 0]
+    z = X_all_z_data[:, 0]
+    mean_trend = intercept + slope * z
+    nuisance_basis = pt.stack([pt.ones_like(z), z], axis=1) if anchor_idx is not None else None
     return _gp_from_mean(
         mean_trend,
         cfg_ell=cfg_ell,
@@ -128,6 +134,8 @@ def trend_and_gp(
         store_deterministic=store_deterministic,
         latent_name=latent_name,
         anchor_idx=anchor_idx,
+        n_obs=n_obs,
+        nuisance_basis=nuisance_basis,
     )
 
 
@@ -142,6 +150,7 @@ def intercept_and_gp(
     store_deterministic,
     latent_name=None,
     anchor_idx=None,
+    n_obs=None,
 ):
     """Intercept-only mean (no age slope) + HSGP deviation; full-grid latent.
 
@@ -149,8 +158,17 @@ def intercept_and_gp(
     below the data floor: the mean is the free RV ``intercept{suffix}`` (created via
     ``to_pymc``, *not* a ``Deterministic``) and the GP carries the age-varying
     shape. Otherwise identical to :func:`trend_and_gp` (see it for the parameters).
+    When anchored the nuisance basis is ``[1]`` only — the mean carries no age slope,
+    so a linear GP direction is genuine signal here and must not be projected out;
+    only the level (co-identified with the free ``intercept``) is removed, then the
+    GP is pinned to zero at the reference-age anchor row.
     """
     intercept = cfg_intercept.to_pymc(f"intercept{suffix}")
+    nuisance_basis = (
+        pt.stack([pt.ones_like(X_all_z_data[:, 0])], axis=1)
+        if anchor_idx is not None
+        else None
+    )
     return _gp_from_mean(
         intercept,
         cfg_ell=cfg_ell,
@@ -161,6 +179,8 @@ def intercept_and_gp(
         store_deterministic=store_deterministic,
         latent_name=latent_name,
         anchor_idx=anchor_idx,
+        n_obs=n_obs,
+        nuisance_basis=nuisance_basis,
     )
 
 
@@ -180,6 +200,7 @@ def tent_and_gp(
     store_deterministic,
     latent_name=None,
     anchor_idx=None,
+    n_obs=None,
 ):
     """Three-anchor "tent" mean (rise to a peak anchor, then decline) + HSGP.
 
@@ -191,8 +212,10 @@ def tent_and_gp(
     is two logit-linear segments meeting at the peak anchor, **clamped flat beyond
     the outer anchors** so it does not extrapolate to implausible values. The peak
     therefore sits at the middle anchor age by construction, and the GP carries
-    smooth departures. Otherwise identical to :func:`trend_and_gp`; ``anchor_idx``
-    (Option D) still centres the GP through zero at that grid row.
+    smooth departures. When anchored the GP is orthogonalised against this mean's
+    full basis — the three fixed tent hats spanning ``{p_low, p_mid, p_hi}``, a
+    larger space than ``[1, z]`` — so it cannot mimic a shift of any anchor, then
+    pinned to zero at the reference-age anchor row (see :func:`_gp_from_mean`).
     """
     p_low = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_mid = cfg_mid.to_pymc(f"p_slope_mid{suffix}")
@@ -217,6 +240,21 @@ def tent_and_gp(
             ),
         ),
     )
+    if anchor_idx is not None:
+        # Fixed partition-of-unity tent hats: mean_tent == logit(p_low)*phi_low +
+        # logit(p_mid)*phi_mid + logit(p_hi)*phi_hi. Projecting the GP out of their
+        # span removes exactly the directions that alias with the three anchors
+        # (a strictly larger nuisance space than [1, z]).
+        phi_low = pt.clip((z_mid - zc) / (z_mid - z_low), 0.0, 1.0)
+        phi_hi = pt.clip((zc - z_mid) / (z_hi - z_mid), 0.0, 1.0)
+        phi_mid = pt.clip(
+            pt.minimum((zc - z_low) / (z_mid - z_low), (z_hi - zc) / (z_hi - z_mid)),
+            0.0,
+            1.0,
+        )
+        nuisance_basis = pt.stack([phi_low, phi_mid, phi_hi], axis=1)
+    else:
+        nuisance_basis = None
     return _gp_from_mean(
         mean_tent,
         cfg_ell=cfg_ell,
@@ -227,7 +265,43 @@ def tent_and_gp(
         store_deterministic=store_deterministic,
         latent_name=latent_name,
         anchor_idx=anchor_idx,
+        n_obs=n_obs,
+        nuisance_basis=nuisance_basis,
     )
+
+
+def _orthogonalise_and_anchor(g_unit, nuisance_basis, n_obs, anchor_idx, *, ridge=1e-6):
+    """Project the GP out of the mean's identifiable basis, then point-anchor it.
+
+    ``nuisance_basis`` is the ``(n_all, k)`` design whose columns span the mean term
+    the GP would otherwise alias with (``[1, z]`` for the logit-linear trend, ``[1]``
+    for the free-intercept mean, the three tent hats for the peak mean). Two
+    properties matter, and both are enforced here:
+
+    * **Inference must not depend on the reporting grid.** ``X_all_z`` stacks the
+      observations with plot points, query ages and the anchor row; the projection
+      coefficients are therefore fitted on the first ``n_obs`` *observed* rows only
+      (a fixed model design), then applied to every row. Changing ``n_plot`` /
+      ``ages_query`` cannot move the observed-row latent, so it cannot move the
+      likelihood or posterior.
+    * **The reference-age anchor contract is preserved.** After removing the
+      identifiable directions, the residual is shifted so it is exactly zero at
+      ``anchor_idx`` — every posterior draw still passes through zero at the
+      reference age, fixing the GP level against the mean (the reference age is a
+      deliberate model choice, unlike the plot/query grids). The linear/tent
+      directions removed above are the additional decoupling that stops the GP
+      aliasing with ``slope`` / the anchors.
+
+    A tiny ridge stabilises the normal-equations solve if a basis column is empty
+    over the observed rows (e.g. a tent hat with no observations in its support).
+    """
+    B = nuisance_basis
+    B_obs = B[:n_obs]
+    g_obs = g_unit[:n_obs]
+    gram = pt.dot(B_obs.T, B_obs) + ridge * pt.eye(B_obs.shape[1])
+    coef = pt_solve(gram, pt.dot(B_obs.T, g_obs), assume_a="pos")
+    g_unit = g_unit - pt.dot(B, coef)
+    return g_unit - g_unit[anchor_idx]
 
 
 def _gp_from_mean(
@@ -241,13 +315,17 @@ def _gp_from_mean(
     store_deterministic,
     latent_name,
     anchor_idx,
+    n_obs=None,
+    nuisance_basis=None,
 ):
     """Shared HSGP tail: build ell/eta/HSGP, sample ``g_unit``, combine with the mean.
 
     Factored out of :func:`trend_and_gp` / :func:`intercept_and_gp` so the two
-    differ only in their mean term. The op order is unchanged from the inlined
-    engines: ``ell_unit`` and ``eta`` are created after the mean term and before the
-    single RNG-bearing ``hsgp.prior`` call, so the free-RV stream is identical.
+    differ only in their mean term. ``ell_unit`` and ``eta`` are created after the
+    mean term and before the single RNG-bearing ``hsgp.prior`` call, so the free-RV
+    stream is identical across engines. When ``anchor_idx`` is set the GP is
+    orthogonalised against ``nuisance_basis`` and pinned to zero at the reference
+    row by :func:`_orthogonalise_and_anchor` (deterministic ops only — no new RVs).
     """
     ell_unit = cfg_ell.to_pymc(f"ell_unit{suffix}")
     ell = pm.Deterministic(
@@ -258,18 +336,12 @@ def _gp_from_mean(
     hsgp = pm.gp.HSGP(cov_func=cov, m=grid.M, L=grid.L)
     g_unit = hsgp.prior(f"g_unit{suffix}", X=X_all_z_data, dims="all_id")
     if anchor_idx is not None:
-        # Orthogonalise the GP deviation against the linear trend: remove its
-        # constant AND linear-in-age components over the grid, so `g` carries only
-        # nonlinear curvature. The old single-point anchor (``g_unit -
-        # g_unit[anchor_idx]``) removed only the level trade-off with the
-        # intercept; the GP could still tilt linearly and alias with ``slope`` — an
-        # R-hat ridge on ``p_slope_*``/``slope``/``g_unit_hsgp_coeffs`` that heavier
-        # tuning does not fix (it worsened for vg12 at hightune). Zeroing the mean
-        # and linear slope of ``g_unit`` decouples it from intercept + slope.
-        z = X_all_z_data[:, 0]
-        zc = z - z.mean()
-        g_unit = g_unit - g_unit.mean()
-        g_unit = g_unit - ((zc * g_unit).sum() / (zc * zc).sum()) * zc
+        if n_obs is None or nuisance_basis is None:
+            raise ValueError(
+                "anchored GP requires n_obs and nuisance_basis "
+                f"(suffix={suffix!r}, anchor_idx={anchor_idx})"
+            )
+        g_unit = _orthogonalise_and_anchor(g_unit, nuisance_basis, n_obs, anchor_idx)
     if store_deterministic:
         g = pm.Deterministic(f"g{suffix}", eta * g_unit, dims=("all_id",))
         return pm.Deterministic(latent_name, mean_trend + g, dims=("all_id",))

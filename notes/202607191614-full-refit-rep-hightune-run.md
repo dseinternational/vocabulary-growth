@@ -112,3 +112,30 @@ Restart of the deliberately-paused 2026-07-17 run (`202607170935-full-refit-vm-r
 **Provenance note:** published set will span commits 3e6f61d (baselines, code-identical) + b563586 (reparam) + the branch HEAD after this note. All docs/reparam commits are code-equivalent for each model's engine.
 
 **Infra lessons captured:** (1) never write into the working tree during a reporting run (dirties in-flight manifests); (2) launch long runs under `systemd-run` (system scope), not bare `setsid`/`nohup` (logind `KillUserProcesses` kills the latter on logout); (3) the hierarchical TD hightune fits are memory-heavy — draws 12000 OOMs on 251 GB; keep draws ≤ 8000 and never run two heavy fits concurrently.
+
+## GP orthogonalisation added, then TD trio landed at hightune (2026-07-21 late → 2026-07-22)
+
+- **GP orthogonalisation (commit `5397561`).** To remove the trend-vs-GP redundancy structurally (rather than lean on hightune), the anchored HSGP was changed from a single-point anchor (`g_unit - g_unit[idx]`) to a **whole-grid** orthogonalisation: project the constant AND linear-in-age components out of `g_unit` over the full `X_all_z` grid. This improved the already-passing DS anchored models — **vg10** R-hat 1.0027 → 1.0013, min ESS 2135 → 5111; **vg15** R-hat 1.0035 → 1.0011, min ESS 2050 → 6428 (0 divergences both). (These before/after numbers are from the `5397561` whole-grid form; see the correction below — they are superseded and will be re-derived.)
+- **TD trio** refit at hightune on the reparam + GP-orthogonalisation code: all three cleared the hard gate. Final soft caveats: **vg12** BFMI 0.29, **vg13** BFMI 0.28 (both pass R-hat/ESS); vg11 clean. All 15 models then passed the hard gate (11 fully clean, 4 soft-caveat: vg01 3 div, vg02 1 div, vg12/vg13 low BFMI).
+- Phase B (comparisons + render) completed; PR #176 opened.
+
+## Statistical review of #176 (PR reviewer via Codex/GPT-5, 2026-07-23) — four P1 + two P2
+
+The review found the two core conditioning commits were **correct in intent but flawed in implementation**. All six points verified against the code and accepted:
+
+- **P1-A — the whole-grid orthogonalisation leaked the reporting grid into inference.** `X_all_z` stacks observations with plot points, query ages and the anchor row; computing the projection statistics (`g.mean()`, the `z`-slope) over that whole stack makes the _observed-row_ latent — hence the likelihood — depend on `n_plot` / `ages_query`. A reporting-only choice must never move the posterior.
+- **P1-B — the whole-grid form broke the `anchor_g*_at_ref` point-anchor contract** (`g` no longer passed through zero at the reference age, contradicting the docstrings, the `definitions` field and the build output), and for the `tent` mean it projected against only `[1, z]`, a smaller basis than the three-anchor tent spans.
+- **P1-C — the sum-to-zero RE change was mis-described as prior-preserving.** `ZeroSumNormal(1)` has covariance `I − J/K` (marginal `1 − 1/K`, a 25 % shrink at K=4, plus a −1/K correlation); `tau` unchanged does not restore it.
+- **P1-D — the sign study zero-sum spanned all studies, not the sign-informed subset.** Uninformed studies' `z_sign` could counterbalance a common shift among the informed ones, so the constraint need not remove the sign-intercept ridge.
+- **P2-A** — the new guard tests skip in CI (`pytest` runs before `prepare_data.py`). **P2-B** — this note stopped before the GP-orthogonalisation commit and final validation.
+
+## Corrected fixes on the branch (2026-07-23)
+
+Implemented and unit-tested (full suite green; ruff clean). **No model definitions or priors semantics beyond the intentional, now-documented RE constraint.**
+
+- **GP anchor (P1-A + P1-B), `gp_utils.py`.** Projection coefficients are now fitted on the **observed rows only** (`n_obs`, a fixed model design) and applied to every row, so plot/query grids cannot leak into inference; the residual is then **pinned to zero at the anchor row**, restoring the point-anchor contract. The nuisance basis is **mean-specific**: `[1, z]` for the logit-linear trend, `[1]` for the free-intercept mean (a linear GP direction there is genuine signal), and the **three tent hats** for the peak mean. New data-free unit tests (`test_gp_anchor_orthogonalisation.py`) assert anchor-zero, observed-row orthogonality, reporting-grid invariance, and the intercept/tent basis behaviour; they run in CI.
+- **Sum-to-zero rescale (P1-C).** `ZeroSumNormal` sigma is rescaled by `sqrt(K/(K−1))` so each study effect's marginal prior variance stays `tau²`; only the group-mean DOF (the ridge) and a −1/K correlation remain. Relabelled in code/PR as an intentional identifiability constraint, not prior-preserving. Applied in `common_univariate_re`, `common_bivariate_re`, `common_joint_modality`.
+- **Sign zero-sum over informed studies (P1-D), `common_joint_modality.py`.** `delta_sign` is now `ZeroSumNormal` over the **sign-informed studies only** (union of `idx_sign` / `idx_cells` / `idx_prod`), scattered into full `study_id` with **0 for uninformed studies**. Verified on VG15: of 12 studies, 5 are active and zero-sum, 7 are forced to exactly 0. U and q remain global (audited: informed by every retained study via their direct + nested terms).
+- **P2-A** — added the synthetic CI tests above; updated the integration test's assertions to the new (observed-row, point-anchored) contract.
+
+**Refit scope (pending).** The GP-anchor and sign-zero-sum changes alter the likelihood, and the RE rescale shifts the prior scale, so **every study-RE and every anchored model must be re-fit** before publication: the DS RE/anchored models (vg07–10, 15, 16) and the TD trio (vg11–13) at least. The whole-grid VG10/VG15 before/after numbers above are **superseded** and will be regenerated from the corrected fits. **Phase C (upload to `dseresearch/public`) is held** until the re-fit is clean. Baselines with no study REs and no anchor (vg01–05, 14) are unaffected by these changes.

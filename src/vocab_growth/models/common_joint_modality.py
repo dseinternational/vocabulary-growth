@@ -59,6 +59,7 @@ import numpy as np
 import pandas as pd
 import preliz as pz
 import pymc as pm
+import pytensor.tensor as pt
 from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
@@ -845,6 +846,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             grid=gp_grid,
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_u else None,
+            n_obs=n,
         )
         h_all = trend_and_gp(
             cfg_low=config.p_slope_low_q_dist,
@@ -856,6 +858,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             grid=gp_grid,
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_q else None,
+            n_obs=n,
         )
         # Signed marginal: three-anchor "tent" hump mean (young/peak/old) + GP; the
         # study random intercept delta_sign is added at obs level below. The GP is
@@ -876,23 +879,57 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             grid=gp_grid,
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_sign else None,
+            n_obs=n,
         )
 
         # Study random intercepts (non-centred, sum-to-zero), applied at obs level
         # only. Sum-to-zero on the unit offsets removes the intercept vs
-        # study-RE-mean ridge; the tau * z scaling keeps the non-centring.
+        # study-RE-mean ridge; the tau * z scaling keeps the non-centring. This is an
+        # intentional identifiability constraint, not a prior-preserving
+        # reparameterisation: it removes the group-mean DOF and imposes a -1/K
+        # correlation. Each ZeroSumNormal sigma is rescaled by sqrt(K/(K-1)) so the
+        # marginal per-study prior variance stays tau^2 (its value before the
+        # constraint), where K is the number of studies the *outcome* actually
+        # constrains.
+        #
+        # The zero-sum must be taken over only the studies that inform each outcome
+        # (P1-D). delta_u/delta_q are informed by every retained study — U enters its
+        # own likelihood and the spoken/sign nested terms for all studies, and q
+        # enters the spoken likelihood and the cross-tab cells — so a global zero-sum
+        # over study_id is correct for them. But signing is observed by only a
+        # subset (the y_sign rows and the uk_02/nz_01 cross-tabs); a global zero-sum
+        # would let the uninformed studies' z_sign counterbalance a common shift
+        # among the informed ones, so it need not remove the sign-intercept ridge and
+        # it couples the informed effects through nuisance ones. delta_sign is
+        # therefore zero-summed over the sign-informed studies only, and fixed to 0
+        # for studies with no signing information (they never enter a sign term).
         tau_u = pm.HalfNormal("tau_u", sigma=config.tau_u_sigma)
         tau_q = pm.HalfNormal("tau_q", sigma=config.tau_q_sigma)
         tau_sign = pm.HalfNormal("tau_sign", sigma=config.tau_sign_sigma)
+        zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
         delta_u = pm.Deterministic(
-            "delta_u", tau_u * pm.ZeroSumNormal("z_u", sigma=1.0, dims="study_id"), dims="study_id"
+            "delta_u", tau_u * pm.ZeroSumNormal("z_u", sigma=zsn_sigma, dims="study_id"), dims="study_id"
         )
         delta_q = pm.Deterministic(
-            "delta_q", tau_q * pm.ZeroSumNormal("z_q", sigma=1.0, dims="study_id"), dims="study_id"
+            "delta_q", tau_q * pm.ZeroSumNormal("z_q", sigma=zsn_sigma, dims="study_id"), dims="study_id"
         )
-        delta_sign = pm.Deterministic(
-            "delta_sign", tau_sign * pm.ZeroSumNormal("z_sign", sigma=1.0, dims="study_id"), dims="study_id"
+
+        # Sign-informed studies: those contributing a signing marginal (idx_sign) or
+        # a within-understood/produced cross-tab (idx_cells / idx_prod).
+        sign_informed = np.unique(
+            np.concatenate([
+                study_codes[idx_sign],
+                study_codes[idx_cells],
+                study_codes[idx_prod],
+            ]).astype(int)
         )
+        n_sign_studies = int(sign_informed.size)
+        zsn_sigma_sign = float(np.sqrt(n_sign_studies / (n_sign_studies - 1)))
+        z_sign = pm.ZeroSumNormal("z_sign", sigma=zsn_sigma_sign, shape=n_sign_studies)
+        delta_sign_full = pt.set_subtensor(
+            pt.zeros(n_studies)[sign_informed], tau_sign * z_sign
+        )
+        delta_sign = pm.Deterministic("delta_sign", delta_sign_full, dims="study_id")
 
         # Subject random intercepts (non-centred), applied at obs level only. Each
         # is gated by its flag so the sign-RE can be dropped via config alone.
