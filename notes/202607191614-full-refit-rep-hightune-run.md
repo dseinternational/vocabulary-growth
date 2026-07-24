@@ -148,7 +148,7 @@ Implemented and unit-tested (full suite green; ruff clean). **No model definitio
 | ----- | --------- | --------- | ------- | --- | -------- | ----------- |
 | vg07  | PASS      | 1.0005    | 8434    | 0   | 0.78     | —           |
 | vg08  | PASS      | 1.0020    | 1899    | 0   | 0.54     | —           |
-| vg09  | PASS      | 1.0033    | 1684    | 0   | 0.50     | —           |
+| vg09  | PASS      | 1.0033    | 1684    | 0   | 0.49     | —           |
 | vg10  | PASS      | 1.0016    | 5020    | 0   | 0.50     | —           |
 | vg15  | PASS      | 1.0012    | 4451    | 0   | 0.59     | —           |
 | vg16  | PASS      | 1.0062    | 1630    | 0   | 0.50     | —           |
@@ -156,7 +156,7 @@ Implemented and unit-tested (full suite green; ruff clean). **No model definitio
 | vg13  | PASS      | 1.0041    | 1215    | 0   | 0.28     | BFMI ~0.28  |
 | vg11  | PASS      | 1.0058    | 621     | 2   | 0.40     | 2 div       |
 
-The DS six are pristine (0 div, BFMI ≥ 0.5). The TD trio's BFMI ≈ 0.28 is intrinsic to the age-varying dispersion posterior over the narrow young-TD window — the same soft caveat accepted last run, now reached at plain `rep`. vg10 (DS anchored) is well conditioned (min ESS 5020), confirming the corrected obs-only anchor matches the flawed whole-grid form it replaced. These numbers supersede the whole-grid VG10/VG15 metrics quoted earlier.
+The DS six are pristine (0 div, BFMI 0.49–0.78; vg09 0.495 and vg16 0.496 sit just under 0.5). The TD trio's BFMI ≈ 0.28 is intrinsic to the age-varying dispersion posterior over the narrow young-TD window — the same soft caveat accepted last run, now reached at plain `rep`. vg10 (DS anchored) is well conditioned (min ESS 5020), confirming the corrected obs-only anchor matches the flawed whole-grid form it replaced. These numbers supersede the whole-grid VG10/VG15 metrics quoted earlier.
 
 **Provenance gap found and fixed.** The first corrected re-fit recorded `dirty=True` on every manifest: `git_metadata` computes dirty from `git status --porcelain --untracked-files=normal`, and 68 untracked `docs/comparison/*.png|svg` figure copies (left over from an earlier render) were in the tree at launch — `.gitignore` covered `*.csv`/`index.html` but not the plots. Fixed in `d2f2b96` (ignore the plot copies + report LaTeX byproducts), cleaned the tree, and re-fit on a porcelain-clean tree so all manifests are `dirty=False`. Lesson: the "never fit on an unclean tree" rule includes untracked build artifacts, not just modified tracked files.
 
