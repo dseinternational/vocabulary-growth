@@ -185,3 +185,12 @@ All 15 model reports uploaded via `scripts/upload.py all --config rep` (traces e
 | VG16  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b2-2106-75b2-8ad6-5476b3bdac6a/VG16-age-understood-spoken-ds-re-subj-uq-crosslag/index.html |
 
 Note: `upload.py` publishes the per-model reports; the consolidated report book (`docs/report`) and comparison book (`docs/comparison`) are rendered locally but not part of this per-model upload path.
+
+## Phase C addendum — consolidated books uploaded (2026-07-24)
+
+The consolidated report book (`output/report`, HTML + PDF + DOCX) and the comparison book (`docs/comparison`, rendered HTML; Quarto source excluded) were uploaded via `upload_directory_to_blob_storage` (shared run id `019f93ff-4065-706e-a592-d9e6839411bc`):
+
+| artefact                 | index URL                                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Consolidated report book | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93ff-4065-706e-a592-d9e6839411bc/report/index.html     |
+| Comparison analysis      | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93ff-4065-706e-a592-d9e6839411bc/comparison/index.html |
