@@ -161,3 +161,27 @@ The DS six are pristine (0 div, BFMI ≥ 0.5). The TD trio's BFMI ≈ 0.28 is in
 **Provenance gap found and fixed.** The first corrected re-fit recorded `dirty=True` on every manifest: `git_metadata` computes dirty from `git status --porcelain --untracked-files=normal`, and 68 untracked `docs/comparison/*.png|svg` figure copies (left over from an earlier render) were in the tree at launch — `.gitignore` covered `*.csv`/`index.html` but not the plots. Fixed in `d2f2b96` (ignore the plot copies + report LaTeX byproducts), cleaned the tree, and re-fit on a porcelain-clean tree so all manifests are `dirty=False`. Lesson: the "never fit on an unclean tree" rule includes untracked build artifacts, not just modified tracked files.
 
 **Phase B complete.** All 15 model reports rendered; comparison suite (incl. the now-guarded `loo_compare`) ran clean; figures synced; report + comparison books rendered. `check_fit --purpose publish` passes for all 15 (dirty=False + reporting quality + rendered). **Phase C (blob upload) held** pending reviewer sign-off on PR #176.
+
+## Phase C complete — published to `dseresearch/public` (2026-07-24)
+
+All 15 model reports uploaded via `scripts/upload.py all --config rep` (traces excluded; `AZURE_TOKEN_CREDENTIALS=dev`, `DSERESEARCH_BLOB_CONTAINER_URL=https://dseresearch.blob.core.windows.net/public`). Each report is at a UUID-versioned path `.../public/projects/vocabulary-growth/output/<id>/<model-label>/index.html`:
+
+| model | report URL                                                                                                                                                                           |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| VG01  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b0-86f2-7762-8560-518939d1ca12/VG01-age-spoken-ds/index.html                                |
+| VG02  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b0-9b34-7209-b080-6b7a4aa8e287/VG02-age-understood-ds/index.html                            |
+| VG03  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b0-afb6-7328-a803-b236b53bf7a6/VG03-age-spoken-td/index.html                                |
+| VG04  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b0-c1ba-711c-a64a-6a6c1d450569/VG04-age-understood-td/index.html                            |
+| VG05  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b0-d3b4-72ea-8e37-9a070c17e996/VG05-age-understood-spoken-ds/index.html                     |
+| VG07  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b0-f96f-752c-a590-8fe04bd877df/VG07-age-understood-spoken-ds-re/index.html                  |
+| VG08  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b1-1f08-7594-8d8a-dfce3caa8cac/VG08-age-understood-spoken-ds-re-subj/index.html             |
+| VG09  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b1-4572-773c-a2e1-0733c00a453a/VG09-age-understood-spoken-ds-re-subj-uq/index.html          |
+| VG10  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b1-6ca0-74b3-af97-f08b709e1656/VG10-age-understood-spoken-ds-re-subj-uq-anchored/index.html |
+| VG11  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b1-9247-70dc-9e54-abc154e6f4fe/VG11-age-spoken-td-re/index.html                             |
+| VG12  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b1-a49a-7734-8970-1837cc5cf49a/VG12-age-understood-td-re/index.html                         |
+| VG13  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b1-b72b-74ea-b4c9-b1415a5f935f/VG13-age-understood-spoken-td-re-young/index.html            |
+| VG14  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b1-d75b-7393-914a-0ec560fc5d8e/VG14-age-understood-spoken-signed-ds/index.html              |
+| VG15  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b2-0a5d-73e9-9589-acf892c920e6/VG15-age-joint-signspeech-ds/index.html                      |
+| VG16  | https://dseresearch.blob.core.windows.net/public/projects/vocabulary-growth/output/019f93b2-2106-75b2-8ad6-5476b3bdac6a/VG16-age-understood-spoken-ds-re-subj-uq-crosslag/index.html |
+
+Note: `upload.py` publishes the per-model reports; the consolidated report book (`docs/report`) and comparison book (`docs/comparison`) are rendered locally but not part of this per-model upload path.
