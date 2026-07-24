@@ -38,6 +38,7 @@ isna
 judgments
 Jupytext
 Kaat
+Kalashnikova
 Kruschke
 Kucharski
 Laudanska
@@ -47,6 +48,7 @@ Lewandowsky
 LLM
 logit
 LOSO
+Marchman
 matplotlib
 McElreath
 MCMC
@@ -85,6 +87,7 @@ spanos
 Spiegelhalter
 subj
 TEDS
+Thal
 timepoint
 toddlerhood
 TOST
