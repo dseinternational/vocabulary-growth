@@ -139,3 +139,25 @@ Implemented and unit-tested (full suite green; ruff clean). **No model definitio
 - **P2-A** — added the synthetic CI tests above; updated the integration test's assertions to the new (observed-row, point-anchored) contract.
 
 **Refit scope (pending).** The GP-anchor and sign-zero-sum changes alter the likelihood, and the RE rescale shifts the prior scale, so **every study-RE and every anchored model must be re-fit** before publication: the DS RE/anchored models (vg07–10, 15, 16) and the TD trio (vg11–13) at least. The whole-grid VG10/VG15 before/after numbers above are **superseded** and will be regenerated from the corrected fits. **Phase C (upload to `dseresearch/public`) is held** until the re-fit is clean. Baselines with no study REs and no anchor (vg01–05, 14) are unaffected by these changes.
+
+## Clean re-fit + Phase B on the corrected code (2026-07-23/24)
+
+**All 9 affected models converged at plain `rep`** — the corrected fixes removed the ridges structurally, so the TD trio no longer needs hightune (vg11/12/13 previously failed plain `rep` and required hightune; vg12 got _worse_ at hightune before the fixes). Diagnostics (commit `d2f2b96`, all `dirty=False`):
+
+| model | hard gate | max R-hat | min ESS | div | min BFMI | soft caveat |
+| ----- | --------- | --------- | ------- | --- | -------- | ----------- |
+| vg07  | PASS      | 1.0005    | 8434    | 0   | 0.78     | —           |
+| vg08  | PASS      | 1.0020    | 1899    | 0   | 0.54     | —           |
+| vg09  | PASS      | 1.0033    | 1684    | 0   | 0.50     | —           |
+| vg10  | PASS      | 1.0016    | 5020    | 0   | 0.50     | —           |
+| vg15  | PASS      | 1.0012    | 4451    | 0   | 0.59     | —           |
+| vg16  | PASS      | 1.0062    | 1630    | 0   | 0.50     | —           |
+| vg12  | PASS      | 1.0083    | 451     | 0   | 0.28     | BFMI ~0.28  |
+| vg13  | PASS      | 1.0041    | 1215    | 0   | 0.28     | BFMI ~0.28  |
+| vg11  | PASS      | 1.0058    | 621     | 2   | 0.40     | 2 div       |
+
+The DS six are pristine (0 div, BFMI ≥ 0.5). The TD trio's BFMI ≈ 0.28 is intrinsic to the age-varying dispersion posterior over the narrow young-TD window — the same soft caveat accepted last run, now reached at plain `rep`. vg10 (DS anchored) is well conditioned (min ESS 5020), confirming the corrected obs-only anchor matches the flawed whole-grid form it replaced. These numbers supersede the whole-grid VG10/VG15 metrics quoted earlier.
+
+**Provenance gap found and fixed.** The first corrected re-fit recorded `dirty=True` on every manifest: `git_metadata` computes dirty from `git status --porcelain --untracked-files=normal`, and 68 untracked `docs/comparison/*.png|svg` figure copies (left over from an earlier render) were in the tree at launch — `.gitignore` covered `*.csv`/`index.html` but not the plots. Fixed in `d2f2b96` (ignore the plot copies + report LaTeX byproducts), cleaned the tree, and re-fit on a porcelain-clean tree so all manifests are `dirty=False`. Lesson: the "never fit on an unclean tree" rule includes untracked build artifacts, not just modified tracked files.
+
+**Phase B complete.** All 15 model reports rendered; comparison suite (incl. the now-guarded `loo_compare`) ran clean; figures synced; report + comparison books rendered. `check_fit --purpose publish` passes for all 15 (dirty=False + reporting quality + rendered). **Phase C (blob upload) held** pending reviewer sign-off on PR #176.
