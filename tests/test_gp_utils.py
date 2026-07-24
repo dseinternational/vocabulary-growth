@@ -112,8 +112,11 @@ def test_trend_and_gp_anchor_adds_no_free_rv():
         latent_name="f_all",
     )
     plain = _model_with(lambda X: trend_and_gp(X_all_z_data=X, anchor_idx=None, **cfg))
-    anchored = _model_with(lambda X: trend_and_gp(X_all_z_data=X, anchor_idx=3, **cfg))
-    # Option-D centring is a deterministic transform: same free RVs, same order.
+    anchored = _model_with(
+        lambda X: trend_and_gp(X_all_z_data=X, anchor_idx=3, n_obs=6, **cfg)
+    )
+    # The anchor + orthogonalisation is a deterministic transform: same free RVs,
+    # same order (no new sampled quantities).
     assert [v.name for v in plain.free_RVs] == [v.name for v in anchored.free_RVs]
 
 

@@ -511,6 +511,7 @@ def build_model_re(
             store_deterministic=True,
             latent_name="f_u_all",
             anchor_idx=i_anchor if anchor_g_u else None,
+            n_obs=n,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -525,23 +526,35 @@ def build_model_re(
             store_deterministic=True,
             latent_name="h_all",
             anchor_idx=i_anchor if anchor_g_q else None,
+            n_obs=n,
         )
 
         # ============================================================
         # Study-level random intercepts
         # ============================================================
 
-        # Non-centred (delta = tau * z, z ~ Normal(0, 1)) for HMC-friendly
-        # geometry with few studies — consistent with the subject REs below and
-        # the rest of the codebase. Mathematically identical to the centred form;
-        # the public names delta_u/delta_q/tau_u/tau_q are preserved (downstream
-        # scripts extract them by name from the trace). See issue #65.
+        # Non-centred, sum-to-zero (delta = tau * z, z ~ ZeroSumNormal) for
+        # HMC-friendly geometry with few studies — consistent with the subject REs
+        # below and the rest of the codebase. The tau * raw scaling keeps the
+        # funnel-avoiding non-centring of issue #65; the sum-to-zero constraint on
+        # the unit offsets additionally removes the intercept vs study-RE-mean ridge
+        # (with few studies an unconstrained mean trades off against the global
+        # intercept/slope, an R-hat failure). This is an intentional identifiability
+        # constraint, not a prior-preserving reparameterisation — it removes the
+        # group-mean DOF. We rescale sigma by sqrt(K/(K-1)) so each study effect's
+        # marginal prior variance stays tau^2 (unchanged from independent Normal),
+        # leaving only the mean DOF removed and a -1/K correlation imposed. Both
+        # outcomes are informed by every retained study here, so a global zero-sum
+        # over study_id is correct (cf. the joint model's per-outcome coordinates).
+        # The public names delta_u/delta_q/tau_u/tau_q are preserved (downstream
+        # scripts extract them by name from the trace).
+        zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
         tau_u = pm.HalfNormal("tau_u", sigma=definition.tau_u_sigma)
-        delta_u_raw = pm.Normal("delta_u_raw", mu=0.0, sigma=1.0, dims="study_id")
+        delta_u_raw = pm.ZeroSumNormal("delta_u_raw", sigma=zsn_sigma, dims="study_id")
         delta_u = pm.Deterministic("delta_u", tau_u * delta_u_raw, dims="study_id")
 
         tau_q = pm.HalfNormal("tau_q", sigma=definition.tau_q_sigma)
-        delta_q_raw = pm.Normal("delta_q_raw", mu=0.0, sigma=1.0, dims="study_id")
+        delta_q_raw = pm.ZeroSumNormal("delta_q_raw", sigma=zsn_sigma, dims="study_id")
         delta_q = pm.Deterministic("delta_q", tau_q * delta_q_raw, dims="study_id")
 
         # ============================================================

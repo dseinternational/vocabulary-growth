@@ -108,3 +108,11 @@ hightune
 resumable
 rhat
 vars
+dseresearch
+incl
+logind
+nohup
+reparam
+setsid
+unconverged
+docstrings

@@ -368,14 +368,26 @@ def build_univariate_re_model(
             store_deterministic=True,
             latent_name="f_all",
             anchor_idx=i_anchor if anchor_g else None,
+            n_obs=n,
         )
 
         # ============================================================
-        # Study-level random intercepts (non-centred parameterisation)
+        # Study-level random intercepts (non-centred, sum-to-zero)
         # ============================================================
 
+        # Sum-to-zero on the unit offsets (delta_raw) removes the intercept vs
+        # study-RE-mean ridge: with few studies an unconstrained mean trades off
+        # against the global intercept/slope (R-hat failure at rep-hightune). This is
+        # an intentional identifiability constraint, NOT a prior-preserving
+        # reparameterisation: it removes the group-mean degree of freedom (that is
+        # the ridge) and imposes a -1/K correlation. ZeroSumNormal(sigma=1) would
+        # also shrink each marginal to Var = tau^2 * (K-1)/K; we rescale sigma by
+        # sqrt(K/(K-1)) so the marginal per-study prior variance stays tau^2 (its
+        # value before this change), leaving only the mean DOF removed. The tau * raw
+        # scaling keeps the funnel-avoiding non-centring of issue #65.
         tau = pm.HalfNormal("tau", sigma=definition.tau_study_sigma)
-        delta_raw = pm.Normal("delta_raw", mu=0.0, sigma=1.0, dims="study_id")
+        zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
+        delta_raw = pm.ZeroSumNormal("delta_raw", sigma=zsn_sigma, dims="study_id")
         delta = pm.Deterministic("delta", tau * delta_raw, dims="study_id")
 
         if use_subject_re:

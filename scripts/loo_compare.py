@@ -123,8 +123,19 @@ def per_model_loo() -> dict[str, list[dict]]:
             continue
 
         rows = []
+        # PSIS-LOO can fail numerically for the heavily subject-random-effect
+        # models (leaving out one observation swings that child's intercept, so
+        # the importance-weight tail degenerates — "All tail values are the
+        # same"). Guard each az.loo call so one such model is skipped with a
+        # warning rather than aborting the whole comparison, matching the
+        # missing-trace / missing-log_likelihood skips above. The high Pareto-k
+        # counts already flag the models whose PSIS-LOO is unreliable.
         if short in UNIVARIATE:
-            loo = az.loo(idata, pointwise=True)
+            try:
+                loo = az.loo(idata, pointwise=True)
+            except Exception as exc:  # noqa: BLE001 - any LOO failure -> skip
+                print(f"  {short}: LOO failed ({type(exc).__name__}: {exc}) — skipped")
+                continue
             row = _loo_summary_row("y_obs", loo)
             rows.append(row)
             print(
@@ -135,7 +146,11 @@ def per_model_loo() -> dict[str, list[dict]]:
         else:
             _attach_joint_log_likelihood(idata)
             for var in ("y_u_obs", "y_s_obs", "y_joint"):
-                loo = az.loo(idata, pointwise=True, var_name=var)
+                try:
+                    loo = az.loo(idata, pointwise=True, var_name=var)
+                except Exception as exc:  # noqa: BLE001 - any LOO failure -> skip
+                    print(f"  {short} [{var}]: LOO failed ({type(exc).__name__}: {exc}) — skipped")
+                    continue
                 row = _loo_summary_row(var, loo)
                 rows.append(row)
                 print(
@@ -144,6 +159,9 @@ def per_model_loo() -> dict[str, list[dict]]:
                     f"high-k = {row['pareto_k_gt_0.7']}/{row['n_observations']}"
                 )
 
+        if not rows:
+            print(f"  {short}: no usable LOO — skipped")
+            continue
         pd.DataFrame(rows).to_csv(os.path.join(OUT_DIR, f"loo_{short}.csv"),
                                   index=False)
         out[short] = rows
@@ -161,7 +179,11 @@ def compare_pair(
     kwargs = {"method": "stacking"}
     if var_name is not None:
         kwargs["var_name"] = var_name
-    df = az.compare(compare_dict, **kwargs)
+    try:
+        df = az.compare(compare_dict, **kwargs)
+    except Exception as exc:  # noqa: BLE001 - degenerate PSIS-LOO -> skip this comparison
+        print(f"  compare {tag}: failed ({type(exc).__name__}: {exc}) — skipped")
+        return
     df.to_csv(os.path.join(OUT_DIR, f"loo_compare_{tag}.csv"))
     print(f"\n=== az.compare(): {tag} ===")
     print(df.to_string())

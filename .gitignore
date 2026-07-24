@@ -8,10 +8,20 @@ figures/
 # Standalone comparison-doc render artifacts. The comparison suite writes its
 # tables to output/comparisons/; docs/comparison/index.qmd reads them by bare
 # name, so they are staged next to the doc at render time (with the rendered
-# index.html + index_files/). All generated — never committed.
+# index.html + index_files/). The plot copies (.png/.svg) are staged the same
+# way. All generated — never committed. (Leaving the plots untracked previously
+# flagged fit manifests as dirty because git_metadata counts untracked files.)
 docs/comparison/*.csv
+docs/comparison/*.png
+docs/comparison/*.svg
 docs/comparison/index.html
 docs/comparison/index_files/
+
+# Quarto/LaTeX render byproducts staged next to docs/report/index.qmd.
+docs/report/index.aux
+docs/report/index.tex
+docs/report/index.toc
+docs/report/index.pdf
 _freeze/
 _temp/
 temp/

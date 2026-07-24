@@ -74,3 +74,27 @@ def test_study_deltas_are_deterministic_not_free(vg07_model):
     assert {"delta_u", "delta_q"}.isdisjoint(free)
     # The raw offsets and scales are the sampled quantities.
     assert {"delta_u_raw", "delta_q_raw", "tau_u", "tau_q"}.issubset(free)
+
+
+def test_study_raw_offsets_are_sum_to_zero(vg07_model):
+    """The unit study offsets are ZeroSumNormal, removing the intercept vs
+    study-RE-mean ridge that broke R-hat for the hierarchical models. Guards the
+    reparameterisation: prior draws of delta_u_raw / delta_q_raw sum to ~0 across
+    studies, and the underlying free RV is the zero-sum axis."""
+    import numpy as np
+    import pymc as pm
+
+    with vg07_model:
+        draws = pm.draw(
+            [vg07_model["delta_u_raw"], vg07_model["delta_q_raw"]], draws=64, random_seed=0
+        )
+    for arr in draws:
+        # last axis is study_id; each draw sums to zero up to float tolerance
+        assert np.allclose(arr.sum(axis=-1), 0.0, atol=1e-6)
+
+    # The sampled free variables are the zero-sum reparameterisation, not plain Normal.
+    free_names = {v.name for v in vg07_model.free_RVs}
+    assert {"delta_u_raw", "delta_q_raw"}.issubset(free_names)
+    for name in ("delta_u_raw", "delta_q_raw"):
+        rv_op = type(vg07_model[name].owner.op).__name__
+        assert "ZeroSum" in rv_op, f"{name} is {rv_op}, expected a ZeroSumNormal"
