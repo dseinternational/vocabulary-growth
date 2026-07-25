@@ -768,6 +768,94 @@ def load_p_any_trajectory(
     return ages, p_any * n_trials_
 
 
+# ==========================================================================
+# Reporting helpers for the matched-comprehension contrast
+# ==========================================================================
+#
+# The findings chapter used to state this contrast's credible window, peak and
+# direction as hand-typed prose, which outlived the fits that produced it: the
+# quoted window and peak came from a superseded denominator and likelihood, and
+# by the current fits the *sign of the trend* had changed too. Deriving those
+# three facts here — from the same written table the chapter tabulates, filtered
+# the same way — means the chapter cannot restate a superseded fit, and the
+# derivation is unit-testable rather than living in a ``.qmd``.
+
+
+def dq_contrast_facts(
+    table: pd.DataFrame | None,
+    *,
+    min_coverage: float = DEFAULT_MIN_COVERAGE,
+    grid_col: str = "words",
+    prefix: str = "dq",
+) -> dict | None:
+    """Summarise a matched-comprehension difference table for prose.
+
+    ``table`` is a ``summarise_draws``-shaped frame for a difference (as written
+    to ``ds_td_comprehension_q_at_U.csv``), carrying ``<prefix>_median``,
+    ``<prefix>_ci_lo``/``_hi`` and optionally ``<prefix>_coverage``. Grid points
+    whose coverage falls below ``min_coverage`` are dropped, because their
+    summaries are conditional on the subset of draws that attain the level.
+
+    Returns ``None`` when the table is absent or has no usable rows, so a report
+    can degrade gracefully before the comparison has been run. Otherwise a dict
+    with:
+
+    ``table``
+        The coverage-filtered, grid-sorted frame actually summarised.
+    ``covered``
+        ``(lo, hi)`` grid range retained after filtering.
+    ``positive`` / ``negative``
+        ``(lo, hi)`` grid sub-range where the interval excludes zero in that
+        direction, or ``None``. These are the *extent* of credible points, not a
+        guarantee that every point between them is credible.
+    ``peak``
+        The largest-magnitude row (a ``Series``), signed — not the largest
+        positive row, so a contrast that is credibly negative reports honestly.
+    ``rises``
+        Whether the difference increases with the grid variable, by the sign of
+        the Spearman correlation. ``None`` when fewer than three points remain,
+        where a monotone direction is not meaningful.
+    """
+    if table is None:
+        return None
+    median, lo, hi = f"{prefix}_median", f"{prefix}_ci_lo", f"{prefix}_ci_hi"
+    needed = {grid_col, median, lo, hi}
+    if not needed.issubset(table.columns):
+        return None
+
+    rows = table.dropna(subset=[median, lo, hi])
+    coverage = f"{prefix}_coverage"
+    if coverage in rows.columns:
+        rows = rows[rows[coverage] >= min_coverage]
+    rows = rows.sort_values(grid_col)
+    if rows.empty:
+        return None
+
+    positive = rows[rows[lo] > 0]
+    negative = rows[rows[hi] < 0]
+
+    def _extent(subset: pd.DataFrame) -> tuple[float, float] | None:
+        if subset.empty:
+            return None
+        return float(subset[grid_col].min()), float(subset[grid_col].max())
+
+    rises = None
+    if len(rows) >= 3:
+        correlation = rows[grid_col].corr(rows[median], method="spearman")
+        if pd.notna(correlation):
+            rises = bool(correlation > 0)
+
+    return {
+        "table": rows,
+        "covered": (float(rows[grid_col].min()), float(rows[grid_col].max())),
+        "positive": _extent(positive),
+        "negative": _extent(negative),
+        "peak": rows.loc[rows[median].abs().idxmax()],
+        "rises": rises,
+        "min_coverage": float(min_coverage),
+    }
+
+
 def shade_unsupported(
     ax, support_lo: float, support_hi: float, *, colour: str = "0.85",
     label: str | None = "outside reference support",

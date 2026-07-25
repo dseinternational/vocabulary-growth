@@ -44,6 +44,32 @@ outcomes while masking only their ``signed`` value by default.
 UNCERTAIN_SIGN_STUDIES = ("uk_06",)
 """Studies whose signing-field construct has not yet been source-verified."""
 
+INCOMPLETE_ADMINISTRATION_CEILINGS: dict[str, tuple[int, ...]] = {"ie_01": (460,)}
+"""Per-study ``survey_vocab_max`` values marking a partial administration.
+
+An administration that omitted part of the reference inventory does not produce a
+count on the 810-item scale the model likelihoods score against, so its counts are
+masked by default.
+
+This is a different situation from the shorter MacArthur-derived forms (Oxford CDI
+416, MB-CDI WG 396, NZCDI 675). Those are *nested* instruments whose absent items
+are the rarer, later-acquired words an ability-matched child mostly does not know,
+and a dual-form crosswalk fitted to the uk_02 children who took both the DSE and
+Oxford forms put the fixed-810 count ratio near 1 across the range where the short
+forms are administered (see ``notes/202607121200-statistical-model-review.md``
+§3A). Here, by contrast, a whole 350-item subscale of the *same* instrument was
+not administered:
+
+- ``ie_01`` baseline wave (ceiling 460 = DSE Checklists 1 + 2). Checklist 3 is
+  recorded as exactly zero for all 59 children on all three response types
+  (understood, imitates, says); no baseline total exceeds 460; and 33 of 46
+  follow-up records carry non-zero Checklist 3 counts up to 328, including
+  children whose baseline total already exceeded 390. At matched vocabulary the
+  follow-up wave puts about 9.5% of Checklist 3 known, against 0% at baseline —
+  so the zeros are an un-administered subscale, not ability.
+"""
+
+
 ENGLISH_LANGUAGES = (
     "English (American)",
     "English (Australian)",
@@ -91,6 +117,54 @@ def mask_incomparable_signed_outcomes(
         mask = (out["study"] == study) & out["signed"].notna()
         dropped[study] = int(mask.sum())
         out.loc[mask, "signed"] = float("nan")
+    return out, dropped
+
+
+def mask_incomplete_administrations(
+    df: pd.DataFrame,
+    *,
+    include_incomplete: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Mask counts from administrations that omitted part of the reference inventory.
+
+    Every model likelihood scores counts against the common 810-item inventory, so
+    a count from a partial administration understates the child's reference-scale
+    vocabulary by however much of the inventory went unasked. Rescaling is not
+    available either: the omitted DSE Checklist 3 items are markedly harder than
+    the administered ones, so the proportion known on Checklists 1-2 is not the
+    proportion known on all three.
+
+    The affected rows are identified by their recorded ``survey_vocab_max`` (see
+    :data:`INCOMPLETE_ADMINISTRATION_CEILINGS`) and their outcome columns are set
+    missing; the rows are retained so age coverage and provenance stay auditable.
+    The returned counts report how many observed values were masked per study, for
+    the fit log. Pass ``include_incomplete=True`` to reintroduce them as a
+    sensitivity.
+    """
+    required = {"study", "survey_vocab_max"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Incomplete-administration masking requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    out = df.copy()
+    dropped: dict[str, int] = {}
+    if include_incomplete:
+        return out, dropped
+
+    outcome_columns = [
+        column
+        for column in ("understood", "spoken", "signed", "produced")
+        if column in out.columns
+    ]
+    for study, ceilings in INCOMPLETE_ADMINISTRATION_CEILINGS.items():
+        mask = out["study"].eq(study) & out["survey_vocab_max"].isin(ceilings)
+        if not mask.any():
+            continue
+        dropped[study] = int(out.loc[mask, outcome_columns].notna().to_numpy().sum())
+        out.loc[mask, outcome_columns] = float("nan")
     return out, dropped
 
 
@@ -293,22 +367,41 @@ def vocab_combined_view_sql() -> str:
            END                as survey_vocab_max
     FROM vocab_uk_02 as vuk2
     UNION ALL
+    -- ie_01 (Down Syndrome Ireland), two waves.
+    --
+    -- ``understood`` is the parent-reported comprehension count, passed through
+    -- unchanged. It was previously GREATEST(says_total, understands_total) on the
+    -- reasoning that production implies comprehension; that repaired 7 records in
+    -- which says > understands by overwriting comprehension with production, which
+    -- (a) hid them from the ``n_parent_violations`` count that methods-models.qmd
+    -- says such rows are reported through, and (b) fed the nested spoken
+    -- likelihood exact S = U rows, i.e. observations that the child says every
+    -- word it understands. Repairing a count from the outcome being modelled is
+    -- selection on the outcome; the documented policy (retain via the marginal
+    -- fallback, count as a source-data violation) now handles them instead.
+    --
+    -- The baseline wave omitted Checklist 3 (350 of the 810 DSE items): it is
+    -- recorded as zero for every child on all three response types, no baseline
+    -- total exceeds Checklists 1+2 = 460, and follow-up records carry non-zero
+    -- Checklist 3 counts for children whose baseline total already exceeded 390.
+    -- Its true administered ceiling is therefore 460, not 810 (see
+    -- INCOMPLETE_ADMINISTRATION_CEILINGS).
     SELECT 'ie_01'                                                   as study,
            vie.subject_id,
            NULL                                                        as sex,
            vie.age_months_start                                        as age,
-           GREATEST(vie.says_total_start, vie.understands_total_start) as understood,
+           vie.understands_total_start                                 as understood,
            vie.says_total_start                                        as spoken,
            null                                                        as signed,
            null                                                        as produced,
-           810                                                         as survey_vocab_max
+           460                                                         as survey_vocab_max
     FROM vocab_ie_01 as vie
     UNION ALL
     SELECT 'ie_01'                                               as study,
            vie.subject_id,
            NULL                                                    as sex,
            vie.age_months_end                                      as age,
-           GREATEST(vie.says_total_end, vie.understands_total_end) as understood,
+           vie.understands_total_end                               as understood,
            vie.says_total_end                                      as spoken,
            null                                                    as signed,
            vie.says_total_end                                      as produced,
@@ -439,15 +532,23 @@ def vocab_combined_view_sql() -> str:
     """
 
 
-def load_combined_data(max_age_months=None):
+def load_combined_data(max_age_months=None, *, include_incomplete_administrations=False):
     """
     Load the combined data from the DuckDB database.
 
     (Run ./scripts/prepare_data.py to create the database if it doesn't exist.)
 
+    Counts from partial administrations are masked by default
+    (:func:`mask_incomplete_administrations`), because they are not on the
+    810-item reference scale the model likelihoods assume. This is applied here
+    rather than per-engine — unlike the signing-source masking, which only the
+    signing models need — so every consumer of the DS pool gets the same scale.
+
     Parameters:
     -----------
         max_age_months (int, optional): The maximum age in months to include in the data. Defaults to None (no limit).
+        include_incomplete_administrations (bool): Reintroduce counts from partial
+            administrations, for sensitivity analysis. Defaults to False.
 
     Returns:
     --------
@@ -473,6 +574,9 @@ def load_combined_data(max_age_months=None):
             [age_limit],
         ).df()
 
+    df, _ = mask_incomplete_administrations(
+        df, include_incomplete=include_incomplete_administrations
+    )
     return df
 
 

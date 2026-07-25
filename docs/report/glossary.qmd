@@ -32,7 +32,7 @@ Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
 : A cryptographic hash summarising the exact model input. If the input changes, its fingerprint changes, allowing stale output to be detected.
 
 **Divergent transition**
-: A warning that the NUTS sampler could not accurately follow part of the posterior geometry. Reporting fits require zero divergences.
+: A warning that the NUTS sampler could not accurately follow part of the posterior geometry. Divergences are one of the two soft-tier convergence checks: a reporting fit that records any is marked with a sampling caveat and its interval bounds read with extra caution, rather than being discarded.
 
 **Effective sample size (ESS)**
 : The approximate number of independent draws containing the same information as the correlated MCMC draws. Bulk ESS concerns central summaries; tail ESS concerns interval limits and other tail summaries.
