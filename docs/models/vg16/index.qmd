@@ -144,3 +144,17 @@ diagnostics
 ## Words understood vs words spoken
 
 ![Expected words understood vs spoken](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
+
+## Predictive calibration
+
+Quantitative counterpart to the posterior predictive checks above: how often each
+predictive interval contains the observation it predicts, and where the
+observations sit within their predictive distributions.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```

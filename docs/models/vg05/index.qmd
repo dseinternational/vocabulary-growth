@@ -304,3 +304,17 @@ Smoothed:
 ### Dispersion $\kappa$ -- spoken
 
 ![posterior_kappa_s](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+
+## Predictive calibration
+
+Quantitative counterpart to the posterior predictive checks above: how often each
+predictive interval contains the observation it predicts, and where the
+observations sit within their predictive distributions.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```

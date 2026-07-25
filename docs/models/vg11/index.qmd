@@ -224,3 +224,17 @@ The posterior distribution of the derivative of expected spoken words with respe
 Lower $\kappa$ values indicate greater overdispersion (greater between-child variability relative to the mean), while higher $\kappa$ values indicate less overdispersion (less between-child variability relative to the mean).
 
 ![posterior_kappa](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}
+
+## Predictive calibration
+
+Quantitative counterpart to the posterior predictive checks above: how often each
+predictive interval contains the observation it predicts, and where the
+observations sit within their predictive distributions.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```
