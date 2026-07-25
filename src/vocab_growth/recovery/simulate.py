@@ -37,6 +37,7 @@ from typing import Any
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.reporting as model_reporting
 import dse_research_utils.statistics.models.sampling as model_sampling
+import duckdb
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -61,7 +62,7 @@ BUILD_STAGE_NAME = "Model definition and initialisation"
 PRIORS_STAGE_NAME = "Priors and hyperparameters"
 PREPARE_STAGE_NAME = "Prepare data"
 
-SYNTHETIC_FRAME_FILENAME = "synthetic_analysis_frame.csv"
+SYNTHETIC_FRAME_FILENAME = "synthetic_analysis_frame.parquet"
 TRUTH_FILENAME = "truth.nc"
 SIMULATION_FILENAME = "simulation.json"
 
@@ -779,49 +780,68 @@ def simulate_replicate(
     )
 
 
-def _write_frame(frame: pd.DataFrame, path: str) -> dict[str, str]:
-    """Write the synthetic frame as CSV and verify the round trip is lossless.
+def _sql_literal(path: str) -> str:
+    """Single-quoted SQL string literal for a filesystem path.
 
-    CSV rather than a columnar format because the pinned environment does not
-    guarantee a Parquet-capable ``pyarrow`` build, and this file has to be
-    readable by the refit on every platform the study runs on. The column dtypes
-    are recorded alongside it and re-applied on load, and the round trip is
-    verified here so a lossy write fails during simulation rather than surfacing
-    as a mysterious difference in the refit.
+    DuckDB takes the target of ``COPY … TO`` as a literal rather than a bound
+    parameter, so the path is escaped here rather than interpolated raw.
+    """
+    escaped = path.replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _write_frame(frame: pd.DataFrame, path: str) -> dict[str, str]:
+    """Write the synthetic frame as Parquet via DuckDB, verifying the round trip.
+
+    DuckDB carries its own Parquet reader and writer, so this needs no
+    ``pyarrow`` Parquet support — which matters because the pinned environment
+    installs ``pyarrow-core`` (Arrow buffers only, pulled in by nutpie) and no
+    ``libparquet`` on either locked platform. DuckDB is already a declared
+    dependency and already the project's storage layer for the prepared data.
+
+    Parquet keeps dtypes, integer widths and missingness exactly, so unlike a
+    text round trip nothing has to be reconstructed from a recorded schema. The
+    schema is still recorded as provenance, and the round trip is still verified
+    here — including **dtype identity**, which a CSV round trip could not
+    guarantee — so a lossy write fails during simulation rather than surfacing as
+    an unexplained difference in the refit hours later.
     """
     schema = {str(column): str(dtype) for column, dtype in frame.dtypes.items()}
-    frame.to_csv(path, index=False)
-    reloaded = _read_frame(path, schema)
+    with duckdb.connect() as connection:
+        connection.register("synthetic_frame", frame)
+        connection.execute(
+            f"COPY (SELECT * FROM synthetic_frame) TO {_sql_literal(path)} (FORMAT PARQUET)"
+        )
+    reloaded = _read_frame(path)
     if list(reloaded.columns) != list(frame.columns):
-        raise RuntimeError("Synthetic frame columns changed on the CSV round trip.")
+        raise RuntimeError("Synthetic frame columns changed on the Parquet round trip.")
     for column in frame.columns:
         original, restored = frame[column], reloaded[column]
+        if str(original.dtype) != str(restored.dtype):
+            raise RuntimeError(
+                f"Column {column!r} changed dtype on the Parquet round trip "
+                f"({original.dtype} -> {restored.dtype})."
+            )
         if pd.api.types.is_numeric_dtype(original):
             if not np.allclose(
-                pd.to_numeric(original, errors="coerce").to_numpy(dtype=float),
-                pd.to_numeric(restored, errors="coerce").to_numpy(dtype=float),
+                original.to_numpy(dtype=float),
+                restored.to_numpy(dtype=float),
                 equal_nan=True,
             ):
-                raise RuntimeError(f"Column {column!r} changed on the CSV round trip.")
+                raise RuntimeError(f"Column {column!r} changed on the Parquet round trip.")
         elif not original.astype(str).equals(restored.astype(str)):
-            raise RuntimeError(f"Column {column!r} changed on the CSV round trip.")
+            raise RuntimeError(f"Column {column!r} changed on the Parquet round trip.")
     return schema
 
 
-def _read_frame(path: str, schema: dict[str, str] | None) -> pd.DataFrame:
-    """Read a synthetic frame back, restoring the recorded column dtypes."""
-    frame = pd.read_csv(path)
-    for column, dtype in (schema or {}).items():
-        if column not in frame.columns:
-            continue
-        try:
-            frame[column] = frame[column].astype(dtype)
-        except (TypeError, ValueError):
-            # A column that cannot be restored exactly is left as read; the
-            # round-trip check in _write_frame is what guarantees the values are
-            # unchanged, and every engine coerces the columns it consumes.
-            continue
-    return frame
+def _read_frame(path: str) -> pd.DataFrame:
+    """Read a synthetic frame back from Parquet, dtypes intact."""
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"No synthetic frame at {path}.")
+    with duckdb.connect() as connection:
+        return connection.execute(
+            f"SELECT * FROM read_parquet({_sql_literal(path)})"
+        ).df()
 
 
 def load_simulation(directory: str) -> tuple[pd.DataFrame, xr.DataTree, dict[str, Any]]:
@@ -829,10 +849,10 @@ def load_simulation(directory: str) -> tuple[pd.DataFrame, xr.DataTree, dict[str
     from vocab_growth.fit_artifacts import read_json
 
     record = read_json(os.path.join(directory, SIMULATION_FILENAME))
-    frame = _read_frame(
-        os.path.join(directory, SYNTHETIC_FRAME_FILENAME),
-        record.get("simulation", {}).get("frame_schema"),
+    frame_file = record.get("simulation", {}).get(
+        "frame_file", SYNTHETIC_FRAME_FILENAME
     )
+    frame = _read_frame(os.path.join(directory, frame_file))
     truth = xr.open_datatree(os.path.join(directory, TRUTH_FILENAME)).load()
     return frame, truth, record
 

@@ -48,6 +48,12 @@ python scripts/fit_recovery.py headline --config test --compare-only
 
 Recovery fits land in `<output root>/models/<model_id>-<config_name>-recovery-rNN/` and never touch a model of record. `sync_report_figures.py` and `check_fit` key off the registered config names, so they skip these directories — a recovery fit cannot leak into the technical report.
 
+Each replicate's inputs live in `<output root>/recovery/<model_id>-<config_name>-recovery-rNN/`, deliberately outside `models/` because a completed fit atomically replaces its own output directory and would otherwise delete what produced it:
+
+- `synthetic_analysis_frame.parquet` — the simulated dataset, written and read through DuckDB. Parquet keeps dtypes, integer widths and missingness exactly, so a numeric-looking `subject_id` cannot come back as an integer; the round trip is verified at write time, including dtype identity, so a lossy write fails during simulation rather than surfacing as an unexplained difference in the refit. DuckDB carries its own Parquet implementation, so this needs no `pyarrow` Parquet support — which the pinned environment does not provide (see [#178](https://github.com/dseinternational/vocabulary-growth/issues/178)).
+- `truth.nc` — the single parameter draw the data were generated from, plus the reported deterministics computed from it.
+- `simulation.json` — provenance: the truth's source, chain and draw, the simulation order, the likelihood row counts, and every coherence check that passed.
+
 ### Choosing the truth source
 
 `--truth posterior` (the default) takes each replicate's truth from the model of record's stored posterior, one evenly spaced draw per replicate, spread across chains so replicates are not autocorrelated near-duplicates. This asks whether the parameters are recoverable **in the regime the study actually reports**, which is the question worth answering. It requires the model of record to have been fitted at the same output root, because it reads that fit's `trace.nc`.

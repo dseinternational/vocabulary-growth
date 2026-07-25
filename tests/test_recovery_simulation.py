@@ -238,35 +238,70 @@ def test_write_column_rejects_an_unknown_column():
         _write_column(frame, "not_a_column", np.array([0]), np.array([1.0]))
 
 
-def test_frame_round_trip_preserves_values_and_missingness(tmp_path):
+def test_frame_round_trip_preserves_values_dtypes_and_missingness(tmp_path):
+    """The frame reaches the refit through a file, so it must survive exactly.
+
+    Parquet via DuckDB keeps dtypes as well as values, so this asserts dtype
+    identity — the property a text round trip could not offer, and the reason a
+    numeric-looking ``subject_id`` cannot silently become an integer.
+    """
     frame = _bivariate_frame()
     frame["subject_key"] = ["a::1", "a::2", "b::3", "b::4", "b::5"]
-    path = tmp_path / "synthetic.csv"
+    # All-numeric-looking string ids: the case a CSV round trip would coerce.
+    frame["subject_id"] = ["0012", "34", "56", "78", "90"]
+    path = tmp_path / "synthetic.parquet"
 
     schema = _write_frame(frame, str(path))
-    reloaded = _read_frame(str(path), schema)
+    reloaded = _read_frame(str(path))
 
     assert list(reloaded.columns) == list(frame.columns)
-    pd.testing.assert_frame_equal(reloaded, frame, check_dtype=False)
+    pd.testing.assert_frame_equal(reloaded, frame)
     assert reloaded["understood"].isna().tolist() == frame["understood"].isna().tolist()
+    assert reloaded["subject_id"].tolist() == ["0012", "34", "56", "78", "90"]
     assert schema["study"] == str(frame["study"].dtype)
 
 
 def test_frame_round_trip_reports_a_lossy_write(tmp_path, monkeypatch):
     """A lossy write must fail at simulation time, not in the refit."""
     frame = _bivariate_frame()
-    path = tmp_path / "synthetic.csv"
+    path = tmp_path / "synthetic.parquet"
 
-    def _truncating_read(read_path, schema):
-        loaded = pd.read_csv(read_path)
+    def _corrupting_read(read_path):
+        loaded = _read_frame(read_path)
         loaded.loc[0, "understood"] = 999.0
         return loaded
 
     monkeypatch.setattr(
-        "vocab_growth.recovery.simulate._read_frame", _truncating_read
+        "vocab_growth.recovery.simulate._read_frame", _corrupting_read
     )
-    with pytest.raises(RuntimeError, match="changed on the CSV round trip"):
+    with pytest.raises(RuntimeError, match="changed on the Parquet round trip"):
         _write_frame(frame, str(path))
+
+
+def test_frame_round_trip_catches_a_dtype_change(tmp_path, monkeypatch):
+    """Values surviving is not enough — a dtype change must also abort.
+
+    An integer study code arriving back as a float would still compare equal
+    numerically, but the engines index with it.
+    """
+    frame = _bivariate_frame()
+    path = tmp_path / "synthetic.parquet"
+
+    def _dtype_shifting_read(read_path):
+        loaded = _read_frame(read_path)
+        loaded["study_code"] = loaded["study_code"].astype(float)
+        return loaded
+
+    monkeypatch.setattr(
+        "vocab_growth.recovery.simulate._read_frame", _dtype_shifting_read
+    )
+    with pytest.raises(RuntimeError, match="changed dtype on the Parquet round trip"):
+        _write_frame(frame, str(path))
+
+
+def test_reading_a_missing_frame_says_so(tmp_path):
+    with pytest.raises(FileNotFoundError, match="No synthetic frame"):
+        _read_frame(str(tmp_path / "absent.parquet"))
 
 
 def test_truth_draws_are_spread_and_distinct_within_a_chain():
