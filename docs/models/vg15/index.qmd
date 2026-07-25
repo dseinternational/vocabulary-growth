@@ -336,3 +336,15 @@ summary_r
 Observed vs predicted totals for the four within-understood cells (uk_02), checking the Dirichlet-Multinomial fit that identifies $\psi$.
 
 ![uk_02 four-cell PPC](uk02_cell_ppc.png){#fig-ppc .lightbox fig-align="left"}
+
+## Predictive calibration
+
+Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```

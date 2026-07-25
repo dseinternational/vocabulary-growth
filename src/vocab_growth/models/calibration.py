@@ -1,7 +1,19 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Quantitative posterior-predictive calibration summaries."""
+"""Quantitative posterior-predictive calibration summaries.
+
+Every fit writes one of these tables. It answers a different question from the
+convergence gate: the gate establishes that the sampler characterised the
+specified posterior, while this establishes whether the fitted model's replicated
+outcomes look like the observed ones — how often a predictive interval contains
+the observation it is predicting, and whether the observations sit uniformly
+within their predictive distributions.
+
+The reporting helpers at the foot of this module turn a written table into the
+form the report and the per-model dashboards present, so the interpretation
+cannot drift between them.
+"""
 
 import os
 
@@ -9,13 +21,31 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from vocab_growth import intervals
+
+# Nominal levels tabulated by default. The inner and outer levels are the
+# project's reporting convention (vocab_growth.intervals), so predictive coverage
+# is reported at the same widths as every credible interval in the report rather
+# than at an unrelated round number. The middle level is an intermediate
+# reference point.
+DEFAULT_INTERVAL_PROBS: tuple[float, ...] = (
+    intervals.INNER_CI_PROB,
+    0.80,
+    intervals.DEFAULT_CI_PROB,
+)
+
+# Variance of a standard uniform, the value a perfectly calibrated probability
+# integral transform has. Below it the predictive distribution is wider than the
+# data warrant (conservative intervals); above it, too narrow (overconfident).
+UNIFORM_PIT_VARIANCE: float = 1.0 / 12.0
+
 
 def predictive_calibration_table(
     observed: np.ndarray,
     predictive: np.ndarray,
     ages: np.ndarray,
     *,
-    interval_probs: tuple[float, ...] = (0.50, 0.80, 0.90),
+    interval_probs: tuple[float, ...] = DEFAULT_INTERVAL_PROBS,
     age_band_months: int = 12,
     observation_chunk_size: int = 256,
 ) -> pd.DataFrame:
@@ -155,3 +185,164 @@ def write_trace_calibration(
         index=False,
     )
     return result
+
+
+# ==========================================================================
+# Reporting helpers
+# ==========================================================================
+#
+# A written table carries every tabulated nominal level and every age band. The
+# report and the per-model dashboards present one level at a time, so these
+# helpers resolve the level and label the columns in one place — the numbers in
+# the report and the numbers on a model's page are then the same numbers,
+# selected the same way.
+
+# Display labels, in presentation order.
+_DISPLAY_COLUMNS: dict[str, str] = {
+    "outcome": "Outcome",
+    "age_band_months": "Age band (mo)",
+    "n_observations": "n",
+    "observed_mean": "Observed mean",
+    "predictive_mean": "Predicted mean",
+    "mean_error": "Mean error",
+    "empirical_coverage": "Coverage",
+    "mid_pit_mean": "PIT mean",
+    "mid_pit_variance": "PIT variance",
+    "mid_pit_extreme_rate": "PIT extreme rate",
+}
+
+OVERALL_BAND = "all"
+
+
+def nominal_level(table: pd.DataFrame, target: float | None = None) -> float:
+    """The tabulated nominal level closest to the reporting convention.
+
+    Resolved from the table rather than assumed, because a table written before
+    the tabulated levels were tied to :mod:`vocab_growth.intervals` carries a 0.90
+    outer level where a current one carries 0.89. Reporting the level actually
+    found — and labelling it — keeps an older fit's table readable and honest
+    instead of silently mislabelling it.
+    """
+    if "interval_probability" not in table.columns or table.empty:
+        raise ValueError("Not a calibration table: no interval_probability column.")
+    wanted = intervals.DEFAULT_CI_PROB if target is None else target
+    levels = np.asarray(sorted(table["interval_probability"].dropna().unique()), dtype=float)
+    if levels.size == 0:
+        raise ValueError("Calibration table has no tabulated interval levels.")
+    return float(levels[int(np.argmin(np.abs(levels - wanted)))])
+
+
+def _at_level(table: pd.DataFrame, level: float | None) -> tuple[pd.DataFrame, float]:
+    resolved = nominal_level(table) if level is None else level
+    rows = table[np.isclose(table["interval_probability"], resolved)]
+    return rows, resolved
+
+
+def overall_calibration(
+    table: pd.DataFrame, level: float | None = None
+) -> tuple[pd.DataFrame, float]:
+    """Per-outcome calibration pooled over ages, with the level it is reported at.
+
+    Returns ``(frame, level)``. The frame has one row per outcome.
+    """
+    rows, resolved = _at_level(table, level)
+    rows = rows[rows["age_band_months"] == OVERALL_BAND]
+    return rows.reset_index(drop=True), resolved
+
+
+def calibration_by_age(
+    table: pd.DataFrame, level: float | None = None
+) -> tuple[pd.DataFrame, float]:
+    """Per-outcome, per-age-band calibration, with the level it is reported at.
+
+    Age bands sort by their lower bound rather than lexically, so ``[108, 120)``
+    follows ``[96, 108)`` instead of ``[12, 24)``.
+    """
+    rows, resolved = _at_level(table, level)
+    rows = rows[rows["age_band_months"] != OVERALL_BAND].copy()
+    if rows.empty:
+        return rows.reset_index(drop=True), resolved
+    rows["_lower"] = (
+        rows["age_band_months"].str.extract(r"\[(-?\d+)", expand=False).astype(float)
+    )
+    sort_columns = ["outcome", "_lower"] if "outcome" in rows.columns else ["_lower"]
+    rows = rows.sort_values(sort_columns).drop(columns="_lower")
+    return rows.reset_index(drop=True), resolved
+
+
+def format_calibration(frame: pd.DataFrame) -> pd.DataFrame:
+    """Select and label the presentation columns of a calibration selection."""
+    columns = [column for column in _DISPLAY_COLUMNS if column in frame.columns]
+    out = frame[columns].rename(columns=_DISPLAY_COLUMNS)
+    for label, places in (
+        ("Observed mean", 1),
+        ("Predicted mean", 1),
+        ("Mean error", 1),
+        ("Coverage", 3),
+        ("PIT mean", 3),
+        ("PIT variance", 3),
+        ("PIT extreme rate", 3),
+    ):
+        if label in out.columns:
+            out[label] = out[label].astype(float).round(places)
+    if "n" in out.columns:
+        out["n"] = out["n"].astype(int)
+    return out
+
+
+def render_calibration_section(directory: str = ".") -> None:
+    """Print the calibration evidence for a per-model report cell.
+
+    Intended for a report cell with ``#| output: asis``, mirroring
+    :func:`vocab_growth.plotting.ppc_count_distribution_gallery`. Prints a note
+    recording the nominal level actually tabulated, the per-outcome table pooled
+    over ages, and the per-age-band breakdown. Prints an explanatory line rather
+    than failing when the fit predates the calibration table, so the section is
+    never silently empty.
+    """
+    path = os.path.join(directory, "posterior_predictive_calibration.csv")
+    if not os.path.exists(path):
+        print(
+            "_No calibration table for this fit "
+            "(`posterior_predictive_calibration.csv` absent — refit to generate it)._"
+        )
+        return
+    table = pd.read_csv(path)
+    if table.empty:
+        print("_The calibration table for this fit is empty._")
+        return
+
+    overall, level = overall_calibration(table)
+    print(
+        f"Predictive coverage is reported at the **{level:.0%}** nominal level, the "
+        "outer interval this fit tabulated. A well-calibrated model has coverage "
+        f"near {level:.0%}, a PIT mean near 0.5, and a PIT variance near "
+        f"{UNIFORM_PIT_VARIANCE:.3f} (the variance of a standard uniform). Coverage "
+        "above nominal with PIT variance below that value means the predictive "
+        "distribution is wider than the data warrant.\n"
+    )
+    # The caveat travels with the numbers. Without it a reader of this page alone
+    # would take over-coverage as evidence that the reported intervals are
+    # conservative for a new child, which these in-sample checks cannot support.
+    print(
+        "These are **in-sample** checks: the replications condition on parameters "
+        "that these same observations informed, so some over-coverage and an "
+        "under-dispersed PIT are expected even for a well-specified model. That "
+        "direction is therefore *not* evidence that the reported intervals are "
+        "conservative for a new child — read these numbers for comparison across "
+        "outcomes and ages, and for gross misfit. The out-of-sample counterpart is "
+        "the LOO/ELPD comparison.\n"
+    )
+    print(format_calibration(overall).to_markdown(index=False))
+    print("\n: Predictive calibration pooled over ages {#tbl-calibration-overall}\n")
+
+    by_age, _ = calibration_by_age(table)
+    if not by_age.empty:
+        print("\n### By age band\n")
+        print(
+            "_Bands with few observations are uninformative: a single-observation "
+            "band reports a coverage of 0 or 1 and a PIT variance of 0 by "
+            "construction._\n"
+        )
+        print(format_calibration(by_age).to_markdown(index=False))
+        print("\n: Predictive calibration by age band {#tbl-calibration-by-age}\n")

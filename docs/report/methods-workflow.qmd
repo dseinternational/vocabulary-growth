@@ -3,6 +3,8 @@ title: "Bayesian workflow and model validation"
 abstract: "*This chapter describes the iterative Bayesian workflow used to develop, fit and validate the models: the fitting pipeline and sampling configurations, the validation checks every model is held to (prior predictive, convergence diagnostics, posterior predictive), and the formal basis on which one model is said to supersede another — tabulated out-of-sample model comparison together with identified structural issues.*"
 ---
 
+{{< include _report_data.qmd >}}
+
 ::: {.callout-note}
 Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5).
 :::
@@ -40,6 +42,50 @@ Bulk and tail ESS are both gated because they govern different summaries: bulk-E
 ### Posterior predictive checks
 
 Posterior predictive checks generate replicated outcomes from each fitted model and compare them with the observations. We inspect probability-mass and cumulative-distribution overlays, the distribution of bounded counts across age, and age-specific summaries. For joint models we check understood and produced outcomes together, including violations and fallback rows in the nested likelihood. The signing model additionally checks the four sign-by-speech cells used to identify their association. A model can pass sampler diagnostics yet fail these checks: convergence shows that computation characterised the specified posterior, not that the specification adequately represents the data.
+
+### Quantitative predictive calibration {#sec-predictive-calibration}
+
+The overlays above are read by eye. Every fit additionally writes a numerical calibration table, so the same question is answered in numbers that can be compared across models, outcomes and ages. For each outcome it records, pooled overall and within 12-month age bands: the mean observed and predicted counts and their difference; the **empirical coverage** of the predictive interval at each reported width; and the distribution of the **probability integral transform** (PIT) — the position of each observation within its own predictive distribution, summarised by its mean, its variance, and the proportion falling in the extreme 5% tails. Because the outcomes are discrete counts, the mid-PIT is used, which assigns half the replicated mass equal to the observation.
+
+A well-calibrated model has coverage near nominal, a PIT mean near 0.5, and a PIT variance near $1/12 \approx 0.083$, the variance of a standard uniform. Departures are directional: PIT variance *below* that value with coverage *above* nominal means the predictive distribution is wider than the data warrant; PIT variance above it with coverage below nominal means the model is overconfident. A PIT mean away from 0.5 indicates systematic bias, and an inflated extreme rate indicates observations the model treats as near-impossible.
+
+Two limits on how far these numbers can be pushed. First, they are **in-sample**: the replications condition on parameters that the same observations informed, so the PIT is expected to be somewhat under-dispersed and coverage somewhat above nominal even for a well-specified model. The direction of a departure is therefore not by itself evidence that the reported intervals are conservative for a *new* child; the out-of-sample counterpart is the LOO/ELPD comparison in @sec-supersedes. Their value is in comparison — between models, between outcomes, and across age — and in catching gross misfit, which is where an interval-coverage failure would first appear. Second, pooling over ages can conceal an age-specific failure, which is why each model's own report carries the age-banded breakdown; bands holding a handful of observations are uninformative by construction.
+
+```{python}
+#| label: tbl-calibration-cross-model
+#| tbl-cap: "Posterior-predictive calibration of each model of record, pooled over ages. Nominal is the outer predictive width each fit tabulated. PIT variance is compared against 1/12 = 0.083."
+#| echo: false
+import pandas as pd
+
+from vocab_growth.models.calibration import overall_calibration
+from vocab_growth.models.definitions import MODEL_REGISTRY
+
+_rows = []
+for _model in MODEL_REGISTRY.values():
+    _table = load_summary(_model.model_id, "posterior_predictive_calibration")
+    if _table is None or _table.empty:
+        continue
+    _overall, _level = overall_calibration(_table)
+    for _, _row in _overall.iterrows():
+        _rows.append(
+            {
+                "Model": _model.model_id,
+                "Outcome": _row["outcome"],
+                "n": int(_row["n_observations"]),
+                "Nominal": f"{_level:.0%}",
+                "Coverage": round(float(_row["empirical_coverage"]), 3),
+                "Mean error": round(float(_row["mean_error"]), 1),
+                "PIT mean": round(float(_row["mid_pit_mean"]), 3),
+                "PIT variance": round(float(_row["mid_pit_variance"]), 3),
+                "PIT extreme rate": round(float(_row["mid_pit_extreme_rate"]), 3),
+            }
+        )
+
+show_or_pending(
+    pd.DataFrame(_rows) if _rows else None,
+    "the per-model posterior-predictive calibration tables",
+)
+```
 
 ### Reporting estimates: lead with the interval
 
