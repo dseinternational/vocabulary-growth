@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCKFILE = ROOT / "conda-lock.yml"
 PIP_LOCKFILE = ROOT / "requirements-pip.lock"
 PLATFORMS = ("linux-64", "osx-arm64")
+_SOURCE_ENTRY = "  - environment.yml"
 
 
 def _run_json(command: list[str], *, env: dict[str, str] | None = None):
@@ -125,7 +126,12 @@ def _normalise_lock_metadata(conda_spec: Path) -> None:
                 "#     python scripts/lock_environment.py --environment dse-vocab-growth"
             )
         elif line.strip().endswith(str(conda_spec)):
-            lines.append("  - environment.yml")
+            # conda-lock appends the spec it just solved to the `sources` of the
+            # lockfile it was handed, so re-locking an existing conda-lock.yml
+            # leaves the previous (already normalised) entry alongside the
+            # temporary path. Both name the same file; keep one.
+            if lines[-1:] != [_SOURCE_ENTRY]:
+                lines.append(_SOURCE_ENTRY)
         else:
             lines.append(line)
     LOCKFILE.write_text("\n".join(lines) + "\n", encoding="utf-8")

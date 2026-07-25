@@ -23,7 +23,6 @@ metadata:
   - osx-arm64
   sources:
   - environment.yml
-  - environment.yml
 package:
 - name: _openmp_mutex
   version: '4.5'
