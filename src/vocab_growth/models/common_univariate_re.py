@@ -19,6 +19,7 @@ This module is the shared pipeline for VG11 (TD spoken) and VG12 (TD understood)
 
 import os
 import sys
+from collections.abc import Callable
 
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.statistics.descriptive as descriptive_stats
@@ -551,6 +552,54 @@ def sample_posterior_predictive_re(
 # ============================================================
 
 
+def univariate_re_stages(
+    definition: UnivariateModelDefinition,
+) -> list[tuple[str, Callable[[UnivariateREContext], None]]]:
+    """The ordered ``(stage name, stage fn)`` list for this engine's fit.
+
+    Exposed separately from :func:`fit_univariate_re_model` so a caller can
+    substitute a single stage and still run the identical pipeline — the
+    parameter-recovery harness swaps stage 0 (data preparation) for a loader
+    that injects a simulated analysis frame (see
+    :mod:`vocab_growth.recovery.refit`).
+    """
+    y_col = definition.outcome.value
+    outcome_label = definition.outcome_label
+
+    return [
+        (
+            "Prepare data",
+            lambda ctx: prepare_univariate_re_data(ctx, definition),
+        ),
+        (
+            "Priors and hyperparameters",
+            lambda ctx: configure_univariate_priors(ctx, definition),
+        ),
+        (
+            "Model definition and initialisation",
+            lambda ctx: build_univariate_re_model(ctx, definition),
+        ),
+        (
+            "Prior predictive checks",
+            lambda ctx: prior_predictive_checks(
+                ctx, outcome_col=y_col, outcome_label=outcome_label
+            ),
+        ),
+        ("Posterior sampling", sample),
+        ("Diagnostics", diagnostics),
+        (
+            "Posterior predictions",
+            lambda ctx: sample_posterior_predictive_re(ctx, definition),
+        ),
+        ("Posterior summary", posterior_summary),
+        (
+            "Plots",
+            lambda ctx: run_standard_plots(ctx, outcome_label=outcome_label),
+        ),
+        ("Report", report),
+    ]
+
+
 def fit_univariate_re_model(
     config: str,
     definition: UnivariateModelDefinition,
@@ -562,42 +611,4 @@ def fit_univariate_re_model(
     (prior predictive checks, sampling, diagnostics, posterior summary, plots,
     report) are reused unchanged from ``common.py``.
     """
-    y_col = definition.outcome.value
-    outcome_label = definition.outcome_label
-
-    return run_fit_pipeline(
-        config,
-        definition,
-        stages=[
-            (
-                "Prepare data",
-                lambda ctx: prepare_univariate_re_data(ctx, definition),
-            ),
-            (
-                "Priors and hyperparameters",
-                lambda ctx: configure_univariate_priors(ctx, definition),
-            ),
-            (
-                "Model definition and initialisation",
-                lambda ctx: build_univariate_re_model(ctx, definition),
-            ),
-            (
-                "Prior predictive checks",
-                lambda ctx: prior_predictive_checks(
-                    ctx, outcome_col=y_col, outcome_label=outcome_label
-                ),
-            ),
-            ("Posterior sampling", sample),
-            ("Diagnostics", diagnostics),
-            (
-                "Posterior predictions",
-                lambda ctx: sample_posterior_predictive_re(ctx, definition),
-            ),
-            ("Posterior summary", posterior_summary),
-            (
-                "Plots",
-                lambda ctx: run_standard_plots(ctx, outcome_label=outcome_label),
-            ),
-            ("Report", report),
-        ],
-    )
+    return run_fit_pipeline(config, definition, stages=univariate_re_stages(definition))

@@ -81,6 +81,14 @@ python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-
 
 Output (traces, figures, summary tables) is written to `<output-root>/models/<model_name>/`. The output root is resolved (highest precedence first) from `--output-dir`, then the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable, then the repository-local `output/` default — so reporting-quality VM runs can redirect the multi-gigabyte traces to a scratch disk without changing the layout. `fit_model.py`, `fit_sensitivity.py`, `sync_report_figures.py`, and `upload.py` all honour the same resolution (`vocab_growth.environment.output_root`), and the disk preflight prints the resolved root. The report figure cache (`docs/report/figures/`, below) always stays in the checkout.
 
+### Run parameter-recovery checks
+
+```bash
+python scripts/fit_recovery.py <model|headline|all> [--config <config>] [--replicates <n>] [--truth posterior|prior] [--simulate-only | --fit-only | --compare-only] [--output-dir <dir>]
+```
+
+Simulates a dataset from a model at a known parameter draw, refits the model to it with the engine's own pipeline, and scores the recovered posterior against the truth. `headline` is `vg10`, `vg12`, `vg15`; `all` is every supported model (`vg07`-`vg13`, `vg15` — VG16 is excluded because its cross-lag predictor is a function of the outcome). Truth defaults to the model of record's posterior (requires a fitted model of record); `--truth prior` needs no trace but tests parameter settings far from the reported regime. Recovery fits land in `<output-root>/models/<model_id>-<config>-recovery-rNN/` and never touch a model of record; tables land in `<output-root>/comparisons/recovery/`. A replicate is only assessed if its fit's convergence is confirmed. See `docs/runbooks/parameter-recovery.md`, including what a handful of replicates can and cannot establish.
+
 ### Sync report figures
 
 ```bash

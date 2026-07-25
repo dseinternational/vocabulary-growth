@@ -47,6 +47,7 @@ VG14 memory discipline.
 
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import dse_research_utils.math.constants as math_constants
@@ -1566,33 +1567,42 @@ def _run_joint_plots(context: JointContext):
 # ============================================================
 
 
+def joint_stages(
+    definition: JointModelDefinition,
+) -> list[tuple[str, Callable[[JointContext], None]]]:
+    """The ordered ``(stage name, stage fn)`` list for this engine's fit.
+
+    Exposed separately from :func:`fit_joint_model` so a caller can substitute a
+    single stage and still run the identical pipeline — the parameter-recovery
+    harness swaps stage 0 (data preparation) for a loader that injects a
+    simulated analysis frame (see :mod:`vocab_growth.recovery.refit`).
+    """
+    return [
+        ("Prepare data", lambda ctx: prepare_joint_data(ctx, definition)),
+        (
+            "Priors and hyperparameters",
+            lambda ctx: configure_joint_priors(ctx, definition),
+        ),
+        (
+            "Model definition and initialisation",
+            lambda ctx: build_model(ctx, definition),
+        ),
+        ("Prior predictive checks", prior_predictive_checks),
+        ("Posterior sampling", sample),
+        ("Diagnostics", diagnostics),
+        (
+            "Posterior predictions",
+            lambda ctx: sample_posterior_predictive(ctx, definition),
+        ),
+        ("Posterior summary", posterior_summary),
+        ("Plots", _run_joint_plots),
+        ("Report", report),
+    ]
+
+
 def fit_joint_model(
     config: str,
     definition: JointModelDefinition,
 ) -> JointContext:
     """Shared fit pipeline for the joint sign/speech model (VG15)."""
-    return run_fit_pipeline(
-        config,
-        definition,
-        stages=[
-            ("Prepare data", lambda ctx: prepare_joint_data(ctx, definition)),
-            (
-                "Priors and hyperparameters",
-                lambda ctx: configure_joint_priors(ctx, definition),
-            ),
-            (
-                "Model definition and initialisation",
-                lambda ctx: build_model(ctx, definition),
-            ),
-            ("Prior predictive checks", prior_predictive_checks),
-            ("Posterior sampling", sample),
-            ("Diagnostics", diagnostics),
-            (
-                "Posterior predictions",
-                lambda ctx: sample_posterior_predictive(ctx, definition),
-            ),
-            ("Posterior summary", posterior_summary),
-            ("Plots", _run_joint_plots),
-            ("Report", report),
-        ],
-    )
+    return run_fit_pipeline(config, definition, stages=joint_stages(definition))
