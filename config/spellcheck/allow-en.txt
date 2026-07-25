@@ -121,3 +121,6 @@ setsid
 unconverged
 docstrings
 workstream
+dtype
+dtypes
+deterministics
