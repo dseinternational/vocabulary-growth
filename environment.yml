@@ -9,6 +9,7 @@ dependencies:
   - numpy>=2.4.6,<2.5 # pymc>=6.1.0 -> pytensor 3.1.x -> numba<=0.65.1 -> numpy<2.5
   - scipy>=1.18.0
   - pandas>=3.0.3
+  - pyarrow>=24.0.0 # pandas 3.x's default `str` dtype is Arrow-backed; floor held at 24 by jaxlib's libabseil pin
   - numba>=0.58,<=0.65.1 # pytensor 3.x caps numba; this is what pymc>=6.1.0 commits us to
   - matplotlib>=3.11.0
   - scikit-learn>=1.9.0
@@ -35,7 +36,7 @@ dependencies:
       # notebook (ipython/ipywidgets/notebook/jupytext), io (orjson/tabulate).
       # This also pulls dse-research-utils' own runtime deps (azure-identity/
       # -storage-blob, rich, psutil, pyyaml, …) — no need to list them here.
-      - dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.7.1#subdirectory=src/python
+      - dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.8.0#subdirectory=src/python
       - -e ./
       # Local-dev override — to develop against a sibling checkout of research,
       # comment the git line above and uncomment this instead:
