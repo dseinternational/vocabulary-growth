@@ -315,9 +315,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ## Predictive calibration
 
-Quantitative counterpart to the posterior predictive checks above: how often each
-predictive interval contains the observation it predicts, and where the
-observations sit within their predictive distributions.
+Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
 ```{python}
 #| echo: false

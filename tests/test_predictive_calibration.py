@@ -188,3 +188,23 @@ def test_render_calibration_section_reports_the_level_and_both_tables(tmp_path, 
     assert "0.083" in out  # the uniform-PIT reference value
     assert "pooled over ages" in out and "by age band" in out.lower()
     assert "| Outcome" in out  # rendered as a markdown table
+
+
+def test_render_calibration_section_carries_the_in_sample_caveat(tmp_path, capsys):
+    """The caveat must travel with the numbers, not live only in the report.
+
+    A reader of a single model's page would otherwise take over-coverage as
+    evidence that the reported intervals are conservative for a new child, which
+    an in-sample posterior predictive check cannot support.
+    """
+    from vocab_growth.models.calibration import render_calibration_section
+
+    _written_table().to_csv(
+        tmp_path / "posterior_predictive_calibration.csv", index=False
+    )
+    render_calibration_section(str(tmp_path))
+
+    out = capsys.readouterr().out
+    assert "in-sample" in out.lower()
+    assert "not* evidence" in out or "not evidence" in out
+    assert "LOO" in out  # points at the out-of-sample counterpart

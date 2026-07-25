@@ -57,7 +57,7 @@ Two limits on how far these numbers can be pushed. First, they are **in-sample**
 #| echo: false
 import pandas as pd
 
-from vocab_growth.models.calibration import nominal_level, overall_calibration
+from vocab_growth.models.calibration import overall_calibration
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 _rows = []

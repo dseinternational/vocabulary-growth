@@ -319,8 +319,19 @@ def render_calibration_section(directory: str = ".") -> None:
         f"near {level:.0%}, a PIT mean near 0.5, and a PIT variance near "
         f"{UNIFORM_PIT_VARIANCE:.3f} (the variance of a standard uniform). Coverage "
         "above nominal with PIT variance below that value means the predictive "
-        "distribution is wider than the data warrant — conservative rather than "
-        "overconfident.\n"
+        "distribution is wider than the data warrant.\n"
+    )
+    # The caveat travels with the numbers. Without it a reader of this page alone
+    # would take over-coverage as evidence that the reported intervals are
+    # conservative for a new child, which these in-sample checks cannot support.
+    print(
+        "These are **in-sample** checks: the replications condition on parameters "
+        "that these same observations informed, so some over-coverage and an "
+        "under-dispersed PIT are expected even for a well-specified model. That "
+        "direction is therefore *not* evidence that the reported intervals are "
+        "conservative for a new child — read these numbers for comparison across "
+        "outcomes and ages, and for gross misfit. The out-of-sample counterpart is "
+        "the LOO/ELPD comparison.\n"
     )
     print(format_calibration(overall).to_markdown(index=False))
     print("\n: Predictive calibration pooled over ages {#tbl-calibration-overall}\n")
