@@ -22,6 +22,7 @@ Plot and query predictions use the population-level trajectory (delta=0).
 """
 
 import os
+from collections.abc import Callable
 
 import dse_research_utils.math.constants as math_constants
 import dse_research_utils.statistics.descriptive as descriptive_stats
@@ -783,6 +784,46 @@ def build_model_re(
 # ============================================================
 
 
+def bivariate_re_stages(
+    definition: BivariateModelDefinition,
+) -> list[tuple[str, Callable[[BivariateREContext], None]]]:
+    """The ordered ``(stage name, stage fn)`` list for this engine's fit.
+
+    Exposed separately from :func:`fit_bivariate_re_model` so a caller can
+    substitute a single stage and still run the identical pipeline — the
+    parameter-recovery harness swaps stage 0 (data preparation) for a loader
+    that injects a simulated analysis frame (see
+    :mod:`vocab_growth.recovery.refit`).
+    """
+    return [
+        (
+            "Prepare data",
+            lambda ctx: prepare_bivariate_re_data(ctx, definition),
+        ),
+        (
+            "Priors and hyperparameters",
+            lambda ctx: configure_bivariate_priors(ctx, definition),
+        ),
+        (
+            "Model definition and initialisation",
+            lambda ctx: build_model_re(ctx, definition),
+        ),
+        ("Prior predictive checks", prior_predictive_checks),
+        ("Posterior sampling", sample),
+        ("Diagnostics", diagnostics),
+        (
+            "Posterior predictions",
+            lambda ctx: sample_posterior_predictive(ctx, definition),
+        ),
+        ("Posterior summary", posterior_summary),
+        (
+            "Plots",
+            lambda ctx: _run_bivariate_joint_plots(ctx, definition),
+        ),
+        ("Report", report),
+    ]
+
+
 def fit_bivariate_re_model(
     config: str,
     definition: BivariateModelDefinition,
@@ -790,34 +831,4 @@ def fit_bivariate_re_model(
     """
     Fit pipeline for bivariate model with study random intercepts (VG07).
     """
-    return run_fit_pipeline(
-        config,
-        definition,
-        stages=[
-            (
-                "Prepare data",
-                lambda ctx: prepare_bivariate_re_data(ctx, definition),
-            ),
-            (
-                "Priors and hyperparameters",
-                lambda ctx: configure_bivariate_priors(ctx, definition),
-            ),
-            (
-                "Model definition and initialisation",
-                lambda ctx: build_model_re(ctx, definition),
-            ),
-            ("Prior predictive checks", prior_predictive_checks),
-            ("Posterior sampling", sample),
-            ("Diagnostics", diagnostics),
-            (
-                "Posterior predictions",
-                lambda ctx: sample_posterior_predictive(ctx, definition),
-            ),
-            ("Posterior summary", posterior_summary),
-            (
-                "Plots",
-                lambda ctx: _run_bivariate_joint_plots(ctx, definition),
-            ),
-            ("Report", report),
-        ],
-    )
+    return run_fit_pipeline(config, definition, stages=bivariate_re_stages(definition))
