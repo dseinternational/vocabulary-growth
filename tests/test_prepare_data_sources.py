@@ -58,9 +58,16 @@ def _source_registry() -> dict[str, str]:
     )
 
 
-def test_source_registry_is_non_empty():
-    # Guards the guard: a registry that failed to parse would make the us_01
-    # assertions below pass vacuously.
+def test_source_registry_parses_to_all_study_csvs():
+    # Guards the guard. A syntax error, a renamed registry or a non-dict value
+    # already fails loudly inside _source_registry(); the risk covered here is
+    # subtler. If _sources is ever refactored into a dynamically built mapping
+    # (``_sources = {}`` followed by ``.update(...)``, or a seed entry plus a
+    # loop), the literal still parses — but to a stub this static read cannot
+    # follow. test_source_registry_has_no_us_01_entry would then pass against
+    # that stub while the real registry went unchecked, so require a plausibly
+    # complete registry of per-study CSV paths rather than merely a non-empty
+    # one.
     registry = _source_registry()
     assert len(registry) > 1
     assert all(path.endswith(".csv") for path in registry.values())
