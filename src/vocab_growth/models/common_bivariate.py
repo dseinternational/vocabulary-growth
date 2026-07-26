@@ -1206,13 +1206,18 @@ def plot_understood_spoken_trajectory(
     return fig
 
 
-def plot_understood_spoken_trajectory_hdi(
+def plot_understood_spoken_trajectory_intervals(
     samples: BivariateModelSamples,
     n_trials: int,
     output_dir: str | None = None,
     filename: str | None = None,
 ):
-    """Plot understood and spoken posterior predictive medians with 50% and 89% intervals."""
+    """Plot understood and spoken posterior predictive medians with 50% and 89% equal-tailed intervals.
+
+    The bands summarise the posterior predictive draws (``y_u_plot`` / ``y_s_plot``),
+    not the mean trajectory, and are equal-tailed per the house convention in
+    :mod:`vocab_growth.intervals` — counts are not on the HDI short-list.
+    """
     X_plot = samples.X_plot
     outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
     pct = int(round(outer * 100))
@@ -1691,15 +1696,15 @@ def _run_bivariate_joint_plots(
     context.plots["joint_trajectory"] = fig
     plt.close(fig)
 
-    # ---- Joint trajectory HDI plot ----
+    # ---- Joint trajectory interval plot ----
 
-    fig = plot_understood_spoken_trajectory_hdi(
+    fig = plot_understood_spoken_trajectory_intervals(
         samples,
         n_trials=context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
-        filename="joint_trajectory_hdi",
+        filename="joint_trajectory_intervals",
     )
-    context.plots["joint_trajectory_hdi"] = fig
+    context.plots["joint_trajectory_intervals"] = fig
     plt.close(fig)
 
     # ---- Production rate q(a) ----
