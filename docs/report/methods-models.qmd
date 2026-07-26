@@ -23,7 +23,7 @@ $$
 
 so that a one-unit change in $z$ corresponds to $s_x$ months (this scale differs by population and model — see the relevant appendix).
 
-A Binomial likelihood would assume exchangeable Bernoulli trials within each observation and no unmodelled heterogeneity between children, so its variance is fixed by its mean and it tends to *underdisperse* relative to real vocabulary data. To accommodate extra-binomial variation we use a **Beta-Binomial** likelihood, in which the per-observation success probability is itself Beta-distributed [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025]. With latent mean $p_i = p(z_i)$ and concentration $\kappa_i > 0$,
+A Binomial likelihood would make two distinct assumptions, and it is worth separating them because the Beta-Binomial relaxes only one. The first is that, *given* an observation's success probability, the words of the inventory are exchangeable Bernoulli trials — every word equally likely to be known, so that the item list could be reordered without effect. The second is that there is no unmodelled heterogeneity between children, which fixes the variance at its mean and tends to *underdisperse* relative to real vocabulary data. To accommodate that extra-binomial variation we use a **Beta-Binomial** likelihood, in which the per-observation success probability is itself Beta-distributed [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025]. With latent mean $p_i = p(z_i)$ and concentration $\kappa_i > 0$,
 
 $$
 y_i \sim \mathrm{BetaBinomial}\!\left(N_{\text{trials}},\,\alpha_i,\,\beta_i\right),
@@ -34,6 +34,10 @@ y_i \sim \mathrm{BetaBinomial}\!\left(N_{\text{trials}},\,\alpha_i,\,\beta_i\rig
 $$
 
 Smaller $\kappa_i$ implies greater dispersion (more between-child heterogeneity at a given age); larger $\kappa_i$ approaches the Binomial. Observations are assumed conditionally independent given the latent mean $p(z)$, the dispersion $\kappa(z)$, and the model parameters.
+
+The item-exchangeability assumption is *not* relaxed by this construction: it survives inside the Binomial step, and it is false — words differ markedly in difficulty, which the checklist structure demonstrates directly (a model-free hypergeometric test against the three DSE checklists rejects it decisively). Two considerations establish that this does not threaten the estimates. First, under an item-response model with heterogeneous difficulties but equal discrimination, the total score is a *sufficient statistic* for a child's ability: the likelihood depends on the responses only through their sum, so modelling counts rather than individual words discards no information about ability, and difficulty heterogeneity can reach the model only through the distribution of the total. Second, that distributional effect is small where it matters. Heterogeneous difficulty makes the true count variance *lower* than Binomial — the opposite of the usual intuition — by an exact identity, $\sum_j p_j(1-p_j) = N\bar p(1-\bar p) - N\operatorname{Var}_j(p)$; but the Binomial kernel carries under 6% of total variance at every age in the fitted models, because between-child dispersion dominates it by one to two orders of magnitude, so even a 40% error in the kernel moves the total standard deviation by about 1%.
+
+What item difficulty *does* affect is the interpretation of the production ratio $q$, which is a composition-weighted average over the words each child happens to know rather than an item-level probability (@sec-ratios), and the reading of $\kappa$ itself, discussed next.
 
 ### Age-varying dispersion {#sec-kappa}
 

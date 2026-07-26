@@ -98,6 +98,7 @@ Tovar
 Trivariate
 unbiasedness
 underdisperse
+underdispersion
 univariates
 unmodelled
 Vehtari

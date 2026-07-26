@@ -17,10 +17,12 @@ requires_real_db = pytest.mark.skipif(
 )
 """Skip a test that asserts against the real database rather than a fixture.
 
-``data/vocabulary.duckdb`` is a build artefact, gitignored and absent on CI, so a
-test that opens it must skip rather than fail there. The counts these tests pin
-are still worth asserting — they are what the notes and the report quote — but
-only where the database exists."""
+``data/vocabulary.duckdb`` is a build artefact, gitignored and rebuilt by
+``scripts/prepare_data.py`` in ~300 ms. CI now builds it *before* pytest, so these
+tests run there; the marker is for a local checkout where it has not been built
+yet. The counts they pin — 8 understood values masked by the duplicated-outcome
+rule, 30 spoken by the production rules, every exclusion inside ``us_01`` — are
+what the notes and the report quote, and no miniature fixture can check them."""
 
 
 def test_mask_incomparable_signed_outcomes_preserves_other_outcomes():

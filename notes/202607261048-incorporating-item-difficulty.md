@@ -9,6 +9,17 @@
 > [!IMPORTANT]
 > Revised the same day, before merge, after an independent verification pass: the §1 and §3 tables are recomputed exactly with their method and anchor now stated, the seam counts are corrected against the tree, and the §6 attribution of the imitation finding is fixed. A second round, responding to review on the pull-request thread, labels Proposal C's retained nested likelihood as a moment-level approximation, adds the Rasch location constraint and the variance-share correction to the DIF design, extends Proposal B's cost to anchor re-derivation and the hard-coded logistic derivative, restates the singleton counts for the fitted frame (282 of 613), scopes difficulty transportability across forms, and reframes A1 as the first registered sensitivity.
 
+> [!CAUTION]
+> **Re-billed 2026-07-26, on the study owner's challenge.** Under a Rasch-type model the total score is a sufficient statistic for ability, so heterogeneous item difficulty costs nothing for inference from sum scores; the only question is whether the Beta-Binomial fits the total, and it does, to within ~1% of the total standard deviation ([companion note](202607261008-challenging-item-exchangeability.md) §3A′, measured against VG10's fitted `kappa`).
+>
+> **So there is no fit-based case for any proposal here, and none should be argued on those grounds.** What survives is narrower and should be stated plainly:
+>
+> - **Proposal C** and the composition-free `q` address a real defect — `q` as currently defined is a composition-weighted average, not the item-level probability the report calls it. This is the estimand channel, and sufficiency does not touch it. Indeed sufficiency is the _proof_ that sum scores cannot address it: a statistic sufficient for ability is by construction uninformative about which items, so an estimand that depends on composition needs item data.
+> - **Proposals A and B** are **interpretive**, not corrective. B's difficulty-mixed link shifts the implied `kappa` by roughly 10% (§1, §3) — a change to what `kappa` _means_, not to how well anything fits, and not a shift these data could detect. Neither proposal should be sold as improving the likelihood.
+> - **§6, the test of the scientific hypothesis, is the load-bearing section.** "Do children with Down syndrome learn words in roughly the same order, but later?" is a claim about item difficulties. No aggregate model of any quality can test it. That, not any deficiency in the current likelihood, is why item-level data matters.
+>
+> §7's sequence is unchanged and its caution is vindicated: the model changes remain downstream registered sensitivities gated on the differential-item-functioning result, and nothing here licenses a refit.
+
 ## Summary
 
 Item difficulty can be brought into the models without item-level responses for every child, because item difficulty is treated as a property of the **instrument**, not of the children — itself an invariance assumption, and §6 is its test. A small number of children measured at item level calibrates the inventory; the calibrated inventory then improves the likelihood for every aggregate observation. That is the architectural idea behind all the proposals below.

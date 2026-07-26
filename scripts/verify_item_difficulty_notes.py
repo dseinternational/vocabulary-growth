@@ -197,6 +197,33 @@ def note1_kappa(output_root: Path) -> None:
     check("ratio", decline_kp1 / predicted, 0.52, tol=0.005)
     check("log decline in kappa", np.log(kappa[0] / kappa[-1]), 1.225, tol=0.005)
 
+    note1_kernel_share(vg10)
+
+
+def note1_kernel_share(vg10: Path) -> None:
+    """Note 1 §3A′: how much total variance the item-exchangeability kernel carries.
+
+    Rasch sufficiency means heterogeneous item difficulty can only reach the model
+    through the distribution of the total, so this share bounds the whole concern.
+    It is `1 / VIF` where `VIF = (N + kappa) / (kappa + 1)` is the Beta-Binomial's
+    inflation over its Binomial kernel. An earlier draft of the note quoted VG07's
+    figures as though they were the model of record's, understating the exposure
+    threefold — hence checking against VG10's own output here.
+    """
+    print("note 1 §3A' — kernel share of total variance (VG10)")
+    for outcome, share_claim, sd_claim in (("u", [0.77, 5.27], 1.06), ("s", [0.83, 0.86], 0.17)):
+        table = vg10 / f"posterior_kappa_{outcome}.csv"
+        if not table.exists():
+            print(f"  [skip] {table.name} not present")
+            continue
+        kappa = pd.read_csv(table)["kappa_median"].to_numpy(float)
+        share = 100.0 * (kappa + 1.0) / (N_ITEMS + kappa)
+        check(f"kernel share % ({outcome}, min/max)", [share.min(), share.max()], share_claim, tol=0.01)
+        # A 40% error in a component carrying `share` of the variance (the
+        # underdispersion at a 2-logit difficulty spread) moves the total SD by:
+        worst = 100.0 * (1.0 - np.sqrt(1.0 - 0.40 * share.max() / 100.0))
+        check(f"worst-case total SD shift % ({outcome})", worst, sd_claim, tol=0.01)
+
 
 def _pooled_profile(ie: pd.DataFrame) -> np.ndarray:
     end_u = ie[["understands_1_end", "understands_2_end", "understands_3_end"]].to_numpy(float)

@@ -70,11 +70,16 @@ jobs:
       - name: Verify environment core matches the canonical spec
         run: dse-check-env environment.yml
 
-      - name: Run pytest
-        run: pytest
-
+      # Before pytest, not after: the tests that pin the study-level inclusion
+      # counts quoted in the notes and the report open the real database rather
+      # than a miniature fixture, and skip when it is absent. Building it costs
+      # ~300 ms, so running those assertions is effectively free — and a suite
+      # that silently skipped them would report green while the counts drifted.
       - name: Prepare data
         run: python scripts/prepare_data.py
+
+      - name: Run pytest
+        run: pytest
 
       - name: Fit model VG01 (dev)
         run: python scripts/fit_model.py vg01 --config dev

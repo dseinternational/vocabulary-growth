@@ -9,6 +9,15 @@
 > [!IMPORTANT]
 > Revised the same day, before merge, after an independent verification pass that recomputed every checkable number from the raw CSVs and the fitted output. The §3B dispersion table is corrected (an age-standardisation error, recorded in §8 — the correction _strengthens_ the conclusion), §3B now reads `tau_subj_u` alongside `kappa`, and the IRT-feasibility conclusion in §7 is superseded by the companion note [`202607261048-incorporating-item-difficulty.md`](202607261048-incorporating-item-difficulty.md). A second round, responding to review on the pull-request thread, harmonises the §3B comparison on `kappa + 1`, scopes §3A to local independence, states what the §2 test does and does not reject, tightens the age-gradient conservativeness claim, and adds [`scripts/verify_item_difficulty_notes.py`](../scripts/verify_item_difficulty_notes.py).
 
+> [!CAUTION]
+> **The title over-claims, and the study owner was right to challenge it (2026-07-26).** "Challenging item exchangeability" reads as an attack on the likelihood. It should not. The finding is that item exchangeability is _false_ (§2, decisively) and yet _nearly costless_ for the quantity the models actually fit — and there is a clean theoretical reason for that which this note failed to state.
+>
+> Under a Rasch-type item model — items of arbitrary, heterogeneous difficulty but equal discrimination — the total score is a **sufficient statistic** for ability. Writing the log-likelihood as `theta * T - sum_j y_j d_j - sum_j log(1 + exp(theta - d_j))`, the term that depends on _which_ items were passed carries no `theta`. So modelling sum scores discards no information about ability, and heterogeneous difficulty costs nothing on that axis. Rasch is the unique item-response family with this property.
+>
+> That relocates the whole question to: **is the Beta-Binomial an adequate distribution for the total?** Which is measurable, and measured in §3A′ below: the component that item exchangeability governs carries **0.8%–5.3%** of total variance in VG10, and a 40% error in it moves the total SD by **at most 1.1%**. Well below what 613 children can resolve.
+>
+> So §7's conclusion — documentation only, no refit, do not rebuild the likelihood — is not a cautious compromise. It is the right answer, and this note should have said so in its title. What survives is **§3C (the estimand channel)** and **§3B (the level-scale channel, which was never an exchangeability problem)**. Those, plus the fact that the study's own hypothesis is item-level, are the case for the Route 1 work — not any defect in the aggregate likelihood. See [`202607261048-incorporating-item-difficulty.md`](202607261048-incorporating-item-difficulty.md) and [`202607261210-route1-dif-prespecification.md`](202607261210-route1-dif-prespecification.md), both re-billed accordingly.
+
 ## Summary
 
 Every model in the family assumes that, conditional on a child's latent ability, the 810 words of the reference inventory are equally likely to be known. That assumption is false, decisively and in a consistent direction. But three quite different concerns have been travelling under the label "exchangeability", and separating them is most of the value: one is negligible, one costs a definition rather than a number, and the most consequential of the three is **not an exchangeability problem at all** — it is that the Beta-Binomial concentration on a bounded proportion scale cannot be read as latent between-child heterogeneity, which would be true even if every word were equally hard.
@@ -52,6 +61,41 @@ For independent Bernoulli trials there is an exact identity, `sum_i p_i (1 - p_i
 That does not propagate, because the between-child term carries `N^2 = 810^2`. Within-child variance is only 0.6%–4.6% of total count variance across the plausible range of ability spreads and levels, so the effect on a recovered `kappa` is about 1%. Confirmed by simulating through the project's own likelihood: `kappa` moves by under 1.1%.
 
 This channel can be set aside — with its scope stated: the identity, and the smallness, are claims about _difficulty heterogeneity under local independence_ (items independent given ability). Item dependence beyond ability — semantic clustering, prerequisite structure — adds covariance terms that can scale as `N^2` and is a separate, unquantified channel; operationally it is part of what the observation-level `kappa` already absorbs, which reinforces §3B's residual-dispersion reading.
+
+### 3A′. Why 3A was the only distributional channel, and a correction to its magnitude
+
+§3A computed the right quantity without saying why it was the only one that mattered. The reason is Rasch sufficiency (see the caution at the head of this note): if the total is sufficient for ability, then nothing about the item composition can affect inference on ability, and the only way heterogeneous difficulty can reach the model is through the **distribution of the total**. §3A is that channel. There is no third distributional route to look for.
+
+Two things follow, and they pull in opposite directions.
+
+**The kernel misspecification is larger than §3A said.** §3A took its difficulty spread from the ~1.8-logit gap between the outer checklists, which is a _between-stratum_ gap standing in for the _item-level_ spread — a lower bound, since it ignores difficulty variation within each checklist. Treating the three checklists as three difficulty points implies a standard deviation near 0.7–1.0 logits, which is where the quoted 9% comes from. A realistic full-inventory spread for a CDI is 1.5–2.5 logits, and the underdispersion at that spread is much larger:
+
+| difficulty SD (logits) | Var(Poisson-binomial) / Var(Binomial), at `pbar` 0.15–0.75 |
+| ---------------------- | ---------------------------------------------------------- |
+| 1.0                    | 0.84–0.89                                                  |
+| 1.5                    | 0.72–0.80                                                  |
+| 2.0                    | 0.60–0.67                                                  |
+| 2.5                    | 0.52–0.61                                                  |
+
+So the within-child kernel may be wrong by ~40% rather than 9%. Note also that the Beta-Binomial cannot represent this at all in principle: its variance is `N p (1 - p) (N + kappa) / (kappa + 1)`, which is `>= N p (1 - p)` for every `kappa`, so the family has the Binomial as a _floor_ and underdispersion is outside it. `kappa` absorbs the difference.
+
+**And the share is now measured rather than bounded.** §3A gave within-child variance as 0.6%–4.6% of total across a plausible range. The fitted models pin it: `posterior_kappa_*.csv` carries the variance inflation factor `(N + kappa) / (kappa + 1)`, whose reciprocal is the kernel's share.
+
+| model / outcome     | fitted `kappa` | variance inflation | share of total variance in the kernel | worst-case effect on total SD |
+| ------------------- | -------------- | ------------------ | ------------------------------------- | ----------------------------- |
+| **VG10** understood | 5.3–44.0       | 19×–129×           | **0.77%–5.27%**                       | **1.06%**                     |
+| **VG10** spoken     | 5.8–6.0        | 117×–120×          | 0.83%–0.86%                           | 0.17%                         |
+| VG07 understood     | 3.3–11.3       | 67×–191×           | 0.52%–1.49%                           | 0.30%                         |
+| VG07 spoken         | 2.3–2.5        | 234×–244×          | 0.41%–0.43%                           | 0.09%                         |
+
+Take the figures from **VG10**, the model of record: at its youngest ages `kappa_u` reaches 44, the kernel carries 5.3% of total variance, and a 40% error in it moves the total standard deviation by 1.06%. This is the widest exposure anywhere in the family, and it is still an order of magnitude below what these data resolve. §3A's estimated range (0.6%–4.6%) was close but slightly low at the top end.
+
+The correction to the magnitude therefore strengthens §3A's conclusion rather than weakening it: the misspecification is larger than stated, the exposure is slightly larger than stated, and the product is still negligible — now against fitted output rather than an assumed range.
+
+> [!NOTE]
+> An earlier draft of this subsection quoted VG07's figures (0.4%–1.5%, ≤0.30%) as "the fitted models". VG07 is not a model of record; its `kappa` is far lower than VG10's, which understated the exposure by a factor of three. The numbers above are checked by [`scripts/verify_item_difficulty_notes.py`](../scripts/verify_item_difficulty_notes.py) against VG10's own output so the mistake cannot recur silently.
+
+One assumption is worth naming because it is load-bearing here and elsewhere: Rasch sufficiency requires _equal discrimination_ exactly. CDI items do not have it. That does not revive this channel — unequal discrimination perturbs the same ~1% budget — but it does bear on Route 1, where a 1PL fitted to data with varying discrimination can present as spurious differential item functioning. That is a threat to the DIF verdict, not to the aggregate likelihood, and the pre-specification now records it.
 
 ### 3B. The level-scale channel — the consequential one, and not about exchangeability
 
