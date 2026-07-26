@@ -1,6 +1,8 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import os
+
 import duckdb
 import numpy as np
 import pandas as pd
@@ -8,6 +10,17 @@ import pytest
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth.models.definitions import Population
+
+requires_real_db = pytest.mark.skipif(
+    not os.path.exists(data_utils.VOCABULARY_DATA_PATH),
+    reason="prepared vocabulary DuckDB not available (run scripts/prepare_data.py)",
+)
+"""Skip a test that asserts against the real database rather than a fixture.
+
+``data/vocabulary.duckdb`` is a build artefact, gitignored and absent on CI, so a
+test that opens it must skip rather than fail there. The counts these tests pin
+are still worth asserting — they are what the notes and the report quote — but
+only where the database exists."""
 
 
 def test_mask_incomparable_signed_outcomes_preserves_other_outcomes():
@@ -658,7 +671,8 @@ def test_duplicated_outcome_masking_requires_its_columns():
         data_utils.mask_duplicated_outcome_administrations(frame.drop(columns="age"))
 
 
-def test_load_combined_data_masks_the_edgin_duplicated_outcomes(tmp_path, monkeypatch):
+@requires_real_db
+def test_load_combined_data_masks_the_edgin_duplicated_outcomes():
     # End-to-end against the real database. The ratio is 0.75, set from the measured
     # gap (0.86 -> 0.55), so eight administrations match — an earlier 0.9 cut ran
     # through the middle of the cluster and missed two.
@@ -756,6 +770,7 @@ def test_implausible_production_leaves_comprehension_alone():
     assert out.loc[0, "understood"] == 156.0
 
 
+@requires_real_db
 def test_edgin_rules_together_on_the_real_database():
     # End to end: the widened duplicated-outcome rule masks 8 understood values,
     # the production rules mask 30 spoken values, and one duplicate row is dropped.
