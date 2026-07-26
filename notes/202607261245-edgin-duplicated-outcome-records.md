@@ -231,6 +231,13 @@ The source author no longer holds the original files (§12). Before accepting th
 
 There is no `data/vocab_data_us_01.csv` supplied by the source team — every other study has one, with a companion `.md` codebook, and `us_01` has neither. It is built in [`vocab_combined_view_sql`](../src/vocab_growth/data_utils.py) by filtering `data/wordbank_administration_data.csv` — the public Wordbank by-child export, downloaded 15 June 2026 — to `dataset_name = 'Edgin'`, American English, `health_conditions = 'down syndrome'`. The numeric identifiers throughout this note are Wordbank's, not the study's.
 
+> [!CAUTION]
+> The first clause is **wrong**, and was asserted without checking `git ls-files`. `data/vocab_data_us_01.csv` does exist and is tracked: 66 rows, 42 children, Words & Gestures only, ages 11–18, comprehension at most 96 and production at most 12, with hashed subject identifiers rather than Wordbank integers. Its only commit is `7eafe97`.
+>
+> What is true is that **nothing reads it**. It is absent from `prepare_data.py`'s `DATASETS` registry and unreferenced anywhere else in the repository, and it has no companion `.md` codebook. It is an orphaned early extract, superseded by the Wordbank derivation described above — 196 administrations from 119 children, ages 11–30, across both the 396- and 680-word forms — and it cannot even be reconciled with it, because the two use different identifier schemes.
+>
+> The provenance conclusion is unaffected: the `us_01` that §§8–11 analyse is the Wordbank derivation, and the numeric identifiers throughout this note are Wordbank's. But the file leaves a live trap — a tracked CSV named exactly like every other study's source file, which anyone could add to the registry and thereby double-count `us_01` under two incompatible identifier schemes.
+
 Two consequences follow, and they point in opposite directions.
 
 The **loss is narrower than it looked**: we were never analysing the source team's files, so what has become unavailable is the ability to _explain_ and _repair_ the defect, not the ability to _detect_ it. Everything in §§8–11 was derived from a public file that is still there and still re-checkable.
