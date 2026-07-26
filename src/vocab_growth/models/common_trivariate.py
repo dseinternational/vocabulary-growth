@@ -57,6 +57,7 @@ from vocab_growth.models.common import (
     BaseModelConfiguration,
     ModelFitContext,
     _plot_and_print_dist,
+    emit_monthly_summary,
     get_hsgp_hyperparams,
     render_model_graph,
     report,
@@ -1798,6 +1799,7 @@ def _run_trivariate_outcome_plots(
     y_plot: np.ndarray,
     y_query: np.ndarray,
     f_plot: np.ndarray,
+    p_plot: np.ndarray,
     kappa_plot: np.ndarray,
     kappa_query: np.ndarray,
     x_obs: pd.Series,
@@ -1810,6 +1812,19 @@ def _run_trivariate_outcome_plots(
     y_label: str,
 ):
     """Run the standard per-outcome plotting pipeline for a trivariate outcome."""
+    emit_monthly_summary(
+        output_dir=output_dir,
+        X_plot=samples.X_plot,
+        p_plot=p_plot,
+        y_plot=y_plot,
+        X_obs=x_obs,
+        n_trials=n_trials,
+        ci_prob=ci_prob,
+        suffix=suffix,
+        outcome_label=outcome_label.lower(),
+        y_label=y_label,
+    )
+
     plotting.plot_posterior_predictive_count_distributions_by_query_age(
         X_query=samples.X_query,
         y_query=y_query,
@@ -2124,6 +2139,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         y_plot=samples.y_u_plot,
         y_query=samples.y_u_query,
         f_plot=samples.f_u_plot,
+        p_plot=samples.p_u_plot,
         kappa_plot=samples.kappa_u_plot,
         kappa_query=samples.kappa_u_query,
         x_obs=analysis_df.loc[has_u, "age"],
@@ -2142,6 +2158,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         y_plot=samples.y_s_plot,
         y_query=samples.y_s_query,
         f_plot=samples.f_s_plot,
+        p_plot=samples.p_s_plot,
         kappa_plot=samples.kappa_s_plot,
         kappa_query=samples.kappa_s_query,
         x_obs=analysis_df.loc[has_s, "age"],
@@ -2160,6 +2177,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         y_plot=samples.y_sign_plot,
         y_query=samples.y_sign_query,
         f_plot=samples.f_sign_plot,
+        p_plot=samples.p_sign_plot,
         kappa_plot=samples.kappa_sign_plot,
         kappa_query=samples.kappa_sign_query,
         x_obs=analysis_df.loc[has_sign, "age"],

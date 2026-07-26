@@ -145,45 +145,235 @@ def posterior_summary_table(
     -------
     pd.DataFrame
     """
+    rows = [
+        summary_row(
+            float(a),
+            p_query[j, :],
+            y_query[j, :],
+            n_trials=n_trials,
+            ci_prob=ci_prob,
+            inner_ci_prob=inner_ci_prob,
+            interval_kind=interval_kind,
+        )
+        for j, a in enumerate(X_query)
+    ]
+
+    return pd.DataFrame(rows).sort_values("age_months").reset_index(drop=True)
+
+
+COUNT_BUCKET_THRESHOLDS: tuple[int, ...] = (5, 10, 25, 50, 100, 200, 400)
+"""Cumulative predictive-count thresholds reported as ``P(Y<=k)`` columns.
+
+Shared by :func:`posterior_summary_table` and :func:`monthly_summary_table` so
+the canonical query-age table and the whole-month table cannot drift apart in
+either the thresholds or the column names.
+"""
+
+
+def summary_row(
+    age_months: float,
+    p: np.ndarray,
+    y: np.ndarray | None,
+    *,
+    n_trials: int,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    inner_ci_prob: float = intervals.INNER_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
+) -> dict:
+    """Summarise one age's posterior draws into the standard summary columns.
+
+    Three distinct estimands, deliberately kept in separate column families
+    because they answer different questions and behave oppositely as data
+    accumulate:
+
+    ``p_*``
+        the latent population proportion;
+    ``Ey_*``
+        the **expected** count, ``p * n_trials`` — a credible interval on the
+        mean trajectory, carrying parameter uncertainty only, which narrows
+        toward zero width as more children are observed;
+    ``Y_*`` and ``P(Y<=k)``
+        the posterior **predictive** count for a child — parameter uncertainty
+        plus between-child and occasion-level dispersion, which converges on the
+        real population spread rather than on zero.
+
+    Quoting an ``Ey_*`` interval where a ``Y_*`` interval belongs understates the
+    range of individual children substantially, so the naming is load-bearing.
+
+    ``y`` may be ``None`` for a model that carries no predictive count draws at
+    this grid — the joint sign/speech engine is the case in this project. The
+    ``Y_*`` and ``P(Y<=k)`` columns are then absent rather than zero-filled, so a
+    reader cannot mistake a missing estimand for a computed one.
+    """
+    p = np.asarray(p, dtype=float)
+    Ey = p * n_trials
+
+    p_lo, p_hi = intervals.interval_1d(p, ci_prob, interval_kind)
+    p_lo50, p_hi50 = intervals.interval_1d(p, inner_ci_prob, interval_kind)
+    Ey_lo, Ey_hi = intervals.interval_1d(Ey, ci_prob, interval_kind)
+    Ey_lo50, Ey_hi50 = intervals.interval_1d(Ey, inner_ci_prob, interval_kind)
+
+    row = {
+        "age_months": float(age_months),
+        "p_median": float(np.median(p)),
+        "p_ci50_lo": p_lo50,
+        "p_ci50_hi": p_hi50,
+        "p_ci_lo": p_lo,
+        "p_ci_hi": p_hi,
+        "Ey_median": float(np.median(Ey)),
+        "Ey_ci50_lo": Ey_lo50,
+        "Ey_ci50_hi": Ey_hi50,
+        "Ey_ci_lo": Ey_lo,
+        "Ey_ci_hi": Ey_hi,
+    }
+
+    if y is None:
+        return row
+
+    y = np.asarray(y, dtype=float)
+    y_lo, y_hi = intervals.interval_1d(y, ci_prob, interval_kind)
+    y_lo50, y_hi50 = intervals.interval_1d(y, inner_ci_prob, interval_kind)
+    row.update({
+        "Y_median": float(np.median(y)),
+        "Y_ci50_lo": y_lo50,
+        "Y_ci50_hi": y_hi50,
+        "Y_ci_lo": y_lo,
+        "Y_ci_hi": y_hi,
+        "P(Y=0)": float((y == 0).mean()),
+    })
+    for k in COUNT_BUCKET_THRESHOLDS:
+        row[f"P(Y<={k})"] = float((y <= k).mean())
+    row[f"P(Y>{COUNT_BUCKET_THRESHOLDS[-1]})"] = float(
+        (y > COUNT_BUCKET_THRESHOLDS[-1]).mean()
+    )
+    return row
+
+
+# A whole-month row is read off the nearest plot-grid age. With the default
+# n_plot = 500 the grid step is about 0.2 months, so the snap is a few days;
+# this bound rejects a grid too coarse to carry monthly reporting rather than
+# emitting rows whose stated age is wrong.
+MAX_MONTH_SNAP_OFFSET: float = 0.25
+
+
+def monthly_summary_table(
+    X_plot: np.ndarray,
+    p_plot: np.ndarray,
+    y_plot: np.ndarray | None,
+    n_trials: int,
+    *,
+    X_obs: np.ndarray | pd.Series | None = None,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    inner_ci_prob: float = intervals.INNER_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
+) -> pd.DataFrame:
+    """Build the summary table at every whole month, from the plot grid.
+
+    The canonical reporting ages (:func:`posterior_summary_table` at the model
+    definition's ``ages_query``) stay 6-monthly for the report; this is the
+    finer-grained companion, one row per whole month of age, with the same
+    columns and the same bucket thresholds.
+
+    It reads the *plot* grid rather than adding query ages to the model, so it is
+    pure post-processing of a fitted trace: no change to the model graph, the
+    HSGP domain, or the ``query_id`` dimension the report and comparisons
+    consume. Each whole month takes the nearest plot-grid point, and the two
+    provenance columns record which:
+
+    ``grid_age_months``
+        the plot-grid age actually summarised;
+    ``grid_offset_months``
+        ``grid_age_months - age_months``, bounded by
+        :data:`MAX_MONTH_SNAP_OFFSET`.
+
+    Coverage is every whole month lying **inside** the plot grid's span, which is
+    the observed age range. In practice that is wider than the canonical query
+    ages, not narrower: the Down syndrome pool spans 8-115 months and the
+    typically-developing pool 8-25, so every canonical age has a monthly
+    counterpart and the extra months run out to the tails of the data. Many of
+    those tail months hold no observation at all, which is what ``n_obs`` is for.
+
+    A month **outside** the span is excluded even where it would snap within
+    :data:`MAX_MONTH_SNAP_OFFSET` — with a grid starting at 8.1, month 8 is
+    dropped rather than reported from the 8.1 point. Both halves of that matter:
+    the month lies below every observed age, so reporting it would extrapolate,
+    and its value would be the trajectory at 8.1 wearing an "8" label. Recorded
+    ages are whole months throughout this project, so no month is currently lost
+    this way; the rule is what keeps a future fractional-age source from
+    acquiring a silently extrapolated boundary row.
+
+    ``X_obs``, when given, adds an ``n_obs`` column counting the observed
+    administrations falling in each whole month — the check on whether a row is
+    data-supported or interpolated between sparse ages.
+
+    Raises
+    ------
+    ValueError
+        If the plot grid is too coarse for whole-month resolution, naming the
+        offending offset, so a reduced ``n_plot`` cannot silently mislabel ages.
+    """
+    X_plot = np.asarray(X_plot, dtype=float).reshape(-1)
+    p_plot = np.asarray(p_plot, dtype=float)
+    y_plot = None if y_plot is None else np.asarray(y_plot, dtype=float)
+
+    if p_plot.shape[0] != X_plot.shape[0]:
+        raise ValueError(
+            "p_plot must have one row per plot age "
+            f"(X_plot {X_plot.shape[0]}, p_plot {p_plot.shape[0]})."
+        )
+    if y_plot is not None and y_plot.shape[0] != X_plot.shape[0]:
+        raise ValueError(
+            "y_plot must have one row per plot age "
+            f"(X_plot {X_plot.shape[0]}, y_plot {y_plot.shape[0]})."
+        )
+
+    # Whole months strictly inside the grid span. ceil/floor deliberately exclude
+    # a boundary month that would snap from outside — a month below X_plot.min()
+    # is below every observed age, so reporting it would extrapolate and would
+    # label the trajectory at (say) 8.1 months as month 8. Widening this to
+    # "nearest point within MAX_MONTH_SNAP_OFFSET" would reintroduce both.
+    months = np.arange(
+        int(np.ceil(X_plot.min())), int(np.floor(X_plot.max())) + 1, dtype=int
+    )
+    if months.size == 0:
+        raise ValueError(
+            f"The plot grid spans no whole month (ages {X_plot.min():.2f}-{X_plot.max():.2f})."
+        )
+
+    nearest = np.abs(months[:, None] - X_plot[None, :]).argmin(axis=1)
+    offsets = X_plot[nearest] - months
+    worst = float(np.max(np.abs(offsets)))
+    if worst > MAX_MONTH_SNAP_OFFSET:
+        raise ValueError(
+            "The plot grid is too coarse for whole-month reporting: nearest-point "
+            f"offset reaches {worst:.3f} months against a {MAX_MONTH_SNAP_OFFSET} "
+            f"limit (grid step {np.diff(X_plot).max():.3f} months over "
+            f"{X_plot.min():.1f}-{X_plot.max():.1f}). Raise n_plot."
+        )
+
+    if X_obs is not None:
+        observed = np.asarray(X_obs, dtype=float).reshape(-1)
+        observed = observed[np.isfinite(observed)]
+        n_obs = [int(np.sum(np.rint(observed) == month)) for month in months]
+    else:
+        n_obs = None
+
     rows = []
-    for j, a in enumerate(X_query):
-        p = p_query[j, :]
-        y = y_query[j, :]
-        Ey = p * n_trials
-
-        p_lo, p_hi = intervals.interval_1d(p, ci_prob, interval_kind)
-        p_lo50, p_hi50 = intervals.interval_1d(p, inner_ci_prob, interval_kind)
-        Ey_lo, Ey_hi = intervals.interval_1d(Ey, ci_prob, interval_kind)
-        Ey_lo50, Ey_hi50 = intervals.interval_1d(Ey, inner_ci_prob, interval_kind)
-        y_lo, y_hi = intervals.interval_1d(y, ci_prob, interval_kind)
-        y_lo50, y_hi50 = intervals.interval_1d(y, inner_ci_prob, interval_kind)
-
-        rows.append({
-            "age_months": float(a),
-            "p_median": float(np.median(p)),
-            "p_ci50_lo": p_lo50,
-            "p_ci50_hi": p_hi50,
-            "p_ci_lo": p_lo,
-            "p_ci_hi": p_hi,
-            "Ey_median": float(np.median(Ey)),
-            "Ey_ci50_lo": Ey_lo50,
-            "Ey_ci50_hi": Ey_hi50,
-            "Ey_ci_lo": Ey_lo,
-            "Ey_ci_hi": Ey_hi,
-            "Y_median": float(np.median(y)),
-            "Y_ci50_lo": y_lo50,
-            "Y_ci50_hi": y_hi50,
-            "Y_ci_lo": y_lo,
-            "Y_ci_hi": y_hi,
-            "P(Y=0)": float((y == 0).mean()),
-            "P(Y<=5)": float((y <= 5).mean()),
-            "P(Y<=10)": float((y <= 10).mean()),
-            "P(Y<=25)": float((y <= 25).mean()),
-            "P(Y<=50)": float((y <= 50).mean()),
-            "P(Y<=100)": float((y <= 100).mean()),
-            "P(Y<=200)": float((y <= 200).mean()),
-            "P(Y<=400)": float((y <= 400).mean()),
-            "P(Y>400)": float((y > 400).mean()),
-        })
+    for position, (month, index) in enumerate(zip(months, nearest, strict=True)):
+        row = summary_row(
+            float(month),
+            p_plot[index, :],
+            None if y_plot is None else y_plot[index, :],
+            n_trials=n_trials,
+            ci_prob=ci_prob,
+            inner_ci_prob=inner_ci_prob,
+            interval_kind=interval_kind,
+        )
+        row["age_months"] = int(month)
+        if n_obs is not None:
+            row["n_obs"] = n_obs[position]
+        row["grid_age_months"] = float(X_plot[index])
+        row["grid_offset_months"] = float(offsets[position])
+        rows.append(row)
 
     return pd.DataFrame(rows).sort_values("age_months").reset_index(drop=True)

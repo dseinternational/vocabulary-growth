@@ -1122,6 +1122,79 @@ def posterior_summary(context: ModelFitContext):
         os.path.join(context.reporting.output_dir, "posterior_summary.csv"), index=False
     )
 
+    emit_monthly_summary(
+        output_dir=context.reporting.output_dir,
+        X_plot=context.model_samples.X_plot,
+        p_plot=context.model_samples.p_plot,
+        y_plot=context.model_samples.y_plot,
+        X_obs=context.model_samples.X_obs,
+        n_trials=context.model_data.n_trials,
+        ci_prob=context.reporting.ci_prob,
+        interval_kind=context.reporting.interval_kind,
+        dataframes=context.dataframes,
+        plots=context.plots,
+    )
+
+
+def emit_monthly_summary(
+    *,
+    output_dir: str,
+    X_plot,
+    p_plot,
+    y_plot,
+    X_obs,
+    n_trials: int,
+    ci_prob: float,
+    interval_kind: str = "eti",
+    suffix: str | None = None,
+    outcome_label: str = "words",
+    y_label: str = "Word count",
+    dataframes: dict | None = None,
+    plots: dict | None = None,
+):
+    """Write the whole-month summary table and its expected-count figure.
+
+    The report continues to quote the 6-monthly ``ages_query`` table; this is the
+    finer companion, one row per whole month, for readers who need monthly
+    resolution. It is derived from the plot grid, so it adds no query ages to the
+    model graph and leaves the ``query_id`` dimension the report and comparisons
+    consume untouched (see
+    :func:`vocab_growth.posterior_analysis.monthly_summary_table`).
+
+    ``y_plot`` may be None where an engine draws no predictive counts on the plot
+    grid; the table and figure then cover the expected count only.
+    """
+    stem = "posterior_summary_monthly" if suffix is None else f"posterior_summary_monthly_{suffix}"
+    monthly = posterior_analysis.monthly_summary_table(
+        X_plot,
+        p_plot,
+        y_plot,
+        n_trials=n_trials,
+        X_obs=X_obs,
+        ci_prob=ci_prob,
+        interval_kind=interval_kind,
+    )
+    monthly.to_csv(os.path.join(output_dir, f"{stem}.csv"), index=False)
+    if dataframes is not None:
+        dataframes[stem] = monthly
+
+    figure_stem = (
+        "expected_counts_by_month" if suffix is None else f"expected_counts_by_month_{suffix}"
+    )
+    fig = plotting.plot_expected_counts_by_month(
+        monthly,
+        n_trials=n_trials,
+        ci_prob=ci_prob,
+        output_dir=output_dir,
+        filename=figure_stem,
+        y_label=y_label,
+        outcome_label=outcome_label,
+    )
+    if plots is not None:
+        plots[figure_stem] = fig
+    plt.close(fig)
+    return monthly
+
 
 def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word count"):
     """
