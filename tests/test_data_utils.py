@@ -230,6 +230,34 @@ def test_td_load_data_can_widen_languages(tmp_path, monkeypatch):
     assert "Norwegian" in df["language"].tolist()
 
 
+def test_td_pool_excludes_the_edgin_clinical_cohort(tmp_path, monkeypatch):
+    """The reference pool must not contain rows from the audited DS source.
+
+    Two Edgin rows satisfy the typically-developing filter, and one is a Words &
+    Sentences record at exactly the 680-word ceiling inside the run that
+    ``mask_implausible_production_administrations`` excludes on the DS side. The
+    source team no longer holds the original files, so the defect cannot be
+    resolved at source — which makes it the more important that the benchmark and
+    the benchmarked are disjoint.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    spoken = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["study", "form", "age", "spoken"],
+    )
+    bivariate = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["study", "form", "age", "understood", "spoken"],
+    )
+
+    assert "Edgin" not in set(spoken["study"])
+    assert "Edgin" not in set(bivariate["study"])
+    # The ceiling record specifically, which the spoken-only pool would admit.
+    assert 680 not in set(spoken["spoken"])
+
+
 def _load_us01(tmp_path, monkeypatch):
     db_path = _create_vocab_db(tmp_path)
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
@@ -389,6 +417,12 @@ def _create_vocab_db(tmp_path):
                 ("WS",         "English (American)",  "Edgin",           "d02", "M",  24.0,  77,  77, False, "Down syndrome"),
                 ("WS",         "English (American)",  "Edgin",           "d03", None, 29.0, 150, 150, False, "Down syndrome"),
                 ("WG",         "English (American)",  "Edgin",           "d04", "F",  18.0, 200, 120, False, "Down syndrome"),
+                # Two Edgin rows in the real export carry typically_developing = true
+                # with no health condition, so they would otherwise land in the TD
+                # reference pool the DS exclusions are benchmarked against. One of
+                # them sits at the 680-word WS ceiling inside the flagged run.
+                ("WS",         "English (American)",  "Edgin",           "d05", None, 29.0, 680, 680, True,  None),
+                ("WG",         "English (American)",  "Edgin",           "d06", None, 17.0, 306,   7, True,  None),
             ],
         )
         for table, table_schema in _SOURCE_TABLE_SCHEMAS.items():

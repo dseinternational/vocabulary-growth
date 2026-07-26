@@ -9,9 +9,12 @@
 > [!IMPORTANT]
 > Extended the same day. The note began as an analysis of six Words & Gestures administrations with duplicated outcome columns. Following that up — the residual maximum of 152 spoken words at 8–14 months did not look survivable either — led to a systematic audit of the whole subset ([`scripts/audit_edgin_subset.py`](../scripts/audit_edgin_subset.py)), which found **four** defect classes affecting **32 of 196 administrations (16%)** and 31 of 119 children. §§1–7 record the original analysis; §§8–11 record the audit, the widened rules, and one earlier conclusion of mine that it overturned. The registered `us01-ceiling-excluded` sensitivities are retired as a consequence (§10).
 
+> [!IMPORTANT]
+> Extended again, 2026-07-26, after the study owner established with the source author that **the original data files no longer exist**. That closes repair at source, and prompted a provenance check which found that `us_01` is not a study file at all but a subset of the public Wordbank export — so the cohort's other condition groups are available as internal controls. §13 records what that showed: the ceiling-saturation finding is far stronger than §9 claimed, but **§9's characterisation of it was wrong in three specifics**, and two reference figures quoted in §9 and in `methods-data.qmd` were wrong. It also records a contamination §§1–12 missed entirely — two Edgin rows were in the typically-developing reference pool the exclusions are benchmarked against.
+
 ## Summary
 
-A systematic audit of the `us_01` (Edgin/Wordbank) Down syndrome subset finds **four independent defect classes affecting 32 of 196 administrations (16%)** and 31 of 119 children: outcome-column duplication (8), saturation at the form maximum (19, of which 13 form a contiguous child-id batch), longitudinal collapse (12 within the rule's floor and age scope, overlapping the others and contributing 1 uniquely), and one administration recorded twice. Two further checks came back clean — no count exceeds its form's ceiling and no form was administered outside its age band.
+A systematic audit of the `us_01` (Edgin/Wordbank) Down syndrome subset finds **four independent defect classes affecting 32 of 196 administrations (16%)** and 31 of 119 children: outcome-column duplication (8), saturation at the form maximum (19, of which 13 fall inside a run of 21 consecutive ceiling records in identifier order — a run that crosses out of the subset entirely, §13), longitudinal collapse (12 within the rule's floor and age scope, overlapping the others and contributing 1 uniquely), and one administration recorded twice. Two further checks came back clean — no count exceeds its form's ceiling and no form was administered outside its age band.
 
 Three rules now mask these by default, each with an `include_*` flag for sensitivity. Every exclusion falls in `us_01`; the pool goes from 1,219 to 1,218 rows, understood observations from 680 to 671, and spoken from 1,145 to 1,114. §11 tabulates the rules.
 
@@ -95,6 +98,9 @@ The study owner's assessment is that these are **highly unusual and clinically u
 
 Also retained, and unrelated to this rule: the roughly 20 Words & Sentences administrations at the 680-item form ceiling. These are genuine right-censoring, not error, and remain covered by the existing `us01-ceiling-excluded` sensitivity.
 
+> [!CAUTION]
+> Both sentences above are **wrong**, and are kept only because §§1–7 are preserved as written. Those records are not right-censoring but invalid values (§9, restated on firmer evidence in §13), they are now masked by default rather than retained, and the `us01-ceiling-excluded` sensitivity no longer exists (§10).
+
 ## 6. Implementation
 
 `data_utils.mask_duplicated_outcome_administrations` masks `understood`, `spoken` and `produced` where all three conditions hold:
@@ -174,9 +180,15 @@ The block is two distinct defects.
 | 81359 | 18 mo: 680 | 24 mo: 25 | 27×    |
 | 81342 | 19 mo: 680 | 24 mo: 13 | 52×    |
 
-Seven for seven. For scale, **no typically-developing child** of 1,469 aged 16–19 months reaches the Words & Sentences ceiling, and their maximum is 643.
+Seven for seven. For scale, **no typically-developing child** of the 2,489 Words & Sentences administrations at 16–19 months reaches the ceiling; their maximum is 661.
 
-**Thirteen records forming a contiguous child-id block**, 81207–81241, ages 24–30, every one at exactly 680. No child in the block has any other administration anywhere in the dataset, and the next id present is 81322 — an 81-id gap. A disjoint run of consecutive ids, uniformly at the form maximum, with no corroborating data, is a preparation-batch signature. Berglund's most able child of 330 reached 668 words at _48_ months; this block asks us to accept thirteen children reaching 680 by 24–30 months, with nothing else recorded about any of them.
+> [!NOTE]
+> That sentence originally read "no typically-developing child of 1,469 aged 16–19 months … their maximum is 643". Both figures were wrong: 1,469 is the audit's **Words & Gestures** reference count at those ages, which I attached to a Words & Sentences claim, and 643 appears nowhere in the audit output. The claim itself — that no typically-developing child reaches the Words & Sentences ceiling at 16–19 months — holds, at 0.00% of 2,489 with a maximum of 661.
+
+**Thirteen records at exactly 680, adjacent in the dataset's identifier ordering**, ids 81207–81241, ages 24–30. No child among them has any other administration anywhere in the dataset. Uniformity at the form maximum across a run of adjacent records, with no corroborating data, is a preparation-batch signature rather than thirteen exceptionally able children. Berglund's most able child of 330 reached 668 words at _48_ months; this block asks us to accept thirteen children reaching 680 by 24–30 months, with nothing else recorded about any of them.
+
+> [!CAUTION]
+> This paragraph originally described "a contiguous child-id block … a disjoint run of consecutive ids" with "an 81-id gap to the next child present". **Two of those three claims are false**, and the third is understated. The identifiers are _not_ consecutive integers — 22 integers inside 81207–81241 are absent from the Wordbank export altogether — and the "81-id gap" was an artefact of looking only at the Down syndrome subset: the next identifier present in the cohort is 81246, an autism-group child, also at exactly 680. What is true, and stronger, is that the records are adjacent in _identifier order_, and the run does not stop where the Down syndrome subset does. §13 sets this out with an exact probability.
 
 ## 10. The retired sensitivity
 
@@ -204,4 +216,67 @@ Thirty-two of 196 `us_01` administrations (16%) carry a defect, across four inde
 
 That pattern is itself the finding. It would be worth putting the audit output to the source team: the contiguous-id block in particular looks like something they could confirm or explain quickly, and the item-level pull would settle the duplication mechanism outright, since a duplicated or auto-filled column appears as two identical response vectors. Inferring these rules from aggregate data is the second-best route and is only necessary while that confirmation is unavailable.
 
+> [!IMPORTANT]
+> **This route is now closed.** The study owner raised the audit with the source author, who no longer has access to the original data files. The rules in §11 are therefore permanent rather than provisional: nothing further will arrive to confirm or refute them at source. §13 records what follows from that — including two evidential routes that do _not_ depend on the source team, one of which has already strengthened the case considerably.
+
 Residual after all three rules, and not explained: the maximum spoken count at 15–18 months is 68 words and at 19–24 months 406, both still high against a Berglund median of about 10 at 24 months. The 406 is the retained borderline record. Whether the remaining elevation reflects genuine cohort variation, this pooled sample's selection toward intervention-exposed families, or a further defect class the aggregate data cannot expose is not resolved here.
+
+---
+
+## 13. After the source route closed: a provenance check, a stronger finding, and a contamination
+
+The source author no longer holds the original files (§12). Before accepting that the rules can never be checked, it was worth asking precisely what `us_01` _is_ — and the answer changes the picture, because the premise of §12's recommendation was itself partly wrong.
+
+### 13.1 `us_01` is not a study file
+
+There is no `data/vocab_data_us_01.csv` supplied by the source team — every other study has one, with a companion `.md` codebook, and `us_01` has neither. It is built in [`vocab_combined_view_sql`](../src/vocab_growth/data_utils.py) by filtering `data/wordbank_administration_data.csv` — the public Wordbank by-child export, downloaded 15 June 2026 — to `dataset_name = 'Edgin'`, American English, `health_conditions = 'down syndrome'`. The numeric identifiers throughout this note are Wordbank's, not the study's.
+
+Two consequences follow, and they point in opposite directions.
+
+The **loss is narrower than it looked**: we were never analysing the source team's files, so what has become unavailable is the ability to _explain_ and _repair_ the defect, not the ability to _detect_ it. Everything in §§8–11 was derived from a public file that is still there and still re-checkable.
+
+The **available evidence is wider than §§8–11 used**. The Edgin dataset in Wordbank is not only the Down syndrome group. It holds 251 children in four condition groups — Down syndrome 119, unlabelled 108, pre-term 17, autism 7 — and `us_01` is one of the four. The other three are not in any analysis pool, but they passed through the _same_ preparation. A defect introduced in preparation has no reason to respect the condition label, so those groups are internal controls that the `us_01` filter had been hiding. The audit now runs its batch check over the whole cohort for exactly this reason.
+
+### 13.2 The ceiling saturation, restated correctly
+
+Ordering all 235 Edgin Words & Sentences records by identifier and marking those at exactly 680:
+
+| statement                | §9 claimed           | actually                                                                      |
+| ------------------------ | -------------------- | ----------------------------------------------------------------------------- |
+| identifiers in the block | consecutive integers | **not** consecutive — 22 integers inside 81207–81241 are absent from Wordbank |
+| what follows the block   | an 81-identifier gap | identifier 81246, an autism-group child, **also at exactly 680**              |
+| length of the run        | 13                   | **21**, ids 81207–81299                                                       |
+| groups spanned           | Down syndrome only   | Down syndrome, autism **and** unlabelled                                      |
+
+The corrected statement: **21 consecutive records in identifier order, every one at exactly the 680-word form ceiling, ages 24–30, crossing two condition-group boundaries, and not one of the 21 children has any other administration anywhere in the dataset.**
+
+That run is not a near-miss on chance. Placing the 27 ceiling records at random among the 235 Words & Sentences records, the probability of _some_ run of 21 or longer is **1.3 × 10⁻²²** — computed exactly rather than simulated, by counting the arrangements in which every gap between unflagged records holds at most 20 flags. Even the truncated Down-syndrome-only view that §9 saw gives 3.4 × 10⁻¹¹. Because this figure is published and can no longer be corroborated at source, the `_run_probability` helper is pinned by [`tests/test_audit_edgin_subset.py`](../tests/test_audit_edgin_subset.py) against five hand-countable cases _and_ against brute-force enumeration of every arrangement for all layouts up to ten records.
+
+The reference comparison also has to be made at the right ages, which §9 and `methods-data.qmd` both failed to do — they quoted the 16–19 month reference against a block aged 24–30. Making it correctly does not weaken the case:
+
+| group                                 | Words & Sentences records, 24–30 months | at exactly 680 | median production |
+| ------------------------------------- | --------------------------------------- | -------------- | ----------------- |
+| Edgin Down syndrome (`us_01`)         | 37                                      | **13 (35.1%)** | 35                |
+| typically developing (Edgin excluded) | 5,135                                   | 24 (0.47%)     | 399               |
+
+A third of the Down syndrome records at these ages sit at the absolute ceiling of the instrument, while the median of the same 37 records is 35 words. No developmental process produces that shape; a preparation step that writes the form maximum into a block of rows does.
+
+So the masking decision in §11 stands on materially better evidence than the reasoning that produced it — which is the outcome to hope for from a falsification attempt, but not the one to assume.
+
+### 13.3 A contamination §§1–12 missed
+
+The typically-developing pool is built by `load_data` from the same Wordbank export, requiring `typically_developing` true and no health condition recorded. **Two Edgin rows satisfy that filter**, and one of them is child 81299 — a Words & Sentences record at exactly 680, at 29 months, the last member of the run of 21.
+
+Edgin is the only clinical cohort in the export that leaks this way: it contributes 2 of its 435 rows (0.5%) to the reference pool, where every other contributing dataset gives at least 10% of its rows. So excluding it is not an ad-hoc carve-out for an inconvenient dataset; it is the one instance of a clinical cohort whose non-affected children slip through a filter designed for norming samples.
+
+`TD_POOL_EXCLUDED_DATASETS` in [`data_utils.py`](../src/vocab_growth/data_utils.py) now bars it, removing 1 row from the bivariate pool and 2 from the spoken-inclusive pool, out of 15,379. **No estimate moves.** The reason to do it anyway is that the reference pool is the benchmark the Down syndrome exclusions are justified against, and a record we exclude as invalid on one side of that comparison cannot sit inside the other side. A regression test pins it, and the audit script's reference pool excludes Edgin too — its previously reported reference counts were inflated by these two rows.
+
+### 13.4 What can still be established, and what cannot
+
+**Cannot, now:** why the defect exists, whether the 680 block was a merge artefact or a coding convention for "completed the form", and which column was overwritten in the eight duplicated-outcome records. These were only ever answerable at source.
+
+**Can, without the source team:** the item-level check. Wordbank publishes item-level ("instrument data") exports alongside the by-child summaries, and the Route 1 pull is already specified to take them from Wordbank rather than from any study team (pre-specification §3). If the Edgin dataset has an item-level export, a duplicated or auto-filled column appears as two identical response vectors, and a form written to its maximum appears as 680 items all marked known — both decisive, both from a public file. Whether that export exists for this dataset is unknown and is a checkable ingest question, not an assumption; §8.7 of the pre-specification should record "no item-level export available" as a possible and reportable outcome rather than presuming the check can be run.
+
+**Also can, and cheaply:** the internal controls. The unlabelled and pre-term groups are in the same file and the same preparation. Pre-term shows no ceiling saturation at all (maximum production 321 across 17 records), which is informative — the defect is not uniform across the cohort, so it is not a whole-file transformation.
+
+The honest summary for publication is that four defect classes in 32 of 196 administrations were identified from aggregate data, that the strongest of them is established at a probability of 10⁻²² against chance, and that the source of the error cannot now be determined. The remaining `include_*` flags are what make that reviewable: they let a reader see what the conclusions would have been had we judged wrongly.

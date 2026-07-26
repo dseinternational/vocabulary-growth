@@ -28,6 +28,7 @@ independent Berglund et al. (2001) Down syndrome cohort quoted in
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -54,18 +55,35 @@ COLLAPSE_MIN_VALUE = 50
 COLLAPSE_MAX_AGE_MONTHS = 30
 
 
-def _load() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (Edgin Down syndrome rows, typically-developing reference rows)."""
+def _load() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Return (Edgin Down syndrome rows, the whole Edgin cohort, reference rows).
+
+    ``us_01`` is not a study file supplied by the source team: it is the
+    ``dataset_name == 'Edgin'`` Down syndrome subset of the public Wordbank
+    by-child export. The cohort also contains pre-term, autism and
+    unlabelled-condition children, who are *not* in ``us_01`` but who share the
+    dataset's preparation. Batch-structure checks therefore run over the whole
+    cohort: a defect introduced during preparation does not respect the
+    condition label we happen to filter on, and looking only at the Down
+    syndrome rows truncates any such run at the subset boundary.
+
+    The reference pool excludes Edgin. Two of its rows satisfy the
+    typically-developing filter (``typically_developing`` true, no health
+    condition), and one of the two is itself at the Words & Sentences ceiling
+    inside the flagged run — so leaving them in would benchmark the defect
+    partly against itself.
+    """
     frame = pd.read_csv(WORDBANK, low_memory=False)
     english = frame[frame["language"] == "English (American)"]
-    conditions = english["health_conditions"].astype(str).str.lower()
-    edgin = english[
-        (english["dataset_name"] == "Edgin") & conditions.str.contains("down", na=False)
-    ].copy()
+    cohort = english[english["dataset_name"] == "Edgin"].copy()
+    conditions = cohort["health_conditions"].astype(str).str.lower()
+    edgin = cohort[conditions.str.contains("down", na=False)].copy()
     reference = english[
-        english["typically_developing"].eq(True) & english["health_conditions"].isna()
+        english["typically_developing"].eq(True)
+        & english["health_conditions"].isna()
+        & english["dataset_name"].ne("Edgin")
     ].copy()
-    return edgin, reference
+    return edgin, cohort, reference
 
 
 def _td_percentile(reference: pd.DataFrame, form: str, outcome: str, age, value) -> float:
@@ -92,7 +110,7 @@ def section(title: str) -> None:
     print(f"\n{'=' * 78}\n{title}\n{'=' * 78}")
 
 
-def describe(edgin: pd.DataFrame, reference: pd.DataFrame) -> None:
+def describe(edgin: pd.DataFrame, cohort: pd.DataFrame, reference: pd.DataFrame) -> None:
     section("0. Composition")
     print(f"administrations: {len(edgin)}   children: {edgin['child_id'].nunique()}")
     per_child = edgin.groupby("child_id").size().value_counts().sort_index()
@@ -104,7 +122,18 @@ def describe(edgin: pd.DataFrame, reference: pd.DataFrame) -> None:
               f"ages {group['age'].min():.0f}-{group['age'].max():.0f}, "
               f"comprehension present {group['comprehension'].notna().sum():>3}, "
               f"production present {group['production'].notna().sum():>3}")
-    print(f"\nreference (typically developing, American English): {len(reference)} rows")
+    conditions = (
+        cohort["health_conditions"].fillna("(unlabelled)").replace("", "(unlabelled)")
+    )
+    print(f"\nwhole Edgin cohort: {len(cohort)} administrations, "
+          f"{cohort['child_id'].nunique()} children")
+    print("  condition groups (children): "
+          + ", ".join(f"{k}={v}" for k, v in
+                      cohort.groupby(conditions)["child_id"].nunique().items()))
+    print("  us_01 is the Down syndrome group only; the rest share the dataset's")
+    print("  preparation and are used below as internal controls.")
+    print(f"\nreference (typically developing, American English, Edgin excluded): "
+          f"{len(reference)} rows")
 
 
 def check_impossible_values(edgin: pd.DataFrame) -> pd.Series:
@@ -190,29 +219,77 @@ def check_form_saturation(edgin: pd.DataFrame, reference: pd.DataFrame) -> pd.Se
     return flags
 
 
-def check_batch_structure(edgin: pd.DataFrame) -> pd.Series:
-    section("6. Contiguous child-id batches with anomalous uniformity")
+def _run_probability(n: int, m: int, k: int) -> float:
+    """Exact P(some run of >= k flags) when m flags are placed uniformly in n slots.
+
+    The m flags are exchangeable, so every one of ``C(n, m)`` arrangements is
+    equally likely. Laying out the ``n - m`` unflagged slots creates
+    ``n - m + 1`` gaps, and an arrangement avoids a k-run exactly when every gap
+    holds at most ``k - 1`` flags — so the count is the coefficient of ``x^m`` in
+    ``(1 + x + ... + x^(k-1)) ** (n - m + 1)``. The complement is taken over the
+    exact integer counts before dividing: the avoiding arrangements outnumber the
+    rest so heavily here that subtracting in floating point underflows to zero.
+    """
+    if m == 0 or k > m:
+        return 0.0
+    gaps = n - m + 1
+    poly = [1]
+    for _ in range(gaps):
+        nxt = [0] * (len(poly) + k - 1)
+        for i, c in enumerate(poly):
+            if c:
+                for j in range(k):
+                    nxt[i + j] += c
+        poly = nxt[: m + 1]
+    # The truncation above can leave the polynomial shorter than m + 1, which
+    # means no arrangement avoids a k-run at all (k == 1 is the degenerate case).
+    avoid = poly[m] if m < len(poly) else 0
+    total = math.comb(n, m)
+    return (total - avoid) / total
+
+
+def check_batch_structure(cohort: pd.DataFrame, edgin: pd.DataFrame) -> pd.Series:
+    section("6. Preparation-batch structure (runs at the ceiling, in child_id order)")
+    print("  Run over the WHOLE Edgin cohort, not just its Down syndrome subset:")
+    print("  a preparation defect does not respect the condition label, and the")
+    print("  us_01 filter truncates any run at the subset boundary.")
     flags = pd.Series(False, index=edgin.index)
     for form, ceiling in FORM_CEILINGS.items():
-        group = edgin[edgin["form"] == form].sort_values("child_id")
+        group = cohort[cohort["form"] == form].sort_values("child_id")
         if group.empty:
             continue
-        saturated = group["production"].ge(0.88 * ceiling)
-        runs = (saturated != saturated.shift()).cumsum()
-        print(f"  {form}:")
+        at_ceiling = group["production"].eq(ceiling)
+        print(f"\n  {form}: {int(at_ceiling.sum())} of {len(group)} records at exactly {ceiling}")
+        if not at_ceiling.any():
+            continue
+        runs = (at_ceiling != at_ceiling.shift()).cumsum()
+        longest = 0
         for _, block in group.groupby(runs):
-            if not block["production"].ge(0.88 * ceiling).iloc[0] or len(block) < 3:
+            if not at_ceiling.loc[block.index].iloc[0] or len(block) < 3:
                 continue
-            others = edgin[
-                edgin["child_id"].isin(block["child_id"]) & (edgin["form"] != form)
+            longest = max(longest, len(block))
+            ids = block["child_id"].tolist()
+            span = ids[-1] - ids[0] + 1
+            groups = sorted(
+                block["health_conditions"].fillna("(unlabelled)").replace("", "(unlabelled)").unique()
+            )
+            others = cohort[
+                cohort["child_id"].isin(ids) & (cohort["form"] != form)
             ]
-            print(f"    ids {block['child_id'].min()}-{block['child_id'].max()}: "
-                  f"{len(block)} consecutive saturated records, "
-                  f"ages {block['age'].min():.0f}-{block['age'].max():.0f}, "
-                  f"other administrations for these children: {len(others)}")
+            print(f"    run of {len(block)}: ids {ids[0]}-{ids[-1]}, "
+                  f"ages {block['age'].min():.0f}-{block['age'].max():.0f}")
+            print(f"      consecutive in id ORDER (adjacent present ids), not consecutive "
+                  f"integers: {len(ids)} ids across a span of {span}")
+            print(f"      condition groups spanned: {groups}")
+            print(f"      other administrations for these children: {len(others)}")
             flags |= edgin.index.isin(block.index)
-        if not flags.any():
-            print("    no saturated run of three or more consecutive ids")
+        if longest >= 3:
+            n, m = len(group), int(at_ceiling.sum())
+            p = _run_probability(n, m, longest)
+            print(f"    P(a run this long | {m} ceiling records placed at random "
+                  f"in {n}) = {p:.2e}")
+        else:
+            print("    no run of three or more consecutive records at the ceiling")
     return flags
 
 
@@ -284,16 +361,16 @@ def main(argv: list[str] | None = None) -> int:
     if not WORDBANK.exists():
         print(f"[error] {WORDBANK} not present.")
         return 1
-    edgin, reference = _load()
+    edgin, cohort, reference = _load()
 
-    describe(edgin, reference)
+    describe(edgin, cohort, reference)
     verdicts = {
         "impossible_value": check_impossible_values(edgin),
         "duplicate_administration": check_duplicate_administrations(edgin),
         "form_age_mismatch": check_form_age_mismatch(edgin),
         "outcome_duplication": check_outcome_duplication(edgin),
         "form_saturation": check_form_saturation(edgin, reference),
-        "id_batch": check_batch_structure(edgin),
+        "id_batch": check_batch_structure(cohort, edgin),
         "longitudinal_collapse": check_longitudinal_collapse(edgin),
     }
     table = check_external_implausibility(edgin, reference)

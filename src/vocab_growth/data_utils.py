@@ -33,6 +33,25 @@ WORDBANK_SPOKEN_ONLY_FORMS = ("WS",)
 US01_WS_VOCAB_MAX = 680
 """Native vocabulary ceiling of the us_01 Words & Sentences form."""
 
+TD_POOL_EXCLUDED_DATASETS = ("Edgin",)
+"""Wordbank datasets barred from the typically-developing reference pool.
+
+``Edgin`` supplies the ``us_01`` Down syndrome subset. Two of its 435 rows also
+satisfy the typically-developing filter (``typically_developing`` true, no health
+condition recorded) — it is the only clinical cohort in the export that leaks this
+way, contributing 0.5% of its rows against at least 10% for every other dataset.
+One of the two is a Words & Sentences record at exactly the 680-word ceiling,
+inside the run of 21 consecutive ceiling records that
+``notes/202607261245-edgin-duplicated-outcome-records.md`` §13 identifies as a
+preparation artefact.
+
+The cost is two rows of 15,379, so this changes no estimate. It is done because
+the reference pool is what the Down syndrome exclusions are benchmarked against,
+and a dataset whose preparation we have established to be defective — and which,
+the source team having confirmed the original files are no longer available,
+cannot be repaired at source — should not sit on both sides of that comparison.
+"""
+
 SIGNED_ONLY_STUDIES = ("uk_01",)
 """Studies whose ``signed`` field excludes words that are also spoken.
 
@@ -955,6 +974,7 @@ def load_data(
             WHERE typically_developing = true
                 AND age <= $2
                 AND health_conditions IS NULL
+                AND dataset_name NOT IN ({_sql_string_list(TD_POOL_EXCLUDED_DATASETS)})
                 AND form IN $1
                 {language_clause}
             """,

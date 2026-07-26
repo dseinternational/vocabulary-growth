@@ -38,16 +38,11 @@ naive run hits. Distilled from the 2026-07-12 run
 
 `python scripts/fit_model.py all --config rep --render --upload` treats convergence and rendering as per-model failures and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, atomically promotes every successful fit before rendering it, continues rendering after an individual Quarto failure, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. A render failure leaves the completed fit available for `--render-only`; other fitting exceptions still abort immediately. The canonical `run_replication.sh` path remains resumable and invokes one model at a time.
 
-### us_01 ceiling-censoring sensitivity
+### us_01 ceiling sensitivity — retired, do not run
 
-After the VG10 and VG15 baselines pass, fit and compare the registered `us01-ceiling-excluded` variants. These variants remove only the 18 us_01 Words & Sentences observations at the 680-word form ceiling; they retain the valid Words & Gestures observation at its separate 396-word ceiling.
+The `us01-ceiling-excluded` variants for VG10 and VG15 **no longer exist**, and `fit_sensitivity.py` now raises `KeyError` if you ask for them. They excluded the 18 us_01 Words & Sentences observations at the 680-word form ceiling from a frame that already excludes those observations by default, so they could not fail; the Edgin audit established the records as invalid values rather than censored measurements (`notes/202607261245-edgin-duplicated-outcome-records.md` §§9–10, 13).
 
-```bash
-python scripts/fit_sensitivity.py vg10 us01-ceiling-excluded --config rep
-python scripts/fit_sensitivity.py vg15 us01-ceiling-excluded --config rep
-python scripts/compare_sensitivity.py vg10 --variant us01-ceiling-excluded
-python scripts/compare_sensitivity.py vg15 --variant us01-ceiling-excluded
-```
+The live question is the inverse — what changes if that exclusion is _wrong_ — which needs `include_implausible_production=True` registered as a variant. That requires a `ModelDefinition` field and is not yet available, so **no ceiling sensitivity runs in this refit**. Record the gap in the run log rather than substituting a different variant.
 
 ### Default (sequential, resumable)
 
