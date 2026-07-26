@@ -1,14 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Recompute the checkable figures in the item-difficulty working notes.
+"""Recompute the checkable figures in the item-difficulty working note.
 
-Verifies the numbers in ``notes/202607261008-challenging-item-exchangeability.md``
-(§2, §3B, §3C, §6) and ``notes/202607261048-incorporating-item-difficulty.md``
-(§1, §2, §3, §5, §6) from the raw CSVs and, where present, the fitted VG10
-output. Each check prints CLAIM vs COMPUTED; the script exits non-zero if any
-executed check fails. Sections that need fitted output are skipped (not failed)
-when the output root has no VG10 directory.
+Verifies the numbers in
+``notes/202607261540-item-difficulty-and-the-aggregate-likelihood.md``
+(§§2, 3.3, 4, 5, 8, 9, 10, 11 — the consolidation of two earlier notes whose
+figures this script originally pinned; their git history holds the trail) from
+the raw CSVs and, where present, the fitted VG10 output. Each check prints
+CLAIM vs COMPUTED; the script exits non-zero if any executed check fails.
+Sections that need fitted output are skipped (not failed) when the output root
+has no VG10 directory.
 
 Run from anywhere::
 
@@ -48,8 +50,8 @@ def check(label: str, computed, claim, tol: float = 0.0) -> None:
         _failures.append(label)
 
 
-def note1_exchangeability(ie: pd.DataFrame) -> None:
-    print("note 1 §2 — hypergeometric exchangeability test (ie_01 follow-up wave)")
+def check_exchangeability(ie: pd.DataFrame) -> None:
+    print("§2 — hypergeometric exchangeability test (ie_01 follow-up wave)")
     end_u = ie[["understands_1_end", "understands_2_end", "understands_3_end"]].to_numpy(float)
     complete = ~np.isnan(end_u).any(axis=1)
     totals = end_u.sum(axis=1)
@@ -95,8 +97,8 @@ def note1_exchangeability(ie: pd.DataFrame) -> None:
     check("outer-checklist spread (logits)", spread, 1.8, tol=0.05)
 
 
-def note1_production(ie: pd.DataFrame) -> None:
-    print("note 1 §3C — production propensity gradient")
+def check_production_gradient(ie: pd.DataFrame) -> None:
+    print("§5 — production propensity gradient")
     end_u = ie[["understands_1_end", "understands_2_end", "understands_3_end"]].to_numpy(float)
     says = ie[["says_1_end", "says_2_end", "says_3_end"]].to_numpy(float)
     both = ~np.isnan(end_u).any(axis=1) & ~np.isnan(says).any(axis=1)
@@ -133,8 +135,8 @@ def note1_production(ie: pd.DataFrame) -> None:
     check("Kitagawa total / within / composition", [total, within, composition], [0.3399, 0.3950, -0.0550], tol=0.0005)
 
 
-def note1_data_defects(ie: pd.DataFrame, uk: pd.DataFrame) -> None:
-    print("note 1 §6 — data defects")
+def check_data_defects(ie: pd.DataFrame, uk: pd.DataFrame) -> None:
+    print("§8 — data defects")
     end_u = ie[["understands_1_end", "understands_2_end", "understands_3_end"]].to_numpy(float)
     complete = ~np.isnan(end_u).any(axis=1)
     start_1 = ie["understands_1_start"].to_numpy(float)
@@ -165,8 +167,8 @@ def note1_data_defects(ie: pd.DataFrame, uk: pd.DataFrame) -> None:
     check("maximum spoken/understood", np.nanmax(ratio), 1.95, tol=0.005)
 
 
-def note1_kappa(output_root: Path) -> None:
-    print("note 1 §3B — VG10 fitted dispersion (skipped if no fitted output)")
+def check_fitted_dispersion(output_root: Path) -> None:
+    print("§4 — VG10 fitted dispersion (skipped if no fitted output)")
     vg10_dirs = sorted((output_root / "models").glob("VG10-*")) if (output_root / "models").is_dir() else []
     if not vg10_dirs:
         print("  [skip] no VG10 output found under", output_root / "models")
@@ -197,11 +199,11 @@ def note1_kappa(output_root: Path) -> None:
     check("ratio", decline_kp1 / predicted, 0.52, tol=0.005)
     check("log decline in kappa", np.log(kappa[0] / kappa[-1]), 1.225, tol=0.005)
 
-    note1_kernel_share(vg10)
+    check_kernel_share(vg10)
 
 
-def note1_kernel_share(vg10: Path) -> None:
-    """Note 1 §3A′: how much total variance the item-exchangeability kernel carries.
+def check_kernel_share(vg10: Path) -> None:
+    """Note §3.3: how much total variance the item-exchangeability kernel carries.
 
     Rasch sufficiency means heterogeneous item difficulty can only reach the model
     through the distribution of the total, so this share bounds the whole concern.
@@ -210,7 +212,7 @@ def note1_kernel_share(vg10: Path) -> None:
     figures as though they were the model of record's, understating the exposure
     threefold — hence checking against VG10's own output here.
     """
-    print("note 1 §3A' — kernel share of total variance (VG10)")
+    print("§3.3 — kernel share of total variance (VG10)")
     for outcome, share_claim, sd_claim in (("u", [0.77, 5.27], 1.06), ("s", [0.83, 0.86], 0.17)):
         table = vg10 / f"posterior_kappa_{outcome}.csv"
         if not table.exists():
@@ -231,8 +233,8 @@ def _pooled_profile(ie: pd.DataFrame) -> np.ndarray:
     return end_u[complete].sum(axis=0) / (complete.sum() * STRATUM_SIZES)
 
 
-def note2_links(ie: pd.DataFrame) -> None:
-    print("note 2 §1 and §3 — implied-kappa and mixed-link tables (sigma = 1, exact)")
+def check_link_tables(ie: pd.DataFrame) -> None:
+    print("§4 and §9 — implied-kappa and mixed-link tables (sigma = 1, exact)")
     weights = STRATUM_SIZES / N_ITEMS
     profile = _pooled_profile(ie)
     d_k = -np.log(profile / (1 - profile))
@@ -274,8 +276,8 @@ def note2_links(ie: pd.DataFrame) -> None:
     check("plain link: f for p = 0.9", np.log(9), 2.20, tol=0.005)
 
 
-def note2_counts(merged: pd.DataFrame) -> None:
-    print("note 2 §2 and §5 — frame counts and the Edgin anchor")
+def check_frame_counts(merged: pd.DataFrame) -> None:
+    print("§9 and §10 — frame counts and the Edgin anchor")
     with_age = merged.dropna(subset=["age"])
     raw_pairs = with_age.groupby(["study", "subject_id"]).size()
     check("raw view: observations / children / singletons / repeated", [len(with_age), len(raw_pairs), (raw_pairs == 1).sum(), (raw_pairs > 1).sum()], [1219, 626, 235, 391])
@@ -295,8 +297,8 @@ def note2_counts(merged: pd.DataFrame) -> None:
     check("us_01 rows / children / rows with comprehension", [len(us_01), us_01["subject_id"].nunique(), int(us_01["understood"].notna().sum())], [196, 119, 87])
 
 
-def note2_imitation(ie: pd.DataFrame) -> None:
-    print("note 2 §6 — pooled imitation decomposition (follow-up wave)")
+def check_imitation_decomposition(ie: pd.DataFrame) -> None:
+    print("§11 — pooled imitation decomposition (follow-up wave)")
     end_u = ie[["understands_1_end", "understands_2_end", "understands_3_end"]].to_numpy(float)
     imitates = ie[["imitates_1_end", "imitates_2_end", "imitates_3_end"]].to_numpy(float)
     says = ie[["says_1_end", "says_2_end", "says_3_end"]].to_numpy(float)
@@ -313,16 +315,16 @@ def main() -> int:
     merged_path = REPO / "data" / "vocab_data_merged.csv"
     output_root = Path(os.environ.get("DSE_VOCAB_GROWTH_OUTPUT_DIR") or (REPO / "output"))
 
-    note1_exchangeability(ie)
-    note1_production(ie)
-    note1_data_defects(ie, uk)
-    note1_kappa(output_root)
-    note2_links(ie)
+    check_exchangeability(ie)
+    check_production_gradient(ie)
+    check_data_defects(ie, uk)
+    check_fitted_dispersion(output_root)
+    check_link_tables(ie)
     if merged_path.exists():
-        note2_counts(pd.read_csv(merged_path))
+        check_frame_counts(pd.read_csv(merged_path))
     else:
-        print("note 2 §2/§5 — [skip] data/vocab_data_merged.csv not present (run scripts/prepare_data.py)")
-    note2_imitation(ie)
+        print("§9/§10 — [skip] data/vocab_data_merged.csv not present (run scripts/prepare_data.py)")
+    check_imitation_decomposition(ie)
 
     if _failures:
         print(f"\n{len(_failures)} check(s) FAILED: " + "; ".join(_failures))

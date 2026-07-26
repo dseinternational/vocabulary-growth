@@ -4,7 +4,7 @@
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 
 > [!WARNING]
-> Pre-specification, 2026-07-26, committed **before** any item-level data enters the repository — the git history is the timestamp. It binds the Route 1 analysis described in [`202607261048-incorporating-item-difficulty.md`](202607261048-incorporating-item-difficulty.md) §6 once execution begins; until then two decisions marked **[owner decision]** remain open and must be settled by the study owner, not the analyst. Deviations after execution begins are permitted but must be logged in this note's §10 with their reason, and the primary estimand, threshold and decision rule may not be changed after any Down syndrome item-level response has been seen.
+> Pre-specification, 2026-07-26, committed **before** any item-level data enters the repository — the git history is the timestamp. It binds the Route 1 analysis described in [`202607261540-item-difficulty-and-the-aggregate-likelihood.md`](202607261540-item-difficulty-and-the-aggregate-likelihood.md) §11 once execution begins; until then two decisions marked **[owner decision]** remain open and must be settled by the study owner, not the analyst. Deviations after execution begins are permitted but must be logged in this note's §10 with their reason, and the primary estimand, threshold and decision rule may not be changed after any Down syndrome item-level response has been seen.
 
 ## 1. Purpose and scope
 
@@ -12,7 +12,7 @@ This note pre-specifies the first empirical test of the working scientific assum
 
 Pre-specifying before acquisition matters here for a specific reason: the analyst has already seen the _aggregate_ Down syndrome data extensively, and the companion notes make directional predictions. Fixing the estimand, threshold and decision rule now is what keeps the answer from being fitted to the expectation.
 
-**Why this analysis is warranted, stated correctly.** Not because the aggregate likelihood is defective — it is not. Under a Rasch-type model the total score is sufficient for ability, so heterogeneous item difficulty costs nothing for inference from sum scores, and the Beta-Binomial describes the totals to within about 1% of their standard deviation ([`202607261008-challenging-item-exchangeability.md`](202607261008-challenging-item-exchangeability.md) §3A′). Two things justify the work instead, and both are untouched by that result:
+**Why this analysis is warranted, stated correctly.** Not because the aggregate likelihood is defective — it is not. Under a Rasch-type model the total score is sufficient for ability, so heterogeneous item difficulty costs nothing for inference from sum scores, and the Beta-Binomial describes the totals to within about 1% of their standard deviation ([`202607261540-item-difficulty-and-the-aggregate-likelihood.md`](202607261540-item-difficulty-and-the-aggregate-likelihood.md) §3). Two things justify the work instead, and both are untouched by that result:
 
 1. **The hypothesis is item-level.** "Same order" is a claim about the difficulty vector `d_j`. Sufficiency of the total for ability is precisely the statement that a sum score carries no information about which items — so no aggregate model, however well specified, can test it. This analysis is the only route.
 2. **One reported estimand depends on composition.** `q` at matched comprehension is a weighted average over each child's own understood set. Whether Down syndrome and typically-developing children who understand 200 words understand the _same_ 200 determines whether the reported `Delta q` reflects production propensity or item composition. That is a validity question about a published contrast, not a modelling preference.
@@ -136,3 +136,5 @@ Consequently the **design analysis is a gate, not a formality** (§8): if it sho
 5. Log any deviation below, dated, with its reason.
 
 _Deviations: none — not yet executed._
+
+_Editorial, 2026-07-26 (pre-execution, pre-ingest): the two companion notes were consolidated into [`202607261540-item-difficulty-and-the-aggregate-likelihood.md`](202607261540-item-difficulty-and-the-aggregate-likelihood.md) and deleted; the two links in §1 and the header were retargeted to the consolidated note's §11 and §3. No analysis content — estimand, threshold, decision rule, model, controls or sensitivities — changed._
