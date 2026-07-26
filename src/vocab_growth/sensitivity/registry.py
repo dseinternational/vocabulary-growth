@@ -114,9 +114,22 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # data_utils.mask_implausible_production_administrations. A sensitivity that
     # excludes records already excluded is a no-op, and a registered check that
     # cannot fail is worse than no check. The live question is the inverse — what
-    # changes if the exclusion is wrong — which the loaders expose as
-    # include_implausible_production=True and which needs a ModelDefinition field
-    # before it can be registered here.
+    # changes if the exclusion is wrong — and it is registered below.
+    #
+    # This inverse form is not optional garnish. The source author no longer holds
+    # the original data files, so the 30 masked administrations can never be
+    # confirmed as defective at source; these two variants are the only way to
+    # report what the headline joint trajectories would have been had that
+    # judgement been wrong. Both engines print the reinstated count, so a variant
+    # that silently stopped biting would be visible rather than reassuring.
+    ("vg10", "us01-implausible-reinstated"): {
+        "suffix": "us01-implausible-reinstated",
+        "scalar": {"include_implausible_production": True},
+    },
+    ("vg15", "us01-implausible-reinstated"): {
+        "suffix": "us01-implausible-reinstated",
+        "scalar": {"include_implausible_production": True},
+    },
 
     # -- Target 6: VG15 psi (association) --
     ("vg15", "psi-neutral"): {"suffix": "psi-neutral", "scalar": {"log_psi_mu": 0.0, "log_psi_sigma": 0.5}},

@@ -68,13 +68,16 @@ def test_registry_counts_and_models():
     # The two `us01-ceiling-excluded` variants were retired with the Edgin audit:
     # the records they excluded are now masked by default, so the variants could
     # only have excluded records already excluded. A registered check that cannot
-    # fail is worse than no check — see the note in registry.py.
-    assert len(VARIANTS) == 39
-    assert len(variants_for("vg10")) == 10
+    # fail is worse than no check — see the note in registry.py. They are replaced
+    # by the inverse `us01-implausible-reinstated` pair, which asks what changes if
+    # that default exclusion is mistaken — the only remaining check on it, the
+    # source author no longer holding the original files.
+    assert len(VARIANTS) == 41
+    assert len(variants_for("vg10")) == 11
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1
-    assert len(variants_for("vg15")) == 19
+    assert len(variants_for("vg15")) == 20
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -91,9 +94,9 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 19
+    assert len(all_vg15) == 20
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 19
+    assert len({d.config_name for d in all_vg15}) == 20
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
@@ -105,6 +108,25 @@ def test_build_variant_all_and_named():
     for model in ("vg10", "vg15"):
         with pytest.raises(KeyError, match="us01-ceiling-excluded"):
             build_variant(model, "us01-ceiling-excluded")
+
+
+def test_implausible_production_reinstatement_is_registered_and_bites():
+    """The inverse sensitivity must exist, flip the flag, and change the frame.
+
+    The 30 masked administrations cannot be confirmed defective at source — the
+    source author no longer holds the original files — so this variant is the only
+    published check on that exclusion. It has to move real observations, or it
+    repeats the fault of the variants it replaces.
+    """
+    for model, model_id in (("vg10", "VG10"), ("vg15", "VG15")):
+        (variant,) = build_variant(model, "us01-implausible-reinstated")
+        assert variant.include_implausible_production is True
+        assert variant.model_id == model_id
+        assert "us01-implausible-reinstated" in variant.config_name
+
+    # The baselines must not carry the flag, or the variant would be a no-op.
+    assert VG10.include_implausible_production is False
+    assert VG15.include_implausible_production is False
 
 
 def test_build_variant_rejects_unknown():

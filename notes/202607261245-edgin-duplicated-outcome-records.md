@@ -10,7 +10,7 @@
 > Extended the same day. The note began as an analysis of six Words & Gestures administrations with duplicated outcome columns. Following that up — the residual maximum of 152 spoken words at 8–14 months did not look survivable either — led to a systematic audit of the whole subset ([`scripts/audit_edgin_subset.py`](../scripts/audit_edgin_subset.py)), which found **four** defect classes affecting **32 of 196 administrations (16%)** and 31 of 119 children. §§1–7 record the original analysis; §§8–11 record the audit, the widened rules, and one earlier conclusion of mine that it overturned. The registered `us01-ceiling-excluded` sensitivities are retired as a consequence (§10).
 
 > [!IMPORTANT]
-> Extended again, 2026-07-26, after the study owner established with the source author that **the original data files no longer exist**. That closes repair at source, and prompted a provenance check which found that `us_01` is not a study file at all but a subset of the public Wordbank export — so the cohort's other condition groups are available as internal controls. §13 records what that showed: the ceiling-saturation finding is far stronger than §9 claimed, but **§9's characterisation of it was wrong in three specifics**, and two reference figures quoted in §9 and in `methods-data.qmd` were wrong. It also records a contamination §§1–12 missed entirely — two Edgin rows were in the typically-developing reference pool the exclusions are benchmarked against.
+> Extended again, 2026-07-26, after the study owner established with the source author that **the original data files no longer exist**. That closes repair at source, and prompted a provenance check which found that `us_01` is not a study file at all but a subset of the public Wordbank export — so the cohort's other condition groups are available as internal controls. §13 records what that showed: the ceiling-saturation finding is far stronger than §9 claimed, but **§9's characterisation of it was wrong in three specifics**, and two reference figures quoted in §9 and in `methods-data.qmd` were wrong. It also records a contamination §§1–12 missed entirely — two Edgin rows were in the typically-developing reference pool the exclusions are benchmarked against. §14 then registers the reinstatement sensitivity, which is now the only published check on an exclusion that can never be confirmed at source.
 
 ## Summary
 
@@ -23,7 +23,7 @@ The rules are **conditioned on age, not on source study**. A production count cl
 Deliberately **not** caught, and now flagged rather than silently included: two administrations with a high infant comprehension count but a normal production gap, retained on the study owner's judgement that they are clinically unusual but should not be excluded; and one Words & Sentences record of 406 words at 23 months with no later administration to contradict it. All three are sensitivity targets rather than defects.
 
 > [!NOTE]
-> §§1–7 below are the original six-record analysis, kept as written because the reasoning about method — signature rather than threshold, age-conditioned rather than study-scoped — is what the audit went on to generalise. Where they are superseded, §§8–12 say so: the rule now catches eight rather than six Words & Gestures records (§8), and the claim in §1 that the Words & Sentences ceiling block is right-censoring is **wrong and corrected in §9**.
+> §§1–7 below are the original six-record analysis, kept as written because the reasoning about method — signature rather than threshold, age-conditioned rather than study-scoped — is what the audit went on to generalise. Where they are superseded, §§8–14 say so: the rule now catches eight rather than six Words & Gestures records (§8), and the claim in §1 that the Words & Sentences ceiling block is right-censoring is **wrong and corrected in §9**, on evidence restated in §13.
 
 ## 1. Why not a threshold on extreme values
 
@@ -190,11 +190,11 @@ Seven for seven. For scale, **no typically-developing child** of the 2,489 Words
 > [!CAUTION]
 > This paragraph originally described "a contiguous child-id block … a disjoint run of consecutive ids" with "an 81-id gap to the next child present". **Two of those three claims are false**, and the third is understated. The identifiers are _not_ consecutive integers — 22 integers inside 81207–81241 are absent from the Wordbank export altogether — and the "81-id gap" was an artefact of looking only at the Down syndrome subset: the next identifier present in the cohort is 81246, an autism-group child, also at exactly 680. What is true, and stronger, is that the records are adjacent in _identifier order_, and the run does not stop where the Down syndrome subset does. §13 sets this out with an exact probability.
 
-## 10. The retired sensitivity
+## 10. The retired sensitivity, and the inverse that replaces it
 
 Because those records are now masked by default, the registered `us01-ceiling-excluded` variants for VG10 and VG15 could no longer do anything: they excluded records already excluded. A registered check that cannot fail is worse than no check, so both entries are removed from [`sensitivity/registry.py`](../src/vocab_growth/sensitivity/registry.py) with the reasoning recorded in place.
 
-The live question is the inverse — what changes if the exclusion is _wrong_ — and the loaders expose it as `include_implausible_production=True`. Registering that as a variant needs a `ModelDefinition` field, which is left as a follow-up rather than done here. The `exclude_us01_spoken_ceiling` flag and its helper are retained, and remain functional on a reinstated frame, so the decision can be reverted without re-deriving anything.
+The live question is the inverse — what changes if the exclusion is _wrong_ — and it is now registered as `us01-implausible-reinstated` for both models (§14). The `exclude_us01_spoken_ceiling` flag and its helper are retained, and remain functional on a reinstated frame, so the decision can be reverted without re-deriving anything.
 
 ## 11. The rules as implemented
 
@@ -279,4 +279,26 @@ Edgin is the only clinical cohort in the export that leaks this way: it contribu
 
 **Also can, and cheaply:** the internal controls. The unlabelled and pre-term groups are in the same file and the same preparation. Pre-term shows no ceiling saturation at all (maximum production 321 across 17 records), which is informative — the defect is not uniform across the cohort, so it is not a whole-file transformation.
 
-The honest summary for publication is that four defect classes in 32 of 196 administrations were identified from aggregate data, that the strongest of them is established at a probability of 10⁻²² against chance, and that the source of the error cannot now be determined. The remaining `include_*` flags are what make that reviewable: they let a reader see what the conclusions would have been had we judged wrongly.
+The honest summary for publication is that four defect classes in 32 of 196 administrations were identified from aggregate data, that the strongest of them is established at a probability of 10⁻²² against chance, and that the source of the error cannot now be determined. The remaining `include_*` flags are what make that reviewable: they let a reader see what the conclusions would have been had we judged wrongly. §14 turns the most consequential of them into a registered sensitivity, so that this is a reported result rather than an available option.
+
+---
+
+## 14. The reinstatement sensitivity, registered
+
+A flag a reader could set is not evidence a reader has been given. Because the exclusion can no longer be checked at source, the inverse of the retired variant is now registered and runs in the refit: **`us01-implausible-reinstated`** for VG10 and VG15, setting `include_implausible_production=True`.
+
+|                      |                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| what it does         | reinstates the production counts masked by `mask_implausible_production_administrations` and refits |
+| effect on the frame  | spoken observations 1,114 → 1,136 (VG10); marginal spoken 947 → 969 (VG15)                          |
+| why these two models | they carry the headline joint trajectories, and mirror the footprint of the variants retired in §10 |
+
+**Why 22 and not 30.** The rule masks 30 administrations, but 8 of those are also caught by the duplicated-outcome rule (§8), which stays active and has its own separate flag. Reinstating one rule's exclusions does not reinstate another's, and it should not — the two rest on independent evidence.
+
+**Three implementation points worth recording**, because each was a way to get a plausible-looking but useless sensitivity:
+
+The flag has to reach the frame. `load_data` previously had no way to pass the `include_*` flags through to `load_combined_data`, so a `ModelDefinition` field alone would have produced a variant that changed the config name and nothing else — the retired variants' fault in a new costume. `load_data` now forwards all three, and **raises** if one is passed for the typically-developing population, where the flags name defect classes that do not exist.
+
+The count has to be reported. Each engine prints `us_01 implausible production reinstated`, derived by differencing the two loader paths rather than reimplementing the signature, so it cannot drift from the rule it describes. A run where that line reads 0 is a failure to investigate, not a robustness result — which is the check the retired variants lacked and could not have passed.
+
+The count has to match the frame the engine actually loaded. The first implementation read `definition.max_age_months`, which `JointModelDefinition` does not define, so VG15 raised `AttributeError` the moment the engine ran — invisible to every unit test until [`tests/test_implausible_production_sensitivity.py`](../tests/test_implausible_production_sensitivity.py) exercised both engines' preparation. Two of the three engines pass no age bound to `load_data`, so the count is now taken over the same unbounded frame; reporting a bounded count against an unbounded fit would have understated what was reinstated.

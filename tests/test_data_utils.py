@@ -258,6 +258,66 @@ def test_td_pool_excludes_the_edgin_clinical_cohort(tmp_path, monkeypatch):
     assert 680 not in set(spoken["spoken"])
 
 
+def _create_vocab_db_with_masked_production(tmp_path):
+    """Fixture DB plus one us_01 record the implausible-production rule masks."""
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(
+            "INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("WS", "English (American)", "Edgin", "d09", None, 26, 680, 680,
+             False, "Down syndrome"),
+        )
+    return db_path
+
+
+def test_load_data_passes_reinstatement_flags_through_for_ds(tmp_path, monkeypatch):
+    """The sensitivity flag must reach the DS frame, not stop at load_data."""
+    db_path = _create_vocab_db_with_masked_production(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    columns = ["study", "age", "spoken", "survey_vocab_max"]
+    masked = data_utils.load_data(
+        Population.DOWN_SYNDROME, columns=columns
+    )
+    reinstated = data_utils.load_data(
+        Population.DOWN_SYNDROME,
+        columns=columns,
+        include_implausible_production=True,
+    )
+
+    assert reinstated["spoken"].notna().sum() == masked["spoken"].notna().sum() + 1
+    assert 680 in reinstated["spoken"].dropna().tolist()
+    assert 680 not in masked["spoken"].dropna().tolist()
+
+
+def test_load_data_rejects_reinstatement_flags_for_td(tmp_path, monkeypatch):
+    """Each flag names a DS defect class, so a TD caller is mistaken, not a no-op."""
+    db_path = _create_vocab_db(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    with pytest.raises(ValueError, match="Down syndrome pool only"):
+        data_utils.load_data(
+            Population.TYPICALLY_DEVELOPING,
+            columns=["age", "spoken"],
+            include_implausible_production=True,
+        )
+
+
+def test_reinstated_implausible_production_count_is_reported(tmp_path, monkeypatch):
+    """The count the sensitivity's fit log prints must be non-zero and exact."""
+    db_path = _create_vocab_db_with_masked_production(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    count = data_utils.count_reinstated_implausible_production()
+    masked = data_utils.load_combined_data()
+    reinstated = data_utils.load_combined_data(include_implausible_production=True)
+
+    assert count > 0
+    assert count == int(
+        reinstated["spoken"].notna().sum() - masked["spoken"].notna().sum()
+    )
+
+
 def _load_us01(tmp_path, monkeypatch):
     db_path = _create_vocab_db(tmp_path)
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
@@ -421,8 +481,8 @@ def _create_vocab_db(tmp_path):
                 # with no health condition, so they would otherwise land in the TD
                 # reference pool the DS exclusions are benchmarked against. One of
                 # them sits at the 680-word WS ceiling inside the flagged run.
-                ("WS",         "English (American)",  "Edgin",           "d05", None, 29.0, 680, 680, True,  None),
-                ("WG",         "English (American)",  "Edgin",           "d06", None, 17.0, 306,   7, True,  None),
+                ("WS",         "English (American)",  "Edgin",           "t01", None, 29.0, 680, 680, True,  None),
+                ("WG",         "English (American)",  "Edgin",           "t02", None, 17.0, 306,   7, True,  None),
             ],
         )
         for table, table_schema in _SOURCE_TABLE_SCHEMAS.items():

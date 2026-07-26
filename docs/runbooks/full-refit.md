@@ -38,11 +38,20 @@ naive run hits. Distilled from the 2026-07-12 run
 
 `python scripts/fit_model.py all --config rep --render --upload` treats convergence and rendering as per-model failures and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, atomically promotes every successful fit before rendering it, continues rendering after an individual Quarto failure, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. A render failure leaves the completed fit available for `--render-only`; other fitting exceptions still abort immediately. The canonical `run_replication.sh` path remains resumable and invokes one model at a time.
 
-### us_01 ceiling sensitivity — retired, do not run
+### us_01 implausible-production sensitivity
 
-The `us01-ceiling-excluded` variants for VG10 and VG15 **no longer exist**, and `fit_sensitivity.py` now raises `KeyError` if you ask for them. They excluded the 18 us_01 Words & Sentences observations at the 680-word form ceiling from a frame that already excludes those observations by default, so they could not fail; the Edgin audit established the records as invalid values rather than censored measurements (`notes/202607261245-edgin-duplicated-outcome-records.md` §§9–10, 13).
+The old `us01-ceiling-excluded` variants **no longer exist** and `fit_sensitivity.py` raises `KeyError` for them: they excluded records that the Edgin audit established as invalid and that are now masked by default, so they could not fail (`notes/202607261245-edgin-duplicated-outcome-records.md` §§9–10, 13).
 
-The live question is the inverse — what changes if that exclusion is _wrong_ — which needs `include_implausible_production=True` registered as a variant. That requires a `ModelDefinition` field and is not yet available, so **no ceiling sensitivity runs in this refit**. Record the gap in the run log rather than substituting a different variant.
+They are replaced by the inverse. `us01-implausible-reinstated` puts the 22 masked spoken observations back and refits, answering what changes if the default exclusion is itself mistaken. This is not optional in a published refit: the source author no longer holds the original data files, so the exclusion can never be confirmed at source, and this pair is the only evidence a reader has for whether the headline joint trajectories depend on our judgement.
+
+```bash
+python scripts/fit_sensitivity.py vg10 us01-implausible-reinstated --config rep
+python scripts/fit_sensitivity.py vg15 us01-implausible-reinstated --config rep
+python scripts/compare_sensitivity.py vg10 --variant us01-implausible-reinstated
+python scripts/compare_sensitivity.py vg15 --variant us01-implausible-reinstated
+```
+
+Check the fit log's observation counts: each variant prints `us_01 implausible production reinstated` and it must read 22. A zero there means the variant has stopped biting and the comparison is worthless — treat it as a failure, not a pass. Note 22 rather than 30: the other 8 masked administrations stay masked under the independent duplicated-outcome rule, which has its own flag.
 
 ### Default (sequential, resumable)
 

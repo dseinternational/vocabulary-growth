@@ -254,8 +254,22 @@ class BivariateModelDefinition:
     max_age_months: int | None = None
     """Upper bound on age (inclusive, months) for data loading. None = no limit."""
     exclude_us01_spoken_ceiling: bool = False
-    """Exclude us_01 WS spoken counts at the 680-word ceiling. This is a
-    source-censoring sensitivity only; primary models retain these valid rows."""
+    """Exclude us_01 WS spoken counts at the 680-word ceiling.
+
+    Retained for reversibility, and functional on a reinstated frame. It is no
+    longer a *sensitivity* in its own right: those rows are masked by default, so
+    on the primary frame this flag has nothing left to exclude. Use
+    ``include_implausible_production`` below to interrogate that exclusion."""
+    include_implausible_production: bool = False
+    """Reinstate the us_01 production counts masked as implausible by default.
+
+    The inverse sensitivity to the retired ``us01-ceiling-excluded`` variants.
+    ``data_utils.mask_implausible_production_administrations`` excludes 30
+    administrations matching a near-ceiling or longitudinal-collapse signature; the
+    source author no longer holds the original files, so that exclusion can never
+    be confirmed at source, and this flag is the only way to show what the reported
+    trajectories would have been had the judgement been wrong. See
+    ``notes/202607261245-edgin-duplicated-outcome-records.md``."""
 
     @property
     def model_type(self) -> ModelType:
@@ -528,8 +542,22 @@ class JointModelDefinition:
     include_uk06: bool = False
     """Re-include uk_06's unverified signing field for a source-sensitivity fit."""
     exclude_us01_spoken_ceiling: bool = False
-    """Exclude us_01 WS spoken counts at the 680-word ceiling. This is a
-    source-censoring sensitivity only; primary models retain these valid rows."""
+    """Exclude us_01 WS spoken counts at the 680-word ceiling.
+
+    Retained for reversibility, and functional on a reinstated frame. It is no
+    longer a *sensitivity* in its own right: those rows are masked by default, so
+    on the primary frame this flag has nothing left to exclude. Use
+    ``include_implausible_production`` below to interrogate that exclusion."""
+    include_implausible_production: bool = False
+    """Reinstate the us_01 production counts masked as implausible by default.
+
+    The inverse sensitivity to the retired ``us01-ceiling-excluded`` variants.
+    ``data_utils.mask_implausible_production_administrations`` excludes 30
+    administrations matching a near-ceiling or longitudinal-collapse signature; the
+    source author no longer holds the original files, so that exclusion can never
+    be confirmed at source, and this flag is the only way to show what the reported
+    trajectories would have been had the judgement been wrong. See
+    ``notes/202607261245-edgin-duplicated-outcome-records.md``."""
 
     # -- nz_01 (Foster-Cohen) produced cross-tab inclusion --
     include_nz01_cells: bool = True

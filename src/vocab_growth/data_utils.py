@@ -891,6 +891,27 @@ def load_combined_data(
     return df
 
 
+def count_reinstated_implausible_production(max_age_months: int | None = None) -> int:
+    """Spoken observations the implausible-production rule masks by default.
+
+    This is what the ``include_implausible_production`` sensitivity puts back, and
+    it exists so the sensitivity's own fit log can state the size of what it
+    reinstated. A registered check that cannot be seen to have done anything is
+    the failure the retired ``us01-ceiling-excluded`` variants exhibited; a
+    reinstatement variant printing 0 here would be the same fault in mirror image.
+
+    Derived by differencing the two loader paths rather than reimplementing the
+    signature, so it cannot drift from the rule it reports on.
+    """
+    masked = load_combined_data(max_age_months=max_age_months)
+    reinstated = load_combined_data(
+        max_age_months=max_age_months, include_implausible_production=True
+    )
+    return int(
+        reinstated["spoken"].notna().sum() - masked["spoken"].notna().sum()
+    )
+
+
 def load_data(
     population: Population,
     columns: list[str],
@@ -898,6 +919,10 @@ def load_data(
     random_seed: int = 47,
     max_age_months: int | None = None,
     languages: tuple[str, ...] | None = ENGLISH_LANGUAGES,
+    *,
+    include_incomplete_administrations: bool = False,
+    include_duplicated_outcomes: bool = False,
+    include_implausible_production: bool = False,
 ) -> pd.DataFrame:
     """
     Load vocabulary data for the specified population.
@@ -922,15 +947,31 @@ def load_data(
         :data:`ENGLISH_LANGUAGES`. Pass a wider tuple to broaden the scope, or
         ``None`` to include all languages. Ignored for DS (the DS subset is
         fixed to English when the database is built).
+    include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production : bool
+        Reinstate records that :func:`load_combined_data` masks by default, for
+        sensitivity analysis. **DS only** — each names a specific documented
+        defect class in the DS pool, so passing one for the TD population is a
+        caller error rather than a silent no-op.
 
     Returns
     -------
     pd.DataFrame
         DataFrame with the requested columns.
     """
+    reinstatements = {
+        "include_incomplete_administrations": include_incomplete_administrations,
+        "include_duplicated_outcomes": include_duplicated_outcomes,
+        "include_implausible_production": include_implausible_production,
+    }
     if population == Population.DOWN_SYNDROME:
-        df = load_combined_data(max_age_months=max_age_months)
+        df = load_combined_data(max_age_months=max_age_months, **reinstatements)
         return df[columns]
+
+    if any(reinstatements.values()):
+        raise ValueError(
+            "Defect-reinstatement flags apply to the Down syndrome pool only; "
+            f"got {sorted(k for k, v in reinstatements.items() if v)} for {population}."
+        )
 
     # Typically developing — query wordbank_child directly.
     #
