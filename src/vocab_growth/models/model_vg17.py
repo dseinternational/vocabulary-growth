@@ -66,8 +66,14 @@ def _prepare(outcome="spoken", studies=None):
 
     with duckdb.connect(vocab_data_utils.VOCABULARY_DATA_PATH, read_only=True) as con:
         df = con.execute(
-            "SELECT study, subject_id, age, spoken, signed, produced FROM vocab_combined"
+            "SELECT study, subject_id, age, spoken, signed, produced, survey_vocab_max "
+            "FROM vocab_combined"
         ).df()
+    # This module reads the view directly rather than through load_combined_data
+    # (it needs `produced`), so it must apply the same partial-administration mask
+    # the shared loader applies — otherwise an exploratory comparison would use
+    # counts that are not on the 810-item reference scale.
+    df, _ = vocab_data_utils.mask_incomplete_administrations(df)
     df = df[df[outcome].notna() & df["age"].between(AGE_LO, AGE_HI)].copy()
     if studies is not None:
         df = df[df["study"].isin(list(studies))].copy()

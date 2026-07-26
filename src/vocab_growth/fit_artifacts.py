@@ -26,6 +26,15 @@ from typing import Any, Literal
 FIT_MANIFEST_FILENAME = "fit_manifest.json"
 FIT_STATE_FILENAME = "fit_state.json"
 CONVERGENCE_FAILURE_FILENAME = "CONVERGENCE_FAILED.txt"
+CONVERGENCE_CAVEATS_FILENAME = "CONVERGENCE_CAVEATS.txt"
+"""Marker for a fit that cleared the hard gate but has sampling caveats.
+
+Written by ``vocab_growth.models.common.enforce_convergence_gate`` when a
+reporting-quality fit has divergent transitions or a low energy BFMI. Those are
+soft-tier checks: they do not stop the fit being summarised and reported, but
+they do stop it being published as a clean fit (see ``require_clean_convergence``
+in :func:`validate_fit_output`).
+"""
 
 REPORTING_CONFIGS = {
     "reporting",
@@ -267,6 +276,13 @@ def fit_validation_kwargs(
     commits do not invalidate an already complete fit. Provisional local syncs
     retain lifecycle/model/sampling checks while allowing exploratory code and
     data changes.
+
+    Publication also requires clean convergence: a fit carrying soft-tier
+    sampling caveats (divergences, low energy BFMI) stays usable for development
+    and review, but must not be syndicated into the report as though it were
+    clean. ``provisional-sync`` deliberately does not ask for this, so
+    ``sync_report_figures.py --allow-provisional`` remains the way to work
+    locally with a caveated fit.
     """
     kwargs: dict[str, Any] = {
         "expected_definition": expected_definition,
@@ -292,10 +308,79 @@ def fit_validation_kwargs(
             require_reporting_quality=True,
             require_rendered_report=True,
             require_clean_fit=True,
+            require_clean_convergence=True,
         )
     elif purpose != "render":
         raise ValueError(f"Unknown fit-validation purpose: {purpose!r}.")
     return kwargs
+
+
+DIAGNOSTICS_SUMMARY_FILENAME = "diagnostics_summary.json"
+
+
+def convergence_caveats(gate_summary: dict | None) -> list[str]:
+    """Soft-tier convergence problems recorded in a diagnostics-gate payload.
+
+    ``write_diagnostics_summary`` (dse_research_utils) evaluates four checks. Two
+    are **hard**: the R-hat/ESS scan is fail-closed in
+    ``vocab_growth.models.common.enforce_convergence_gate``, because a fit that
+    has not mixed cannot be summarised at all. The other two — divergent
+    transitions and the energy BFMI — are **soft**: they indicate the sampler may
+    have failed to traverse part of the posterior (so tail quantiles, i.e. the
+    reported interval bounds, are the least trustworthy part of the fit), but a
+    small number of divergences or a mildly low BFMI has been an accepted,
+    recorded trade-off for this family rather than a bar to reporting (see
+    ``notes/202607191614-full-refit-rep-hightune-run.md``).
+
+    This lives here, beside the validators, because both ends need one
+    implementation: the gate writes the caveats at fit time, and
+    :func:`validate_fit_output` recomputes them from the payload on disk. Reading
+    the payload rather than trusting a marker file means fits produced before the
+    marker existed are assessed correctly too, instead of counting as clean
+    because nothing ever looked.
+    """
+    if not gate_summary:
+        return []
+    checks = gate_summary.get("checks") or {}
+    thresholds = gate_summary.get("thresholds") or {}
+    caveats: list[str] = []
+
+    if checks.get("divergences") is False:
+        divergences = gate_summary.get("divergences")
+        count = "an unknown number of" if divergences is None else f"{divergences}"
+        caveats.append(
+            f"{count} divergent transition(s): the sampler failed to traverse part "
+            "of the posterior, so reported expectations may be biased."
+        )
+    if checks.get("bfmi") is False:
+        per_chain = gate_summary.get("bfmi_per_chain") or []
+        finite = [b for b in per_chain if b is not None]
+        threshold = thresholds.get("bfmi_threshold")
+        detail = f" (min {min(finite):.3f})" if finite else ""
+        limit = "" if threshold is None else f" below {threshold}"
+        caveats.append(
+            f"energy BFMI{limit}{detail}: the energy chain explored the "
+            "posterior's tails poorly, so the interval bounds are less reliable "
+            "than the point estimates."
+        )
+    return caveats
+
+
+def read_convergence_caveats(output_dir: str) -> list[str]:
+    """Soft-tier caveats for a fit, read from its diagnostics payload.
+
+    An unreadable or absent payload yields no caveats: the hard gate already
+    fails closed when its own scan does not complete, so a missing summary is
+    reported by the lifecycle checks rather than duplicated here.
+    """
+    path = os.path.join(output_dir, DIAGNOSTICS_SUMMARY_FILENAME)
+    if not os.path.isfile(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return convergence_caveats(json.load(handle))
+    except (OSError, ValueError):
+        return []
 
 
 def validate_fit_output(
@@ -310,8 +395,17 @@ def validate_fit_output(
     require_rendered_report: bool = False,
     require_clean_fit: bool = False,
     require_clean_checkout: bool = False,
+    require_clean_convergence: bool = False,
 ) -> list[str]:
-    """Return every reason that fitted output is unsuitable for its intended use."""
+    """Return every reason that fitted output is unsuitable for its intended use.
+
+    ``require_clean_convergence`` additionally rejects a fit that cleared the hard
+    convergence gate but recorded soft-tier caveats (divergent transitions or a low
+    energy BFMI). Those caveats do not invalidate the fit for development or review
+    — that is the project's recorded position — but publishing from one without
+    saying so would misrepresent it, so the publication path asks for this while
+    ``--allow-provisional`` does not.
+    """
     errors: list[str] = []
     state_path = os.path.join(output_dir, FIT_STATE_FILENAME)
     manifest_path = os.path.join(output_dir, FIT_MANIFEST_FILENAME)
@@ -335,6 +429,15 @@ def validate_fit_output(
         errors.append("trace.nc is missing.")
     if os.path.isfile(os.path.join(output_dir, CONVERGENCE_FAILURE_FILENAME)):
         errors.append(f"{CONVERGENCE_FAILURE_FILENAME} is present.")
+    if require_clean_convergence:
+        # Read the diagnostics payload rather than the marker file, so a fit made
+        # before the marker existed is judged on its actual diagnostics.
+        for caveat in read_convergence_caveats(output_dir):
+            errors.append(
+                "Convergence caveat (cleared R-hat/ESS but not the soft tier): "
+                + caveat.split(":", 1)[0]
+                + "."
+            )
 
     if not manifest:
         return errors

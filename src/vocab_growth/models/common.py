@@ -48,7 +48,10 @@ import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
 from vocab_growth.fit_artifacts import (
+    CONVERGENCE_CAVEATS_FILENAME,
+    CONVERGENCE_FAILURE_FILENAME,
     FIT_MANIFEST_FILENAME,
+    convergence_caveats,
     create_staging_root,
     git_metadata,
     is_reporting_quality_config,
@@ -1275,10 +1278,17 @@ def enforce_convergence_gate(
     *,
     sampling_config_name: str,
     output_dir: str,
-) -> None:
-    """Stop reporting pipelines whose reporting-quality posterior did not converge."""
+) -> list[str]:
+    """Stop reporting pipelines whose reporting-quality posterior did not converge.
+
+    Fails closed on the hard tier (the R-hat/ESS scan). Records the soft tier
+    (divergences, energy BFMI) to :data:`CONVERGENCE_CAVEATS_FILENAME` and
+    returns it, so a caveated fit stays reportable — the project's recorded
+    decision — but can no longer be published as if it were clean. Returns the
+    soft caveats (empty when the fit is clean).
+    """
     if not is_reporting_quality_config(sampling_config_name):
-        return
+        return []
 
     scan_failed = (
         gate_summary.get("max_rhat") is None
@@ -1286,28 +1296,48 @@ def enforce_convergence_gate(
     )
     rhat_failing = gate_summary.get("rhat_failing") or []
     ess_failing = gate_summary.get("ess_failing") or []
-    if not scan_failed and not rhat_failing and not ess_failing:
-        return
 
-    if scan_failed:
-        reason = "The R-hat/ESS convergence scan did not complete."
-    else:
-        reason = (
-            f"The convergence gate found {len(rhat_failing)} R-hat failure(s) "
-            f"and {len(ess_failing)} ESS failure(s)."
-        )
-    failure_path = os.path.join(output_dir, "CONVERGENCE_FAILED.txt")
-    with open(failure_path, "w", encoding="utf-8") as failure_file:
-        failure_file.write(
+    if scan_failed or rhat_failing or ess_failing:
+        if scan_failed:
+            reason = "The R-hat/ESS convergence scan did not complete."
+        else:
+            reason = (
+                f"The convergence gate found {len(rhat_failing)} R-hat failure(s) "
+                f"and {len(ess_failing)} ESS failure(s)."
+            )
+        failure_path = os.path.join(output_dir, CONVERGENCE_FAILURE_FILENAME)
+        with open(failure_path, "w", encoding="utf-8") as failure_file:
+            failure_file.write(
+                reason
+                + "\nPosterior summaries, report generation, rendering, and upload must "
+                "not proceed until the model is refitted successfully.\n"
+            )
+        raise ConvergenceGateError(
             reason
-            + "\nPosterior summaries, report generation, rendering, and upload must "
-            "not proceed until the model is refitted successfully.\n"
+            + " Diagnostic artefacts were retained, but downstream publication artefacts "
+            "were stopped."
         )
-    raise ConvergenceGateError(
-        reason
-        + " Diagnostic artefacts were retained, but downstream publication artefacts "
-        "were stopped."
-    )
+
+    # Hard tier passed. Record the soft tier durably — writing on every clean fit
+    # too (by removing a stale file) so the marker's absence always means "checked
+    # and clean", never "an older run never looked".
+    caveats_path = os.path.join(output_dir, CONVERGENCE_CAVEATS_FILENAME)
+    caveats = convergence_caveats(gate_summary)
+    if caveats:
+        with open(caveats_path, "w", encoding="utf-8") as caveats_file:
+            caveats_file.write(
+                "This fit cleared the hard convergence gate (R-hat and ESS) but "
+                "carries sampling caveats:\n\n"
+                + "".join(f"  - {caveat}\n" for caveat in caveats)
+                + "\nThe fit remains reportable; publication as a clean fit is "
+                "blocked (sync_report_figures.py --allow-provisional overrides).\n"
+            )
+        console.print()
+        for caveat in caveats:
+            console.print(f"[bold yellow]⚠ convergence caveat: {caveat}[/bold yellow]")
+    elif os.path.exists(caveats_path):
+        os.remove(caveats_path)
+    return caveats
 
 
 def _report_diagnostic_warnings(gate_summary: dict) -> None:

@@ -158,3 +158,77 @@ def test_milestone_table_flags_unreached_and_below_support():
     row = tbl.iloc[0]
     assert row["prop_reaching"] == 0.0
     assert row["age_median"] is None
+
+
+# ---- dq_contrast_facts (matched-comprehension prose derivation) ----
+def _dq_frame(rows):
+    """Build a summarise_draws-shaped Δq frame from (words, median, lo, hi, cov)."""
+    import pandas as pd
+
+    return pd.DataFrame(
+        rows,
+        columns=["words", "dq_median", "dq_ci_lo", "dq_ci_hi", "dq_coverage"],
+    )
+
+
+def test_dq_contrast_facts_missing_or_empty_is_none():
+    import pandas as pd
+
+    assert comparison.dq_contrast_facts(None) is None
+    assert comparison.dq_contrast_facts(pd.DataFrame()) is None
+    # Present but every point below the coverage floor: conditional summaries are
+    # dropped rather than reported, so there is nothing to say.
+    thin = _dq_frame([(50, 0.05, 0.01, 0.09, 0.10)])
+    assert comparison.dq_contrast_facts(thin) is None
+
+
+def test_dq_contrast_facts_extents_peak_and_direction():
+    # Rises from a non-credible negative point, through zero, to a credible
+    # positive plateau — the shape the current DS/TD fits produce.
+    facts = comparison.dq_contrast_facts(_dq_frame([
+        (30, -0.014, -0.033, +0.001, 1.0),
+        (50, -0.001, -0.018, +0.014, 1.0),
+        (100, +0.034, +0.013, +0.051, 1.0),
+        (175, +0.063, +0.021, +0.095, 1.0),
+        (200, +0.049, -0.019, +0.097, 1.0),
+    ]))
+    assert facts["covered"] == (30.0, 200.0)
+    assert facts["positive"] == (100.0, 175.0)   # interval excludes zero
+    assert facts["negative"] is None             # never credibly negative
+    assert facts["peak"]["words"] == 175         # largest magnitude
+    assert facts["rises"] is True                # advantage grows with vocabulary
+
+
+def test_dq_contrast_facts_peak_is_signed_not_largest_positive():
+    # A contrast that is mostly negative must report the negative peak, not the
+    # largest positive point, or the prose would invert the finding.
+    facts = comparison.dq_contrast_facts(_dq_frame([
+        (30, -0.20, -0.30, -0.10, 1.0),
+        (60, -0.05, -0.12, +0.02, 1.0),
+        (90, +0.02, -0.04, +0.08, 1.0),
+    ]))
+    assert facts["peak"]["dq_median"] == -0.20
+    assert facts["negative"] == (30.0, 30.0)
+    assert facts["positive"] is None
+    assert facts["rises"] is True
+
+
+def test_dq_contrast_facts_applies_coverage_floor():
+    facts = comparison.dq_contrast_facts(_dq_frame([
+        (25, -0.017, -0.036, -0.001, 0.44),   # below the floor: excluded
+        (30, -0.014, -0.033, +0.001, 1.00),
+        (100, +0.034, +0.013, +0.051, 1.00),
+        (150, +0.059, +0.029, +0.084, 1.00),
+    ]))
+    assert facts["covered"][0] == 30.0        # not 25
+    assert facts["negative"] is None          # the credible-negative point was filtered
+    assert len(facts["table"]) == 3
+
+
+def test_dq_contrast_facts_direction_undefined_for_two_points():
+    facts = comparison.dq_contrast_facts(_dq_frame([
+        (100, +0.03, +0.01, +0.05, 1.0),
+        (150, +0.06, +0.03, +0.08, 1.0),
+    ]))
+    assert facts["rises"] is None              # no monotone claim from two points
+    assert facts["positive"] == (100.0, 150.0)

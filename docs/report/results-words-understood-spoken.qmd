@@ -1,6 +1,6 @@
 ---
 title: "Words understood and spoken"
-abstract: "In children with Down syndrome, words understood consistently exceed words spoken throughout development — comprehension leads production. Matching on the number of words understood, typically-developing children say a larger fraction of what they understand than children with Down syndrome, especially at lower vocabulary levels: the comprehension–production gap is disproportionately larger in Down syndrome, narrowing as vocabulary grows."
+abstract: "In children with Down syndrome, words understood consistently exceed words spoken throughout development — comprehension leads production. Matching on the number of words understood, typically-developing children say a larger fraction of what they understand than children with Down syndrome over the upper part of the comprehension range the data cover; at the lowest comprehension levels the two populations are indistinguishable. Typically-developing comprehension data stop at about 200 understood words, so the contrast is not estimated beyond that."
 ---
 
 {{< include _report_data.qmd >}}
@@ -33,27 +33,46 @@ Down syndrome and typically-developing children grow vocabulary on very differen
 ```{python}
 #| label: tbl-ds-td-q
 #| echo: false
-import pandas as pd
-
-_q = comp_load("ds_td_comprehension_q_at_U")
-_q = _q[_q["dq_coverage"] >= 0.80].copy()
-_tab = _q[
-    ["words", "q_TD_median", "q_DS_median", "dq_median", "dq_ci_lo", "dq_ci_hi", "dq_p_gt0"]
-].round(3)
-_tab.columns = [
-    "Words understood", "TD q", "DS q", "Δq (TD−DS)", "89% lo", "89% hi", "P(TD>DS)"
-]
-_tab.reset_index(drop=True)
+_facts = dq_facts()
+_tab = None
+if _facts is not None:
+    _tab = _facts["table"][
+        ["words", "q_TD_median", "q_DS_median", "dq_median", "dq_ci_lo", "dq_ci_hi", "dq_p_gt0"]
+    ].round(3)
+    _tab.columns = [
+        "Words understood", "TD q", "DS q", "Δq (TD−DS)", "89% lo", "89% hi", "P(TD>DS)"
+    ]
+    _tab = _tab.reset_index(drop=True)
+show_or_pending(_tab, "the matched-comprehension contrast")
 ```
 
 ![Spoken fraction given words understood, $q(U = N)$: typically-developing (TD) vs Down syndrome (DS).](figures/comparisons/ds_td_comprehension_q_at_U.png){#fig-q-at-u}
 
 ![Difference $\Delta q(U = N) = q_{\text{TD}} - q_{\text{DS}}$ at matched comprehension, with 89% interval.](figures/comparisons/ds_td_comprehension_dq.png){#fig-dq}
 
-At matched comprehension, typically-developing children say a **larger fraction** of the words they understand than children with Down syndrome. The difference $\Delta q = q_{\text{TD}} - q_{\text{DS}}$ is credibly positive from roughly 50 to 150 understood words (89% interval excluding 0, $P(\text{TD}>\text{DS}) \ge 0.96$), peaks around +0.13, and narrows to uncertain by about 200 words (@fig-dq). So the comprehension–production gap is **disproportionately larger in Down syndrome at lower vocabulary levels, and converges towards the typically-developing pattern as vocabulary grows**. In this large pooled sample this differs from the smaller-study suggestion of a typically-developing-like pattern in Down syndrome.
+```{python}
+#| label: dq-finding
+#| echo: false
+#| output: asis
+# Every number and the direction word come from dq_facts() over the same
+# coverage-filtered table tabulated above, so this paragraph cannot outlive the
+# fits behind it (see _report_data.qmd).
+if dq_facts() is None:
+    print(
+        "_The matched-comprehension contrast is pending: run "
+        "`scripts/compare_ds_td_re.py` and `scripts/sync_report_figures.py`._"
+    )
+else:
+    print(f"""
+At matched comprehension, typically-developing children say a **larger fraction** of the words they understand than children with Down syndrome — but only over the upper part of the comprehension range the data cover ({dq_covered()} understood words). The difference $\\Delta q = q_{{\\text{{TD}}}} - q_{{\\text{{DS}}}}$ is credibly positive, in the sense of an 89% interval excluding zero, from {dq_words("positive")} understood words, and is largest at {dq_peak()} (@fig-dq). Below that the interval includes zero, and at the bottom of the covered range the point estimate is slightly *negative* ($\\Delta q$ = {dq_at(30)} at 30 understood words), so the two populations are not distinguishable there.
+
+The typically-developing advantage therefore **{dq_trend()}** across the covered comprehension range rather than narrowing: it is absent at low comprehension and largest at the top of the range the typically-developing data support. Because typically-developing comprehension coverage ends at about 200 understood words, the contrast is not estimated beyond that, and these data support no claim either way about whether the gap converges at higher vocabulary levels.
+""")
+```
 
 ## Limitations
 
-- **Preliminary fits.** The Down syndrome (VG10) and typically-developing (VG13) models here are development-tier fits; the direction of the contrast is clear, but the magnitudes await reporting-quality re-fits.
-- **Comprehension coverage.** Typically-developing comprehension+production data span only ~8–18 months (words understood up to ~200); above ~200 understood words the typically-developing estimate is coverage-limited, so the contrast is shown only where both populations reach that comprehension level (coverage ≥ 80%).
+- **Sampling-energy caveat on the typically-developing side.** Both fits are reporting quality and clear the R-hat and effective-sample-size gate, but the typically-developing model (VG13) carries an energy-BFMI caveat below 0.3 (see its convergence banner). Low BFMI indicates the sampler explored the posterior's tails poorly, which bears on the interval bounds quoted here more than on the point estimates.
+- **Comprehension coverage.** Typically-developing comprehension+production data span only ~8–18 months (words understood up to ~200); above ~200 understood words the typically-developing estimate is coverage-limited, so the contrast is shown only where both populations reach that comprehension level (coverage ≥ 80%). The upper end of the reported range is therefore the edge of the typically-developing data, not a point at which the contrast was found to stop.
+- **Composition, not only propensity.** Matching on the *number* of words understood does not match *which* words. Vocabulary items differ sharply in difficulty, so part of any $q$ difference at matched $N$ reflects the difficulty composition of the words each population knows at that level rather than production propensity alone.
 - **Across-model contrast.** Down syndrome (VG10) and typically-developing (VG13) are separate fits on the common 810-item scale. A single joint Down syndrome–typically-developing model would give a formal within-model contrast, but only over this same comprehension range; it is noted as a natural refinement rather than built here.

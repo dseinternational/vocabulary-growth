@@ -92,6 +92,71 @@ def words(model_id, summary, age_months, column="Ey_median"):
     return "—" if v is None else f"{round(v):d}"
 
 
+# --- Matched-comprehension Δq contrast --------------------------------------
+#
+# The findings chapter's headline contrast used to quote its window, peak and
+# direction as hand-typed prose. Those numbers silently outlived the fits that
+# produced them (they were written against an 800-item denominator and a
+# marginal spoken likelihood, and by the current fits both the credible window
+# and the *sign of the trend* had changed). Everything the prose asserts about
+# this contrast is now derived from the written table via
+# vocab_growth.comparison.dq_contrast_facts — the same coverage filter the
+# chapter tabulates — so it cannot restate a superseded fit. The derivation
+# lives in the package (and is unit-tested) rather than here.
+
+
+def dq_facts(name="ds_td_comprehension_q_at_U", **kwargs):
+    """Derived facts about Δq = q_TD − q_DS at matched comprehension, or None."""
+    from vocab_growth.comparison import dq_contrast_facts
+
+    return dq_contrast_facts(comp_load(name), **kwargs)
+
+
+def dq_words(kind="positive"):
+    """Comprehension range (words) over which Δq credibly favours one population."""
+    facts = dq_facts()
+    if facts is None or facts[kind] is None:
+        return "—"
+    lo, hi = facts[kind]
+    return f"{lo:.0f}" if lo == hi else f"about {lo:.0f} to {hi:.0f}"
+
+
+def dq_covered():
+    """Comprehension range (words) both populations' draws actually reach."""
+    facts = dq_facts()
+    if facts is None:
+        return "—"
+    lo, hi = facts["covered"]
+    return f"about {lo:.0f} to {hi:.0f}"
+
+
+def dq_peak():
+    """Largest-magnitude Δq with its 89% interval and comprehension level."""
+    facts = dq_facts()
+    if facts is None:
+        return "—"
+    p = facts["peak"]
+    return (
+        f"{p['dq_median']:+.3f} (89% interval {p['dq_ci_lo']:+.3f} to "
+        f"{p['dq_ci_hi']:+.3f}) at {p['words']:.0f} understood words"
+    )
+
+
+def dq_at(words_understood, column="dq_median", fmt="{:+.3f}"):
+    """A Δq column at the nearest tabulated comprehension level, for prose."""
+    return num(
+        comp_at("ds_td_comprehension_q_at_U", "words", words_understood, column), fmt
+    )
+
+
+def dq_trend():
+    """Whether the typically-developing advantage grows or shrinks with vocabulary."""
+    facts = dq_facts()
+    if facts is None or facts["rises"] is None:
+        return "—"
+    return "grows" if facts["rises"] else "shrinks"
+
+
 # Columns to surface, in order, when present (posterior_summary_*.csv schema:
 # age_months; Ey_* = expected count, typical child; Y_* = predictive, individual;
 # ci50_* = inner 50% interval, ci_* = outer 89% interval).

@@ -380,3 +380,97 @@ def _create_vocab_db(tmp_path):
             con.execute(f"CREATE TABLE {table} ({table_schema})")
         con.execute(data_utils.vocab_combined_view_sql())
     return db_path
+
+
+# ---- ie_01: comprehension pass-through and the partial baseline wave ----
+#
+# The view previously set ie_01 understood = GREATEST(says_total, understands_total),
+# which repaired away the records where a parent reported saying more words than
+# understanding — hiding them from the violation count the nested likelihood
+# reports, and feeding it exact spoken == understood rows. And the baseline wave
+# omitted DSE Checklist 3, so its counts are on a 460-item frame, not the 810-item
+# reference scale. These pin both.
+
+def _ie01_db(tmp_path, rows):
+    """A vocabulary DB whose only DS source rows are the supplied ie_01 records."""
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            "INSERT INTO vocab_ie_01 (subject_id, age_months_start, "
+            "understands_total_start, says_total_start, age_months_end, "
+            "understands_total_end, says_total_end) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+    return db_path
+
+
+def test_ie01_understood_is_not_repaired_from_production(tmp_path, monkeypatch):
+    # A child reported as saying more than it understands at follow-up. The old
+    # GREATEST repair turned this into understood == spoken == 366 (an exact
+    # q = 1 observation); understood must now be the parent-reported 13.
+    db_path = _ie01_db(tmp_path, [("s1", 30.0, 100, 20, 61.0, 13, 366)])
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    ie = data_utils.load_combined_data(include_incomplete_administrations=True)
+    ie = ie[ie["study"] == "ie_01"].sort_values("age")
+
+    follow_up = ie[ie["age"] == 61.0].iloc[0]
+    assert follow_up["understood"] == 13      # not GREATEST(13, 366)
+    assert follow_up["spoken"] == 366
+    # It is now visible as a source-data violation rather than silently repaired.
+    assert (ie["spoken"] > ie["understood"]).sum() == 1
+
+
+def test_ie01_baseline_wave_carries_its_true_460_item_ceiling(tmp_path, monkeypatch):
+    db_path = _ie01_db(tmp_path, [("s1", 30.0, 300, 100, 42.0, 500, 200)])
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    ie = data_utils.load_combined_data(include_incomplete_administrations=True)
+    ie = ie[ie["study"] == "ie_01"].sort_values("age")
+
+    assert list(ie["survey_vocab_max"]) == [460, 810]
+
+
+def test_ie01_baseline_counts_are_masked_by_default(tmp_path, monkeypatch):
+    db_path = _ie01_db(tmp_path, [("s1", 30.0, 300, 100, 42.0, 500, 200)])
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    masked = data_utils.load_combined_data()
+    baseline = masked[(masked["study"] == "ie_01") & (masked["age"] == 30.0)].iloc[0]
+    follow_up = masked[(masked["study"] == "ie_01") & (masked["age"] == 42.0)].iloc[0]
+
+    # The partial administration's counts are masked; the row is retained so age
+    # coverage stays auditable, and the complete wave is untouched.
+    assert pd.isna(baseline["understood"]) and pd.isna(baseline["spoken"])
+    assert follow_up["understood"] == 500 and follow_up["spoken"] == 200
+
+    restored = data_utils.load_combined_data(include_incomplete_administrations=True)
+    restored_baseline = restored[
+        (restored["study"] == "ie_01") & (restored["age"] == 30.0)
+    ].iloc[0]
+    assert restored_baseline["understood"] == 300
+
+
+def test_mask_incomplete_administrations_reports_counts_and_needs_columns():
+    frame = pd.DataFrame({
+        "study": ["ie_01", "ie_01", "uk_03"],
+        "survey_vocab_max": [460, 810, 416],
+        "understood": [300.0, 500.0, 90.0],
+        "spoken": [100.0, 200.0, 30.0],
+    })
+    out, dropped = data_utils.mask_incomplete_administrations(frame)
+    assert dropped == {"ie_01": 2}                      # understood + spoken masked
+    assert out["understood"].tolist()[1:] == [500.0, 90.0]
+    assert pd.isna(out.loc[0, "understood"])
+    # A nested short form is NOT a partial administration: uk_03's 416-item Oxford
+    # CDI is left alone (see INCOMPLETE_ADMINISTRATION_CEILINGS).
+    assert out.loc[2, "understood"] == 90.0
+
+    out_kept, dropped_kept = data_utils.mask_incomplete_administrations(
+        frame, include_incomplete=True
+    )
+    assert dropped_kept == {}
+    assert out_kept.equals(frame)
+
+    with pytest.raises(KeyError, match="survey_vocab_max"):
+        data_utils.mask_incomplete_administrations(frame.drop(columns="survey_vocab_max"))
