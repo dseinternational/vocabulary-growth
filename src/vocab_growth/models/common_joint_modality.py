@@ -1386,17 +1386,28 @@ def posterior_summary(context: JointContext):
     # counts on the plot grid, so these carry the expected count only — matching
     # what probability_summary reports at query ages, which likewise has no Y_*
     # or bucket columns.
-    for draws, suffix, label in (
-        (s.p_u_plot, "u", "words understood"),
-        (s.p_u_plot * s.q_plot, "s", "words spoken"),
-        (s.p_u_plot * s.r_plot, "sign", "words signed"),
+    #
+    # n_obs must count the administrations that observed *this* outcome, as the
+    # other engines do by passing their per-outcome x_obs; the three outcomes
+    # have different coverage here, so the whole frame's ages would report the
+    # same total for all three and overstate every one of them.
+    analysis_df = context.analysis_df
+    for draws, suffix, column, label in (
+        (s.p_u_plot, "u", "understood", "words understood"),
+        (s.p_u_plot * s.q_plot, "s", "spoken", "words spoken"),
+        (s.p_u_plot * s.r_plot, "sign", "signed", "words signed"),
     ):
+        observed_ages = (
+            analysis_df.loc[analysis_df[column].notna(), "age"]
+            if column in analysis_df.columns
+            else None
+        )
         emit_monthly_summary(
             output_dir=od,
             X_plot=s.X_plot,
             p_plot=draws,
             y_plot=None,
-            X_obs=context.analysis_df["age"],
+            X_obs=observed_ages,
             n_trials=n_trials,
             ci_prob=ci_prob,
             interval_kind=ci_kind,

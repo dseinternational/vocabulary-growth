@@ -109,3 +109,59 @@ def test_joint_engine_reads_only_fields_its_samples_have():
     fields = set(cj.JointModelSamples.__dataclass_fields__)
     assert {"X_plot", "p_u_plot", "q_plot", "r_plot"} <= fields
     assert not [name for name in fields if name.startswith("y_") and name.endswith("_plot")]
+
+
+def test_n_obs_counts_only_the_administrations_observing_that_outcome(tmp_path):
+    """n_obs is per-outcome, not per-administration.
+
+    A first cut of the joint-engine wiring passed the whole analysis frame's
+    ages for all three outcomes, so every outcome reported the same total and
+    overstated the coverage of the sparser ones. The other engines pass their
+    per-outcome ``x_obs``; this pins the contract the shared emitter relies on.
+    """
+    X_plot, p_plot, y_plot = _grid()
+    frame = pd.DataFrame(
+        {
+            "age": [12.0, 12.0, 12.0, 24.0, 24.0],
+            "understood": [10.0, 20.0, 30.0, 40.0, 50.0],
+            "signed": [1.0, np.nan, np.nan, 2.0, np.nan],
+        }
+    )
+
+    understood = common.emit_monthly_summary(
+        output_dir=str(tmp_path),
+        X_plot=X_plot,
+        p_plot=p_plot,
+        y_plot=y_plot,
+        X_obs=frame.loc[frame["understood"].notna(), "age"],
+        n_trials=810,
+        ci_prob=0.89,
+        suffix="u",
+        outcome_label="words understood",
+    )
+    signed = common.emit_monthly_summary(
+        output_dir=str(tmp_path),
+        X_plot=X_plot,
+        p_plot=p_plot,
+        y_plot=None,
+        X_obs=frame.loc[frame["signed"].notna(), "age"],
+        n_trials=810,
+        ci_prob=0.89,
+        suffix="sign",
+        outcome_label="words signed",
+    )
+
+    assert understood.set_index("age_months")["n_obs"].loc[12] == 3
+    assert signed.set_index("age_months")["n_obs"].loc[12] == 1
+    # The sparser outcome must not inherit the denser one's coverage.
+    assert int(signed["n_obs"].sum()) == 2
+    assert int(understood["n_obs"].sum()) == 5
+
+
+def test_joint_engine_scopes_n_obs_per_outcome():
+    """The joint engine's monthly block must filter its X_obs by outcome column."""
+    source = inspect.getsource(cj.posterior_summary)
+    assert "emit_monthly_summary" in source
+    # It must select on the outcome column rather than handing over the frame.
+    assert 'analysis_df[column].notna()' in source
+    assert 'X_obs=context.analysis_df["age"]' not in source
