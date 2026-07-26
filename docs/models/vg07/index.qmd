@@ -184,7 +184,7 @@ Check `tau_u`, `tau_q`, the study intercepts, and the GP level parameters for ev
 
 ![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Joint posterior predictive trajectory with 50% and 89% intervals](joint_trajectory_hdi.png){#fig-joint-trajectory-hdi .lightbox fig-align="left"}
+![Joint posterior predictive trajectory with 50% and 89% intervals](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ## Production ratio
 

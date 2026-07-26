@@ -235,7 +235,7 @@ templates for rendered model outputs.
 - Diagnostics are present but should add a diagnostic readout for study-effect
   scales and anchored GP parameters.
 - Posterior exploration is currently too thin. The same bivariate plotting
-  pipeline should provide many existing artefacts: `joint_trajectory_hdi`,
+  pipeline should provide many existing artefacts: `joint_trajectory_intervals`,
   `posterior_summary_s.csv`, `posterior_summary_q.csv`,
   `production_rate_by_understood`, `production_rate_predictive`,
   `understood_vs_spoken`, `understood_vs_spoken_predictive`, outcome PMFs/CDFs,
