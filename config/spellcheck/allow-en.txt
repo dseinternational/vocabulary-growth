@@ -30,6 +30,8 @@ Fenson
 Floccia
 Galeote
 Graphviz
+Haldane
+Hermite
 HSGP
 Hutchins
 hyperparameters
@@ -96,6 +98,7 @@ Tovar
 Trivariate
 unbiasedness
 underdisperse
+underdispersion
 univariates
 unmodelled
 Vehtari
@@ -124,3 +127,9 @@ workstream
 dtype
 dtypes
 deterministics
+logits
+Rasch
+reweighting
+Birnbaum
+Psychometrika
+unidimensionality

@@ -94,6 +94,7 @@ def prepare_bivariate_re_data(
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
         max_age_months=definition.max_age_months,
+        include_implausible_production=definition.include_implausible_production,
     )
     ceiling_rows_excluded = 0
     if definition.exclude_us01_spoken_ceiling:
@@ -182,6 +183,13 @@ def prepare_bivariate_re_data(
         )
     if definition.exclude_us01_spoken_ceiling:
         counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
+    if definition.include_implausible_production:
+        counts.append((
+            "us_01 implausible production reinstated",
+            vocab_data_utils.count_reinstated_implausible_production(
+                definition.max_age_months
+            ),
+        ))
     key_value_table("Observation counts", counts)
     dataframe_table(desc, title="Descriptive statistics")
 

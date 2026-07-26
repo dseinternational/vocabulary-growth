@@ -1,0 +1,294 @@
+# Item difficulty and the aggregate likelihood
+
+> [!NOTE]
+> Drafted by an LLM-based AI tool (Claude Code/Fable 5, consolidated and revised by Claude Code/Opus 5).
+
+> [!IMPORTANT]
+> Consolidated note, 2026-07-26. This replaces two same-day working notes — `202607261008-challenging-item-exchangeability.md` (the findings) and `202607261048-incorporating-item-difficulty.md` (the proposals) — which accumulated correction strata faster than they accumulated content, and were deleted when this note was created. The full drafting trail, including every superseded claim in context, is in the git history of those two files and in the PR [#183](https://github.com/dseinternational/vocabulary-growth/pull/183) description and review threads; §15 below is the compact log of what changed and why. Nothing in this note has been actioned in the models, and no refit is proposed by it.
+
+## Summary: the position
+
+Every model in the family assumes that, conditional on a child's latent ability, the 810 words of the reference inventory are equally likely to be known. That assumption — item exchangeability — is **false, decisively and in a consistent direction** (§2). It is also **nearly costless for the quantity the models fit**, and the reason is a theorem, not luck: under a Rasch-type item model the total score is a sufficient statistic for ability, so heterogeneous difficulty can reach a sum-score model only through the distribution of the total, and that distributional effect is measured at about 1% of the total standard deviation in the model of record (§3).
+
+The question is closed in a way further analysis of the data in hand could not reopen: a statistic sufficient for ability carries no information about the item parameters, so counts cannot test the item model, estimate its violation, or refine the bound (§3.1, point 3). What survives from the investigation is:
+
+- **The consequential finding is not about exchangeability.** The concentration parameter `kappa` cannot be read as latent between-child heterogeneity on a bounded inventory — true even under perfect exchangeability — and the fitted `kappa` decline is quantitatively consistent with latent spread that does not grow (§4). One interpretive claim is retired; the report rewrites in §12 are the follow-through.
+- **One estimand genuinely bitten.** The production ratio `q` is a composition-weighted average over the words each child happens to know, not the item-level probability the report calls it (§5). Sufficiency is the proof that no sum-score analysis can repair this: an estimand that depends on composition needs item data.
+- **One channel unquantified, and unquantifiable from counts.** Sufficiency requires equal discrimination exactly; CDI items do not have it; the resulting information loss in a raw count is real, unbounded by anything here, and measurable only with item-level data (§3.4).
+- **The scientific hypothesis is item-level.** "Same order, later" is a claim about the difficulty vector, which no aggregate model of any quality can test. That — not any defect in the aggregate likelihood — is the case for the Route 1 differential-item-functioning analysis, pre-specified in [`202607261210-route1-dif-prespecification.md`](202607261210-route1-dif-prespecification.md), and for the item-level programme behind it (§§9–11).
+
+Nothing here requires a reported mean trajectory or expected word count to change. What it requires is a set of report rewrites and registered sensitivities, listed with their statuses in §12.
+
+## 1. Where the assumption lives
+
+Every likelihood is `y ~ BetaBinomial(810, alpha = p * kappa, beta = (1 - p) * kappa)`. Its generative story has two steps: first draw a child-specific probability `pi ~ Beta(p * kappa, (1 - p) * kappa)`, then draw `y ~ Binomial(810, pi)`.
+
+The first step is the one the report describes: children differ, and `kappa` governs how much. The second step says that _given_ a child's `pi`, each of the 810 words is an independent Bernoulli trial with the **same** `pi` — conditional on ability, every word is equally likely to be known, and the word list could be permuted without changing anything. That is item exchangeability, and it is logically independent of the between-child homogeneity the Beta step relaxes. The two were conflated at `§sec-betabinomial` in the report until this investigation separated them (the rewrite is done — §12).
+
+## 2. The assumption is false, on a test that fits no model
+
+Under item exchangeability, a child who knows `T` of the 810 words has a stratum-`k` count distributed `Hypergeometric(810, n_k, T)`. This is pure combinatorics from the known checklist sizes — no model, no fitted parameter, no distributional assumption beyond the one under test. Standardising ie_01's observed follow-up-wave checklist counts against it (n = 44 children with `0 < T < 810`):
+
+| statistic                                    | observed | exchangeability predicts |
+| -------------------------------------------- | -------- | ------------------------ |
+| RMS z, all strata                            | 9.61     | 1.0                      |
+| mean z, Checklist 1                          | +8.40    | 0                        |
+| mean z, Checklist 2                          | +3.00    | 0                        |
+| mean z, Checklist 3                          | −9.01    | 0                        |
+| children with a positive Checklist 1 excess  | 37 / 44  | ~22 / 44                 |
+| children with a negative Checklist 3 deficit | 42 / 44  | ~22 / 44                 |
+| children with `p_C1 >= p_C2 >= p_C3`         | 79.5%    | 19.2%                    |
+
+The sign tests give p = 5.3e-06 (Checklist 1) and p = 1.1e-10 (Checklist 3). For the monotonicity rate, none of 2000 simulations drawn under exchangeability reached the observed 79.5% (simulated maximum 40.9%). Pooled proportion understood, over the 46 complete follow-up records, is 0.671 / 0.452 / 0.253 across Checklists 1 / 2 / 3, where exchangeability requires all three to equal the overall 0.398 (per-child means are slightly higher, 0.701 / 0.473 / 0.264 over the 44 tested).
+
+Worth stating plainly: the DSE checklists were **constructed** as a difficulty ladder, so finding `C1 > C2 > C3` is partly instrument validation. The corollary is the point — the instrument's own design contradicts within-observation exchangeability, so the assumption was never plausible for this inventory.
+
+One scope clarification, so the finding is not over-read: a likelihood on totals is silent about which words make up a count, so this test rejects the equal-item _completion_ of the aggregate model — the item-level reading invoked whenever `kappa` or `q` is interpreted as a property of individual words — not the distribution of the totals themselves. That is why §7 can leave the total-count likelihoods standing.
+
+## 3. Why falsity is nearly costless: sufficiency, stated with its conditions
+
+### 3.1 The theorem, and what it does and does not give
+
+Under a Rasch-type item model — items of arbitrary, heterogeneous difficulty but equal discrimination — the total score `T` is a **sufficient statistic** for ability. Writing the log-likelihood as `theta * T - sum_j y_j d_j - sum_j log(1 + exp(theta - d_j))`, the Fisher–Neyman factorisation needs both halves to cooperate, and they do: the term recording _which_ items were passed, `-sum_j y_j d_j`, carries no `theta`; and the `theta`-dependent normaliser runs over the whole administered set irrespective of outcome, so it carries no dependence on the response pattern. Given the item difficulties, and given the administered set, modelling sum scores discards no information about ability. If the total is sufficient, nothing about item composition can affect inference on ability, and the only way heterogeneous difficulty can reach the model is through the **distribution of the total** — §3.2 is that channel, and there is no third distributional route to look for.
+
+Four qualifications, each load-bearing somewhere in this project. None reopens the distributional channel.
+
+**1. The administered set is part of the condition — and this project already treats it as one.** The normaliser runs over the items actually put to the child, so sufficiency of `T` is sufficiency _given the administered set_; where that set varies between children and the model does not condition on it, the pair (total, set) is sufficient, not the total alone. This is a live condition here rather than a technicality, because all fifteen model definitions score every count against a fixed `n_trials = 810` while the pooled Down syndrome data carry nine distinct form ceilings — 396, 408, 416, 460, 670, 675, 680, 690 and 810. It is discharged in two different ways, both already in [`data_utils`](../src/vocab_growth/data_utils.py):
+
+- The shorter MacArthur-derived forms (Oxford 416, MB-CDI Words & Gestures 396, NZCDI 675) are treated as _nested_ instruments whose absent items are the rarer, later-acquired words an ability-matched child mostly does not know. That is checked rather than assumed: a dual-form crosswalk fitted to the `uk_02` children who took both the DSE and Oxford forms puts the fixed-810 count ratio near 1 across the range where the short forms are administered.
+- The `ie_01` baseline wave (ceiling 460) omitted a whole 350-item subscale of the _same_ instrument, and there the nesting argument fails — at matched vocabulary the follow-up wave puts about 9.5% of Checklist 3 known against 0% at baseline. Those counts are masked by `mask_incomplete_administrations` rather than rescaled.
+
+Worth noticing what both rules rest on. "The absent items are the harder ones" is a claim about the difficulty vector, and under item exchangeability it could not be written down at all: every item would be equally likely to be known, and any partial administration would rescale by simple proportion. So item heterogeneity is **load-bearing in the data pipeline while being near-costless in the likelihood** — and those two facts are not in tension. Sufficiency is what makes a count an adequate summary _once the administered set is fixed_; these two rules are what fix it.
+
+**2. Sufficiency holds conditional on the difficulties being known.** It is sufficiency for ability _within_ the model, with `d` fixed. The response pattern is not uninformative in general: conditional on `T`, its distribution depends only on the `d_j` — the `theta` cancels exactly — which is precisely what conditional maximum likelihood exploits to estimate item parameters free of ability. The pattern is ancillary for ability and informative for the items.
+
+**3. The converse is uncomfortable, and it is why Route 1 needs item-level data.** The property that makes counts lossless for ability is the same property that makes them carry _no_ information about the item parameters. Counts therefore cannot test whether the Rasch assumption holds, cannot detect varying discrimination, and cannot validate a difficulty ordering borrowed from Wordbank's typically-developing norms and applied to Down syndrome. Sufficiency is not free: it is conditional on a model that the data in hand provide no means of checking. This is the stated justification for Route 1 ([pre-specification](202607261210-route1-dif-prespecification.md) §1), and it also fixes where the mandatory 2PL sensitivity can live — on the item-level Wordbank pull (§8.6b there), never on aggregate counts.
+
+**4. Uniqueness, stated precisely.** The result is Rasch's, formalised by Birnbaum (1968) and proved under regularity conditions by Andersen (_Psychometrika_, 1977): given unidimensionality, local independence and strictly monotone continuous item characteristic curves, if the unweighted raw score is sufficient for ability then the model must be Rasch. Two qualifications on "unique". It is uniqueness for the _raw_ score — a 2PL also has a sufficient statistic, `sum_j a_j y_j`, just not one computable from a total. And the property extends to the polytomous Rasch models (partial credit, rating scale), so "family" is the right word rather than the 1PL specifically.
+
+**And one thing sufficiency does not give at all.** It licenses the _summary_, not the _likelihood_. Given ability, `T` is a sum of independent non-identical Bernoullis — Poisson-binomial, not Binomial — and sufficiency says nothing about which distribution to place on it. That question is answered, approximately and with its magnitude bounded, by §§3.2–3.3: the direction is known (underdispersion, which the Beta-Binomial cannot represent at all, so `kappa` absorbs it) and the consequence is at most about 1% of the total standard deviation in the model of record. An approximation with a measured cost, not an identity.
+
+### 3.2 The distributional channel: heterogeneity makes counts less variable, not more
+
+For independent Bernoulli trials there is an exact identity, `sum_i p_i (1 - p_i) = N * pbar * (1 - pbar) - N * Var_items(p)`, verified here to machine precision. Item-difficulty heterogeneity therefore **reduces** within-child count variance; the natural intuition that "items differ, so there is extra noise" is the wrong way round.
+
+The size of the reduction depends on the item-level difficulty spread. The ~1.8-logit gap between ie_01's outer checklists is a _between-stratum_ gap standing in for the item-level spread — a lower bound, since it ignores variation within each checklist — and treating the three checklists as three difficulty points (SD near 0.7–1.0 logits) puts the reduction at about 9% of within-child variance. A realistic full-inventory spread for a CDI is 1.5–2.5 logits, where it is much larger:
+
+| difficulty SD (logits) | Var(Poisson-binomial) / Var(Binomial), at `pbar` 0.15–0.75 |
+| ---------------------- | ---------------------------------------------------------- |
+| 1.0                    | 0.84–0.89                                                  |
+| 1.5                    | 0.72–0.80                                                  |
+| 2.0                    | 0.60–0.67                                                  |
+| 2.5                    | 0.52–0.61                                                  |
+
+So the within-child kernel may be wrong by ~40%. The Beta-Binomial cannot represent this at all in principle: its variance is `N p (1 - p) (N + kappa) / (kappa + 1)`, which is `>= N p (1 - p)` for every `kappa`, so the family has the Binomial as a _floor_ and underdispersion is outside it. `kappa` absorbs the difference. The identity and its scale are claims about difficulty heterogeneity _under local independence_ (items independent given ability); item dependence beyond ability — semantic clustering, prerequisite structure — adds covariance terms that can scale as `N^2` and is a separate, unquantified channel, operationally part of what the observation-level `kappa` already absorbs (which reinforces §4's residual-dispersion reading).
+
+### 3.3 The exposure, measured against the fitted models
+
+How much a ~40% kernel error matters depends on the kernel's share of total variance, and the fitted models pin it: `posterior_kappa_*.csv` carries the variance inflation factor `(N + kappa) / (kappa + 1)`, whose reciprocal is the kernel's share.
+
+| model / outcome     | fitted `kappa` | variance inflation | share of total variance in the kernel | worst-case effect on total SD |
+| ------------------- | -------------- | ------------------ | ------------------------------------- | ----------------------------- |
+| **VG10** understood | 5.3–44.0       | 19×–129×           | **0.77%–5.27%**                       | **1.06%**                     |
+| **VG10** spoken     | 5.8–6.0        | 117×–120×          | 0.83%–0.86%                           | 0.17%                         |
+| VG07 understood     | 3.3–11.3       | 67×–191×           | 0.52%–1.49%                           | 0.30%                         |
+| VG07 spoken         | 2.3–2.5        | 234×–244×          | 0.41%–0.43%                           | 0.09%                         |
+
+Take the figures from **VG10**, the model of record: at its youngest ages `kappa_u` reaches 44, the kernel carries 5.3% of total variance, and a 40% error in it moves the total standard deviation by 1.06%. This is the widest exposure anywhere in the family, and it is an order of magnitude below what 613 children can resolve. A likelihood-level simulation through the project's own Beta-Binomial confirms the recovered `kappa` moves by under 1.1% (supporting investigation; not yet regenerated by committed code — treat as provisional).
+
+### 3.4 The channel that remains open: discrimination
+
+Rasch sufficiency requires _equal discrimination_ exactly, and CDI items do not have it. That leaves §§3.2–3.3 untouched — the variance identity holds for _any_ set of per-item probabilities, however they arise, so the Poisson-binomial arithmetic and the ~1% budget stand whatever the discriminations are.
+
+It does, however, open a second and distinct channel that this note does not quantify. Under a 2PL the sufficient statistic is the _weighted_ score `sum_j a_j y_j`, which a total cannot recover; so with unequal discrimination the raw count carries a genuine loss of information about ability, not merely a distributional perturbation. Its size depends on the spread of `a_j`, nothing here bounds it, and — by §3.1 point 3 — it cannot be bounded from count data at all. The same assumption also bears on Route 1, where a 1PL fitted to data with varying discrimination can present as spurious differential item functioning; that is a threat to the DIF verdict rather than to the aggregate likelihood, and the pre-specification carries it as a mandatory 2PL sensitivity (§8.6b there). Once the item-level pull exists, the aggregate-side exposure becomes measurable too: fit a 2PL to the typically-developing responses, take the fitted `a_j` spread, simulate counts under it, and score the project's own likelihood against them through the existing recovery harness — a planned check, recorded in §12.
+
+## 4. The consequential finding: `kappa` is not latent heterogeneity
+
+Children's abilities live on a latent logit scale, on which the proportion scale compresses near 0 and 1 and stretches near 0.5. With a **constant** latent standard deviation `sigma`, the delta method gives `Var(p) ~= [p (1 - p)]^2 * sigma^2`, while the Beta-Binomial encodes between-child variance as `p (1 - p) / (kappa + 1)`. Equating the two:
+
+```text
+kappa + 1  ~=  1 / [ p (1 - p) * sigma^2 ]
+```
+
+So `kappa` **must** fall as `p` rises toward 0.5, with no change whatever in latent spread — a 6.7-fold decline from `p = 0.05` to `p = 0.5` at `sigma = 1` by this first-order formula (exact integration of a logit-normal ability distribution gives 16.3 → 4.8, still a 3.4-fold decline) — and must rise again above 0.5. The relationship is U-shaped, minimised at `p = 0.5`. The fitted form `kappa(z) = kappa_min + exp(a_kappa - b_mag * z)` with `b_mag > 0` imposed is monotone, so it cannot represent that shape; it fits a one-way trend through it.
+
+This effect is present under _perfect_ exchangeability — it is a bounded-inventory scale-and-link property, surfaced by the exchangeability investigation rather than caused by the thing under investigation. Item heterogeneity's own contribution runs the other way and is small. Under a constant latent spread (`sigma = 1`; exact Gauss–Hermite integration of the logit-normal ability distribution, with the mixed link's `d_k` set from the pooled checklist profile as in §9), the implied `kappa` at matched observed level is:
+
+| observed `p` | plain logit link | difficulty-mixed link |
+| ------------ | ---------------- | --------------------- |
+| 0.05         | 16.28            | 17.94                 |
+| 0.20         | 6.47             | 7.44                  |
+| 0.50         | 4.76             | 5.50                  |
+
+A three-to-four-fold level-driven decline survives the link change, because the effect is inherent to any bounded, saturating link rather than to equal item difficulties; at matched level the mixed link merely shifts `kappa` up by a fairly uniform 10%–13% and flattens the level-driven log decline by about 3%. **Substituting a difficulty-aware mean function therefore does not repair the `kappa` interpretation, and repairing `kappa` does nothing for `q`'s composition dependence (§5). The two problems need separate fixes, and only the second is about item difficulty.**
+
+**What VG10's own output says.** Two facts sharpen the reading. First, VG10 already carries an explicit between-child latent spread — the subject random intercept scale `tau_subj_u`, posterior mean 0.754, constant by construction — _underneath_ the Beta step, so `kappa` there is residual, occasion-level dispersion, which is one more reason it cannot be read as "children fanning out". Second, reading the model's own fitted dispersion (`posterior_kappa_u.csv` medians; the parameter posteriors are `a_kappa_u = 2.837`, `b_kappa_mag_u = 0.557`, `kappa_min_u = 2.996`) over the ages where DS comprehension data exist:
+
+| age (months) | fitted `p` | fitted `kappa` | implied residual latent SD | total, with `tau_subj_u` |
+| ------------ | ---------- | -------------- | -------------------------- | ------------------------ |
+| 12           | 0.028      | 39.77          | 0.956                      | 1.218                    |
+| 24           | 0.146      | 29.64          | 0.512                      | 0.911                    |
+| 30           | 0.227      | 25.66          | 0.462                      | 0.884                    |
+| 48           | 0.379      | 16.97          | 0.486                      | 0.897                    |
+| 66           | 0.526      | 11.68          | 0.562                      | 0.941                    |
+
+On the `kappa + 1` scale the identity governs, the fitted decline over 12–66 months is 1.168 log units where a constant latent spread alone predicts 2.230 — a ratio of 0.52 (on `kappa` itself, 1.225 log units; all of this is point arithmetic on posterior summaries, with no posterior intervals propagated). The fitted parameters are therefore consistent with residual latent spread that **falls** steeply to about 30 months and then rises modestly — and with total between-child spread (subject intercept plus residual, last column) that falls to about 30 months and is nearly flat thereafter — not with spread that grows throughout. Two honest qualifications: the profile is not monotone, and the 12-month end sits at `p = 0.028`, where the delta-method reading is least reliable and the data thinnest — which is itself the point, because the direction one infers depends on where the range is taken to start. And because `b_mag > 0` is imposed, the exponential-decline family cannot express the U-shaped level effect at all, so a positive fitted `b_mag` is by itself uninformative about latent divergence; what carries information is its magnitude read against the level-effect benchmark, which is the ratio of 0.52 above.
+
+**What this means for the report.** `§sec-kappa` is careful to call the monotone decline an **assumption** rather than an inference, and that framing is correct and should be kept. The problem is the parenthetical defending it — that because the outcome is bounded the decline "allows greater heterogeneity around the mean trajectory on the latent scale" — which is backwards: `kappa` is not a latent-scale heterogeneity parameter, and constant latent heterogeneity already implies a declining `kappa`. The rewrite (still pending — §12) should keep the assumption framing, remove the latent-scale defence, and state that no corrected estimate of real divergence is available from these data. The same conflation sits in the section's opening motivation ("children making more progress diverge from those making less") and in the `§sec-betabinomial` gloss "(more between-child heterogeneity at a given age)". Mitigating: `discussion.qmd`, `summary.qmd` and the signed-vocabulary results chapter are TODO stubs, and the one substantive results chapter contains no dispersion or fan-out prose, so no published prose currently draws the "children fan out with age" inference. It appears as a recommendation in [`202607121200-statistical-model-review.md`](202607121200-statistical-model-review.md) §5, which proposes leading with `posterior_kappa` to communicate the clinical "children fan out" message — acting on that recommendation would be the error. The fan-out message that _does_ survive is on the count scale: posterior-predictive spread widens roughly five-fold from 12 to 66 months, so the `P(Y<=k)` columns and predictive intervals — not `posterior_kappa` — are the artefacts to lead with.
+
+## 5. The surviving defect: `q` is composition-weighted
+
+`q(a) = P(speak | understand)` applied to a child's `U` understood words treats those words as a random draw from the inventory. They are not: they are the `U` easiest words. And production propensity is itself steeply difficulty-graded. Within the same child, the log-odds gap between the outer checklists has median +2.53 — an odds ratio of about **12.6** — positive in 27 of 30 children, exact Wilcoxon p = 4.7e-07 (a +0.5 continuity correction on the stratum counts; construction in §14).
+
+`q` is therefore a composition-weighted average over each child's own understood set, not an item-level probability. `§sec-ratios` defines it as the latter (rewrite pending — §12). Three consequences follow: `q`'s **level** is not transportable to another inventory; it is not comparable between populations matched on age; and it is acutely sensitive to how it is summarised, which no item-level probability would be.
+
+| summary of `q_k` (n = 38 coherent records) | C1    | C2    | C3    |
+| ------------------------------------------ | ----- | ----- | ----- |
+| ratio of sums                              | 0.667 | 0.526 | 0.521 |
+| median per child                           | 0.683 | 0.364 | 0.255 |
+| mean per child                             | 0.612 | 0.414 | 0.318 |
+
+The gradient roughly halves between the first and second rows. The ratio of sums weights children by vocabulary size, and the top quartile of children hold 53% of all understood words; those children have high `q` in every stratum, which compresses the between-stratum contrast. Both summaries are defensible and they answer different questions — which is exactly why `q` needs defining as the composition-weighted quantity it is.
+
+**The rise in `q` survives, and the composition bias is conservative in sign.** As comprehension grows, a child's understood words shift toward the harder checklists (Checklist 1 weight 0.422 → 0.210, Checklist 3 weight 0.124 → 0.312 between the low and high halves of the sample), which drags marginal `q` _down_. A Kitagawa decomposition of the low-to-high difference gives:
+
+| component             | change in `q` | share  |
+| --------------------- | ------------- | ------ |
+| total                 | +0.3399       | 100%   |
+| within-stratum        | +0.3950       | 116.2% |
+| composition (weights) | −0.0550       | −16.2% |
+
+So composition explains none of the rise and works against it. One caveat that matters: this is a split on **comprehension level**, whereas the models report an **age** gradient. Across the wider set of specifications tried in the supporting investigation the composition share was negative in every one, ranging −2.8% to −35.2%, but for the age gradient specifically it was only −2.8% to −9.9% with intervals spanning zero. The defensible statement is: composition explains none of `q`'s rise; the conservative sign is established for the comprehension-level split (negative in every specification tried); for the age gradient the point estimates suggest attenuation and the intervals span zero, so no more than that should be claimed.
+
+## 6. The matched-comprehension DS-versus-TD contrast
+
+Because `q` is composition-dependent, matching two populations on the _number_ of words understood controls composition only if the difficulty ordering is the same in both. The headline result reproduces exactly (peak `Delta q` = +0.063 at `N` = 175, 89% interval +0.021 to +0.095), and the one quantifiable threat — instrument non-equivalence — is bounded rather than fatal. Applying the project's own dual-form crosswalk consistently to numerator and denominator moves the peak to about +0.045 with break-even around `R` = 1.25, rising to roughly 1.78 once shared short-form exposure is allowed for (only 32.4% of DS observations in the band driving the result are on the 810-item form). Two unmodelled effects push the peak up rather than down.
+
+What binds is not measurable here. At every credibly positive level the DS children are 8–13 months older than the TD children (29.2 versus 16.8 months at `N` = 175), so any age-dependent composition difference is fully confounded with the population contrast; and whether word-difficulty ordering is the same in the two populations — the assumption matched-`N` actually needs — cannot be tested with anything in this repository, because there is **no item-level or category-level typically-developing data** here. This must be stated as a limitation rather than bounded with a fragile number. Route 1 (§11) is the direct test of the ordering assumption, and the pre-specification's §1 names the validity of this published contrast as one of its two justifications.
+
+These crosswalk figures come from the supporting investigation and were not independently reproduced for this note; the reproduced quantity is the published `Delta q` table itself.
+
+## 7. What is not affected
+
+Worth recording explicitly, to forestall over-correction:
+
+- **Mean trajectories and expected word counts.** Unaffected by construction wherever data constrain the fit: `E[y] = 810 * p(z)` whatever the composition of the words a child knows, and the HSGP mean is flexible enough to absorb link misfit in-sample. Where the fit extrapolates — past ~60 months and toward the ceiling — the link's shape does real work, which is the territory of Proposal B (§9).
+- **Posterior-predictive count distributions by age.** "Sufficiency licenses the summary, not the likelihood" (§3.1) does not undermine the predictive intervals or `P(Y<=k)` tables, for three reasons in sequence. The mean is composition-free by construction (above). The total predictive spread is fitted to the observed totals through `kappa(z)`, so the kernel misspecification is absorbed as a _misattribution_ of variance between the within- and between-child components rather than an error in the total — the residual effect on interval endpoints is the §3.3 arithmetic, of order 1% of total SD, about a quarter of a word against VG10's ~21-word SD at 12 months where the exposure is widest. And decisively, the observed-scale posterior-predictive calibration checks in the report test the distribution of counts directly — including its tails, which variance arithmetic alone would not bound — so the quantity is validated empirically, independent of the decomposition behind it, and re-validated at every refit. What the predictive cannot support is a reading of its between/within decomposition (§4), any claim about _which_ words make up a count (§5), or confident extrapolation at the ceiling approach, where the hardest items govern and an equal-difficulty link is most wrong (§9, Proposal B).
+- **The DS-versus-TD dispersion ratio.** The item-difficulty contribution to the overdispersion factor is additive and small, moving the ratio by 0.2%–1.2% against a reported difference of four to five fold (supporting investigation; provisional until regenerated by committed code).
+- **The count-variance accounting inside the likelihood.** Under 1.1% on `kappa` (§3.3).
+
+## 8. Evidence base, and the open data questions
+
+Every sub-inventory number here rests on two Down syndrome studies: ie_01's follow-up wave (46 children, 27–86 months, the only source recording checklist-level counts) and uk_01's 19 comprehension categories (29 children with complete category data). There is no item-level or category-level typically-developing data in the repository. The defensible grading is: **existence and direction — strong; magnitudes — provisional, single wave, single study, n < 50.**
+
+Three data problems bear directly on the magnitudes and must be settled before any stratum number is published:
+
+1. **The ie_01 baseline wave is defective beyond the missing Checklist 3.** Pooled Checklist 1 comprehension _falls_ from 0.855 to 0.671 between waves while the mean understood total rises from 252 to 323 words, and Checklist 1 comprehension decreases for 22 of 46 children (minimum −124). At least one wave's Checklist 1 field is unreliable. (The missing-Checklist-3 defect is handled by the masking rule added in #182.)
+2. **The Checklist 1 denominator is contradicted by the data.** 27 records carry Checklist 1 counts above the nominal 120 items, to a maximum of 124. Either the checklist has 124 items or those records are miscoded; the source codebook should settle it. The exchangeability test (§2) is insensitive to this — the Checklist 3 deficit does not depend on the Checklist 1 denominator at all — but the difficulty magnitudes are not.
+3. **uk_01's `understood` appears to exclude words the child also produces.** `spoken / understood` exceeds 1 for 2 of 29 children (maximum 1.95), which an inclusive comprehension field cannot do. Scope is 29 of the pool's 671 understood observations, but the bias is one-directional and sits where `q` is least identified. Verify against the source codebook before changing the pipeline.
+
+A screening rule covering the internally inconsistent records is a **prerequisite** for publishing any stratum table, not a parallel task: the headline proportions move materially under screening (0.710 / 0.321 / 0.095 unscreened against 0.869 / 0.327 / 0.059 on a cleaned subset in the supporting investigation), as does the implied difficulty spread. (One reconciliation worth keeping on record because an earlier draft got it wrong: uk_01's 19 category columns sum _exactly_ to the recorded `understood` for all 29 complete rows — see §15.)
+
+## 9. The proposals, with their statuses
+
+All three are **registered-sensitivity material at most, gated on the Route 1 result and on observed-scale predictive validation** — none is a model-of-record change, and none should be argued as a fit improvement, because §3 establishes there is no fit-based case. Item difficulty is treated throughout as a property of the **instrument**, not of the children — itself an invariance assumption, and §11 is its test. A small number of children measured at item level calibrates the inventory; the calibrated inventory then serves every aggregate observation.
+
+**Proposal A — put the age variation on the latent scale (no item data needed; addresses §4, not item difficulty).** The models carry two dispersion-like quantities: `tau_subj_*`, between-child spread on the latent scale — a scalar `HalfNormal` in every engine that carries subject intercepts (`common_univariate_re`, `common_bivariate_re`, `common_joint_modality` — between them, all three headline models), so constant by construction — and `kappa(z)`, dispersion on the proportion scale, which carries all the age variation and cannot support the developmental interpretation. The age variation is on the wrong parameter.
+
+- **A1 (preferred):** make `tau_subj_*` age-varying and hold `kappa` constant or nearly so. The developmental question is then asked of the parameter that can answer it, and `kappa` reverts to residual dispersion. No new likelihood, no item data, no change to the mean function; the older non-RE engines have no subject term, so for them A1 means adding one. One structural caveat so A1 is not oversold: scaling a single per-child offset by `tau(age)` imposes perfect rank correlation of children across age — children never cross — so A1 asks "does the spread widen" under one specific fan shape. Random slopes or a child-level longitudinal function are the natural relaxations; A1 is the first registered sensitivity among these, not a demonstrated fix.
+- **A2 (alternative):** keep `kappa(z)` but derive it from a latent standard deviation, `kappa = p (1 - p) / [ (dp/df)^2 * sigma^2 ] - 1`, placing the prior on `sigma(z)`. Needs a guard for the Beta variance bound (`sigma < 1 / sqrt(p (1 - p))`, about 2 at `p = 0.5`).
+- **Cost:** `kappa` already has a single shared seam (`build_kappa_of_z` / `make_kappa_of_z` in [`gp_utils.py`](../src/vocab_growth/models/gp_utils.py), 31 invocations of the returned closure). A2 changes the factory signature; A1 does not touch it.
+- **Validation requirement:** in the fitted frame — after the #182 masking, which reduces ie_01 to its follow-up wave — 282 of 613 children (**46%**) contribute a single observation, so `tau_subj` and `kappa` are already partly confounded (for a singleton child they are two names for the same deviation), and making `tau_subj` age-varying makes that worse. The 331 children with repeated observations are what identify it. (The raw age-valid view has 626 children and 235 singletons.) A1 therefore requires a parameter-recovery run under its own structure.
+
+**Proposal B — a difficulty-mixed link (interpretive; consumes a calibration).** Keep the Beta-Binomial entirely and change only the inverse link: `p = sum_k w_k * logistic(f - d_k)` with `w_k = n_k / 810` and `d_k` fixed from a calibration. Measured consequences, with `d_k = -logit(pooled stratum proportions) = (-0.71, +0.19, +1.08)` — an anchor that puts `f = 0` at the observed profile (`p = 0.398`) and therefore carries the checklist-weighted mean difficulty of +0.44 into every absolute `f`:
+
+| quantity                        | plain | mixed |
+| ------------------------------- | ----- | ----- |
+| latent `f` needed for `p = 0.5` | +0.00 | +0.45 |
+| latent `f` needed for `p = 0.9` | +2.20 | +2.79 |
+| `f(p = 0.9) - f(p = 0.5)`       | 2.20  | 2.34  |
+| peak `dp/df`                    | 0.250 | 0.228 |
+
+The first row is mostly the anchor convention; the anchor-invariant statement is the third row. The curve flattens and its approach to the 810-word ceiling slows — modestly by `p = 0.9` (+0.14 logits beyond the anchor shift), growing toward the ceiling (about +0.18 logits by `p = 0.99`). That is the developmentally plausible behaviour, and the top end is exactly where sparse older-age data and the un-anchored 84-month prior already make the trajectory least trustworthy. Two hedges keep the claim honest: the fitted mean is a flexible GP, so in-sample both links can represent essentially the same `p(age)` — the difference concentrates in extrapolation and in what `f` and its priors mean — and "the present link gets it wrong at the top end" is therefore a claim about prior-driven extrapolation that only a refit with observed-scale predictive checks can demonstrate. What the change certainly delivers is that `f` becomes interpretable as ability rather than as the logit of a composition-dependent proportion. B shifts the implied `kappa` by roughly 10% at matched level (§4's table) — a change to what `kappa` _means_, not to how well anything fits, and not a shift these data could detect.
+
+- **Cost:** 35 `math.sigmoid` sites across seven engine modules with **no shared seam**, so a mechanical consolidation refactor comes first (precedent: `trend_and_gp`, whose docstring records byte-for-byte graph reproduction; the identity `d_k = 0` must reproduce the current graph exactly). Beyond the sites: the slope anchors are specified as probabilities and converted with `logit` inside `trend_and_gp`, so every anchor prior must be re-expressed through the mixed link's (numerically invertible) inverse, and the expected-learning-rate artefacts hard-code the logistic derivative `dE[Y]/dx = n * p * (1 - p) * df/dx`, which is wrong under the mixed link. Budget for anchor re-derivation and downstream revalidation, not just the 35 sites.
+
+**Proposal C — stratified means for both outcomes, and a composition-free `q` (the estimand fix).** `p_U(theta) = sum_k w_k * logistic(f_U - d_k)`; `p_S(theta) = sum_k w_k * logistic(f_U - d_k) * logistic(h - e_k)`, with `d_k` comprehension difficulties and `e_k` production-propensity offsets by stratum. Marginal `q = p_S / p_U` then emerges as a **derived**, composition-weighted quantity — which is what it actually is — while `h` is a **composition-free production propensity**. That addresses all three defects in §5, and the headline DS-versus-TD contrast could be run on `h` instead of marginal `q`, removing the composition confound — conditional on the calibration: `h` is composition-free _given_ correctly calibrated, shared `d_k` / `e_k` and the form weights, a model-standardised propensity rather than an assumption-free one. Still no item-level responses needed at fit time. One exactness caveat so the likelihood claim is not overstated: with heterogeneous items, `E[S | U = u]` is **not** exactly `u * p_S / p_U` — conditioning on the observed total changes which items plausibly compose it — so keeping the nested `S | U ~ BetaBinomial(U, q)` structure under stratified means is a **moment-level approximation**, exact only under exchangeability. The honest menu: state the approximation explicitly; or score the stratum counts where they exist (ie_01's follow-up wave); or model `S` marginally against the full inventory. And because `q` becomes derived, any anchor priors currently on `q` must be re-expressed through `h` and the difficulties.
+
+Two things not to do, whatever happens downstream. Do not change the likelihood family: there are 27 `pm.BetaBinomial` construction sites across seven engine modules, and none of the proposals requires it. Do not fit the item-level IRT and the aggregate trajectory models as one joint model on the first pass — calibrate the instrument first, then consume the calibration, so a problem in either half is diagnosable.
+
+## 10. The item-level data that makes calibration feasible
+
+An earlier conclusion — that a full IRT reformulation was infeasible with the aggregate counts in this repository — was conditional on those counts being all there was, and no longer holds. Available item-level data, **to be confirmed at ingest** — the datasets are outside the repository, and for the two Wordbank rows this includes confirming that Wordbank's instrument-data export covers the Edgin dataset at all, which is unknown and a permitted negative outcome (pre-specification §8.7):
+
+| source                 | children | coverage                                     | ages (months) |
+| ---------------------- | -------: | -------------------------------------------- | ------------- |
+| ie_01 (DS)             |       59 | all three DSE checklists, 810 items          | 27–86         |
+| second UK study (DS)   |       40 | two DSE checklists, ~460 items               | to confirm    |
+| Wordbank / Edgin (DS)  |      119 | CDI WG (87 records) and WS (109), item level | 11–30         |
+| Wordbank (TD, English) |   35,025 | CDI, item level                              | 8–30          |
+
+Roughly 218 children with Down syndrome at item level, on two instruments, with complementary age coverage: the DSE sources reach 86 months and identify the hard end of the inventory, while the Edgin subset is young and floor-heavy but sits on the same instrument as the typically-developing corpus. The headline number should not blur the split: only the ~99 DSE-measured children calibrate the DSE inventory directly; the 119 CDI children calibrate CDI items and reach the DSE pool only through the Route 2 crosswalk. One anchor is already checkable inside the repository: `us_01` _is_ the Edgin aggregate — 119 children, 87 WG records carrying comprehension and 109 WS records without — matching the table exactly.
+
+Three consequences. It makes the difficulties properly estimable (a Rasch calibration on ~218 children and several hundred items, versus 46 aggregate records, and without the in-sample circularity of calibrating `d_k` from the data the models then report). It converts two open data defects into answerable questions — the Checklist 1 item count is simply the number of item columns, and a partially administered checklist is visible as a block of missing rather than zero responses — so the ingest is a data-quality fix as well as a modelling input. And it does not need to cover everyone, but nor does it automatically cover every form: fixed difficulties serve rows on the DSE forms directly, and the shorter MacArthur-derived forms only through linked item coverage or a form-specific calibration, which is what the Route 2 crosswalk has to supply. "Instrument property" is the invariance assumption §11 tests, so the calibration serves the full 1,219 rows conditionally, not by fiat.
+
+## 11. Testing the hypothesis: same order, slower
+
+The working assumption — that children with Down syndrome learn words in roughly the same order but later — is, in its testable cross-sectional form, a differential-item-functioning hypothesis: a shared item hierarchy plus an age-associated ability offset. (Within-child acquisition order and learning speed are longitudinal claims that cross-sectional item data cannot test; "same order, slower" is the measurement claim, not the developmental mechanism.) It is worth testing in its own right, not only as a modelling prerequisite: if it holds, it licenses every cross-population comparison in the report; if it fails, the pattern of failure is itself informative.
+
+The hypothesis decomposes onto two parameters of a Rasch model with population-specific ability trajectories and item-level DIF `delta_j`: **"later"** is the ability offset `Delta(age)` with `mu_TD(age - Delta) = mu_DS(age)`; **"same order"** is `sigma_DIF` small relative to `sigma_d`, headline statistic `r = sigma_DIF / sigma_d`, reported alongside the implied item-pair rank-reversal probability. Design points that matter — both identification constraints (`sum d_j = 0` for the Rasch location alias _and_ `sum delta_j = 0` for the group-shift alias, via the codebase's `ZeroSumNormal` idiom); estimating the spread rather than individual items, with recovery runs before trusting `sigma_DIF`; child effects (the Edgin administrations are 196 from 119 children); and class-level DIF for power and interpretability, with the directional prediction that DIF, if present, concentrates on the production side and phonologically demanding items — a pooled ie_01 check is directionally consistent (`P(say | imitate)` falls 0.85 / 0.78 / 0.63 across the checklists while `P(imitate | understand)` is flat at 0.68 / 0.56 / 0.63 over the 24 coherent records, though the within-child paired version is not clean at these `n`, so treat it as a hypothesis for the item-level data).
+
+Two linking routes, complementary rather than alternatives. **Route 1 — crosswalk-free, first:** the Wordbank Edgin subset sits on the _same_ CDI forms as the typically-developing corpus, so the DIF test needs no item crosswalk; limitation is age (11–30 months, floor-heavy, hard items weakly identified). **The binding specification of Route 1 — model, estimand, threshold, decision rule, controls, sensitivities and execution order — is [`202607261210-route1-dif-prespecification.md`](202607261210-route1-dif-prespecification.md), which supersedes the sketch this section carries.** **Route 2 — the DSE data via a crosswalk:** ie_01 and the second UK study cover the older, harder range, linked by common items ([`crosswalk_dse_oxford.py`](../scripts/crosswalk_dse_oxford.py) is form-level precedent); Route 2 also yields the DSE calibration Proposals B and C consume, and will be pre-specified separately after the ingest audit.
+
+What a negative result would mean: material DIF means the matched-`N` contrast is confounded in a way no reweighting fixes, and the honest response is to report the comparison on ability (`theta`) under an explicit linking convention — anchor items argued invariant, or partial-invariance modelling. Either outcome is publishable and either resolves a question currently carried as an untestable caveat.
+
+## 12. Actions and sequence
+
+**Done** (in #182 and PR #183):
+
+- `§sec-betabinomial` rewritten: the two assumptions separated, exchangeability stated as false, the sufficiency argument with both its conditions, and the variance budget (this PR).
+- The methods now state `q`'s composition-weighted reading and point it at `@sec-ratios` (this PR); the results chapter's Limitations block carries the composition caveat (#182).
+- The ie_01 baseline-wave masking rule (#182); the us_01/Edgin audit, its four masking rules, and the registered `us01-implausible-reinstated` sensitivity for VG10/VG15 (this PR).
+- Route 1 pre-specified before any item-level data enters the repository (this PR).
+
+**Pending, in order:**
+
+1. **Settle the ie_01 Checklist 1 denominator and screening rule** (§8) — gates any published stratum table. Open the uk_01 exclusive-coding question with the source codebook at the same time.
+2. **Rewrite the `§sec-kappa` parenthetical and gloss** (§4): keep the assumption framing, remove the latent-scale defence, state the level-effect consistency result, and steer fan-out prose to the count-scale predictive artefacts.
+3. **Rewrite the `§sec-ratios` definition of `q`** (§5) and state the conservativeness claim only at the licensed strength; give the matched-comprehension age offset (8–13 months, §6) the same prominence as the composition caveat.
+4. **Fill [`_caveats-ds.qmd`](../docs/report/_caveats-ds.qmd)** with the screened stratum table and the untestable-ordering statement (blocked on item 1).
+5. **Narrow the [`comparison.py`](../src/vocab_growth/comparison.py) `overdispersion_factor` docstring**: the factor removes the explicit `p (1 - p)` mean dependence at fixed `kappa`; because `kappa` is itself level-driven (§4), the cross-population contrast is not a _pure_ concentration difference. The reported ratio is robust (§7) — the docstring should claim the narrow thing.
+6. **Register the `dse-native-only` sensitivity** for VG10 and VG15 (`survey_vocab_max == 810`: 259 of the pool's 671 understood observations, from 178 children across four sources — ie_01, ie_02, uk_02, uk_06; counted through the loader, which is how an earlier hand-derived "of 680, 194 children" went stale) — the highest-value model check here, because pooling five form ceilings onto an 810 denominator is where the difficulty-ordering assumption does silent load-bearing work, and it has never been tested inside the models.
+7. **Proposal A1 as a registered sensitivity with the first parameter-recovery run** (§9) — independent of all item-level work.
+8. **Route 1**: owner decisions, ingest with manifest and audit, design analysis, then the fit — per the pre-specification. Add the **2PL-spread recovery check** on the aggregate side once the TD item pull exists (§3.4).
+9. **Ingest the DSE item-level data**; Rasch calibration; Route 2 pre-specification and DIF test.
+10. **Proposals B and C as registered sensitivities** using the calibrated difficulties — promoted, and the cross-population contrast re-expressed on `h` or `theta`, only if the DIF result supports shared difficulties.
+
+Meanwhile, per-item response retention goes into any future DSE data-collection protocol: free at collection time, impossible to reconstruct afterwards.
+
+## 13. What none of this fixes
+
+Item difficulty in the likelihood does not resolve the age confound in the headline comparison. At every comprehension level where `Delta q` is credibly positive, the Down syndrome children are 8–13 months older than the typically-developing children (29.2 against 16.8 months at 175 understood words). Conditioning on ability rather than on raw counts addresses the composition confound but not the age confound, which is a design property of the pooled sample rather than a modelling choice.
+
+## 14. Reproducing the numbers
+
+All figures in §§2, 3.3, 4, 5 and 8 were computed directly from `data/vocab_data_ie_01.csv` and `data/vocab_data_uk_01.csv`, and from the fitted output — `diagnostics.csv`, `posterior_summary_u.csv` and `posterior_kappa_u.csv` / `posterior_kappa_s.csv`, VG10's for the headline rows and VG07's corresponding tables for its comparison rows in §3.3. Points of method recorded so the numbers can be checked rather than trusted:
+
+- The hypergeometric test uses stratum sizes 120 / 340 / 350 and the follow-up wave only, restricted to children with `0 < T < 810`; the exchangeability null for the monotonicity rate is simulated by drawing each child's actual `T` uniformly without replacement from 810 positions, 2000 replicates.
+- `q_k` is reported on records that are internally coherent (`says_k <= understands_k` for all three strata), which is 38 of 46. Screening on this criterion is itself selection on the outcome; the within-child paired log-odds contrast is the robust statement and does not depend on the choice. That paired contrast adds 0.5 to all four cells (a Haldane-style continuity correction) and includes every coherent child with a non-empty understood set in both outer checklists (n = 30); the p-value is the exact signed-rank distribution.
+- §4's `kappa` column is the `kappa_median` of VG10's `posterior_kappa_u.csv` at the tabulated ages — equivalently, the posterior-mean parameters pushed through `kappa_min + exp(a_kappa - b_mag * z)` with the **model frame's** age standardisation (mean 40.5 / SD 20.7 months). The implied residual latent SD is a first-order delta-method reading against the population `p`, not a refit; the total column adds the posterior-mean `tau_subj_u = 0.754` in quadrature; and the decline comparison is made on `kappa + 1`, the scale the identity governs. A latent-scale reparameterisation would be needed to estimate any of this properly, which is one reason `kappa` should not be asked to carry the interpretation.
+
+A committed script, [`scripts/verify_item_difficulty_notes.py`](../scripts/verify_item_difficulty_notes.py), recomputes the checkable figures in §§2, 3.3, 4, 5, 8, 9, 10 and 11 from the raw CSVs and, where present, the fitted output. Two magnitudes are not covered by committed code and remain from the supporting investigation's simulations: the under-1.1% likelihood-level effect on `kappa` (§3.3) and the 0.2%–1.2% movement in the dispersion ratio (§7). Treat both as provisional until regenerated.
+
+## 15. Corrections log
+
+This note consolidates two working notes drafted, challenged and corrected on 2026-07-26; the full trail is in the deleted files' git history (`git log --follow` on either path) and on PR #183. What changed, in order:
+
+1. **The framing over-claimed, and the study owner caught it.** "Challenging item exchangeability" read as an attack on the likelihood; the finding is that the assumption is false and nearly costless, for the sufficiency reason now stated up front in §3. The documentation-only conclusion was right for stronger reasons than the original draft gave, and the proposals note's caution — model changes as gated sensitivities only — was vindicated rather than revised.
+2. **An age-standardisation error in the fitted-dispersion table.** The first circulated version standardised age on the understood subset (mean 34.6 / SD 16.6) instead of the model frame (mean 40.5 / SD 20.7), understating `kappa` at older ages by up to a quarter and overstating the fitted log decline: the headline 1.484 log units / ratio 0.67 became 1.168 / 0.52 on the `kappa + 1` scale (§4). The correction strengthened the conclusion.
+3. **VG07's `kappa` was quoted as "the fitted models".** VG07 is not a model of record; its `kappa` is far lower than VG10's, which understated the kernel's variance share threefold (0.4%–1.5% against the correct 0.77%–5.27%). §3.3's table now leads with VG10 and is pinned by the verification script.
+4. **The IRT-infeasibility conclusion was withdrawn** when the item-level availability in §10 was established: "not feasible with aggregate counts" was true and beside the point once ~218 DS children had item-level records elsewhere.
+5. **A claimed 45-word discrepancy in uk_01's category columns was an artefact** of a column-matching pattern (it split `verb14c` from `verbs14v` and missed `adject15`, `inounv`, `iverbv`); the 19 categories reconcile exactly with `understood` for all 29 complete rows.
+6. **"Unequal discrimination perturbs the same ~1% budget" was corrected** to the two-channel statement in §3.4: the dispersion budget stands, but a 2PL's information loss is a distinct channel, unquantified and unquantifiable from counts.
+7. **The sufficiency statement itself was tightened on review**: both halves of the factorisation stated, the administered-set and known-difficulties conditions made explicit, the converse (counts uninformative about items) drawn out, and uniqueness attributed and qualified (§3.1).
+8. **Round-two review corrections carried into the body**: Proposal C's nested likelihood labelled a moment-level approximation; the Rasch location constraint added alongside the zero-sum DIF constraint; `r` distinguished from its variance share; Proposal B's cost extended to anchor re-derivation and the hard-coded logistic derivative; the singleton count restated for the fitted frame (282 of 613); A1 reframed as the first registered sensitivity under an explicit fan-shape caveat; the imitation finding re-attributed to the supporting investigation and its pooled check downgraded to directional; seam counts corrected against the tree.

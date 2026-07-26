@@ -88,10 +88,6 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "tau_subj_u_sigma": 0.25, "tau_subj_q_sigma": 0.25}},
     ("vg10", "no-subject"): {"suffix": "no-subject", "scalar": {
         "use_subject_re_u": False, "use_subject_re_q": False}},
-    ("vg10", "us01-ceiling-excluded"): {
-        "suffix": "us01-ceiling-excluded",
-        "scalar": {"exclude_us01_spoken_ceiling": True},
-    },
     ("vg11", "tau-wide"): {"suffix": "tau-wide", "scalar": {
         "tau_study_sigma": 1.0, "tau_subject_sigma": 1.0}},
     ("vg11", "tau-narrow"): {"suffix": "tau-narrow", "scalar": {
@@ -107,9 +103,32 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "tau_u_sigma": 1.0, "tau_q_sigma": 1.0, "tau_sign_sigma": 1.0}},
     ("vg15", "sign-study-only"): {"suffix": "sign-study-only", "scalar": {
         "use_subject_re_sign": False}},
-    ("vg15", "us01-ceiling-excluded"): {
-        "suffix": "us01-ceiling-excluded",
-        "scalar": {"exclude_us01_spoken_ceiling": True},
+
+    # The former ("vg10"/"vg15", "us01-ceiling-excluded") variants are retired.
+    # They asked what changes if the us_01 Words & Sentences records at the 680-item
+    # form ceiling are dropped, on the reading that those counts were valid but
+    # right-censored. The Edgin audit (notes/202607261245-...) established that they
+    # are not censored measurements but invalid values — a contiguous child-id block
+    # uniformly at the form maximum, with seven of eight young records contradicted
+    # 5-fold or more by the same child later — so they are now masked by default in
+    # data_utils.mask_implausible_production_administrations. A sensitivity that
+    # excludes records already excluded is a no-op, and a registered check that
+    # cannot fail is worse than no check. The live question is the inverse — what
+    # changes if the exclusion is wrong — and it is registered below.
+    #
+    # This inverse form is not optional garnish. The source author no longer holds
+    # the original data files, so the 30 masked administrations can never be
+    # confirmed as defective at source; these two variants are the only way to
+    # report what the headline joint trajectories would have been had that
+    # judgement been wrong. Both engines print the reinstated count, so a variant
+    # that silently stopped biting would be visible rather than reassuring.
+    ("vg10", "us01-implausible-reinstated"): {
+        "suffix": "us01-implausible-reinstated",
+        "scalar": {"include_implausible_production": True},
+    },
+    ("vg15", "us01-implausible-reinstated"): {
+        "suffix": "us01-implausible-reinstated",
+        "scalar": {"include_implausible_production": True},
     },
 
     # -- Target 6: VG15 psi (association) --

@@ -312,6 +312,7 @@ def prepare_joint_data(
     merged = vocab_data_utils.load_data(
         population=definition.population,
         columns=merged_columns,
+        include_implausible_production=definition.include_implausible_production,
     )
     # uk_02 and nz_01 are handled via their cross-tab paths below, so exclude their
     # marginals from the merged view here to avoid double counting. (nz_01 is
@@ -432,6 +433,14 @@ def prepare_joint_data(
     ]
     if definition.exclude_us01_spoken_ceiling:
         counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
+    if definition.include_implausible_production:
+        # No age bound: this engine's load_data call above passes none, so the
+        # reported count has to be taken over the same frame or it misstates what
+        # the fit actually reinstated.
+        counts.append((
+            "us_01 implausible production reinstated",
+            vocab_data_utils.count_reinstated_implausible_production(),
+        ))
     if n_subjects is not None:
         n_singletons = int((analysis_df.groupby("subject_code").size() == 1).sum())
         # Subjects contributing at least one signed observation (the modality that
