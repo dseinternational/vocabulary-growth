@@ -248,3 +248,41 @@ def test_monthly_summary_without_predictive_draws_omits_the_predictive_columns()
     assert {"age_months", "Ey_median", "Ey_ci_lo", "p_median"} <= set(monthly.columns)
     assert not [c for c in monthly.columns if c.startswith("Y_") or c.startswith("P(Y")]
     assert len(monthly) == 83
+
+
+def test_monthly_summary_excludes_months_outside_the_grid_span():
+    """A boundary month that would snap from outside the span is dropped.
+
+    Raised in review on PR #187: with a grid starting at 8.1, month 8 sits 0.1
+    months away — inside MAX_MONTH_SNAP_OFFSET — so a "nearest point within
+    bound" reading would include it. It is excluded deliberately. Month 8 is
+    below every observed age (the plot grid spans exactly the observed range), so
+    reporting it would extrapolate, and its value would be the trajectory at 8.1
+    labelled as month 8.
+
+    Pinned so the boundary rule cannot be widened into extrapolation by a later
+    change that reads the snapping bound as the coverage rule.
+    """
+    X_plot, p_plot, y_plot = _plot_grid_draws(lo=8.1, hi=89.9)
+    monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
+
+    ages = monthly["age_months"].to_numpy()
+    assert ages.min() == 9, "month 8 lies below the grid and must not be reported"
+    assert ages.max() == 89, "month 90 lies above the grid and must not be reported"
+    # Every reported month is bracketed by real grid points, so no row is an
+    # extrapolation of the fitted trajectory.
+    assert X_plot.min() <= monthly["grid_age_months"].min()
+    assert monthly["grid_age_months"].max() <= X_plot.max()
+
+
+def test_monthly_summary_keeps_boundary_months_when_the_grid_is_integral():
+    """With whole-month observed ages — the real case — no month is lost."""
+    X_plot, p_plot, y_plot = _plot_grid_draws(lo=8.0, hi=115.0)
+    monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
+
+    assert monthly["age_months"].min() == 8
+    assert monthly["age_months"].max() == 115
+    # The endpoints land exactly on grid points, so they carry no snap error.
+    offsets = monthly.set_index("age_months")["grid_offset_months"]
+    assert offsets.loc[8] == 0.0
+    assert offsets.loc[115] == 0.0

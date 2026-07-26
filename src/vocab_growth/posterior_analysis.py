@@ -286,11 +286,21 @@ def monthly_summary_table(
         ``grid_age_months - age_months``, bounded by
         :data:`MAX_MONTH_SNAP_OFFSET`.
 
-    Coverage is the plot grid's span, which is the **observed** age range — so
-    query ages outside it (for example the Down syndrome models' 90-month row,
-    beyond the oldest observation) have no monthly counterpart by construction.
-    That is deliberate: those are extrapolations, and this table does not
-    manufacture them.
+    Coverage is every whole month lying **inside** the plot grid's span, which is
+    the observed age range. In practice that is wider than the canonical query
+    ages, not narrower: the Down syndrome pool spans 8-115 months and the
+    typically-developing pool 8-25, so every canonical age has a monthly
+    counterpart and the extra months run out to the tails of the data. Many of
+    those tail months hold no observation at all, which is what ``n_obs`` is for.
+
+    A month **outside** the span is excluded even where it would snap within
+    :data:`MAX_MONTH_SNAP_OFFSET` — with a grid starting at 8.1, month 8 is
+    dropped rather than reported from the 8.1 point. Both halves of that matter:
+    the month lies below every observed age, so reporting it would extrapolate,
+    and its value would be the trajectory at 8.1 wearing an "8" label. Recorded
+    ages are whole months throughout this project, so no month is currently lost
+    this way; the rule is what keeps a future fractional-age source from
+    acquiring a silently extrapolated boundary row.
 
     ``X_obs``, when given, adds an ``n_obs`` column counting the observed
     administrations falling in each whole month — the check on whether a row is
@@ -317,6 +327,11 @@ def monthly_summary_table(
             f"(X_plot {X_plot.shape[0]}, y_plot {y_plot.shape[0]})."
         )
 
+    # Whole months strictly inside the grid span. ceil/floor deliberately exclude
+    # a boundary month that would snap from outside — a month below X_plot.min()
+    # is below every observed age, so reporting it would extrapolate and would
+    # label the trajectory at (say) 8.1 months as month 8. Widening this to
+    # "nearest point within MAX_MONTH_SNAP_OFFSET" would reintroduce both.
     months = np.arange(
         int(np.ceil(X_plot.min())), int(np.floor(X_plot.max())) + 1, dtype=int
     )
