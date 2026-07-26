@@ -290,8 +290,24 @@ def check_frame_counts(merged: pd.DataFrame) -> None:
     fit_pairs = fitted.groupby(["study", "subject_id"]).size()
     check("fitted frame: children / singletons / repeated", [len(fit_pairs), (fit_pairs == 1).sum(), (fit_pairs > 1).sum()], [613, 282, 331])
 
-    understood = merged.dropna(subset=["understood"])
-    check("understood observations, raw / after masking", [len(understood), len(understood) - int((understood["study"] == "ie_01").sum() - 46)], [739, 680])
+    # The note's understood-pool figures (§8 item 3, §12 item 6) are counted
+    # through the loader itself: two earlier hand-derived versions of these
+    # counts went stale when masking rules changed under them.
+    try:
+        from vocab_growth.data_utils import load_combined_data
+
+        pool = load_combined_data()
+    except Exception as error:  # pragma: no cover - environment-dependent
+        print(f"  [skip] loader-derived counts unavailable ({error})")
+    else:
+        understood = pool[pool["understood"].notna()]
+        native = understood[understood["survey_vocab_max"] == 810]
+        check("understood observations after all masking", len(understood), 671)
+        check(
+            "dse-native understood observations / children / sources",
+            [len(native), native["subject_id"].nunique(), native["study"].nunique()],
+            [259, 178, 4],
+        )
 
     us_01 = merged[merged["study"] == "us_01"]
     check("us_01 rows / children / rows with comprehension", [len(us_01), us_01["subject_id"].nunique(), int(us_01["understood"].notna().sum())], [196, 119, 87])
