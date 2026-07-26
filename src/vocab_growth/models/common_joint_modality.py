@@ -77,6 +77,7 @@ from vocab_growth.models.common import (
     BaseModelConfiguration,
     ModelFitContext,
     _plot_and_print_dist,
+    emit_monthly_summary,
     get_hsgp_hyperparams,
     render_model_graph,
     report,
@@ -1380,6 +1381,31 @@ def posterior_summary(context: JointContext):
     probability_summary(s.X_query, s.p_u_query * s.r_query, "sign", "Words signed")
     ratio_summary(s.X_query, s.r_query, "r")
     ratio_summary(s.X_query, s.q_query, "q")
+
+    # Whole-month companions to the tables above. This engine draws no predictive
+    # counts on the plot grid, so these carry the expected count only — matching
+    # what probability_summary reports at query ages, which likewise has no Y_*
+    # or bucket columns.
+    for draws, suffix, label in (
+        (s.p_u_plot, "u", "words understood"),
+        (s.p_u_plot * s.q_plot, "s", "words spoken"),
+        (s.p_u_plot * s.r_plot, "sign", "words signed"),
+    ):
+        emit_monthly_summary(
+            output_dir=od,
+            X_plot=s.X_plot,
+            p_plot=draws,
+            y_plot=None,
+            X_obs=context.analysis_df["age"],
+            n_trials=n_trials,
+            ci_prob=ci_prob,
+            interval_kind=ci_kind,
+            suffix=suffix,
+            outcome_label=label,
+            y_label=f"Expected {label}",
+            dataframes=context.dataframes,
+            plots=context.plots,
+        )
 
     # Data-identified p_any vs independence (expected counts)
     Ey = s.p_any_query * n_trials

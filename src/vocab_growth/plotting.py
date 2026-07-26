@@ -1111,3 +1111,107 @@ def plot_comprehension_production_gap(
         )
 
     return fig
+
+
+def plot_expected_counts_by_month(
+    monthly: pd.DataFrame,
+    n_trials: int,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    output_dir: str | None = None,
+    filename: str | None = None,
+    y_label: str = "Word count",
+    outcome_label: str = "words",
+    show_predictive: bool = True,
+):
+    """Plot expected counts at whole-month resolution, with the predictive range.
+
+    Driven by the DataFrame from
+    :func:`vocab_growth.posterior_analysis.monthly_summary_table`, so the figure
+    and its companion CSV cannot disagree.
+
+    Two estimands are drawn, kept visually distinct because they are routinely
+    confused and quoting one for the other misleads badly:
+
+    - the **expected** count ``Ey`` (filled bands, monthly markers) — the mean
+      trajectory with parameter uncertainty only;
+    - the **predictive** count ``Y`` for an individual child (dashed outline,
+      unfilled) — which is much wider, because it also carries between-child and
+      occasion-level dispersion.
+
+    Parameters
+    ----------
+    monthly
+        Whole-month summary table; needs ``age_months``, ``Ey_median``,
+        ``Ey_ci*`` and (when ``show_predictive``) ``Y_ci_lo`` / ``Y_ci_hi``.
+    n_trials
+        Maximum count, used only to set the y-axis bound.
+    ci_prob
+        Outer interval mass, for the legend label (default 0.89).
+    show_predictive
+        Draw the individual-child predictive interval alongside the expected
+        count. Pass False for a figure about the mean trajectory alone.
+    """
+    required = {"age_months", "Ey_median", "Ey_ci50_lo", "Ey_ci50_hi", "Ey_ci_lo", "Ey_ci_hi"}
+    missing = required - set(monthly.columns)
+    if missing:
+        raise ValueError(
+            "monthly summary is missing required columns: " + ", ".join(sorted(missing))
+        )
+
+    age = monthly["age_months"].to_numpy(dtype=float)
+    pct = int(round(ci_prob * 100))
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+
+    ax.fill_between(
+        age,
+        monthly["Ey_ci_lo"].to_numpy(dtype=float),
+        monthly["Ey_ci_hi"].to_numpy(dtype=float),
+        alpha=0.18,
+        color="C0",
+        label=f"Expected count ({pct}% interval)",
+    )
+    ax.fill_between(
+        age,
+        monthly["Ey_ci50_lo"].to_numpy(dtype=float),
+        monthly["Ey_ci50_hi"].to_numpy(dtype=float),
+        alpha=0.32,
+        color="C0",
+        label="Expected count (50% interval)",
+    )
+    ax.plot(
+        age,
+        monthly["Ey_median"].to_numpy(dtype=float),
+        lw=2.5,
+        color="C0",
+        marker="o",
+        markersize=3,
+        label=f"Expected {outcome_label} (median, by month)",
+    )
+
+    if show_predictive and {"Y_ci_lo", "Y_ci_hi"} <= set(monthly.columns):
+        for column, label in (
+            ("Y_ci_lo", f"Individual child ({pct}% predictive interval)"),
+            ("Y_ci_hi", None),
+        ):
+            ax.plot(
+                age,
+                monthly[column].to_numpy(dtype=float),
+                lw=1.4,
+                ls="--",
+                color="C3",
+                label=label,
+            )
+
+    ax.set_xlabel("Age (months)")
+    ax.set_ylabel(y_label)
+    ax.set_xlim(age.min(), age.max())
+    ax.set_ylim(-20, n_trials + 50)
+    ax.legend(loc="upper left", frameon=True)
+    ax.set_title(f"Expected {outcome_label} by month of age")
+
+    if output_dir is not None and filename is not None:
+        _save_png_svg(fig, output_dir, filename)
+        _save_csv(monthly, output_dir, filename)
+
+    return fig

@@ -88,6 +88,19 @@ Despite their differences, every model is built from the same components:
 
 Every model reports the posterior **median** with an inner **50%** and an outer **89%** credible interval, alongside the **full posterior** (density and posterior-predictive plots). Intervals are **equal-tailed (ETI, percentile-based) by default**; a documented short-list of strongly skewed or boundary-censored estimands — the sign–speech association `psi`, the Beta-Binomial concentration/dispersion `kappa`, and milestone/peak ages — is reported with **highest-density intervals (HDI)** instead. The single source of truth is `vocab_growth.intervals` (`DEFAULT_CI_PROB = 0.89`, `INNER_CI_PROB = 0.50`, `HDI_ESTIMANDS`), carried through the shared `ReportingConfiguration(ci_prob=0.89, interval_kind="eti")`. 89% is a deliberately non-special width: it is not a decision threshold, and its 5.5th/94.5th-percentile limits are more MCMC-stable than the 2.5th/97.5th limits of a 95% interval (McElreath 2020; Kruschke 2021, _Bayesian Analysis Reporting Guidelines_). Column contract: the posterior-summary tables (`posterior_summary_*.csv`) carry the median with an inner `*_ci50_lo`/`*_ci50_hi` and an outer `*_ci_lo`/`*_ci_hi` interval; plot-sidecar CSVs carry the median and the outer `*_ci_lo`/`*_ci_hi`, and additionally `*_ci50_*` for the trajectory plots that draw a nested inner band.
 
+### Reporting ages: 6-monthly tables, whole-month companions
+
+Each model definition carries `ages_query`, the canonical reporting ages — 6-monthly (12–90 months) for the Down syndrome models, 3-monthly (9–30) for the typically-developing ones. Those ages drive `posterior_summary_*.csv` and the report, and they are part of the model graph: the GP is evaluated at them, so changing `ages_query` changes the fitted model.
+
+Alongside them each fit writes a **whole-month** companion — `posterior_summary_monthly[_<outcome>].csv` and the figure `expected_counts_by_month[_<outcome>]` — one row per whole month of age, with the same columns and the same `P(Y<=k)` bucket thresholds. These are derived from the _plot_ grid (`n_plot = 500`, a step of about 0.2 months) rather than from added query ages, so they are pure post-processing: no change to the model graph, the HSGP domain, or the `query_id` dimension the report and the comparisons consume. Two consequences worth knowing:
+
+- Each row's stated month takes the nearest plot-grid point, and the table records which in `grid_age_months` / `grid_offset_months`. The offset is a few days at the default `n_plot`; a grid too coarse to carry whole months is rejected rather than mislabelled.
+- Coverage is the plot grid's span, which is the **observed** age range. Query ages beyond it — the Down syndrome models' 90-month row sits past the oldest observation — have no monthly counterpart by design, because those are extrapolations.
+
+An `n_obs` column counts the observed administrations in each whole month, so a row that is interpolated between sparse ages is visible as such. The joint sign/speech engine (VG15) draws no predictive counts on the plot grid, so its monthly tables carry the expected count (`p_*`, `Ey_*`) only — matching what its query-age tables report — and the predictive columns are absent rather than zero-filled.
+
+Note the two estimands the tables keep separate, because conflating them misleads badly: `Ey_*` is the **expected** count, a credible interval on the mean trajectory carrying parameter uncertainty only, which narrows toward zero width as more children are observed; `Y_*` and `P(Y<=k)` are the posterior **predictive** count for an individual child, which also carry between-child and occasion-level dispersion and converge on the real population spread. For setting expectations about a child, `Y_*` is the one to quote.
+
 ### Structural decomposition (joint models)
 
 The joint models do not model each outcome independently. Instead, production is

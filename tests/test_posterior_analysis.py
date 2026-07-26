@@ -4,12 +4,16 @@
 import types
 
 import numpy as np
+import pytest
 import xarray as xr
 
 from vocab_growth.posterior_analysis import (
+    COUNT_BUCKET_THRESHOLDS,
+    MAX_MONTH_SNAP_OFFSET,
     add_probability_estimand_columns,
     extract_posterior,
     extract_posterior_predictive,
+    monthly_summary_table,
     posterior_summary_table,
 )
 
@@ -117,3 +121,130 @@ def test_add_probability_estimand_columns_makes_population_and_subject_explicit(
     assert np.isclose(row["Ey_population_median"], 200.0)
     assert np.isclose(row["p_subject_marginal_median"], 0.20)
     assert np.isclose(row["Ey_subject_marginal_median"], 160.0)
+
+
+# ---------------------------------------------------------------------------
+# Whole-month summary table
+# ---------------------------------------------------------------------------
+
+
+def _plot_grid_draws(lo: float = 8.0, hi: float = 90.0, n_plot: int = 500, seed: int = 7):
+    """A plot grid with a smooth rising trajectory and predictive count draws."""
+    rng = np.random.default_rng(seed)
+    X_plot = np.linspace(lo, hi, n_plot)
+    p = 1.0 / (1.0 + np.exp(-(X_plot - 45.0) / 12.0))
+    p_plot = np.repeat(p[:, None], N_SAMPLES, axis=1)
+    y_plot = rng.binomial(800, np.clip(p_plot, 1e-6, 1 - 1e-6))
+    return X_plot, p_plot, y_plot
+
+
+def test_monthly_summary_covers_every_whole_month_in_range():
+    X_plot, p_plot, y_plot = _plot_grid_draws()
+    monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
+
+    ages = monthly["age_months"].to_numpy()
+    np.testing.assert_array_equal(ages, np.arange(8, 91))
+    # One row per month, no gaps or repeats, ascending.
+    assert len(monthly) == 83
+    assert monthly["age_months"].is_monotonic_increasing
+
+
+def test_monthly_summary_records_its_snap_provenance():
+    X_plot, p_plot, y_plot = _plot_grid_draws()
+    monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
+
+    offsets = monthly["grid_offset_months"].to_numpy()
+    grid_ages = monthly["grid_age_months"].to_numpy()
+    # The recorded grid age is the stated month plus the recorded offset, and the
+    # offset stays inside the documented bound.
+    np.testing.assert_allclose(grid_ages, monthly["age_months"].to_numpy() + offsets)
+    assert np.abs(offsets).max() <= MAX_MONTH_SNAP_OFFSET
+    # A 500-point grid over 82 months snaps to well under a week.
+    assert np.abs(offsets).max() < 0.1
+
+
+def test_monthly_summary_rejects_a_grid_too_coarse_for_months():
+    # 20 points over 82 months is a ~4-month step: snapping would silently
+    # mislabel ages, so the table must refuse rather than emit wrong ages.
+    X_plot, p_plot, y_plot = _plot_grid_draws(n_plot=20)
+    with pytest.raises(ValueError, match="too coarse for whole-month"):
+        monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
+
+
+def test_monthly_summary_agrees_with_the_canonical_table_at_shared_ages():
+    """The monthly table must be the canonical table at finer resolution.
+
+    Both read the same posterior draws through the same row builder, so at a
+    canonical query age the monthly row is the query row up to the sub-month
+    difference in age. This is the check that the plot-grid derivation is a
+    refinement of the reported table rather than a different quantity.
+    """
+    X_plot, p_plot, y_plot = _plot_grid_draws()
+    monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
+
+    canonical_ages = [12, 24, 36, 48, 60, 72, 84]
+    nearest = [int(np.abs(X_plot - a).argmin()) for a in canonical_ages]
+    canonical = posterior_summary_table(
+        np.array(canonical_ages, dtype=float),
+        p_plot[nearest, :],
+        y_plot[nearest, :],
+        n_trials=800,
+    )
+
+    shared = [c for c in canonical.columns if c != "age_months"]
+    monthly_rows = monthly.set_index("age_months").loc[canonical_ages, shared]
+    np.testing.assert_allclose(
+        monthly_rows.to_numpy(dtype=float),
+        canonical.set_index("age_months")[shared].to_numpy(dtype=float),
+    )
+
+
+def test_monthly_summary_counts_observed_administrations_per_month():
+    X_plot, p_plot, y_plot = _plot_grid_draws()
+    # Three administrations at 24 months (one recorded at 23.7, which rounds to
+    # 24), one at 25, and one outside the grid entirely.
+    X_obs = np.array([24.0, 24.0, 23.7, 25.0, 200.0])
+    monthly = monthly_summary_table(
+        X_plot, p_plot, y_plot, n_trials=800, X_obs=X_obs
+    )
+    by_month = monthly.set_index("age_months")["n_obs"]
+    assert by_month.loc[24] == 3
+    assert by_month.loc[25] == 1
+    assert by_month.loc[26] == 0
+    # n_obs is present for every month, so an unsupported row is visibly zero
+    # rather than missing.
+    assert by_month.notna().all()
+
+
+def test_monthly_summary_bucket_probabilities_are_cumulative():
+    X_plot, p_plot, y_plot = _plot_grid_draws()
+    monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
+
+    bucket_columns = [f"P(Y<={k})" for k in COUNT_BUCKET_THRESHOLDS]
+    buckets = monthly[bucket_columns].to_numpy()
+    # Non-decreasing across thresholds within every month.
+    assert np.all(np.diff(buckets, axis=1) >= -1e-12)
+    # The complement column closes the set.
+    np.testing.assert_allclose(
+        monthly[f"P(Y<={COUNT_BUCKET_THRESHOLDS[-1]})"].to_numpy()
+        + monthly[f"P(Y>{COUNT_BUCKET_THRESHOLDS[-1]})"].to_numpy(),
+        1.0,
+    )
+    # Cumulative probability falls as the trajectory rises.
+    assert monthly["P(Y<=100)"].iloc[0] > monthly["P(Y<=100)"].iloc[-1]
+
+
+def test_monthly_summary_without_predictive_draws_omits_the_predictive_columns():
+    """A model with no plot-grid predictive counts still gets expected counts.
+
+    The joint sign/speech engine draws no ``y_*_plot``, so its monthly table
+    carries ``p_*`` and ``Ey_*`` only. The predictive columns must be absent
+    rather than zero-filled, so a reader cannot mistake a missing estimand for a
+    computed one.
+    """
+    X_plot, p_plot, _ = _plot_grid_draws()
+    monthly = monthly_summary_table(X_plot, p_plot, None, n_trials=800)
+
+    assert {"age_months", "Ey_median", "Ey_ci_lo", "p_median"} <= set(monthly.columns)
+    assert not [c for c in monthly.columns if c.startswith("Y_") or c.startswith("P(Y")]
+    assert len(monthly) == 83
