@@ -130,3 +130,6 @@ deterministics
 logits
 Rasch
 reweighting
+Birnbaum
+Psychometrika
+unidimensionality
