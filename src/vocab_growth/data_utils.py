@@ -71,7 +71,7 @@ not administered:
 
 DUPLICATED_OUTCOME_MAX_AGE_MONTHS = 18
 DUPLICATED_OUTCOME_MIN_UNDERSTOOD = 100
-DUPLICATED_OUTCOME_RATIO = 0.9
+DUPLICATED_OUTCOME_RATIO = 0.75
 """Signature of an administration whose two outcome columns collapsed onto one value.
 
 An infant recorded as *saying* almost every word they understand has an internally
@@ -85,24 +85,31 @@ Detected as ``spoken >= DUPLICATED_OUTCOME_RATIO * understood`` with
 ``understood >= DUPLICATED_OUTCOME_MIN_UNDERSTOOD`` at
 ``age <= DUPLICATED_OUTCOME_MAX_AGE_MONTHS``. All three conditions are needed. The
 same ratio at older ages is ordinary — a child who says most of what they
-understands — so the rule is **age-conditioned rather than study-scoped**: of the
-27 paired rows in the current pool matching the ratio and count conditions, 21 are
-at 37 months or older and are legitimate. Below 19 months it matches 6 of 148
-paired rows, all in ``us_01``.
+understand — so the rule is **age-conditioned rather than study-scoped**: of the
+paired rows in the current pool matching the ratio and count conditions, those at
+37 months or older are legitimate. Below 19 months it matches 8 rows, all in
+``us_01``.
 
-Three independent lines of evidence support masking those six (see
+The ratio is set from the measured gap rather than chosen: among ``us_01`` Words &
+Gestures administrations with comprehension >= 100, the ratios descend
+1.00, 1.00, 0.99, 0.98, 0.94, 0.91, 0.90, 0.86 and then fall to 0.55 — a gap of
+0.306, the largest in the distribution, so any cut inside it separates the cluster
+identically. An earlier 0.9 threshold cut through the middle of that cluster and
+missed two records; ``scripts/audit_edgin_subset.py`` recomputes the gap.
+
+Three independent lines of evidence support masking these (see
 ``notes/202607261245-edgin-duplicated-outcome-records.md``):
 
 - The pattern is rare where it can be checked against a large reference sample:
   among 2,480 typically-developing Words & Gestures administrations with
   comprehension >= 100, only 0.69% have production >= 0.9 * comprehension.
-- The implied production levels — 173 to 396 words between 11 and 18 months — are
+- The implied production levels — 134 to 396 words between 11 and 18 months — are
   impossible against the independent Berglund et al. (2001) Down syndrome cohort,
   which puts median spoken vocabulary near zero at 12 months and about 10 words at
   24 months. This is an external benchmark, not an in-sample one.
-- Every one of the three affected children with a second administration shows an
-  ordinary comprehension-production gap in that other record (ratios 0.08-0.13
-  against 0.91-1.00 in the flagged one).
+- Every affected child with a second administration shows an ordinary
+  comprehension-production gap in that other record (ratios 0.08-0.13 against
+  0.86-1.00 in the flagged one).
 
 Deliberately *not* caught: administrations with a high comprehension count but a
 normal production gap. Two such ``us_01`` records (comprehension 213 and 217 at 18
@@ -274,6 +281,160 @@ def mask_duplicated_outcome_administrations(
         out.loc[suspect, outcome_columns].notna().sum(axis=1).groupby(study_labels[suspect]).sum().items()
     ):
         dropped[str(study)] = int(count)
+    out.loc[suspect, outcome_columns] = float("nan")
+    return out, dropped
+
+
+IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION = 0.9
+IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS = 30
+COLLAPSE_FACTOR = 5.0
+COLLAPSE_MIN_VALUE = 50
+"""Two signatures of a production count that cannot be a real measurement.
+
+Both are scoped to ``age <= IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS``, the window in
+which the independent Berglund et al. (2001) Down syndrome cohort puts median
+spoken vocabulary near zero at 12 months and about 10 words at 24, and in which its
+single most able child of 330 had not yet approached the counts in question — that
+child reached 668 words at 48 months.
+
+**Near-ceiling saturation.** ``spoken >= IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION *
+survey_vocab_max``. In ``us_01`` this matches 23 administrations: 18 at exactly the
+680-item Words & Sentences ceiling, three just below (641, 656, 668), and the Words
+& Gestures record at 396. Thirteen of them form a **contiguous child-id block**
+(81207-81241) in which every record sits at exactly 680, no child has any other
+administration, and the next id present is 81322 — an 81-id gap. That is a
+preparation-batch signature, not thirteen exceptionally able children. For scale,
+no typically-developing child of 1,469 aged 16-19 months reaches the Words &
+Sentences ceiling, and their maximum is 643.
+
+**Longitudinal collapse.** A count of at least ``COLLAPSE_MIN_VALUE`` that exceeds
+the same child's later count by a factor of ``COLLAPSE_FACTOR`` or more. Vocabulary
+does not shrink, so this is unambiguous — 656 words at 17 months against 12 at 23
+months is not measurement noise. The floor matters: without it the rule fires on
+trivial pairs such as 5 understood words falling to 1. The age scope matters too:
+at older ages a decline can arise from a form change or from noise in large counts,
+and two such records outside ``us_01`` (a uk_01 record at 76 months, an ie_02
+record at 45) are deliberately left for separate investigation rather than masked
+by a rule whose justification is developmental.
+
+Within the scoped window the two signatures together match 30 ``us_01``
+administrations and nothing in any other study. Not caught, and retained: a Words &
+Sentences record of 406 words at 23 months with no later administration to
+contradict it. It is extreme against the external benchmark but has no positive
+defect signature, so it is a sensitivity target rather than an exclusion — the same
+treatment as the high-comprehension records described on
+:data:`DUPLICATED_OUTCOME_RATIO`.
+"""
+
+
+def drop_duplicate_administrations(
+    df: pd.DataFrame,
+    *,
+    subject_col: str = "subject_id",
+) -> tuple[pd.DataFrame, int]:
+    """Collapse rows that repeat the same measurement of the same child.
+
+    ``us_01`` contains one administration recorded twice, identically (60 words
+    understood and 1 spoken at 11 months). A repeated row double-weights that
+    observation in every likelihood and, in the random-effect models, makes a
+    single-visit child look like a repeated-measures one. Rows are matched on study,
+    subject, age and every outcome present, so genuine repeat visits — which differ
+    in age — are untouched.
+
+    Returns the de-duplicated frame and the number of rows removed.
+    """
+    key = [column for column in ("study", subject_col, "age") if column in df.columns]
+    if not key:
+        raise KeyError("De-duplication requires at least one of: study, subject, age.")
+    key += [
+        column
+        for column in ("understood", "spoken", "signed", "produced")
+        if column in df.columns
+    ]
+    deduplicated = df.drop_duplicates(subset=key, keep="first")
+    return deduplicated.reset_index(drop=True), len(df) - len(deduplicated)
+
+
+def mask_implausible_production_administrations(
+    df: pd.DataFrame,
+    *,
+    include_implausible: bool = False,
+    subject_col: str = "subject_id",
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Mask production counts matching a near-ceiling or collapse signature.
+
+    Applies both signatures documented on :data:`COLLAPSE_FACTOR`. Only the
+    production-side outcomes are masked (``spoken`` and ``produced``); a paired
+    ``understood`` value is left in place unless it too matches a signature,
+    because on the Words & Sentences form ``understood`` is already absent by the
+    production-proxy rule and on Words & Gestures the comprehension column is an
+    independent measurement.
+
+    Rows are retained so age coverage and provenance stay auditable. The returned
+    counts report masked values per study. Pass ``include_implausible=True`` to
+    reintroduce them as a sensitivity.
+    """
+    required = {"age", "spoken"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Implausible-production masking requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    out = df.copy()
+    dropped: dict[str, int] = {}
+    if include_implausible:
+        return out, dropped
+
+    age = pd.to_numeric(out["age"], errors="coerce")
+    spoken = pd.to_numeric(out["spoken"], errors="coerce")
+    in_window = age.notna() & (age <= IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS)
+
+    suspect = pd.Series(False, index=out.index)
+    if "survey_vocab_max" in out.columns:
+        ceiling = pd.to_numeric(out["survey_vocab_max"], errors="coerce")
+        suspect |= (
+            in_window
+            & spoken.notna()
+            & ceiling.notna()
+            & (spoken >= IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION * ceiling)
+        )
+
+    if subject_col in out.columns:
+        group_keys = out[subject_col].astype(str)
+        if "study" in out.columns:
+            group_keys = out["study"].astype(str) + "::" + group_keys
+        for _, index in out.groupby(group_keys).groups.items():
+            if len(index) < 2:
+                continue
+            ordered = index[age.loc[index].argsort()]
+            values = spoken.loc[ordered]
+            for position, row in enumerate(ordered):
+                value = values.loc[row]
+                if pd.isna(value) or value < COLLAPSE_MIN_VALUE or not in_window.loc[row]:
+                    continue
+                later = values.iloc[position + 1 :].dropna()
+                if len(later) and later.min() * COLLAPSE_FACTOR <= value:
+                    suspect.loc[row] = True
+
+    if not suspect.any():
+        return out, dropped
+
+    outcome_columns = [
+        column for column in ("spoken", "produced") if column in out.columns
+    ]
+    study_labels = (
+        out["study"] if "study" in out.columns else pd.Series("", index=out.index)
+    )
+    counts = (
+        out.loc[suspect, outcome_columns]
+        .notna()
+        .sum(axis=1)
+        .groupby(study_labels[suspect])
+        .sum()
+    )
+    dropped = {str(study): int(count) for study, count in counts.items()}
     out.loc[suspect, outcome_columns] = float("nan")
     return out, dropped
 
@@ -647,6 +808,7 @@ def load_combined_data(
     *,
     include_incomplete_administrations=False,
     include_duplicated_outcomes=False,
+    include_implausible_production=False,
 ):
     """
     Load the combined data from the DuckDB database.
@@ -667,6 +829,9 @@ def load_combined_data(
         include_duplicated_outcomes (bool): Reintroduce infant administrations whose
             outcome columns appear duplicated, for sensitivity analysis. Defaults
             to False.
+        include_implausible_production (bool): Reintroduce production counts matching
+            the near-ceiling or longitudinal-collapse signature, for sensitivity
+            analysis. Defaults to False.
 
     Returns:
     --------
@@ -692,11 +857,17 @@ def load_combined_data(
             [age_limit],
         ).df()
 
+    # De-duplicate first, so a repeated row cannot affect the within-child
+    # comparisons the later rules make.
+    df, _ = drop_duplicate_administrations(df)
     df, _ = mask_incomplete_administrations(
         df, include_incomplete=include_incomplete_administrations
     )
     df, _ = mask_duplicated_outcome_administrations(
         df, include_duplicated=include_duplicated_outcomes
+    )
+    df, _ = mask_implausible_production_administrations(
+        df, include_implausible=include_implausible_production
     )
     return df
 

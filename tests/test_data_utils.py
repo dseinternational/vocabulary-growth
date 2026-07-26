@@ -141,13 +141,28 @@ def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
             ],
         )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
-    frame = data_utils.load_data(
+
+    # Both of these now match the implausible-production signature — the WS record
+    # sits at its 680-item ceiling at 30 months and the WG record at its 396-item
+    # ceiling at 20 months, and both are inside the young window — so the default
+    # loader has already masked them, and the ceiling helper has nothing to exclude.
+    # This is why the registered `us01-ceiling-excluded` sensitivities were retired:
+    # a check that cannot fail is worse than no check (see registry.py).
+    masked = data_utils.load_data(
         Population.DOWN_SYNDROME,
         columns=["study", "spoken", "survey_vocab_max"],
     )
+    assert 680 not in masked["spoken"].dropna().tolist()
+    assert 396 not in masked["spoken"].dropna().tolist()
 
-    filtered, count = data_utils.exclude_us01_spoken_ceiling_rows(frame)
+    _, count = data_utils.exclude_us01_spoken_ceiling_rows(masked)
+    assert count == 0
 
+    # The helper still works on a frame where the records are reinstated, so the
+    # exclusion remains available if the masking decision is ever reverted.
+    reinstated = data_utils.load_combined_data(include_implausible_production=True)
+    reinstated = reinstated[["study", "spoken", "survey_vocab_max"]]
+    filtered, count = data_utils.exclude_us01_spoken_ceiling_rows(reinstated)
     assert count == 1
     assert 680 not in filtered["spoken"].tolist()
     assert 396 in filtered["spoken"].tolist()
@@ -549,13 +564,121 @@ def test_duplicated_outcome_masking_requires_its_columns():
         data_utils.mask_duplicated_outcome_administrations(frame.drop(columns="age"))
 
 
-def test_load_combined_data_masks_the_six_edgin_administrations(tmp_path, monkeypatch):
-    # End-to-end against the real database: exactly six administrations match, all
-    # in us_01, and the flag restores them.
+def test_load_combined_data_masks_the_edgin_duplicated_outcomes(tmp_path, monkeypatch):
+    # End-to-end against the real database. The ratio is 0.75, set from the measured
+    # gap (0.86 -> 0.55), so eight administrations match — an earlier 0.9 cut ran
+    # through the middle of the cluster and missed two.
     masked = data_utils.load_combined_data()
     kept = data_utils.load_combined_data(include_duplicated_outcomes=True)
-    assert kept["understood"].notna().sum() - masked["understood"].notna().sum() == 6
-    assert kept["spoken"].notna().sum() - masked["spoken"].notna().sum() == 6
+    assert kept["understood"].notna().sum() - masked["understood"].notna().sum() == 8
 
-    _, dropped = data_utils.mask_duplicated_outcome_administrations(kept)
-    assert dropped == {"us_01": 12}
+    # Count this rule's own effect on a frame with every mask lifted: applied after
+    # the production rules, some of its records already have `spoken` masked, so a
+    # sequentially-masked frame understates it.
+    unmasked = data_utils.load_combined_data(
+        include_duplicated_outcomes=True, include_implausible_production=True
+    )
+    _, dropped = data_utils.mask_duplicated_outcome_administrations(unmasked)
+    assert dropped == {"us_01": 16}    # 8 administrations x understood + spoken
+
+
+# ---- duplicate administrations, and implausible production ----
+
+def _prod_frame(rows):
+    import pandas as pd
+
+    return pd.DataFrame(
+        rows,
+        columns=["study", "subject_id", "age", "understood", "spoken", "survey_vocab_max"],
+    )
+
+
+def test_drop_duplicate_administrations_collapses_a_repeated_row():
+    # us_01 records one 11-month administration twice, identically. A repeated row
+    # double-weights the observation and makes a single-visit child look repeated.
+    frame = _prod_frame([
+        ("us_01", "c1", 11.0, 60.0, 1.0, 396),
+        ("us_01", "c1", 11.0, 60.0, 1.0, 396),
+        ("us_01", "c1", 17.0, 110.0, 9.0, 396),   # genuine repeat visit: different age
+    ])
+    out, removed = data_utils.drop_duplicate_administrations(frame)
+    assert removed == 1
+    assert len(out) == 2
+    assert sorted(out["age"]) == [11.0, 17.0]
+
+
+def test_implausible_production_masks_near_ceiling_in_the_young_window():
+    frame = _prod_frame([
+        ("us_01", "c1", 24.0, None, 680.0, 680),   # at the WS ceiling: masked
+        ("us_01", "c2", 17.0, None, 641.0, 680),   # just below, still >= 0.9: masked
+        ("us_01", "c3", 23.0, None, 406.0, 680),   # extreme but no signature: kept
+    ])
+    out, dropped = data_utils.mask_implausible_production_administrations(frame)
+    assert pd.isna(out.loc[0, "spoken"])
+    assert pd.isna(out.loc[1, "spoken"])
+    assert out.loc[2, "spoken"] == 406.0
+    assert dropped == {"us_01": 2}
+
+
+def test_implausible_production_is_scoped_to_the_young_window():
+    # The same near-ceiling count at 40 months is plausible for a child with a
+    # large vocabulary and must survive.
+    frame = _prod_frame([("uk_06", "c1", 40.0, 700.0, 680.0, 810)])
+    out, dropped = data_utils.mask_implausible_production_administrations(frame)
+    assert out.loc[0, "spoken"] == 680.0
+    assert dropped == {}
+
+
+def test_implausible_production_masks_a_longitudinal_collapse():
+    # 454 words at 18 months against 35 at 24 months: vocabulary does not shrink.
+    frame = _prod_frame([
+        ("us_01", "c1", 18.0, None, 454.0, 680),
+        ("us_01", "c1", 24.0, None, 35.0, 680),
+    ])
+    out, dropped = data_utils.mask_implausible_production_administrations(frame)
+    assert pd.isna(out.loc[0, "spoken"])      # the earlier, contradicted value
+    assert out.loc[1, "spoken"] == 35.0       # the plausible later one survives
+    assert dropped == {"us_01": 1}
+
+
+def test_longitudinal_collapse_has_a_floor_so_tiny_counts_do_not_fire():
+    # 5 understood words falling to 1 is noise, not a defect; without the floor the
+    # 5x rule would flag it.
+    frame = _prod_frame([
+        ("us_01", "c1", 11.0, 12.0, 5.0, 396),
+        ("us_01", "c1", 17.0, 20.0, 1.0, 396),
+    ])
+    out, dropped = data_utils.mask_implausible_production_administrations(frame)
+    assert out.loc[0, "spoken"] == 5.0
+    assert dropped == {}
+
+
+def test_implausible_production_leaves_comprehension_alone():
+    # Only the production side is masked here; a Words & Gestures comprehension
+    # value is an independent measurement and is handled by its own rule.
+    frame = _prod_frame([("us_01", "c1", 18.0, 156.0, 396.0, 396)])
+    out, _ = data_utils.mask_implausible_production_administrations(frame)
+    assert pd.isna(out.loc[0, "spoken"])
+    assert out.loc[0, "understood"] == 156.0
+
+
+def test_edgin_rules_together_on_the_real_database():
+    # End to end: the widened duplicated-outcome rule masks 8 understood values,
+    # the production rules mask 30 spoken values, and one duplicate row is dropped.
+    base = data_utils.load_combined_data(
+        include_duplicated_outcomes=True, include_implausible_production=True
+    )
+    final = data_utils.load_combined_data()
+    assert base["understood"].notna().sum() - final["understood"].notna().sum() == 8
+    assert base["spoken"].notna().sum() - final["spoken"].notna().sum() == 30
+
+    # Every exclusion is in us_01, and the retained borderline cases survive.
+    for column in ("understood", "spoken"):
+        lost = base[column].notna().sum() - final[column].notna().sum()
+        in_us01 = (
+            base[base["study"] == "us_01"][column].notna().sum()
+            - final[final["study"] == "us_01"][column].notna().sum()
+        )
+        assert lost == in_us01
+    assert ((final["spoken"] == 406) & (final["age"] == 23)).sum() == 1
+    assert (final["understood"].between(210, 220) & (final["age"] == 18)).sum() == 2

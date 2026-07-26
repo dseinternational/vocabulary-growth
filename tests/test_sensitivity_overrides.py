@@ -63,14 +63,18 @@ def test_replace_kappa_overrides_only_named_fields():
 
 def test_registry_counts_and_models():
     # 27 §7 targets + 7 Target-8 young-age anchor variants (#146), two
-    # signing-source variants, two ceiling-censoring variants, and three
-    # repeated-measures sensitivities.
-    assert len(VARIANTS) == 41
-    assert len(variants_for("vg10")) == 11
+    # signing-source variants and three repeated-measures sensitivities.
+    #
+    # The two `us01-ceiling-excluded` variants were retired with the Edgin audit:
+    # the records they excluded are now masked by default, so the variants could
+    # only have excluded records already excluded. A registered check that cannot
+    # fail is worse than no check — see the note in registry.py.
+    assert len(VARIANTS) == 39
+    assert len(variants_for("vg10")) == 10
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1
-    assert len(variants_for("vg15")) == 20
+    assert len(variants_for("vg15")) == 19
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -87,18 +91,20 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 20
+    assert len(all_vg15) == 19
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 20
+    assert len({d.config_name for d in all_vg15}) == 19
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
     assert (psi.log_psi_mu, psi.log_psi_sigma) == (0.0, 0.5)
 
-    (vg10_ceiling,) = build_variant("vg10", "us01-ceiling-excluded")
-    (vg15_ceiling,) = build_variant("vg15", "us01-ceiling-excluded")
-    assert vg10_ceiling.exclude_us01_spoken_ceiling
-    assert vg15_ceiling.exclude_us01_spoken_ceiling
+    # The retired ceiling variants must be gone from the registry, not merely
+    # unused: a registered sensitivity whose records are already excluded by
+    # default cannot fail, and would read as robustness it has not demonstrated.
+    for model in ("vg10", "vg15"):
+        with pytest.raises(KeyError, match="us01-ceiling-excluded"):
+            build_variant(model, "us01-ceiling-excluded")
 
 
 def test_build_variant_rejects_unknown():

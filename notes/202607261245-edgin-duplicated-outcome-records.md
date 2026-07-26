@@ -1,18 +1,26 @@
-# Duplicated outcome columns in six us_01 infant administrations
+# Data defects in the us_01 (Edgin) subset
 
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 
 > [!WARNING]
-> Analysis and implementation note, 2026-07-26. The rule described here is implemented and active by default. It masks 12 values (6 administrations × 2 outcomes) and changes the analysis frame, so the current fits are stale in substance and every model of record needs refitting before its numbers are quoted again.
+> Analysis and implementation note, 2026-07-26. The rules described here are implemented and active by default. They change the analysis frame, so the current fits are stale in substance and every model of record needs refitting before its numbers are quoted again.
+
+> [!IMPORTANT]
+> Extended the same day. The note began as an analysis of six Words & Gestures administrations with duplicated outcome columns. Following that up — the residual maximum of 152 spoken words at 8–14 months did not look survivable either — led to a systematic audit of the whole subset ([`scripts/audit_edgin_subset.py`](../scripts/audit_edgin_subset.py)), which found **four** defect classes affecting **32 of 196 administrations (16%)** and 31 of 119 children. §§1–7 record the original analysis; §§8–11 record the audit, the widened rules, and one earlier conclusion of mine that it overturned. The registered `us01-ceiling-excluded` sensitivities are retired as a consequence (§10).
 
 ## Summary
 
-Six `us_01` (Edgin/Wordbank) Words & Gestures administrations between 11 and 18 months record production within 1–9% of comprehension — between 173 and 396 words *said* by an infant with Down syndrome. Three independent lines of evidence identify these as a data-preparation artefact in which one outcome column was written over the other, not as exceptional children. Both counts are now masked by default, with the row retained and a flag to reinstate them for sensitivity.
+A systematic audit of the `us_01` (Edgin/Wordbank) Down syndrome subset finds **four independent defect classes affecting 32 of 196 administrations (16%)** and 31 of 119 children: outcome-column duplication (8), saturation at the form maximum (19, of which 13 form a contiguous child-id batch), longitudinal collapse (12 within the rule's floor and age scope, overlapping the others and contributing 1 uniquely), and one administration recorded twice. Two further checks came back clean — no count exceeds its form's ceiling and no form was administered outside its age band.
 
-The rule is **conditioned on age, not on source study**. The same production-to-comprehension ratio above 18 months describes a child who says most of what they understand, which is ordinary; 21 of the 27 paired records in the pool meeting the ratio and count conditions are of that kind and are untouched.
+Three rules now mask these by default, each with an `include_*` flag for sensitivity. Every exclusion falls in `us_01`; the pool goes from 1,219 to 1,218 rows, understood observations from 680 to 671, and spoken from 1,145 to 1,114. §11 tabulates the rules.
 
-Deliberately **not** caught: two administrations with a high infant comprehension count but a normal production gap. These are retained on the study owner's judgement that they are clinically unusual but should not be excluded, and are now a registered sensitivity target rather than a defect.
+The rules are **conditioned on age, not on source study**. A production count close to comprehension, or close to the form ceiling, is ordinary in an older child with a large vocabulary and impossible in an infant; conditioning on age states the developmental fact rather than asserting that one dataset is untrustworthy, and it leaves the legitimate older records untouched.
+
+Deliberately **not** caught, and now flagged rather than silently included: two administrations with a high infant comprehension count but a normal production gap, retained on the study owner's judgement that they are clinically unusual but should not be excluded; and one Words & Sentences record of 406 words at 23 months with no later administration to contradict it. All three are sensitivity targets rather than defects.
+
+> [!NOTE]
+> §§1–7 below are the original six-record analysis, kept as written because the reasoning about method — signature rather than threshold, age-conditioned rather than study-scoped — is what the audit went on to generalise. Where they are superseded, §§8–12 say so: the rule now catches eight rather than six Words & Gestures records (§8), and the claim in §1 that the Words & Sentences ceiling block is right-censoring is **wrong and corrected in §9**.
 
 ## 1. Why not a threshold on extreme values
 
@@ -20,28 +28,28 @@ The proposal that prompted this analysis was to censor implausibly high infant c
 
 It is **selection on the outcome**, which is precisely the objection that removed this dataset's previous filter. `methods-data.qmd` records that the former `us_01` rule retaining only production counts at or below 100 words "had no documented measurement or sampling rationale", excluded 8 of 87 Words & Gestures and 24 of 109 Words & Sentences records, and conflicted with the source study's own reported subgroup mean of 275.5 words (SD 198.2). Reintroducing a cap at a higher number would repeat that error rather than correct it.
 
-It **mis-targets**. Benchmarking every `us_01` administration above 200 words against typically-developing children at the same age on the same form, a `> 200` rule would have caught 31 administrations: the 6 genuine defects, 2 records that sit at the 48th–50th typically-developing percentile with an entirely normal production gap, and roughly 20 Words & Sentences records at the 680-item form ceiling that are right-censoring rather than error and are already handled by the registered `us01-ceiling-excluded` sensitivity.
+It **mis-targets**. Benchmarking every `us_01` administration above 200 words against typically-developing children at the same age on the same form, a `> 200` rule would have caught 31 administrations: the 6 genuine defects, 2 records that sit at the 48th–50th typically-developing percentile with an entirely normal production gap, and roughly 20 Words & Sentences records at the 680-item form ceiling which I then took to be right-censoring rather than error. **That reading was wrong — see §9**; the mis-targeting argument against a bare threshold stands regardless, since a threshold would still have caught the two valid records.
 
 And it has **no mechanism**. A threshold asserts that a number is too big; it does not say what went wrong. The signature rule names a specific failure — two columns collapsing onto one value — which is falsifiable, has a measurable false-positive rate, and can be confirmed or refuted outright from item-level responses.
 
 ## 2. The six records
 
-All are `us_01`, form WG (396 items). Percentiles are against typically-developing American-English children on the same form within ±1 month of the same age (reference *n* per cell 649–1,923).
+All are `us_01`, form WG (396 items). Percentiles are against typically-developing American-English children on the same form within ±1 month of the same age (reference _n_ per cell 649–1,923).
 
 | child | age (mo) | understood | spoken | ratio | understood TD %ile | spoken TD %ile |
 | ----- | -------- | ---------- | ------ | ----- | ------------------ | -------------- |
-| 81124 | 11       | 319        | 313    | 0.981 | 96.6              | 99.7           |
-| 81131 | 12       | 190        | 173    | 0.911 | 88.0              | 99.0           |
-| 81091 | 12       | 386        | 385    | 0.997 | 98.1              | 100.0          |
-| 81122 | 14       | 350        | 348    | 0.994 | 97.8              | 99.7           |
-| 81132 | 17       | 235        | 220    | 0.936 | 61.5              | 96.9           |
-| 81114 | 18       | 396        | 396    | 1.000 | 98.8              | 100.0          |
+| 81124 | 11       | 319        | 313    | 0.981 | 96.6               | 99.7           |
+| 81131 | 12       | 190        | 173    | 0.911 | 88.0               | 99.0           |
+| 81091 | 12       | 386        | 385    | 0.997 | 98.1               | 100.0          |
+| 81122 | 14       | 350        | 348    | 0.994 | 97.8               | 99.7           |
+| 81132 | 17       | 235        | 220    | 0.936 | 61.5               | 96.9           |
+| 81114 | 18       | 396        | 396    | 1.000 | 98.8               | 100.0          |
 
 Note the shape of the last row: 396 is the entire form, both columns at ceiling. And note child 81132, whose comprehension is unremarkable at the 61st typically-developing percentile while its production sits at the 97th — the production value is the anomalous one there.
 
 ## 3. Three independent lines of evidence
 
-**The pattern is rare where it can be checked at scale.** Among 2,480 typically-developing WG administrations with comprehension of at least 100 words, only **17 (0.69%)** have production at or above 0.9 of comprehension. This is the rule's false-positive rate on a large reference sample, and it is the reason the ratio threshold is defensible rather than arbitrary. Six such records among 87 Down syndrome WG administrations is a rate of 6.9%, an order of magnitude higher — in the population where comprehension leading production is *most* strongly expected.
+**The pattern is rare where it can be checked at scale.** Among 2,480 typically-developing WG administrations with comprehension of at least 100 words, only **17 (0.69%)** have production at or above 0.9 of comprehension. This is the rule's false-positive rate on a large reference sample, and it is the reason the ratio threshold is defensible rather than arbitrary. Six such records among 87 Down syndrome WG administrations is a rate of 6.9%, an order of magnitude higher — in the population where comprehension leading production is _most_ strongly expected.
 
 **The production levels are impossible against an external benchmark.** Berglund et al. (2001), 330 children with Down syndrome on a 710-item Swedish CDI and independent of this training data, give median spoken vocabulary of approximately zero words at 12 months and about 10 words at 24 months, with 53% passing a 10-word threshold only by 24 months (`docs/models/PRIORS.md`). The flagged records claim 173, 220, 313, 348, 385 and 396 words spoken between 11 and 18 months. This is not a tail of a distribution; it is off the map, and the evidence is external rather than in-sample.
 
@@ -53,22 +61,22 @@ Note the shape of the last row: 396 is the entire form, both columns at ceiling.
 | 81091 | 12 mo: U 386, S 385    | 18 mo: U 31, S 4     | 1.00          | 0.13        |
 | 81131 | 12 mo: U 190, S 173    | 18 mo: U 166, S 15   | 0.91          | 0.09        |
 
-In each case the *other* record shows an ordinary comprehension–production gap. For 81124 and 81091 comprehension also falls implausibly with age — by 209 and 355 words over six months — so in those two records neither column is defensible. For 81131 comprehension is roughly stable (190 → 166) while production collapses (173 → 15), which points specifically at the production column having been overwritten.
+In each case the _other_ record shows an ordinary comprehension–production gap. For 81124 and 81091 comprehension also falls implausibly with age — by 209 and 355 words over six months — so in those two records neither column is defensible. For 81131 comprehension is roughly stable (190 → 166) while production collapses (173 → 15), which points specifically at the production column having been overwritten.
 
 Since the direction of the overwrite differs across records and cannot be recovered from aggregate totals, **both counts are masked** rather than one repaired. Half-repairing on a guess would reintroduce exactly the outcome-dependent editing that the `GREATEST` fix in #182 removed from `ie_01`.
 
 ## 4. Why the rule is age-conditioned
 
-Applying the ratio and count conditions across the whole pooled Down syndrome sample matches 27 of 679 paired records:
+Applying the ratio and count conditions — at the final 0.75 ratio — across the whole pooled Down syndrome sample matches 52 of 678 paired records:
 
 | age band (months) | matching records | all paired records |
 | ----------------- | ---------------- | ------------------ |
-| ≤ 18              | 6                | 148                |
-| 19–36             | 1                | 289                |
-| 37–60             | 12               | 196                |
-| 60+               | 8                | 46                 |
+| ≤ 18              | 8                | 147                |
+| 19–36             | 3                | 289                |
+| 37–60             | 26               | 196                |
+| 60+               | 15               | 46                 |
 
-The 21 records at 37 months and above are legitimate: an older child with a large vocabulary who says most of what they understand is the expected end state of the developmental process these models describe. Masking them would delete real data and bias the production trajectory downward at exactly the ages where the `q` trajectory is most informative.
+The 41 records at 37 months and above are legitimate: an older child with a large vocabulary who says most of what they understand is the expected end state of the developmental process these models describe. Masking them would delete real data — a fifth of all paired records above 37 months — and bias the production trajectory downward at exactly the ages where the `q` trajectory is most informative.
 
 The boundary is clean. The nearest match above the cut is a `uk_02` record at 35 months (understood 407, spoken 367) — entirely plausible. Between 19 and 24 months the maximum spoken count in the whole pool is 100 words and the maximum ratio is 0.49, so nothing approaches the signature just above the threshold. Conditioning on age rather than on study identity is also better science: it states a developmental fact about when the pattern is impossible, rather than asserting that one dataset is untrustworthy.
 
@@ -78,8 +86,8 @@ Two `us_01` administrations at 18 months have high comprehension for an infant w
 
 | child | age (mo) | understood | spoken | understood TD %ile | ratio |
 | ----- | -------- | ---------- | ------ | ------------------ | ----- |
-| 81092 | 18       | 213        | 31     | 48.2              | 0.15  |
-| 81106 | 18       | 217        | 22     | 49.8              | 0.10  |
+| 81092 | 18       | 213        | 31     | 48.2               | 0.15  |
+| 81106 | 18       | 217        | 22     | 49.8               | 0.10  |
 
 Their comprehension sits at the median for typically-developing children of the same age, their production gap is ordinary, and 81106 has a coherent trajectory across two visits (comprehension 65 at 13 months rising to 217 at 18). Statistically there is no case for excluding them, and a `> 200` threshold would have removed the best-behaved young comprehension records in the Down syndrome pool.
 
@@ -103,10 +111,97 @@ Six regression tests pin the behaviour: both counts masked and the row retained;
 
 ## 7. Consequences and follow-ups
 
-**Refit required.** The analysis frame has changed, so all fits are stale in substance. The six records sit where the Down syndrome data are thinnest and most influential — before this change, the maximum understood count below 15 months across the *entire* pooled sample was 386, one of these records, so they were disproportionately setting the young comprehension level. Their removal lowers the maximum understood at 8–14 months to 169 and the maximum spoken to 152.
+**Refit required.** The analysis frame has changed, so all fits are stale in substance. The six records sit where the Down syndrome data are thinnest and most influential — before this change, the maximum understood count below 15 months across the _entire_ pooled sample was 386, one of these records, so they were disproportionately setting the young comprehension level. Their removal lowers the maximum understood at 8–14 months to 169 and the maximum spoken to 152.
 
-**It matters more for Route 1 than for the aggregate models.** The aggregate likelihoods see totals; an item response theory model sees response *patterns*, and a duplicated column is a systematically wrong pattern that would bias the Down syndrome difficulty estimates directly. Six of 53 WG contributors is over a tenth of the comprehension sample. Fixing this before the item-level pull is why the rule is implemented now rather than after.
+**It matters more for Route 1 than for the aggregate models.** The aggregate likelihoods see totals; an item response theory model sees response _patterns_, and a duplicated column is a systematically wrong pattern that would bias the Down syndrome difficulty estimates directly. Six of 53 WG contributors is over a tenth of the comprehension sample. Fixing this before the item-level pull is why the rule is implemented now rather than after.
 
 **The mechanism can be confirmed directly, and the finding is falsifiable.** Item-level responses settle it outright: a duplicated column appears as two identical response vectors. §8.7 of the Route 1 pre-specification requires reporting, for each of the six, whether the vectors are identical, near-identical or unrelated, and logging the result as confirming or refuting this signature. A refutation reinstates the records.
 
 **Open follow-up.** Masking the six leaves a maximum spoken count of 152 words at 8–14 months, which remains high against the Berglund benchmark but does not match this signature (its production-to-comprehension ratio is below the threshold). Whether that reflects a different defect, genuine cohort variation, or the pooled sample's selection toward intervention-exposed families is not addressed here.
+
+---
+
+## 8. The systematic audit
+
+Chasing one residual — after masking the six, the maximum spoken count at 8–14 months was still 152 words, against a Berglund median near zero at 12 months — showed that hand-finding defects one at a time was the wrong method. [`scripts/audit_edgin_subset.py`](../scripts/audit_edgin_subset.py) instead enumerates every defect class the aggregate data can expose, and is committed so any later change can be re-checked by re-running it. It is descriptive: it reports and exits zero, whatever it finds.
+
+Findings, over 196 administrations from 119 children:
+
+| check                                   | flagged |
+| --------------------------------------- | ------- |
+| values impossible for their form        | 0       |
+| form administered outside its age range | 0       |
+| duplicate administrations               | 2       |
+| outcome-column duplication              | 8       |
+| saturation at the form maximum          | 19      |
+| contiguous child-id batch               | 13      |
+| longitudinal collapse                   | 12      |
+
+The union is **32 administrations (16%)** affecting **31 children (26%)**. The implemented rules mask 30 of them and drop one of the two duplicate copies, so 31 records change. Two checks came back clean, which is worth recording: no count exceeds its form's ceiling, none is non-integer, and no form was administered outside its intended age band.
+
+Four things the audit established that the hand analysis had missed or got wrong.
+
+**My ratio threshold was in the wrong place.** The audit computes the largest gap in the ratio distribution rather than taking a threshold on faith. Among Words & Gestures administrations with comprehension ≥ 100 the ratios descend 1.00, 1.00, 0.99, 0.98, 0.94, 0.91, 0.90, 0.86 and then fall to 0.55 — a gap of 0.306, the largest in the distribution. My original 0.90 cut ran through the middle of that cluster and missed two records; any cut inside the gap separates it identically. The rule now uses **0.75**, and the two recovered records are exactly the ones that prompted this section:
+
+```
+child 81127:  11mo C=169 P=152  (ratio 0.899)  ->  17mo C=105 P=2
+child 81119:  12mo C=2   P=0                   ->  18mo C=156 P=134  (ratio 0.859)
+```
+
+The 152 words at 11 months was this defect, sitting one thousandth below my cut. Note 81119's shape: the _later_ record is the anomalous one, production rising 0 → 134 by 18 months.
+
+**An exact duplicate row.** One administration is recorded twice, identically — 60 words understood and 1 spoken at 11 months. A repeated row double-weights that observation in every likelihood and, in the random-effect models, makes a single-visit child look like a repeated-measures one. It is now de-duplicated on study, subject, age and every outcome, so genuine repeat visits, which differ in age, are untouched.
+
+**A longitudinal-collapse signature that generalises.** Vocabulary does not shrink, so a count exceeding the same child's later count several-fold is unambiguous. This catches most of the other defects independently, and one record nothing else caught: 454 words at 18 months against 35 at 24. Two calibrations matter. A **floor** is needed — without one the rule fires on trivial pairs such as five understood words falling to one, which is noise. And an **age scope** is needed: at older ages an apparent decline can arise from a form change or from noise in large counts, and the audit found two such records outside `us_01` (a uk_01 record at 76 months, an ie_02 record at 45) which are left for separate investigation rather than masked by a rule whose justification is developmental.
+
+**The Words & Sentences ceiling block is not right-censoring.** This overturns a conclusion I stated earlier in the review, and §9 sets it out.
+
+## 9. Correction: the ceiling block is invalid, not censored
+
+I previously characterised the ~20 Words & Sentences administrations at the 680-item ceiling as "genuine right-censoring, not error", already covered by the registered `us01-ceiling-excluded` sensitivity. That was wrong on both counts, and it is worth stating plainly because the reading had consequences: right-censoring means the child knows _at least_ 680 words, which is a real if incomplete measurement, whereas an invalid value is not a measurement at all — and a _sensitivity_ leaves the records in the primary analysis by default.
+
+The block is two distinct defects.
+
+**Eight young records, ages 17–19, production 641–680.** Seven of the eight have a later administration and every one collapses:
+
+| child | flagged    | later     | factor |
+| ----- | ---------- | --------- | ------ |
+| 81322 | 17 mo: 656 | 23 mo: 12 | 55×    |
+| 81344 | 17 mo: 680 | 23 mo: 4  | 170×   |
+| 81345 | 17 mo: 641 | 24 mo: 4  | 160×   |
+| 81370 | 17 mo: 680 | 23 mo: 5  | 136×   |
+| 81354 | 18 mo: 668 | 23 mo: 3  | 223×   |
+| 81359 | 18 mo: 680 | 24 mo: 25 | 27×    |
+| 81342 | 19 mo: 680 | 24 mo: 13 | 52×    |
+
+Seven for seven. For scale, **no typically-developing child** of 1,469 aged 16–19 months reaches the Words & Sentences ceiling, and their maximum is 643.
+
+**Thirteen records forming a contiguous child-id block**, 81207–81241, ages 24–30, every one at exactly 680. No child in the block has any other administration anywhere in the dataset, and the next id present is 81322 — an 81-id gap. A disjoint run of consecutive ids, uniformly at the form maximum, with no corroborating data, is a preparation-batch signature. Berglund's most able child of 330 reached 668 words at _48_ months; this block asks us to accept thirteen children reaching 680 by 24–30 months, with nothing else recorded about any of them.
+
+## 10. The retired sensitivity
+
+Because those records are now masked by default, the registered `us01-ceiling-excluded` variants for VG10 and VG15 could no longer do anything: they excluded records already excluded. A registered check that cannot fail is worse than no check, so both entries are removed from [`sensitivity/registry.py`](../src/vocab_growth/sensitivity/registry.py) with the reasoning recorded in place.
+
+The live question is the inverse — what changes if the exclusion is _wrong_ — and the loaders expose it as `include_implausible_production=True`. Registering that as a variant needs a `ModelDefinition` field, which is left as a follow-up rather than done here. The `exclude_us01_spoken_ceiling` flag and its helper are retained, and remain functional on a reinstated frame, so the decision can be reverted without re-deriving anything.
+
+## 11. The rules as implemented
+
+Three rules, each independently defensible, applied in [`load_combined_data`](../src/vocab_growth/data_utils.py) with de-duplication first so a repeated row cannot affect the within-child comparisons the later rules make:
+
+| rule                                          | signature                                                                                                               | effect                              |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `drop_duplicate_administrations`              | identical study, subject, age and outcomes                                                                              | 1 row removed                       |
+| `mask_duplicated_outcome_administrations`     | `spoken >= 0.75 * understood`, `understood >= 100`, `age <= 18`                                                         | 8 administrations, both counts      |
+| `mask_implausible_production_administrations` | `spoken >= 0.9 * form ceiling` at `age <= 30`, **or** a ≥5× collapse against a later count of the same child (floor 50) | 30 administrations, production only |
+
+Effect on the pool: 1,219 → 1,218 rows; understood observations 680 → 671; spoken 1,145 → 1,114. Every exclusion falls in `us_01`, which retains 165 of its 195 spoken and 78 of its 86 understood observations. Each rule has an `include_*` flag for sensitivity, and eighteen regression tests pin the behaviour — including the age scope, the ratio gap, the collapse floor, and that the two retained borderline cases survive.
+
+**Retained, and now flagged rather than silently included:** the two 18-month records with high comprehension and a normal production gap (§5), and a Words & Sentences record of 406 words at 23 months with no later administration to contradict it. All three are extreme against the external benchmark but carry no positive defect signature. Treating them as sensitivity targets rather than exclusions is the same judgement the study owner applied to the first pair.
+
+## 12. Where this leaves the subset, and the open question
+
+Thirty-two of 196 `us_01` administrations (16%) carry a defect, across four independent classes, in a subset that has already been patched three times — the removed `production <= 100` inclusion rule, the Words & Sentences comprehension proxy, and now these. The defects are not random noise: two of the four classes have batch or column-level structure, which points at data preparation rather than at parent report.
+
+That pattern is itself the finding. It would be worth putting the audit output to the source team: the contiguous-id block in particular looks like something they could confirm or explain quickly, and the item-level pull would settle the duplication mechanism outright, since a duplicated or auto-filled column appears as two identical response vectors. Inferring these rules from aggregate data is the second-best route and is only necessary while that confirmation is unavailable.
+
+Residual after all three rules, and not explained: the maximum spoken count at 15–18 months is 68 words and at 19–24 months 406, both still high against a Berglund median of about 10 at 24 months. The 406 is the retained borderline record. Whether the remaining elevation reflects genuine cohort variation, this pooled sample's selection toward intervention-exposed families, or a further defect class the aggregate data cannot expose is not resolved here.
