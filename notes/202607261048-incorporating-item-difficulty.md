@@ -6,31 +6,34 @@
 > [!WARNING]
 > Design proposal, 2026-07-26. Nothing here is implemented. Companion to [`202607261008-challenging-item-exchangeability.md`](202607261008-challenging-item-exchangeability.md), which establishes the findings this responds to. Costs quoted below are code-seam counts taken from the current tree, not effort estimates.
 
+> [!IMPORTANT]
+> Revised the same day, before merge, after an independent verification pass: the §1 and §3 tables are recomputed exactly with their method and anchor now stated, the seam counts are corrected against the tree, and the §6 attribution of the imitation finding is fixed.
+
 ## Summary
 
 Item difficulty can be brought into the models without item-level responses for every child, because item difficulty is a property of the **instrument**, not of the children. A small number of children measured at item level calibrates the inventory; the calibrated inventory then improves the likelihood for every aggregate observation. That is the architectural idea behind all the proposals below.
 
-Two things must be separated first, because they look like one problem and are not. The concentration parameter `kappa` cannot be read as between-child heterogeneity, and **item difficulty is not the cause and will not fix it**. Composition dependence of the production ratio `q` *is* an item-difficulty problem, and is what these proposals address.
+Two things must be separated first, because they look like one problem and are not. The concentration parameter `kappa` cannot be read as between-child heterogeneity, and **item difficulty is not the cause and will not fix it**. Composition dependence of the production ratio `q` _is_ an item-difficulty problem, and is what these proposals address.
 
 With item-level data now available for roughly 218 children with Down syndrome across two instruments, plus the Wordbank typically-developing corpus, a genuine Rasch calibration becomes feasible and the differential-item-functioning question — which the companion note recorded as untestable — becomes testable. That changes the recommendation materially: the earlier conclusion "a full IRT reformulation is not close" was conditional on having only aggregate counts, and no longer holds.
 
 ## 1. The two problems are separate
 
-Substituting a difficulty-aware mean function does not repair the `kappa` interpretation. Under a constant latent between-child standard deviation, the implied `kappa` is:
+Substituting a difficulty-aware mean function does not repair the `kappa` interpretation. Under a constant latent between-child standard deviation (`sigma = 1`; exact Gauss–Hermite integration of the logit-normal ability distribution, with the mixed link's `d_k` set from the pooled checklist profile as in §3), the implied `kappa` at matched observed level is:
 
 | observed `p` | plain logit link | difficulty-mixed link |
 | ------------ | ---------------- | --------------------- |
-| 0.05         | 18.92            | 20.13                 |
-| 0.20         | 5.33             | 6.26                  |
-| 0.50         | 3.17             | 4.00                  |
+| 0.05         | 16.28            | 17.94                 |
+| 0.20         | 6.47             | 7.44                  |
+| 0.50         | 4.76             | 5.50                  |
 
-A five-fold level-driven decline survives the change, because the effect is inherent to any bounded, saturating link rather than to equal item difficulties. Conversely, repairing `kappa` does nothing for `q`'s composition dependence. The two need separate fixes, and only the second is about item difficulty.
+A three-to-four-fold level-driven decline survives the change, because the effect is inherent to any bounded, saturating link rather than to equal item difficulties; at matched level the mixed link merely shifts `kappa` up by a fairly uniform 10%–13% and flattens the level-driven log decline by only about 3%. Conversely, repairing `kappa` does nothing for `q`'s composition dependence. The two need separate fixes, and only the second is about item difficulty.
 
 ## 2. Proposal A — put the age variation on the latent scale (no item data needed)
 
 This is the fix for `kappa`, and it exploits something already present. The models carry two dispersion-like quantities:
 
-- `tau_subj_*` — between-child spread on the **latent** scale. This is the quantity that can answer "do children fan out with age". It is a scalar `HalfNormal` in every engine, so it is **constant by construction**.
+- `tau_subj_*` — between-child spread on the **latent** scale. This is the quantity that can answer "do children fan out with age". It is a scalar `HalfNormal` in every engine that carries subject intercepts (`common_univariate_re`, `common_bivariate_re`, `common_joint_modality` — between them, all three headline models), so it is **constant by construction**; the older non-RE engines have no subject term at all, so for them A1 means adding one, not reparameterising.
 - `kappa(z)` — dispersion on the **proportion** scale, which carries all the age variation and cannot support that interpretation.
 
 The age variation is on the wrong parameter.
@@ -45,9 +48,9 @@ kappa = p (1 - p) / [ (dp/df)^2 * sigma^2 ] - 1
 
 so the level-driven component is built in rather than absorbed as a spurious age trend. One constraint to handle: a Beta distribution's variance is bounded above by `p (1 - p)`, so this admits only `sigma < 1 / sqrt(p (1 - p))` — about `sigma < 2` at `p = 0.5`. Not practically binding, but it needs a guard.
 
-**Cost.** `kappa` already has a single shared seam, `build_kappa_of_z` / `make_kappa_of_z` in [`gp_utils.py`](../src/vocab_growth/models/gp_utils.py), with 24 invocations of the returned closure. A2 changes the factory signature to accept `p`; A1 does not touch the factory at all.
+**Cost.** `kappa` already has a single shared seam, `build_kappa_of_z` / `make_kappa_of_z` in [`gp_utils.py`](../src/vocab_growth/models/gp_utils.py), with 31 invocations of the returned closure. A2 changes the factory signature to accept `p`; A1 does not touch the factory at all.
 
-**Validation requirement.** 235 of 626 children (38%) contribute a single observation, so `tau_subj` and `kappa` are already partly confounded — for a singleton child the two are two names for the same deviation — and making `tau_subj` age-varying makes that worse. The 391 children with repeated observations are what identify it. This needs a parameter-recovery run, which has never been executed for any model — `output/` currently contains no recovery output at all.
+**Validation requirement.** 235 of the 626 children in the pooled dataset (38%; the count spans both populations, and the DS studies alone sit at roughly 36%–41% depending on the study set) contribute a single observation, so `tau_subj` and `kappa` are already partly confounded — for a singleton child the two are two names for the same deviation — and making `tau_subj` age-varying makes that worse. The 391 children with repeated observations are what identify it. This needs a parameter-recovery run, which has never been executed for any model — `output/` currently contains no recovery output at all.
 
 ## 3. Proposal B — a difficulty-mixed link
 
@@ -58,15 +61,16 @@ current:   p = logistic(f)
 proposed:  p = sum_k w_k * logistic(f - d_k)        w_k = n_k / 810,  d_k fixed
 ```
 
-No new likelihood family, no convolution, no quadrature: the mean stays a deterministic transform of the latent trajectory. Measured consequences, using stratum difficulties calibrated to the observed checklist profile:
+No new likelihood family, no convolution, no quadrature: the mean stays a deterministic transform of the latent trajectory. Measured consequences, with `d_k = -logit(pooled stratum proportions) = (-0.71, +0.19, +1.08)` — an anchor that puts `f = 0` at the observed profile (`p = 0.398`) and therefore carries the checklist-weighted mean difficulty of +0.44 into every absolute `f`:
 
-| quantity                       | plain | mixed |
-| ------------------------------ | ----- | ----- |
+| quantity                        | plain | mixed |
+| ------------------------------- | ----- | ----- |
 | latent `f` needed for `p = 0.5` | +0.00 | +0.45 |
-| latent `f` needed for `p = 0.9` | +2.22 | +2.81 |
-| peak `dp/df`                    | 0.245 | 0.225 |
+| latent `f` needed for `p = 0.9` | +2.20 | +2.79 |
+| `f(p = 0.9) - f(p = 0.5)`       | 2.20  | 2.34  |
+| peak `dp/df`                    | 0.250 | 0.228 |
 
-The curve flattens and its approach to the 810-word ceiling slows markedly. That is the developmentally realistic behaviour, and it is what the present link gets wrong at the top end — which is also where the sparse older-age data and the un-anchored 84-month prior already make the trajectory least trustworthy. It also makes `f` interpretable as ability rather than as the logit of a composition-dependent proportion.
+The first row is mostly the anchor convention; the anchor-invariant statement is the third row. The curve flattens and its approach to the 810-word ceiling slows — modestly by `p = 0.9` (+0.14 logits beyond the anchor shift), growing toward the ceiling as the hardest checklist comes to dominate (about +0.18 logits by `p = 0.99`). That is the developmentally realistic behaviour, and it is what the present link gets wrong at the top end — which is also where the sparse older-age data and the un-anchored 84-month prior already make the trajectory least trustworthy. It also makes `f` interpretable as ability rather than as the logit of a composition-dependent proportion.
 
 **Cost.** 35 `math.sigmoid` sites across seven engine modules with **no shared seam**, so this requires a mechanical refactor to introduce one first. There is good precedent: the `trend_and_gp` consolidation did exactly that, and its docstring records that it was done so each engine reproduces its previous PyMC graph byte-for-byte. The same discipline should apply here, with the identity `d_k = 0` reproducing the current graph exactly.
 
@@ -91,14 +95,16 @@ The companion note costed calibration against aggregate stratum counts only: 46 
 
 Available item-level data:
 
-| source                      | children | coverage                                        | ages (months) |
-| --------------------------- | -------: | ----------------------------------------------- | ------------- |
-| ie_01 (DS)                  |       59 | all three DSE checklists, 810 items             | 27–86         |
-| second UK study (DS)        |       40 | two DSE checklists, ~460 items                  | to confirm    |
-| Wordbank / Edgin (DS)       |      119 | CDI WG (87 records) and WS (109), item level    | 11–30         |
-| Wordbank (TD, English)      |   35,025 | CDI, item level                                 | 8–30          |
+| source                 | children | coverage                                     | ages (months) |
+| ---------------------- | -------: | -------------------------------------------- | ------------- |
+| ie_01 (DS)             |       59 | all three DSE checklists, 810 items          | 27–86         |
+| second UK study (DS)   |       40 | two DSE checklists, ~460 items               | to confirm    |
+| Wordbank / Edgin (DS)  |      119 | CDI WG (87 records) and WS (109), item level | 11–30         |
+| Wordbank (TD, English) |   35,025 | CDI, item level                              | 8–30          |
 
 Roughly 218 children with Down syndrome at item level, on two instruments, with complementary age coverage: the DSE sources reach 86 months and therefore identify the hard end of the inventory, while the Edgin subset is young and floor-heavy but sits on the same instrument as the typically-developing corpus.
+
+Provenance: the item-level datasets themselves are outside this repository, so the ie_01, second-UK and Wordbank figures above must be confirmed at ingest. One anchor is already checkable: `us_01` in this repository _is_ the Edgin aggregate — 119 children, 87 WG records carrying comprehension and 109 WS records without — matching the table exactly.
 
 Three consequences worth stating separately.
 
@@ -132,11 +138,11 @@ The hypothesis decomposes cleanly onto two parameters. **"Slower"** is the abili
 
 **Estimate the spread, not the individual items.** With ~218 children, an individual `delta_j` rests on a few hundred binary responses at best and will be poorly determined. But `sigma_DIF` is estimated from the ensemble of several hundred `delta_j` and is well identified even when none of its components is. Design the test around `sigma_DIF`, and treat per-item DIF as exploratory.
 
-**Test by item class for power and interpretability.** Pooling items into classes — function versus content words, semantic category, word length or frequency — gives far more power per parameter and a more interpretable answer than per-item DIF. The companion note's finding that the production gradient sits in `P(say | imitate)` while `P(imitate | understand)` is flat suggests a specific prediction worth testing directly: that DIF, if present, is concentrated on the **production** side and on phonologically demanding items, rather than on comprehension. That is a sharper and more falsifiable hypothesis than a global DIF test.
+**Test by item class for power and interpretability.** Pooling items into classes — function versus content words, semantic category, word length or frequency — gives far more power per parameter and a more interpretable answer than per-item DIF. A finding of the supporting investigation — not reproduced in the companion note — that the production gradient sits mainly in `P(say | imitate)` rather than `P(imitate | understand)` suggests a specific prediction worth testing directly: that DIF, if present, is concentrated on the **production** side and on phonologically demanding items, rather than on comprehension. (A quick pooled check of ie_01's follow-up wave is directionally consistent — `P(say | imitate)` falls 0.85 / 0.78 / 0.63 across the checklists while `P(imitate | understand)` is flat at 0.68 / 0.56 / 0.63 — but the within-child paired version is not clean at these `n`, so treat this as a hypothesis for the item-level data, not an established fact.) That is a sharper and more falsifiable hypothesis than a global DIF test.
 
 ### Two linking routes, in cost order
 
-**Route 1 — crosswalk-free, do this first.** The Wordbank Down syndrome subset (119 children, Edgin) sits on the *same* CDI forms as the typically-developing corpus, so a DIF test between them needs **no item crosswalk at all**. This is the cheapest possible first test of the hypothesis and it is well powered on the typically-developing side. Its limitation is age: 11–30 months, so the sample is floor-heavy and the hard end of the inventory will be weakly identified for the Down syndrome group.
+**Route 1 — crosswalk-free, do this first.** The Wordbank Down syndrome subset (119 children, Edgin) sits on the _same_ CDI forms as the typically-developing corpus, so a DIF test between them needs **no item crosswalk at all**. This is the cheapest possible first test of the hypothesis and it is well powered on the typically-developing side. Its limitation is age: 11–30 months, so the sample is floor-heavy and the hard end of the inventory will be weakly identified for the Down syndrome group.
 
 **Route 2 — the DSE data, via a crosswalk.** ie_01 (59 children, all three checklists, 27–86 months) and the second UK study (40 children, two checklists) cover the older and harder range that Route 1 cannot reach, but linking them to the typically-developing corpus needs a DSE-to-CDI item crosswalk. Some crosswalk machinery exists in [`crosswalk_dse_oxford.py`](../scripts/crosswalk_dse_oxford.py), though at form rather than item level. Items appearing in both inventories are the linking set; a Rasch model fitted jointly with common-item linking is the standard approach.
 
@@ -155,7 +161,7 @@ If `sigma_DIF` is small, the report gains a tested foundation for its matched-co
 5. **Proposals B and C as a registered sensitivity variant** using the calibrated difficulties — not as models of record until the DIF result is known.
 6. **Promote B and C, and re-express the cross-population contrast on `h` or on `theta`**, if and only if the DIF test supports shared difficulties.
 
-Two things not to do. Do not change the likelihood family: there are 30 `BetaBinomial` call sites across seven modules, and none of the proposals above requires it. Do not fit the item-level IRT and the aggregate trajectory models as one joint model on the first pass — calibrate the instrument first, then consume the calibration, so that a problem in either half is diagnosable.
+Two things not to do. Do not change the likelihood family: there are 27 `pm.BetaBinomial` construction sites across seven engine modules, and none of the proposals above requires it. Do not fit the item-level IRT and the aggregate trajectory models as one joint model on the first pass — calibrate the instrument first, then consume the calibration, so that a problem in either half is diagnosable.
 
 ## 8. What none of this fixes
 

@@ -30,6 +30,8 @@ Fenson
 Floccia
 Galeote
 Graphviz
+Haldane
+Hermite
 HSGP
 Hutchins
 hyperparameters
