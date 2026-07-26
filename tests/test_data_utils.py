@@ -474,3 +474,88 @@ def test_mask_incomplete_administrations_reports_counts_and_needs_columns():
 
     with pytest.raises(KeyError, match="survey_vocab_max"):
         data_utils.mask_incomplete_administrations(frame.drop(columns="survey_vocab_max"))
+
+
+# ---- duplicated-outcome administrations (the us_01/Edgin infant records) ----
+#
+# An infant recorded as saying nearly every word they understand has an internally
+# inconsistent administration: comprehension leading production is the premise of
+# the joint models. The rule is age-conditioned rather than study-scoped, because
+# the same ratio at older ages is ordinary.
+
+def _dup_frame(rows):
+    import pandas as pd
+
+    return pd.DataFrame(
+        rows, columns=["study", "age", "understood", "spoken", "survey_vocab_max"]
+    )
+
+
+def test_duplicated_outcome_masks_both_counts_and_keeps_the_row():
+    frame = _dup_frame([("us_01", 12.0, 386.0, 385.0, 396)])
+    out, dropped = data_utils.mask_duplicated_outcome_administrations(frame)
+
+    # Both counts go: which column was overwritten is unrecoverable from totals,
+    # and the production figure is impossible against the independent DS cohort.
+    assert pd.isna(out.loc[0, "understood"])
+    assert pd.isna(out.loc[0, "spoken"])
+    assert len(out) == 1                     # row retained for provenance
+    assert dropped == {"us_01": 2}
+
+    kept, kept_dropped = data_utils.mask_duplicated_outcome_administrations(
+        frame, include_duplicated=True
+    )
+    assert kept_dropped == {}
+    assert kept.equals(frame)
+
+
+def test_duplicated_outcome_rule_is_age_conditioned():
+    # The identical ratio and count at 40 months is a child who says most of what
+    # they understand — ordinary, and must not be masked. 21 of the 27 rows in the
+    # real pool matching the ratio/count conditions are of this kind.
+    frame = _dup_frame([
+        ("us_01", 14.0, 350.0, 348.0, 396),   # infancy: masked
+        ("uk_02", 40.0, 350.0, 348.0, 810),   # older: kept
+    ])
+    out, dropped = data_utils.mask_duplicated_outcome_administrations(frame)
+    assert pd.isna(out.loc[0, "understood"])
+    assert out.loc[1, "understood"] == 350.0
+    assert out.loc[1, "spoken"] == 348.0
+    assert dropped == {"us_01": 2}
+
+
+def test_duplicated_outcome_rule_respects_the_understood_floor():
+    # A genuine young record where both counts are small and equal: an infant who
+    # understands and says the same handful of words is entirely plausible.
+    frame = _dup_frame([("uk_04", 12.0, 8.0, 8.0, 416)])
+    out, dropped = data_utils.mask_duplicated_outcome_administrations(frame)
+    assert out.loc[0, "understood"] == 8.0
+    assert dropped == {}
+
+
+def test_duplicated_outcome_rule_keeps_a_normal_production_gap():
+    # "Group 2": high comprehension for an infant, but an ordinary comprehension-
+    # production gap. Retained by decision — clinically unusual, not a defect.
+    frame = _dup_frame([("us_01", 18.0, 217.0, 22.0, 396)])
+    out, dropped = data_utils.mask_duplicated_outcome_administrations(frame)
+    assert out.loc[0, "understood"] == 217.0
+    assert out.loc[0, "spoken"] == 22.0
+    assert dropped == {}
+
+
+def test_duplicated_outcome_masking_requires_its_columns():
+    frame = _dup_frame([("us_01", 12.0, 386.0, 385.0, 396)])
+    with pytest.raises(KeyError, match="age"):
+        data_utils.mask_duplicated_outcome_administrations(frame.drop(columns="age"))
+
+
+def test_load_combined_data_masks_the_six_edgin_administrations(tmp_path, monkeypatch):
+    # End-to-end against the real database: exactly six administrations match, all
+    # in us_01, and the flag restores them.
+    masked = data_utils.load_combined_data()
+    kept = data_utils.load_combined_data(include_duplicated_outcomes=True)
+    assert kept["understood"].notna().sum() - masked["understood"].notna().sum() == 6
+    assert kept["spoken"].notna().sum() - masked["spoken"].notna().sum() == 6
+
+    _, dropped = data_utils.mask_duplicated_outcome_administrations(kept)
+    assert dropped == {"us_01": 12}

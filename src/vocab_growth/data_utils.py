@@ -69,6 +69,49 @@ not administered:
   so the zeros are an un-administered subscale, not ability.
 """
 
+DUPLICATED_OUTCOME_MAX_AGE_MONTHS = 18
+DUPLICATED_OUTCOME_MIN_UNDERSTOOD = 100
+DUPLICATED_OUTCOME_RATIO = 0.9
+"""Signature of an administration whose two outcome columns collapsed onto one value.
+
+An infant recorded as *saying* almost every word they understand has an internally
+inconsistent administration: comprehension leading production is the most robust
+finding in the early-vocabulary literature, and is the structural premise of the
+joint models' ``p_S = p_U * q`` decomposition. Where that pattern appears in
+infancy together with a substantial comprehension count, the likeliest explanation
+is that one outcome column was written over the other at data preparation.
+
+Detected as ``spoken >= DUPLICATED_OUTCOME_RATIO * understood`` with
+``understood >= DUPLICATED_OUTCOME_MIN_UNDERSTOOD`` at
+``age <= DUPLICATED_OUTCOME_MAX_AGE_MONTHS``. All three conditions are needed. The
+same ratio at older ages is ordinary — a child who says most of what they
+understands — so the rule is **age-conditioned rather than study-scoped**: of the
+27 paired rows in the current pool matching the ratio and count conditions, 21 are
+at 37 months or older and are legitimate. Below 19 months it matches 6 of 148
+paired rows, all in ``us_01``.
+
+Three independent lines of evidence support masking those six (see
+``notes/202607261245-edgin-duplicated-outcome-records.md``):
+
+- The pattern is rare where it can be checked against a large reference sample:
+  among 2,480 typically-developing Words & Gestures administrations with
+  comprehension >= 100, only 0.69% have production >= 0.9 * comprehension.
+- The implied production levels — 173 to 396 words between 11 and 18 months — are
+  impossible against the independent Berglund et al. (2001) Down syndrome cohort,
+  which puts median spoken vocabulary near zero at 12 months and about 10 words at
+  24 months. This is an external benchmark, not an in-sample one.
+- Every one of the three affected children with a second administration shows an
+  ordinary comprehension-production gap in that other record (ratios 0.08-0.13
+  against 0.91-1.00 in the flagged one).
+
+Deliberately *not* caught: administrations with a high comprehension count but a
+normal production gap. Two such ``us_01`` records (comprehension 213 and 217 at 18
+months, production 31 and 22) sit at the 48th and 50th typically-developing
+percentile for comprehension and are retained, on the study owner's judgement that
+they are clinically unusual but should not be excluded. They are a sensitivity
+target, not a defect.
+"""
+
 
 ENGLISH_LANGUAGES = (
     "English (American)",
@@ -165,6 +208,73 @@ def mask_incomplete_administrations(
             continue
         dropped[study] = int(out.loc[mask, outcome_columns].notna().to_numpy().sum())
         out.loc[mask, outcome_columns] = float("nan")
+    return out, dropped
+
+
+def mask_duplicated_outcome_administrations(
+    df: pd.DataFrame,
+    *,
+    include_duplicated: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Mask infant administrations whose outcome columns appear to be duplicates.
+
+    Applies the signature documented on :data:`DUPLICATED_OUTCOME_RATIO`. Both
+    counts are masked rather than one, because in the affected records neither
+    value is defensible: the production figures are impossible against the
+    independent Down syndrome cohort benchmark, and in the two cases where the
+    child's other administration also disagrees on comprehension it falls by 355
+    and 209 words. Which column was overwritten cannot be recovered from the
+    aggregate data, so the administration is treated as unusable rather than
+    half-repaired. The row is retained, so age coverage and provenance stay
+    auditable.
+
+    The returned counts report how many observed values were masked per study, for
+    the fit log. Pass ``include_duplicated=True`` to reintroduce them as a
+    sensitivity.
+
+    Item-level responses would settle the mechanism definitively — a duplicated
+    column appears as two identical response vectors — so this rule is stated as a
+    signature with a stated false-positive rate, to be confirmed or refuted when
+    the item-level data are ingested.
+    """
+    required = {"age", "understood", "spoken"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Duplicated-outcome masking requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    out = df.copy()
+    dropped: dict[str, int] = {}
+    if include_duplicated:
+        return out, dropped
+
+    understood = pd.to_numeric(out["understood"], errors="coerce")
+    spoken = pd.to_numeric(out["spoken"], errors="coerce")
+    age = pd.to_numeric(out["age"], errors="coerce")
+    suspect = (
+        understood.notna()
+        & spoken.notna()
+        & age.notna()
+        & (age <= DUPLICATED_OUTCOME_MAX_AGE_MONTHS)
+        & (understood >= DUPLICATED_OUTCOME_MIN_UNDERSTOOD)
+        & (spoken >= DUPLICATED_OUTCOME_RATIO * understood)
+    )
+    if not suspect.any():
+        return out, dropped
+
+    outcome_columns = [
+        column
+        for column in ("understood", "spoken", "produced")
+        if column in out.columns
+    ]
+    study_labels = out["study"] if "study" in out.columns else pd.Series("", index=out.index)
+    for study, count in (
+        out.loc[suspect, outcome_columns].notna().sum(axis=1).groupby(study_labels[suspect]).sum().items()
+    ):
+        dropped[str(study)] = int(count)
+    out.loc[suspect, outcome_columns] = float("nan")
     return out, dropped
 
 
@@ -532,7 +642,12 @@ def vocab_combined_view_sql() -> str:
     """
 
 
-def load_combined_data(max_age_months=None, *, include_incomplete_administrations=False):
+def load_combined_data(
+    max_age_months=None,
+    *,
+    include_incomplete_administrations=False,
+    include_duplicated_outcomes=False,
+):
     """
     Load the combined data from the DuckDB database.
 
@@ -549,6 +664,9 @@ def load_combined_data(max_age_months=None, *, include_incomplete_administration
         max_age_months (int, optional): The maximum age in months to include in the data. Defaults to None (no limit).
         include_incomplete_administrations (bool): Reintroduce counts from partial
             administrations, for sensitivity analysis. Defaults to False.
+        include_duplicated_outcomes (bool): Reintroduce infant administrations whose
+            outcome columns appear duplicated, for sensitivity analysis. Defaults
+            to False.
 
     Returns:
     --------
@@ -576,6 +694,9 @@ def load_combined_data(max_age_months=None, *, include_incomplete_administration
 
     df, _ = mask_incomplete_administrations(
         df, include_incomplete=include_incomplete_administrations
+    )
+    df, _ = mask_duplicated_outcome_administrations(
+        df, include_duplicated=include_duplicated_outcomes
     )
     return df
 
