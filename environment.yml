@@ -6,15 +6,15 @@ dependencies:
   # Must match dse-research-utils' data/environment-core.yml exactly. Verify:
   #   dse-check-env environment.yml
   - python=3.14.6
-  - numpy>=2.4.6,<2.5 # pymc>=6.1.0 -> pytensor 3.1.x -> numba<=0.65.1 -> numpy<2.5
+  - numpy>=2.4.6,<2.5 # pymc -> pytensor 3.x -> numba -> numpy<2.5; numba 0.66.0 still pins <2.5, so lifting this needs a numba release that supports 2.5
   - scipy>=1.18.0
-  - pandas>=3.0.3
+  - pandas>=3.0.5
   - pyarrow>=24.0.0 # pandas 3.x's default `str` dtype is Arrow-backed; floor held at 24 by jaxlib's libabseil pin
-  - numba>=0.58,<=0.65.1 # pytensor 3.x caps numba; this is what pymc>=6.1.0 commits us to
-  - matplotlib>=3.11.0
+  - numba>=0.58,<=0.65.1 # every pytensor 3.x caps numba here (verified through 3.2.3); this is what pymc>=6.2.0 commits us to
+  - matplotlib>=3.11.1
   - scikit-learn>=1.9.0
   - statsmodels>=0.14.6
-  - pymc>=6.1.0 # pulls pytensor + a C toolchain from conda-forge; forces pytensor >=3.1.2 -> numba <=0.65.1 -> numpy <2.5
+  - pymc>=6.2.0 # pulls pytensor + a C toolchain from conda-forge; requires pytensor >=3.2.2,<3.3 -> numba <=0.65.1 -> numpy <2.5
   - nutpie>=0.16.11
   - numpyro>=0.21.0
   - jax>=0.10.2 # CPU build; GPU acceleration via an environment-gpu.yml overlay
@@ -22,13 +22,13 @@ dependencies:
   - arviz-base>=1.2.0
   - arviz-stats>=1.2.0
   - arviz-plots>=1.2.0
-  - preliz>=0.27.0
-  - h5py>=3.12.0
-  - h5netcdf>=1.3.0
+  - preliz>=0.27.1
+  - h5py>=3.16.0
+  - h5netcdf>=1.8.1
   - graphviz>=14.1.2
-  - python-graphviz>=0.20
+  - python-graphviz>=0.21
   # ── vocab-growth add-ons (compiled / columnar data) ───────────────────────
-  - duckdb>=1.5.4
+  - duckdb>=1.5.5
   - pip
   - pip:
       # Shared library from the public git tag (no auth; PyPI is a later
@@ -36,7 +36,7 @@ dependencies:
       # notebook (ipython/ipywidgets/notebook/jupytext), io (orjson/tabulate).
       # This also pulls dse-research-utils' own runtime deps (azure-identity/
       # -storage-blob, rich, psutil, pyyaml, …) — no need to list them here.
-      - dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.8.0#subdirectory=src/python
+      - dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.9.0#subdirectory=src/python
       - -e ./
       # Local-dev override — to develop against a sibling checkout of research,
       # comment the git line above and uncomment this instead:
@@ -47,5 +47,5 @@ dependencies:
       - hatch
       - build
       - pytest>=9.1.1
-      - ruff>=0.15.20
-      - setuptools>=82.0.1
+      - ruff>=0.16.1
+      - setuptools>=83.0.0
