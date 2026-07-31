@@ -29,6 +29,11 @@ dependencies:
   - python-graphviz>=0.21
   # ── vocab-growth add-ons (compiled / columnar data) ───────────────────────
   - duckdb>=1.5.5
+  # Imported directly across src/vocab_growth (models, recovery, calibration).
+  # Previously it arrived only transitively via arviz, which left the version
+  # this repo runs on at the mercy of arviz's own solve; declare it so the conda
+  # layer owns it at a version the pip floor in pyproject.toml can rely on.
+  - xarray>=2026.7.0
   - pip
   - pip:
       # Shared library from the public git tag (no auth; PyPI is a later

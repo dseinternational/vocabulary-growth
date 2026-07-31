@@ -17,7 +17,13 @@ dependencies = [
   "arviz>=1.2.0",
   "duckdb>=1.5.5",
   "dse-research-utils>=0.9.0",
-  "jaxlib>=0.10.2",
+  # jaxlib is conda-owned but only arrives transitively via jax; environment.yml
+  # does not declare it (nothing here imports it directly — it is numpyro's
+  # backend). Keep this floor at or below what the conda layer may solve to —
+  # conda's jax 0.10.2 admits jaxlib >=0.10.1,<=0.10.2 — or `conda env update`
+  # makes pip try to take ownership of a conda package and fail with
+  # "no RECORD file".
+  "jaxlib>=0.10.1",
   "matplotlib>=3.11.1",
   "numpy>=2.4.6,<2.5",  # pymc -> pytensor -> numba pins numpy <2.5; matches the shared conda core
   "numpyro>=0.21.0",
