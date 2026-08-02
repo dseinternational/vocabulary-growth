@@ -74,7 +74,7 @@ Despite their differences, every model is built from the same components:
 - **Outcome** — every model reports vocabulary on an **810-item common reference inventory**, so DS and TD estimates sit on a comparable scale regardless of which checklist (MB-CDI Words & Gestures, Words & Sentences, Oxford CDI, etc.) produced them. Univariate, understood and marginal-fallback likelihoods use that 810-item denominator; paired, logically nested spoken and signed likelihoods use the observed understood count as their denominator.
 - **Likelihood** — a **Beta-Binomial** with **age-varying dispersion**, so the
   degree of between-child heterogeneity can change across development rather than
-  being fixed. In joint models, paired spoken and signed counts are modelled conditionally on the observed understood count; rows without usable understood data retain a marginal Beta-Binomial fallback.
+  being fixed. In joint models, paired spoken and signed counts are modelled conditionally on the observed understood count; rows without usable understood data retain a marginal Beta-Binomial fallback. Every model with an empirical dispersion calibration states that prior at two reference **ages** (a floor plus the age term at each anchor) rather than as an intercept and a slope, so the prior does not shift meaning when the pool changes and the sign of the age trend is a consequence of the data rather than a constraint. See [`PRIORS.md`](PRIORS.md).
 - **Mean trajectory** — on the logit scale, the expected proportion is a
   **linear developmental trend plus a Hilbert-Space Gaussian Process (HSGP)**
   term that captures smooth nonlinear departures from the trend. The linear trend

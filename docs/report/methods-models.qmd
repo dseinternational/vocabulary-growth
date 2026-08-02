@@ -104,7 +104,15 @@ The following priors are held **constant across all models** (they are the share
 | $a_\kappa$ | Log-scale intercept of $\kappa(z)$ | $\mathrm{Normal}(\mu = \log 8,\ \sigma = 1.0)$ |
 | $b_{\mathrm{mag}}$ | Magnitude of the $\kappa$ decline rate ($b_\kappa = -b_{\mathrm{mag}}$) | $\mathrm{HalfNormal}(\sigma = 0.3)$ |
 
-: Shared default prior distributions, identical across all models. {#tbl-core-priors}
+: Shared default prior distributions. {#tbl-core-priors}
+
+**The three dispersion rows are the legacy parameterisation, and most models no longer use it.** Every model with an empirical dispersion calibration — VG01–VG04, VG09–VG13, VG15 and VG16 — states its dispersion prior at two reference *ages* instead, as a floor plus the age term at each anchor, from which $a_\kappa$ and $b_\kappa$ are derived:
+
+$$
+\kappa(a) = \kappa_{\min} + \exp\!\Big(\log e_{\text{young}} + \tfrac{a - a_{\text{young}}}{a_{\text{old}} - a_{\text{young}}}\,\big(\log e_{\text{old}} - \log e_{\text{young}}\big)\Big).
+$$
+
+Two things motivate it. A prior on $a_\kappa$ describes dispersion at the pool's *mean age*, so it silently changes meaning when the pool is resampled or filtered, where a prior at 24 months always means 24 months. And $b_{\mathrm{mag}} \ge 0$ forces dispersion to fall with age, which the comprehension outcomes reject — under the anchored form the sign is a consequence of the two anchors rather than a constraint. Anchor ages and medians are per model and are given in each appendix; the derivation and the calibration behind the numbers are in `docs/models/PRIORS.md`. The four that keep the table above — VG05, VG07, VG08 and VG14 — do so because their grouping structure differs from the pools the calibration covers, not because they were overlooked.
 
 The length-scale is mapped from the unit interval onto a 6–18 month range, $\ell = \ell_{\min} + (\ell_{\max} - \ell_{\min})\,\ell_\text{unit}$, which favours changes over 6–18 month periods and offers better sampling geometry than a direct prior on the positive reals. The amplitude $\eta$ is constant on the logit scale but, through the logistic link, has its largest effect on counts near $p \approx 0.5$ (about 405 of 810 words) and least effect near the floor or ceiling — matching the expectation that there is least scope for variation when a child is just starting out or near the checklist limit.
 
@@ -149,10 +157,10 @@ To separate the population age curves from differences in study composition and 
 $$
 f_\bullet(z_i) \;\to\; f_\bullet(z_i) + \delta^{\text{study}}_{\bullet,\,s(i)} + \delta^{\text{subj}}_{\bullet,\,j(i)},
 \qquad
-\delta_\bullet \sim \mathrm{Normal}(0, \tau_\bullet),\ \ \tau_\bullet \sim \mathrm{HalfNormal}(0.5),
+\delta_\bullet \sim \mathrm{Normal}(0, \tau_\bullet),\ \ \tau^{\text{study}}_\bullet \sim \mathrm{HalfNormal}(0.5),\ \ \tau^{\text{subj}}_\bullet \sim \mathrm{HalfNormal}(1.5),
 $$
 
-implemented non-centred, where $s(i)$ and $j(i)$ index the study and subject of observation $i$. Study intercepts absorb between-lab/between-study level differences; subject intercepts stop within-child repeated measurements being treated as independent. **The reported population curves set every random effect to zero**, so their interpretation is unchanged. Tiny studies can be trimmed before fitting (`min_study_observations`) to avoid near-unidentified intercepts.
+implemented non-centred, where $s(i)$ and $j(i)$ index the study and subject of observation $i$. The two levels take different scales because they are on different scales in the data: fitting the same grouping structure outside the models puts the between-child standard deviation at 0.74–1.15 on the logit scale across the family, where between-study differences are around a third of that. Study intercepts absorb between-lab/between-study level differences; subject intercepts stop within-child repeated measurements being treated as independent. **The reported population curves set every random effect to zero**, so their interpretation is unchanged. Tiny studies can be trimmed before fitting (`min_study_observations`) to avoid near-unidentified intercepts.
 
 The TD hierarchical models apply the same repeated-measures rule. VG11 and VG12 include a child intercept on their single outcome, and VG13 includes child intercepts on both $p_U$ and $q$. A fixed-seed sensitivity retains one randomly selected administration per study-specific child and disables the child effects, providing a cheaper check that conclusions do not depend on treating repeat administrations as additional independent children.
 
