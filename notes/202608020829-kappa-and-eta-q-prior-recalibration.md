@@ -1405,6 +1405,18 @@ VG11's max R-hat went from 1.035 to 1.072, in the wrong direction for a change m
 - The subject posterior matches the previous fit to three decimals, so a prior four times wider changed the target density negligibly over the region the parameter occupies.
 - **The study scale was already the worst-mixing parameter before the change.** VG12's and VG13's pre-refit diagnostics were captured off disk before their refits promoted, and under the old `HalfNormal(0.5)` subject prior the worst parameter was VG12's `tau` at R-hat 1.016 / ESS 359 and VG13's `tau_u` at 1.012 / ESS 266 — the same parameters that are worst now.
 
+**A single-factor control settles it for VG11 directly.** Reverting only `tau_subject_sigma` to 0.5, everything else current:
+
+| VG11 fit                                           | max R-hat | min ESS | divergences | worst parameter   |
+| -------------------------------------------------- | --------: | ------: | ----------: | ----------------- |
+| original (`sigma` 0.5, before §23)                 |     1.035 |     173 |          30 | `tau` (study)     |
+| **control** (`sigma` 0.5, everything else current) | **1.030** | **195** |      **15** | **`tau` (study)** |
+| refit (`sigma` 1.5)                                |     1.072 |      62 |          18 | `tau` (study)     |
+
+The study scale is the worst-mixing parameter in all three, under both priors. The control's `tau_subject` is 1.060 against the refit's 1.061 and its `kappa` at the anchors 317.4 and 50.3 against 317.2 and 50.4 — the two fits are the same fit to three significant figures everywhere that matters.
+
+What the control does not show is that the change made no difference to the sampling at all: the refit's 1.072 is the worst of the three runs. What it shows is that the change is not the _source_ of the poor mixing, which pre-dates it and persists without it. An R-hat spread of 1.03 to 1.07 across three runs of a parameter with 62 to 195 effective samples is what an unreliable R-hat estimate looks like, and the remedy is the structural one below rather than reverting a prior that fixed a real conflict elsewhere.
+
 The pattern across the family is group count, not prior:
 
 | model | studies | worst-mixing parameter                |
