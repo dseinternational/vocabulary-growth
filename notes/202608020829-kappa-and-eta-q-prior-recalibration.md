@@ -958,6 +958,8 @@ Worth recording because it is easy to misread in the definitions. With `b_kappa 
 1. **"The data cannot arbitrate" between `tau_subject` and `kappa` (§18) is wrong.** They are separable on VG11's design; the recovery check above demonstrates it in both directions. §18's open item 8 — whether VG11 should carry subject random effects at 1.32 administrations per child — loses its main supporting argument, though the question of whether the effects _earn their place_ is untouched.
 2. **"VG11 should not be quoted from this fit" (§18) was right for the wrong reason.** Its dispersion posterior was accurate; the prior conflict was the defect. The convergence failures §18 also recorded remain a reason not to quote it.
 
+The sensitivity registry needed updating with them, and restating the variants exposed what two of them had actually been asking. `kappa-flat` set `a_kappa_mu` from `log 8` to 0 — an eight-fold cut in the _level_ of the age term, not a flattening of it, despite the name — and `kappa-const` pinned `b_kappa_mag` near zero, which is the genuinely constant-in-age one. Both are now stated at the anchors: `kappa-flat` divides both anchor medians by eight, and `kappa-const` sets them equal, since under the anchored form the slope is derived and cannot be set directly. `replace_kappa` now validates against whichever form the block uses and names it in the error, so the next migration breaks a stale variant loudly instead of silently.
+
 ### Refits
 
 All three at `test` (4 chains x 2,000 draws), on the frames and code described above.
@@ -1169,7 +1171,7 @@ When the truth is a constant scale the loading model correctly returns a flat on
 
 ### Why the scale falls: it is the denominator
 
-The obvious explanation — the logit link exaggerating spread at small `p` — is wrong, and VG13's own `q` outcome is what refutes it. `q` is measured on the same children, in the same design, with almost the same mean profile as understood (0.115 → 0.263 against 0.104 → 0.232 across 12–17 months), and it shows **no loading effect at all**: `lambda` 1.084 → 1.103, worth 0.0 log-likelihood units. Nor is it the young low-`p` cells: restricted to 12 months and up, VG13 still gives `lambda` 0.960 → 0.560 for 71.1 units and VG12 0.905 → 0.509 for 89.7.
+The obvious explanation — the logit link exaggerating spread at small `p` — is wrong, and VG13's own `q` outcome is what refutes it. `q` is measured on the same children, in the same design, with almost the same mean profile as understood (0.115 → 0.263 against 0.104 → 0.232 across 12–17 months), and it shows **no loading effect at all**: with a free `kappa` per cell, `lambda` 1.084 → 1.103 for 0.03 log-likelihood units, and on the two-anchor form 0.8 units. Both are a 1-degree-of-freedom extension paying for nothing, on the same rows where understood pays 111. Nor is it the young low-`p` cells: restricted to 12 months and up, VG13 still gives `lambda` 0.960 → 0.560 for 71.1 units and VG12 0.905 → 0.509 for 89.7.
 
 What distinguishes `q` is its denominator. `q` is spoken out of that child's _own observed understood count_, so both sides come from the same form and the form's extent cancels. `understood` is scored out of 810 while the instrument holds 396 items (WG) or 418 (Oxford CDI) — and they are the _easiest_ 396. Two children who differ by hundreds of words on a full inventory can differ by a handful on a form they have nearly exhausted, and by 16–18 months the mean row sits at 0.48–0.53 of its form with 46–55% of children past halfway. The measure compresses, progressively, with age.
 
@@ -1258,7 +1260,53 @@ Two new blocks, `_DS_JOINT_UNDERSTOOD_KAPPA_RE` and `_DS_JOINT_Q_KAPPA_RE`, on *
 
 **VG05, VG07, VG08 and VG14 are deliberately not migrated**, and for a reason the §19 rule supplies: the calibration must match the specification, and theirs differ. VG05 carries no random effects, VG07 only study ones, and VG08 a subject effect on understood but not on `q` — so VG08 would need one calibration per outcome. All three are steps in the VG05 → VG07 → VG08 → VG09 → VG10 lineage, whose whole purpose is to isolate what adding each random effect does; changing a prior partway along would confound exactly that contrast. VG14's frame is the signing subset.
 
-The sensitivity registry needed updating with them, and restating the variants exposed what two of them had actually been asking. `kappa-flat` set `a_kappa_mu` from `log 8` to 0 — an eight-fold cut in the _level_ of the age term, not a flattening of it, despite the name — and `kappa-const` pinned `b_kappa_mag` near zero, which is the genuinely constant-in-age one. Both are now stated at the anchors: `kappa-flat` divides both anchor medians by eight, and `kappa-const` sets them equal, since under the anchored form the slope is derived and cannot be set directly. `replace_kappa` now validates against whichever form the block uses and names it in the error, so the next migration breaks a stale variant loudly instead of silently.
+### Refits
+
+All four at `test` (4 chains x 2,000 draws). Only VG16's is a like-for-like prior comparison — VG09, VG10 and VG15 had only ever been fitted at `dev`, so their improvement confounds the prior change with the extra draws — but VG16's is clean, and it improves on every count:
+
+| model | divergences | max R-hat | min ESS |     | before (VG16 only) |
+| ----- | ----------: | --------: | ------: | --- | ------------------ |
+| VG09  |           0 |     1.011 |     313 |     | —                  |
+| VG10  |           1 |     1.007 |     527 |     | —                  |
+| VG15  |           0 |     1.023 |     442 |     | —                  |
+| VG16  |           0 |     1.007 |     478 |     | 1, 1.013, 331      |
+
+None passes the convergence gate, which requires zero divergences _and_ R-hat below 1.01, but VG09, VG15 and VG16 now have no divergences at all and VG15 — previously the worst-behaved model in the family at max R-hat 1.137 and min ESS 15 — comes back at 1.023 and 442 with its headline association `psi` at 1.92 [1.37, 2.59] on 3,635 effective samples.
+
+**The four agree with each other, as four models sharing a frame should:**
+
+| model | `kappa`(24) U | `kappa`(48) U | `kappa`(24) `q` | `kappa`(48) `q` |
+| ----- | ------------: | ------------: | --------------: | --------------: |
+| VG09  |          77.9 |          17.3 |            23.1 |            16.1 |
+| VG10  |          78.2 |          17.3 |            23.0 |            16.0 |
+| VG15  |          78.1 |          17.5 |            21.2 |            12.1 |
+| VG16  |          78.3 |          17.4 |            23.7 |            16.7 |
+
+**And they land where the lower-bound reading predicted, in both directions.** The understood posteriors sit at 78 against a prior median of 110 and the uncorrected estimate of 81.6 — so the bias correction was not needed there, and at `sigma = 1.0` it cost nothing (prior CDF 0.37 and 0.26). The ratio posteriors sit at 23 and 16 against a prior median of 17 and 11 and an estimate of 13.8 and 7.6 — _above_ both, which is the direction a lower bound is supposed to be wrong in. Recording this plainly because it is the useful part: the correction was applied a priori from the recovery simulation, it over-corrected one outcome and under-corrected the other, and a prior wide enough to be honest about the frame absorbed both.
+
+Prior CDF at the posterior mean, VG09 (the others are within 0.01):
+
+| parameter              | post mean | prior median | prior CDF | contraction |
+| ---------------------- | --------: | -----------: | --------: | ----------: |
+| `kappa_min_u`          |      2.03 |          3.0 |     0.312 |       0.753 |
+| `kappa_excess_young_u` |     75.88 |        106.0 |     0.369 |       0.958 |
+| `kappa_excess_old_u`   |     15.26 |         28.7 |     0.264 |       0.962 |
+| `kappa_min_s`          |      9.23 |          3.0 | **0.920** |  **−0.052** |
+| `kappa_excess_young_s` |     13.87 |         12.6 |     0.538 |       0.840 |
+| `kappa_excess_old_s`   |      6.85 |          6.7 |     0.509 |       0.680 |
+
+`kappa_min_s` is the one parameter not centred, and it is §20's ridge again rather than a new problem: the floor and the excess trade off, only their sum at the anchors is identified, and that sum is tight (23.1, 89% interval [18.3, 28.9], 2,964 effective samples). VG02 did the same thing in the opposite direction. The negative contraction says the same — a posterior no narrower than its prior on a parameter the data cannot separately see.
+
+**`b_kappa` is freed and the constraint is shown to have been binding.** Under the legacy form these models put `b_kappa_mag_u` at 1.14–1.16 against a `HalfNormal(0.3)`. Derived from the anchors instead:
+
+| outcome          | `b_kappa` mean | 89% ETI        |
+| ---------------- | -------------: | -------------- |
+| VG09 `b_kappa_u` |         −1.395 | [−1.64, −1.15] |
+| VG09 `b_kappa_s` |         −0.804 | [−1.86, −0.13] |
+| VG15 `b_kappa_u` |         −1.385 | [−1.63, −1.15] |
+| VG15 `b_kappa_s` |         −1.289 | [−2.28, −0.30] |
+
+Both signs are negative, so unlike the comprehension models of §19 the legacy form's _direction_ was right here — it was the magnitude the prior would not allow. VG15's signed ratio, still on the legacy form, sits at `b_kappa_mag_sign` 0.153 [0.01, 0.41] and is not fighting anything, which is consistent with leaving it there.
 
 ## 23. Implemented: the subject random-effect scales
 
