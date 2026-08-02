@@ -4,7 +4,8 @@
 
 > [!NOTE]
 > Drafted by LLM-based AI tools (OpenAI Codex/GPT-5; "Evidence base" section and
-> prior–norm comparison by Claude Code/Opus 4.8).
+> prior–norm comparison by Claude Code/Opus 4.8; dispersion and random-effect
+> scale sections by Claude Code/Opus 5).
 
 > [!WARNING]
 > This is a working document for issue 89, last reviewed on 2026-07-01. It

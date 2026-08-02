@@ -16,7 +16,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; VG10 `q`-anchor reference corrected by Claude Code/Opus 4.8).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; VG10 `q`-anchor reference corrected by Claude Code/Opus 4.8; dispersion prior descriptions by Claude Code/Opus 5).
 :::
 
 ```{python}

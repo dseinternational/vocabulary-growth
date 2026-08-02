@@ -1,7 +1,7 @@
 # Model inventory
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and Codex/GPT-5).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and Codex/GPT-5; dispersion prior note by Claude Code/Opus 5).
 
 > [!WARNING]
 > This is work in progress. All models and their output are preliminary and likely

@@ -4,7 +4,7 @@ abstract: "*TODO*"
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Codex/GPT-5).
+Drafted by an LLM-based AI tool (Codex/GPT-5; dispersion and random-effect prior sections updated by Claude Code/Opus 5).
 :::
 
 Our goal is to estimate **age-associated change** in a vocabulary outcome, not to claim that age alone causally determines vocabulary growth. Many factors influence a child's opportunities to learn and produce words, including exposure, explicit teaching and therapy, hearing, and words already learned. Age is a useful ordering variable because these opportunities accumulate over time, but the pooled observational data also vary by study, instrument, recruitment, cohort, and sample selection.
