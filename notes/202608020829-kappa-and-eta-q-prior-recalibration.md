@@ -1359,3 +1359,94 @@ Every parameter lands in the central half. The family stays HalfNormal rather th
 `tau_subj_sign` has no calibration — nothing estimates a signing subject scale — so it inherits the family setting rather than being fitted to one. Its posterior at 1.082 was in the same tail as the rest, and definitions.py already recorded the conflict and declined to act on it ("kept at 0.5, porting VG10"); it is now resolved by the same change, at prior CDF 0.53.
 
 **The study scales stay at `HalfNormal(0.5)`.** Their posteriors sit at prior CDF 0.43 to 0.82 across every model that has them, so there is nothing to fix, and the estimator treats study effects as fixed and therefore has no opinion to offer. That the subject scales and the study scales shared one default was the accident; only one of them was mis-set.
+
+### Refits
+
+All seven affected models at `test` (4 chains x 2,000 draws). VG09, VG10, VG15 and VG16 carry §22's dispersion change as well, so only VG11, VG12 and VG13 isolate this one — and of those three, all had a previous `test` fit, so all three are like-for-like.
+
+| model | divergences | max R-hat | min ESS |     | before             |
+| ----- | ----------: | --------: | ------: | --- | ------------------ |
+| VG09  |           0 |     1.011 |     313 |     | `dev` only         |
+| VG10  |           1 |     1.007 |     527 |     | `dev` only         |
+| VG11  |          18 |     1.072 |      62 |     | 30, 1.035, 173     |
+| VG12  |          23 |     1.011 |     294 |     | 11, 1.017, 359     |
+| VG13  |       **4** |     1.023 |     121 |     | **80**, 1.012, 266 |
+| VG15  |           0 |     1.023 |     442 |     | `dev` only         |
+| VG16  |           0 |     1.007 |     478 |     | 1, 1.013, 331      |
+
+Divergences move in both directions — VG13 from 80 to 4, VG16 from 1 to 0, VG11 from 30 to 18, but VG12 from 11 to 23 — and so does max R-hat. Neither is a clean win and neither should be read as one; these are noisy counts on models with a known ridge.
+
+**What is clean is that nothing moved.** Every subject scale came back where the previous fit had it and where the estimator said it would be:
+
+| model | parameter       | posterior | estimate | prior CDF | was   |
+| ----- | --------------- | --------: | -------: | --------: | ----- |
+| VG09  | `tau_subj_u`    |     0.831 |    0.847 |     0.420 | 0.904 |
+| VG09  | `tau_subj_q`    |     1.380 |    1.147 |     0.642 | 0.994 |
+| VG10  | `tau_subj_u`    |     0.831 |    0.847 |     0.420 | 0.902 |
+| VG10  | `tau_subj_q`    |     1.382 |    1.147 |     0.643 | 0.994 |
+| VG11  | `tau_subject`   |     1.061 |    1.056 |     0.521 | 0.966 |
+| VG12  | `tau_subject`   |     0.736 |    0.736 |     0.376 | 0.858 |
+| VG13  | `tau_subj_u`    |     0.769 |    0.770 |     0.392 | 0.876 |
+| VG13  | `tau_subj_q`    |     1.118 |    1.119 |     0.544 | 0.975 |
+| VG15  | `tau_subj_u`    |     0.828 |    0.847 |     0.419 | 0.901 |
+| VG15  | `tau_subj_q`    |     1.275 |    1.147 |     0.605 | 0.988 |
+| VG15  | `tau_subj_sign` |     1.128 |        — |     0.548 | 0.970 |
+| VG16  | `tau_subj_u`    |     0.834 |    0.847 |     0.422 | 0.904 |
+| VG16  | `tau_subj_q`    |     1.381 |    1.147 |     0.643 | 0.994 |
+
+VG11 1.061 against 1.060 before, VG12 0.736 against 0.735, VG13 0.769 and 1.118 against 0.768 and 1.117. Every effective sample size is between 567 and 1,944 and every R-hat at or below 1.006. These parameters were never prior-limited; they were data-determined and sitting in a prior tail. That is the outcome to want — a posterior that _moved_ when its prior widened would have meant the old fits were reporting the prior rather than the data. The dispersion blocks are equally unmoved: VG11's `kappa` at the anchors 317.2 and 50.4 against 315.8 and 50.2, VG12's 42.5 and 65.8 against 42.3 and 65.7, VG13's 41.9 and 119.8 against 42.0 and 116.6.
+
+### The study scales are the new binding diagnostic, and were already the worst before
+
+VG11's max R-hat went from 1.035 to 1.072, in the wrong direction for a change meant to help, so it needed ruling out. The culprit is `tau` — the _study_ scale, at ESS 63 — which this change did not touch. Four things say the subject prior is not the cause:
+
+- `tau_subject` is impeccable in the same fit: per-chain means 1.0610, 1.0597, 1.0610 and 1.0608, ESS 1,036, R-hat 1.004.
+- The two scales correlate **0.033** in the posterior. They are not competing for the same variance.
+- The subject posterior matches the previous fit to three decimals, so a prior four times wider changed the target density negligibly over the region the parameter occupies.
+- **The study scale was already the worst-mixing parameter before the change.** VG12's and VG13's pre-refit diagnostics were captured off disk before their refits promoted, and under the old `HalfNormal(0.5)` subject prior the worst parameter was VG12's `tau` at R-hat 1.016 / ESS 359 and VG13's `tau_u` at 1.012 / ESS 266 — the same parameters that are worst now.
+
+The pattern across the family is group count, not prior:
+
+| model | studies | worst-mixing parameter                |
+| ----- | ------: | ------------------------------------- |
+| VG12  |       4 | `tau` (study), R-hat 1.009, ESS 299   |
+| VG13  |       4 | `tau_u` (study), R-hat 1.023, ESS 164 |
+| VG11  |       7 | `tau` (study), R-hat 1.072, ESS 63    |
+| VG09  |      12 | `p_slope_hi_u`, R-hat 1.008           |
+| VG10  |      12 | `p_slope_low_u`, R-hat 1.006          |
+| VG15  |      12 | `kappa_excess_old_s`, R-hat 1.013     |
+| VG16  |      12 | `kappa_min_s`, R-hat 1.007            |
+
+The study scale is worst in every typically-developing model, which have four or seven studies, and in none of the four Down syndrome ones, which have twelve. A hierarchical scale on four groups is weakly identified whatever prior it carries.
+
+**This is not a prior problem and should not be treated as one.** The study scales' posteriors sit at prior CDF 0.43-0.82 across every model that has them; they are not fighting anything. It is a scale estimated from too few groups, and the candidate remedies are structural rather than a re-centring: a prior justified by the group count, partial pooling across outcomes, or simply treating study as a fixed effect on the typically-developing models, where four groups is arguably a fixed-effects situation to begin with. It replaces the subject scales at the head of the open list.
+
+## Open list after §23
+
+**Resolved by §§21–23**, from §20's list: item 1 (the 16–18 month spike, §21), item 2 (Down syndrome joint dispersion, §22), item 3 (refit VG16, done as part of §23's batch) and item 9 (the subject random-effect scales, §23).
+
+Eleven of the fifteen registered models now carry an empirically calibrated two-anchor dispersion prior, each matched to whether its own model has grouping structure, and every subject random-effect scale in the family sits inside the central half of its prior.
+
+Still open, in rough priority order:
+
+1. **Rerun `scripts/prior_predictive_audit.py` for the whole family.** §20's item 4, now much wider: eleven models changed dispersion parameterisation and every subject scale in the registry moved. Its `kappa` and random-effect rows are stale for all of them, and PRIORS.md's "Prior predictive audit" table quotes it. This is the largest single piece of unfinished validation and should come before any reporting-quality run.
+
+2. **The study random-effect scales** (§23). Now the worst-mixing parameter in all three typically-developing hierarchical models and in none of the four Down syndrome ones; the difference is four or seven studies against twelve. Not a prior problem — their posteriors sit at prior CDF 0.43–0.82 — so the remedies are structural: a prior justified by the group count, pooling across outcomes, or fixed study effects where there are only four.
+
+3. **VG05, VG07, VG08 and VG14 still carry the legacy dispersion prior, and §22 shows it is wrong for them too.** All four put `b_kappa_mag_u` at prior CDF 0.993–0.9998, and VG05, VG07, VG08 and VG14 all show _negative_ contraction on the spoken slope. They were left alone for a good reason — each needs a calibration matched to its own grouping, and three of them are lineage steps whose contrast a mid-sequence prior change would confound — but "deliberately not migrated" is now a decision to revisit rather than a settled state. The estimator's `Pool` can already express all three specifications.
+
+4. **VG13's divergences.** Down from 80 to 4, which is the largest single diagnostic improvement in this note, but nothing here targeted them and the cause is not established.
+
+5. **`kappa_min` is doing different things on different outcomes.** VG02's posterior pulls it to 1.34, the Down syndrome spoken ratio's to 9.2 against a median of 3 with contraction −0.05 (§22), and VG13's understood is a young-age asymptote at 34 rather than a floor. §18's item 6 asked whether to tighten `kappa_min_sigma` family-wide; the accumulated evidence says the answer is per-outcome, and that the parameter's _meaning_ varies with the sign of `b_kappa` more than its prior does.
+
+6. **How `kappa` on the understood outcomes should be reported** (§21). The priors are right for the models as specified. What the technical report should say about a parameter that is part observation-level dispersion and part subject-scale drift is not settled, and "dispersion rises with age" is the reading to avoid.
+
+7. **Test `eta_q = 0.4` on VG10** (§5). Untouched by any of this.
+
+8. **Pair a `dev`-config control against VG03's anchored fit** (§18's item 7) to settle the per-draw cost of the parameterisation.
+
+9. **Whether VG11 should carry subject random effects at all** (§19). §19 removed the argument that the data cannot arbitrate; the question of whether the effects earn their place is still open, and VG11's `tau_subject` at 1.061 ± 0.009 on 12,266 children is a strong argument that they do.
+
+10. **`tau_subj_sign` has no calibration of its own** (§23) and inherits the family scale. Nothing estimates a signing subject scale on this frame.
+
+11. **Nothing passes the convergence gate.** It requires zero divergences and R-hat below 1.01. VG09, VG15 and VG16 now have no divergences, and VG10, VG12 and VG16 are at or near the R-hat threshold, but no model clears both.
