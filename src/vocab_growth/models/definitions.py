@@ -73,8 +73,8 @@ class KappaPriorParams:
 class KappaAnchorPriorParams:
     """Two-anchor dispersion prior: `kappa` pinned at two reference ages.
 
-    Same curve as :class:`KappaPriorParams` — a floor plus an exponentially
-    decaying age term, ``kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)`` — but
+    Same curve as :class:`KappaPriorParams` — an asymptote plus an exponential
+    age term, ``kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)`` — but
     ``(a_kappa, b_kappa)`` are *derived* from priors on the age term at two
     reference **ages in months** instead of being given priors of their own. This
     is the same move the mean trajectory already makes through ``slope_anchors``.
@@ -106,15 +106,21 @@ class KappaAnchorPriorParams:
     anchor_ages: tuple[float, float]
     """Reference ages (months), ordered (young, old), for the two kappa anchors."""
     kappa_min_mu: float
-    """LogNormal mu for kappa_min (the old-age dispersion floor)."""
+    """LogNormal mu for kappa_min, the dispersion asymptote.
+
+    Which end of the age range it applies at follows the sign of the derived
+    ``b_kappa``, so it is a floor only when dispersion falls with age. Where it
+    rises — the typically-developing comprehension models — it is the young-age
+    asymptote instead, and carries real weight: VG13's is 30, not 3.
+    """
     kappa_min_sigma: float
     """LogNormal sigma for kappa_min."""
     excess_young_mu: float
-    """LogNormal mu for the age term at the young anchor (kappa above the floor)."""
+    """LogNormal mu for the age term at the young anchor (kappa above the asymptote)."""
     excess_young_sigma: float
     """LogNormal sigma for the age term at the young anchor."""
     excess_old_mu: float
-    """LogNormal mu for the age term at the old anchor (kappa above the floor)."""
+    """LogNormal mu for the age term at the old anchor (kappa above the asymptote)."""
     excess_old_sigma: float
     """LogNormal sigma for the age term at the old anchor."""
 

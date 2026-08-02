@@ -103,10 +103,12 @@ def build_kappa_of_z_anchored(
     ``kappa_old{suffix}`` carry *total* kappa at the two anchors, which is what a
     per-age empirical estimate can be checked against.
 
-    The three free RVs are the floor and the two anchors. No prior is placed on
-    the slope at all: its sign is whatever the two anchors imply, so a rising
+    The three free RVs are the asymptote and the two anchors. No prior is placed
+    on the slope at all: its sign is whatever the two anchors imply, so a rising
     dispersion trajectory is representable (the legacy form's ``b_kappa =
-    -b_kappa_mag <= 0`` is not).
+    -b_kappa_mag <= 0`` is not). When it does rise, ``kappa_min`` is the
+    *young*-age asymptote rather than an old-age floor — the exponential term
+    vanishes at whichever end the slope points away from.
     """
     z_young, z_old = (float(anchor_z[0]), float(anchor_z[1]))
     if not z_old > z_young:

@@ -129,11 +129,16 @@ class AnchoredKappaPriors:
     """
 
     kappa_min_dist: Continuous
-    """Prior for the old-age dispersion floor (kappa_min)."""
+    """Prior for the dispersion asymptote (kappa_min).
+
+    The end of the age range it applies at follows the sign of the derived
+    ``b_kappa``: falling dispersion makes it the old-age floor, rising dispersion
+    the young-age one (VG13's is 30, not 3, for that reason).
+    """
     excess_young_dist: Continuous
-    """Prior for the age term above the floor at the young anchor age."""
+    """Prior for the age term above the asymptote at the young anchor age."""
     excess_old_dist: Continuous
-    """Prior for the age term above the floor at the old anchor age."""
+    """Prior for the age term above the asymptote at the old anchor age."""
     anchor_ages: tuple[float, float]
     """Reference ages (months), ordered (young, old)."""
 
@@ -236,7 +241,7 @@ def kappa_prior_rows(config, suffix="") -> list[tuple[str, object]]:
 
 
 def kappa_anchor_derived_rows(config, *, X_obs_mean, X_obs_std, suffix=""):
-    """"Derived quantities" rows for the kappa anchors, or none if unanchored.
+    """Rows for the "Derived quantities" table, or none if unanchored.
 
     The z positions are what the graph actually uses, and they move with the
     pool's age distribution even though the ages do not, so they are worth
