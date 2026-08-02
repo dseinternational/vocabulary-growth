@@ -1105,3 +1105,93 @@ Still open, in rough priority order — unchanged from §19 except for the numbe
 7. **Pair a `dev`-config control against VG03's anchored fit** (§18's item 7) to settle the per-draw cost of the parameterisation.
 8. **Whether VG11 should carry subject random effects at all** (§19).
 9. **The subject random-effect scales.** VG13's `tau_subj_q` sits at prior CDF 0.975 and VG11's `tau_subject` is pinned at 1.060 ± 0.009 against a `HalfNormal(0.5)`. With dispersion now calibrated everywhere it can be, this is the largest remaining prior-data conflict in the family and deserves the same treatment `kappa` has just had.
+
+## 21. Diagnosed: the 16–18 month understood spike is a form-scale artefact
+
+§20's open item 1. The answer is not in the age cells, and not in the children: **counts collected on a 396-item form are scored out of 810, so the modelled proportion compresses as children work up the form, the apparent between-child spread falls with age, and a constant subject scale cannot follow it. `kappa(age)` is the only age-varying spread parameter left, so it absorbs the difference.** The 16-month cell is where the observed spread first drops below the fitted `tau`, and `kappa` there has nothing left to explain.
+
+### Reproducing it
+
+A free `kappa` per age cell on VG13's understood frame, random effects present, reproduces §19's profile:
+
+| age (months) |    8 |    9 |   10 |   11 |   12 |   13 |   14 |   15 |    16 |   17 |    18 |
+| ------------ | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----: | ---: | ----: |
+| `kappa`      | 23.5 | 32.2 | 29.0 | 27.8 | 44.9 | 50.6 | 21.8 | 23.2 | 186.8 | 75.0 | 141.1 |
+| n            |  252 |  289 |  261 |  321 |  586 | 1036 |  504 |  322 |   917 |  482 |   436 |
+
+### Four candidates, all eliminated
+
+**One study dominating the 16-month cell.** True but not sufficient. Thal contributes 634 of the 917 rows (69%), and it is a two-wave longitudinal study: the _same_ 634 children at 13 and at 16 months, nothing in between. Its within-cell spread is the lowest in the frame — logit sd 0.617 against Marchman's 0.831 and Floccia's 1.017 — so it does pull the cell down. But Marchman's own spread collapses over the same boundary, 1.433 at 15 months to 0.831 at 16, on rows Thal has no part in.
+
+**Hard censoring at the form ceiling.** Ruled out on magnitude. Only 0.43% of the 16-month cell sits at the WG ceiling of 396 and 2.0% within 5% of it. Whatever compresses the distribution is not clipping it.
+
+**Selection into the WG form.** Ruled out directly. From 16 months the WS form becomes available and only WG and Oxford CDI rows carry comprehension, so a study that streamed its abler children onto WS would leave a truncated WG sample behind. Thal did not stream: it gave _both_ forms to the same 644 children at 16 months, so its 634 WG rows are the whole cohort. Marchman does split children between forms (165 WG and 183 WS at 16 months, disjoint), but the WS children are barely ahead — median production 28 against 21 — and Marchman is 18% of the cell.
+
+**Between-study heterogeneity in the subject scale.** Real, and much too small. Fitting one `tau` per study costs three extra parameters and buys 34.8 log-likelihood units; the age term below costs one and buys 115.2.
+
+### What it is
+
+Let the subject effect keep one scalar per child but give it an age-varying loading, `logit p_ij = m_c + s_k + lambda(a_ij) b_i` with `b_i ~ N(0, 1)` and `lambda` on the same two-anchor form as `kappa`. The quadrature is unchanged; the model gains one parameter.
+
+| model on VG13 understood      | parameters | nll       | vs constant `tau` |
+| ----------------------------- | ---------: | --------- | ----------------: |
+| no subject effect             |         25 | 30,188.50 |            −405.3 |
+| constant `tau` (§19's form)   |         26 | 29,783.17 |                 — |
+| **age-varying `lambda`**      |     **27** | 29,668.01 |        **+115.2** |
+| one `tau` per study           |         29 | 29,748.40 |             +34.8 |
+| per-study `tau` + age loading |         30 | 29,648.32 |            +134.9 |
+
+One parameter buys 115 units. Adding per-study scales on top of it buys a further 19.7 for three more, and the age slope is unchanged when they are present, so the two are not competing for the same variance. Under the loading model the fitted `lambda` falls from 0.906 at 12 months to 0.576 at 17, and the `kappa` profile changes character completely — 177.6 at 8 months down to 44.9 at 18, with the 16-month cell at 99.1 rather than 186.8. **It falls with age instead of rising.**
+
+The same contrast on the two-anchor `kappa` form the models actually parameterise, which is what `--loading` reports:
+
+| pool                     | constant `tau` (as modelled)      | with an age-varying loading                         |       gap |
+| ------------------------ | --------------------------------- | --------------------------------------------------- | --------: |
+| VG11 spoken (12, 20)     | `tau` 1.056; `kappa` 317.5 → 50.5 | `lambda` 1.304 → 1.028 (−21%); `kappa` 516.9 → 48.0 | **237.1** |
+| VG12 understood (12, 20) | `tau` 0.736; `kappa` 43.0 → 66.4  | `lambda` 0.933 → 0.525 (−44%); `kappa` 84.6 → 53.0  | **162.3** |
+| VG13 understood (12, 17) | `tau` 0.770; `kappa` 42.2 → 124.1 | `lambda` 0.941 → 0.622 (−34%); `kappa` 79.0 → 63.5  | **111.3** |
+| VG13 `q` (12, 17)        | `tau` 1.119; `kappa` 36.0 → 29.7  | `lambda` 0.981 → 1.216 (+24%); `kappa` 22.7 → 53.4  |       0.8 |
+
+Both understood outcomes reverse: 43.0 → 66.4 becomes 84.6 → 53.0, and 42.2 → 124.1 becomes 79.0 → 63.5. `q` alone shows no gap, and it is the outcome whose denominator cancels the form.
+
+### The estimator can tell the two apart
+
+Simulating on VG13's real subject, study and age structure, two seeds each:
+
+| truth                                       | fitted `lambda`               | fitted `kappa`(16) | loading buys |
+| ------------------------------------------- | ----------------------------- | -----------------: | -----------: |
+| constant `tau` = 0.721, `kappa`(16) = 186.8 | 0.740 → 0.688 / 0.743 → 0.711 |      135.0 / 170.7 |    1.0 / 0.6 |
+| `lambda` 0.906 → 0.526, `kappa`(16) = 99.1  | 0.890 → 0.549 / 0.904 → 0.549 |       131.9 / 95.6 |  86.3 / 80.9 |
+
+When the truth is a constant scale the loading model correctly returns a flat one and buys nothing — a 1-degree-of-freedom null behaving like one. When the truth is a falling loading, the constant-`tau` model invents a 16-month spike of **484.0 and 273.5** against a truth of 99.1, and the loading model recovers both the scale and the profile. The real data behave like the second row.
+
+### Why the scale falls: it is the denominator
+
+The obvious explanation — the logit link exaggerating spread at small `p` — is wrong, and VG13's own `q` outcome is what refutes it. `q` is measured on the same children, in the same design, with almost the same mean profile as understood (0.115 → 0.263 against 0.104 → 0.232 across 12–17 months), and it shows **no loading effect at all**: `lambda` 1.084 → 1.103, worth 0.0 log-likelihood units. Nor is it the young low-`p` cells: restricted to 12 months and up, VG13 still gives `lambda` 0.960 → 0.560 for 71.1 units and VG12 0.905 → 0.509 for 89.7.
+
+What distinguishes `q` is its denominator. `q` is spoken out of that child's _own observed understood count_, so both sides come from the same form and the form's extent cancels. `understood` is scored out of 810 while the instrument holds 396 items (WG) or 418 (Oxford CDI) — and they are the _easiest_ 396. Two children who differ by hundreds of words on a full inventory can differ by a handful on a form they have nearly exhausted, and by 16–18 months the mean row sits at 0.48–0.53 of its form with 46–55% of children past halfway. The measure compresses, progressively, with age.
+
+Rescoring the identical rows out of each row's own form instead of 810 is the test, and it is decisive:
+
+| pool            | out of 810                 | out of the row's own form | removed |
+| --------------- | -------------------------- | ------------------------- | ------: |
+| VG12 understood | 141.0 units, `lambda` −44% | 6.1 units, `lambda` −11%  | **96%** |
+| VG13 understood | 115.2 units, `lambda` −36% | 15.8 units, `lambda` −15% | **86%** |
+| VG11 spoken     | 199.9 units, `lambda` −22% | 32.1 units, `lambda` −11% | **84%** |
+| VG13 `q`        | 0.0 units, `lambda` +2%    | — (shares its form)       |       — |
+
+The ordering is the one the mechanism predicts. Comprehension is worst affected because WG's 396 comprehension items are the tightest constraint in the export; spoken production is milder because WS carries 680 and the mean spoken row is only 0.26 of its form; and the ratio outcome, which cancels the form, shows nothing.
+
+### What this does and does not change
+
+> [!IMPORTANT]
+> **No prior changes.** §19's rule is that the calibration must mirror the model's own structure, and the registered models carry a constant `tau_subject`. Their `kappa` therefore has to absorb this, and a prior calibrated under the constant-`tau` estimator is the right prior for them. The refits in §19 and §20 stand.
+
+What changes is the **interpretation**, and the docs state it too strongly in three places. "Typically-developing comprehension dispersion rises with age" is true of the model's `kappa` parameter and false of typically-developing comprehension: on the instrument's own scale the dispersion falls, like every other outcome. `kappa` on the understood outcomes is a compound of observation-level dispersion and a subject scale the model cannot vary, and it should not be read as a statement about children. Corrected in [`docs/models/PRIORS.md`](../docs/models/PRIORS.md) and the VG12 and VG13 model pages.
+
+The 810-item reference scale itself is not in question. It is a deliberate harmonisation choice, documented in PRIORS.md's "Instrument scale" section, endorsed by Laudańska et al. (2026), and load-bearing for every cross-population comparison the project makes. What is new here is a consequence of it that had not been traced: it makes the between-child scale age-dependent on the modelled scale, and a constant-`tau` model routes that into its dispersion.
+
+### Changed in the repository
+
+- **`scripts/kappa_conditional_calibration.py`** gained `--loading`, which fits the age-varying loading alongside the constant-`tau` form and reports the likelihood-ratio gap. It is a diagnostic, not a calibration path: a large gap means the pool's `kappa` is carrying subject-scale drift and should not be read as dispersion.
+- **`tests/test_kappa_conditional_calibration.py`** covers both directions of the control above — a constant-`tau` truth must return a flat loading, and a falling-loading truth must not be recoverable by the constant-`tau` form.

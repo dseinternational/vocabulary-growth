@@ -42,6 +42,7 @@ Usage:
     python scripts/kappa_conditional_calibration.py vg11-spoken
     python scripts/kappa_conditional_calibration.py --recover vg11-spoken
     python scripts/kappa_conditional_calibration.py --mean-sweep vg12-understood
+    python scripts/kappa_conditional_calibration.py --loading vg13-understood
 """
 
 from __future__ import annotations
@@ -172,18 +173,24 @@ class Design:
 # --------------------------------------------------------------------------
 
 
-def _layout(design):
+def _layout(design, loading=False):
+    """Parameter positions. ``loading`` appends one, leaving the rest in place."""
     n_mean = design.B.shape[1]
     n_study_free = max(len(design.studies) - 1, 0)
-    return {
+    base = n_mean + n_study_free
+    layout = {
         "m": slice(0, n_mean),
-        "s": slice(n_mean, n_mean + n_study_free),
-        "log_tau": n_mean + n_study_free,
-        "log_kmin": n_mean + n_study_free + 1,
-        "log_ey": n_mean + n_study_free + 2,
-        "log_eo": n_mean + n_study_free + 3,
-        "n_params": n_mean + n_study_free + 4,
+        "s": slice(n_mean, base),
+        "log_tau": base,
+        "log_kmin": base + 1,
+        "log_ey": base + 2,
+        "log_eo": base + 3,
+        "n_params": base + 4,
     }
+    if loading:
+        layout["log_lam_old"] = base + 4
+        layout["n_params"] = base + 5
+    return layout
 
 
 def _require_float64():
@@ -203,10 +210,23 @@ def _require_float64():
         )
 
 
-def make_objective(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None):
-    """Build the JAX negative log-likelihood for one design."""
+def make_objective(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None,
+                   loading=False):
+    """Build the JAX negative log-likelihood for one design.
+
+    With ``loading`` the subject effect keeps one scalar per child but its
+    loading varies with age -- ``logit p = m_c + s_k + lambda(a) b``, `b ~ N(0, 1)`,
+    `lambda` interpolated between the same two anchors as `kappa`. This is a
+    *diagnostic* rather than a calibration path: the registered models all carry
+    a constant `tau_subject`, so a pool where the loading buys a large likelihood
+    gap is one whose `kappa` is absorbing subject-scale drift the model cannot
+    represent, and whose `kappa` should not be read as dispersion. See section 21
+    of ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md``.
+    """
     _require_float64()
-    layout = _layout(design)
+    if loading and tau_fixed is not None:
+        raise ValueError("tau_fixed and loading are mutually exclusive")
+    layout = _layout(design, loading=loading)
     young, old = float(anchor_ages[0]), float(anchor_ages[1])
     if not old > young:
         raise ValueError(f"anchor_ages must be ordered (young, old); got {anchor_ages!r}")
@@ -239,15 +259,21 @@ def make_objective(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None
         s_free = theta[layout["s"]]
         s = (jnp.concatenate([s_free, -jnp.sum(s_free)[None]])
              if n_studies > 1 else jnp.zeros(1))
-        tau = (jnp.exp(theta[layout["log_tau"]]) if tau_fixed is None
-               else jnp.asarray(tau_fixed))
         log_ey, log_eo = theta[layout["log_ey"]], theta[layout["log_eo"]]
 
         kappa = jnp.exp(theta[layout["log_kmin"]]) + jnp.exp(
             log_ey + w * (log_eo - log_ey)
         )
 
-        eta = (B @ m + s[study_idx])[:, None] + (jnp.sqrt(2.0) * tau * nodes)[None, :]
+        fixed = (B @ m + s[study_idx])[:, None]
+        if loading:
+            log_ly, log_lo = theta[layout["log_tau"]], theta[layout["log_lam_old"]]
+            lam = jnp.exp(log_ly + w * (log_lo - log_ly))
+            eta = fixed + jnp.sqrt(2.0) * lam[:, None] * nodes[None, :]
+        else:
+            tau = (jnp.exp(theta[layout["log_tau"]]) if tau_fixed is None
+                   else jnp.asarray(tau_fixed))
+            eta = fixed + (jnp.sqrt(2.0) * tau * nodes)[None, :]
         p = jax.nn.sigmoid(jnp.clip(eta, -_ETA_CLIP, _ETA_CLIP))
         # Floor the Beta parameters. At a wide `tau` the outermost quadrature
         # nodes drive p to the edge, and with `kappa` in the hundreds the smaller
@@ -285,6 +311,9 @@ class Result:
     converged: bool
     se: np.ndarray | None = None
     corr: np.ndarray | None = None
+    #: subject loading at the old anchor when fitted with ``loading=True``;
+    #: ``tau`` is then the loading at the young anchor rather than a constant.
+    lam_old: float | None = None
 
     @property
     def kappa_young(self):
@@ -302,8 +331,10 @@ class Result:
 
     def summary(self, label=""):
         ya, oa = self.anchor_ages
+        tau_text = (f"tau={self.tau:.3f}" if self.lam_old is None else
+                    f"lambda({ya:.0f})={self.tau:.3f} lambda({oa:.0f})={self.lam_old:.3f}")
         lines = [
-            f"  {label}nll={self.nll:,.2f}  tau={self.tau:.3f}  "
+            f"  {label}nll={self.nll:,.2f}  {tau_text}  "
             f"kappa_min={self.kappa_min:.2f}"
             + ("" if self.converged else "   [DID NOT CONVERGE]"),
             f"    kappa({ya:.0f} mo)={self.kappa_young:8.1f} "
@@ -327,10 +358,10 @@ class Result:
 
 
 def fit(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None, x0=None,
-        standard_errors=False):
+        standard_errors=False, loading=False):
     """Maximise the marginal likelihood; return the anchored dispersion at its optimum."""
     nll, layout = make_objective(
-        design, anchor_ages, n_nodes=n_nodes, tau_fixed=tau_fixed
+        design, anchor_ages, n_nodes=n_nodes, tau_fixed=tau_fixed, loading=loading
     )
     grad = jax.jit(jax.grad(nll))
 
@@ -344,6 +375,8 @@ def fit(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None, x0=None,
         theta0[layout["log_kmin"]] = np.log(3.0)
         theta0[layout["log_ey"]] = np.log(30.0)
         theta0[layout["log_eo"]] = np.log(3.0)
+        if loading:
+            theta0[layout["log_lam_old"]] = np.log(0.5)
     else:
         theta0 = np.asarray(x0, float).copy()
 
@@ -360,6 +393,8 @@ def fit(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None, x0=None,
     # the repository is kappa 317 and the largest tau 1.15.
     bounds = [(None, None)] * layout["n_params"]
     bounds[layout["log_tau"]] = (np.log(1e-3), np.log(10.0))
+    if loading:
+        bounds[layout["log_lam_old"]] = (np.log(1e-3), np.log(10.0))
     for key in ("log_kmin", "log_ey", "log_eo"):
         bounds[layout[key]] = (np.log(1e-4), np.log(1e6))
 
@@ -393,25 +428,36 @@ def fit(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None, x0=None,
         converged=bool(res.success),
         se=se,
         corr=corr,
+        lam_old=(float(np.exp(res.x[layout["log_lam_old"]])) if loading else None),
     )
 
 
-def simulate(design, *, tau, kappa_min, excess_young, excess_old, anchor_ages, seed):
-    """Draw counts from the GLMM at a known truth, on a real design."""
+def simulate(design, *, tau, kappa_min, excess_young, excess_old, anchor_ages, seed,
+             lam_old=None):
+    """Draw counts from the GLMM at a known truth, on a real design.
+
+    ``lam_old`` makes the subject loading age-varying: `tau` is then its value at
+    the young anchor and `lam_old` its value at the old one, interpolated the
+    same way `kappa` is. Left as ``None`` the loading is constant at `tau`, which
+    is the specification every registered model has.
+    """
     rng = np.random.default_rng(seed)
     prop = np.bincount(design.cell_idx, weights=design.y / design.n_trials)
     prop = np.clip(prop / design.cell_counts, 1e-4, 1 - 1e-4)
     m = np.log(prop / (1 - prop))
 
-    s = rng.normal(0.0, 0.25, len(design.studies))
-    s -= s.mean()
-    b = rng.normal(0.0, tau, design.n_subjects)
-
-    eta = m[design.cell_idx] + s[design.study_idx] + b[design.subject_idx]
-    p = 1.0 / (1.0 + np.exp(-eta))
-
     young, old = anchor_ages
     w = (design.age - young) / (old - young)
+
+    s = rng.normal(0.0, 0.25, len(design.studies))
+    s -= s.mean()
+    b = rng.standard_normal(design.n_subjects)[design.subject_idx]
+    lam = (np.full(design.n_obs, float(tau)) if lam_old is None
+           else np.exp(np.log(tau) + w * (np.log(lam_old) - np.log(tau))))
+
+    eta = m[design.cell_idx] + s[design.study_idx] + lam * b
+    p = 1.0 / (1.0 + np.exp(-eta))
+
     ly, lo = np.log(excess_young), np.log(excess_old)
     kappa = kappa_min + np.exp(ly + w * (lo - ly))
 
@@ -641,6 +687,39 @@ def run_recovery(key, *, nodes=DEFAULT_NODES, basis=None):
                 label=f"seed {seed}: "), flush=True)
 
 
+def run_loading(key, *, nodes=DEFAULT_NODES, basis=None):
+    """Is this pool's `kappa` carrying subject-scale drift the model cannot?
+
+    Every registered model gives a child one intercept with a scale constant in
+    age. Where the true between-child scale is *not* constant, `kappa(age)` is
+    the only age-varying spread parameter left and absorbs the difference, which
+    is what produced the 16-18 month typically-developing understood spike
+    (section 21 of the note). A large gap here does not invalidate the pool's
+    calibration -- the estimator is meant to mirror the model, drift and all --
+    but it does mean the resulting `kappa` is a compound quantity and should not
+    be reported as dispersion.
+    """
+    pool = POOLS[key]
+    if not pool.subject_effects:
+        print(f"\n{'=' * 78}\n{pool.label}\n  no subject effect — nothing to vary")
+        return None
+    design = pool.design(**(basis or {}))
+    ya, oa = pool.anchors
+    print(f"\n{'=' * 78}\nsubject-loading check -- {pool.label}   anchors={pool.anchors}")
+    print(" ", design.describe(), flush=True)
+
+    const = fit(design, pool.anchors, n_nodes=nodes)
+    print(const.summary(label="constant tau (as modelled): "), flush=True)
+    varying = fit(design, pool.anchors, n_nodes=nodes, loading=True)
+    print(varying.summary(label="age-varying loading:        "), flush=True)
+
+    gap = const.nll - varying.nll
+    drift = varying.lam_old / varying.tau - 1.0
+    print(f"    loading buys {gap:,.1f} log-likelihood units on 1 parameter; "
+          f"scale {drift * 100:+.0f}% over {ya:.0f}-{oa:.0f} months")
+    return const, varying
+
+
 def run_mean_sweep(key, *, nodes=DEFAULT_NODES):
     """How much does the answer depend on how flexible the mean is?
 
@@ -677,6 +756,9 @@ def main(argv=None):
                         help="simulate from a known truth and refit, instead of fitting")
     parser.add_argument("--mean-sweep", action="store_true",
                         help="refit across mean models to test whether kappa is stable")
+    parser.add_argument("--loading", action="store_true",
+                        help="diagnostic: refit with an age-varying subject loading "
+                             "to see how much of kappa is subject-scale drift")
     parser.add_argument("--mean", choices=("saturated", "spline"), default="saturated",
                         help="mean model for --recover and the default fit "
                              "(default %(default)s; the DS joint frame needs spline, "
@@ -698,6 +780,8 @@ def main(argv=None):
             run_recovery(key, nodes=args.nodes, basis=basis)
         elif args.mean_sweep:
             run_mean_sweep(key, nodes=args.nodes)
+        elif args.loading:
+            run_loading(key, nodes=args.nodes, basis=basis)
         else:
             run_pool(key, nodes=args.nodes, basis=basis)
     return 0

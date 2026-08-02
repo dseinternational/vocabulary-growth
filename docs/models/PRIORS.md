@@ -312,7 +312,7 @@ a_kappa =  log kappa_excess_young - b_kappa * z_young
 
 Both sets of estimates come from `scripts/kappa_conditional_calibration.py`, which fits a saturated per-age mean alongside whichever effects the model carries — study effects and a quadrature-integrated subject effect for the random-effect models, neither for VG01-VG04. Each pool declares its own grouping and the estimator mirrors it. The `--recover` and `--mean-sweep` modes are what establish that a given pool can be calibrated at all; both must be run before adding one.
 
-`s = 0.9` on the two understood outcomes rather than 0.7 is not generic caution. Typically-developing understood `kappa` per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16 months, so the fitted rise is a two-parameter summary of a jagged profile and should not be stated more confidently than that.
+`s = 0.9` on the two understood outcomes rather than 0.7 is not generic caution. Typically-developing understood `kappa` per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16 months, so the fitted rise is a two-parameter summary of a jagged profile and should not be stated more confidently than that. What produces the jaggedness is now known — see "What a rising `kappa` on the understood outcomes means" below — and it is a further reason to keep these two anchors wide.
 
 Prior simulation on each model's own age grid:
 
@@ -330,9 +330,23 @@ Review notes:
 - The prior on `kappa` at any given age is **exactly invariant** to the pool's age standardisation: the interpolation weight is `(age - young) / (old - young)` in months, and the standardisation cancels. Resampling or a study filter cannot move it.
 - `kappa_min` is carried over from the legacy recalibration unchanged for the spoken and ratio outcomes. The anchored form leans on it harder — beyond the old anchor the floor alone sets the level — so its ~8% of prior mass below `kappa = 1` now shows at old ages. Tightening `kappa_min_sigma` is a candidate follow-up.
 - **The floor is not always a floor.** With `b_kappa > 0` the exponential term vanishes at young ages instead of old ones, so `kappa_min` becomes the _young_-age asymptote. That is why VG13's is 30 rather than 3: a third of its 8-18 month frame sits below the young anchor, and the 8-11 month cells estimate 23-32. VG12's conditional fit puts no mass on a floor at all (it goes to zero with an unbounded standard error, a rising curve never reaching one inside the frame), so it keeps the weak default and the anchors carry the level.
-- The sign of `b_kappa` is unconstrained, and this is what the comprehension models needed: their dispersion _rises_ with age, which `b_kappa_mag >= 0` cannot represent at any setting. For the spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls.
+- The sign of `b_kappa` is unconstrained, and this is what the comprehension models needed: their fitted `kappa` _rises_ with age, which `b_kappa_mag >= 0` cannot represent at any setting. For the spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls. On what the rise does and does not mean, see immediately below.
 - Dropping `kappa_min` entirely and using a pure log-linear `kappa` was tested and rejected: it costs 10 to 168 log-likelihood units against the floored form across the six pools.
 - **VG09, VG10 and VG16 stay on the legacy form deliberately.** Their shared Down syndrome joint frame — 671 rows spanning 12-46 months — is too thin to calibrate from: the conditional estimate moves by 80% depending on how flexible the mean model is, where the typically-developing pools move by 3%. VG15's cross-tabulated frame the estimator does not reproduce at all.
+
+### What a rising `kappa` on the understood outcomes means
+
+VG12's and VG13's dispersion priors rise with age, and the two-anchor form exists partly so they can. That is a correct description of the models' `kappa` parameter and **not** a finding that comprehension becomes more variable as children get older. On the instrument's own scale it becomes less so.
+
+The cause is the 810-item reference scale interacting with a subject intercept whose scale is fixed in age. Comprehension is collected only on WG (396 items) and Oxford CDI (418), and those are the _easiest_ items, so as children work up a form the modelled proportion `y / 810` compresses: by 16-18 months the mean row sits at about half its form's extent. The apparent between-child spread on the logit scale therefore falls with age, a constant `tau_subject` cannot follow it, and `kappa(age)` — the only age-varying spread parameter in the likelihood — absorbs the residue. Where the observed spread crosses below `tau`, `kappa` runs away, which is what produces the 110.7 at 16 months in the per-cell profile above.
+
+Three measurements pin it down, all in section 21 of [`notes/202608020829-kappa-and-eta-q-prior-recalibration.md`](../../notes/202608020829-kappa-and-eta-q-prior-recalibration.md) and reproducible with `scripts/kappa_conditional_calibration.py --loading`:
+
+- Letting the subject loading vary with age costs one parameter and buys 111-237 log-likelihood units on the three affected pools, and reverses the sign of the fitted `kappa` trend on both understood outcomes.
+- `q` — the same children, the same design, a mean profile within 10% of understood's — shows **no** loading drift at all, worth 0.8 units. Its denominator is the child's own understood count, so the form's extent cancels.
+- Rescoring the identical rows out of each row's own form instead of 810 removes 84-96% of the drift.
+
+Two consequences. For the priors, none: the calibration must mirror the model's own structure, the registered models carry a constant `tau_subject`, and so a `kappa` prior fitted under that assumption is the right one for them. For reporting, `kappa` on the understood outcomes is a compound of observation-level dispersion and a subject scale the model holds fixed, and should not be quoted as a statement about children. The 810-item scale itself is not in question — it is the harmonisation this project deliberately adopts (see "Instrument scale" below) — only an untraced consequence of it.
 
 See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` for the calibration, the estimator correction behind it, and the forms that were rejected.
 

@@ -186,6 +186,91 @@ def test_too_few_quadrature_nodes_biases_kappa_down():
     assert coarse.kappa_young < 0.8 * fine.kappa_young
 
 
+# --- the age-varying subject loading (a diagnostic, not a calibration path) -----
+#
+# Section 21 of the note traces the 16-18 month typically-developing understood
+# `kappa` spike to a subject scale that falls with age while the model holds it
+# constant. `--loading` is the check for that, and it is only worth anything if
+# it is quiet when the scale really is constant and loud when it is not. Both
+# truths below are simulated on the same design; tolerances are the worst over
+# seeds 7-11, rounded out.
+
+_CONSTANT_LOADING = dict(tau=1.0, kappa_min=5.0, excess_young=295.0, excess_old=45.0)
+_FALLING_LOADING = dict(tau=1.3, lam_old=0.55, kappa_min=5.0,
+                        excess_young=95.0, excess_old=45.0)
+
+
+def _refit_loading(truth, *, seed, nodes=N_NODES):
+    """Fit the same simulated draw both ways; return (constant tau, loading)."""
+    design = _synthetic_design()
+    y = simulate(design, anchor_ages=ANCHORS, seed=seed, **truth)
+    sim = Design(
+        age=design.age, y=y, n_trials=design.n_trials,
+        subject=design.subject_idx, study=design.study_idx, min_cell=1,
+    )
+    return (fit(sim, ANCHORS, n_nodes=nodes),
+            fit(sim, ANCHORS, n_nodes=nodes, loading=True))
+
+
+@pytest.mark.parametrize("seed", [7, 8, 9])
+def test_a_constant_subject_scale_reads_as_constant(seed):
+    """The null. A one-parameter extension must not pay for itself on noise.
+
+    Simulating a genuinely constant loading and fitting the age-varying form
+    returns a flat one (ratio 0.94-1.11 over seeds 7-11) for 0.4-1.9 log-likelihood
+    units. Without this the diagnostic would flag every pool it was pointed at.
+    """
+    const, varying = _refit_loading(_CONSTANT_LOADING, seed=seed)
+
+    assert const.nll - varying.nll < 5.0
+    assert varying.lam_old / varying.tau == pytest.approx(1.0, abs=0.15)
+
+
+@pytest.mark.parametrize("seed", [7, 8, 9])
+def test_a_falling_subject_scale_is_found_and_distorts_kappa_if_it_is_not(seed):
+    """The alternative, and why it matters that the diagnostic exists.
+
+    A loading falling 1.3 -> 0.55 across the anchors is recovered as 0.43-0.50 of
+    its young value for 63-82 log-likelihood units. Fitting the same draw with
+    the constant scale every registered model carries does not merely lose those
+    units: its `kappa` at the young anchor comes back at 13-26 against a truth of
+    100, so a calibration read off it would be out by nearly an order of
+    magnitude in a way nothing in the fit itself announces.
+    """
+    truth_ratio = _FALLING_LOADING["lam_old"] / _FALLING_LOADING["tau"]
+    truth_kappa_young = _FALLING_LOADING["kappa_min"] + _FALLING_LOADING["excess_young"]
+    const, varying = _refit_loading(_FALLING_LOADING, seed=seed)
+
+    assert const.nll - varying.nll > 30.0
+    assert varying.lam_old / varying.tau == pytest.approx(truth_ratio, rel=0.35)
+    assert const.kappa_young < 0.5 * truth_kappa_young
+
+
+def test_the_loading_fit_leaves_the_constant_form_untouched():
+    """`loading=False` must be exactly the code path the calibration already uses.
+
+    The loading parameter is appended after the existing four, so every index
+    into the parameter vector is unchanged and a default fit cannot drift.
+    """
+    design = _synthetic_design()
+    plain = _MODULE._layout(design)
+    extended = _MODULE._layout(design, loading=True)
+
+    assert extended["n_params"] == plain["n_params"] + 1
+    assert extended["log_lam_old"] == plain["n_params"]
+    for key in ("log_tau", "log_kmin", "log_ey", "log_eo"):
+        assert extended[key] == plain[key]
+    assert "log_lam_old" not in plain
+
+
+def test_loading_and_a_pinned_tau_are_rejected_together():
+    """A fixed scale and a varying one are contradictory, not silently merged."""
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _MODULE.make_objective(
+            _synthetic_design(), ANCHORS, n_nodes=8, tau_fixed=1e-6, loading=True
+        )
+
+
 # --- the anchored curve --------------------------------------------------------
 
 
