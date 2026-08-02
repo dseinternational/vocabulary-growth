@@ -4,7 +4,8 @@
 """Unit tests for the shared HSGP/trend build helpers.
 
 Covers the kappa dispersion-closure factory (``make_kappa_of_z`` — pinning the
-closed form ``z -> kappa_min + exp(a_kappa + b_kappa * z)``), the trend + HSGP
+closed form ``z -> kappa_min + exp(a_kappa + b_kappa * z)``), the two-anchor
+builder over the same curve (``build_kappa_of_z_anchored``), the trend + HSGP
 graph builders (``trend_and_gp`` / ``intercept_and_gp`` — checking which RVs and
 deterministics they emit), and ``get_hsgp_hyperparams`` (the boundary/basis
 sizing). Evaluating with constant inputs is sufficient (and matches the
@@ -15,10 +16,12 @@ caller has already created).
 import numpy as np
 import preliz as pz
 import pymc as pm
+import pytest
 
 from vocab_growth.models.common import get_hsgp_hyperparams
 from vocab_growth.models.gp_utils import (
     GPGrid,
+    build_kappa_of_z_anchored,
     intercept_and_gp,
     make_kappa_of_z,
     tent_and_gp,
@@ -45,6 +48,75 @@ def test_make_kappa_of_z_monotone_for_negative_b():
     hi = float(f(1.0).eval())
     # negative b_kappa => kappa decreases as standardised age increases
     assert lo > hi
+
+
+# --- build_kappa_of_z_anchored -----------------------------------------------
+
+
+def _anchored(anchor_z, young=30.0, old=3.0, floor=4.0, suffix=""):
+    """Build the anchored kappa closure from point-mass priors, in a model.
+
+    Each prior is a LogNormal with sigma driven to ~0 so the single prior draw is
+    its median. That makes the anchor identity checkable exactly rather than
+    distributionally: the point of the parameterisation is that ``kappa`` at the
+    anchor ages *is* the floor plus the drawn excess, for every draw.
+    """
+    with pm.Model() as model:
+        f = build_kappa_of_z_anchored(
+            pz.LogNormal(mu=np.log(floor), sigma=1e-9),
+            pz.LogNormal(mu=np.log(young), sigma=1e-9),
+            pz.LogNormal(mu=np.log(old), sigma=1e-9),
+            anchor_z=anchor_z,
+            suffix=suffix,
+        )
+    return model, f
+
+
+def test_anchored_kappa_hits_both_anchors():
+    zy, zo = -1.3, 0.4
+    _, f = _anchored((zy, zo))
+    assert np.isclose(float(f(zy).eval()), 4.0 + 30.0)
+    assert np.isclose(float(f(zo).eval()), 4.0 + 3.0)
+
+
+def test_anchored_kappa_is_log_linear_above_the_floor():
+    zy, zo = -1.0, 1.0
+    _, f = _anchored((zy, zo))
+    # midway between the anchors the excess is the geometric mean of the two
+    mid = float(f(0.0).eval())
+    assert np.isclose(mid, 4.0 + np.sqrt(30.0 * 3.0))
+
+
+def test_anchored_kappa_admits_a_rising_trajectory():
+    # excess_old > excess_young: the legacy b_kappa_mag >= 0 cannot express this
+    _, f = _anchored((-1.0, 1.0), young=3.0, old=30.0)
+    assert float(f(1.0).eval()) > float(f(-1.0).eval())
+
+
+def test_anchored_kappa_emits_the_expected_variables():
+    model, _ = _anchored((-1.0, 1.0), suffix="_u")
+    assert {v.name for v in model.free_RVs} == {
+        "kappa_min_u", "kappa_excess_young_u", "kappa_excess_old_u"
+    }
+    # a_kappa/b_kappa keep the legacy names so the two forms stay comparable
+    assert {"a_kappa_u", "b_kappa_u", "kappa_young_u", "kappa_old_u"} == {
+        d.name for d in model.deterministics
+    }
+
+
+def test_anchored_kappa_derives_the_legacy_coefficients():
+    zy, zo = -1.2, 0.6
+    model, f = _anchored((zy, zo), young=30.0, old=3.0, floor=4.0)
+    b = float(model["b_kappa"].eval())
+    a = float(model["a_kappa"].eval())
+    assert np.isclose(b, (np.log(3.0) - np.log(30.0)) / (zo - zy))
+    # a_kappa is the log-excess at z = 0, so the closure agrees with the legacy form
+    assert np.isclose(float(f(0.37).eval()), 4.0 + np.exp(a + b * 0.37))
+
+
+def test_anchored_kappa_rejects_unordered_anchors():
+    with pytest.raises(ValueError, match="ordered"):
+        _anchored((0.5, -0.5))
 
 
 # --- trend_and_gp / intercept_and_gp -----------------------------------------

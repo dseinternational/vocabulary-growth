@@ -50,7 +50,12 @@ class ModelType(Enum):
 
 @dataclass
 class KappaPriorParams:
-    """Parameters for the dispersion (kappa) prior distributions."""
+    """Parameters for the dispersion (kappa) prior distributions.
+
+    The intercept-and-slope parameterisation ``kappa(z) = kappa_min +
+    exp(a_kappa - b_kappa_mag * z)``. See :class:`KappaAnchorPriorParams` for the
+    two-anchor alternative and why the migrated models use it.
+    """
 
     kappa_min_mu: float = math.log(5.0)
     """LogNormal mu for kappa_min."""
@@ -62,6 +67,56 @@ class KappaPriorParams:
     """Normal sigma for a_kappa."""
     b_kappa_mag_sigma: float = 0.3
     """HalfNormal sigma for b_kappa_mag."""
+
+
+@dataclass
+class KappaAnchorPriorParams:
+    """Two-anchor dispersion prior: `kappa` pinned at two reference ages.
+
+    Same curve as :class:`KappaPriorParams` — a floor plus an exponentially
+    decaying age term, ``kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)`` — but
+    ``(a_kappa, b_kappa)`` are *derived* from priors on the age term at two
+    reference **ages in months** instead of being given priors of their own. This
+    is the same move the mean trajectory already makes through ``slope_anchors``.
+
+    Four things follow, and all four are the reason for the change (see
+    notes/202608020829-kappa-and-eta-q-prior-recalibration.md, sections 8 and 17):
+
+    * **The priors are checkable.** ``kappa_min + excess_young`` is total `kappa`
+      at ``anchor_ages[0]``, directly comparable with a per-age Beta-Binomial fit
+      to the analysis frame. ``a_kappa`` is not: it is the age term at ``z = 0``,
+      i.e. at whatever the *pool mean age* happens to be.
+    * **They do not move when the pool does.** ``a_kappa`` is defined at the pool
+      mean, so resampling or a study filter silently changes what its prior means.
+      Ages do not move.
+    * **The tails are interpolated, not extrapolated.** Both anchors sit inside
+      the data, so the prior on `kappa` between them is a blend of two checked
+      values rather than an intercept and a slope whose tails compound as
+      ``exp(2b)`` at the ends of the range.
+    * **The sign is free.** ``b_kappa_mag >= 0`` forces `kappa` to fall with age,
+      which the typically-developing comprehension data reject. Two free anchors
+      admit either direction.
+
+    Place the anchors where the age term is about an order of magnitude above the
+    floor and where it has fallen back to it: between them the exponential carries
+    the curve, outside them the floor does, so both priors sit where the data
+    identify them.
+    """
+
+    anchor_ages: tuple[float, float]
+    """Reference ages (months), ordered (young, old), for the two kappa anchors."""
+    kappa_min_mu: float
+    """LogNormal mu for kappa_min (the old-age dispersion floor)."""
+    kappa_min_sigma: float
+    """LogNormal sigma for kappa_min."""
+    excess_young_mu: float
+    """LogNormal mu for the age term at the young anchor (kappa above the floor)."""
+    excess_young_sigma: float
+    """LogNormal sigma for the age term at the young anchor."""
+    excess_old_mu: float
+    """LogNormal mu for the age term at the old anchor (kappa above the floor)."""
+    excess_old_sigma: float
+    """LogNormal sigma for the age term at the old anchor."""
 
 
 # ============================================================
@@ -100,7 +155,14 @@ class UnivariateModelDefinition:
 
     # -- TD-specific data parameters --
     sample_fraction: float = 1.0
-    """Fraction of TD data to subsample (1.0 = no subsampling)."""
+    """Fraction of TD **subjects** to subsample (1.0 = no subsampling).
+
+    Whole children are drawn and all their administrations kept
+    (:func:`vocab_growth.data_utils._subsample_subjects`). Subsampling rows
+    instead destroys the within-child replication that identifies a subject
+    random effect; see
+    ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md`` §§11-12.
+    """
     random_seed: int = 47
     """Random seed for TD subsampling."""
 
@@ -110,7 +172,11 @@ class UnivariateModelDefinition:
     eta_sigma: float = 0.4
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
-    kappa: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa: KappaPriorParams | KappaAnchorPriorParams = field(
+        default_factory=KappaPriorParams
+    )
+    """Dispersion priors, in either parameterisation; only the univariate spoken
+    models have migrated to the two-anchor form so far."""
 
     # -- Study-level random intercepts --
     tau_study_sigma: float = 0.5
@@ -187,7 +253,14 @@ class BivariateModelDefinition:
 
     # -- TD-specific data parameters --
     sample_fraction: float = 1.0
-    """Fraction of TD data to subsample (1.0 = no subsampling)."""
+    """Fraction of TD **subjects** to subsample (1.0 = no subsampling).
+
+    Whole children are drawn and all their administrations kept
+    (:func:`vocab_growth.data_utils._subsample_subjects`). Subsampling rows
+    instead destroys the within-child replication that identifies a subject
+    random effect; see
+    ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md`` §§11-12.
+    """
     random_seed: int = 47
     """Random seed for TD subsampling."""
 
@@ -581,6 +654,99 @@ _DS_GP_DOMAIN_MONTHS = (8, 115)
 _TD_GP_DOMAIN_MONTHS = (8, 30)
 _YOUNG_TD_GP_DOMAIN_MONTHS = (8, 18)
 
+
+# ------------------------------------------------------------------
+# Production-outcome dispersion, two-anchor form (2026-08-02)
+# ------------------------------------------------------------------
+# The spoken models were recalibrated in the legacy (a_kappa, b_kappa_mag)
+# parameterisation earlier the same day and then reparameterised, because
+# recalibrating that form could not be finished: no setting of its three
+# parameters both admits the slope the data want and keeps young-age dispersion
+# plausible, since the intercept and slope tails compound as exp(2b) at the ends
+# of the age range. See notes/202608020829-kappa-and-eta-q-prior-recalibration.md
+# (sections 8, 17 and 18) for the full argument and the audit trail.
+#
+# Both blocks below are centred on a three-parameter fit of the model's own
+# dispersion curve, kappa(z) = kappa_min + exp(a - b z), to a *saturated* mean —
+# a free proportion per integer-age cell, every cell with at least 15
+# observations — so the dispersion estimate is not contaminated by a choice of
+# mean model:
+#
+#   pool             n      cells  kappa_min      b     kappa at the two anchors
+#   DS spoken     1,114       25       3.54    2.78     49.1 @ 18 mo, 7.7 @ 36 mo
+#   TD spoken     4,075       23       3.08    1.78     37.1 @ 12 mo, 6.2 @ 20 mo   (VG03 frame)
+#   TD spoken    16,235       23       3.08    1.50     29.9 @ 12 mo, 6.6 @ 20 mo   (VG11 frame)
+#
+# Anchors go where the age term is roughly an order of magnitude above the floor
+# and where it has fallen back to it: between them the exponential carries the
+# curve and outside them the floor does, so both priors sit where the data can
+# identify them. The excess medians below are those fitted totals minus the
+# floor, rounded.
+#
+# sigma 0.7 throughout (a 5-95% range of about +/- 3.2x), set so each anchor's
+# range covers the spread of defensible estimates for it — the two TD frames'
+# fitted values, and the per-age cells on either side of the anchor age, which
+# scatter more than the smooth fit does. At the typically-developing young anchor
+# the 11/12/13-month cells give total kappa of 20.3, 89.4 and 37.0, on profile
+# intervals that do not overlap ([12.2, 31.2] on 86 administrations, [65.6,
+# 119.1] on 162, [29.4, 45.7] on 271): the scatter is real between-study
+# composition rather than noise, and no smooth curve passes through all three.
+# sigma 0.6 would have put the high cell at the 96th prior percentile; 0.7 covers
+# it. Erring wide is deliberate — the failure this replaces was a prior too tight
+# to let the data speak (contraction 0.82, prior CDF 0.93-1.00).
+#
+# kappa_min is carried over unchanged (LogNormal(log 3, 0.8), median 3, 5-95%
+# [0.80, 11.2]) so this is a single-factor change against the recalibrated legacy
+# fits. Three independent pools put the floor at 3.08-3.54. Note that the
+# anchored form leans on it harder — beyond the old anchor the floor alone sets
+# the level, where before the exponential term propped it up — so its 8% of prior
+# mass below kappa = 1 now shows at old ages, and tightening kappa_min_sigma is a
+# candidate follow-up rather than something folded into this change.
+#
+# One prior per population, not one shared block: b_kappa_mag is a slope per unit
+# *standardised* age, so a single prior on it is about 3.5x tighter on the DS
+# pool (sd 20.8 months) than on the TD pool (sd 5.9 months) in per-month terms —
+# the units problem recorded in section 15. Anchors stated in months are immune
+# to it, and to the pool's age distribution moving under a resample or a study
+# filter.
+#
+# NOT applied to the comprehension models (VG02, VG04, VG12) or to kappa_s in the
+# joint models. Comprehension would benefit most from the freed sign — TD
+# understood dispersion is flat to slightly rising, which b_kappa <= 0 cannot
+# represent at all — but its anchors need their own calibration (the TD
+# understood floor is ~10.6, not ~3), and kappa_s governs dispersion of the
+# production ratio on a per-child denominator, a different quantity to which this
+# marginal calibration does not transfer.
+
+_DS_SPOKEN_KAPPA = KappaAnchorPriorParams(
+    # Implied b_kappa_mag: median 2.80, 5-95% [0.91, 4.67], P(kappa rising) 0.007.
+    # The empirical slope is 2.78 on 25 age cells and 2.17 on the 12-cell subset
+    # used earlier, so the prior brackets both readings; the legacy
+    # HalfNormal(0.75) put them at prior CDF 1.00.
+    anchor_ages=(18.0, 36.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(45.0),
+    excess_young_sigma=0.7,
+    excess_old_mu=math.log(4.0),
+    excess_old_sigma=0.7,
+)
+
+_TD_SPOKEN_KAPPA = KappaAnchorPriorParams(
+    # Shared by VG03 and VG11, whose frames fit 1.78 and 1.50; implied b_kappa_mag
+    # median 1.71 on the VG03 frame and 1.69 on VG11 (they differ only through the
+    # frames' age standard deviations), 5-95% about [0.50, 2.90], which also
+    # contains the 1.71 estimated in section 17. Excess medians split the two
+    # frames' fitted values (34.0/26.8 at 12 months, 3.07/3.47 at 20 months).
+    anchor_ages=(12.0, 20.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(30.0),
+    excess_young_sigma=0.7,
+    excess_old_mu=math.log(3.0),
+    excess_old_sigma=0.7,
+)
+
 VG01 = UnivariateModelDefinition(
     model_id="VG01",
     config_name="age-spoken-ds",
@@ -611,6 +777,7 @@ VG01 = UnivariateModelDefinition(
     # Raised from 0.4 to offset the p_slope_low pull-down: lets the HSGP add
     # mid-range curvature so the steep 36-60 mo rise stays covered.
     eta_sigma=0.5,
+    kappa=_DS_SPOKEN_KAPPA,
 )
 
 VG02 = UnivariateModelDefinition(
@@ -675,6 +842,7 @@ VG03 = UnivariateModelDefinition(
     # after the WS exclusion; this keeps the effective training set
     # (~1,500 rows) close to the previous VG03 fit.
     sample_fraction=0.25,
+    kappa=_TD_SPOKEN_KAPPA,
 )
 
 VG04 = UnivariateModelDefinition(
@@ -921,6 +1089,7 @@ VG11 = UnivariateModelDefinition(
     # GP–intercept ridge that arises when study REs are present.
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
+    kappa=_TD_SPOKEN_KAPPA,
 )
 
 VG12 = UnivariateModelDefinition(
@@ -1161,6 +1330,26 @@ VG16 = BivariateModelDefinition(
     lag_baseline="population",
     beta_lag_mu=0.0,
     beta_lag_sigma=0.5,
+    # Option D (ported from VG10, as VG15 already does): per-draw GP anchor at
+    # 54 mo (the midpoint of the (24, 84) anchors). Added 2026-08-02.
+    #
+    # VG16 was specified as "VG09 plus a cross-lag" and so inherited VG09's
+    # *unanchored* geometry, making it the only model with subject random effects
+    # on both u and q that lacked the stabilisation. It was correspondingly the
+    # worst-behaved model in the family: 47 divergences (4.7% of draws, against
+    # 0-0.4% everywhere else) and max scalar R-hat 1.126 on eta_u.
+    #
+    # The diagnosis is the understood-trajectory GP-versus-linear ridge that
+    # motivated VG10. Measured on the dev traces, the anchoring is what removes
+    # it — posterior correlations VG09 -> VG10: intercept_u/slope_u -0.54 ->
+    # -0.27, intercept_u/eta_u -0.37 -> +0.03, intercept_u/ell_unit_u -0.47 ->
+    # -0.09, while the intrinsic eta_u/ell_unit_u correlation is untouched
+    # (+0.43 -> +0.46). VG10's max scalar R-hat is 1.017 against VG09's 1.252.
+    #
+    # See notes/202608020829-kappa-and-eta-q-prior-recalibration.md §§15-16.
+    anchor_g_u_at_ref=True,
+    anchor_g_q_at_ref=True,
+    gp_anchor_age_months=54.0,
 )
 
 MODEL_REGISTRY: dict[
@@ -1206,9 +1395,37 @@ def _validate_positive_scale_fields(value, *, path: str) -> None:
                 raise ValueError(f"{field_path} must be positive; got {field_value!r}.")
 
 
+def _kappa_priors(definition):
+    """Yield every kappa prior block a definition carries, whatever its arity."""
+    for item in fields(definition):
+        if item.name == "kappa" or item.name.startswith("kappa_"):
+            value = getattr(definition, item.name)
+            if isinstance(value, (KappaPriorParams, KappaAnchorPriorParams)):
+                yield item.name, value
+
+
+def _kappa_anchor_ages(definition) -> list[float]:
+    """Every two-anchor reference age in a definition, for the GP-domain check."""
+    return [
+        age
+        for _, kp in _kappa_priors(definition)
+        if isinstance(kp, KappaAnchorPriorParams)
+        for age in kp.anchor_ages
+    ]
+
+
 def validate_model_definition(definition) -> None:
     """Fail early when a declarative model specification is internally invalid."""
     prefix = getattr(definition, "model_id", type(definition).__name__)
+    for name, kp in _kappa_priors(definition):
+        if isinstance(kp, KappaAnchorPriorParams) and not (
+            len(kp.anchor_ages) == 2
+            and all(math.isfinite(age) for age in kp.anchor_ages)
+            and kp.anchor_ages[0] < kp.anchor_ages[1]
+        ):
+            raise ValueError(
+                f"{prefix}.{name}.anchor_ages must be ordered (young, old)."
+            )
     if not re.fullmatch(r"VG\d{2}", definition.model_id):
         raise ValueError(f"{prefix}.model_id must have the form VG01.")
     if not re.fullmatch(r"[A-Za-z0-9]+(?:[A-Za-z0-9_-]*[A-Za-z0-9])?", definition.config_name):
@@ -1251,6 +1468,7 @@ def validate_model_definition(definition) -> None:
             required_ages.append(anchor_age)
         sign_anchors = getattr(definition, "sign_anchor_ages", ())
         required_ages.extend(sign_anchors)
+        required_ages.extend(_kappa_anchor_ages(definition))
         if min(required_ages) < domain[0] or max(required_ages) > domain[1]:
             raise ValueError(f"{prefix} reference and query ages must lie in its GP domain.")
 

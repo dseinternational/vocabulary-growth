@@ -72,12 +72,14 @@ Oijen
 orcid
 overfitting
 parameterisation
+parameterisations
 preliz
 PyMC
 pyplot
 pytest
 rankdir
 recentred
+recentring
 recomputation
 reflow
 reparameterisation
@@ -133,3 +135,6 @@ reweighting
 Birnbaum
 Psychometrika
 unidimensionality
+unrepresentable
+bimodality
+parameterising

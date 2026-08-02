@@ -912,6 +912,52 @@ def count_reinstated_implausible_production(max_age_months: int | None = None) -
     )
 
 
+def _subsample_subjects(
+    df: pd.DataFrame, sample_fraction: float, random_seed: int
+) -> pd.DataFrame:
+    """Draw a fraction of *subjects*, keeping all their administrations.
+
+    Subsampling rows independently destroys the within-child replication that
+    identifies a subject random effect. In the typically-developing pool a child
+    contributes 1.32 administrations on average and 15.9% contribute more than
+    one; drawing 10% of *rows* leaves 1.04 and 3.8%, at which point a subject
+    random intercept and the observation-level Beta-Binomial dispersion are the
+    same quantity — two per-observation noise terms with nothing to separate
+    them.
+
+    That is not hypothetical. Fitting VG11 to a 10% row-wise draw produces a
+    posterior with two entirely separated modes — the between-child spread
+    attributed either to ``kappa`` (``tau_subject`` about 0.07, ``a_kappa``
+    about 1.2) or to the subject effects (``tau_subject`` about 1.08,
+    ``a_kappa`` about 4.1) — with six chains splitting 3/3, no within-chain
+    migration, and R-hat 1.72. The same model on a subject-wise draw of the same
+    size is unimodal at R-hat 1.01. See
+    ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md`` §§11-12.
+
+    Subjects are keyed by ``study``/``subject_id`` together, matching the
+    ``subject_key`` convention the random-effect engines use, so a subject
+    identifier repeated across datasets is not merged.
+
+    The key list is **sorted** before sampling. ``Series.unique`` preserves order
+    of first appearance and ``Series.sample`` draws by position, so an unsorted
+    list would make the selected subjects depend on the order DuckDB happened to
+    return rows in — the loader's query carries no ``ORDER BY``. Sorting matches
+    what the random-effect engines already do when they assign study and subject
+    codes, and makes the draw reproducible from the seed alone.
+    """
+    subject_key = (
+        df["study"].astype(str) + "::" + df["subject_id"].astype(str)
+    )
+    keep = (
+        pd.Series(sorted(subject_key.unique()))
+        .sample(frac=sample_fraction, random_state=random_seed)
+    )
+    return (
+        df[subject_key.isin(set(keep))]
+        .reset_index(drop=True)
+    )
+
+
 def load_data(
     population: Population,
     columns: list[str],
@@ -937,7 +983,11 @@ def load_data(
         For TD the ``study`` column is aliased from ``dataset_name`` (the Wordbank
         dataset/lab identifier), along with ``subject_id``, ``form`` and ``language``.
     sample_fraction : float
-        Fraction of data to subsample (TD only). 1.0 = no subsampling.
+        Fraction of **subjects** to subsample (TD only). 1.0 = no subsampling.
+        Whole children are drawn and all their administrations kept, so
+        within-child replication survives the subsample — see
+        :func:`_subsample_subjects` for why drawing rows instead is unsafe for
+        any model carrying subject random effects.
     random_seed : int
         Random seed for subsampling.
     max_age_months : int | None
@@ -1025,9 +1075,6 @@ def load_data(
         )
 
     if sample_fraction < 1.0:
-        td_df = (
-            td_df.sample(frac=sample_fraction, random_state=random_seed)
-            .reset_index(drop=True)
-        )
+        td_df = _subsample_subjects(td_df, sample_fraction, random_seed)
 
     return td_df[columns]

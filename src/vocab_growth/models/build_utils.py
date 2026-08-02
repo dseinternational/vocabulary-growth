@@ -190,6 +190,22 @@ def validate_ell_bounds(ell_months_range) -> tuple[float, float]:
     return ell_low_months, ell_high_months
 
 
+def standardize_anchor_ages(
+    anchor_ages,
+    *,
+    X_obs_mean: float,
+    X_obs_std: float,
+) -> tuple[float, float]:
+    """Z-score a pair of reference ages against the observed-age standardisation.
+
+    Shared by every anchored parameterisation — the mean trajectory's slope
+    anchors and the dispersion curve's kappa anchors — so an age stated in a model
+    definition always reaches the graph through the same conversion.
+    """
+    age_a, age_b = float(anchor_ages[0]), float(anchor_ages[1])
+    return (age_a - X_obs_mean) / X_obs_std, (age_b - X_obs_mean) / X_obs_std
+
+
 def slope_anchor_logit_coeffs(
     slope_anchors,
     *,
@@ -202,8 +218,6 @@ def slope_anchor_logit_coeffs(
     slope/intercept coefficients operates on PyMC random variables and stays
     inline in each engine's model context.
     """
-    slope_age_a = float(slope_anchors[0])
-    slope_age_b = float(slope_anchors[1])
-    slope_age_a_z = (slope_age_a - X_obs_mean) / X_obs_std
-    slope_age_b_z = (slope_age_b - X_obs_mean) / X_obs_std
-    return slope_age_a_z, slope_age_b_z
+    return standardize_anchor_ages(
+        slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+    )

@@ -66,12 +66,21 @@ from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
     standardize_ages,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.calibration import write_trace_calibration
-from vocab_growth.models.definitions import UnivariateModelDefinition
+from vocab_growth.models.definitions import (
+    KappaAnchorPriorParams,
+    UnivariateModelDefinition,
+)
 from vocab_growth.models.diagnostics_utils import capped_plot_var_names
-from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import (
+    GPGrid,
+    build_kappa_of_z,
+    build_kappa_of_z_anchored,
+    trend_and_gp,
+)
 from vocab_growth.reporting import (
     config_table,
     console,
@@ -108,9 +117,35 @@ class BaseModelConfiguration:
             raise ValueError("ages_query must be a non-empty list of integers.")
 
 
+@dataclass(frozen=True)
+class AnchoredKappaPriors:
+    """Resolved two-anchor dispersion priors: the distributions and their ages.
+
+    The configuration-side counterpart of
+    :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams`. Held as one
+    object rather than as loose fields so a model configuration carries either
+    this or the legacy ``a_kappa`` / ``b_kappa_mag`` pair, never a half-specified
+    mixture of the two.
+    """
+
+    kappa_min_dist: Continuous
+    """Prior for the old-age dispersion floor (kappa_min)."""
+    excess_young_dist: Continuous
+    """Prior for the age term above the floor at the young anchor age."""
+    excess_old_dist: Continuous
+    """Prior for the age term above the floor at the old anchor age."""
+    anchor_ages: tuple[float, float]
+    """Reference ages (months), ordered (young, old)."""
+
+
 @dataclass
 class ModelConfiguration(BaseModelConfiguration):
-    """Configuration for a single-outcome model (VG01-VG04)."""
+    """Configuration for a single-outcome model (VG01-VG04).
+
+    Dispersion is specified in exactly one of two ways: the legacy
+    ``kappa_min_dist`` / ``a_kappa_dist`` / ``b_kappa_mag_dist`` triple, or
+    ``kappa_anchored``. ``__post_init__`` rejects anything else.
+    """
 
     p_slope_low_dist: Continuous
     """Prior distribution for the mean proportion of the outcome at the lower slope anchor."""
@@ -120,12 +155,98 @@ class ModelConfiguration(BaseModelConfiguration):
     """Prior distribution for the unit length-scale parameter (ell_unit)."""
     eta_dist: Continuous
     """Prior distribution for the GP amplitude (eta)."""
-    kappa_min_dist: Continuous
-    """Prior distribution for the minimum kappa value (kappa_min)."""
-    a_kappa_dist: Continuous
-    """Prior distribution for the age slope of kappa (a_kappa)."""
-    b_kappa_mag_dist: Continuous
-    """Prior distribution for the magnitude of the kappa parameter."""
+    kappa_min_dist: Continuous | None = None
+    """Prior distribution for the minimum kappa value (kappa_min); legacy form only."""
+    a_kappa_dist: Continuous | None = None
+    """Prior distribution for the age slope of kappa (a_kappa); legacy form only."""
+    b_kappa_mag_dist: Continuous | None = None
+    """Prior distribution for the magnitude of the kappa parameter; legacy form only."""
+    kappa_anchored: AnchoredKappaPriors | None = None
+    """Two-anchor dispersion priors, in place of the three fields above."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        legacy = (self.kappa_min_dist, self.a_kappa_dist, self.b_kappa_mag_dist)
+        if self.kappa_anchored is not None:
+            if any(dist is not None for dist in legacy):
+                raise ValueError(
+                    "kappa_anchored cannot be combined with the legacy kappa_min / "
+                    "a_kappa / b_kappa_mag distributions."
+                )
+        elif any(dist is None for dist in legacy):
+            raise ValueError(
+                "the legacy kappa form needs all of kappa_min_dist, a_kappa_dist "
+                "and b_kappa_mag_dist; pass kappa_anchored instead."
+            )
+
+
+def kappa_prior_rows(config) -> list[tuple[str, object]]:
+    """Rows for the "Priors" table, naming whichever kappa form the model uses.
+
+    The anchored rows carry their reference ages, because the age is part of what
+    the prior means — ``kappa_excess_young`` on its own says nothing.
+    """
+    anchored = getattr(config, "kappa_anchored", None)
+    if anchored is None:
+        return [
+            ("kappa_min", config.kappa_min_dist),
+            ("a_kappa", config.a_kappa_dist),
+            ("b_kappa_mag", config.b_kappa_mag_dist),
+        ]
+    young_age, old_age = anchored.anchor_ages
+    return [
+        ("kappa_min", anchored.kappa_min_dist),
+        (f"kappa_excess_young ({young_age:g} mo)", anchored.excess_young_dist),
+        (f"kappa_excess_old ({old_age:g} mo)", anchored.excess_old_dist),
+    ]
+
+
+def kappa_anchor_derived_rows(config, *, X_obs_mean, X_obs_std):
+    """"Derived quantities" rows for the kappa anchors, or none if unanchored.
+
+    The z positions are what the graph actually uses, and they move with the
+    pool's age distribution even though the ages do not, so they are worth
+    printing next to the slope anchors.
+    """
+    anchored = getattr(config, "kappa_anchored", None)
+    if anchored is None:
+        return []
+    return [
+        ("Kappa anchors (months)", anchored.anchor_ages),
+        (
+            "Kappa anchors (z-score)",
+            standardize_anchor_ages(
+                anchored.anchor_ages, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+            ),
+        ),
+    ]
+
+
+def build_kappa_for_config(config, *, X_obs_mean, X_obs_std, suffix=""):
+    """Create the dispersion RVs for whichever kappa form ``config`` carries.
+
+    The single point where the two parameterisations diverge inside a model
+    graph. The anchored form needs the observed-age standardisation to place its
+    reference ages on the z scale; the legacy form does not, and is emitted
+    unchanged.
+    """
+    anchored = getattr(config, "kappa_anchored", None)
+    if anchored is None:
+        return build_kappa_of_z(
+            config.kappa_min_dist,
+            config.a_kappa_dist,
+            config.b_kappa_mag_dist,
+            suffix=suffix,
+        )
+    return build_kappa_of_z_anchored(
+        anchored.kappa_min_dist,
+        anchored.excess_young_dist,
+        anchored.excess_old_dist,
+        anchor_z=standardize_anchor_ages(
+            anchored.anchor_ages, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+        ),
+        suffix=suffix,
+    )
 
 
 @dataclass
@@ -539,9 +660,7 @@ def build_model(
             ("p_slope_hi", context.model_config.p_slope_hi_dist),
             ("ell_unit", context.model_config.ell_unit_dist),
             ("eta", context.model_config.eta_dist),
-            ("kappa_min", context.model_config.kappa_min_dist),
-            ("a_kappa", context.model_config.a_kappa_dist),
-            ("b_kappa_mag", context.model_config.b_kappa_mag_dist),
+            *kappa_prior_rows(context.model_config),
         ],
         key_header="Parameter",
         value_header="Distribution",
@@ -593,6 +712,9 @@ def build_model(
             ("HSGP boundary factor (L)", L),
             ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
             ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+            *kappa_anchor_derived_rows(
+                context.model_config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+            ),
         ],
     )
 
@@ -668,12 +790,11 @@ def build_model(
         # ---- Dispersion / overdispersion ----
 
         # dispersion parameter κ (kappa) is a function of age (z), with a minimum value and an
-        # exponential increase/decrease with age (kappa_min, a_kappa/b_kappa_mag -> b_kappa,
-        # shared helper — see models.gp_utils.build_kappa_of_z).
-        kappa_of_z = build_kappa_of_z(
-            context.model_config.kappa_min_dist,
-            context.model_config.a_kappa_dist,
-            context.model_config.b_kappa_mag_dist,
+        # exponential increase/decrease with age. Either parameterisation of that curve —
+        # the legacy a_kappa/b_kappa_mag pair or two age anchors — is dispatched by
+        # build_kappa_for_config; both end at models.gp_utils.make_kappa_of_z.
+        kappa_of_z = build_kappa_for_config(
+            context.model_config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
         )
 
         # compute kappa for the observed data points, and use that in the likelihood
@@ -1516,7 +1637,51 @@ def configure_univariate_priors(
     p_slope_hi_dist = pz.Beta(alpha=definition.p_slope_hi_alpha, beta=definition.p_slope_hi_beta)
     _plot_and_print_dist(context, p_slope_hi_dist, "p_slope_hi_dist")
 
-    kp = definition.kappa
+    kappa_fields = _configure_kappa_priors(context, definition.kappa)
+
+    config = ModelConfiguration(
+        slope_anchors=definition.slope_anchors,
+        ell_months_range=definition.ell_months_range,
+        p_slope_low_dist=p_slope_low_dist,
+        p_slope_hi_dist=p_slope_hi_dist,
+        ell_unit_dist=ell_unit_dist,
+        eta_dist=eta_dist,
+        n_plot=definition.n_plot,
+        ages_query=definition.ages_query,
+        **kappa_fields,
+    )
+
+    context.set_model_config(config)
+
+
+def _configure_kappa_priors(context: ModelFitContext, kp) -> dict:
+    """Build the dispersion priors for whichever kappa parameterisation `kp` is.
+
+    Returns the ``ModelConfiguration`` keyword arguments for that form, and plots
+    each prior under its own name, so a report shows the parameters the model
+    actually samples rather than a fixed three.
+    """
+    if isinstance(kp, KappaAnchorPriorParams):
+        kappa_min_dist = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
+        _plot_and_print_dist(context, kappa_min_dist, "kappa_min_dist")
+
+        excess_young_dist = pz.LogNormal(
+            mu=kp.excess_young_mu, sigma=kp.excess_young_sigma
+        )
+        _plot_and_print_dist(context, excess_young_dist, "kappa_excess_young_dist")
+
+        excess_old_dist = pz.LogNormal(mu=kp.excess_old_mu, sigma=kp.excess_old_sigma)
+        _plot_and_print_dist(context, excess_old_dist, "kappa_excess_old_dist")
+
+        return {
+            "kappa_anchored": AnchoredKappaPriors(
+                kappa_min_dist=kappa_min_dist,
+                excess_young_dist=excess_young_dist,
+                excess_old_dist=excess_old_dist,
+                anchor_ages=tuple(float(age) for age in kp.anchor_ages),
+            )
+        }
+
     kappa_min_dist = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
     _plot_and_print_dist(context, kappa_min_dist, "kappa_min_dist")
 
@@ -1526,21 +1691,11 @@ def configure_univariate_priors(
     b_kappa_mag_dist = pz.HalfNormal(sigma=kp.b_kappa_mag_sigma)
     _plot_and_print_dist(context, b_kappa_mag_dist, "b_kappa_mag_dist")
 
-    config = ModelConfiguration(
-        slope_anchors=definition.slope_anchors,
-        ell_months_range=definition.ell_months_range,
-        p_slope_low_dist=p_slope_low_dist,
-        p_slope_hi_dist=p_slope_hi_dist,
-        ell_unit_dist=ell_unit_dist,
-        eta_dist=eta_dist,
-        kappa_min_dist=kappa_min_dist,
-        a_kappa_dist=a_kappa_dist,
-        b_kappa_mag_dist=b_kappa_mag_dist,
-        n_plot=definition.n_plot,
-        ages_query=definition.ages_query,
-    )
-
-    context.set_model_config(config)
+    return {
+        "kappa_min_dist": kappa_min_dist,
+        "a_kappa_dist": a_kappa_dist,
+        "b_kappa_mag_dist": b_kappa_mag_dist,
+    }
 
 
 def _analysis_data_hash(df: pd.DataFrame) -> str:

@@ -46,9 +46,14 @@ from vocab_growth.models.build_utils import (
     standardize_ages,
     validate_ell_bounds,
 )
-from vocab_growth.models.common import ModelConfiguration, get_hsgp_hyperparams
-from vocab_growth.models.definitions import VG01
-from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
+from vocab_growth.models.common import (
+    AnchoredKappaPriors,
+    ModelConfiguration,
+    build_kappa_for_config,
+    get_hsgp_hyperparams,
+)
+from vocab_growth.models.definitions import VG01, KappaAnchorPriorParams
+from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 
 EPS = 1e-6
 N_TRIALS = 810
@@ -91,9 +96,28 @@ def _prepare(outcome="spoken", studies=None):
 
 
 def _config() -> ModelConfiguration:
-    """Reuse VG01's DS-spoken priors (trend/GP/kappa)."""
+    """Reuse VG01's DS-spoken priors (trend/GP/kappa).
+
+    The kappa block follows whichever parameterisation VG01 carries, so this
+    stays a genuine reuse rather than a copy that silently diverges.
+    """
     b = VG01
     kp = b.kappa
+    if isinstance(kp, KappaAnchorPriorParams):
+        kappa_fields = {
+            "kappa_anchored": AnchoredKappaPriors(
+                kappa_min_dist=pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma),
+                excess_young_dist=pz.LogNormal(mu=kp.excess_young_mu, sigma=kp.excess_young_sigma),
+                excess_old_dist=pz.LogNormal(mu=kp.excess_old_mu, sigma=kp.excess_old_sigma),
+                anchor_ages=tuple(float(age) for age in kp.anchor_ages),
+            )
+        }
+    else:
+        kappa_fields = {
+            "kappa_min_dist": pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma),
+            "a_kappa_dist": pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma),
+            "b_kappa_mag_dist": pz.HalfNormal(sigma=kp.b_kappa_mag_sigma),
+        }
     return ModelConfiguration(
         slope_anchors=b.slope_anchors,
         ell_months_range=b.ell_months_range,
@@ -101,11 +125,9 @@ def _config() -> ModelConfiguration:
         p_slope_hi_dist=pz.Beta(alpha=b.p_slope_hi_alpha, beta=b.p_slope_hi_beta),
         ell_unit_dist=pz.Beta(alpha=b.ell_unit_alpha, beta=b.ell_unit_beta),
         eta_dist=pz.HalfNormal(sigma=b.eta_sigma),
-        kappa_min_dist=pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma),
-        a_kappa_dist=pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma),
-        b_kappa_mag_dist=pz.HalfNormal(sigma=kp.b_kappa_mag_sigma),
         n_plot=b.n_plot,
         ages_query=b.ages_query,
+        **kappa_fields,
     )
 
 
@@ -173,7 +195,7 @@ def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_s
         f_obs = f_all[i_o0:i_o1] + delta[study_obs] + beta_sign[sign_obs]
         p_obs = pm.math.sigmoid(f_obs)
 
-        kappa_of_z = build_kappa_of_z(config.kappa_min_dist, config.a_kappa_dist, config.b_kappa_mag_dist)
+        kappa_of_z = build_kappa_for_config(config, X_obs_mean=X_mean, X_obs_std=X_std)
         kappa_obs = kappa_of_z(X_all_z_data[i_o0:i_o1, 0])
 
         # population trajectory (delta=0) per sign group, at plot + query ages

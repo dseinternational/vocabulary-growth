@@ -38,10 +38,12 @@ from vocab_growth.models.build_utils import (
 from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
     ModelFitContext,
+    build_kappa_for_config,
     configure_univariate_priors,
     diagnostics,
     extract_model_samples,
     get_hsgp_hyperparams,
+    kappa_anchor_derived_rows,
     posterior_summary,
     prior_predictive_checks,
     render_model_graph,
@@ -54,7 +56,7 @@ from vocab_growth.models.common import (
     sample_posterior_predictive as _base_sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
-from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 from vocab_growth.reporting import (
     dataframe_table,
     key_value_table,
@@ -308,6 +310,9 @@ def build_univariate_re_model(
         ("HSGP boundary factor (L)", L),
         ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
         ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+        *kappa_anchor_derived_rows(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+        ),
     ]
     if anchor_g:
         derived_rows.append(("GP anchor age (months)", f"{anchor_age_months:g}"))
@@ -444,8 +449,8 @@ def build_univariate_re_model(
         # Dispersion / overdispersion
         # ============================================================
 
-        kappa_of_z = build_kappa_of_z(
-            config.kappa_min_dist, config.a_kappa_dist, config.b_kappa_mag_dist
+        kappa_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
         )
 
         kappa_obs = pm.Deterministic(

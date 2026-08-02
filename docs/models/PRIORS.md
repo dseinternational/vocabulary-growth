@@ -250,12 +250,15 @@ The Beta-Binomial concentration is age-varying:
 
 ```text
 kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)
-b_kappa = -b_kappa_mag
 ```
 
-where `z` is standardised age. The shared default is:
+where `z` is standardised age. Every model uses that curve; they differ in how `(a_kappa, b_kappa)` are given priors.
+
+#### Legacy form — intercept and slope (VG02, VG04, VG05, VG07-VG10, VG12-VG16)
 
 ```text
+b_kappa = -b_kappa_mag
+
 kappa_min ~ LogNormal(log(5), 0.6)
 a_kappa ~ Normal(log(8), 1.0)
 b_kappa_mag ~ HalfNormal(0.3)
@@ -271,13 +274,51 @@ First-pass prior simulation gives:
 
 Review notes:
 
-- Smaller `kappa` means more overdispersion relative to a Binomial at the same
-  mean. The prior allows substantial extra-binomial heterogeneity.
-- The sign of `b_kappa` encodes increasing heterogeneity with age, with a later
-  plateau at `kappa_min`.
-- This structure should be checked carefully near floor and ceiling regions,
-  where `kappa` can be weakly identified even if predictions look reasonable.
+- Smaller `kappa` means more overdispersion relative to a Binomial at the same mean. The prior allows substantial extra-binomial heterogeneity.
+- The sign of `b_kappa` encodes increasing heterogeneity with age, with a later plateau at `kappa_min`.
+- This structure should be checked carefully near floor and ceiling regions, where `kappa` can be weakly identified even if predictions look reasonable.
 - Alternative `kappa` priors are a sensitivity target for main reporting models.
+- **This form has three known weaknesses**, all of which the two-anchor form below removes and none of which are repaired by re-tuning the three numbers above. `a_kappa` is the age term at `z = 0`, so its prior describes the pool's _mean age_ and silently changes meaning when the pool is resampled or filtered. `b_kappa_mag` is a slope per unit standardised age, so one shared prior is about 3.5x tighter on the Down syndrome pool (age sd ~21 months) than on the typically-developing pool (~6 months). And `b_kappa_mag >= 0` forces dispersion to fall with age, which typically-developing comprehension rejects — its dispersion is flat to slightly rising.
+
+#### Two-anchor form (VG01, VG03, VG11)
+
+The same curve, with the age term `exp(a_kappa + b_kappa * z)` given priors at two reference **ages in months** and `(a_kappa, b_kappa)` solved for so the curve passes through both:
+
+```text
+kappa_min           ~ LogNormal(log(3), 0.8)
+kappa_excess_young  ~ LogNormal(log(e_young), 0.7)   at anchor_ages[0]
+kappa_excess_old    ~ LogNormal(log(e_old),   0.7)   at anchor_ages[1]
+
+b_kappa = (log kappa_excess_old - log kappa_excess_young) / (z_old - z_young)
+a_kappa =  log kappa_excess_young - b_kappa * z_young
+```
+
+`a_kappa` and `b_kappa` remain in the trace as derived quantities under the same names, so a migrated model's dispersion posterior stays comparable with the fits that preceded it. `kappa_young` and `kappa_old` carry _total_ kappa at the anchors — floor plus excess — which is the quantity a per-age empirical estimate can be checked against.
+
+| Model      | Anchors (months) | `e_young` | `e_old` | Implied `b_kappa_mag`, median [5-95%] |
+| ---------- | ---------------- | --------: | ------: | ------------------------------------- |
+| VG01       | 18, 36           |        45 |     4.0 | 2.80 [0.91, 4.67]                     |
+| VG03, VG11 | 12, 20           |        30 |     3.0 | 1.71 [0.50, 2.91]                     |
+
+Prior simulation on each model's own age grid:
+
+| Model | 8 mo           | 12 mo         | 18 mo        | 24 mo         | 36 mo       | oldest        |
+| ----- | -------------- | ------------- | ------------ | ------------- | ----------- | ------------- |
+| VG01  | 177 [30, 1150] | 105 [24, 491] | 49 [18, 147] | 24 [11, 52]   | 7.9 [3, 20] | 3.1 [0.8, 12] |
+| VG03  | 99 [19, 586]   | 34 [13, 99]   | 9.2 [4, 20]  | 4.6 [1.5, 15] | —           | 3.6 [1.0, 13] |
+
+Median and 5-95%. The upper tails at the youngest ages look alarming next to the legacy table above but are not: at `n = 810`, `kappa = 200` still gives 2.2x the binomial standard deviation, so it is _not_ near-binomial, and the observed dispersion at those ages is genuinely in that range — the Down syndrome 18-month cell estimates 64 (profile interval [35, 107]) and the typically-developing 12-month cell 89 ([66, 119]).
+
+Anchors are placed where the age term is roughly an order of magnitude above the floor and where it has fallen back to it. Both priors then sit inside the data, so the prior between them is an interpolation of two checked values rather than an extrapolation from an intercept and a slope whose tails compound as `exp(2b)`.
+
+Review notes:
+
+- The prior on `kappa` at any given age is **exactly invariant** to the pool's age standardisation: the interpolation weight is `(age - young) / (old - young)` in months, and the standardisation cancels. Resampling or a study filter cannot move it.
+- `kappa_min` is carried over from the legacy recalibration unchanged. The anchored form leans on it harder — beyond the old anchor the floor alone sets the level — so its ~8% of prior mass below `kappa = 1` now shows at old ages. Tightening `kappa_min_sigma` is a candidate follow-up.
+- The sign of `b_kappa` is unconstrained, but for these three spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls. For a comprehension model the two anchors would be near-equal and the mass would be near-even.
+- Dropping `kappa_min` entirely and using a pure log-linear `kappa` was tested and rejected: it costs 10 to 168 log-likelihood units against the floored form across the six pools.
+
+See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` for the calibration, the estimator correction behind it, and the forms that were rejected.
 
 ### Study and subject random-effect scale priors
 
@@ -480,21 +521,35 @@ overdispersion.
 | Spoken (WG)     | 8–18 mo  |             10–36 |       0.03–0.09 | `kappa` falls with age         |
 | Spoken (WS)     | 16–30 mo |              3–14 |       0.07–0.26 | `kappa` falls steeply with age |
 
+> [!IMPORTANT]
+> The per-age slopes in the table above are estimated by regressing `log kappa` on standardised age. That is **not** the model's parameter: because `kappa` flattens onto `kappa_min`, the log-slope of total `kappa` is shallower than `b_kappa_mag`, and the regression estimates it low — by roughly a factor of two. Fitting the model's own three-parameter form to the same cells gives `b_kappa_mag` of **2.78** for Down syndrome spoken and **1.71-1.78** for typically-developing spoken, against the 1.38 and 0.77 the log-linear regression reported. The direction below is unaffected; the magnitude is. See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` section 17.
+
 Against the shared prior (`kappa` median ~13–17, 5–95% ~5–60; `b_kappa < 0`):
 
 - **Direction confirmed.** For the spoken/production outcome (the primary one)
-  `kappa` clearly falls with age (WG spoken slope −0.13/month; WS spoken
-  −0.09/month) — dispersion rises with age, exactly the sign the prior encodes.
-  Comprehension is roughly flat. Independently, Zampini & D'Odorico (2013) report
-  DS vocabulary variability _increasing_ from 36 months, the same direction.
-- **Level slightly too tight at the high-dispersion end.** The prior's central
-  `kappa ≈ 14` is a reasonable mid-range value, but the empirical range is wider.
-  At older toddler ages (WS 24–30 months) `kappa` falls to ~3–4 (`rho ≈
-0.21–0.26`), below the prior's ~5 lower 5–95% bound. Part of this is a ceiling
-  artefact (WS counts pile toward the 680-item form limit), and the model's GP
-  mean and study random effects absorb some spread that these raw per-age fits do
-  not — so the fitted-model `kappa` would sit somewhat higher. Even so, a broader
-  `kappa_min` allowance is worth a sensitivity check at older ages.
+  `kappa` clearly falls with age — dispersion rises with age, exactly the sign the
+  prior encodes. Comprehension is roughly flat, and on the typically-developing
+  random-effects frame very slightly rising, which the shared prior's
+  `b_kappa_mag >= 0` cannot represent at all. Independently, Zampini & D'Odorico
+  (2013) report DS vocabulary variability _increasing_ from 36 months, the same
+  direction.
+- **The floor is real and is about 3.** Three independent pools (DS spoken, and
+  the two typically-developing spoken frames) put `kappa_min` at 3.08–3.54,
+  against a shared prior centred at 5 whose 5th percentile was 1.86. Dropping the
+  floor and using a pure log-linear `kappa` was tested and costs 10–168
+  log-likelihood units, so the plateau is a genuine feature rather than a
+  parameterisation convenience. Part of the old-age level is a ceiling artefact
+  (WS counts pile toward the 680-item form limit), and the model's GP mean and
+  study random effects absorb some spread that these raw per-age fits do not.
+- **The age slope was out by a factor of five, not "slightly too tight".** The
+  shared `HalfNormal(0.3)` has a median of 0.20 and a 95th percentile of 0.59
+  against corrected empirical values of 1.7–2.8. Widening it to `HalfNormal(0.75)`
+  moved VG03 from prior CDF 1.00 and contraction 0.18 to 0.93 and 0.82 but did not
+  go far enough, and widening a third time is not viable: the intercept and slope
+  tails compound as `exp(2b)`, so at `HalfNormal(1.5)` about 30% of prior mass puts
+  `kappa` above 200 at `z = -2`. This is what the two-anchor form above resolves,
+  and why VG01, VG03 and VG11 have migrated to it. The remaining models still
+  carry the mis-scaled shared default and are the outstanding work.
 
 ### Methodological endorsement of the 810-item design
 

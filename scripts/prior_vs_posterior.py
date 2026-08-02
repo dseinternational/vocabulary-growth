@@ -30,6 +30,7 @@ from vocab_growth import environment as env
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     BivariateModelDefinition,
+    KappaAnchorPriorParams,
     UnivariateModelDefinition,
 )
 
@@ -47,15 +48,37 @@ MODEL_LABELS = {
 }
 
 
+def kappa_priors(kp, suffix: str = "") -> dict[str, pz.distributions.distributions.Continuous]:
+    """Priors for whichever kappa parameterisation `kp` is.
+
+    Only the *free* parameters appear. Under the two-anchor form ``a_kappa`` and
+    ``b_kappa`` are derived, so they are in the trace but have no prior to plot
+    against — including them would invite a comparison against a distribution
+    that was never specified.
+    """
+    priors = {
+        f"kappa_min{suffix}": pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
+    }
+    if isinstance(kp, KappaAnchorPriorParams):
+        priors[f"kappa_excess_young{suffix}"] = pz.LogNormal(
+            mu=kp.excess_young_mu, sigma=kp.excess_young_sigma
+        )
+        priors[f"kappa_excess_old{suffix}"] = pz.LogNormal(
+            mu=kp.excess_old_mu, sigma=kp.excess_old_sigma
+        )
+    else:
+        priors[f"a_kappa{suffix}"] = pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma)
+        priors[f"b_kappa_mag{suffix}"] = pz.HalfNormal(sigma=kp.b_kappa_mag_sigma)
+    return priors
+
+
 def univariate_priors(d: UnivariateModelDefinition) -> dict[str, pz.distributions.distributions.Continuous]:
     return {
         "ell_unit": pz.Beta(alpha=d.ell_unit_alpha, beta=d.ell_unit_beta),
         "eta": pz.HalfNormal(sigma=d.eta_sigma),
         "p_slope_low": pz.Beta(alpha=d.p_slope_low_alpha, beta=d.p_slope_low_beta),
         "p_slope_hi": pz.Beta(alpha=d.p_slope_hi_alpha, beta=d.p_slope_hi_beta),
-        "kappa_min": pz.LogNormal(mu=d.kappa.kappa_min_mu, sigma=d.kappa.kappa_min_sigma),
-        "a_kappa": pz.Normal(mu=d.kappa.a_kappa_mu, sigma=d.kappa.a_kappa_sigma),
-        "b_kappa_mag": pz.HalfNormal(sigma=d.kappa.b_kappa_mag_sigma),
+        **kappa_priors(d.kappa),
     }
 
 
@@ -72,6 +95,14 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
         "kappa_min_u": pz.LogNormal(mu=d.kappa_u.kappa_min_mu, sigma=d.kappa_u.kappa_min_sigma),
         "kappa_min_s": pz.LogNormal(mu=d.kappa_s.kappa_min_mu, sigma=d.kappa_s.kappa_min_sigma),
     }
+    # The bivariate models have not migrated to the two-anchor kappa form; if one
+    # does, its a_kappa / b_kappa_mag rows here would silently become wrong.
+    for name, kp in (("kappa_u", d.kappa_u), ("kappa_s", d.kappa_s)):
+        if isinstance(kp, KappaAnchorPriorParams):
+            raise NotImplementedError(
+                f"{d.model_id}.{name} uses the two-anchor kappa form; extend "
+                "bivariate_priors before plotting it."
+            )
     if getattr(d, "tau_u_sigma", None) is not None:
         priors["tau_u"] = pz.HalfNormal(sigma=d.tau_u_sigma)
         priors["tau_q"] = pz.HalfNormal(sigma=d.tau_q_sigma)
