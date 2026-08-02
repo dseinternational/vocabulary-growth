@@ -30,7 +30,9 @@ returns standard errors on those and not on some reparameterisation of them.
 
 **The design has to be able to tell `tau` from `kappa` before any of this means
 anything.** For a child measured once they add variance to the same single
-number; only children with a repeat separate them. ``--recover`` simulates from
+number, and are separated only by the shape of the count distribution each
+implies -- enough to pin a large `tau` but not a small one, so the children with
+a repeat are what make the estimate precise. ``--recover`` simulates from
 a known truth on a real frame and refits, which is what established that they
 *are* separable here (and that 24 quadrature nodes are not enough -- see
 ``--nodes``). Run it before trusting a new pool.
@@ -71,6 +73,13 @@ DEFAULT_NODES = 160
 
 #: Minimum observations in an integer-age cell for the saturated mean to use it.
 MIN_CELL = 15
+
+#: Bounds keeping the likelihood and its gradient finite wherever the optimiser
+#: wanders. Both are far outside the region any real fit occupies: |logit p| = 40
+#: is p within 4e-18 of an endpoint, and a Beta parameter of 1e-6 needs
+#: p * kappa that small. See the comment in `make_objective`.
+_ETA_CLIP = 40.0
+_BETA_FLOOR = 1e-6
 
 
 # --------------------------------------------------------------------------
@@ -177,8 +186,26 @@ def _layout(design):
     }
 
 
+def _require_float64():
+    """Fail loudly rather than silently calibrate in single precision.
+
+    Counts near 810 with `kappa` in the hundreds put the Beta-Binomial's betaln
+    differences below float32 resolution, so a float32 run does not error — it
+    returns plausible, wrong numbers. The module-level `config.update` normally
+    handles this, but it is global state any other import can reach, so it is
+    re-asserted at the point of use.
+    """
+    jax.config.update("jax_enable_x64", True)
+    if jnp.zeros(1).dtype != jnp.float64:
+        raise RuntimeError(
+            "JAX is not in float64 mode; this calibration is not accurate in "
+            "single precision. Something has overridden jax_enable_x64."
+        )
+
+
 def make_objective(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None):
     """Build the JAX negative log-likelihood for one design."""
+    _require_float64()
     layout = _layout(design)
     young, old = float(anchor_ages[0]), float(anchor_ages[1])
     if not old > young:
@@ -221,9 +248,18 @@ def make_objective(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None
         )
 
         eta = (B @ m + s[study_idx])[:, None] + (jnp.sqrt(2.0) * tau * nodes)[None, :]
-        p = jnp.clip(jax.nn.sigmoid(eta), 1e-12, 1 - 1e-12)
-        a = p * kappa[:, None]
-        b = (1 - p) * kappa[:, None]
+        p = jax.nn.sigmoid(jnp.clip(eta, -_ETA_CLIP, _ETA_CLIP))
+        # Floor the Beta parameters. At a wide `tau` the outermost quadrature
+        # nodes drive p to the edge, and with `kappa` in the hundreds the smaller
+        # of (p*kappa, (1-p)*kappa) underflows to zero: betaln then returns inf,
+        # and although logsumexp gives such a node a softmax weight of ~e^-80,
+        # reverse-mode differentiation still evaluates 0 * inf = NaN and poisons
+        # the whole gradient. That is what made this estimator fail on CI while
+        # converging locally — whether the line search reached the underflow
+        # depended on the platform. Those nodes contribute nothing to the
+        # integral, so bounding them changes no answer (asserted in the tests).
+        a = jnp.clip(p * kappa[:, None], _BETA_FLOOR, None)
+        b = jnp.clip((1 - p) * kappa[:, None], _BETA_FLOOR, None)
         logpmf = (
             log_binom[:, None]
             + betaln(y[:, None] + a, n_trials[:, None] - y[:, None] + b)
@@ -315,10 +351,22 @@ def fit(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None, x0=None,
         t = jnp.asarray(t)
         return float(nll(t)), np.asarray(grad(t), float)
 
+    # Box the variance parameters. The dispersion likelihood is very flat in
+    # `kappa` once it is large (a big kappa is near-binomial, and the data stop
+    # distinguishing bigger from biggest), so an unbounded line search can walk
+    # a long way up that ridge and return a non-finite objective — which is what
+    # made this estimator diverge on CI while converging locally. Both boxes are
+    # orders of magnitude outside any real fit: the largest calibrated value in
+    # the repository is kappa 317 and the largest tau 1.15.
+    bounds = [(None, None)] * layout["n_params"]
+    bounds[layout["log_tau"]] = (np.log(1e-3), np.log(10.0))
+    for key in ("log_kmin", "log_ey", "log_eo"):
+        bounds[layout[key]] = (np.log(1e-4), np.log(1e6))
+
     opts = {"maxiter": 4000, "maxfun": 6000, "ftol": 1e-14, "gtol": 1e-9}
-    res = minimize(f, theta0, jac=True, method="L-BFGS-B", options=opts)
+    res = minimize(f, theta0, jac=True, method="L-BFGS-B", bounds=bounds, options=opts)
     # a second pass from the optimum guards against an early L-BFGS stop
-    res = minimize(f, res.x, jac=True, method="L-BFGS-B", options=opts)
+    res = minimize(f, res.x, jac=True, method="L-BFGS-B", bounds=bounds, options=opts)
 
     se = corr = None
     if standard_errors:

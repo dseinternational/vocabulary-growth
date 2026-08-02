@@ -849,10 +849,13 @@ _TD_UNDERSTOOD_KAPPA = KappaAnchorPriorParams(
 # Three things had to be established before reading a prior off this (section 19
 # of the note has the detail, and --recover / --mean-sweep re-run the checks):
 #
-#  * **tau and kappa are separable here.** For a child measured once they are
-#    confounded, and 84% of VG11's children are measured once. Simulating from a
-#    subject-heavy truth and a dispersion-heavy truth on the real design returns
-#    each correctly, an order of magnitude apart.
+#  * **tau and kappa are separable here.** For a child measured once both add
+#    variance to the same single number, and 84% of VG11's children are measured
+#    once; what separates them is the shape of the count distribution each
+#    implies, which pins a large tau but not a small one, so the children with a
+#    repeat are what make the estimate precise. Simulating from a subject-heavy
+#    truth and a dispersion-heavy truth on the real design returns each
+#    correctly, an order of magnitude apart.
 #  * **The answer does not depend on the mean model.** Saturated, spline and even
 #    a linear mean agree to within a few percent on all four pools — so the gap
 #    against VG12's and VG13's posteriors (both near 16) is not an artefact of
