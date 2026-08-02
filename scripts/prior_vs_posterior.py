@@ -92,8 +92,9 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
         "p_slope_hi_u": pz.Beta(alpha=d.p_slope_hi_u_alpha, beta=d.p_slope_hi_u_beta),
         "p_slope_low_q": pz.Beta(alpha=d.p_slope_low_q_alpha, beta=d.p_slope_low_q_beta),
         "p_slope_hi_q": pz.Beta(alpha=d.p_slope_hi_q_alpha, beta=d.p_slope_hi_q_beta),
-        # Each outcome independently, since VG13 anchors both while the DS joint
-        # models anchor neither.
+        # Each outcome independently. Every bivariate model now anchors both,
+        # but VG15 (handled by neither dispatch) anchors understood and spoken
+        # while leaving the signed ratio legacy, so the per-outcome split stays.
         **kappa_priors(d.kappa_u, "_u"),
         **kappa_priors(d.kappa_s, "_s"),
     }

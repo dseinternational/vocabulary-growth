@@ -74,21 +74,25 @@ from vocab_growth.models.build_utils import (
 )
 from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
+    AnchoredKappaPriors,
     BaseModelConfiguration,
     ModelFitContext,
+    _configure_kappa_priors,
     _plot_and_print_dist,
+    build_kappa_for_config,
     emit_monthly_summary,
     get_hsgp_hyperparams,
+    kappa_anchor_derived_rows,
     render_model_graph,
     report,
     run_fit_pipeline,
+    validate_kappa_fields,
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
 from vocab_growth.models.definitions import JointModelDefinition
 from vocab_growth.models.gp_utils import (
     GPGrid,
-    build_kappa_of_z,
     tent_and_gp,
     trend_and_gp,
 )
@@ -149,17 +153,6 @@ class JointModelConfiguration(BaseModelConfiguration):
     ell_unit_sign_dist: Continuous
     eta_sign_dist: Continuous
 
-    # Kappa priors (age-varying dispersion) — understood / spoken / signed
-    kappa_min_u_dist: Continuous
-    a_kappa_u_dist: Continuous
-    b_kappa_mag_u_dist: Continuous
-    kappa_min_s_dist: Continuous
-    a_kappa_s_dist: Continuous
-    b_kappa_mag_s_dist: Continuous
-    kappa_min_sign_dist: Continuous
-    a_kappa_sign_dist: Continuous
-    b_kappa_mag_sign_dist: Continuous
-
     # Association (Plackett log odds-ratio) and Dirichlet-Multinomial concentration
     log_psi_dist: Continuous
     log_conc_dist: Continuous
@@ -168,6 +161,31 @@ class JointModelConfiguration(BaseModelConfiguration):
     tau_u_sigma: float
     tau_q_sigma: float
     tau_sign_sigma: float
+
+    # Kappa priors (age-varying dispersion) — understood / spoken / signed.
+    # Legacy triples; None on an outcome that uses the two-anchor form below.
+    # These carry defaults, so they sit last in the field order.
+    kappa_min_u_dist: Continuous | None = None
+    a_kappa_u_dist: Continuous | None = None
+    b_kappa_mag_u_dist: Continuous | None = None
+    kappa_min_s_dist: Continuous | None = None
+    a_kappa_s_dist: Continuous | None = None
+    b_kappa_mag_s_dist: Continuous | None = None
+    kappa_min_sign_dist: Continuous | None = None
+    a_kappa_sign_dist: Continuous | None = None
+    b_kappa_mag_sign_dist: Continuous | None = None
+
+    # Two-anchor dispersion priors, in place of the triples above. Outcomes are
+    # independent: VG15 anchors understood and spoken, whose scale the Down
+    # syndrome joint calibration covers, and leaves the signed ratio on the
+    # legacy form because nothing measures it.
+    kappa_anchored_u: AnchoredKappaPriors | None = None
+    kappa_anchored_s: AnchoredKappaPriors | None = None
+    kappa_anchored_sign: AnchoredKappaPriors | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_kappa_fields(self, suffixes=("_u", "_s", "_sign"))
 
 
 @dataclass
@@ -519,17 +537,11 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
 
     def kappa_block(kp, suffix):
         heading(f"Kappa priors — {suffix}", style="bold cyan")
-        kmin = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
-        _plot_and_print_dist(context, kmin, f"kappa_min_{suffix}_dist")
-        a = pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma)
-        _plot_and_print_dist(context, a, f"a_kappa_{suffix}_dist")
-        b = pz.HalfNormal(sigma=kp.b_kappa_mag_sigma)
-        _plot_and_print_dist(context, b, f"b_kappa_mag_{suffix}_dist")
-        return kmin, a, b
+        return _configure_kappa_priors(context, kp, f"_{suffix}")
 
-    kappa_min_u_dist, a_kappa_u_dist, b_kappa_mag_u_dist = kappa_block(definition.kappa_u, "u")
-    kappa_min_s_dist, a_kappa_s_dist, b_kappa_mag_s_dist = kappa_block(definition.kappa_s, "s")
-    kappa_min_sign_dist, a_kappa_sign_dist, b_kappa_mag_sign_dist = kappa_block(definition.kappa_sign, "sign")
+    kappa_u_fields = kappa_block(definition.kappa_u, "u")
+    kappa_s_fields = kappa_block(definition.kappa_s, "s")
+    kappa_sign_fields = kappa_block(definition.kappa_sign, "sign")
 
     heading("Association (psi) and Dirichlet-Multinomial concentration", style="bold cyan")
     log_psi_dist = pz.Normal(mu=definition.log_psi_mu, sigma=definition.log_psi_sigma)
@@ -555,15 +567,9 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         p_slope_hi_sign_dist=p_slope_hi_sign_dist,
         ell_unit_sign_dist=ell_unit_sign_dist,
         eta_sign_dist=eta_sign_dist,
-        kappa_min_u_dist=kappa_min_u_dist,
-        a_kappa_u_dist=a_kappa_u_dist,
-        b_kappa_mag_u_dist=b_kappa_mag_u_dist,
-        kappa_min_s_dist=kappa_min_s_dist,
-        a_kappa_s_dist=a_kappa_s_dist,
-        b_kappa_mag_s_dist=b_kappa_mag_s_dist,
-        kappa_min_sign_dist=kappa_min_sign_dist,
-        a_kappa_sign_dist=a_kappa_sign_dist,
-        b_kappa_mag_sign_dist=b_kappa_mag_sign_dist,
+        **kappa_u_fields,
+        **kappa_s_fields,
+        **kappa_sign_fields,
         log_psi_dist=log_psi_dist,
         log_conc_dist=log_conc_dist,
         tau_u_sigma=definition.tau_u_sigma,
@@ -771,6 +777,15 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         ("n_trials", n_trials),
         ("Age mean / std", (round(X_mean, 1), round(X_std, 1))),
         ("HSGP m / L", (M, L)),
+        *kappa_anchor_derived_rows(
+            config, X_obs_mean=X_mean, X_obs_std=X_std, suffix="_u"
+        ),
+        *kappa_anchor_derived_rows(
+            config, X_obs_mean=X_mean, X_obs_std=X_std, suffix="_s"
+        ),
+        *kappa_anchor_derived_rows(
+            config, X_obs_mean=X_mean, X_obs_std=X_std, suffix="_sign"
+        ),
     ]
     if use_subject_codes:
         build_cfg.append(
@@ -994,15 +1009,15 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         log_conc = config.log_conc_dist.to_pymc("log_conc")
         conc = pm.Deterministic("conc", pm.math.exp(log_conc))
 
-        # --- kappa functions (shared helper — see models.gp_utils.build_kappa_of_z) ---
-        kappa_u_of_z = build_kappa_of_z(
-            config.kappa_min_u_dist, config.a_kappa_u_dist, config.b_kappa_mag_u_dist, suffix="_u"
+        # --- kappa functions (shared helper — see models.common.build_kappa_for_config) ---
+        kappa_u_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_mean, X_obs_std=X_std, suffix="_u"
         )
-        kappa_s_of_z = build_kappa_of_z(
-            config.kappa_min_s_dist, config.a_kappa_s_dist, config.b_kappa_mag_s_dist, suffix="_s"
+        kappa_s_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_mean, X_obs_std=X_std, suffix="_s"
         )
-        kappa_sign_of_z = build_kappa_of_z(
-            config.kappa_min_sign_dist, config.a_kappa_sign_dist, config.b_kappa_mag_sign_dist, suffix="_sign"
+        kappa_sign_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_mean, X_obs_std=X_std, suffix="_sign"
         )
 
         kappa_u_obs = kappa_u_of_z(z_obs)

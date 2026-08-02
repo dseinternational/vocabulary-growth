@@ -93,7 +93,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The trajectory priors match the TD understood baseline anchors at 12 and 26 months. The low anchor is strongly floor-oriented, while the high anchor allows rapid TD comprehension growth without forcing a ceiling. The dataset and child random-effect scales each use a HalfNormal(0.5) prior on the logit scale, and the 19-month GP anchor is an identifiability constraint rather than a substantive developmental breakpoint.
+The trajectory priors match the TD understood baseline anchors at 12 and 26 months. The low anchor is strongly floor-oriented, while the high anchor allows rapid TD comprehension growth without forcing a ceiling. The dataset random-effect scale uses a HalfNormal(0.5) prior on the logit scale and the child one a HalfNormal(1.5), the latter calibrated against an estimate of 0.74 for this model (see `docs/models/PRIORS.md`). The 19-month GP anchor is an identifiability constraint rather than a substantive developmental breakpoint.
 
 ### Lengthscale
 

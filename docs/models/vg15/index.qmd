@@ -161,21 +161,25 @@ The signed mean is a three-anchor "tent" (young / peak / old reference ages join
 
 ### Random-effect scales
 
-Study and subject random-intercept scales use HalfNormal(0.5) priors on the logit scale for understood, spoken-ratio and signed-ratio trajectories. The reported age curves are population-level curves with random effects set to zero; the random effects enter the likelihood to account for study composition and repeated measurements.
+Study random-intercept scales use HalfNormal(0.5) priors on the logit scale for all three trajectories; subject scales use a calibrated HalfNormal(1.5) (see `docs/models/PRIORS.md`). The signed-ratio subject scale has no calibration of its own and inherits the family setting, which also resolves the prior-data conflict its earlier HalfNormal(0.5) produced. The reported age curves are population-level curves with random effects set to zero; the random effects enter the likelihood to account for study composition and repeated measurements.
 
 ### Dispersion / overdispersion
 
+This is the only model carrying both dispersion parameterisations. Understood and spoken share VG09's frame and specification, so both take the two-anchor form with priors stated as `kappa` at 24 and 48 months; the signed ratio has no calibration — nothing estimates a signing dispersion on this frame — and stays on the earlier intercept-and-slope form.
+
+The two anchored blocks are conditional estimates: this model carries study and child random intercepts, so their `kappa` describes what is left once a child's own level is known. The Down syndrome joint frame is the thinnest the calibration covers, and on it the estimator recovers a known `kappa` with a one-directional downward bias, so the medians are lower bounds corrected by the bias measured at each and `sigma` is 1.0 on all four — wider than anywhere else in the family. See `docs/models/PRIORS.md`.
+
 ![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
-![`a_kappa_u_dist`](a_kappa_u_dist.png){#fig-a-kappa-u .lightbox fig-align="left"}
+![`kappa_excess_young_u_dist` (24 months)](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
 
-![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.png){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+![`kappa_excess_old_u_dist` (48 months)](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
 
 ![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
 
-![`a_kappa_s_dist`](a_kappa_s_dist.png){#fig-a-kappa-s .lightbox fig-align="left"}
+![`kappa_excess_young_s_dist` (24 months)](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
 
-![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+![`kappa_excess_old_s_dist` (48 months)](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
 
 ![`kappa_min_sign_dist`](kappa_min_sign_dist.png){#fig-kappa-min-sign .lightbox fig-align="left"}
 

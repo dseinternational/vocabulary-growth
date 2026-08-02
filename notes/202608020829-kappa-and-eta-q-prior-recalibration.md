@@ -4,11 +4,13 @@
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
-> Analysis and implementation note, 2026-08-02. Five things are **implemented**: the production `kappa` priors on VG01, VG03 and VG11 (§6), the subject-wise `sample_fraction` fix (§13), the VG10 GP anchoring on VG16 (§16 — a structural change to a registered model), the two-anchor `kappa` reparameterisation on VG01, VG03 and VG11 (§18), which **supersedes §6 on those three models**, and the conditional `kappa` calibration on VG11, VG12 and VG13 (§19), which **supersedes §18's prior values on VG11**, and the marginal calibration of the two comprehension models VG02 and VG04 (§20), after which every univariate model is on the two-anchor form. §§4–5 (`kappa_min` family-wide, `eta_q`) remain **proposals**. The supporting fits in §§2–8 are `dev` configuration (2 chains x 500 draws) on a 10% typically-developing subsample and are indicative only; §§10, 12, 13, 16, 18 and 19 supersede them with `test`-config fits.
+> Analysis and implementation note, 2026-08-02. Seven things are **implemented**: the production `kappa` priors on VG01, VG03 and VG11 (§6), the subject-wise `sample_fraction` fix (§13), the VG10 GP anchoring on VG16 (§16 — a structural change to a registered model), the two-anchor `kappa` reparameterisation on VG01, VG03 and VG11 (§18), which **supersedes §6 on those three models**, the conditional `kappa` calibration on VG11, VG12 and VG13 (§19), which **supersedes §18's prior values on VG11**, the marginal calibration of the two comprehension models VG02 and VG04 (§20), the Down syndrome joint dispersion calibration on VG09, VG10, VG15 and VG16 (§22), which **supersedes §19's decision to exclude them**, and the family-wide subject random-effect scale (§23). §§4–5 (`kappa_min` family-wide, `eta_q`) remain **proposals**. The supporting fits in §§2–8 are `dev` configuration (2 chains x 500 draws) on a 10% typically-developing subsample and are indicative only; §§10, 12, 13, 16, 18, 19, 22 and 23 supersede them with `test`-config fits.
 >
-> **Read §§18–20 before acting on any `kappa` recommendation in §§2–17.** Neither the parameterisation nor the calibration those sections describe is still in use on the migrated models.
+> **Read §§18–23 before acting on any `kappa` recommendation in §§2–17.** Neither the parameterisation nor the calibration those sections describe is still in use on the migrated models. Every model that carries an empirical dispersion calibration is now on the two-anchor form; the four that are not (VG05, VG07, VG08, VG14) are named and reasoned in §22.
 >
 > **Every `kappa` figure before §19 is a _marginal_ estimate**, valid only for the models with no grouping structure — VG01 to VG04. A model with study and subject random intercepts needs the conditional estimate, which is three to ten times larger. Reading a number from §§1–18 across to VG11, VG12 or VG13 reintroduces exactly the error §19 exists to correct.
+>
+> **§21 is a caveat on how every `kappa` in this note should be read.** On the understood outcomes it is not a pure dispersion: counts collected on 396- and 418-item forms are scored out of 810, which compresses the modelled scale as children work up a form, and the models' age-constant subject scale cannot follow that — so `kappa(age)` absorbs it. The priors are unaffected (the calibration mirrors the model, as it must), but "typically-developing comprehension dispersion rises with age" describes the parameter, not children.
 
 > [!IMPORTANT]
 > Extended the same day with §§10–17. The recalibration works — VG03 on the corrected frame puts `b_kappa_mag` at 1.369 with contraction 0.82, against prior CDF 1.00 and contraction 0.18 before (§13) — but `b_kappa_mag` remains censored in VG01 (§10). The validation also turned up a bimodality in VG11, which a control fit cleared the recalibration of causing (§10). §11 identifies the cause: **`sample_fraction` drew rows rather than children, cutting replication from 1.32 to 1.04 administrations per child and leaving the subject random effect and the observation-level dispersion indistinguishable.** §12 confirms it — a subject-wise draw at the same volume gives max R-hat 1.010 against 1.718 — and **corrects §11's ranking of the two modes, which was wrong**: the comparator was a published US-English monolingual norm matching this pool's mean rather than its median. §13 records the fix, its tests, and the VG03 and VG04 refits. Results for VG11, VG12 and VG13 obtained under row-wise subsampling should be discarded, including the `dev` run in §2. §15 then diagnoses the two remaining open items — VG01's censored `b_kappa_mag` is a units problem, and the Down syndrome models' elevated R-hat is the known understood-trajectory ridge — and §16 implements the one action that came out of it, giving VG16 the VG10 anchoring. **§17 is a review pass over this note's own work** and corrects it in two places: the empirical `b_kappa_mag` in §2 was estimated with the wrong functional form and is biased low (correct values 1.71 and 2.17, not 0.77 and 1.38), which makes the implemented `HalfNormal(0.75)` still too tight and invalidates §13's explanation of the VG03 gap; and `_subsample_subjects` depended on input row order until sorted. It also confirms the `kappa` decline is not a CDI-form artefact.
@@ -1195,3 +1197,111 @@ The 810-item reference scale itself is not in question. It is a deliberate harmo
 
 - **`scripts/kappa_conditional_calibration.py`** gained `--loading`, which fits the age-varying loading alongside the constant-`tau` form and reports the likelihood-ratio gap. It is a diagnostic, not a calibration path: a large gap means the pool's `kappa` is carrying subject-scale drift and should not be read as dispersion.
 - **`tests/test_kappa_conditional_calibration.py`** covers both directions of the control above — a constant-`tau` truth must return a flat loading, and a falling-loading truth must not be recoverable by the constant-`tau` form.
+
+## 22. Implemented: the Down syndrome joint frame, calibrated as a lower bound
+
+§20's open item 2, and a reversal of §19's verdict on it. The suggestion §19 left — pool the joint rows with VG01's and VG02's single-outcome rows to buy replication — **cannot be done**, and finding out why is what forced the rest of this section.
+
+### There are no rows to pool
+
+Every Down syndrome model calls `load_data` with no `sample_fraction`, no `min_study_observations`, no age bound and no exclusions. They all get the same 1,218 rows, of which 671 carry comprehension, 1,114 production and 670 both. **VG02's understood frame and VG09's are not two frames; they are the same 671 rows** — VG02's appears smaller in §20's table only because the saturated mean's 15-observation cell rule drops 325 of them.
+
+So "pool VG01 and VG02 in" resolves to "relax filters that are already absent". The joint frame is not a subset of a larger Down syndrome pool; it is the pool. Whatever is done here has to be done on 671 rows.
+
+### No configuration recovers `kappa`, and 36 were tried
+
+The remaining lever is to spend fewer parameters. Sweeping spline flexibility (4, 5, 6, 8 knots) × age window (8–115, 10–60, 12–48 months) × anchor pair ((24, 48), (18, 36), (20, 40)), scoring each by how well two known truths come back on two seeds: **none recovers everything to within 30%.** The best understood configuration is off by 39% at the young anchor and the best ratio configuration by 61%.
+
+`tau` is the exception, and a large one: it recovers to within 6% on the understood frame at the configuration the estimate uses, and under 14% at every setting tried. That result is what §23 rests on.
+
+### But the failure is bias, not scatter — which makes it usable
+
+The grid varied `tau` along with `kappa`, conflating two questions. Holding `tau` at its fitted value and varying only the truth, five seeds each at the configuration the estimate uses:
+
+| pool              | truth `kappa`(24) | recovered (median) | bias | seed range |
+| ----------------- | ----------------: | -----------------: | ---: | ---------- |
+| VG09/10/15/16 U   |              12.0 |               11.7 |  −2% | 10.4–13.3  |
+| VG09/10/15/16 U   |              40.8 |               39.0 |  −4% | 34.9–42.5  |
+| VG09/10/15/16 U   |              81.6 |               60.2 | −26% | 54.6–68.9  |
+| VG09/10/15/16 U   |             163.2 |              104.1 | −36% | 94.4–108.6 |
+| VG09/10/15/16 `q` |               6.9 |                5.5 | −20% | 4.7–8.4    |
+| VG09/10/15/16 `q` |              13.8 |               11.5 | −17% | 8.4–11.9   |
+| VG09/10/15/16 `q` |              27.6 |               15.9 | −42% | 13.3–20.5  |
+| VG09/10/15/16 `q` |             100.0 |               33.4 | −67% | 26.1–42.9  |
+
+The error is **one-directional and monotone in the level**, and the seed ranges are tight around each median. That is not an estimator returning noise; it is one walking down a flat ridge. A large `kappa` is near-binomial, the data stop distinguishing bigger from biggest, and the optimum slides toward where the likelihood still has curvature. §19 read the two-sided spread of a `tau`-and-`kappa` grid and concluded "no number read off it would mean anything". The correct reading is narrower and more useful: **the estimates are lower bounds.**
+
+The understood pool is also more stable than §19's single mean sweep suggested. Across spline knot counts 6, 8, 10 and 14 it gives `kappa`(24) of 81.3, 81.6, 81.9 and 81.5 — a spread of 0.7%. It is the ratio outcome that moves, 13.0 to 23.6 across the same sweep. Stability and recoverability are different properties and this frame has one without the other.
+
+### The prior was wrong regardless, and demonstrably so
+
+None of the above is needed to establish that the legacy block does not fit these models. Prior CDF at the posterior mean, `dev` fits, across every Down syndrome joint model:
+
+| model | `b_kappa_mag_u` | prior CDF | contraction | ESS   |     | `b_kappa_mag_s` | prior CDF | contraction |
+| ----- | --------------: | --------: | ----------: | ----- | --- | --------------: | --------: | ----------: |
+| VG05  |           0.825 |     0.994 |        0.38 | 999   |     |           0.855 |     0.996 |       −0.22 |
+| VG07  |           0.813 |     0.993 |        0.40 | 1,031 |     |           0.906 |     0.998 |       −0.18 |
+| VG08  |           1.100 |    0.9998 |        0.24 | 318   |     |           0.746 |     0.987 |       −0.31 |
+| VG09  |           1.141 |    0.9999 |        0.27 | 313   |     |           0.309 |     0.697 |        0.07 |
+| VG10  |           1.157 |    0.9999 |        0.29 | 381   |     |           0.304 |     0.689 |        0.09 |
+| VG14  |           0.807 |     0.993 |        0.41 | 951   |     |           0.856 |     0.996 |       −0.26 |
+| VG15  |           1.154 |    0.9999 |        0.28 | 496   |     |           0.361 |     0.771 |       −0.07 |
+| VG16  |           1.144 |    0.9999 |        0.29 | 3,028 |     |           0.311 |     0.700 |        0.11 |
+
+Against `HalfNormal(0.3)`. Every understood slope is in the extreme upper tail, all eight well mixed, and five of the eight spoken slopes have **negative contraction** — the posterior wider than the prior, the likelihood pushing outward against a wall. This is §18's pathology, worse than VG01's 0.998 was, and it needs no view on the level to diagnose: the two-anchor form removes it by having no slope prior at all.
+
+### What was changed
+
+Two new blocks, `_DS_JOINT_UNDERSTOOD_KAPPA_RE` and `_DS_JOINT_Q_KAPPA_RE`, on **VG09, VG10, VG15 and VG16** — the four models carrying subject intercepts on _both_ outcomes, which is what makes them share one calibration target. Medians are each estimate divided by the bias measured at it: understood 81.6/0.74 = 110 at 24 months and 20.3/0.62 = 33 at 48; ratio 13.8/0.83 = 17 and 7.6/0.70 = 11. `sigma` is **1.0** on all four anchors, wider than anywhere else in the family, because the correction is itself uncertain and the ratio's mean sensitivity is a factor of 1.8.
+
+**VG15 needed the joint-modality engine extending first.** §19 gave the two bivariate engines a per-outcome suffix; `common_joint_modality.py` still called `build_kappa_of_z` directly with a hard-coded triple. It now routes through the same shared helpers with suffixes `_u`, `_s` and `_sign`, and `JointModelConfiguration` gained the three `kappa_anchored_*` fields and the shared validator. VG15 is consequently **the only registered model mixing the two forms** — anchored on understood and spoken, legacy on the signed ratio, which has no calibration — and a test now pins that.
+
+**VG05, VG07, VG08 and VG14 are deliberately not migrated**, and for a reason the §19 rule supplies: the calibration must match the specification, and theirs differ. VG05 carries no random effects, VG07 only study ones, and VG08 a subject effect on understood but not on `q` — so VG08 would need one calibration per outcome. All three are steps in the VG05 → VG07 → VG08 → VG09 → VG10 lineage, whose whole purpose is to isolate what adding each random effect does; changing a prior partway along would confound exactly that contrast. VG14's frame is the signing subset.
+
+The sensitivity registry needed updating with them, and restating the variants exposed what two of them had actually been asking. `kappa-flat` set `a_kappa_mu` from `log 8` to 0 — an eight-fold cut in the _level_ of the age term, not a flattening of it, despite the name — and `kappa-const` pinned `b_kappa_mag` near zero, which is the genuinely constant-in-age one. Both are now stated at the anchors: `kappa-flat` divides both anchor medians by eight, and `kappa-const` sets them equal, since under the anchored form the slope is derived and cannot be set directly. `replace_kappa` now validates against whichever form the block uses and names it in the error, so the next migration breaks a stale variant loudly instead of silently.
+
+## 23. Implemented: the subject random-effect scales
+
+§20's open item 9, the last of the three and the simplest, because the measurement had already been made and nobody had read it. The conditional estimator reports `tau` alongside `kappa` for every pool — it has to, since separating them is the whole point of it — so the subject scales have had a calibration sitting in §19's output since §19 was written.
+
+### Fourteen parameters, one prior, none of them centred
+
+Every subject random-effect scale in the registry was `HalfNormal(0.5)`, median 0.34:
+
+| model | parameter       | posterior | prior CDF | estimate |
+| ----- | --------------- | --------: | --------: | -------: |
+| VG08  | `tau_subj_u`    |     0.824 |     0.901 |    0.847 |
+| VG09  | `tau_subj_u`    |     0.831 |     0.904 |    0.847 |
+| VG09  | `tau_subj_q`    |     1.360 |     0.994 |    1.147 |
+| VG10  | `tau_subj_u`    |     0.827 |     0.902 |    0.847 |
+| VG10  | `tau_subj_q`    |     1.363 |     0.994 |    1.147 |
+| VG11  | `tau_subject`   |     1.060 |     0.966 |    1.056 |
+| VG12  | `tau_subject`   |     0.735 |     0.858 |    0.736 |
+| VG13  | `tau_subj_u`    |     0.768 |     0.876 |    0.770 |
+| VG13  | `tau_subj_q`    |     1.117 |     0.975 |    1.119 |
+| VG15  | `tau_subj_u`    |     0.826 |     0.901 |    0.847 |
+| VG15  | `tau_subj_q`    |     1.253 |     0.988 |    1.147 |
+| VG15  | `tau_subj_sign` |     1.082 |     0.970 |        — |
+| VG16  | `tau_subj_u`    |     0.831 |     0.904 |    0.847 |
+| VG16  | `tau_subj_q`    |     1.362 |     0.994 |    1.147 |
+
+Not one below 0.858. A prior that every parameter in the family sits in the upper tail of is not weakly informative; it is wrong in a consistent direction.
+
+**The agreement in the last two columns is worth pausing on.** On all four typically-developing parameters the independent estimator and the model posterior agree to three significant figures — 1.056 against 1.060, 0.736 against 0.735, 0.770 against 0.768, 1.119 against 1.117 — and on the five Down syndrome understood ones to within 3%. Two different estimation machines, one a quadrature-integrated maximum-likelihood GLMM with a saturated mean and the other a Hamiltonian sampler with an HSGP, landing on the same number. That is the strongest validation of the conditional estimator anywhere in this note, and it arrives as a by-product.
+
+The four that differ are all the Down syndrome ratio, estimate 1.147 against posteriors of 1.25 to 1.38, and §22 measured a bias on exactly that pool: a `tau` of 1.15 recovers there as 1.06, about 8% low, so 1.147 implies a truth near 1.24. That accounts for VG15's 1.253 exactly and about half the gap to the 1.36 the other three reach. The residual is the estimator's known weakness on its weakest pool rather than a conflict, and it is in the direction that makes the prior below _more_ comfortable, not less.
+
+### One number covers the family
+
+The estimates span 0.74 to 1.15, a factor of 1.6 — narrow enough that one prior serves. `HalfNormal(1.5)` has median 1.01 and 5–95% of 0.09 to 2.94:
+
+|                                   | at the estimate | at the posterior |
+| --------------------------------- | --------------- | ---------------- |
+| prior CDF under `HalfNormal(0.5)` | 0.86–0.994      | 0.86–0.994       |
+| prior CDF under `HalfNormal(1.5)` | **0.376–0.556** | **0.376–0.636**  |
+
+Every parameter lands in the central half. The family stays HalfNormal rather than moving to the LogNormal the `kappa` anchors use, deliberately: a scale prior with mass at zero lets a subject effect the data do not support shrink away, and that property is worth keeping even on frames where the effect is overwhelming (§19's likelihood ratios against `tau = 0` run from 117 to 4,353 on one degree of freedom). Widening the scale fixes the conflict without giving it up.
+
+`tau_subj_sign` has no calibration — nothing estimates a signing subject scale — so it inherits the family setting rather than being fitted to one. Its posterior at 1.082 was in the same tail as the rest, and definitions.py already recorded the conflict and declined to act on it ("kept at 0.5, porting VG10"); it is now resolved by the same change, at prior CDF 0.53.
+
+**The study scales stay at `HalfNormal(0.5)`.** Their posteriors sit at prior CDF 0.43 to 0.82 across every model that has them, so there is nothing to fix, and the estimator treats study effects as fixed and therefore has no opinion to offer. That the subject scales and the study scales shared one default was the accident; only one of them was mis-set.

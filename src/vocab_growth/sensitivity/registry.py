@@ -28,6 +28,8 @@ varied in *separate* one-factor variants so the attribution stays clean.
 
 from __future__ import annotations
 
+import math
+
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.sensitivity.overrides import make_variant
 
@@ -69,29 +71,53 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "include_uk06": True}},
 
     # -- Target 4: kappa (dispersion): VG10 (U/S) and VG15 (adds sign) --
+    #
+    # VG10's and VG15's understood and spoken outcomes moved to the two-anchor
+    # form (note section 22), so these are restated in its parameters. The two
+    # questions each variant asks are unchanged:
+    #
+    #   kappa-flat   what if dispersion is much *lower* than calibrated? The
+    #                legacy version set a_kappa_mu from log(8) to 0, an eight-fold
+    #                cut in the age term; here both anchor medians are divided by
+    #                eight, which is the same cut stated at the anchors.
+    #   kappa-const  what if dispersion does not vary with age? The legacy version
+    #                pinned b_kappa_mag near zero; under the anchored form the
+    #                slope is derived, so a curve constant in age is one whose two
+    #                anchors are equal.
+    #
+    # VG15's signed ratio stays on the legacy form and keeps the legacy override.
     ("vg10", "kappa-broadfloor"): {"suffix": "kappa-broadfloor", "kappa": {
-        "kappa_u": {"kappa_min_sigma": 1.0}, "kappa_s": {"kappa_min_sigma": 1.0}}},
+        "kappa_u": {"kappa_min_sigma": 1.5}, "kappa_s": {"kappa_min_sigma": 1.5}}},
     ("vg10", "kappa-flat"): {"suffix": "kappa-flat", "kappa": {
-        "kappa_u": {"a_kappa_mu": 0.0}, "kappa_s": {"a_kappa_mu": 0.0}}},
+        "kappa_u": {"excess_young_mu": math.log(106.0 / 8),
+                    "excess_old_mu": math.log(28.7 / 8)},
+        "kappa_s": {"excess_young_mu": math.log(12.6 / 8),
+                    "excess_old_mu": math.log(6.7 / 8)}}},
     ("vg10", "kappa-const"): {"suffix": "kappa-const", "kappa": {
-        "kappa_u": {"b_kappa_mag_sigma": 0.02}, "kappa_s": {"b_kappa_mag_sigma": 0.02}}},
+        "kappa_u": {"excess_old_mu": math.log(106.0)},
+        "kappa_s": {"excess_old_mu": math.log(12.6)}}},
     ("vg15", "kappa-broadfloor"): {"suffix": "kappa-broadfloor", "kappa": {
-        "kappa_u": {"kappa_min_sigma": 1.0}, "kappa_s": {"kappa_min_sigma": 1.0},
+        "kappa_u": {"kappa_min_sigma": 1.5}, "kappa_s": {"kappa_min_sigma": 1.5},
         "kappa_sign": {"kappa_min_sigma": 1.0}}},
 
     # -- Target 5: random-effect scales --
+    #
+    # The subject scales are calibrated at HalfNormal(1.5) (note section 23), so
+    # these bracket that rather than the old 0.5: wide is 3.0 and narrow 0.75,
+    # keeping the factor of two either side the variants had before. The *study*
+    # scales are still 0.5 and keep their original 1.0 / 0.25.
     ("vg10", "tau-wide"): {"suffix": "tau-wide", "scalar": {
         "tau_u_sigma": 1.0, "tau_q_sigma": 1.0,
-        "tau_subj_u_sigma": 1.0, "tau_subj_q_sigma": 1.0}},
+        "tau_subj_u_sigma": 3.0, "tau_subj_q_sigma": 3.0}},
     ("vg10", "tau-narrow"): {"suffix": "tau-narrow", "scalar": {
         "tau_u_sigma": 0.25, "tau_q_sigma": 0.25,
-        "tau_subj_u_sigma": 0.25, "tau_subj_q_sigma": 0.25}},
+        "tau_subj_u_sigma": 0.75, "tau_subj_q_sigma": 0.75}},
     ("vg10", "no-subject"): {"suffix": "no-subject", "scalar": {
         "use_subject_re_u": False, "use_subject_re_q": False}},
     ("vg11", "tau-wide"): {"suffix": "tau-wide", "scalar": {
-        "tau_study_sigma": 1.0, "tau_subject_sigma": 1.0}},
+        "tau_study_sigma": 1.0, "tau_subject_sigma": 3.0}},
     ("vg11", "tau-narrow"): {"suffix": "tau-narrow", "scalar": {
-        "tau_study_sigma": 0.25, "tau_subject_sigma": 0.25}},
+        "tau_study_sigma": 0.25, "tau_subject_sigma": 0.75}},
     ("vg11", "single-admin"): {"suffix": "single-admin", "scalar": {
         "one_observation_per_subject": True, "use_subject_re": False}},
     ("vg12", "single-admin"): {"suffix": "single-admin", "scalar": {
