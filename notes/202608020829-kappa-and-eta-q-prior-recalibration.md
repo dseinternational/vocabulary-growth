@@ -1099,6 +1099,9 @@ Posterior `kappa` at the anchors: VG02 14.4 [12.3, 16.4] and 6.9 [6.2, 7.6] agai
 
 ### Open list after §20
 
+> [!NOTE]
+> Items 1, 2, 3 and 9 below are resolved by §§21–23. The current list is **Open list after §23**, at the end of this note.
+
 Resolved by this section: §19's item 2. Every univariate model (VG01–VG04, VG11, VG12) now carries an empirically calibrated two-anchor dispersion prior, each matched to whether its own model has grouping structure.
 
 Still open, in rough priority order — unchanged from §19 except for the numbering:
