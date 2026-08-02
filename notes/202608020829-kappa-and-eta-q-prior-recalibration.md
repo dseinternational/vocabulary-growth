@@ -4,14 +4,18 @@
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
-> Analysis and implementation note, 2026-08-02. Four things are **implemented**: the production `kappa` priors on VG01, VG03 and VG11 (§6), the subject-wise `sample_fraction` fix (§13), the VG10 GP anchoring on VG16 (§16 — a structural change to a registered model), and the two-anchor `kappa` reparameterisation on VG01, VG03 and VG11 (§18), which **supersedes §6 on those three models**. §§4–5 (`kappa_min` family-wide, `eta_q`) remain **proposals**. The supporting fits in §§2–8 are `dev` configuration (2 chains x 500 draws) on a 10% typically-developing subsample and are indicative only; §§10, 12, 13, 16 and 18 supersede them with `test`-config fits.
+> Analysis and implementation note, 2026-08-02. Five things are **implemented**: the production `kappa` priors on VG01, VG03 and VG11 (§6), the subject-wise `sample_fraction` fix (§13), the VG10 GP anchoring on VG16 (§16 — a structural change to a registered model), the two-anchor `kappa` reparameterisation on VG01, VG03 and VG11 (§18), which **supersedes §6 on those three models**, and the conditional `kappa` calibration on VG11, VG12 and VG13 (§19), which **supersedes §18's prior values on VG11**. §§4–5 (`kappa_min` family-wide, `eta_q`) remain **proposals**. The supporting fits in §§2–8 are `dev` configuration (2 chains x 500 draws) on a 10% typically-developing subsample and are indicative only; §§10, 12, 13, 16, 18 and 19 supersede them with `test`-config fits.
 >
-> **Read §18 before acting on any `kappa` recommendation in §§2–17.** The parameterisation those sections calibrate is no longer the one VG01, VG03 and VG11 use.
+> **Read §§18–19 before acting on any `kappa` recommendation in §§2–17.** Neither the parameterisation nor the calibration those sections describe is still in use on the migrated models.
+>
+> **Every `kappa` figure before §19 is a _marginal_ estimate**, valid only for VG01 and VG03. A model with study and subject random intercepts needs the conditional estimate, which is three to ten times larger. Reading a number from §§1–18 across to VG11, VG12 or VG13 reintroduces exactly the error §19 exists to correct.
 
 > [!IMPORTANT]
 > Extended the same day with §§10–17. The recalibration works — VG03 on the corrected frame puts `b_kappa_mag` at 1.369 with contraction 0.82, against prior CDF 1.00 and contraction 0.18 before (§13) — but `b_kappa_mag` remains censored in VG01 (§10). The validation also turned up a bimodality in VG11, which a control fit cleared the recalibration of causing (§10). §11 identifies the cause: **`sample_fraction` drew rows rather than children, cutting replication from 1.32 to 1.04 administrations per child and leaving the subject random effect and the observation-level dispersion indistinguishable.** §12 confirms it — a subject-wise draw at the same volume gives max R-hat 1.010 against 1.718 — and **corrects §11's ranking of the two modes, which was wrong**: the comparator was a published US-English monolingual norm matching this pool's mean rather than its median. §13 records the fix, its tests, and the VG03 and VG04 refits. Results for VG11, VG12 and VG13 obtained under row-wise subsampling should be discarded, including the `dev` run in §2. §15 then diagnoses the two remaining open items — VG01's censored `b_kappa_mag` is a units problem, and the Down syndrome models' elevated R-hat is the known understood-trajectory ridge — and §16 implements the one action that came out of it, giving VG16 the VG10 anchoring. **§17 is a review pass over this note's own work** and corrects it in two places: the empirical `b_kappa_mag` in §2 was estimated with the wrong functional form and is biased low (correct values 1.71 and 2.17, not 0.77 and 1.38), which makes the implemented `HalfNormal(0.75)` still too tight and invalidates §13's explanation of the VG03 gap; and `_subsample_subjects` depended on input row order until sorted. It also confirms the `kappa` decline is not a CDI-form artefact.
 >
 > **§18 then implements the reparameterisation §17 called for, corrects §17 in turn, and turns up a limitation none of the earlier sections saw.** VG01 and VG03 come out clean and centred — every dispersion parameter between prior CDF 0.46 and 0.56, against 0.998 and 0.932 for `b_kappa_mag` before — but **VG11 puts `kappa` at ten times its marginal estimate**, because its subject random effects absorb the between-child spread the Beta-Binomial carries in VG01 and VG03. A dispersion prior calibrated on raw per-age counts does not transfer to a model that conditions on random effects; that is the error §7 identified for `kappa_s` and declined to make, and §6 made it for VG11. **VG01 and VG03 are the two models §18 validates.**
+>
+> **§19 then closes §18's top open item and finds it was wider than §18 thought.** A conditional (GLMM) estimator — saturated mean, study effects, subject effect integrated out by quadrature — puts `kappa` 3 to 10 times above its marginal counterpart on every random-effect pool measured. VG11's posterior turns out to have been right all along at 310 against a conditional estimate of 317, so re-centring removes a prior conflict without moving the answer. **The new finding is VG12 and VG13**, whose understood dispersion posteriors sat at ~16 against a data estimate of ~42 — prior-dominated rather than prior-conflicted, and so invisible to the check that caught VG11 — and whose dispersion _rises_ with age, which the legacy `b_kappa_mag >= 0` forbids outright. Both are migrated and recalibrated, and their refits move to 42.3 and 42.0 with `b_kappa` posteriors entirely in the region the old form excluded (`+0.211` and `+1.397`). Across all three models every dispersion parameter now sits between prior CDF 0.41 and 0.63. **The Down syndrome joint frame fails the recovery check** — a known `kappa(24) = 317` comes back between 260 and 842 — so VG09/VG10/VG16 are deliberately excluded; that is a limitation, not a clearance. §19 also disproves §18's claim that `tau_subject` and `kappa` cannot be told apart on this design, and leaves the **subject random-effect scales** as the loudest remaining prior-data conflict (VG13's `tau_subj_q` at prior CDF 0.975).
 >
 > On the parameterisation itself: The floor-free form §17 simulated is rejected by the data (10 to 168 log-likelihood units across six pools), so `kappa_min + exp(a + bz)` is kept and only its _parameterisation_ changes: priors go on the age term at two reference ages in months, and `a_kappa` / `b_kappa` are derived. That also supplies the argument this note had been missing — the anchor values are stable across age-cell inclusion rules that swing `b_kappa_mag` by 44%, so the legacy form asks for a prior on the one quantity the data do not pin down. §18 also retires the `P(kappa > 200)` criterion that `_PRODUCTION_KAPPA` was tuned against: at `n = 810`, `kappa = 200` is 2.24x the binomial standard deviation, not "near-binomial", and the observed young-age cells really do sit there.
 
@@ -790,6 +794,9 @@ Per-draw statistical efficiency is unchanged by the reparameterisation: VG03's d
 
 Resolved by this section: §17's items 1 (the reparameterisation), the VG03 half of item 2, the PRIORS.md half of item 4, and §14's open items 1 (restate `b_kappa_mag` in interpretable units) and 6.
 
+> [!CAUTION]
+> **Items 1, 2 and 8 below are superseded by §19.** Item 1 is done — the estimator exists and VG11, VG12 and VG13 are recalibrated — and it turned up two things this list did not anticipate: VG12 and VG13 were mis-centred as badly as VG11 but silently, and the Down syndrome joint frame cannot support the calibration at all, so VG09/VG10/VG16 are deliberately left out. Item 2's premise is wrong in its specifics: the typically-developing understood dispersion is not "nearly flat" on the conditional scale, it rises. Item 8's supporting argument — that `tau_subject` and `kappa` are indistinguishable on this design — is disproved in §19.
+
 Still open, in rough priority order:
 
 1. **Calibrate `kappa` conditionally for the random-effect models.** Newly the top item: VG11's fit (below) shows a marginally-calibrated dispersion prior is out by a factor of ten once subject effects absorb the between-child spread. Needs per-age Beta-Binomial fits to residuals after study and subject effects, not to raw counts. This is the same piece of work §7 scheduled for `kappa_s`; do it once and apply it to VG11, VG12, VG13 and the joint models together. **Until then `_TD_SPOKEN_KAPPA` on VG11 is known to be mis-centred** — it is left in place only because reverting to `_PRODUCTION_KAPPA` would substitute one mis-calibrated prior for another, and the anchored form at least makes the miss legible.
@@ -802,6 +809,9 @@ Still open, in rough priority order:
 8. **Whether VG11 should carry subject random effects at all** at 1.32 administrations per child (§14's item 5). VG11's `tau_subject` posterior of 1.059 with a standard deviation of 0.009, alongside `kappa` at ten times its marginal estimate, is that question presenting itself rather than a separate finding.
 
 ### VG11 rejects the shared typically-developing anchors, for a reason that is not the parameterisation
+
+> [!NOTE]
+> **Diagnosis confirmed by §19, conclusion partly overturned.** The mechanism described below is right, and §19 measures it: VG11's conditional `kappa` at 12 months is 317.5 against the 30 this section's prior encoded. But the closing paragraph's two claims do not survive. `tau_subject` and `kappa` _are_ separable on this design (§19 recovers each from simulation), and VG11's dispersion posterior was accurate rather than untrustworthy — 310 against a conditional estimate of 317.5. The prior was wrong; the fit was not.
 
 VG11's `test` fit (16,235 observations, 12,266 subjects, 39m 55s) is unimodal — max R-hat 1.017 against the 1.718 of the row-wise fit it replaces — but it does **not** pass the convergence gate (13 divergences, min ESS 203, R-hat and ESS failures on `ell_unit`, `eta`, `tau`, `ell`, three HSGP coefficients and `delta_raw[0]`). And its dispersion posterior is nowhere near its prior:
 
@@ -823,3 +833,200 @@ It is the same error §7 identified for `kappa_s` and declined to make: **a disp
 There is a second reading, and the two are not separable on this evidence. `tau_subject` at 1.06 with a posterior standard deviation of 0.009 on a pool with 1.32 administrations per child — only 1,947 of 12,266 subjects have a repeat — is what §14's open item 5 predicted: the subject random effect and the observation-level dispersion are competing for the same variance, and the data cannot arbitrate. A prior at CDF 1.000 on one side and 0.966 on the other is what that looks like from the outside. Whether VG11 needs a conditional dispersion calibration, or should not carry subject effects at this replication, is now the question — and it is a question about VG11's structure, not about `kappa`'s parameterisation.
 
 **Action:** VG11 should not be quoted from this fit either. It needs `kappa` anchors calibrated _conditionally_ — per-age Beta-Binomial fits to residuals after subject and study effects, not to raw counts — which is the same piece of work §7 scheduled for `kappa_s`, and should be done once for both. Until then VG01 and VG03 are the two models this section validates.
+
+## 19. Implemented: `kappa` calibrated conditionally for the random-effect models
+
+§18's open item 1, and the resolution of the VG11 failure it ended on. §7 first identified this error class and declined to make it; §6 made it for VG11; §18 measured it at a factor of ten and could not fix it. This section builds the estimator that can, validates it, and applies it to the three typically-developing random-effect models. It also finds that VG12 and VG13 were affected as badly as VG11 and in a way that had gone unremarked, and that the Down syndrome joint frame cannot support the calibration at all.
+
+### What the marginal estimate is an estimate of
+
+The per-age fits in §§1–2 and §18 answer one question: how much do counts vary at a given age? For VG01 and VG03 that is the right question, because nothing in those models removes any of that variation before the likelihood sees it — the Beta-Binomial carries all of it.
+
+A model with study and subject random intercepts has already removed most of it. Its `kappa` answers a different question: how much variation is left once this child's own level is known? That residual is necessarily smaller, so `kappa` is necessarily larger, and the marginal number is a lower bound rather than an approximation. §1 said as much — "a marginal `kappa` is a lower bound on the model's `kappa`" — and then §6 used it anyway.
+
+The size of the gap is the point. A lower bound off by 20% is a usable prior centre. Off by a factor of ten it is a prior for a different quantity.
+
+### The estimator
+
+`scripts/kappa_conditional_calibration.py` fits the same saturated mean the marginal calibration uses, with the random effects present:
+
+```text
+logit p_ij = m_c(ij) + s_k(i) + b_i,     b_i ~ N(0, tau^2)
+y_ij       ~ BetaBinomial(N_ij, p_ij, kappa(a_ij))
+```
+
+`m_c` is free per integer-age cell, so dispersion is still estimated given whatever the mean does. Study effects are fixed and sum-to-zero, matching the engines' `ZeroSumNormal` intercepts (with a handful of large studies the shrinkage is negligible, so fixed and random coincide). The subject effect is integrated out by Gauss-Hermite quadrature; the log-likelihood is differentiated with JAX and maximised with L-BFGS. `kappa` is parameterised directly as the floor plus the age term at each of two anchor ages, so the Hessian returns standard errors on the quantities the prior is actually stated on.
+
+For the nested spoken outcome this is the conditional scale §7 asked for: successes are the spoken count, the denominator is that child's own observed understood count, and the mean is the production ratio `q`.
+
+### Three things had to hold before reading a prior off it
+
+**The design must be able to tell `tau` from `kappa`.** For a child measured once they are formally confounded — both add variance to the same single number — and 84% of VG11's children are measured once. §18 concluded from that "the data cannot arbitrate". **That was too pessimistic**, and this is the first correction this section makes to §18. Simulating from two opposite truths on VG11's real subject/study/age structure and refitting recovers each. (This check is what excludes the Down syndrome pool below, so it is not a formality that every pool passes.)
+
+| truth            | `tau` | `kappa(12)` | `kappa(20)` | recovered `tau` | recovered `kappa(12)` | recovered `kappa(20)` |
+| ---------------- | ----: | ----------: | ----------: | --------------: | --------------------: | --------------------: |
+| subject-heavy    |  1.06 |       317.5 |        50.5 |   1.059 / 1.050 |         337.7 / 297.1 |           50.4 / 51.0 |
+| dispersion-heavy |  0.15 |        30.0 |         6.6 |   0.137 / 0.146 |           30.4 / 30.3 |             6.6 / 6.7 |
+
+Two seeds each. The 1,947 children with a repeat carry the separating information: on this design the posterior correlation between `log tau` and the anchors stays below 0.33 in every recovery run, and the two regimes come back an order of magnitude apart rather than collapsing to a common answer. What §18 saw — a prior at CDF 1.000 on one side and 0.966 on the other — is not two parameters trading off; it is two priors that were both wrong.
+
+The separation is not equally comfortable everywhere. On the real fits the same correlation is 0.27 for VG11 and 0.39 for VG13's `q`, but **0.71 for VG12** — its `tau` and young anchor are genuinely competing, which is a further reason its prior is left wide. A test asserts the negative control too: with repeats stripped from the design, the estimator does _not_ recover the truth, so the checks above are testing something.
+
+**The quadrature has to converge.** It does not at the node count a first pass would choose. At `tau` near 1 the subject distribution is wide, and under-integrating it understates the spread the random effect accounts for, so the dispersion absorbs the difference and `kappa` comes out low. On VG11: 292.6 at 24 nodes, 313.3 at 48, 317.6 at 96, 318.5 at 240. All four pools are converged by 160, which is the default. The recovery table above is at 160; at 24 the same simulation returned 265 against a truth of 303.
+
+**The answer must not depend on the mean model.** The saturated mean fits every age cell exactly where the models use a smooth HSGP, so a gap between this estimate and a posterior could be an artefact of the estimator tracking the age curve more closely. Sweeping from a 6-parameter spline to saturated, and separately across polynomial means:
+
+| pool            | linear mean | quadratic | spline[8] | saturated |
+| --------------- | ----------: | --------: | --------: | --------: |
+| VG11 spoken     |       166.2 |     318.3 |     316.3 |     317.5 |
+| VG12 understood |        33.4 |      44.2 |      42.4 |      43.0 |
+| VG13 understood |        41.6 |      41.7 |      41.7 |      42.2 |
+| VG13 `q`        |        35.3 |      35.2 |      35.6 |      36.0 |
+
+`kappa` at the young anchor. From a quadratic upward nothing moves by more than 3%, so the gaps reported below are properties of the data and not of this estimator.
+
+### Results
+
+Conditional fits at 160 nodes on a saturated mean, against the marginal estimate on the same rows and against each model's posterior. **The posterior column is the fit that preceded this section** — the pre-change priors — since that is what makes the comparison informative; the refits are further below and overwrite those figures in `output/`. Only VG11's was `test` config; VG12's, VG13's and the Down syndrome joint models' were `dev` (2 chains x 500 draws) and are indicative, so the gaps below are read as order-of-magnitude evidence and not as precise discrepancies.
+
+| pool                     |      n | obs/child | `tau` | conditional `kappa` at anchors | marginal | posterior [94% CI]            |
+| ------------------------ | -----: | --------: | ----: | ------------------------------ | -------- | ----------------------------- |
+| VG11 spoken (12, 20)     | 16,235 |      1.32 |  1.06 | **317.5**, **50.5**            | 30, 6.7  | 310 [281, 339], 50.0 [47, 53] |
+| VG12 understood (12, 20) |  5,997 |      1.26 |  0.74 | **43.0**, **66.4**             | 11, 13   | 16.5 [13, 21], 15.6 [12, 19]  |
+| VG13 understood (12, 17) |  5,406 |      1.19 |  0.77 | **42.2**, **124.1**            | 10.8, 13 | 15.9 [12, 21], 14.4 [11, 19]  |
+| VG13 `q` (12, 17)        |  5,320 |      1.19 |  1.12 | **36.0**, **29.7**             | 5.8, 4.1 | 40.4 [20, 64], 29.7 [17, 50]  |
+| VG09/10/16 U (24, 48)    |    671 |      1.73 |  0.85 | 81.6, 20.3 _(unstable)_        | 12, 5.1  | 66.3 [55, 79], 19.5 [16, 23]  |
+| VG09/10/16 `q` (24, 48)  |    645 |      1.74 |  1.15 | 13.8, 7.6 _(unstable)_         | 4.5, 2.0 | 20.5 [17, 24], 16.5 [15, 19]  |
+
+Every conditional estimate is 3–10x its marginal counterpart, and the likelihood-ratio statistic against `tau = 0` is between 117 and 4,353 on 1 degree of freedom. The random-effect absorption is not a subtle correction to any of these pools.
+
+Three separate patterns sit in that table.
+
+**VG11 and VG13's `q` were right all along.** Their posteriors match the conditional estimate closely — 310 against 317.5, 50.0 against 50.5; 40.4 against 36.0, 29.7 against 29.7 — which means the likelihood was overwhelming a bad prior rather than being distorted by it. Re-centring removes a prior-data conflict without moving the answer. It also retrospectively vindicates VG11's `test` fit, which §18 said should not be quoted: the dispersion figure it reported was correct, and the reason to distrust it was the prior it was fighting, not the number it reached.
+
+**VG12 and VG13's understood outcome were not.** Both posteriors sit near 16 where the data say 42, with the 94% credible interval nowhere near it. These models were on the legacy form, whose prior puts `kappa` at roughly 13 at the pool mean age — and the posteriors had barely moved off it, on 5,997 and 5,406 observations.
+
+Their `b_kappa_mag` posteriors show why, and are the most direct evidence in this section that the constraint rather than the data was in charge:
+
+| model          | `b_kappa_mag` mean | 89% ETI        | prior             |
+| -------------- | -----------------: | -------------- | ----------------- |
+| VG12           |              0.075 | [0.004, 0.224] | `HalfNormal(0.3)` |
+| VG13 `kappa_u` |              0.131 | [0.013, 0.352] | `HalfNormal(0.3)` |
+
+Both are pressed against the zero boundary with the interval's lower limit at the constraint. `b_kappa_mag >= 0` forces dispersion to fall with age; these data want it to rise, so the posterior does the only thing it can and piles up at "as close to flat as permitted". No setting of the three legacy parameters fixes that — it is the parameterisation, not the numbers.
+
+This is the finding that was not visible before: §18 flagged VG11 because its prior conflict was loud, and these two were quietly prior-dominated instead — a posterior sitting _on_ its prior median attracts no attention, which is exactly the failure mode a prior-CDF check is meant to catch and a glance at the trajectory plots is not.
+
+One caveat on the strength of this comparison. Neither `dev` fit passes the convergence gate, and VG12's `a_kappa` in particular has a bulk ESS of 23 and R-hat 1.075, so its posterior mean is not precisely located. That is why the argument above rests on the boundary behaviour of `b_kappa_mag` (ESS 283 and 372, R-hat 1.017 and 1.003, both well mixed) rather than on the exact value of `kappa`. The refits below are the proper test.
+
+**The Down syndrome joint frame cannot be calibrated from.** Its replication is the best of any pool — 1.73 administrations per child, 208 of 387 children with a repeat — but 671 rows spread over 12–46 months is not enough. The recovery check settles it directly: on this design, at the same spline basis and node count the estimate would use, a known `kappa(24) = 317` comes back as 465 and 842 for understood and 260 and 517 for `q`, with one of the four fits failing to converge. Even in the easier low-dispersion regime, where `kappa(24) = 30` recovers to within 11%, `kappa(48) = 6.6` comes back at 8.3–12.9. The estimator is not wrong here so much as unconstrained: it cannot recover a truth on this design, so it cannot report one.
+
+The mean sweep says the same thing more mildly. Varying only the spline knot count, on identical rows, moves `kappa` at the young `q` anchor from 13.0 to 23.6, a factor of 1.8; the typically-developing pools move by 3% under the same sweep. (Its saturated fit moves further still, to 30.9, but that is not a like-for-like comparison: the 15-observation cell rule drops 325 of the 671 rows, so the mean model and the row set change together — which is why the saturated mean is unusable here and the spline basis was added in the first place.)
+
+A second limitation compounds it. 469 of 1,114 spoken rows fall back to the engine's marginal out-of-810 likelihood because the understood count is missing or violated, so `kappa_s` there governs two different scales and this calibration covers only the 58% on the nested one. On VG13 the same figure is 2%, which is why it does not arise there.
+
+**VG09, VG10 and VG16 therefore keep their existing priors, and that is a finding rather than an omission.** It should not be read as evidence they are correctly calibrated — the presumption from every pool that _could_ be measured is that a marginally-calibrated prior on a random-effect model is several times too low, and nothing here rules that out for them. It means only that this estimator cannot say by how much. VG15 is out of scope for a different reason: its cross-tabulated four-cell frame is not one this estimator reproduces.
+
+### The typically-developing understood rise is real but not smooth
+
+The two-anchor fit summarises VG13's understood dispersion as rising from 42 at 12 months to 124 at 17. Fitting a free `kappa` per age cell, with the random effects still present, shows what that is smoothing:
+
+| age (months) |   8 |   9 |  10 |  11 |  12 |   13 |   14 |   15 |    16 |   17 |    18 |
+| ------------ | --: | --: | --: | --: | --: | ---: | ---: | ---: | ----: | ---: | ----: |
+| VG13 `kappa` |  23 |  32 |  29 |  28 |  45 |   51 | 21.6 | 23.4 | 183.2 | 80.3 | 127.9 |
+| n            | 252 | 289 | 261 | 321 | 586 | 1036 |  504 |  322 |   917 |  482 |   436 |
+
+A factor of eight between adjacent cells at 15 and 16 months, on 322 and 917 observations — too large and on too much data to be sampling noise, and not a monotone trend either. VG12 shows the same shape on the same rows (19.6, 21.0, 110.7 at 14, 15, 16). **Why the 16–18 month cells sit so far above their neighbours is not established here**, and the obvious candidates — a CDI form boundary, a single dataset dominating the 16-month cell — are not tested. The prior response is to centre on the fitted rise but widen both understood anchors to `sigma = 0.9` (5–95% about ±4.4x) rather than the 0.7 the spoken and ratio anchors use, so the prior admits a flat or falling curve too. Treating the log-linear fit as if it described the profile would overstate what is known.
+
+### Changed in the repository
+
+- **`scripts/kappa_conditional_calibration.py`** (new) — the estimator, the six pool definitions, and `--recover` / `--mean-sweep`, which are the checks above and are meant to be run before adding a pool.
+- **`tests/test_kappa_conditional_calibration.py`** (new) — recovery in both regimes on a small synthetic design, the negative control (with repeats removed, the truth is _not_ recovered), the node-count bias, and the anchor algebra.
+- **The two-anchor form now works per outcome in the joint engines.** `build_kappa_for_config`, `kappa_prior_rows`, `kappa_anchor_derived_rows` and `_configure_kappa_priors` all take a suffix that selects both the configuration field and the variable names, and a new shared `validate_kappa_fields` rejects a half-specified or doubly-specified outcome. `BivariateModelConfiguration` gained `kappa_anchored_u` / `kappa_anchored_s`; both bivariate build paths route through the shared builder. Outcomes are independent — VG13 anchors both, the Down syndrome joint models anchor neither — and a test covers the mixed case, which no registered model currently uses.
+- **Four new conditional prior blocks** in `definitions.py`, applied to VG11 (`kappa`), VG12 (`kappa`), and VG13 (`kappa_u`, `kappa_s`). VG12 and VG13 also migrate from the legacy form in the process, which resolves §18's open item 2 for VG12 and was not previously scheduled for VG13.
+- **`scripts/prior_vs_posterior.py`** now handles anchored joint models; it previously raised `NotImplementedError` as a deliberate tripwire for exactly this case, and VG13 is the model that would have hit it.
+- **The migration guard in `tests/test_model_definitions.py`** now records which outcomes are anchored and why, so the DS joint models' exclusion is asserted rather than inferred from absence.
+
+### `kappa_min` stops meaning "floor"
+
+Worth recording because it is easy to misread in the definitions. With `b_kappa > 0` the exponential term vanishes at _young_ ages rather than old ones, so `kappa_min` becomes the young-age asymptote. VG13's is 30, not 3, and that is not a discrepancy: a third of its 8–18 month frame sits below the 12-month anchor, where the rising exponential contributes almost nothing, and the 8–11 month cells estimate 23–32. VG12's conditional fit puts no mass on a floor at all — it goes to zero with an unbounded standard error, since a rising curve never reaches one inside the frame — so it keeps the weak default and lets the anchors carry the level.
+
+### Corrections to §18
+
+1. **"The data cannot arbitrate" between `tau_subject` and `kappa` (§18) is wrong.** They are separable on VG11's design; the recovery check above demonstrates it in both directions. §18's open item 8 — whether VG11 should carry subject random effects at 1.32 administrations per child — loses its main supporting argument, though the question of whether the effects _earn their place_ is untouched.
+2. **"VG11 should not be quoted from this fit" (§18) was right for the wrong reason.** Its dispersion posterior was accurate; the prior conflict was the defect. The convergence failures §18 also recorded remain a reason not to quote it.
+
+### Refits
+
+All three at `test` (4 chains x 2,000 draws), on the frames and code described above.
+
+**Every dispersion parameter is now centred.** Prior CDF at the posterior mean, against 1.000 for VG11's two anchors under §18's prior:
+
+| model | parameter              | post mean | prior median | prior CDF | contraction |
+| ----- | ---------------------- | --------: | -----------: | --------: | ----------: |
+| VG11  | `kappa_min`            |      5.83 |          6.0 |     0.485 |       0.876 |
+| VG11  | `kappa_excess_young`   |    311.35 |        311.0 |     0.501 |       0.943 |
+| VG11  | `kappa_excess_old`     |     44.39 |         44.0 |     0.505 |       0.945 |
+| VG12  | `kappa_min`            |      3.59 |          3.0 |     0.589 |       0.261 |
+| VG12  | `kappa_excess_young`   |     38.87 |         40.0 |     0.487 |       0.942 |
+| VG12  | `kappa_excess_old`     |     62.19 |         63.0 |     0.494 |       0.953 |
+| VG13  | `kappa_min_u`          |     33.88 |         30.0 |     0.580 |       0.777 |
+| VG13  | `kappa_excess_young_u` |      8.13 |         10.0 |     0.409 |       0.695 |
+| VG13  | `kappa_excess_old_u`   |     84.63 |         90.0 |     0.473 |       0.894 |
+| VG13  | `kappa_min_s`          |      3.94 |          3.0 |     0.633 |       0.258 |
+| VG13  | `kappa_excess_young_s` |     31.34 |         33.0 |     0.471 |       0.867 |
+| VG13  | `kappa_excess_old_s`   |     24.98 |         27.0 |     0.456 |       0.864 |
+
+Nothing outside 0.41-0.63. The two `kappa_min` rows with low contraction (0.26) are the two outcomes whose conditional fit put no mass on a floor: the data have little to say about a parameter that never binds inside the frame, and the prior is correspondingly left to carry it.
+
+**Posterior `kappa` at the anchor ages matches the independent conditional estimate:**
+
+| outcome         | posterior at anchors [94% CI]          | conditional estimate | before         |
+| --------------- | -------------------------------------- | -------------------- | -------------- |
+| VG11 spoken     | 315.8 [288, 347], 50.2 [47.6, 53.1]    | 317.5, 50.5          | 310, 50.0      |
+| VG12 understood | 42.3 [38.3, 47.1], 65.7 [59.6, 71.8]   | 43.0, 66.4           | **16.5, 15.6** |
+| VG13 understood | 42.0 [37.8, 46.4], 116.6 [91.8, 145.6] | 42.2, 124.1          | **15.9, 14.4** |
+| VG13 `q`        | 35.0 [29.8, 40.3], 28.8 [24.7, 33.2]   | 36.0, 29.7           | 40.4, 29.7     |
+
+VG12 and VG13's understood dispersion moves by a factor of 2.6. VG11's and VG13's `q` do not move, as predicted.
+
+**The freed sign is what did it, and the posteriors prove the constraint was binding.** `b_kappa` is a derived quantity under the anchored form, so it can be read directly against the region the legacy form allowed:
+
+| outcome          | `b_kappa` mean | 89% ETI          | legacy form admitted |
+| ---------------- | -------------: | ---------------- | -------------------- |
+| VG11             |         -1.432 | [-1.531, -1.333] | yes                  |
+| VG12             |     **+0.211** | [+0.143, +0.279] | **no**               |
+| VG13 `b_kappa_u` |     **+1.397** | [+0.782, +2.083] | **no**               |
+| VG13 `b_kappa_s` |         -0.126 | [-0.277, +0.019] | yes                  |
+
+Both comprehension outcomes put their entire 89% interval in `b_kappa > 0`, which `b_kappa = -b_kappa_mag <= 0` made unreachable at any prior setting. That is the cleanest statement of what was wrong: not a mis-tuned number but a parameterisation that excluded the answer.
+
+**A caution about what this does and does not confirm.** The priors are centred on the conditional estimate from the same rows the models fit, so posterior agreeing with prior agreeing with estimate is not independent corroboration of the value — it is confirmation that the prior no longer fights the data and that the model can now reach what the data say. The evidence that the data rather than the prior are placing these posteriors is the contraction (0.94-0.95 on the anchors, so the posterior is far narrower than a prior spanning roughly [10, 190] at 5-95%) together with the `b_kappa` sign, which no prior here forces.
+
+**None of the three passes the convergence gate**, and that is unchanged by this work rather than caused by it:
+
+| model | divergences | max R-hat | min ESS | failing parameters                  | sampling |
+| ----- | ----------: | --------: | ------: | ----------------------------------- | -------- |
+| VG11  |          30 |     1.035 |     174 | `tau`, `ell_unit`, `ell`, `eta`     | 30m 38s  |
+| VG12  |          11 |     1.017 |     359 | `tau`                               | 9m 22s   |
+| VG13  |          80 |     1.012 |     266 | `tau_u`, `kappa_old_u`, `b_kappa_u` | 15m 45s  |
+
+The failures are concentrated in the study random-effect scale and the GP hyperparameters, not the dispersion block: every `kappa` parameter has bulk ESS between 398 and 1,357 with R-hat at most 1.009. VG11's profile is the same one §18 recorded before this change. **These fits still should not be quoted for reporting**, but the dispersion estimates in them are well mixed and are what the tables above rest on.
+
+One thing worth flagging that this section does not fix: VG11's `tau_subject` is 1.060 with a posterior standard deviation of 0.009, and VG13's `tau_subj_q` is 1.117 at prior CDF 0.975 and contraction 0.932. The subject random-effect scales remain pinned against a `HalfNormal(0.5)` prior in both, which is a separate mis-calibration from the one this section corrects and is now the loudest remaining prior-data conflict in these models.
+
+### Open list after §19
+
+Resolved by this section: §18's items 1 (the conditional calibration), 2 for VG12 (VG02 and VG04 remain, and both still need their own calibration — neither carries random effects, so the _marginal_ estimator is the right one for them), the VG12 and VG13 parts of item 3, and item 8's supporting argument.
+
+Still open, in rough priority order:
+
+1. **Why typically-developing understood `kappa` jumps at 16–18 months.** The per-age profile goes 21.6, 23.4, 183.2 at 14, 15, 16 months on 504, 322 and 917 observations, and the 16-month cell is the largest in the frame. Candidates not yet tested: a CDI form boundary (Words & Gestures runs to 18 months), one dataset dominating that cell, or a genuine developmental feature. Until it is understood, both understood anchors are deliberately wide and VG12's and VG13's dispersion should be read as a level rather than a trend.
+2. **Extend the two-anchor form to VG02 and VG04** (§18's item 2, minus VG12). Both are marginal-scale models, so §§1–2's estimator applies directly; neither has been calibrated.
+3. **Dispersion for VG09, VG10, VG16 and VG15 remains uncalibrated and probably too low.** Every pool that _could_ be measured came out 3–10x its marginal counterpart, and these four carry marginally-derived defaults. The frame cannot support the estimator as written; what might work is pooling the Down syndrome joint rows with VG01's and VG02's single-outcome rows to buy replication, or a hierarchical fit that borrows the dispersion curve's shape across populations. Neither is attempted here.
+4. **Refit VG04** on the post-sort frame (§17's item 2, still outstanding), and **VG16** on current code.
+5. **Rerun `scripts/prior_predictive_audit.py`** for VG01, VG03, VG11, VG12 and VG13. Its `kappa` rows are now stale three times over.
+6. **Test `eta_q = 0.4` on VG10** (§5). Untouched by any of this.
+7. **Consider tightening `kappa_min_sigma`** (§18's item 6). Now more delicate than it looked: on a rising curve `kappa_min` is the young-age asymptote and carries real weight, so a single family-wide setting is no longer obviously right.
+8. **Pair a `dev`-config control against VG03's anchored fit** (§18's item 7) to settle the per-draw cost of the parameterisation.
+9. **Whether VG11 should carry subject random effects at all.** §19 removes the argument that `tau_subject` and `kappa` are inseparable, so this reverts to the ordinary question of whether the effect earns its place at 1.32 administrations per child — worth answering by model comparison rather than by inspection.

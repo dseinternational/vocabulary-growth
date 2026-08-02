@@ -166,55 +166,89 @@ class ModelConfiguration(BaseModelConfiguration):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        legacy = (self.kappa_min_dist, self.a_kappa_dist, self.b_kappa_mag_dist)
-        if self.kappa_anchored is not None:
+        validate_kappa_fields(self)
+
+
+def _legacy_kappa_dists(config, suffix):
+    """The legacy triple for one outcome, by the engine's field-naming convention.
+
+    Single-outcome configurations use ``kappa_min_dist``; the joint ones append
+    the outcome to the same stems (``kappa_min_u_dist``), so one suffix drives
+    both the field lookup here and the RV names in the graph.
+    """
+    return (
+        getattr(config, f"kappa_min{suffix}_dist", None),
+        getattr(config, f"a_kappa{suffix}_dist", None),
+        getattr(config, f"b_kappa_mag{suffix}_dist", None),
+    )
+
+
+def validate_kappa_fields(config, suffixes=("",)) -> None:
+    """Reject a configuration that half-specifies a dispersion form.
+
+    Each outcome carries exactly one of the two parameterisations. Outcomes are
+    independent of each other — a joint model may anchor ``kappa_u`` while
+    ``kappa_s`` stays on the legacy form — but neither may be partial, and no
+    outcome may carry both.
+    """
+    for suffix in suffixes:
+        legacy = _legacy_kappa_dists(config, suffix)
+        label = f"kappa{suffix}"
+        if getattr(config, f"kappa_anchored{suffix}", None) is not None:
             if any(dist is not None for dist in legacy):
                 raise ValueError(
-                    "kappa_anchored cannot be combined with the legacy kappa_min / "
-                    "a_kappa / b_kappa_mag distributions."
+                    f"kappa_anchored{suffix} cannot be combined with the legacy "
+                    f"{label} kappa_min / a_kappa / b_kappa_mag distributions."
                 )
         elif any(dist is None for dist in legacy):
             raise ValueError(
-                "the legacy kappa form needs all of kappa_min_dist, a_kappa_dist "
-                "and b_kappa_mag_dist; pass kappa_anchored instead."
+                f"the legacy {label} form needs all of kappa_min{suffix}_dist, "
+                f"a_kappa{suffix}_dist and b_kappa_mag{suffix}_dist; pass "
+                f"kappa_anchored{suffix} instead."
             )
 
 
-def kappa_prior_rows(config) -> list[tuple[str, object]]:
+def kappa_prior_rows(config, suffix="") -> list[tuple[str, object]]:
     """Rows for the "Priors" table, naming whichever kappa form the model uses.
 
     The anchored rows carry their reference ages, because the age is part of what
     the prior means — ``kappa_excess_young`` on its own says nothing.
     """
-    anchored = getattr(config, "kappa_anchored", None)
+    anchored = getattr(config, f"kappa_anchored{suffix}", None)
     if anchored is None:
+        kappa_min_dist, a_kappa_dist, b_kappa_mag_dist = _legacy_kappa_dists(
+            config, suffix
+        )
         return [
-            ("kappa_min", config.kappa_min_dist),
-            ("a_kappa", config.a_kappa_dist),
-            ("b_kappa_mag", config.b_kappa_mag_dist),
+            (f"kappa_min{suffix}", kappa_min_dist),
+            (f"a_kappa{suffix}", a_kappa_dist),
+            (f"b_kappa_mag{suffix}", b_kappa_mag_dist),
         ]
     young_age, old_age = anchored.anchor_ages
     return [
-        ("kappa_min", anchored.kappa_min_dist),
-        (f"kappa_excess_young ({young_age:g} mo)", anchored.excess_young_dist),
-        (f"kappa_excess_old ({old_age:g} mo)", anchored.excess_old_dist),
+        (f"kappa_min{suffix}", anchored.kappa_min_dist),
+        (
+            f"kappa_excess_young{suffix} ({young_age:g} mo)",
+            anchored.excess_young_dist,
+        ),
+        (f"kappa_excess_old{suffix} ({old_age:g} mo)", anchored.excess_old_dist),
     ]
 
 
-def kappa_anchor_derived_rows(config, *, X_obs_mean, X_obs_std):
+def kappa_anchor_derived_rows(config, *, X_obs_mean, X_obs_std, suffix=""):
     """"Derived quantities" rows for the kappa anchors, or none if unanchored.
 
     The z positions are what the graph actually uses, and they move with the
     pool's age distribution even though the ages do not, so they are worth
     printing next to the slope anchors.
     """
-    anchored = getattr(config, "kappa_anchored", None)
+    anchored = getattr(config, f"kappa_anchored{suffix}", None)
     if anchored is None:
         return []
     return [
-        ("Kappa anchors (months)", anchored.anchor_ages),
+        (f"Kappa anchors{suffix} (months)", anchored.anchor_ages),
         (
-            "Kappa anchors (z-score)",
+            f"Kappa anchors{suffix} (z-score)",
             standardize_anchor_ages(
                 anchored.anchor_ages, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
             ),
@@ -228,15 +262,16 @@ def build_kappa_for_config(config, *, X_obs_mean, X_obs_std, suffix=""):
     The single point where the two parameterisations diverge inside a model
     graph. The anchored form needs the observed-age standardisation to place its
     reference ages on the z scale; the legacy form does not, and is emitted
-    unchanged.
+    unchanged. ``suffix`` selects the outcome for the joint engines ("_u", "_s",
+    "_sign") and names the resulting variables.
     """
-    anchored = getattr(config, "kappa_anchored", None)
+    anchored = getattr(config, f"kappa_anchored{suffix}", None)
     if anchored is None:
+        kappa_min_dist, a_kappa_dist, b_kappa_mag_dist = _legacy_kappa_dists(
+            config, suffix
+        )
         return build_kappa_of_z(
-            config.kappa_min_dist,
-            config.a_kappa_dist,
-            config.b_kappa_mag_dist,
-            suffix=suffix,
+            kappa_min_dist, a_kappa_dist, b_kappa_mag_dist, suffix=suffix
         )
     return build_kappa_of_z_anchored(
         anchored.kappa_min_dist,
@@ -1654,27 +1689,33 @@ def configure_univariate_priors(
     context.set_model_config(config)
 
 
-def _configure_kappa_priors(context: ModelFitContext, kp) -> dict:
+def _configure_kappa_priors(context: ModelFitContext, kp, suffix: str = "") -> dict:
     """Build the dispersion priors for whichever kappa parameterisation `kp` is.
 
-    Returns the ``ModelConfiguration`` keyword arguments for that form, and plots
-    each prior under its own name, so a report shows the parameters the model
-    actually samples rather than a fixed three.
+    Returns the configuration keyword arguments for that form, and plots each
+    prior under its own name, so a report shows the parameters the model actually
+    samples rather than a fixed three. ``suffix`` selects the outcome for the
+    joint engines ("_u", "_s", "_sign"); it names both the configuration fields
+    and the plotted priors.
     """
     if isinstance(kp, KappaAnchorPriorParams):
         kappa_min_dist = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
-        _plot_and_print_dist(context, kappa_min_dist, "kappa_min_dist")
+        _plot_and_print_dist(context, kappa_min_dist, f"kappa_min{suffix}_dist")
 
         excess_young_dist = pz.LogNormal(
             mu=kp.excess_young_mu, sigma=kp.excess_young_sigma
         )
-        _plot_and_print_dist(context, excess_young_dist, "kappa_excess_young_dist")
+        _plot_and_print_dist(
+            context, excess_young_dist, f"kappa_excess_young{suffix}_dist"
+        )
 
         excess_old_dist = pz.LogNormal(mu=kp.excess_old_mu, sigma=kp.excess_old_sigma)
-        _plot_and_print_dist(context, excess_old_dist, "kappa_excess_old_dist")
+        _plot_and_print_dist(
+            context, excess_old_dist, f"kappa_excess_old{suffix}_dist"
+        )
 
         return {
-            "kappa_anchored": AnchoredKappaPriors(
+            f"kappa_anchored{suffix}": AnchoredKappaPriors(
                 kappa_min_dist=kappa_min_dist,
                 excess_young_dist=excess_young_dist,
                 excess_old_dist=excess_old_dist,
@@ -1683,18 +1724,18 @@ def _configure_kappa_priors(context: ModelFitContext, kp) -> dict:
         }
 
     kappa_min_dist = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
-    _plot_and_print_dist(context, kappa_min_dist, "kappa_min_dist")
+    _plot_and_print_dist(context, kappa_min_dist, f"kappa_min{suffix}_dist")
 
     a_kappa_dist = pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma)
-    _plot_and_print_dist(context, a_kappa_dist, "a_kappa_dist")
+    _plot_and_print_dist(context, a_kappa_dist, f"a_kappa{suffix}_dist")
 
     b_kappa_mag_dist = pz.HalfNormal(sigma=kp.b_kappa_mag_sigma)
-    _plot_and_print_dist(context, b_kappa_mag_dist, "b_kappa_mag_dist")
+    _plot_and_print_dist(context, b_kappa_mag_dist, f"b_kappa_mag{suffix}_dist")
 
     return {
-        "kappa_min_dist": kappa_min_dist,
-        "a_kappa_dist": a_kappa_dist,
-        "b_kappa_mag_dist": b_kappa_mag_dist,
+        f"kappa_min{suffix}_dist": kappa_min_dist,
+        f"a_kappa{suffix}_dist": a_kappa_dist,
+        f"b_kappa_mag{suffix}_dist": b_kappa_mag_dist,
     }
 
 

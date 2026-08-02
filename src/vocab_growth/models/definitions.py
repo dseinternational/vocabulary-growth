@@ -273,8 +273,12 @@ class BivariateModelDefinition:
     eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
-    kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
-    kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(
+        default_factory=KappaPriorParams
+    )
+    kappa_s: KappaPriorParams | KappaAnchorPriorParams = field(
+        default_factory=KappaPriorParams
+    )
 
     # -- Study-level random intercepts --
     tau_u_sigma: float = 0.5
@@ -710,13 +714,9 @@ _YOUNG_TD_GP_DOMAIN_MONTHS = (8, 18)
 # to it, and to the pool's age distribution moving under a resample or a study
 # filter.
 #
-# NOT applied to the comprehension models (VG02, VG04, VG12) or to kappa_s in the
-# joint models. Comprehension would benefit most from the freed sign — TD
-# understood dispersion is flat to slightly rising, which b_kappa <= 0 cannot
-# represent at all — but its anchors need their own calibration (the TD
-# understood floor is ~10.6, not ~3), and kappa_s governs dispersion of the
-# production ratio on a per-child denominator, a different quantity to which this
-# marginal calibration does not transfer.
+# These two blocks are calibrated *marginally* and so belong only to models with
+# no grouping structure — VG01 and VG03. Everything with study and subject random
+# intercepts is calibrated conditionally instead; see the next section.
 
 _DS_SPOKEN_KAPPA = KappaAnchorPriorParams(
     # Implied b_kappa_mag: median 2.80, 5-95% [0.91, 4.67], P(kappa rising) 0.007.
@@ -733,17 +733,131 @@ _DS_SPOKEN_KAPPA = KappaAnchorPriorParams(
 )
 
 _TD_SPOKEN_KAPPA = KappaAnchorPriorParams(
-    # Shared by VG03 and VG11, whose frames fit 1.78 and 1.50; implied b_kappa_mag
-    # median 1.71 on the VG03 frame and 1.69 on VG11 (they differ only through the
-    # frames' age standard deviations), 5-95% about [0.50, 2.90], which also
-    # contains the 1.71 estimated in section 17. Excess medians split the two
-    # frames' fitted values (34.0/26.8 at 12 months, 3.07/3.47 at 20 months).
+    # VG03 only. Implied b_kappa_mag median 1.71 on its frame, 5-95% about
+    # [0.50, 2.90], which contains both the 1.78 its own frame fits and the 1.71
+    # estimated in section 17. Excess medians split the two TD frames' fitted
+    # values (34.0/26.8 at 12 months, 3.07/3.47 at 20 months) from when VG11
+    # shared this block; VG11 has since moved to a conditional calibration and
+    # the numbers are left as they are, being within a few percent of VG03's own.
     anchor_ages=(12.0, 20.0),
     kappa_min_mu=math.log(3.0),
     kappa_min_sigma=0.8,
     excess_young_mu=math.log(30.0),
     excess_young_sigma=0.7,
     excess_old_mu=math.log(3.0),
+    excess_old_sigma=0.7,
+)
+
+
+# ------------------------------------------------------------------
+# Dispersion for the random-effect models, calibrated conditionally (2026-08-02)
+# ------------------------------------------------------------------
+# A marginal calibration answers "how much do counts vary at this age?". A model
+# carrying study and subject random intercepts has already removed most of that
+# variation by the time its likelihood runs, so its kappa answers a different
+# question — "how much is left once this child's own level is known?" — and the
+# marginal number is a lower bound. On VG11 it was out by a factor of ten: the
+# prior sat at kappa(12) = 30 while the fit went to 312, at prior CDF 1.000.
+#
+# scripts/kappa_conditional_calibration.py estimates the right quantity, by
+# fitting the same saturated mean with the random effects present and the subject
+# effect integrated out:
+#
+#     logit p_ij = m_c(ij) + s_k(i) + b_i,   b_i ~ N(0, tau^2)
+#     y_ij       ~ BetaBinomial(N_ij, p_ij, kappa(a_ij))
+#
+#   pool                        n     obs/child   tau    kappa at the anchors
+#   VG11 spoken            16,235       1.32     1.06    317 @ 12 mo, 50 @ 20 mo
+#   VG12 understood         5,997       1.26     0.74     43 @ 12 mo, 66 @ 20 mo
+#   VG13 understood         5,406       1.19     0.77     42 @ 12 mo, 124 @ 17 mo
+#   VG13 q | understood     5,320       1.19     1.12     36 @ 12 mo, 30 @ 17 mo
+#
+# Every one is 3-10x its marginal counterpart, and two of them rise with age,
+# which the legacy b_kappa <= 0 cannot represent at any setting. The medians below
+# are those totals, split into a floor and an excess per anchor.
+#
+# Three things had to be established before reading a prior off this (section 19
+# of the note has the detail, and --recover / --mean-sweep re-run the checks):
+#
+#  * **tau and kappa are separable here.** For a child measured once they are
+#    confounded, and 84% of VG11's children are measured once. Simulating from a
+#    subject-heavy truth and a dispersion-heavy truth on the real design returns
+#    each correctly, an order of magnitude apart.
+#  * **The answer does not depend on the mean model.** Saturated, spline and even
+#    a linear mean agree to within a few percent on all four pools — so the gap
+#    against VG12's and VG13's posteriors (both near 16) is not an artefact of
+#    this estimator fitting the age curve more closely than an HSGP does.
+#  * **The DS joint frame fails the first test outright.** On its 671 rows a known
+#    kappa(24) = 317 comes back as 465, 842, 260 and 517 across two outcomes and
+#    two seeds, so no number read off it would mean anything. VG09, VG10 and VG16
+#    therefore keep their existing priors — which is a limitation, not a
+#    clearance: every pool that could be measured came out 3-10x its marginal
+#    value, and nothing rules that out for them. Nor is VG15 calibrated here,
+#    its cross-tabulated frame not being one the estimator reproduces.
+#
+# sigma is 0.7 for the spoken and ratio anchors, as in the marginal blocks, and
+# 0.9 for the two understood ones. The wider setting is not caution for its own
+# sake: TD understood kappa per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16
+# months, so the log-linear fit is smoothing a genuinely jagged profile and the
+# fitted rise should not be stated more confidently than that. Why the 16-18 month
+# cells sit so far above their neighbours is not yet understood and is recorded as
+# a follow-up.
+
+_TD_SPOKEN_KAPPA_RE = KappaAnchorPriorParams(
+    # VG11. Its posterior already found 310 @ 12 mo and 50.0 @ 20 mo against this
+    # calibration's 317 and 50.5 — the likelihood was overwhelming the old prior
+    # rather than being distorted by it, so this change removes a prior-data
+    # conflict rather than moving the fit.
+    anchor_ages=(12.0, 20.0),
+    kappa_min_mu=math.log(6.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(311.0),
+    excess_young_sigma=0.7,
+    excess_old_mu=math.log(44.0),
+    excess_old_sigma=0.7,
+)
+
+_TD_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
+    # VG12 (8-25 months). Rising: 43 @ 12 mo to 66 @ 20 mo. The conditional fit
+    # puts no mass on a floor (kappa_min goes to 0 with an unbounded standard
+    # error, because a rising curve never reaches one inside the frame), so the
+    # floor keeps the weak LogNormal(log 3, 0.8) the other blocks use and the
+    # anchors carry the level.
+    anchor_ages=(12.0, 20.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(40.0),
+    excess_young_sigma=0.9,
+    excess_old_mu=math.log(63.0),
+    excess_old_sigma=0.9,
+)
+
+_TD_YOUNG_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
+    # VG13's understood outcome (8-18 months). Here the fit *does* identify a
+    # floor, at 37, and it matters: a third of the frame sits below the young
+    # anchor, where a rising exponential term contributes almost nothing and the
+    # floor alone sets the level. The 8-11 month cells give 23-32, consistent
+    # with it. Totals: 40 @ 12 mo, 120 @ 17 mo.
+    anchor_ages=(12.0, 17.0),
+    kappa_min_mu=math.log(30.0),
+    kappa_min_sigma=0.6,
+    excess_young_mu=math.log(10.0),
+    excess_young_sigma=0.9,
+    excess_old_mu=math.log(90.0),
+    excess_old_sigma=0.9,
+)
+
+_TD_YOUNG_Q_KAPPA_RE = KappaAnchorPriorParams(
+    # VG13's production ratio, on the nested scale the engine uses: spoken out of
+    # that child's own observed understood count, mean q. Falls gently, 36 to 30.
+    # VG13's posterior is already at 40.4 and 29.7, so like VG11 this re-centres a
+    # prior the data had overruled rather than changing the answer.
+    anchor_ages=(12.0, 17.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(33.0),
+    excess_young_sigma=0.7,
+    excess_old_mu=math.log(27.0),
     excess_old_sigma=0.7,
 )
 
@@ -1089,7 +1203,7 @@ VG11 = UnivariateModelDefinition(
     # GP–intercept ridge that arises when study REs are present.
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
-    kappa=_TD_SPOKEN_KAPPA,
+    kappa=_TD_SPOKEN_KAPPA_RE,
 )
 
 VG12 = UnivariateModelDefinition(
@@ -1129,6 +1243,7 @@ VG12 = UnivariateModelDefinition(
     # Anchor the GP at the midpoint of slope_anchors (19 months).
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
+    kappa=_TD_UNDERSTOOD_KAPPA_RE,
 )
 
 VG13 = BivariateModelDefinition(
@@ -1191,6 +1306,8 @@ VG13 = BivariateModelDefinition(
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,
     gp_anchor_age_months=13.0,
+    kappa_u=_TD_YOUNG_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_TD_YOUNG_Q_KAPPA_RE,
 )
 
 VG14 = TrivariateModelDefinition(

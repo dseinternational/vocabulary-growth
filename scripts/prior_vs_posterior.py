@@ -92,17 +92,11 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
         "p_slope_hi_u": pz.Beta(alpha=d.p_slope_hi_u_alpha, beta=d.p_slope_hi_u_beta),
         "p_slope_low_q": pz.Beta(alpha=d.p_slope_low_q_alpha, beta=d.p_slope_low_q_beta),
         "p_slope_hi_q": pz.Beta(alpha=d.p_slope_hi_q_alpha, beta=d.p_slope_hi_q_beta),
-        "kappa_min_u": pz.LogNormal(mu=d.kappa_u.kappa_min_mu, sigma=d.kappa_u.kappa_min_sigma),
-        "kappa_min_s": pz.LogNormal(mu=d.kappa_s.kappa_min_mu, sigma=d.kappa_s.kappa_min_sigma),
+        # Each outcome independently, since VG13 anchors both while the DS joint
+        # models anchor neither.
+        **kappa_priors(d.kappa_u, "_u"),
+        **kappa_priors(d.kappa_s, "_s"),
     }
-    # The bivariate models have not migrated to the two-anchor kappa form; if one
-    # does, its a_kappa / b_kappa_mag rows here would silently become wrong.
-    for name, kp in (("kappa_u", d.kappa_u), ("kappa_s", d.kappa_s)):
-        if isinstance(kp, KappaAnchorPriorParams):
-            raise NotImplementedError(
-                f"{d.model_id}.{name} uses the two-anchor kappa form; extend "
-                "bivariate_priors before plotting it."
-            )
     if getattr(d, "tau_u_sigma", None) is not None:
         priors["tau_u"] = pz.HalfNormal(sigma=d.tau_u_sigma)
         priors["tau_q"] = pz.HalfNormal(sigma=d.tau_q_sigma)

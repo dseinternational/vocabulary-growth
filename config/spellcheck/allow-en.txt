@@ -138,3 +138,6 @@ unidimensionality
 unrepresentable
 bimodality
 parameterising
+BFGS
+GLMM
+uncalibrated

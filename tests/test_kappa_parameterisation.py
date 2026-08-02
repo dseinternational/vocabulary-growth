@@ -25,11 +25,16 @@ from vocab_growth.models.common import (
     build_kappa_for_config,
     kappa_prior_rows,
 )
+from vocab_growth.models.common_bivariate import BivariateModelConfiguration
 from vocab_growth.models.definitions import (
     VG01,
     VG02,
     VG03,
+    VG09,
+    VG10,
     VG11,
+    VG13,
+    VG16,
     KappaAnchorPriorParams,
     KappaPriorParams,
 )
@@ -266,3 +271,117 @@ def test_the_two_kappa_prior_classes_stay_distinct():
     assert not isinstance(VG01.kappa, KappaPriorParams)
     assert isinstance(VG01.kappa, KappaAnchorPriorParams)
     assert isinstance(VG02.kappa, KappaPriorParams)
+
+
+# --- the joint engines carry one form per outcome -----------------------------
+
+
+def _bivariate_config(**kappa_fields) -> BivariateModelConfiguration:
+    return BivariateModelConfiguration(
+        slope_anchors=(10, 16),
+        ell_months_range=(6, 18),
+        p_slope_low_u_dist=pz.Beta(alpha=1, beta=15),
+        p_slope_hi_u_dist=pz.Beta(alpha=2, beta=6),
+        ell_unit_u_dist=pz.Beta(alpha=3, beta=3),
+        eta_u_dist=pz.HalfNormal(sigma=0.4),
+        p_slope_low_q_dist=pz.Beta(alpha=1, beta=10),
+        p_slope_hi_q_dist=pz.Beta(alpha=2, beta=7),
+        ell_unit_q_dist=pz.Beta(alpha=3, beta=3),
+        eta_q_dist=pz.HalfNormal(sigma=0.2),
+        n_plot=10,
+        ages_query=[12, 17],
+        **kappa_fields,
+    )
+
+
+_LEGACY_U = {
+    "kappa_min_u_dist": pz.LogNormal(mu=math.log(5.0), sigma=0.6),
+    "a_kappa_u_dist": pz.Normal(mu=math.log(8.0), sigma=1.0),
+    "b_kappa_mag_u_dist": pz.HalfNormal(sigma=0.3),
+}
+_LEGACY_S = {
+    "kappa_min_s_dist": pz.LogNormal(mu=math.log(5.0), sigma=0.6),
+    "a_kappa_s_dist": pz.Normal(mu=math.log(8.0), sigma=1.0),
+    "b_kappa_mag_s_dist": pz.HalfNormal(sigma=0.3),
+}
+
+
+def test_a_joint_model_may_anchor_one_outcome_and_not_the_other():
+    """VG13 anchors both and the DS joint models anchor neither, but nothing in
+    the configuration ties the two outcomes together — so the mixed case has to
+    work rather than merely not be exercised."""
+    config = _bivariate_config(kappa_anchored_u=_ANCHORED, **_LEGACY_S)
+
+    with pm.Model() as model:
+        build_kappa_for_config(
+            config, X_obs_mean=13.0, X_obs_std=2.8, suffix="_u"
+        )
+        build_kappa_for_config(
+            config, X_obs_mean=13.0, X_obs_std=2.8, suffix="_s"
+        )
+
+    assert {v.name for v in model.free_RVs} == {
+        "kappa_min_u", "kappa_excess_young_u", "kappa_excess_old_u",
+        "kappa_min_s", "a_kappa_s", "b_kappa_mag_s",
+    }
+
+
+def test_a_joint_outcome_cannot_mix_the_two_forms():
+    with pytest.raises(ValueError, match="kappa_anchored_u cannot be combined"):
+        _bivariate_config(kappa_anchored_u=_ANCHORED, **_LEGACY_U, **_LEGACY_S)
+
+
+def test_a_joint_outcome_cannot_be_half_specified():
+    partial = dict(_LEGACY_S)
+    del partial["b_kappa_mag_s_dist"]
+
+    with pytest.raises(ValueError, match="kappa_s form needs all of"):
+        _bivariate_config(kappa_anchored_u=_ANCHORED, **partial)
+
+
+@pytest.mark.parametrize("mean,sd", [(13.0, 2.8), (28.0, 12.0)])
+def test_joint_anchors_land_at_their_ages_whatever_the_pool(mean, sd):
+    """Same invariance as the single-outcome case, through the suffixed path."""
+    pinned = AnchoredKappaPriors(
+        kappa_min_dist=pz.LogNormal(mu=math.log(3.0), sigma=1e-9),
+        excess_young_dist=pz.LogNormal(mu=math.log(30.0), sigma=1e-9),
+        excess_old_dist=pz.LogNormal(mu=math.log(3.0), sigma=1e-9),
+        anchor_ages=(12.0, 20.0),
+    )
+    config = _bivariate_config(kappa_anchored_u=pinned, **_LEGACY_S)
+
+    with pm.Model():
+        kappa_of_z = build_kappa_for_config(
+            config, X_obs_mean=mean, X_obs_std=sd, suffix="_u"
+        )
+        at_12 = float(kappa_of_z((12.0 - mean) / sd).eval())
+        at_20 = float(kappa_of_z((20.0 - mean) / sd).eval())
+
+    assert np.isclose(at_12, 33.0)
+    assert np.isclose(at_20, 6.0)
+
+
+def test_derived_rows_are_labelled_per_outcome():
+    config = _bivariate_config(kappa_anchored_u=_ANCHORED, **_LEGACY_S)
+
+    rows = dict(
+        common.kappa_anchor_derived_rows(
+            config, X_obs_mean=20.0, X_obs_std=5.0, suffix="_u"
+        )
+    )
+    assert rows["Kappa anchors_u (months)"] == (12.0, 20.0)
+    # the legacy outcome contributes nothing to the table
+    assert common.kappa_anchor_derived_rows(
+        config, X_obs_mean=20.0, X_obs_std=5.0, suffix="_s"
+    ) == []
+
+
+def test_vg13_anchors_both_outcomes_and_the_ds_joint_models_anchor_neither():
+    assert isinstance(VG13.kappa_u, KappaAnchorPriorParams)
+    assert isinstance(VG13.kappa_s, KappaAnchorPriorParams)
+    # The DS joint frame is too thin for a stable conditional estimate (see
+    # scripts/kappa_conditional_calibration.py --mean-sweep), so VG09/VG10/VG16
+    # deliberately keep the legacy priors.
+    for definition in (VG09, VG10, VG16):
+        assert isinstance(definition.kappa_u, KappaPriorParams), definition.model_id
+        assert isinstance(definition.kappa_s, KappaPriorParams), definition.model_id

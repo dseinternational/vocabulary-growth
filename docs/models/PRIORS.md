@@ -254,7 +254,7 @@ kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)
 
 where `z` is standardised age. Every model uses that curve; they differ in how `(a_kappa, b_kappa)` are given priors.
 
-#### Legacy form — intercept and slope (VG02, VG04, VG05, VG07-VG10, VG12-VG16)
+#### Legacy form — intercept and slope (VG02, VG04, VG05, VG07-VG10, VG14-VG16)
 
 ```text
 b_kappa = -b_kappa_mag
@@ -280,25 +280,35 @@ Review notes:
 - Alternative `kappa` priors are a sensitivity target for main reporting models.
 - **This form has three known weaknesses**, all of which the two-anchor form below removes and none of which are repaired by re-tuning the three numbers above. `a_kappa` is the age term at `z = 0`, so its prior describes the pool's _mean age_ and silently changes meaning when the pool is resampled or filtered. `b_kappa_mag` is a slope per unit standardised age, so one shared prior is about 3.5x tighter on the Down syndrome pool (age sd ~21 months) than on the typically-developing pool (~6 months). And `b_kappa_mag >= 0` forces dispersion to fall with age, which typically-developing comprehension rejects — its dispersion is flat to slightly rising.
 
-#### Two-anchor form (VG01, VG03, VG11)
+#### Two-anchor form (VG01, VG03, VG11, VG12, VG13)
 
 The same curve, with the age term `exp(a_kappa + b_kappa * z)` given priors at two reference **ages in months** and `(a_kappa, b_kappa)` solved for so the curve passes through both:
 
 ```text
-kappa_min           ~ LogNormal(log(3), 0.8)
-kappa_excess_young  ~ LogNormal(log(e_young), 0.7)   at anchor_ages[0]
-kappa_excess_old    ~ LogNormal(log(e_old),   0.7)   at anchor_ages[1]
+kappa_min           ~ LogNormal(log(k_min),   s_min)
+kappa_excess_young  ~ LogNormal(log(e_young), s)     at anchor_ages[0]
+kappa_excess_old    ~ LogNormal(log(e_old),   s)     at anchor_ages[1]
 
 b_kappa = (log kappa_excess_old - log kappa_excess_young) / (z_old - z_young)
 a_kappa =  log kappa_excess_young - b_kappa * z_young
 ```
 
-`a_kappa` and `b_kappa` remain in the trace as derived quantities under the same names, so a migrated model's dispersion posterior stays comparable with the fits that preceded it. `kappa_young` and `kappa_old` carry _total_ kappa at the anchors — floor plus excess — which is the quantity a per-age empirical estimate can be checked against.
+`a_kappa` and `b_kappa` remain in the trace as derived quantities under the same names, so a migrated model's dispersion posterior stays comparable with the fits that preceded it. `kappa_young` and `kappa_old` carry _total_ kappa at the anchors — floor plus excess — which is the quantity a per-age empirical estimate can be checked against. The joint engines take one form per outcome, suffixed `_u` and `_s`, so a model may anchor one and leave the other on the legacy form.
 
-| Model      | Anchors (months) | `e_young` | `e_old` | Implied `b_kappa_mag`, median [5-95%] |
-| ---------- | ---------------- | --------: | ------: | ------------------------------------- |
-| VG01       | 18, 36           |        45 |     4.0 | 2.80 [0.91, 4.67]                     |
-| VG03, VG11 | 12, 20           |        30 |     3.0 | 1.71 [0.50, 2.91]                     |
+| Model          | Outcome               | Anchors (months) | `k_min` | `e_young` | `e_old` | `s` | Calibration |
+| -------------- | --------------------- | ---------------- | ------: | --------: | ------: | --: | ----------- |
+| VG01           | spoken                | 18, 36           |       3 |        45 |     4.0 | 0.7 | marginal    |
+| VG03           | spoken                | 12, 20           |       3 |        30 |     3.0 | 0.7 | marginal    |
+| VG11           | spoken                | 12, 20           |       6 |       311 |      44 | 0.7 | conditional |
+| VG12           | understood            | 12, 20           |       3 |        40 |      63 | 0.9 | conditional |
+| VG13 `kappa_u` | understood            | 12, 17           |      30 |        10 |      90 | 0.9 | conditional |
+| VG13 `kappa_s` | q = spoken/understood | 12, 17           |       3 |        33 |      27 | 0.7 | conditional |
+
+**The two calibrations answer different questions and are not interchangeable.** A _marginal_ calibration estimates how much counts vary at an age, full stop; it is the right target only for a model with no grouping structure, which is why VG01 and VG03 use it. A model with study and subject random intercepts has already removed most of that variation before its likelihood runs, so its `kappa` describes what is left once a child's own level is known — a much smaller residual. Substituting one for the other is a large error, not a rounding one: on VG11 the marginal number was 30 at 12 months where the conditional estimate is 317, and the fit went to 312 with the prior at CDF 1.000.
+
+The conditional estimates come from `scripts/kappa_conditional_calibration.py`, which fits the same saturated per-age mean with the random effects present and the subject effect integrated out by Gauss-Hermite quadrature. Its `--recover` and `--mean-sweep` modes are what establish that a given pool can be calibrated at all; both must be run before adding one.
+
+`s = 0.9` on the two understood outcomes rather than 0.7 is not generic caution. Typically-developing understood `kappa` per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16 months, so the fitted rise is a two-parameter summary of a jagged profile and should not be stated more confidently than that.
 
 Prior simulation on each model's own age grid:
 
@@ -314,9 +324,11 @@ Anchors are placed where the age term is roughly an order of magnitude above the
 Review notes:
 
 - The prior on `kappa` at any given age is **exactly invariant** to the pool's age standardisation: the interpolation weight is `(age - young) / (old - young)` in months, and the standardisation cancels. Resampling or a study filter cannot move it.
-- `kappa_min` is carried over from the legacy recalibration unchanged. The anchored form leans on it harder — beyond the old anchor the floor alone sets the level — so its ~8% of prior mass below `kappa = 1` now shows at old ages. Tightening `kappa_min_sigma` is a candidate follow-up.
-- The sign of `b_kappa` is unconstrained, but for these three spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls. For a comprehension model the two anchors would be near-equal and the mass would be near-even.
+- `kappa_min` is carried over from the legacy recalibration unchanged for the spoken and ratio outcomes. The anchored form leans on it harder — beyond the old anchor the floor alone sets the level — so its ~8% of prior mass below `kappa = 1` now shows at old ages. Tightening `kappa_min_sigma` is a candidate follow-up.
+- **The floor is not always a floor.** With `b_kappa > 0` the exponential term vanishes at young ages instead of old ones, so `kappa_min` becomes the _young_-age asymptote. That is why VG13's is 30 rather than 3: a third of its 8-18 month frame sits below the young anchor, and the 8-11 month cells estimate 23-32. VG12's conditional fit puts no mass on a floor at all (it goes to zero with an unbounded standard error, a rising curve never reaching one inside the frame), so it keeps the weak default and the anchors carry the level.
+- The sign of `b_kappa` is unconstrained, and this is what the comprehension models needed: their dispersion _rises_ with age, which `b_kappa_mag >= 0` cannot represent at any setting. For the spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls.
 - Dropping `kappa_min` entirely and using a pure log-linear `kappa` was tested and rejected: it costs 10 to 168 log-likelihood units against the floored form across the six pools.
+- **VG09, VG10 and VG16 stay on the legacy form deliberately.** Their shared Down syndrome joint frame — 671 rows spanning 12-46 months — is too thin to calibrate from: the conditional estimate moves by 80% depending on how flexible the mean model is, where the typically-developing pools move by 3%. VG15's cross-tabulated frame the estimator does not reproduce at all.
 
 See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` for the calibration, the estimator correction behind it, and the forms that were rejected.
 
@@ -524,6 +536,9 @@ overdispersion.
 > [!IMPORTANT]
 > The per-age slopes in the table above are estimated by regressing `log kappa` on standardised age. That is **not** the model's parameter: because `kappa` flattens onto `kappa_min`, the log-slope of total `kappa` is shallower than `b_kappa_mag`, and the regression estimates it low — by roughly a factor of two. Fitting the model's own three-parameter form to the same cells gives `b_kappa_mag` of **2.78** for Down syndrome spoken and **1.71-1.78** for typically-developing spoken, against the 1.38 and 0.77 the log-linear regression reported. The direction below is unaffected; the magnitude is. See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` section 17.
 
+> [!IMPORTANT]
+> Every figure in this section is **marginal** — no random effects — and so applies only to VG01 and VG03. For a model with study and subject random intercepts the same data give a `kappa` three to ten times larger, because the random effects absorb the between-child spread that these per-age fits leave in the residual. The conditional estimates are in the two-anchor table above and in section 19 of the note; do not read this section's numbers across to VG11, VG12 or VG13.
+
 Against the shared prior (`kappa` median ~13–17, 5–95% ~5–60; `b_kappa < 0`):
 
 - **Direction confirmed.** For the spoken/production outcome (the primary one)
@@ -548,8 +563,17 @@ Against the shared prior (`kappa` median ~13–17, 5–95% ~5–60; `b_kappa < 0
   go far enough, and widening a third time is not viable: the intercept and slope
   tails compound as `exp(2b)`, so at `HalfNormal(1.5)` about 30% of prior mass puts
   `kappa` above 200 at `z = -2`. This is what the two-anchor form above resolves,
-  and why VG01, VG03 and VG11 have migrated to it. The remaining models still
-  carry the mis-scaled shared default and are the outstanding work.
+  and why VG01, VG03, VG11, VG12 and VG13 have migrated to it. The remaining
+  models still carry the mis-scaled shared default and are the outstanding work.
+- **The random-effect models needed a second correction on top of that one.**
+  Re-parameterising fixes the shape of the prior but not what it is a prior
+  _about_: a marginally-calibrated `kappa` transplanted into a model with subject
+  random intercepts is a prior for the wrong quantity, and VG11 showed the size of
+  that error at a factor of ten. VG11, VG12 and VG13 are now calibrated
+  conditionally. VG09, VG10 and VG16 are not, because their frame cannot support
+  it, so their dispersion priors remain the weakest part of this specification —
+  VG12's and VG13's posteriors sat at less than half their conditional estimate
+  before the change, and nothing rules out the same being true of them.
 
 ### Methodological endorsement of the 810-item design
 
