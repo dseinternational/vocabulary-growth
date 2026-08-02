@@ -122,21 +122,27 @@ The `q(a)` anchors are probabilities conditional on understanding, not direct wo
 
 Study random-intercept scales use the shared HalfNormal(0.5) prior on the logit scale for both understood and production-ratio trajectories. This is regularising but still allows meaningful between-dataset differences. The study effects are included in the likelihood and omitted from the reported population-level curves.
 
-### Dispersion / overdispersion -- understood
+### Dispersion / overdispersion
+
+Both outcomes follow `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`, with the age term given priors at 12 and 17 months rather than an intercept at the pool's mean age and a slope. `a_kappa` and `b_kappa` are derived from those two anchors, so neither prior shifts meaning if the pool's age distribution changes.
+
+Because this model carries dataset and child random intercepts on both trajectories, its dispersion parameters describe what is left once a child's own level is known. The anchors are calibrated on that conditional scale: 42 and 124 for understood, 36 and 30 for the production ratio. Understood dispersion rises across this window, which the earlier parameterisation could not represent at any setting; its `kappa_min` of 30 is correspondingly a *young*-age asymptote rather than a floor, since a rising exponential term contributes almost nothing below the young anchor and a third of the 8-18 month frame sits there. The per-age profile behind the understood rise is jagged — 19.6, 21.0 and 110.7 at 14, 15 and 16 months — so both understood anchors take a wider prior than the ratio ones. See `docs/models/PRIORS.md`.
+
+#### Understood
 
 ![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
-![`a_kappa_u_dist`](a_kappa_u_dist.png){#fig-a-kappa-u .lightbox fig-align="left"}
+![`kappa_excess_young_u_dist` (12 months)](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
 
-![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.png){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+![`kappa_excess_old_u_dist` (17 months)](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
 
-### Dispersion / overdispersion -- spoken
+#### Production ratio
 
 ![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
 
-![`a_kappa_s_dist`](a_kappa_s_dist.png){#fig-a-kappa-s .lightbox fig-align="left"}
+![`kappa_excess_young_s_dist` (12 months)](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
 
-![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+![`kappa_excess_old_s_dist` (17 months)](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
 

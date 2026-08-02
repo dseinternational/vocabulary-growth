@@ -13,6 +13,12 @@ created (in the caller's own order) and returns a closure whose body is
 byte-identical to the ``kappa_of_z`` closures previously inlined in every engine,
 so it moves no random-variable creation and cannot change the model graph.
 
+Two builders wrap it, differing only in how the same curve is parameterised:
+:func:`build_kappa_of_z` (a free intercept and a sign-constrained slope) and
+:func:`build_kappa_of_z_anchored` (priors on the age term at two reference ages,
+from which the intercept and slope are derived). Models migrate one at a time;
+see :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams`.
+
 It also provides the trend + HSGP construction (``trend_and_gp`` /
 ``intercept_and_gp``) shared by every engine. Because these carry the sole
 RNG-bearing call (``hsgp.prior()``), they are parameterised (``suffix``,
@@ -63,6 +69,63 @@ def build_kappa_of_z(kappa_min_dist, a_kappa_dist, b_kappa_mag_dist, suffix=""):
     a_kappa = a_kappa_dist.to_pymc(f"a_kappa{suffix}")
     b_kappa_mag = b_kappa_mag_dist.to_pymc(f"b_kappa_mag{suffix}")
     b_kappa = pm.Deterministic(f"b_kappa{suffix}", -b_kappa_mag)
+    return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
+
+
+def build_kappa_of_z_anchored(
+    kappa_min_dist,
+    excess_young_dist,
+    excess_old_dist,
+    *,
+    anchor_z,
+    suffix="",
+):
+    """Create the two-anchor kappa RVs and return the dispersion closure.
+
+    The two-anchor counterpart of :func:`build_kappa_of_z`. Instead of free
+    ``a_kappa`` / ``b_kappa_mag``, the *age term* ``exp(a_kappa + b_kappa z)`` is
+    given priors at two standardised reference ages ``anchor_z = (z_young,
+    z_old)``, and the intercept and slope are solved for:
+
+        b_kappa = (log e_old - log e_young) / (z_old - z_young)
+        a_kappa = log e_young - b_kappa * z_young
+
+    so that ``kappa(z_young) = kappa_min + e_young`` and ``kappa(z_old) =
+    kappa_min + e_old`` exactly. See
+    :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams` for why the
+    reparameterisation is worth making.
+
+    ``a_kappa{suffix}`` and ``b_kappa{suffix}`` are still stored as named
+    ``Deterministic``\\ s, under the same names the legacy form gives them, so a
+    migrated model's dispersion posterior stays directly comparable with the
+    fits that preceded it — ``a_kappa`` is a derived quantity here and a free RV
+    there, but it is the same quantity in both. ``kappa_young{suffix}`` and
+    ``kappa_old{suffix}`` carry *total* kappa at the two anchors, which is what a
+    per-age empirical estimate can be checked against.
+
+    The three free RVs are the asymptote and the two anchors. No prior is placed
+    on the slope at all: its sign is whatever the two anchors imply, so a rising
+    dispersion trajectory is representable (the legacy form's ``b_kappa =
+    -b_kappa_mag <= 0`` is not). When it does rise, ``kappa_min`` is the
+    *young*-age asymptote rather than an old-age floor — the exponential term
+    vanishes at whichever end the slope points away from.
+    """
+    z_young, z_old = (float(anchor_z[0]), float(anchor_z[1]))
+    if not z_old > z_young:
+        raise ValueError(
+            f"kappa anchor_z must be ordered (young, old); got {anchor_z!r}."
+        )
+    kappa_min = kappa_min_dist.to_pymc(f"kappa_min{suffix}")
+    excess_young = excess_young_dist.to_pymc(f"kappa_excess_young{suffix}")
+    excess_old = excess_old_dist.to_pymc(f"kappa_excess_old{suffix}")
+    log_young = pm.math.log(excess_young)
+    log_old = pm.math.log(excess_old)
+    b_kappa = pm.Deterministic(
+        f"b_kappa{suffix}", (log_old - log_young) / (z_old - z_young)
+    )
+    a_kappa = pm.Deterministic(f"a_kappa{suffix}", log_young - b_kappa * z_young)
+    _ = pm.Deterministic(f"kappa_young{suffix}", kappa_min + excess_young)
+    _ = pm.Deterministic(f"kappa_old{suffix}", kappa_min + excess_old)
     return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
 
 

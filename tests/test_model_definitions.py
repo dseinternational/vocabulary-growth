@@ -11,6 +11,9 @@ from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     VG01,
     VG16,
+    KappaAnchorPriorParams,
+    KappaPriorParams,
+    _kappa_priors,
     validate_model_definition,
     validate_model_registry,
 )
@@ -53,3 +56,63 @@ def test_cross_lag_requires_understood_subject_effect():
 
     with pytest.raises(ValueError, match="requires use_subject_re_u"):
         validate_model_definition(invalid)
+
+
+def test_definition_rejects_unordered_kappa_anchors():
+    invalid = replace(VG01, kappa=replace(VG01.kappa, anchor_ages=(36.0, 18.0)))
+
+    with pytest.raises(ValueError, match=r"kappa\.anchor_ages must be ordered"):
+        validate_model_definition(invalid)
+
+
+def test_definition_rejects_kappa_anchor_outside_the_gp_domain():
+    # The anchors are reference ages like slope_anchors, so they are held to the
+    # same rule: a prior stated at an age the model never sees is not checkable.
+    invalid = replace(VG01, kappa=replace(VG01.kappa, anchor_ages=(4.0, 36.0)))
+
+    with pytest.raises(ValueError, match="must lie in its GP domain"):
+        validate_model_definition(invalid)
+
+
+# Which outcomes carry the two-anchor form, and why. Anchored priors are stated
+# as a dispersion at a named age for a named quantity, so one picked up by the
+# wrong pool is a prior for something else entirely — the split is asserted here
+# rather than left to review. A model reaches this set only once an empirical
+# calibration exists for its own outcome and frame:
+#
+#   VG01-VG04         marginal calibration (no grouping structure to condition on)
+#   VG11, VG12, VG13  conditional calibration (study + subject random intercepts)
+#
+# Everything else stays on the legacy form. For VG09/VG10/VG16 that is a finding,
+# not an omission: their shared DS joint frame is too thin for a stable
+# conditional estimate. VG15's frame the estimator does not reproduce at all, and
+# VG05/VG07/VG08/VG14/VG17/VG18 have had neither calibration.
+_ANCHORED_OUTCOMES = {
+    "vg01": {"kappa"},
+    "vg02": {"kappa"},
+    "vg03": {"kappa"},
+    "vg04": {"kappa"},
+    "vg11": {"kappa"},
+    "vg12": {"kappa"},
+    "vg13": {"kappa_u", "kappa_s"},
+}
+
+
+@pytest.mark.parametrize("model_id", sorted(_ANCHORED_OUTCOMES), ids=str)
+def test_calibrated_models_use_the_two_anchor_kappa_form(model_id):
+    expected = _ANCHORED_OUTCOMES[model_id]
+    anchored = {
+        name
+        for name, kappa in _kappa_priors(MODEL_REGISTRY[model_id])
+        if isinstance(kappa, KappaAnchorPriorParams)
+    }
+
+    assert anchored == expected
+
+
+@pytest.mark.parametrize(
+    "model_id", [k for k in MODEL_REGISTRY if k not in _ANCHORED_OUTCOMES], ids=str
+)
+def test_uncalibrated_models_keep_the_legacy_kappa_form(model_id):
+    for name, kappa in _kappa_priors(MODEL_REGISTRY[model_id]):
+        assert isinstance(kappa, KappaPriorParams), f"{model_id}.{name}"

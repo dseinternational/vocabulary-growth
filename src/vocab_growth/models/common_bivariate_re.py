@@ -39,7 +39,9 @@ from vocab_growth.models.build_utils import (
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
+    build_kappa_for_config,
     get_hsgp_hyperparams,
+    kappa_anchor_derived_rows,
     render_model_graph,
     report,
     run_fit_pipeline,
@@ -55,7 +57,7 @@ from vocab_growth.models.common_bivariate import (
     sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import BivariateModelDefinition
-from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.reporting import (
     dataframe_table,
@@ -434,6 +436,12 @@ def build_model_re(
         ("HSGP boundary factor (L)", L),
         ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
         ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+        *kappa_anchor_derived_rows(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_u"
+        ),
+        *kappa_anchor_derived_rows(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_s"
+        ),
     ]
     if use_gp_anchor:
         derived_rows.append(
@@ -705,11 +713,8 @@ def build_model_re(
         # Kappa — understood
         # ============================================================
 
-        kappa_u_of_z = build_kappa_of_z(
-            config.kappa_min_u_dist,
-            config.a_kappa_u_dist,
-            config.b_kappa_mag_u_dist,
-            suffix="_u",
+        kappa_u_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_u"
         )
 
         kappa_u_obs = pm.Deterministic(
@@ -722,11 +727,8 @@ def build_model_re(
         # Kappa — spoken
         # ============================================================
 
-        kappa_s_of_z = build_kappa_of_z(
-            config.kappa_min_s_dist,
-            config.a_kappa_s_dist,
-            config.b_kappa_mag_s_dist,
-            suffix="_s",
+        kappa_s_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_s"
         )
 
         kappa_s_obs = pm.Deterministic(

@@ -793,3 +793,113 @@ def test_edgin_rules_together_on_the_real_database():
         assert lost == in_us01
     assert ((final["spoken"] == 406) & (final["age"] == 23)).sum() == 1
     assert (final["understood"].between(210, 220) & (final["age"] == 18)).sum() == 2
+
+
+def _replication_frame() -> pd.DataFrame:
+    """Ten children per study, child ``k`` contributing ``1 + k % 3`` rows."""
+    rows = []
+    for study in ("StudyA", "StudyB"):
+        for child in range(10):
+            for visit in range(1 + child % 3):
+                rows.append(
+                    {
+                        "study": study,
+                        "subject_id": f"id_{child}",
+                        "age": 12 + visit,
+                        "spoken": 10 * child + visit,
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def test_subsample_subjects_keeps_every_administration_of_a_selected_child():
+    frame = _replication_frame()
+    out = data_utils._subsample_subjects(frame, 0.5, random_seed=47)
+
+    full_sizes = (frame["study"] + "::" + frame["subject_id"]).value_counts()
+    out_sizes = (out["study"] + "::" + out["subject_id"]).value_counts()
+
+    # Every retained child keeps all of its rows — no child is split.
+    assert not out_sizes.empty
+    for key, n in out_sizes.items():
+        assert n == full_sizes[key]
+    # And the draw is over children, so the child count is the fraction, not the
+    # row count. This is the regression: a row-wise draw would leave ~half of the
+    # repeat children with a single row.
+    assert out_sizes.size == round(full_sizes.size * 0.5)
+
+
+def test_subsample_subjects_is_study_scoped():
+    # The same subject_id in two studies is two children, matching the
+    # subject_key convention in the random-effect engines. Selecting
+    # StudyA::id_k must therefore not drag in StudyB::id_k.
+    frame = _replication_frame()
+    out = data_utils._subsample_subjects(frame, 0.5, random_seed=47)
+    keys = set(out["study"] + "::" + out["subject_id"])
+    per_study = {
+        s: {k.split("::")[1] for k in keys if k.startswith(f"{s}::")}
+        for s in ("StudyA", "StudyB")
+    }
+    assert per_study["StudyA"] and per_study["StudyB"]
+    # At least one child id is drawn in one study but not the other, which is
+    # only possible if the two are treated as distinct subjects.
+    assert per_study["StudyA"] ^ per_study["StudyB"]
+
+
+def test_subsample_subjects_is_reproducible():
+    frame = _replication_frame()
+    first = data_utils._subsample_subjects(frame, 0.5, random_seed=47)
+    second = data_utils._subsample_subjects(frame, 0.5, random_seed=47)
+    other = data_utils._subsample_subjects(frame, 0.5, random_seed=48)
+    pd.testing.assert_frame_equal(first, second)
+    assert not first.equals(other)
+
+
+def test_subsample_subjects_does_not_depend_on_input_row_order():
+    """The seed alone must determine the draw.
+
+    ``Series.unique`` preserves order of first appearance and ``Series.sample``
+    draws by position, so without the sort the selected children would depend on
+    the order DuckDB returned rows in — and the loader's query has no ORDER BY.
+    """
+    frame = _replication_frame()
+    shuffled = frame.sample(frac=1.0, random_state=1).reset_index(drop=True)
+
+    def subjects(df):
+        return set(df["study"] + "::" + df["subject_id"])
+
+    assert subjects(
+        data_utils._subsample_subjects(frame, 0.5, random_seed=47)
+    ) == subjects(data_utils._subsample_subjects(shuffled, 0.5, random_seed=47))
+
+
+@requires_real_db
+def test_td_sample_fraction_preserves_within_child_replication():
+    """A subsample must not flatten the pool to one administration per child.
+
+    Drawing rows rather than children cut the typically-developing pool from 1.32
+    administrations per child to 1.04, which made the subject random intercept
+    and the observation-level Beta-Binomial dispersion indistinguishable and gave
+    VG11 a bimodal posterior at R-hat 1.72. See
+    notes/202608020829-kappa-and-eta-q-prior-recalibration.md §§11-12.
+    """
+    columns = ["age", "spoken", "study", "subject_id"]
+
+    def obs_per_subject(df):
+        df = df.dropna(subset=["age", "spoken"])
+        key = df["study"].astype(str) + "::" + df["subject_id"].astype(str)
+        return len(df) / key.nunique()
+
+    full = obs_per_subject(
+        data_utils.load_data(Population.TYPICALLY_DEVELOPING, columns)
+    )
+    sampled = obs_per_subject(
+        data_utils.load_data(
+            Population.TYPICALLY_DEVELOPING, columns, sample_fraction=0.10
+        )
+    )
+
+    assert full > 1.1, "fixture assumption: the TD pool has repeated measures"
+    # Subject-wise draw keeps replication; the row-wise draw it replaced scored
+    # 1.04 here against a pool value of 1.32.
+    assert sampled == pytest.approx(full, rel=0.10)

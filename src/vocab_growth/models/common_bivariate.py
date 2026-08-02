@@ -40,19 +40,24 @@ from vocab_growth.models.build_utils import (
 )
 from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
+    AnchoredKappaPriors,
     BaseModelConfiguration,
     ModelFitContext,
+    _configure_kappa_priors,
     _plot_and_print_dist,
+    build_kappa_for_config,
     emit_monthly_summary,
     get_hsgp_hyperparams,
+    kappa_anchor_derived_rows,
     render_model_graph,
     report,
     run_fit_pipeline,
+    validate_kappa_fields,
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
 from vocab_growth.models.definitions import BivariateModelDefinition
-from vocab_growth.models.gp_utils import GPGrid, build_kappa_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.plotting import (
     _save_csv,
@@ -81,7 +86,14 @@ EPSILON = math_constants.EPSILON
 
 @dataclass
 class BivariateModelConfiguration(BaseModelConfiguration):
-    """Configuration for the bivariate (understood + spoken) model."""
+    """Configuration for the bivariate (understood + spoken) model.
+
+    Each outcome's dispersion is specified in exactly one of two ways: the
+    legacy ``kappa_min_*_dist`` / ``a_kappa_*_dist`` / ``b_kappa_mag_*_dist``
+    triple, or ``kappa_anchored_*``. The two outcomes are independent — VG13
+    anchors both, the DS joint models anchor neither — but neither may be
+    half-specified. ``__post_init__`` rejects anything else.
+    """
 
     # Understood (U) trajectory priors
     p_slope_low_u_dist: Continuous
@@ -95,15 +107,23 @@ class BivariateModelConfiguration(BaseModelConfiguration):
     ell_unit_q_dist: Continuous
     eta_q_dist: Continuous
 
-    # Kappa priors — understood
-    kappa_min_u_dist: Continuous
-    a_kappa_u_dist: Continuous
-    b_kappa_mag_u_dist: Continuous
+    # Kappa priors — understood (legacy form)
+    kappa_min_u_dist: Continuous | None = None
+    a_kappa_u_dist: Continuous | None = None
+    b_kappa_mag_u_dist: Continuous | None = None
 
-    # Kappa priors — spoken
-    kappa_min_s_dist: Continuous
-    a_kappa_s_dist: Continuous
-    b_kappa_mag_s_dist: Continuous
+    # Kappa priors — spoken (legacy form)
+    kappa_min_s_dist: Continuous | None = None
+    a_kappa_s_dist: Continuous | None = None
+    b_kappa_mag_s_dist: Continuous | None = None
+
+    # Two-anchor dispersion priors, in place of the triples above
+    kappa_anchored_u: AnchoredKappaPriors | None = None
+    kappa_anchored_s: AnchoredKappaPriors | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_kappa_fields(self, suffixes=("_u", "_s"))
 
 
 @dataclass
@@ -312,29 +332,11 @@ def configure_bivariate_priors(
 
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
-
-    kp_u = definition.kappa_u
-    kappa_min_u_dist = pz.LogNormal(mu=kp_u.kappa_min_mu, sigma=kp_u.kappa_min_sigma)
-    _plot_and_print_dist(context, kappa_min_u_dist, "kappa_min_u_dist")
-
-    a_kappa_u_dist = pz.Normal(mu=kp_u.a_kappa_mu, sigma=kp_u.a_kappa_sigma)
-    _plot_and_print_dist(context, a_kappa_u_dist, "a_kappa_u_dist")
-
-    b_kappa_mag_u_dist = pz.HalfNormal(sigma=kp_u.b_kappa_mag_sigma)
-    _plot_and_print_dist(context, b_kappa_mag_u_dist, "b_kappa_mag_u_dist")
+    kappa_u_fields = _configure_kappa_priors(context, definition.kappa_u, "_u")
 
     # --- Kappa priors — spoken ---
     heading("Kappa priors — spoken", style="bold cyan")
-
-    kp_s = definition.kappa_s
-    kappa_min_s_dist = pz.LogNormal(mu=kp_s.kappa_min_mu, sigma=kp_s.kappa_min_sigma)
-    _plot_and_print_dist(context, kappa_min_s_dist, "kappa_min_s_dist")
-
-    a_kappa_s_dist = pz.Normal(mu=kp_s.a_kappa_mu, sigma=kp_s.a_kappa_sigma)
-    _plot_and_print_dist(context, a_kappa_s_dist, "a_kappa_s_dist")
-
-    b_kappa_mag_s_dist = pz.HalfNormal(sigma=kp_s.b_kappa_mag_sigma)
-    _plot_and_print_dist(context, b_kappa_mag_s_dist, "b_kappa_mag_s_dist")
+    kappa_s_fields = _configure_kappa_priors(context, definition.kappa_s, "_s")
 
     # --- Configuration object ---
 
@@ -351,16 +353,11 @@ def configure_bivariate_priors(
         p_slope_hi_q_dist=p_slope_hi_q_dist,
         ell_unit_q_dist=ell_unit_q_dist,
         eta_q_dist=eta_q_dist,
-        # Kappa — understood
-        kappa_min_u_dist=kappa_min_u_dist,
-        a_kappa_u_dist=a_kappa_u_dist,
-        b_kappa_mag_u_dist=b_kappa_mag_u_dist,
-        # Kappa — spoken
-        kappa_min_s_dist=kappa_min_s_dist,
-        a_kappa_s_dist=a_kappa_s_dist,
-        b_kappa_mag_s_dist=b_kappa_mag_s_dist,
         n_plot=definition.n_plot,
         ages_query=definition.ages_query,
+        # Kappa — understood and spoken, each in whichever form it carries
+        **kappa_u_fields,
+        **kappa_s_fields,
     )
 
     context.set_model_config(config)
@@ -474,6 +471,12 @@ def build_model(
             ("HSGP boundary factor (L)", L),
             ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
             ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
+            *kappa_anchor_derived_rows(
+                config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_u"
+            ),
+            *kappa_anchor_derived_rows(
+                config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_s"
+            ),
         ],
     )
 
@@ -621,11 +624,8 @@ def build_model(
         # Kappa — understood
         # ============================================================
 
-        kappa_u_of_z = build_kappa_of_z(
-            config.kappa_min_u_dist,
-            config.a_kappa_u_dist,
-            config.b_kappa_mag_u_dist,
-            suffix="_u",
+        kappa_u_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_u"
         )
 
         kappa_u_obs = pm.Deterministic(
@@ -638,11 +638,8 @@ def build_model(
         # Kappa — spoken
         # ============================================================
 
-        kappa_s_of_z = build_kappa_of_z(
-            config.kappa_min_s_dist,
-            config.a_kappa_s_dist,
-            config.b_kappa_mag_s_dist,
-            suffix="_s",
+        kappa_s_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_s"
         )
 
         kappa_s_obs = pm.Deterministic(

@@ -115,11 +115,13 @@ The low-age anchor encodes a strong floor expectation for spoken words at 24 mon
 
 ### Dispersion / overdispersion
 
+Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`, with the age term given priors at 18 and 36 months rather than an intercept at the pool's mean age and a slope. `a_kappa` and `b_kappa` are derived from those two anchors, so both priors are directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. See `docs/models/PRIORS.md`.
+
 ![Dispersion prior distribution `kappa_min_dist`](kappa_min_dist.png){#fig-kappa-min .lightbox fig-align="left"}
 
-![Dispersion prior distribution `a_kappa_dist`](a_kappa_dist.png){#fig-a-kappa .lightbox fig-align="left"}
+![Dispersion prior distribution `kappa_excess_young_dist` (18 months)](kappa_excess_young_dist.png){#fig-kappa-excess-young .lightbox fig-align="left"}
 
-![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.png){#fig-b-kappa-mag .lightbox fig-align="left"}
+![Dispersion prior distribution `kappa_excess_old_dist` (36 months)](kappa_excess_old_dist.png){#fig-kappa-excess-old .lightbox fig-align="left"}
 
 ## Prior predictive checks
 

@@ -14,6 +14,7 @@ from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
     standardize_ages,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 
@@ -81,6 +82,37 @@ def test_slope_anchor_logit_coeffs():
     a_z, b_z = slope_anchor_logit_coeffs((24, 84), X_obs_mean=30.0, X_obs_std=12.0)
     assert np.isclose(a_z, (24 - 30) / 12)
     assert np.isclose(b_z, (84 - 30) / 12)
+
+
+# --- standardize_anchor_ages ------------------------------------------------
+
+
+def test_standardize_anchor_ages_known_values():
+    y_z, o_z = standardize_anchor_ages((12, 20), X_obs_mean=19.6, X_obs_std=5.9)
+    assert np.isclose(y_z, (12 - 19.6) / 5.9)
+    assert np.isclose(o_z, (20 - 19.6) / 5.9)
+
+
+def test_slope_anchor_logit_coeffs_delegates_to_standardize_anchor_ages():
+    # One conversion, so the mean trajectory's anchors and the dispersion
+    # curve's cannot drift apart.
+    kwargs = {"X_obs_mean": 30.0, "X_obs_std": 12.0}
+
+    assert slope_anchor_logit_coeffs((24, 84), **kwargs) == standardize_anchor_ages(
+        (24, 84), **kwargs
+    )
+
+
+def test_standardize_anchor_ages_preserves_the_relative_position_of_an_age():
+    # The property the two-anchor kappa prior relies on: the interpolation
+    # weight of any age between the anchors is the same under any
+    # standardisation, because z is affine in age.
+    def weight(mean, sd):
+        y_z, o_z = standardize_anchor_ages((12, 20), X_obs_mean=mean, X_obs_std=sd)
+        return ((18.0 - mean) / sd - y_z) / (o_z - y_z)
+
+    assert np.isclose(weight(19.6, 5.9), weight(33.0, 15.0))
+    assert np.isclose(weight(19.6, 5.9), (18 - 12) / (20 - 12))
 
 
 # --- construct_age_grids ----------------------------------------------------
