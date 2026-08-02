@@ -1213,9 +1213,9 @@ Every Down syndrome model calls `load_data` with no `sample_fraction`, no `min_s
 
 So "pool VG01 and VG02 in" resolves to "relax filters that are already absent". The joint frame is not a subset of a larger Down syndrome pool; it is the pool. Whatever is done here has to be done on 671 rows.
 
-### No configuration recovers `kappa`, and 36 were tried
+### No configuration recovers `kappa`, and 36 per outcome were tried
 
-The remaining lever is to spend fewer parameters. Sweeping spline flexibility (4, 5, 6, 8 knots) × age window (8–115, 10–60, 12–48 months) × anchor pair ((24, 48), (18, 36), (20, 40)), scoring each by how well two known truths come back on two seeds: **none recovers everything to within 30%.** The best understood configuration is off by 39% at the young anchor and the best ratio configuration by 61%.
+The remaining lever is to spend fewer parameters. Sweeping spline flexibility (4, 5, 6, 8 knots) × age window (8–115, 10–60, 12–48 months) × anchor pair ((24, 48), (18, 36), (20, 40)), scoring each by how well two known truths come back on two seeds — 36 configurations per outcome, 288 fits in all: **none recovers everything to within 30%.** The best understood configuration is off by 39% at the young anchor and the best ratio configuration by 61%.
 
 `tau` is the exception, and a large one: it recovers to within 6% on the understood frame at the configuration the estimate uses, and under 14% at every setting tried. That result is what §23 rests on.
 
