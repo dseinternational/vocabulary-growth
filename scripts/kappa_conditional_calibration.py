@@ -463,22 +463,49 @@ def bivariate_frames(definition, **basis):
 
 @dataclass(frozen=True)
 class Pool:
-    """One (model, outcome) pair, with the anchors the calibration reports at."""
+    """One (model, outcome) pair, with the anchors the calibration reports at.
+
+    ``study_effects`` and ``subject_effects`` record what the *model* carries,
+    and the estimator mirrors them. That is the whole lesson of the VG11 failure:
+    a dispersion prior is a prior about the residual left after the model's
+    grouping structure, so a calibration that includes more effects than the
+    model does will understate `kappa`, and one that includes fewer will
+    overstate it. VG01-VG04 carry neither, so for them the fit here reduces to
+    the marginal per-age estimate and the two columns coincide.
+    """
 
     label: str
     model_id: str
     part: str | None
     anchors: tuple
+    study_effects: bool = True
+    subject_effects: bool = True
     note: str = ""
 
     def design(self, **basis):
         definition = getattr(defs, self.model_id)
-        if self.part is None:
-            return univariate_frame(definition, **basis)
-        return bivariate_frames(definition, **basis)[self.part]
+        design = (univariate_frame(definition, **basis) if self.part is None
+                  else bivariate_frames(definition, **basis)[self.part])
+        if not self.study_effects:
+            # one group => the sum-to-zero contrast is empty and no between-study
+            # spread is removed, so kappa keeps it, as the model's must
+            design.studies = np.zeros(1)
+            design.study_idx = np.zeros(design.n_obs, dtype=int)
+        return design
 
 
 POOLS = {
+    # No grouping structure: kappa carries every source of spread, so the fit
+    # here is the marginal per-age estimate and there is no contrast to draw.
+    "vg02-understood": Pool(
+        "VG02 understood (DS)", "VG02", None, (18.0, 36.0),
+        study_effects=False, subject_effects=False,
+    ),
+    "vg04-understood": Pool(
+        "VG04 understood (TD, 25% subsample)", "VG04", None, (12.0, 18.0),
+        study_effects=False, subject_effects=False,
+    ),
+    # Study and subject random intercepts: kappa is what is left after them.
     "vg11-spoken": Pool("VG11 spoken (TD)", "VG11", None, (12.0, 20.0)),
     "vg12-understood": Pool("VG12 understood (TD)", "VG12", None, (12.0, 20.0)),
     "vg13-understood": Pool("VG13 understood (TD 8-18)", "VG13", "u", (12.0, 17.0)),
@@ -510,8 +537,16 @@ def run_pool(key, *, nodes=DEFAULT_NODES, basis=None):
     if pool.note:
         print(f"   NOTE: {pool.note}")
 
-    marginal = fit(design, pool.anchors, n_nodes=nodes, tau_fixed=1e-6)
+    marginal = fit(design, pool.anchors, n_nodes=nodes, tau_fixed=1e-6,
+                   standard_errors=not pool.subject_effects)
     print(marginal.summary(label="marginal (tau=0): "), flush=True)
+
+    if not pool.subject_effects:
+        # The model has no subject effect, so the marginal fit *is* the matching
+        # specification. Fitting a conditional one too would calibrate against a
+        # residual this model never forms.
+        print("    (model carries no random effects — this is the fit to use)")
+        return marginal, marginal
 
     conditional = fit(design, pool.anchors, n_nodes=nodes, standard_errors=True)
     print(conditional.summary(label="conditional:      "), flush=True)
@@ -568,9 +603,13 @@ def run_mean_sweep(key, *, nodes=DEFAULT_NODES):
     print(f"\n{'=' * 78}\nmean sweep -- {pool.label}   anchors={pool.anchors}")
     print(f"  {'mean':>16} {'tau':>7} {'kappa_min':>10} "
           f"{f'kappa({ya})':>11} {f'kappa({oa})':>11}", flush=True)
+    # Sweep the specification the pool actually calibrates under, not always the
+    # conditional one — otherwise a no-random-effects model is tested for the
+    # stability of a fit it never uses.
+    tau_fixed = None if pool.subject_effects else 1e-6
 
     def _row(design):
-        res = fit(design, pool.anchors, n_nodes=nodes)
+        res = fit(design, pool.anchors, n_nodes=nodes, tau_fixed=tau_fixed)
         name = f"{design.mean}[{design.B.shape[1]}]"
         print(f"  {name:>16} {res.tau:>7.3f} {res.kappa_min:>10.2f} "
               f"{res.kappa_young:>11.1f} {res.kappa_old:>11.1f}", flush=True)

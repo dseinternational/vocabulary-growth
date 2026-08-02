@@ -115,11 +115,15 @@ The early TD understood anchor is tighter near the floor than the DS understood 
 
 ### Dispersion / overdispersion
 
+Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`, with the age term given priors at 12 and 18 months rather than an intercept at the pool's mean age and a slope. `a_kappa` and `b_kappa` are derived from those two anchors, so neither prior shifts meaning if the pool's age distribution changes.
+
+Typically-developing comprehension dispersion is **flat**: 11.8 at 12 months against 11.3 at 18, with per-age cells scattering 5.8–15.6 and no trend across 8–24 months. The two anchors are therefore near-equal and sit only six months apart, placed where the data are densest rather than spanning a decay, and the implied slope prior is near-symmetric about zero (P(`kappa` rising) 0.476). The earlier parameterisation forced `kappa` to fall and could not represent this at any setting. This model carries no random effects, so its `kappa` also absorbs the between-child spread that VG12's subject intercepts remove — which is why VG12's anchors sit near 43 for the same outcome. See `docs/models/PRIORS.md`.
+
 ![Dispersion prior distribution `kappa_min_dist`](kappa_min_dist.png){#fig-kappa-min .lightbox fig-align="left"}
 
-![Dispersion prior distribution `a_kappa_dist`](a_kappa_dist.png){#fig-a-kappa .lightbox fig-align="left"}
+![Dispersion prior distribution `kappa_excess_young_dist` (12 months)](kappa_excess_young_dist.png){#fig-kappa-excess-young .lightbox fig-align="left"}
 
-![Dispersion prior distribution `b_kappa_mag_dist`](b_kappa_mag_dist.png){#fig-b-kappa-mag .lightbox fig-align="left"}
+![Dispersion prior distribution `kappa_excess_old_dist` (18 months)](kappa_excess_old_dist.png){#fig-kappa-excess-old .lightbox fig-align="left"}
 
 ## Prior predictive checks
 

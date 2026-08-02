@@ -12,6 +12,7 @@ the same thing whatever the pool's age distribution turns out to be.
 
 import math
 import types
+from dataclasses import replace
 
 import numpy as np
 import preliz as pz
@@ -192,8 +193,17 @@ def test_configure_gives_vg01_the_anchored_form(monkeypatch):
     assert config.kappa_anchored.anchor_ages == VG01.kappa.anchor_ages
 
 
-def test_configure_leaves_vg02_on_the_legacy_form(monkeypatch):
-    config = _configure(VG02, monkeypatch)
+def test_configure_leaves_a_legacy_definition_on_the_legacy_form(monkeypatch):
+    """Driven off a synthetic definition rather than a registered model.
+
+    Every univariate model has now migrated, so there is no legacy one left to
+    point at — and pinning this to whichever model happens not to have migrated
+    yet is what made the earlier version of this test fail the moment VG02 did.
+    Which models carry which form is asserted in ``test_model_definitions.py``;
+    what belongs here is that the dispatch honours the definition it is given.
+    """
+    legacy = replace(VG02, kappa=KappaPriorParams())
+    config = _configure(legacy, monkeypatch)
 
     assert config.kappa_anchored is None
     assert config.b_kappa_mag_dist is not None
@@ -268,9 +278,12 @@ def test_legacy_prior_at_an_age_does_depend_on_the_standardisation():
 
 
 def test_the_two_kappa_prior_classes_stay_distinct():
-    assert not isinstance(VG01.kappa, KappaPriorParams)
+    # Neither inherits from the other, so `isinstance` is a sound discriminator
+    # for the dispatch — which it would not be if one were a subclass.
     assert isinstance(VG01.kappa, KappaAnchorPriorParams)
-    assert isinstance(VG02.kappa, KappaPriorParams)
+    assert not isinstance(VG01.kappa, KappaPriorParams)
+    assert isinstance(KappaPriorParams(), KappaPriorParams)
+    assert not isinstance(KappaPriorParams(), KappaAnchorPriorParams)
 
 
 # --- the joint engines carry one form per outcome -----------------------------

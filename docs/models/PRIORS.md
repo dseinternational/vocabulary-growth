@@ -254,7 +254,7 @@ kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)
 
 where `z` is standardised age. Every model uses that curve; they differ in how `(a_kappa, b_kappa)` are given priors.
 
-#### Legacy form — intercept and slope (VG02, VG04, VG05, VG07-VG10, VG14-VG16)
+#### Legacy form — intercept and slope (VG05, VG07-VG10, VG14-VG16)
 
 ```text
 b_kappa = -b_kappa_mag
@@ -280,7 +280,7 @@ Review notes:
 - Alternative `kappa` priors are a sensitivity target for main reporting models.
 - **This form has three known weaknesses**, all of which the two-anchor form below removes and none of which are repaired by re-tuning the three numbers above. `a_kappa` is the age term at `z = 0`, so its prior describes the pool's _mean age_ and silently changes meaning when the pool is resampled or filtered. `b_kappa_mag` is a slope per unit standardised age, so one shared prior is about 3.5x tighter on the Down syndrome pool (age sd ~21 months) than on the typically-developing pool (~6 months). And `b_kappa_mag >= 0` forces dispersion to fall with age, which typically-developing comprehension rejects — its dispersion is flat to slightly rising.
 
-#### Two-anchor form (VG01, VG03, VG11, VG12, VG13)
+#### Two-anchor form (VG01-VG04, VG11, VG12, VG13)
 
 The same curve, with the age term `exp(a_kappa + b_kappa * z)` given priors at two reference **ages in months** and `(a_kappa, b_kappa)` solved for so the curve passes through both:
 
@@ -298,15 +298,19 @@ a_kappa =  log kappa_excess_young - b_kappa * z_young
 | Model          | Outcome               | Anchors (months) | `k_min` | `e_young` | `e_old` | `s` | Calibration |
 | -------------- | --------------------- | ---------------- | ------: | --------: | ------: | --: | ----------- |
 | VG01           | spoken                | 18, 36           |       3 |        45 |     4.0 | 0.7 | marginal    |
+| VG02           | understood            | 18, 36           |       3 |        11 |     3.2 | 0.8 | marginal    |
 | VG03           | spoken                | 12, 20           |       3 |        30 |     3.0 | 0.7 | marginal    |
+| VG04           | understood            | 12, 18           |       3 |       7.6 |     7.2 | 0.7 | marginal    |
 | VG11           | spoken                | 12, 20           |       6 |       311 |      44 | 0.7 | conditional |
 | VG12           | understood            | 12, 20           |       3 |        40 |      63 | 0.9 | conditional |
 | VG13 `kappa_u` | understood            | 12, 17           |      30 |        10 |      90 | 0.9 | conditional |
 | VG13 `kappa_s` | q = spoken/understood | 12, 17           |       3 |        33 |      27 | 0.7 | conditional |
 
-**The two calibrations answer different questions and are not interchangeable.** A _marginal_ calibration estimates how much counts vary at an age, full stop; it is the right target only for a model with no grouping structure, which is why VG01 and VG03 use it. A model with study and subject random intercepts has already removed most of that variation before its likelihood runs, so its `kappa` describes what is left once a child's own level is known — a much smaller residual. Substituting one for the other is a large error, not a rounding one: on VG11 the marginal number was 30 at 12 months where the conditional estimate is 317, and the fit went to 312 with the prior at CDF 1.000.
+**The two calibrations answer different questions and are not interchangeable.** A _marginal_ calibration estimates how much counts vary at an age, full stop; it is the right target only for a model with no grouping structure, which is why VG01-VG04 use it. A model with study and subject random intercepts has already removed most of that variation before its likelihood runs, so its `kappa` describes what is left once a child's own level is known — a much smaller residual. Substituting one for the other is a large error, not a rounding one: on VG11 the marginal number was 30 at 12 months where the conditional estimate is 317, and the fit went to 312 with the prior at CDF 1.000.
 
-The conditional estimates come from `scripts/kappa_conditional_calibration.py`, which fits the same saturated per-age mean with the random effects present and the subject effect integrated out by Gauss-Hermite quadrature. Its `--recover` and `--mean-sweep` modes are what establish that a given pool can be calibrated at all; both must be run before adding one.
+**VG04 and VG12 are the cleanest demonstration**, being the same outcome and population under the two specifications. VG04 carries no random effects and its dispersion is 11.8 at 12 months; VG12 carries study and subject intercepts and its is 43.0. Fit VG04's own rows _conditionally_ and they give 42.8; fit VG12's _marginally_ and they give 11.0. The gap is the specification, not the data.
+
+Both sets of estimates come from `scripts/kappa_conditional_calibration.py`, which fits a saturated per-age mean alongside whichever effects the model carries — study effects and a quadrature-integrated subject effect for the random-effect models, neither for VG01-VG04. Each pool declares its own grouping and the estimator mirrors it. The `--recover` and `--mean-sweep` modes are what establish that a given pool can be calibrated at all; both must be run before adding one.
 
 `s = 0.9` on the two understood outcomes rather than 0.7 is not generic caution. Typically-developing understood `kappa` per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16 months, so the fitted rise is a two-parameter summary of a jagged profile and should not be stated more confidently than that.
 

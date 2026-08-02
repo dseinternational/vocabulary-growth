@@ -80,16 +80,18 @@ def test_definition_rejects_kappa_anchor_outside_the_gp_domain():
 # rather than left to review. A model reaches this set only once an empirical
 # calibration exists for its own outcome and frame:
 #
-#   VG01, VG03        marginal calibration (no grouping structure to condition on)
+#   VG01-VG04         marginal calibration (no grouping structure to condition on)
 #   VG11, VG12, VG13  conditional calibration (study + subject random intercepts)
 #
 # Everything else stays on the legacy form. For VG09/VG10/VG16 that is a finding,
 # not an omission: their shared DS joint frame is too thin for a stable
 # conditional estimate. VG15's frame the estimator does not reproduce at all, and
-# VG02/VG04/VG05/VG07/VG08/VG14/VG17/VG18 have had neither calibration.
+# VG05/VG07/VG08/VG14/VG17/VG18 have had neither calibration.
 _ANCHORED_OUTCOMES = {
     "vg01": {"kappa"},
+    "vg02": {"kappa"},
     "vg03": {"kappa"},
+    "vg04": {"kappa"},
     "vg11": {"kappa"},
     "vg12": {"kappa"},
     "vg13": {"kappa_u", "kappa_s"},

@@ -720,9 +720,34 @@ _YOUNG_TD_GP_DOMAIN_MONTHS = (8, 18)
 # to it, and to the pool's age distribution moving under a resample or a study
 # filter.
 #
-# These two blocks are calibrated *marginally* and so belong only to models with
-# no grouping structure — VG01 and VG03. Everything with study and subject random
-# intercepts is calibrated conditionally instead; see the next section.
+# The blocks in this section are calibrated *marginally* and so belong only to
+# models with no grouping structure — VG01, VG02, VG03 and VG04, all of which run
+# on the plain univariate engine and give `kappa` every source of spread to carry.
+# Everything with study and subject random intercepts is calibrated conditionally
+# instead; see the next section.
+#
+# The two comprehension blocks were added later, from the same estimator run with
+# its subject and study effects switched off (scripts/kappa_conditional_calibration.py
+# records which effects each pool's model has and mirrors them). Both are stable
+# across every mean model tried — VG02 gives 14.8-15.4 at 18 months and 7.1-7.2 at
+# 36, VG04 11.6-11.8 at 12 months and 11.1-11.4 at 18 — so the thinness of the
+# Down syndrome comprehension frame (346 usable rows) does not undermine them the
+# way it does the conditional fits in the next section. Nothing has to be
+# separated from a random effect here, which is what that frame could not support.
+#
+# Two things about comprehension differ from the spoken blocks above:
+#
+#   * **VG04's dispersion is flat.** 11.8 at 12 months against 11.3 at 18, and
+#     per-age cells scattering 5.8-15.6 with no trend across 8-24 months. Its two
+#     anchors are therefore near-equal and the implied slope prior is near
+#     symmetric about zero — P(kappa rising) 0.476, against 0.007 for DS spoken.
+#     This is the case the legacy b_kappa_mag >= 0 could not represent at all.
+#   * **The floor is not identified for either.** VG02's fitted kappa_min ranges
+#     over 0.76-6.01 depending on the mean model while its anchor totals move by
+#     under 4%, and VG04's curve is flat enough that any (floor, excess) split
+#     reproducing the level fits equally well. Both keep the shared weak
+#     LogNormal(log 3, 0.8) and let the anchors carry the level — which is the
+#     ridge the two-anchor parameterisation exists to sidestep.
 
 _DS_SPOKEN_KAPPA = KappaAnchorPriorParams(
     # Implied b_kappa_mag: median 2.80, 5-95% [0.91, 4.67], P(kappa rising) 0.007.
@@ -751,6 +776,45 @@ _TD_SPOKEN_KAPPA = KappaAnchorPriorParams(
     excess_young_mu=math.log(30.0),
     excess_young_sigma=0.7,
     excess_old_mu=math.log(3.0),
+    excess_old_sigma=0.7,
+)
+
+_DS_UNDERSTOOD_KAPPA = KappaAnchorPriorParams(
+    # VG02. Fitted totals 15.4 at 18 months and 7.1 at 36, so comprehension
+    # dispersion is roughly a third of spoken's at the same ages (VG01: 48 and 7)
+    # and falls more gently. Implied b_kappa_mag median 0.97, 5-95%
+    # [-0.67, 2.61], P(kappa rising) 0.166 — the interval reaches across zero
+    # because 346 rows over 15 age cells of 15-35 observations each cannot rule
+    # out a flat curve, and the freed sign is what lets the prior say so.
+    # sigma 0.8 rather than the spoken blocks' 0.7: the per-cell estimates
+    # scatter 3.6-16.3 around the anchors on those cell counts.
+    anchor_ages=(18.0, 36.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(11.0),
+    excess_young_sigma=0.8,
+    excess_old_mu=math.log(3.2),
+    excess_old_sigma=0.8,
+)
+
+_TD_UNDERSTOOD_KAPPA = KappaAnchorPriorParams(
+    # VG04, on its 25% subsample (1,538 rows). Fitted totals 11.8 at 12 months
+    # and 11.3 at 18 — flat, which is why the anchors sit only six months apart:
+    # there is no decay to span, and placing them where the data are densest
+    # (n = 115 and 128) is what matters instead. Implied b_kappa_mag median 0.04,
+    # 5-95% [-0.94, 1.00], P(kappa rising) 0.476.
+    #
+    # Cross-check on the whole marginal/conditional distinction: VG12 fits the
+    # same outcome and population with random effects, and its *marginal*
+    # estimate is 11.0 at 12 months against this frame's 11.8. Fit VG04's own
+    # rows conditionally and they give 42.8, against VG12's 43.0. Two frames, two
+    # estimators, the same answer once the specification matches the model.
+    anchor_ages=(12.0, 18.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(7.6),
+    excess_young_sigma=0.7,
+    excess_old_mu=math.log(7.2),
     excess_old_sigma=0.7,
 )
 
@@ -929,6 +993,7 @@ VG02 = UnivariateModelDefinition(
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     eta_sigma=0.6,
+    kappa=_DS_UNDERSTOOD_KAPPA,
 )
 
 VG03 = UnivariateModelDefinition(
@@ -996,6 +1061,7 @@ VG04 = UnivariateModelDefinition(
     # after the WS exclusion; this keeps the effective training set
     # (~1,500 rows) close to the previous VG04 fit.
     sample_fraction=0.25,
+    kappa=_TD_UNDERSTOOD_KAPPA,
 )
 
 VG05 = BivariateModelDefinition(
