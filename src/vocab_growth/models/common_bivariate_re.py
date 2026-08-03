@@ -95,6 +95,10 @@ def prepare_bivariate_re_data(
         columns=columns,
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
+        # TD language scope is part of the model graph; DS ignores it.
+        languages=getattr(
+            definition, "td_languages", vocab_data_utils.ENGLISH_LANGUAGES
+        ),
         max_age_months=definition.max_age_months,
         include_implausible_production=definition.include_implausible_production,
     )

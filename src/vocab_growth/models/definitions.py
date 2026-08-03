@@ -19,6 +19,101 @@ import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 
+ENGLISH_LANGUAGES = (
+    "English (American)",
+    "English (Australian)",
+    "English (British)",
+    "English (Irish)",
+)
+"""Wordbank ``language`` values treated as English — the current default scope.
+
+The ``wordbank_child`` table now holds the full multi-language Wordbank export.
+Queries restrict to these English variants by default; pass a wider ``languages``
+set (or ``None`` for all languages) to the loaders to widen the scope later.
+See :data:`ENGLISH_AND_ROMANCE_LANGUAGES` for the widened scope the hierarchical
+typically-developing models use.
+"""
+
+
+ROMANCE_LANGUAGES = ("Italian", "Spanish (European)")
+"""Non-English Wordbank languages admitted to the typically-developing pool.
+
+The Down syndrome pool is already a quarter non-English by observation — ``es_01``
+(Spanish, 186 children) and ``it_01`` (Italian, 54 children) — while the
+typically-developing reference was drawn from English alone. That asymmetry is what
+these two languages remove: it is a defensibility argument, not a power argument, and
+the added children barely move a contrast that is limited by the Down syndrome sample.
+
+Why these two and not the wider Romance set:
+
+- **Italian** is the only pairing that is same-language *and* same-instrument on both
+  sides. ``it_01``'s two form ceilings, 408 and 670, are exactly Wordbank's Italian
+  Words & Gestures and Words & Sentences item counts, so the Italian Down syndrome
+  and typically-developing data are the same instrument. It is a norming sample, and
+  its comprehension reaches 24 months.
+- **Spanish (European)** matches ``es_01``'s language but not its instrument
+  (``es_01`` uses the 651-item CDI-Down; Wordbank's Spanish forms are 309 and 594).
+  It is a norming sample with clean comprehension. Note that ``es_01`` also carries
+  its own 186 mental-age and sex matched typically-developing children on the *same*
+  CDI-Down, which remain the better Spanish comparison for a matched analysis.
+
+Excluded, with reasons:
+
+- **French (French)** fails on two counts. Its Words & Gestures form carries 713 word
+  items where every other Words & Gestures adaptation in Wordbank has 309-457, so it
+  is a Words & Sentences-sized inventory administered at 8-16 months; and on rows with
+  comprehension >= 20 (excluding all-zero rows, so this is not a low-count
+  coincidence) **20.9% record comprehension exactly equal to production** — the same
+  proxy-defect signature that retired VG06. The four admitted or considered Romance
+  Words & Gestures forms sit at 0.000 by comparison, cleaner than English (American)
+  Words & Gestures at 0.001.
+- **Catalan** and **Portuguese (European)** are clean but are neither norming samples
+  nor matched to any Down syndrome study, and Portuguese would have contributed 45%
+  of the added observations on its own.
+
+Two measurement checks were run before admitting these, both reported in
+``notes/202608031500-td-romance-extension.md``. Ceiling exposure is no worse than the
+existing pool: the Italian and Spanish Words & Gestures forms sit within 90% of their
+own ceiling less often (1.5% and 2.9%) than English Words & Gestures (3.1%) or the
+Oxford CDI (8.0%), and no row exceeds its own ceiling. And the fixed 810-item
+denominator survives — across the 8-15 month window these forms share, language
+medians align **better** on raw counts than on proportion-of-own-form (mean
+coefficient of variation 0.206 against 0.244, raw tighter at 7 of 8 ages), which is
+what the nesting argument predicts and the first test of that assumption across
+languages rather than within English.
+"""
+
+ENGLISH_AND_ROMANCE_LANGUAGES = ENGLISH_LANGUAGES + ROMANCE_LANGUAGES
+"""Widened typically-developing scope: English plus :data:`ROMANCE_LANGUAGES`.
+
+Used by the hierarchical typically-developing models (VG11, VG12, VG13), whose
+dataset random intercepts can absorb between-language variation. **Not** used by
+VG03/VG04: those carry no random effects, so the between-language spread — about
+±20% at matched age, with 15-month medians running 108 to 159 across candidate
+languages — would be absorbed by the Beta-Binomial dispersion instead and reported as
+child-level dispersion. They stay English-only as the simple baselines they are
+documented to be.
+
+Language is very nearly collinear with dataset here (each added language contributes
+one dataset per form: Italian WG = Caselli, Italian WS = CLEX, Spanish = Karousou),
+so a language effect cannot be separated from a sample effect and will be estimated
+as between-dataset heterogeneity. Report it as such. One consequence to watch: the
+``CLEX`` dataset label spans several languages in Wordbank (it supplies Italian here,
+but also Croatian, Danish, Russian, Swedish and Turkish). Only its Italian rows enter
+the pool today, so the study label is unambiguous — but admitting a further CLEX
+language would silently pool two languages under one study intercept.
+"""
+
+KNOWN_TD_LANGUAGES = ENGLISH_AND_ROMANCE_LANGUAGES
+"""Language names a definition's ``td_languages`` may reference.
+
+A guard against silence rather than a scientific statement: a ``language`` value that
+does not match Wordbank's spelling exactly returns no rows, so a typo would shrink
+the reference pool without raising anything. Widening the pool means adding to
+:data:`ROMANCE_LANGUAGES` — and doing the measurement checks its docstring records —
+not adding a name here.
+"""
+
 
 class Population(Enum):
     """Study population."""
@@ -213,6 +308,14 @@ class UnivariateModelDefinition:
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     is a clustering sensitivity analysis, not the default estimand."""
+    td_languages: tuple[str, ...] = ENGLISH_LANGUAGES
+    """Wordbank ``language`` values the typically-developing pool draws on.
+
+    Ignored for the Down syndrome population, whose language scope is fixed when the
+    database is built. Defaults to :data:`ENGLISH_LANGUAGES`; the hierarchical
+    typically-developing models set :data:`ENGLISH_AND_ROMANCE_LANGUAGES`. Changing
+    this changes the data the model sees, so it is part of the model graph and a
+    change requires a refit."""
 
     # -- GP anchor constraint (per-draw zero at reference age) --
     anchor_g_at_ref: bool = False
@@ -326,6 +429,14 @@ class BivariateModelDefinition:
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     provides a cheap sensitivity analysis for repeated-measures dependence."""
+    td_languages: tuple[str, ...] = ENGLISH_LANGUAGES
+    """Wordbank ``language`` values the typically-developing pool draws on.
+
+    Ignored for the Down syndrome population, whose language scope is fixed when the
+    database is built. Defaults to :data:`ENGLISH_LANGUAGES`; the hierarchical
+    typically-developing models set :data:`ENGLISH_AND_ROMANCE_LANGUAGES`. Changing
+    this changes the data the model sees, so it is part of the model graph and a
+    change requires a refit."""
 
     # -- Within-child cross-lag (VG16, issue #113) --
     use_cross_lag: bool = False
@@ -1351,6 +1462,13 @@ VG11 = UnivariateModelDefinition(
     # Use all bivariate-capable rows (WG + Oxford CDI) plus WS production rows.
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
+    # Widen the reference pool beyond English (issue: DS-TD language symmetry).
+    # The DS pool is already a quarter non-English (es_01 Spanish, it_01 Italian)
+    # while this reference was English-only; the study REs below absorb the
+    # between-language variation. See ROMANCE_LANGUAGES for the admission criteria
+    # and the two measurement checks, and note that VG03/VG04 stay English-only
+    # because they carry no random effects to absorb it.
+    td_languages=ENGLISH_AND_ROMANCE_LANGUAGES,
     # Study-level random intercepts on the spoken trajectory
     tau_study_sigma=0.5,
     # Drop datasets with <200 observations (issue #55): roughly halves the study
@@ -1392,6 +1510,13 @@ VG12 = UnivariateModelDefinition(
     # WG + Oxford CDI only (WS comprehension is a production proxy).
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
+    # Widen the reference pool beyond English (issue: DS-TD language symmetry).
+    # The DS pool is already a quarter non-English (es_01 Spanish, it_01 Italian)
+    # while this reference was English-only; the study REs below absorb the
+    # between-language variation. See ROMANCE_LANGUAGES for the admission criteria
+    # and the two measurement checks, and note that VG03/VG04 stay English-only
+    # because they carry no random effects to absorb it.
+    td_languages=ENGLISH_AND_ROMANCE_LANGUAGES,
     # Study-level random intercepts on the understood trajectory
     tau_study_sigma=0.5,
     # Drop datasets with <200 observations (issue #55): roughly halves the study
@@ -1451,6 +1576,13 @@ VG13 = BivariateModelDefinition(
     # Use all available bivariate rows in the 8–18 month window; study REs
     # absorb between-lab variation so no subsampling is required.
     sample_fraction=1.0,
+    # Widen the reference pool beyond English (issue: DS-TD language symmetry).
+    # The DS pool is already a quarter non-English (es_01 Spanish, it_01 Italian)
+    # while this reference was English-only; the study REs below absorb the
+    # between-language variation. See ROMANCE_LANGUAGES for the admission criteria
+    # and the two measurement checks, and note that VG03/VG04 stay English-only
+    # because they carry no random effects to absorb it.
+    td_languages=ENGLISH_AND_ROMANCE_LANGUAGES,
     # Dataset-level study random intercepts on both trajectories
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
@@ -1768,6 +1900,28 @@ def validate_model_definition(definition) -> None:
     max_age = getattr(definition, "max_age_months", None)
     if max_age is not None and max_age <= 0:
         raise ValueError(f"{prefix}.max_age_months must be positive.")
+    td_languages = getattr(definition, "td_languages", None)
+    if td_languages is not None:
+        if not isinstance(td_languages, tuple) or not td_languages:
+            raise ValueError(
+                f"{prefix}.td_languages must be a non-empty tuple of Wordbank "
+                "language names."
+            )
+        unknown = sorted(set(td_languages) - set(KNOWN_TD_LANGUAGES))
+        if unknown:
+            raise ValueError(
+                f"{prefix}.td_languages contains language names that are not "
+                f"admitted to the reference pool: {unknown}. Add them to "
+                "ROMANCE_LANGUAGES (with the measurement checks its docstring "
+                "records) before referencing them here — a name that does not "
+                "match a Wordbank `language` value silently yields no rows."
+            )
+        # Deliberately not checked here: that a model going beyond English carries a
+        # study random intercept to absorb between-language variation. Every
+        # definition class names its study scale differently (tau_study_sigma,
+        # tau_u_study_sigma, ...), so any attribute-sniffing check would quietly pass
+        # for a class it does not know and give false assurance. The requirement is
+        # stated on ENGLISH_AND_ROMANCE_LANGUAGES and is a review matter.
     sign_anchors = getattr(definition, "sign_anchor_ages", None)
     if sign_anchors is not None and (
         len(sign_anchors) != 3

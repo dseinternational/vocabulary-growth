@@ -97,6 +97,10 @@ def prepare_univariate_re_data(
         columns=columns,
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
+        # TD language scope is part of the model graph; DS ignores it.
+        languages=getattr(
+            definition, "td_languages", vocab_data_utils.ENGLISH_LANGUAGES
+        ),
     )
     analysis_df = df[columns].dropna(subset=["age", y_col]).reset_index(drop=True)
     analysis_df, dropped_studies = vocab_data_utils.filter_studies_by_min_obs(
