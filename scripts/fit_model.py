@@ -60,7 +60,12 @@ def _render_output(output_dir: str) -> None:
     qmd_path = os.path.join(output_dir, "index.qmd")
     if not os.path.isfile(qmd_path):
         raise FileNotFoundError(f"Quarto source is missing: {qmd_path}")
-    subprocess.run(["quarto", "render", qmd_path], check=True)
+    # Quarto otherwise resolves the Jupyter kernel for the report's python cells
+    # from PATH, which is not this interpreter when the environment's python was
+    # invoked by absolute path without activation. The report then renders against
+    # whichever python PATH finds and cannot open the trace this fit just wrote.
+    render_env = {**os.environ, "QUARTO_PYTHON": sys.executable}
+    subprocess.run(["quarto", "render", qmd_path], check=True, env=render_env)
     if not os.path.isfile(os.path.join(output_dir, "index.html")):
         raise RuntimeError("Quarto render completed without producing index.html.")
 
