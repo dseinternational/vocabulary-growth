@@ -591,7 +591,12 @@ def _sql_string_list(values: tuple[str, ...]) -> str:
 #   - MacArthur-Bates CDI: Words & Gestures (WG) = 396 (us_01 WG form, us_02 —
 #     which carries comprehension, so it is the WG form); Words & Sentences
 #     (WS, production only) = 680 (us_01 WS form).
-#   - NZCDI (nz_01) = 675. uk_01 and it_01 carry a per-row source ceiling.
+#   - NZCDI (nz_01) = 675.
+#   - CDI-Down (es_01) = 651 words, the Spanish MB-CDI adaptation for children with
+#     Down syndrome. Two of its children sit exactly at the comprehension ceiling
+#     (legitimate but censored: their true receptive vocabulary is at least 651),
+#     which the guard keeps — it drops only counts strictly above the ceiling.
+#   uk_01 and it_01 carry a per-row source ceiling.
 #
 # Form-ceiling guard (issues #128/#131): exclude rows whose word count exceeds
 # the native item ceiling of the checklist form they came from
@@ -817,6 +822,54 @@ def vocab_combined_view_sql() -> str:
         vnz01.spoken + vnz01.signed + vnz01.spoken_signed as produced,
         675                                               as survey_vocab_max
     FROM vocab_nz_01 as vnz01
+    UNION ALL
+    -- es_01 (Galeote): a Spanish cross-sectional Down syndrome sample assessed on
+    -- the 651-word CDI-Down, the Spanish MB-CDI adaptation for children with Down
+    -- syndrome.
+    --
+    -- The source CSV also carries the study's 186 mental-age and sex matched
+    -- typically developing children (group = 'TD'), which this Down syndrome
+    -- relation excludes. They are a Spanish-normed comparison sample on a
+    -- different instrument, so they are not interchangeable with the Wordbank TD
+    -- reference pool load_data draws on, and pooling them would put a second
+    -- instrument into the pool the Down syndrome exclusions are benchmarked
+    -- against. They stay available in vocab_es_01 for a matched-pair analysis
+    -- (pair_id links a DS child to its TD partner).
+    --
+    -- The CDI-Down adds a third response column for *symbolic* (referential)
+    -- gestures -- "gestures representing specific lexical items" (Galeote et al.,
+    -- 2011) -- so the source's `gestured` count is a gestural lexicon scored
+    -- against the same 651 words, not a tally of generic communicative gestures.
+    -- It is therefore read as this repository's `signed` construct: a non-vocal
+    -- expressive lexicon recorded per word. Like uk_02 and nz_01 -- and unlike
+    -- uk_01, see SIGNED_ONLY_STUDIES -- it is a TOTAL, counting words gestured
+    -- whether or not they are also spoken, so it is comparable without item-level
+    -- re-derivation. All 186 rows carry a non-zero total.
+    --
+    -- `produced` is the source's own recorded spoken-or-gestured union, each word
+    -- counted once, so it is a de-duplicated union like uk_01's and nz_01's rather
+    -- than a sum. It exceeds `spoken` by a mean of 28 words.
+    --
+    -- Guard: a gestural total larger than the union it belongs to is impossible --
+    -- a union cannot be smaller than either of its parts -- so such a row's
+    -- `signed` is masked rather than passed to the signing models as a total. One
+    -- of the 186 rows is affected (1 word spoken, 15 gestured, union 11); which of
+    -- its three source numbers is wrong cannot be determined, and its understood,
+    -- spoken and produced values are unaffected. See data/vocab_data_es_01.md.
+    SELECT 'es_01'                           as study,
+        ves01.subject_id,
+        ves01.sex,
+        ves01.age,
+        ves01.understood,
+        ves01.spoken,
+        CASE
+            WHEN ves01.gestured <= ves01.spoken_or_gestured THEN ves01.gestured
+            ELSE NULL
+        END                                 as signed,
+        ves01.spoken_or_gestured            as produced,
+        651                                 as survey_vocab_max  -- CDI-Down
+    FROM vocab_es_01 as ves01
+    WHERE ves01."group" = 'DS'
     ) vc
     WHERE {_CEILING_GUARD_KEEP}
     """
