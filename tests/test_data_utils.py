@@ -447,6 +447,7 @@ _SOURCE_TABLE_SCHEMAS = {
     "vocab_uk_06": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
     "vocab_ie_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
     "vocab_nz_01": "subject_id VARCHAR, age BIGINT, not_spoken_or_signed BIGINT, signed BIGINT, spoken_signed BIGINT, spoken BIGINT",
+    "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex VARCHAR, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
 }
 
 
@@ -573,6 +574,96 @@ def test_ie01_baseline_counts_are_masked_by_default(tmp_path, monkeypatch):
         (restored["study"] == "ie_01") & (restored["age"] == 30.0)
     ].iloc[0]
     assert restored_baseline["understood"] == 300
+
+
+# ---- es_01: the Down syndrome filter, and gestures kept out of `signed` ----
+#
+# es_01 (Galeote) is the only source carrying a typically developing comparison
+# group in the same CSV, and the only one recording gestural rather than signed
+# production. The view must admit its Down syndrome children only, and must not
+# route `gestured` into the `signed` slot the signing models read.
+
+_ES01_COLUMNS = (
+    "subject_id, pair_id, \"group\", sex, age, age_days, mental_age, "
+    "mental_age_level, understood, spoken, gestured, spoken_or_gestured"
+)
+
+
+def _es01_db(tmp_path, rows):
+    """A vocabulary DB whose only DS source rows are the supplied es_01 records."""
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            f"INSERT INTO vocab_es_01 ({_ES01_COLUMNS}) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+    return db_path
+
+
+def test_es01_admits_only_the_down_syndrome_group(tmp_path, monkeypatch):
+    # A matched pair: same pair_id, one DS child and one TD child. Only the DS
+    # child may reach the Down syndrome analysis relation.
+    db_path = _es01_db(
+        tmp_path,
+        [
+            ("ds1", 1, "DS", "M", 60, 1800, 28.0, 7, 500, 300, 40, 320),
+            ("td1", 1, "TD", "M", 28, 840, 28.0, 7, 480, 290, 30, 300),
+        ],
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    es = data_utils.load_combined_data()
+    es = es[es["study"] == "es_01"]
+
+    assert list(es["subject_id"]) == ["ds1"]
+    assert es.iloc[0]["age"] == 60
+    assert es.iloc[0]["sex"] == "M"
+
+
+def test_es01_gestures_do_not_become_signed_or_produced(tmp_path, monkeypatch):
+    # gestured = 40 and spoken_or_gestured = 320 are both present in the source
+    # row; neither may leak into `signed` (which the signing models read as total
+    # sign use) or into `produced`, which stays oral production alone.
+    db_path = _es01_db(
+        tmp_path, [("ds1", 1, "DS", "F", 60, 1800, 28.0, 7, 500, 300, 40, 320)]
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    row = data_utils.load_combined_data()
+    row = row[row["study"] == "es_01"].iloc[0]
+
+    assert pd.isna(row["signed"])
+    assert row["spoken"] == 300
+    assert row["understood"] == 500
+
+    # load_combined_data does not select `produced`, so assert it on the view
+    # itself — the signing engines read that column directly.
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        produced, signed = con.execute(
+            "SELECT produced, signed FROM vocab_combined WHERE study = 'es_01'"
+        ).fetchone()
+    assert produced == 300
+    assert signed is None
+
+
+def test_es01_carries_the_651_item_cdi_down_ceiling(tmp_path, monkeypatch):
+    # A child at the comprehension ceiling is kept (the guard drops only counts
+    # strictly above it); one above the ceiling is impossible and dropped.
+    db_path = _es01_db(
+        tmp_path,
+        [
+            ("at_ceiling", 1, "DS", "F", 60, 1800, 28.0, 7, 651, 300, 40, 320),
+            ("impossible", 2, "DS", "M", 60, 1800, 28.0, 7, 652, 300, 40, 320),
+        ],
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    es = data_utils.load_combined_data()
+    es = es[es["study"] == "es_01"]
+
+    assert list(es["subject_id"]) == ["at_ceiling"]
+    assert list(es["survey_vocab_max"]) == [651]
 
 
 def test_mask_incomplete_administrations_reports_counts_and_needs_columns():

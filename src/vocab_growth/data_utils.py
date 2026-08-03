@@ -591,7 +591,12 @@ def _sql_string_list(values: tuple[str, ...]) -> str:
 #   - MacArthur-Bates CDI: Words & Gestures (WG) = 396 (us_01 WG form, us_02 —
 #     which carries comprehension, so it is the WG form); Words & Sentences
 #     (WS, production only) = 680 (us_01 WS form).
-#   - NZCDI (nz_01) = 675. uk_01 and it_01 carry a per-row source ceiling.
+#   - NZCDI (nz_01) = 675.
+#   - CDI-Down (es_01) = 651 words, the Spanish MB-CDI adaptation for children with
+#     Down syndrome. Two of its children sit exactly at the comprehension ceiling
+#     (legitimate but censored: their true receptive vocabulary is at least 651),
+#     which the guard keeps — it drops only counts strictly above the ceiling.
+#   uk_01 and it_01 carry a per-row source ceiling.
 #
 # Form-ceiling guard (issues #128/#131): exclude rows whose word count exceeds
 # the native item ceiling of the checklist form they came from
@@ -817,6 +822,37 @@ def vocab_combined_view_sql() -> str:
         vnz01.spoken + vnz01.signed + vnz01.spoken_signed as produced,
         675                                               as survey_vocab_max
     FROM vocab_nz_01 as vnz01
+    UNION ALL
+    -- es_01 (Galeote): a Spanish cross-sectional Down syndrome sample assessed on
+    -- the 651-word CDI-Down, the Spanish MB-CDI adaptation for children with Down
+    -- syndrome.
+    --
+    -- The source CSV also carries the study's 186 mental-age and sex matched
+    -- typically developing children (group = 'TD'), which this Down syndrome
+    -- relation excludes. They are a Spanish-normed comparison sample on a
+    -- different instrument, so they are not interchangeable with the Wordbank TD
+    -- reference pool load_data draws on, and pooling them would put a second
+    -- instrument into the pool the Down syndrome exclusions are benchmarked
+    -- against. They stay available in vocab_es_01 for a matched-pair analysis
+    -- (pair_id links a DS child to its TD partner).
+    --
+    -- `gestured` -- words the child expresses by gesture -- is deliberately NOT
+    -- mapped onto `signed`. The CDI-Down records communicative gestures for a
+    -- word, not a signed lexicon, so pooling it with the uk_02/nz_01 total-sign
+    -- measures would change what the signing models estimate. `produced` is
+    -- therefore `spoken`, as for every other non-signing source; the source's
+    -- spoken-or-gestured union stays in vocab_es_01 for a gesture analysis.
+    SELECT 'es_01'                           as study,
+        ves01.subject_id,
+        ves01.sex,
+        ves01.age,
+        ves01.understood,
+        ves01.spoken,
+        NULL                                as signed,
+        ves01.spoken                        as produced,
+        651                                 as survey_vocab_max  -- CDI-Down
+    FROM vocab_es_01 as ves01
+    WHERE ves01."group" = 'DS'
     ) vc
     WHERE {_CEILING_GUARD_KEEP}
     """

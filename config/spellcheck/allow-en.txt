@@ -11,6 +11,7 @@ callout
 Caselli
 centered
 centile
+Checa
 Clibbens
 CLPM
 color
@@ -45,6 +46,7 @@ Kruschke
 Kucharski
 Laudanska
 Laudańska
+Lézine
 lengthscale
 Lewandowsky
 LLM
@@ -71,6 +73,7 @@ Odorico
 Oijen
 orcid
 overfitting
+Palacios
 parameterisation
 parameterisations
 preliz
@@ -87,7 +90,9 @@ reparameterise
 Reparameterise
 reparameterised
 reparameterising
+Sánchez
 signspeech
+Soto
 spanos
 Spiegelhalter
 subj

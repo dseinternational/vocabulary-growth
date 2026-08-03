@@ -32,6 +32,7 @@ _sources = {
     "vocab_us_02": "./data/vocab_data_us_02.csv",
     "vocab_uk_06": "./data/vocab_data_uk_06.csv",
     "vocab_nz_01": "./data/vocab_data_nz_01.csv",
+    "vocab_es_01": "./data/vocab_data_es_01.csv",
 }
 # nz_01 (Foster-Cohen) is added with the real anonymisation key in a separate
 # data commit; tolerate its absence so the pipeline still builds without it.
@@ -73,6 +74,7 @@ vocab_uk_04_df = _loaded["vocab_uk_04"]
 vocab_uk_05_df = _loaded["vocab_uk_05"]
 vocab_us_02_df = _loaded["vocab_us_02"]
 vocab_uk_06_df = _loaded["vocab_uk_06"]
+vocab_es_01_df = _loaded["vocab_es_01"]
 
 # Prepare the data for merging
 vocab_to_merge = vocab_uk_01_df[["subject_id", "age", "understood", "spoken"]].copy()
@@ -172,6 +174,18 @@ else:
         columns=["subject_id", "age", "understood", "spoken", "study"]
     )
 
+# Spain (es_01, Galeote): a cross-sectional sample of 186 children with Down
+# syndrome and 186 mental-age/sex matched typically developing children, assessed
+# on the 651-word CDI-Down. Only the Down syndrome children enter this relation —
+# the TD children are a Spanish-normed comparison sample on a different instrument
+# from the Wordbank TD pool (see vocab_combined_view_sql). The gestured and
+# spoken-or-gestured counts are likewise left in the vocab_es_01 table: gestures
+# for a word are not a signed lexicon, so `spoken` here is oral production alone.
+es_01_to_merge = vocab_es_01_df.loc[
+    vocab_es_01_df["group"] == "DS", ["subject_id", "age", "understood", "spoken"]
+].copy()
+es_01_to_merge["study"] = 12
+
 
 merged_df = pd.concat(
     [
@@ -187,6 +201,7 @@ merged_df = pd.concat(
         vocab_uk_06_to_merge,
         ireland_2_to_merge,
         nz_01_to_merge,
+        es_01_to_merge,
     ],
     ignore_index=True,
 )
@@ -302,6 +317,13 @@ else:
         """
     )
 
+
+con.execute(
+    """
+    CREATE TABLE vocab_es_01 AS
+    SELECT * FROM vocab_es_01_df
+    """
+)
 
 wordbank_child_df = pd.read_csv(
     "./data/wordbank_administration_data.csv", low_memory=False
