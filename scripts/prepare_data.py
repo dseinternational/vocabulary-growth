@@ -178,9 +178,10 @@ else:
 # syndrome and 186 mental-age/sex matched typically developing children, assessed
 # on the 651-word CDI-Down. Only the Down syndrome children enter this relation —
 # the TD children are a Spanish-normed comparison sample on a different instrument
-# from the Wordbank TD pool (see vocab_combined_view_sql). The gestured and
-# spoken-or-gestured counts are likewise left in the vocab_es_01 table: gestures
-# for a word are not a signed lexicon, so `spoken` here is oral production alone.
+# from the Wordbank TD pool (see vocab_combined_view_sql). This pre-guard concat
+# carries understood/spoken only; the CDI-Down's symbolic-gesture lexicon reaches
+# the models as `signed`, and its spoken-or-gestured union as `produced`, through
+# the vocab_combined view.
 es_01_to_merge = vocab_es_01_df.loc[
     vocab_es_01_df["group"] == "DS", ["subject_id", "age", "understood", "spoken"]
 ].copy()

@@ -836,20 +836,37 @@ def vocab_combined_view_sql() -> str:
     -- against. They stay available in vocab_es_01 for a matched-pair analysis
     -- (pair_id links a DS child to its TD partner).
     --
-    -- `gestured` -- words the child expresses by gesture -- is deliberately NOT
-    -- mapped onto `signed`. The CDI-Down records communicative gestures for a
-    -- word, not a signed lexicon, so pooling it with the uk_02/nz_01 total-sign
-    -- measures would change what the signing models estimate. `produced` is
-    -- therefore `spoken`, as for every other non-signing source; the source's
-    -- spoken-or-gestured union stays in vocab_es_01 for a gesture analysis.
+    -- The CDI-Down adds a third response column for *symbolic* (referential)
+    -- gestures -- "gestures representing specific lexical items" (Galeote et al.,
+    -- 2011) -- so the source's `gestured` count is a gestural lexicon scored
+    -- against the same 651 words, not a tally of generic communicative gestures.
+    -- It is therefore read as this repository's `signed` construct: a non-vocal
+    -- expressive lexicon recorded per word. Like uk_02 and nz_01 -- and unlike
+    -- uk_01, see SIGNED_ONLY_STUDIES -- it is a TOTAL, counting words gestured
+    -- whether or not they are also spoken, so it is comparable without item-level
+    -- re-derivation. All 186 rows carry a non-zero total.
+    --
+    -- `produced` is the source's own recorded spoken-or-gestured union, each word
+    -- counted once, so it is a de-duplicated union like uk_01's and nz_01's rather
+    -- than a sum. It exceeds `spoken` by a mean of 28 words.
+    --
+    -- Guard: a gestural total larger than the union it belongs to is impossible --
+    -- a union cannot be smaller than either of its parts -- so such a row's
+    -- `signed` is masked rather than passed to the signing models as a total. One
+    -- of the 186 rows is affected (1 word spoken, 15 gestured, union 11); which of
+    -- its three source numbers is wrong cannot be determined, and its understood,
+    -- spoken and produced values are unaffected. See data/vocab_data_es_01.md.
     SELECT 'es_01'                           as study,
         ves01.subject_id,
         ves01.sex,
         ves01.age,
         ves01.understood,
         ves01.spoken,
-        NULL                                as signed,
-        ves01.spoken                        as produced,
+        CASE
+            WHEN ves01.gestured <= ves01.spoken_or_gestured THEN ves01.gestured
+            ELSE NULL
+        END                                 as signed,
+        ves01.spoken_or_gestured            as produced,
         651                                 as survey_vocab_max  -- CDI-Down
     FROM vocab_es_01 as ves01
     WHERE ves01."group" = 'DS'

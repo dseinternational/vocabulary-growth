@@ -576,12 +576,15 @@ def test_ie01_baseline_counts_are_masked_by_default(tmp_path, monkeypatch):
     assert restored_baseline["understood"] == 300
 
 
-# ---- es_01: the Down syndrome filter, and gestures kept out of `signed` ----
+# ---- es_01: the Down syndrome filter, and the symbolic-gesture lexicon ----
 #
 # es_01 (Galeote) is the only source carrying a typically developing comparison
-# group in the same CSV, and the only one recording gestural rather than signed
-# production. The view must admit its Down syndrome children only, and must not
-# route `gestured` into the `signed` slot the signing models read.
+# group in the same CSV, so the view must admit its Down syndrome children only.
+# Its `gestured` column counts *symbolic* gestures representing specific lexical
+# items — a gestural lexicon scored per word — so it is the repository's `signed`
+# construct, and a total one (words gestured whether or not also spoken), like
+# uk_02 and nz_01. A gestural total exceeding its own union is impossible and must
+# be masked rather than fed to the signing models.
 
 _ES01_COLUMNS = (
     "subject_id, pair_id, \"group\", sex, age, age_days, mental_age, "
@@ -621,10 +624,10 @@ def test_es01_admits_only_the_down_syndrome_group(tmp_path, monkeypatch):
     assert es.iloc[0]["sex"] == "M"
 
 
-def test_es01_gestures_do_not_become_signed_or_produced(tmp_path, monkeypatch):
-    # gestured = 40 and spoken_or_gestured = 320 are both present in the source
-    # row; neither may leak into `signed` (which the signing models read as total
-    # sign use) or into `produced`, which stays oral production alone.
+def test_es01_symbolic_gestures_are_the_signed_lexicon(tmp_path, monkeypatch):
+    # gestured = 40 is a total symbolic-gesture lexicon, so it is `signed`; the
+    # source's own spoken-or-gestured union (320) is `produced`, de-duplicated, so
+    # it must not be recomputed as spoken + gestured (which would be 340).
     db_path = _es01_db(
         tmp_path, [("ds1", 1, "DS", "F", 60, 1800, 28.0, 7, 500, 300, 40, 320)]
     )
@@ -633,7 +636,7 @@ def test_es01_gestures_do_not_become_signed_or_produced(tmp_path, monkeypatch):
     row = data_utils.load_combined_data()
     row = row[row["study"] == "es_01"].iloc[0]
 
-    assert pd.isna(row["signed"])
+    assert row["signed"] == 40
     assert row["spoken"] == 300
     assert row["understood"] == 500
 
@@ -643,8 +646,32 @@ def test_es01_gestures_do_not_become_signed_or_produced(tmp_path, monkeypatch):
         produced, signed = con.execute(
             "SELECT produced, signed FROM vocab_combined WHERE study = 'es_01'"
         ).fetchone()
-    assert produced == 300
-    assert signed is None
+    assert produced == 320       # the recorded union, not 300 + 40
+    assert signed == 40
+
+
+def test_es01_masks_a_gestural_total_above_its_own_union(tmp_path, monkeypatch):
+    # A union cannot be smaller than either of its parts, so gestured > union is an
+    # impossible total and is not a usable signed count. One real row matches
+    # (1 spoken, 15 gestured, union 11). The other outcomes survive.
+    db_path = _es01_db(
+        tmp_path,
+        [
+            ("ok", 1, "DS", "F", 60, 1800, 28.0, 7, 500, 300, 40, 320),
+            ("bad", 2, "DS", "M", 24, 720, 12.7, 2, 82, 1, 15, 11),
+        ],
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    es = data_utils.load_combined_data()
+    es = es[es["study"] == "es_01"].set_index("subject_id")
+
+    assert es.loc["ok", "signed"] == 40
+    assert pd.isna(es.loc["bad", "signed"])
+    # Comprehension and oral production are unaffected by the gesture-entry error,
+    # and the row is retained rather than dropped.
+    assert es.loc["bad", "understood"] == 82
+    assert es.loc["bad", "spoken"] == 1
 
 
 def test_es01_carries_the_651_item_cdi_down_ceiling(tmp_path, monkeypatch):

@@ -64,8 +64,8 @@ SIGN_GROUPS = ["unknown", "non_signer", "signer"]  # index 0 is the reference
 def _prepare(outcome="spoken", studies=None):
     """Load DS `outcome` data, 12-66 mo, with study and 3-level sign-group codes.
 
-    ``studies`` (optional) restricts to a subset, e.g. ("uk_02", "nz_01") for the
-    de-duplicated-union total-expressive analysis (see model_vg18 docstring).
+    ``studies`` (optional) restricts to a subset, e.g. ("uk_02", "nz_01", "es_01")
+    for the de-duplicated-union total-expressive analysis (see model_vg18 docstring).
     """
     import duckdb
 
