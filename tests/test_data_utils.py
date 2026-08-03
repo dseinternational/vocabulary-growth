@@ -21,7 +21,7 @@ requires_real_db = pytest.mark.skipif(
 ``scripts/prepare_data.py`` in ~300 ms. CI now builds it *before* pytest, so these
 tests run there; the marker is for a local checkout where it has not been built
 yet. The counts they pin — 8 understood values masked by the duplicated-outcome
-rule, 30 spoken by the production rules, every exclusion inside ``us_01`` — are
+rule, 19 spoken by the production rules, every exclusion inside ``us_01`` — are
 what the notes and the report quote, and no miniature fixture can check them."""
 
 
@@ -127,40 +127,24 @@ def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
         con.executemany(
-            "INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (
-                    "WS",
-                    "English (American)",
-                    "Edgin",
-                    "d05",
-                    None,
-                    30,
-                    680,
-                    680,
-                    False,
-                    "Down syndrome",
-                ),
-                (
-                    "WG",
-                    "English (American)",
-                    "Edgin",
-                    "d06",
-                    None,
-                    20,
-                    396,
-                    396,
-                    False,
-                    "Down syndrome",
-                ),
+                # WS at its 680 ceiling, age 30 — the last month inside the WS
+                # window, so the window rule keeps it and the implausible-production
+                # rule is what masks it.
+                ("d05", "WS", 30.0, None, "down_syndrome", 680, 680, 680, True),
+                # WG at its 396 ceiling, age 20. Its child has no other record, so
+                # the ceiling-only rule removes it before the production rules see it;
+                # the reinstatement below therefore has to lift that rule as well.
+                ("d06", "WG", 20.0, None, "down_syndrome", 396, 396, 396, False),
             ],
         )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
-    # Both of these now match the implausible-production signature — the WS record
-    # sits at its 680-item ceiling at 30 months and the WG record at its 396-item
-    # ceiling at 20 months, and both are inside the young window — so the default
-    # loader has already masked them, and the ceiling helper has nothing to exclude.
+    # Neither survives the default loader — the WS record's child has an in-window
+    # record so it stays but its count is masked by the implausible-production
+    # signature, and the WG record's child is ceiling-only so the whole child is
+    # dropped first — so the ceiling helper has nothing to exclude.
     # This is why the registered `us01-ceiling-excluded` sensitivities were retired:
     # a check that cannot fail is worse than no check (see registry.py).
     masked = data_utils.load_data(
@@ -175,7 +159,9 @@ def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
 
     # The helper still works on a frame where the records are reinstated, so the
     # exclusion remains available if the masking decision is ever reverted.
-    reinstated = data_utils.load_combined_data(include_implausible_production=True)
+    reinstated = data_utils.load_combined_data(
+        include_implausible_production=True, include_ceiling_only_children=True
+    )
     reinstated = reinstated[["study", "spoken", "survey_vocab_max"]]
     filtered, count = data_utils.exclude_us01_spoken_ceiling_rows(reinstated)
     assert count == 1
@@ -245,6 +231,125 @@ def test_td_load_data_can_widen_languages(tmp_path, monkeypatch):
     assert "Norwegian" in df["language"].tolist()
 
 
+def test_td_romance_scope_admits_italian_and_spanish_only(tmp_path, monkeypatch):
+    """ENGLISH_AND_ROMANCE_LANGUAGES widens the pool to exactly two more languages.
+
+    The point of the widening is DS-TD language symmetry: the DS pool is already a
+    quarter non-English (es_01 Spanish, it_01 Italian) while this reference was
+    English-only. Norwegian stands in for every language that is *not* admitted --
+    widening must not become "all languages", which would change what the reference
+    trajectory means and admit forms whose comprehension is a production proxy.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    widened = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["language", "form", "age", "understood"],
+        languages=data_utils.ENGLISH_AND_ROMANCE_LANGUAGES,
+    )
+    languages = set(widened["language"])
+
+    assert {"Italian", "Spanish (European)"} <= languages
+    assert "Norwegian" not in languages
+
+    english_only = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["language", "form", "age", "understood"],
+    )
+    assert not {"Italian", "Spanish (European)"} & set(english_only["language"])
+    assert len(widened) == len(english_only) + 2
+
+
+def test_td_pool_stays_inside_the_gp_domain_when_languages_widen(tmp_path, monkeypatch):
+    """The reference pool must not reach below the typically-developing GP domain.
+
+    Italian Words & Gestures is registered from 7 months where every English form
+    starts at 8, so widening the language scope pushed five administrations below the
+    floor of ``_TD_GP_DOMAIN_MONTHS`` and ``build_utils`` refused to build. Bounding
+    the pool is the fix rather than widening that domain, which is shared with
+    VG03/VG04 and would have made those models stale for five observations at the
+    least informative end of the range.
+    """
+    from vocab_growth.models import definitions
+
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(
+            "INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("WG", "Italian", "Caselli", "c12", None, 7.0, 9, 0, True, None),
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    df = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["language", "age", "understood"],
+        languages=data_utils.ENGLISH_AND_ROMANCE_LANGUAGES,
+    )
+
+    age_lower, age_upper = data_utils.TD_POOL_AGE_MONTHS
+    assert df["age"].min() >= age_lower
+    assert 7.0 not in df["age"].tolist()
+    # The bound has to sit inside the GP domain the TD models declare, or the pool
+    # can still produce ages build_utils will reject.
+    domain_low, domain_high = definitions.VG12.gp_domain_months
+    assert age_lower >= domain_low
+    assert age_upper <= domain_high
+
+
+def test_romance_scope_is_a_superset_of_english_and_excludes_french():
+    """French is excluded on measurement grounds, not by oversight.
+
+    Its Words & Gestures form carries 713 word items where every other Words &
+    Gestures adaptation has 309-457, and 20.9% of its rows with comprehension >= 20
+    record comprehension exactly equal to production -- the proxy-defect signature
+    that retired VG06. A future widening that reaches for "the Romance languages"
+    should have to notice this.
+    """
+    assert set(data_utils.ENGLISH_LANGUAGES) < set(
+        data_utils.ENGLISH_AND_ROMANCE_LANGUAGES
+    )
+    assert set(data_utils.ROMANCE_LANGUAGES) == {"Italian", "Spanish (European)"}
+    assert not any(
+        "French" in language for language in data_utils.ENGLISH_AND_ROMANCE_LANGUAGES
+    )
+
+
+def test_only_hierarchical_td_models_go_beyond_english():
+    """VG03/VG04 must stay English-only; VG11/VG12/VG13 carry the widened scope.
+
+    VG03 and VG04 have no random effects, so between-language variation would be
+    absorbed by the Beta-Binomial dispersion and reported as child-level dispersion.
+    The widened scope belongs only where a study random intercept can hold it.
+    """
+    from vocab_growth.models import definitions
+
+    for name in ("VG03", "VG04"):
+        definition = getattr(definitions, name)
+        assert definition.td_languages == definitions.ENGLISH_LANGUAGES, name
+    for name in ("VG11", "VG12", "VG13"):
+        definition = getattr(definitions, name)
+        assert (
+            definition.td_languages == definitions.ENGLISH_AND_ROMANCE_LANGUAGES
+        ), name
+
+
+def test_ds_models_ignore_the_td_language_scope(tmp_path, monkeypatch):
+    """The DS subset is English by construction, so a language scope cannot alter it."""
+    db_path = _create_vocab_db(tmp_path)
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    columns = ["study", "age", "understood", "spoken"]
+    default = data_utils.load_data(Population.DOWN_SYNDROME, columns=columns)
+    widened = data_utils.load_data(
+        Population.DOWN_SYNDROME,
+        columns=columns,
+        languages=data_utils.ENGLISH_AND_ROMANCE_LANGUAGES,
+    )
+
+    pd.testing.assert_frame_equal(default, widened)
+
+
 def test_td_pool_excludes_the_edgin_clinical_cohort(tmp_path, monkeypatch):
     """The reference pool must not contain rows from the audited DS source.
 
@@ -277,10 +382,16 @@ def _create_vocab_db_with_masked_production(tmp_path):
     """Fixture DB plus one us_01 record the implausible-production rule masks."""
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
-        con.execute(
-            "INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("WS", "English (American)", "Edgin", "d09", None, 26, 680, 680,
-             False, "Down syndrome"),
+        con.executemany(
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("d09", "WS", 26.0, None, "down_syndrome", 680, 680, 680, True),
+                # The same child, below its form's ceiling. Without this the child is
+                # ceiling-only and exclude_ceiling_only_children removes it outright,
+                # leaving the production reinstatement nothing to put back — which
+                # would test the wrong rule.
+                ("d09", "WG", 15.0, None, "down_syndrome", 45, 3, 396, True),
+            ],
         )
     return db_path
 
@@ -372,6 +483,171 @@ def test_ds_us01_keeps_valid_rows_above_legacy_100_cap(tmp_path, monkeypatch):
     assert set(us01["survey_vocab_max"].dropna().astype(int)) == {396, 680}
 
 
+def test_ds_us01_admits_only_the_down_syndrome_group(tmp_path, monkeypatch):
+    """The Edgin cohort has four developmental-status groups; only one is us_01.
+
+    The comparison group (source ``DevStatus``/``DevelopmentalDiagnosis`` = 0) reaches
+    the export as ``typically_developing = false`` with a *blank* condition label,
+    because Wordbank's importer links a HealthCondition whose name is the empty string.
+    That makes it look, in the export, like Down syndrome children with a missing code.
+    It is not: no child carries both codes. Keying on ``dev_status`` keeps it out of the
+    DS relation while leaving it available in ``vocab_us_01`` for a matched analysis.
+    """
+    us01 = _load_us01(tmp_path, monkeypatch)
+
+    # k01 is the comparison-group row in the fixture: 138 understood at 15 months,
+    # well clear of every DS value, so it would be conspicuous if it leaked in.
+    assert 138 not in us01["understood"].dropna().tolist()
+    assert 43 not in us01["spoken"].dropna().tolist()
+    assert len(us01) == 4
+
+
+def test_above_window_administrations_are_admitted(tmp_path, monkeypatch):
+    """An early-vocabulary form given to an older child is admissible.
+
+    For a Down syndrome cohort that is developmentally appropriate, not an error, and
+    the registered age window governs whether Wordbank's *percentile norms* apply --
+    which this project does not use. Excluding them was also the more biased choice: a
+    child still on Words & Gestures at 25 months is plausibly lower-ability than one who
+    moved to Words & Sentences, and in the real data these are ``us_01``'s **only**
+    comprehension observations between 19 and 27 months.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            # Words & Gestures at 23 months: above the 8-18 window, ordinary counts,
+            # and the child also has an in-window record (d01 is a different child, so
+            # give this one two of its own).
+            ("d07", "WG", 23.0, None, "down_syndrome", 110, 10, 396, False),
+        )
+        con.execute(
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("d07", "WG", 15.0, None, "down_syndrome", 40, 2, 396, True),
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    us01 = data_utils.load_combined_data()
+    us01 = us01[us01["study"] == "us_01"]
+
+    assert 23.0 in us01["age"].tolist()
+    assert 110 in us01["understood"].dropna().tolist()
+
+
+def test_below_form_floor_administrations_are_dropped(tmp_path, monkeypatch):
+    """Administrations below a form's lowest registered age are held back.
+
+    Unlike the above-window case this block is unreliable: in the real data three of
+    the 16 rows report 236-368 words *spoken* at 6 months, which no 6-month-old in any
+    population produces, and two of the same children show comprehension collapsing
+    from 247-371 words at 6 months to 5-19 by 11-12. See FORM_AGE_FLOORS.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                # 236 is one of the three real impossible counts and sits below
+                # 0.9 * 396, so this row tests the floor rule rather than the
+                # ceiling-only rule.
+                ("w02", "WG", 6.0, None, "down_syndrome", 247, 236, 396, False),
+                ("w03", "WG", 7.0, None, "down_syndrome", 28, 0, 396, False),
+            ],
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    default = data_utils.load_combined_data()
+    assert 236 not in default["spoken"].dropna().tolist()
+    assert 6.0 not in default["age"].tolist()
+    assert 7.0 not in default["age"].tolist()
+
+    reinstated = data_utils.load_combined_data(include_below_form_floor=True)
+    assert len(reinstated) == len(default) + 2
+    assert 6.0 in reinstated["age"].tolist()
+
+
+def test_form_floor_rule_leaves_other_studies_alone():
+    """Only studies with a registered floor are touched; the rule never guesses."""
+    frame = pd.DataFrame(
+        {
+            "study": ["us_01", "us_01", "uk_02", "es_01", "us_01", "us_01"],
+            "age": [14.0, 6.0, 96.0, 71.0, 24.0, 44.0],
+            "survey_vocab_max": [396, 396, 810, 651, None, 680],
+        }
+    )
+
+    kept, dropped = data_utils.exclude_below_form_floor(frame)
+
+    # uk_02 at 96 months and es_01 at 71 have no registered floor; the us_01 row with an
+    # unknown ceiling cannot be matched to a form, so it is kept rather than guessed;
+    # and the us_01 row at 44 months is *above* its window, which this rule allows.
+    assert dropped == {"us_01": 1}
+    assert kept["age"].tolist() == [14.0, 96.0, 71.0, 24.0, 44.0]
+
+
+def test_ceiling_only_children_are_dropped_whole(tmp_path, monkeypatch):
+    """A child recorded only at the form ceiling is a preparation artefact.
+
+    This is a provenance criterion, not selection on the outcome: age and count together
+    cannot separate the Edgin ceiling batch from a legitimately able older child, so what
+    separates them is that the batch children have no non-ceiling record of their own.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                # Ceiling-only child: both records at the ceiling, nothing else.
+                ("b01", "WS", 44.0, None, "down_syndrome", 680, 680, 680, False),
+                ("b02", "WS", 52.0, None, "down_syndrome", 680, 680, 680, False),
+                # Same shape of count, but this child has a non-ceiling record too, so
+                # the child is kept and only the count is left to the other rules.
+                ("g01", "WS", 40.0, None, "down_syndrome", 680, 680, 680, False),
+                ("g01", "WG", 17.0, None, "down_syndrome", 60, 4, 396, True),
+            ],
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    default = data_utils.load_combined_data()
+    us01 = default[default["study"] == "us_01"]
+    ids = set(us01["subject_id"])
+
+    kept_g01 = {
+        sid
+        for sid in ids
+        if 17.0 in us01.loc[us01["subject_id"].eq(sid), "age"].tolist()
+        and 40.0 in us01.loc[us01["subject_id"].eq(sid), "age"].tolist()
+    }
+    assert kept_g01, "a child with a non-ceiling record must survive in full"
+    assert 44.0 not in us01["age"].tolist()
+    assert 52.0 not in us01["age"].tolist()
+
+    reinstated = data_utils.load_combined_data(include_ceiling_only_children=True)
+    assert 44.0 in reinstated["age"].tolist()
+    assert len(reinstated) == len(default) + 2
+
+
+def test_ceiling_only_rule_is_scoped_and_child_level():
+    """Scoped to CEILING_ONLY_CHILD_STUDIES, and keyed on study plus subject."""
+    frame = pd.DataFrame(
+        {
+            "study": ["us_01", "us_01", "us_01", "uk_01", "uk_01"],
+            "subject_id": ["a", "a", "b", "b", "b"],
+            "age": [40.0, 17.0, 44.0, 91.0, 95.0],
+            "spoken": [680.0, 4.0, 680.0, 669.0, 660.0],
+            "survey_vocab_max": [680, 396, 680, 690, 690],
+        }
+    )
+
+    kept, dropped = data_utils.exclude_ceiling_only_children(frame)
+
+    # us_01 subject 'a' has a non-ceiling record and survives; 'b' does not and goes.
+    # uk_01 subject 'b' is ceiling-only but out of scope — and shares a subject label
+    # with us_01's 'b', which must not merge them.
+    assert dropped == {"us_01": 1}
+    assert kept["age"].tolist() == [40.0, 17.0, 91.0, 95.0]
+
+
 def test_form_ceiling_guard_drops_counts_above_survey_vocab_max(tmp_path, monkeypatch):
     # issue #131: a count above its source form's native ceiling is impossible
     # (a data-entry error) and must be dropped. it_01 carries a per-row ceiling
@@ -448,7 +724,13 @@ _SOURCE_TABLE_SCHEMAS = {
     "vocab_ie_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
     "vocab_nz_01": "subject_id VARCHAR, age BIGINT, not_spoken_or_signed BIGINT, signed BIGINT, spoken_signed BIGINT, spoken BIGINT",
     "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex VARCHAR, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
+    "vocab_us_01": "subject_id VARCHAR, form VARCHAR, age DOUBLE, sex VARCHAR, dev_status VARCHAR, comprehension INTEGER, production INTEGER, survey_vocab_max INTEGER, in_norming_window BOOLEAN",
 }
+
+_US01_COLUMNS = (
+    "subject_id, form, age, sex, dev_status, comprehension, production, "
+    "survey_vocab_max, in_norming_window"
+)
 
 
 def _create_vocab_db(tmp_path):
@@ -483,26 +765,41 @@ def _create_vocab_db(tmp_path):
                 ("WG",         "English (British)",  "Fenson (2007)",   "c06", None, 35.0, 100,  50, True,  None),
                 ("WG",         "English (British)",  "Fenson (2007)",   "c07", None, 18.0,  60,  20, True,  "premature"),
                 ("WG",         "English (British)",  "Fenson (2007)",   "c08", None, 18.0,  60,  20, False, None),
-                # Non-English row that otherwise matches: excluded by the default English filter.
+                # Non-English rows. Norwegian is excluded by every admitted scope;
+                # Italian and Spanish (European) are excluded by the English default
+                # but admitted by ENGLISH_AND_ROMANCE_LANGUAGES.
                 ("WG",         "Norwegian",           "Simonsen (2014)", "c09", None, 16.0,  55,  18, True,  None),
-                # us_01 / Edgin Down syndrome rows, feeding the vocab_combined
-                # view: WG comprehension is an independent measure; WS
-                # comprehension is a production proxy and must not become
-                # `understood`; valid production > 100 rows remain included.
-                ("WG",         "English (American)",  "Edgin",           "d01", "F",  14.0,  40,  12, False, "Down syndrome"),
-                ("WS",         "English (American)",  "Edgin",           "d02", "M",  24.0,  77,  77, False, "Down syndrome"),
-                ("WS",         "English (American)",  "Edgin",           "d03", None, 29.0, 150, 150, False, "Down syndrome"),
-                ("WG",         "English (American)",  "Edgin",           "d04", "F",  18.0, 200, 120, False, "Down syndrome"),
+                ("WG",         "Italian",             "Caselli",         "c10", None, 16.0,  58,  19, True,  None),
+                ("WG",         "Spanish (European)",  "Karousou",        "c11", None, 14.0,  52,  15, True,  None),
                 # Two Edgin rows in the real export carry typically_developing = true
                 # with no health condition, so they would otherwise land in the TD
                 # reference pool the DS exclusions are benchmarked against. One of
                 # them sits at the 680-word WS ceiling inside the flagged run.
+                # These stay in wordbank_child: the TD pool still reads the export.
                 ("WS",         "English (American)",  "Edgin",           "t01", None, 29.0, 680, 680, True,  None),
                 ("WG",         "English (American)",  "Edgin",           "t02", None, 17.0, 306,   7, True,  None),
             ],
         )
         for table, table_schema in _SOURCE_TABLE_SCHEMAS.items():
             con.execute(f"CREATE TABLE {table} ({table_schema})")
+        # us_01 / Edgin Down syndrome rows now reach vocab_combined through
+        # vocab_us_01, not the by-child export: WG comprehension is an independent
+        # measure; WS comprehension is a production proxy and must not become
+        # `understood`; valid production > 100 rows remain included. All four sit
+        # inside their form's norming window (WG 8-18, WS 16-30) so the
+        # window rule leaves them alone.
+        con.executemany(
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("d01", "WG", 14.0, "F",  "down_syndrome",  40,  12, 396, True),
+                ("d02", "WS", 24.0, "M",  "down_syndrome",  77,  77, 680, True),
+                ("d03", "WS", 29.0, None, "down_syndrome", 150, 150, 680, True),
+                ("d04", "WG", 18.0, "F",  "down_syndrome", 200, 120, 396, True),
+                # The comparison group in the same cohort. dev_status keeps it out of
+                # the DS relation; it is not Down syndrome children with a blank code.
+                ("k01", "WG", 15.0, None, "comparison",    138,  43, 396, True),
+            ],
+        )
         con.execute(data_utils.vocab_combined_view_sql())
     return db_path
 
@@ -893,13 +1190,19 @@ def test_implausible_production_leaves_comprehension_alone():
 @requires_real_db
 def test_edgin_rules_together_on_the_real_database():
     # End to end: the widened duplicated-outcome rule masks 8 understood values,
-    # the production rules mask 30 spoken values, and one duplicate row is dropped.
+    # the production rules mask 19 spoken values, and one duplicate row is dropped.
+    #
+    # 19, not the 30 this pinned before the us_01 source moved to the item-level
+    # contributor files. Fewer counts are masked because more records are removed
+    # earlier: exclude_ceiling_only_children takes the Edgin ceiling batch out as whole
+    # children on its provenance, so those counts never reach the production rules. See
+    # CEILING_ONLY_CHILD_STUDIES.
     base = data_utils.load_combined_data(
         include_duplicated_outcomes=True, include_implausible_production=True
     )
     final = data_utils.load_combined_data()
     assert base["understood"].notna().sum() - final["understood"].notna().sum() == 8
-    assert base["spoken"].notna().sum() - final["spoken"].notna().sum() == 30
+    assert base["spoken"].notna().sum() - final["spoken"].notna().sum() == 19
 
     # Every exclusion is in us_01, and the retained borderline cases survive.
     for column in ("understood", "spoken"):

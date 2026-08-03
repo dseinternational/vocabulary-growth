@@ -1,0 +1,92 @@
+{
+  "derived_down_syndrome_in_window": 194,
+  "derived_down_syndrome_total": 345,
+  "derived_rows": 738,
+  "derived_rows_by_dev_status": {
+    "autism_spectrum": 23,
+    "comparison": 321,
+    "down_syndrome": 345,
+    "pre_term": 42,
+    "unrecorded": 7
+  },
+  "excluded_empty_administrations": [
+    {
+      "age": "29",
+      "dev_status": "comparison",
+      "form": "WG",
+      "subject_id": "151120169"
+    },
+    {
+      "age": "17",
+      "dev_status": "down_syndrome",
+      "form": "WG",
+      "subject_id": "160410348"
+    },
+    {
+      "age": "12",
+      "dev_status": "down_syndrome",
+      "form": "WG",
+      "subject_id": "20157010039"
+    },
+    {
+      "age": "68",
+      "dev_status": "comparison",
+      "form": "WS",
+      "subject_id": "40049"
+    }
+  ],
+  "files": [
+    {
+      "bytes": 433502,
+      "sha256": "1e17717688473fba1a3211baaf822162c6bf8102c046242345ef5673c6d5964b",
+      "url": "https://raw.githubusercontent.com/langcog/wordbank/master/raw_data/English_American_WG/EnglishWG_Edgin_data.csv"
+    },
+    {
+      "bytes": 13555,
+      "sha256": "142771677c9922c1328aa690341e328a80d1801febde5d09e7f7f6031f8db880",
+      "url": "https://raw.githubusercontent.com/langcog/wordbank/master/raw_data/English_American_WG/EnglishWG_Edgin_fields.csv"
+    },
+    {
+      "bytes": 790,
+      "sha256": "953aa4d7faf5aa3c748bbc377bf547795442ce99bbd2031607d688a5b3256ea0",
+      "url": "https://raw.githubusercontent.com/langcog/wordbank/master/raw_data/English_American_WG/EnglishWG_Edgin_values.csv"
+    },
+    {
+      "bytes": 581759,
+      "sha256": "6c6025bdc5ace0e8be386b2382c009bd72601c108800a08dac5b80e68fb05588",
+      "url": "https://raw.githubusercontent.com/langcog/wordbank/master/raw_data/English_American_WS/EnglishWS_Edgin_data.csv"
+    },
+    {
+      "bytes": 22388,
+      "sha256": "719320d118a0d898ed96bfe2661331760966a99accec63adda5b6265cf913dbd",
+      "url": "https://raw.githubusercontent.com/langcog/wordbank/master/raw_data/English_American_WS/EnglishWS_Edgin_fields.csv"
+    },
+    {
+      "bytes": 850,
+      "sha256": "ae0758dc301b2396a77527fcb899363ea3e690d073d27d3230eb7b2dea5dae30",
+      "url": "https://raw.githubusercontent.com/langcog/wordbank/master/raw_data/English_American_WS/EnglishWS_Edgin_values.csv"
+    }
+  ],
+  "per_form": {
+    "WG": {
+      "empty_administrations_excluded": 3,
+      "norming_window": [
+        8,
+        18
+      ],
+      "source_rows": 398,
+      "word_items": 396
+    },
+    "WS": {
+      "empty_administrations_excluded": 1,
+      "norming_window": [
+        16,
+        30
+      ],
+      "source_rows": 344,
+      "word_items": 680
+    }
+  },
+  "retrieved": "2026-08-03",
+  "source_repository": "https://github.com/langcog/wordbank"
+}

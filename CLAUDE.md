@@ -66,6 +66,14 @@ python scripts/prepare_data.py
 
 This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a DuckDB database at `data/vocabulary.duckdb`.
 
+One source is generated rather than committed by hand:
+
+```bash
+python scripts/build_us01_source.py --verify
+```
+
+This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01`) from the item-level contributor files in the public `langcog/wordbank` repository, with a provenance manifest. It is not read from `data/wordbank_administration_data.csv`, because Wordbank's by-child download page age-truncates every administration to its instrument's registered window (345 Down syndrome administrations reduced to 194) and cannot separate the four all-blank administrations it scores as zeros. `--verify` checks the in-window rows against the export as a multiset. See [`data/vocab_data_us_01.md`](data/vocab_data_us_01.md). The export is still the source for the typically-developing pool, for which the age filter is appropriate.
+
 ### Fit a model
 
 ```bash
@@ -104,6 +112,10 @@ Validates the model definition, sampling configuration, raw-data fingerprint, co
 1. Raw study data lives in `data/` as CSVs (one per study, e.g. `vocab_data_uk_01.csv`).
 2. `scripts/prepare_data.py` merges and harmonises them into a DuckDB database with a unified `vocab_combined` view.
 3. Model code loads data via `vocab_growth.data_utils.load_combined_data()`.
+
+The Down syndrome pool masks or drops several documented defect classes by default, each with a reinstatement flag for sensitivity analysis: partial administrations, duplicated outcome columns, implausible production (near-ceiling and longitudinal-collapse signatures), administrations given below their form's lowest registered age, and children recorded only at their form's ceiling. Read the governing constant's docstring before reinstating any of them. Two are worth knowing about even if you never touch them: administrations _above_ a form's age window are deliberately **admitted**, because for a Down syndrome cohort an early-vocabulary form given to an older child is developmentally appropriate and those rows are `us_01`'s only comprehension observations between 19 and 27 months; and the ceiling-saturated preparation batch is identified by `CEILING_ONLY_CHILD_STUDIES` on the _provenance_ criterion that the affected children have no non-ceiling record, because age and count together cannot separate it from a legitimately able older child.
+
+The typically-developing reference pool is drawn from Wordbank and scoped by language. It defaults to `ENGLISH_LANGUAGES`; the hierarchical models (VG11, VG12, VG13) use `ENGLISH_AND_ROMANCE_LANGUAGES`, adding Italian and Spanish (European) so the Down-syndrome-versus-typically-developing comparison spans several languages on both sides — the Down syndrome pool is already a quarter non-English. VG03/VG04 stay English-only: they carry no random effects to absorb between-language variation. The scope is a model-definition field (`td_languages`), so it is part of the model graph and changing it requires a refit. Admission criteria and the two measurement checks are on `ROMANCE_LANGUAGES` in `src/vocab_growth/models/definitions.py`.
 
 ### Model structure
 

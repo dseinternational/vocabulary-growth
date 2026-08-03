@@ -33,6 +33,7 @@ _sources = {
     "vocab_uk_06": "./data/vocab_data_uk_06.csv",
     "vocab_nz_01": "./data/vocab_data_nz_01.csv",
     "vocab_es_01": "./data/vocab_data_es_01.csv",
+    "vocab_us_01": "./data/vocab_data_us_01.csv",
 }
 # nz_01 (Foster-Cohen) is added with the real anonymisation key in a separate
 # data commit; tolerate its absence so the pipeline still builds without it.
@@ -323,6 +324,21 @@ con.execute(
     """
     CREATE TABLE vocab_es_01 AS
     SELECT * FROM vocab_es_01_df
+    """
+)
+
+# us_01 (Edgin) is derived from the item-level contributor files by
+# scripts/build_us01_source.py, not read out of the by-child Wordbank export: that
+# export is age-truncated by Wordbank's own download page and cannot separate the
+# four all-blank administrations it scores as zeros. The table carries all four
+# developmental-status groups; the vocab_combined view selects Down syndrome, and
+# the comparison group stays available for a matched analysis.
+vocab_us_01_df = _loaded["vocab_us_01"]
+
+con.execute(
+    """
+    CREATE TABLE vocab_us_01 AS
+    SELECT * FROM vocab_us_01_df
     """
 )
 

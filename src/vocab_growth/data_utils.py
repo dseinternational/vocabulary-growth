@@ -9,7 +9,21 @@ import duckdb
 import pandas as pd
 
 import vocab_growth.environment as local_env
-from vocab_growth.models.definitions import Population
+
+# The widened language scopes are defined with the model definitions (data_utils
+# imports from definitions, not the other way round), but they belong to the loader's
+# vocabulary as far as callers are concerned. Re-exported explicitly: the ``X as X``
+# form marks a deliberate re-export, so it is not pruned as an unused import.
+from vocab_growth.models.definitions import (
+    ENGLISH_AND_ROMANCE_LANGUAGES as ENGLISH_AND_ROMANCE_LANGUAGES,
+)
+from vocab_growth.models.definitions import (
+    ENGLISH_LANGUAGES,
+    Population,
+)
+from vocab_growth.models.definitions import (
+    ROMANCE_LANGUAGES as ROMANCE_LANGUAGES,
+)
 
 VOCABULARY_DATA_PATH = os.path.join(local_env.DATA_DIR, "vocabulary.duckdb")
 
@@ -51,6 +65,29 @@ and a dataset whose preparation we have established to be defective — and whic
 the source team having confirmed the original files are no longer available,
 cannot be repaired at source — should not sit on both sides of that comparison.
 """
+
+TD_POOL_AGE_MONTHS = (8, 30)
+"""Age window, in months, of the typically-developing reference pool.
+
+The upper bound was already implicit — the loader defaulted to 30 — and the lower
+bound was implicit too, because every English CDI form in Wordbank starts at 8
+months. Widening the pool beyond English made the lower bound matter: Italian Words &
+Gestures is registered from **7** months, and five Italian administrations at 7 months
+sit below the floor of the typically-developing models' GP domain
+(``_TD_GP_DOMAIN_MONTHS = (8, 30)``), which ``build_utils`` rightly refuses.
+
+Bounding the pool is the right fix rather than widening that domain: the GP domain is
+shared with VG03/VG04, so widening it would make those models stale for the sake of
+five observations at the least informative end of the range — where a
+typically-developing child knows almost no words. Stating the window here keeps the
+pool inside the GP domain whichever languages are admitted, instead of leaving that
+invariant to depend on which forms happen to be in scope.
+
+``max_age_months`` still overrides the upper bound per model (VG13 uses 18). There is
+deliberately no per-model override for the lower bound: no model has wanted one, and
+a model that did would be asking to sit outside its own GP domain.
+"""
+
 
 SIGNED_ONLY_STUDIES = ("uk_01",)
 """Studies whose ``signed`` field excludes words that are also spoken.
@@ -136,20 +173,6 @@ months, production 31 and 22) sit at the 48th and 50th typically-developing
 percentile for comprehension and are retained, on the study owner's judgement that
 they are clinically unusual but should not be excluded. They are a sensitivity
 target, not a defect.
-"""
-
-
-ENGLISH_LANGUAGES = (
-    "English (American)",
-    "English (Australian)",
-    "English (British)",
-    "English (Irish)",
-)
-"""Wordbank ``language`` values treated as English — the current default scope.
-
-The ``wordbank_child`` table now holds the full multi-language Wordbank export.
-Queries restrict to these English variants by default; pass a wider ``languages``
-set (or ``None`` for all languages) to the loaders to widen the scope later.
 """
 
 
@@ -316,15 +339,40 @@ spoken vocabulary near zero at 12 months and about 10 words at 24, and in which 
 single most able child of 330 had not yet approached the counts in question — that
 child reached 668 words at 48 months.
 
+That age scope is load-bearing and deliberately **not** relaxed. Above it a
+near-ceiling count is ordinary rather than suspect, and removing the bound would mask
+19 apparently legitimate records across six studies — a uk_01 child at 115 months with
+658 of 690 words, an ie_01 child at 69 months with 741 of 810, an es_01 child at 54
+months with 637 of 651. Age and count together therefore cannot separate a legitimate
+able older child from the Edgin ceiling batch; that batch is identified on its
+provenance instead, by :data:`CEILING_ONLY_CHILD_STUDIES`, which runs first and leaves
+nothing above 30 months for this rule to find.
+
 **Near-ceiling saturation.** ``spoken >= IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION *
-survey_vocab_max``. In ``us_01`` this matches 23 administrations: 18 at exactly the
-680-item Words & Sentences ceiling, three just below (641, 656, 668), and the Words
-& Gestures record at 396. Thirteen of them form a **contiguous child-id block**
-(81207-81241) in which every record sits at exactly 680, no child has any other
-administration, and the next id present is 81322 — an 81-id gap. That is a
-preparation-batch signature, not thirteen exceptionally able children. For scale,
-no typically-developing child of 1,469 aged 16-19 months reaches the Words &
-Sentences ceiling, and their maximum is 643.
+survey_vocab_max``. Within the scoped window this now matches 8 ``us_01``
+administrations, down from 21, because :func:`exclude_ceiling_only_children` runs first
+and removes the batch children wholesale rather than masking their counts one at a
+time. What reaches this rule are ceiling counts from children who *do* have other,
+non-ceiling records. For scale, no typically-developing child of 1,469 aged 16-19
+months reaches the Words & Sentences ceiling, and their maximum is 643.
+
+The batch signature that first identified these is recorded in
+``notes/202607261245-edgin-duplicated-outcome-records.md`` §13: thirteen records in a
+contiguous Wordbank ``child_id`` block, every one at exactly 680, no child with any
+other administration, and an 81-id gap to the next id present. Those ids are no
+longer this repository's identifiers — ``us_01`` now keys on the study's own subject
+id (see :data:`CEILING_ONLY_CHILD_STUDIES` and ``scripts/build_us01_source.py``), because
+Wordbank issued a **separate child_id per form**, so the 119 apparent children were
+53 Words & Gestures records plus 66 Words & Sentences records with no child linked
+across the two. They are 71 children, 46 of whom took both forms. The note's
+reasoning stands; only the identifiers it cites are historical.
+
+**Where the ceiling records are concentrated.** Every Words & Gestures record at or
+near the 396-item ceiling — 25 of them, including all six of the oldest at 61, 62,
+63, 73, 84 and 173 months — sits *outside* the form's age window, as do all 62 Words
+& Sentences records above 30 months, of which 61 are at exactly 680. Those are held
+back by :func:`exclude_ceiling_only_children` before this rule is reached, which is
+why the near-ceiling count here is lower than the whole cohort's would suggest.
 
 **Longitudinal collapse.** A count of at least ``COLLAPSE_MIN_VALUE`` that exceeds
 the same child's later count by a factor of ``COLLAPSE_FACTOR`` or more. Vocabulary
@@ -336,8 +384,11 @@ and two such records outside ``us_01`` (a uk_01 record at 76 months, an ie_02
 record at 45) are deliberately left for separate investigation rather than masked
 by a rule whose justification is developmental.
 
-Within the scoped window the two signatures together match 30 ``us_01``
-administrations and nothing in any other study. Not caught, and retained: a Words &
+Within the scoped window the two signatures together mask 11 ``us_01`` spoken counts
+and nothing in any other study. That is fewer than the 30 masked before the source
+change, and the reason is not that less is caught but that
+:func:`exclude_ceiling_only_children` removes the ceiling batch as whole children
+first, so those counts never reach this rule. Not caught, and retained: a Words &
 Sentences record of 406 words at 23 months with no later administration to
 contradict it. It is extreme against the external benchmark but has no positive
 defect signature, so it is a sensitivity target rather than an exclusion — the same
@@ -509,6 +560,178 @@ def exclude_us01_spoken_ceiling_rows(
     return df.loc[~at_ws_ceiling].reset_index(drop=True), int(at_ws_ceiling.sum())
 
 
+FORM_AGE_FLOORS: dict[str, dict[int, int]] = {
+    "us_01": {396: 8, 680: 16},
+}
+"""Lowest age, in months, at which each source form may be administered.
+
+Keyed by study and form ceiling. Wordbank registers an ``age_min``/``age_max`` per
+instrument -- English (American) Words & Gestures 8-18 months, Words & Sentences 16-30
+-- and its by-child download page silently drops every administration outside that
+window. ``scripts/build_us01_source.py`` reads the item-level contributor files
+instead, so ``us_01`` now carries the administrations the export never showed.
+
+**Only the floor is enforced.** Administrations *above* a form's window are admitted:
+for a Down syndrome cohort, giving an early-vocabulary form to a chronologically older
+child is developmentally appropriate rather than an error, and the age window governs
+whether Wordbank's *percentile norms* apply -- which this project does not use. Every
+model scores raw counts against the 810-item reference with a per-form ceiling guard,
+and a raw count is a raw count at any age.
+
+Excluding them would also have been the more biased choice, not the safer one. A child
+still on Words & Gestures at 25 months is plausibly lower-ability than one who had
+moved to Words & Sentences, so dropping the whole out-of-window block removes
+observations non-randomly with respect to ability. Concretely, ``us_01`` contributes 58
+administrations between 19 and 27 months and every one is Words & Sentences, whose
+comprehension is a production proxy discarded by :data:`WORDBANK_BIVARIATE_FORMS` --
+so before these rows were admitted the study contributed **no comprehension
+observations at all** in that band. The 50 Words & Gestures administrations admitted
+there are its only ones, and all 47 contributing children are already in the pool, so
+they are repeat visits carrying within-child information rather than new children.
+
+The floor is enforced because it is a different case. 16 ``us_01`` administrations sit
+below their form's floor, at 5-7 months, and three of them are physically impossible:
+236, 364 and 368 words *spoken*, which no 6-month-old in any population produces. Two
+more of the same children show comprehension collapsing from 247-371 words at 6 months
+to 5-19 by 11-12 months. The block is unreliable, most likely mis-keyed ages, and the
+remaining rows in it are near-zero counts that carry almost no information anyway.
+
+The genuinely defective out-of-window administrations are handled on their own
+evidence, not by age: see :data:`CEILING_ONLY_CHILD_STUDIES`.
+"""
+
+
+CEILING_ONLY_CHILD_STUDIES = ("us_01",)
+"""Studies in which a child recorded only at the form ceiling is a preparation artefact.
+
+``notes/202607261245-edgin-duplicated-outcome-records.md`` §13 identified a batch
+signature in the Edgin subset: a run of records at exactly the form ceiling in which no
+affected child has any other administration. With the full source now ingested that
+signature resolves 64 children and 98 administrations -- 23 Words & Gestures at 39-173
+months, all at exactly 396 spoken; 62 Words & Sentences at 31-88 months, 61 at exactly
+680; and 13 Words & Sentences at 24-30 months whose counts every other rule already
+masks, so removing them changes no estimate.
+
+**Why a provenance criterion rather than an age one.** A near-ceiling count is a defect
+signature only in infancy, where the Berglund benchmark rules it out. At older ages it
+is ordinary: an eight-year-old with Down syndrome knowing 658 of 690 words is expected.
+Removing the age scope from :data:`IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS` would
+therefore mask 19 apparently legitimate records across six other studies (uk_01 at 115
+months with 658 of 690, ie_01 at 69 with 741 of 810, es_01 at 54 with 637 of 651, and
+so on). Age and count together cannot separate the Edgin batch from those. What does
+separate them is that **the batch children have no non-ceiling record of their own** --
+a fact about how the data were prepared, not about the values, so it is not selection
+on the outcome.
+
+**Why it is study-scoped where the duplicated-outcome rule deliberately is not.** That
+rule's evidence is developmental and so applies to any study. This one's evidence is a
+specific, documented failure of one dataset's preparation, whose source team has
+confirmed the original files no longer exist. Applying it elsewhere would assert a
+defect for which there is no evidence.
+
+**What it costs, stated plainly.** The rule is not free: 23 of the removed
+administrations carry a live comprehension value, all at exactly 396 on the 396-item
+Words & Gestures form between 39 and 173 months. A child recorded as understanding every
+word *and* saying every word at 173 months is the artefact rather than a measurement, so
+they go with the rest of their record — but the 23 are a real loss, not bookkeeping.
+
+Because the criterion is applied to raw source counts before any masking, it also removes
+14 children who were previously in the pool as *phantoms*: every one of their counts was
+already masked by another rule, so they contributed a subject random effect informed only
+by its prior. Of the 71 children the previous ``us_01`` pool reported, 57 had at least one
+live observation; the figure after this rule is 58.
+"""
+
+
+def exclude_below_form_floor(
+    df: pd.DataFrame,
+    *,
+    include_below_floor: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Drop administrations given below their form's lowest registered age.
+
+    Applies only to the studies in :data:`FORM_AGE_FLOORS`. Rows whose study is not
+    listed, or whose ``survey_vocab_max`` does not identify a known form, are kept --
+    the rule never guesses a floor it does not have. Administrations *above* a form's
+    window are deliberately untouched; read :data:`FORM_AGE_FLOORS` for why.
+
+    Returns the filtered frame and the number of rows dropped per study.
+    """
+    required = {"study", "age", "survey_vocab_max"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Form-floor exclusion requires columns: " + ", ".join(sorted(missing))
+        )
+
+    if include_below_floor:
+        return df.reset_index(drop=True), {}
+
+    age = pd.to_numeric(df["age"], errors="coerce")
+    ceiling = pd.to_numeric(df["survey_vocab_max"], errors="coerce")
+    drop = pd.Series(False, index=df.index)
+
+    for study, floors in FORM_AGE_FLOORS.items():
+        in_study = df["study"].eq(study)
+        for form_ceiling, age_min in floors.items():
+            drop |= in_study & ceiling.eq(form_ceiling) & age.notna() & (age < age_min)
+
+    dropped = {
+        str(study): int(count)
+        for study, count in df.loc[drop, "study"].value_counts().items()
+    }
+    return df.loc[~drop].reset_index(drop=True), dropped
+
+
+def exclude_ceiling_only_children(
+    df: pd.DataFrame,
+    *,
+    include_ceiling_only: bool = False,
+    subject_col: str = "subject_id",
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Drop every administration of a child recorded only at the form ceiling.
+
+    Scoped to :data:`CEILING_ONLY_CHILD_STUDIES`. A child with at least one production
+    count below :data:`IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION` of its form's ceiling is
+    kept in full -- the criterion identifies children whose *entire* record is
+    ceiling-saturated, which is the documented batch signature, not individual extreme
+    counts. Applied to raw source counts before any masking, so it does not depend on
+    the order the other rules run in.
+
+    Returns the filtered frame and the number of rows dropped per study.
+    """
+    required = {"study", "spoken", "survey_vocab_max", subject_col}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Ceiling-only exclusion requires columns: " + ", ".join(sorted(missing))
+        )
+
+    if include_ceiling_only:
+        return df.reset_index(drop=True), {}
+
+    spoken = pd.to_numeric(df["spoken"], errors="coerce")
+    ceiling = pd.to_numeric(df["survey_vocab_max"], errors="coerce")
+    at_ceiling = (
+        spoken.notna()
+        & ceiling.notna()
+        & (spoken >= IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION * ceiling)
+    )
+
+    in_scope = df["study"].isin(CEILING_ONLY_CHILD_STUDIES)
+    # A child is identified by study and subject, so a shared subject label in two
+    # studies cannot merge them.
+    key = df["study"].astype(str) + "::" + df[subject_col].astype(str)
+    all_at_ceiling = at_ceiling.groupby(key).transform("all")
+
+    drop = in_scope & all_at_ceiling
+    dropped = {
+        str(study): int(count)
+        for study, count in df.loc[drop, "study"].value_counts().items()
+    }
+    return df.loc[~drop].reset_index(drop=True), dropped
+
+
 def select_one_observation_per_subject(
     df: pd.DataFrame,
     *,
@@ -624,10 +847,11 @@ def vocab_combined_view_sql() -> str:
     which must stay in lockstep with the TD guard in :func:`load_data` — are
     importable and regression-tested (see ``tests/test_data_utils.py``).
 
-    The Wordbank export contains all languages; the DS (Edgin) subset is
-    restricted to English via :data:`ENGLISH_LANGUAGES`.
+    The DS (Edgin) subset comes from ``vocab_us_01``, which is derived from the
+    English (American) item-level contributor files and so is English by
+    construction — it no longer needs the :data:`ENGLISH_LANGUAGES` filter the
+    ``wordbank_child`` export required. That constant still scopes the TD loader.
     """
-    english_sql_list = _sql_string_list(ENGLISH_LANGUAGES)
     bivariate_forms_sql_list = _sql_string_list(WORDBANK_BIVARIATE_FORMS)
     return f"""
     CREATE VIEW vocab_combined AS
@@ -703,33 +927,52 @@ def vocab_combined_view_sql() -> str:
            810                                                     as survey_vocab_max
     FROM vocab_ie_01 as vie
     UNION ALL
-    -- us_01 (Edgin): the English Down syndrome subset of the Wordbank export.
+    -- us_01 (Edgin): the English Down syndrome subset of the Edgin cohort.
+    --
+    -- Read from ``vocab_us_01`` (derived by ``scripts/build_us01_source.py`` from
+    -- the item-level contributor files) rather than from the ``wordbank_child``
+    -- by-child export, for two reasons the export cannot address:
+    --
+    --   * The export is age-truncated. Wordbank's download page calls
+    --     ``get_administration_data()`` without ``filter_age = FALSE``, so every
+    --     administration outside its instrument's registered age window is dropped
+    --     before the page's age slider is even built. That cut the Edgin Down
+    --     syndrome subset from 345 administrations to 194.
+    --   * Four source administrations have every word item blank, which Wordbank
+    --     scores as zero. Two are Down syndrome rows inside the window, and at 12
+    --     months the export holds two ``(0, 0)`` rows of which only one is the empty
+    --     form — so they are separable only at item level. They are excluded when
+    --     the source CSV is built.
+    --
+    -- Administrations outside the form's registered age window are carried in the
+    -- source. Those *above* the window are admitted -- for a Down syndrome cohort an
+    -- early-vocabulary form given to an older child is developmentally appropriate,
+    -- and they are this study's only comprehension observations between 19 and 27
+    -- months. Those below its floor are dropped (FORM_AGE_FLOORS), as are children
+    -- recorded only at the form ceiling (CEILING_ONLY_CHILD_STUDIES). Both rules read
+    -- ``survey_vocab_max``, so the view's column list is untouched. See
+    -- notes/202608031500-edgin-out-of-window-administrations.md.
+    --
     -- Wordbank's CDI: Words & Sentences (WS) form records comprehension as a
     -- production proxy (comprehension == production by data convention), so
     -- understood is taken only from the genuinely bivariate forms — the same
     -- guard load_data applies on the TD side. WS rows still contribute
     -- production (spoken/produced). See
     -- notes/202607061200-us01-edgin-ws-comprehension-issue.md.
-    SELECT 'us_01'                          as study,
-           concat('id_', hex(hash(child_id))) as subject_id,
-           sex,
-           age,
+    SELECT 'us_01'                                     as study,
+           concat('id_', hex(hash(vus01.subject_id)))   as subject_id,
+           vus01.sex,
+           vus01.age,
            CASE
-               WHEN form IN ({bivariate_forms_sql_list}) THEN comprehension
+               WHEN vus01.form IN ({bivariate_forms_sql_list}) THEN vus01.comprehension
                ELSE NULL
-           END                                as understood,
-           production                         as spoken,
-           null                               as signed,
-           production                         as produced,
-           CASE form
-               WHEN 'WG' THEN 396
-               WHEN 'WS' THEN 680
-               ELSE NULL
-               END                            as survey_vocab_max
-    FROM wordbank_child
-    WHERE dataset_name = 'Edgin'
-      AND language IN ({english_sql_list})
-      AND lower(health_conditions) = 'down syndrome'
+           END                                          as understood,
+           vus01.production                             as spoken,
+           null                                         as signed,
+           vus01.production                             as produced,
+           vus01.survey_vocab_max
+    FROM vocab_us_01 as vus01
+    WHERE vus01.dev_status = 'down_syndrome'
     UNION ALL
     SELECT 'uk_03'                           as study,
            vuk2025.subject_id,
@@ -881,6 +1124,8 @@ def load_combined_data(
     include_incomplete_administrations=False,
     include_duplicated_outcomes=False,
     include_implausible_production=False,
+    include_below_form_floor=False,
+    include_ceiling_only_children=False,
 ):
     """
     Load the combined data from the DuckDB database.
@@ -904,6 +1149,15 @@ def load_combined_data(
         include_implausible_production (bool): Reintroduce production counts matching
             the near-ceiling or longitudinal-collapse signature, for sensitivity
             analysis. Defaults to False.
+        include_below_form_floor (bool): Reintroduce administrations given below their
+            form's lowest registered age, for sensitivity analysis. Defaults to False.
+            Read :data:`FORM_AGE_FLOORS` first — three of the 16 rows this puts back
+            report 236 to 368 words *spoken* at 6 months.
+        include_ceiling_only_children (bool): Reintroduce children whose every
+            administration sits at their form's ceiling, for sensitivity analysis.
+            Defaults to False. Read :data:`CEILING_ONLY_CHILD_STUDIES` first — this puts
+            back 64 children and 98 administrations that carry a documented
+            preparation-batch signature.
 
     Returns:
     --------
@@ -929,7 +1183,18 @@ def load_combined_data(
             [age_limit],
         ).df()
 
-    # De-duplicate first, so a repeated row cannot affect the within-child
+    # Both source-admissibility rules run before de-duplication and before any rule
+    # that compares a child's records against each other. A ceiling-saturated row would
+    # otherwise become the later value the longitudinal-collapse signature is measured
+    # against, and could mask a valid count as a "collapse" that is an artefact of the
+    # unusable row being present. exclude_ceiling_only_children must also see raw
+    # counts, before the near-ceiling rule masks any of them, or its child-level test
+    # would depend on the order the rules run in.
+    df, _ = exclude_ceiling_only_children(
+        df, include_ceiling_only=include_ceiling_only_children
+    )
+    df, _ = exclude_below_form_floor(df, include_below_floor=include_below_form_floor)
+    # De-duplicate next, so a repeated row cannot affect the within-child
     # comparisons the later rules make.
     df, _ = drop_duplicate_administrations(df)
     df, _ = mask_incomplete_administrations(
@@ -1022,6 +1287,8 @@ def load_data(
     include_incomplete_administrations: bool = False,
     include_duplicated_outcomes: bool = False,
     include_implausible_production: bool = False,
+    include_below_form_floor: bool = False,
+    include_ceiling_only_children: bool = False,
 ) -> pd.DataFrame:
     """
     Load vocabulary data for the specified population.
@@ -1050,9 +1317,9 @@ def load_data(
         :data:`ENGLISH_LANGUAGES`. Pass a wider tuple to broaden the scope, or
         ``None`` to include all languages. Ignored for DS (the DS subset is
         fixed to English when the database is built).
-    include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production : bool
-        Reinstate records that :func:`load_combined_data` masks by default, for
-        sensitivity analysis. **DS only** — each names a specific documented
+    include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production, include_below_form_floor, include_ceiling_only_children : bool
+        Reinstate records that :func:`load_combined_data` masks or drops by default,
+        for sensitivity analysis. **DS only** — each names a specific documented
         defect class in the DS pool, so passing one for the TD population is a
         caller error rather than a silent no-op.
 
@@ -1065,6 +1332,8 @@ def load_data(
         "include_incomplete_administrations": include_incomplete_administrations,
         "include_duplicated_outcomes": include_duplicated_outcomes,
         "include_implausible_production": include_implausible_production,
+        "include_below_form_floor": include_below_form_floor,
+        "include_ceiling_only_children": include_ceiling_only_children,
     }
     if population == Population.DOWN_SYNDROME:
         df = load_combined_data(max_age_months=max_age_months, **reinstatements)
@@ -1089,9 +1358,10 @@ def load_data(
     if needs_spoken and not needs_understood:
         td_forms.extend(WORDBANK_SPOKEN_ONLY_FORMS)
 
-    age_upper = max_age_months if max_age_months is not None else 30
+    age_lower, default_upper = TD_POOL_AGE_MONTHS
+    age_upper = max_age_months if max_age_months is not None else default_upper
 
-    params: list = [td_forms, age_upper]
+    params: list = [td_forms, age_upper, age_lower]
     language_clause = ""
     if languages is not None:
         params.append(list(languages))
@@ -1117,6 +1387,7 @@ def load_data(
             FROM wordbank_child
             WHERE typically_developing = true
                 AND age <= $2
+                AND age >= $3
                 AND health_conditions IS NULL
                 AND dataset_name NOT IN ({_sql_string_list(TD_POOL_EXCLUDED_DATASETS)})
                 AND form IN $1
