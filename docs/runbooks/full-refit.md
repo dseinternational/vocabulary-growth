@@ -1,7 +1,7 @@
 # Runbook: full reporting-config refit of all models
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section by Claude Code/Opus 5).
 
 How to refit the whole `VG01`–`VG16` family at reporting quality (`rep`) on a
 large VM, render every report, and produce comparisons — with the pitfalls that a
@@ -20,7 +20,7 @@ naive run hits. Distilled from the 2026-07-12 run
 
 ## 0. Prerequisites
 
-- Conda env `dse-vocab-growth` active; `dse-check-env environment.yml` clean.
+- Conda env `dse-vocab-growth` active; `dse-check-env environment.yml` clean. Activation matters for **rendering**, not only fitting — read [Rendering without an activated environment](#rendering-without-an-activated-environment) first if you drive the scripts by absolute interpreter path instead.
 - **`dse-research-utils >= v0.6.0`** — earlier versions' convergence gate rounds
   R-hat/ESS to 2 significant figures and can certify a fit that truly fails the
   ≤1.01 gate (research#65). A banner reading exactly `max R-hat = 1.0` is the
@@ -184,6 +184,12 @@ scratch `--output-dir`) makes quarto exit non-zero on the `code-links: [repo]`
 post-processor ("not a GitHub project") — the HTML is still produced and complete;
 it just lacks the repo source-link button. It's clean when output lives under the
 in-repo `output/`.
+
+### Rendering without an activated environment
+
+Quarto resolves the Jupyter kernel for a report's python cells from `PATH`, independently of the interpreter running the fit. Driving the scripts by absolute interpreter path (`~/miniconda3/envs/dse-vocab-growth/bin/python scripts/fit_model.py …`) without also putting that `bin/` on `PATH` therefore renders against whichever `python` `PATH` finds — on macOS the system framework python, which has no `h5netcdf` and cannot open `trace.nc`. The tell-tale is a fit that samples, gates, and promotes normally, followed by `ModuleNotFoundError: No module named 'h5netcdf'` from the render (2026-08-03 `test`-config refit: fifteen clean fits, fifteen failed renders, all recovered with `--render-only`).
+
+`fit_model.py` pins `QUARTO_PYTHON` to its own `sys.executable`, so per-model reports are immune. The two `quarto render` calls above are bare shell invocations and are not: either activate the env, or `export QUARTO_PYTHON=/Users/…/envs/dse-vocab-growth/bin/python` before rendering the books. `run_replication.sh` activates the env itself and needs neither.
 
 ## 4. Completion checklist
 

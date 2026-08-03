@@ -67,3 +67,27 @@ def test_batch_render_continues_after_one_model_fails(monkeypatch):
     assert calls == ["/first", "/bad", "/last"]
     assert set(timings) == {"first", "bad", "last"}
     assert failures == {"bad": "RuntimeError: quarto failed"}
+
+
+def test_render_pins_quarto_python_to_the_fitting_interpreter(monkeypatch, tmp_path):
+    (tmp_path / "index.qmd").write_text("")
+    (tmp_path / "index.html").write_text("")
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(_MODULE.subprocess, "run", fake_run)
+    monkeypatch.setenv("QUARTO_PYTHON", "/usr/bin/python3")
+    monkeypatch.setenv("DSE_RENDER_ENV_SENTINEL", "inherited")
+
+    _MODULE._render_output(str(tmp_path))
+
+    assert captured["command"] == ["quarto", "render", str(tmp_path / "index.qmd")]
+    env = captured["env"]
+    # An inherited QUARTO_PYTHON is the failure mode, not an override to respect:
+    # the report must be rendered by the interpreter that produced the fit.
+    assert env["QUARTO_PYTHON"] == sys.executable
+    assert env["DSE_RENDER_ENV_SENTINEL"] == "inherited"
