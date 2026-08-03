@@ -14,6 +14,7 @@ dependencies:
   - matplotlib>=3.11.1
   - scikit-learn>=1.9.0
   - statsmodels>=0.14.6
+  - polars>=1.43.2 # canonical core (not used by this repo, but the core is a single lockstep spec)
   - pymc>=6.2.0 # pulls pytensor + a C toolchain from conda-forge; requires pytensor >=3.2.2,<3.3 -> numba <=0.66.0 -> numpy <2.5
   - nutpie>=0.16.11
   - numpyro>=0.21.0
@@ -41,7 +42,7 @@ dependencies:
       # notebook (ipython/ipywidgets/notebook/jupytext), io (orjson/tabulate).
       # This also pulls dse-research-utils' own runtime deps (azure-identity/
       # -storage-blob, rich, psutil, pyyaml, …) — no need to list them here.
-      - dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.9.1#subdirectory=src/python
+      - dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.9.2#subdirectory=src/python
       - -e ./
       # Local-dev override — to develop against a sibling checkout of research,
       # comment the git line above and uncomment this instead:
