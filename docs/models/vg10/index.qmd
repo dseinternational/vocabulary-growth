@@ -16,7 +16,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; `q`-anchor prior descriptions corrected by Claude Code/Opus 4.8).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; `q`-anchor prior descriptions corrected by Claude Code/Opus 4.8; dispersion prior descriptions by Claude Code/Opus 5).
 :::
 
 ```{python}
@@ -137,19 +137,23 @@ The understood priors match VG09. The production-ratio (`q`) anchors are the sha
 
 ### Dispersion / overdispersion -- understood
 
+Both dispersion blocks use the two-anchor form, with priors stated as `kappa` at 24 and 48 months rather than as an intercept and a slope. The medians are conditional estimates: this model carries study and child random intercepts, so its `kappa` describes what is left once a child's own level is known, not the total spread between children at an age.
+
+The Down syndrome joint frame is the thinnest the calibration covers — 671 comprehension rows over 8-115 months, and there is no larger pool to draw on, since every Down syndrome model loads the same unfiltered 1,218 rows. On it the estimator recovers a known `kappa` with a one-directional downward bias that grows with the level, so its estimates are lower bounds; the medians here are each estimate divided by the bias measured at it, and `sigma` is 1.0 on all four anchors, wider than anywhere else in the family. What is not in doubt is that the previous prior was wrong: it forced dispersion to fall with age via `b_kappa_mag >= 0`, and this model's posterior sat at the far edge of that constraint. See `docs/models/PRIORS.md`.
+
 ![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
-![`a_kappa_u_dist`](a_kappa_u_dist.png){#fig-a-kappa-u .lightbox fig-align="left"}
+![`kappa_excess_young_u_dist` (24 months)](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
 
-![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.png){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+![`kappa_excess_old_u_dist` (48 months)](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
 
 ### Dispersion / overdispersion -- spoken
 
 ![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
 
-![`a_kappa_s_dist`](a_kappa_s_dist.png){#fig-a-kappa-s .lightbox fig-align="left"}
+![`kappa_excess_young_s_dist` (24 months)](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
 
-![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+![`kappa_excess_old_s_dist` (48 months)](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
 

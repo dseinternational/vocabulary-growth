@@ -61,6 +61,34 @@ def test_replace_kappa_overrides_only_named_fields():
     assert new is not kp
 
 
+def test_replace_kappa_checks_fields_against_the_form_in_use():
+    """A variant written for one parameterisation must not survive a migration.
+
+    VG15 carries both forms — anchored on understood, legacy on the signed ratio
+    — so it exercises the dispatch in one object. Silently accepting a legacy
+    field name on an anchored block would leave a registered sensitivity check
+    quietly testing nothing.
+    """
+    with pytest.raises(ValueError, match="two-anchor form"):
+        replace_kappa(VG15.kappa_u, a_kappa_mu=0.0)
+    with pytest.raises(ValueError, match="legacy form"):
+        replace_kappa(VG15.kappa_sign, excess_young_mu=0.0)
+
+    # and each accepts its own
+    assert replace_kappa(VG15.kappa_u, excess_young_mu=1.0).excess_young_mu == 1.0
+    assert replace_kappa(VG15.kappa_sign, a_kappa_mu=1.0).a_kappa_mu == 1.0
+
+
+def test_every_registered_variant_builds():
+    """The registry is only useful if every entry in it can be materialised.
+
+    Nothing else covers this: the variants are data, so a stale override survives
+    import and lint and only fails when someone tries to fit it.
+    """
+    for key in VARIANTS:
+        build_variant(*key)
+
+
 def test_registry_counts_and_models():
     # 27 §7 targets + 7 Target-8 young-age anchor variants (#146), two
     # signing-source variants and three repeated-measures sensitivities.

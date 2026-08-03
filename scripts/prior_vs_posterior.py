@@ -92,8 +92,12 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
         "p_slope_hi_u": pz.Beta(alpha=d.p_slope_hi_u_alpha, beta=d.p_slope_hi_u_beta),
         "p_slope_low_q": pz.Beta(alpha=d.p_slope_low_q_alpha, beta=d.p_slope_low_q_beta),
         "p_slope_hi_q": pz.Beta(alpha=d.p_slope_hi_q_alpha, beta=d.p_slope_hi_q_beta),
-        # Each outcome independently, since VG13 anchors both while the DS joint
-        # models anchor neither.
+        # Dispatched per outcome, because a definition may carry a different
+        # dispersion form on each: `validate_kappa_fields` checks the two blocks
+        # independently and permits a mixed pair. Every registered bivariate
+        # model happens to anchor both, so calling `kappa_priors` once would
+        # currently give the same answer — but it would be right by coincidence,
+        # and would start mis-plotting the moment one outcome migrated alone.
         **kappa_priors(d.kappa_u, "_u"),
         **kappa_priors(d.kappa_s, "_s"),
     }

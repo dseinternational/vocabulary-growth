@@ -196,8 +196,20 @@ class UnivariateModelDefinition:
     use_subject_re: bool = False
     """If True, add a subject-level random intercept to account for repeated
     assessments of the same child."""
-    tau_subject_sigma: float = 0.5
-    """HalfNormal scale for the subject intercept SD (logit scale)."""
+    tau_subject_sigma: float = 1.5
+    """HalfNormal scale for the subject intercept SD (logit scale).
+
+    Calibrated, 1.5 rather than the 0.5 every model carried until section 23 of
+    ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md``. The conditional
+    dispersion estimator reports `tau` alongside `kappa` for every pool, so this
+    scale has had a calibration available since section 19 and was simply never
+    read off it. It puts the subject scale between 0.74 and 1.15 across the
+    family, against a HalfNormal(0.5) whose median is 0.34 — which left all
+    fourteen subject-scale parameters in the registry at prior CDF 0.86 to 0.994.
+    HalfNormal(1.5) has median 1.01 and lands every one of them between 0.38 and
+    0.64 while keeping the mass near zero that lets a subject effect the data do
+    not support shrink away. The *study* scales stay at 0.5: their posteriors sit
+    at prior CDF 0.43-0.82 already and need nothing."""
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     is a clustering sensitivity analysis, not the default estimand."""
@@ -297,14 +309,20 @@ class BivariateModelDefinition:
     that add parameters without informing the estimates."""
 
     # -- Subject-level random intercepts --
+    #
+    # Both scales are 1.5, calibrated; see `UnivariateModelDefinition
+    # .tau_subject_sigma` for the evidence and why the study scales stay at 0.5.
     use_subject_re_u: bool = False
     """If True, add subject-level random intercepts on the understood trajectory."""
-    tau_subj_u_sigma: float = 0.5
-    """HalfNormal scale for subject intercept SD on understood (logit scale)."""
+    tau_subj_u_sigma: float = 1.5
+    """HalfNormal scale for subject intercept SD on understood (logit scale).
+    Estimated at 0.85 on the Down syndrome joint frame and 0.74-0.77 on the
+    typically-developing ones."""
     use_subject_re_q: bool = False
     """If True, add subject-level random intercepts on the production ratio q."""
-    tau_subj_q_sigma: float = 0.5
-    """HalfNormal scale for subject intercept SD on q (logit scale)."""
+    tau_subj_q_sigma: float = 1.5
+    """HalfNormal scale for subject intercept SD on q (logit scale). Estimated at
+    1.15 on the Down syndrome joint frame and 1.12 on VG13's."""
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     provides a cheap sensitivity analysis for repeated-measures dependence."""
@@ -593,19 +611,22 @@ class JointModelDefinition:
     tau_sign_sigma: float = 0.5
 
     # -- Subject-level random intercepts (VG08-VG10 pattern, issue #59) --
+    #
+    # All three scales are 1.5, calibrated for understood and q and widened to
+    # match for the signed ratio; see `UnivariateModelDefinition.tau_subject_sigma`.
     use_subject_re_u: bool = False
     """If True, add subject-level random intercepts on the understood trajectory."""
-    tau_subj_u_sigma: float = 0.5
+    tau_subj_u_sigma: float = 1.5
     """HalfNormal scale for the subject intercept SD on understood (logit scale)."""
     use_subject_re_q: bool = False
     """If True, add subject-level random intercepts on the speak ratio q."""
-    tau_subj_q_sigma: float = 0.5
+    tau_subj_q_sigma: float = 1.5
     """HalfNormal scale for the subject intercept SD on q (logit scale)."""
     use_subject_re_sign: bool = False
     """If True, add subject-level random intercepts on the sign ratio r. Signing is
     the sparsest modality, so this is gated: inspect tau_subj_sign and fall back to
     study-RE-only on r (set False) if it pins near its prior with poor diagnostics."""
-    tau_subj_sign_sigma: float = 0.5
+    tau_subj_sign_sigma: float = 1.5
     """HalfNormal scale for the subject intercept SD on r (logit scale)."""
 
     # -- GP anchor constraint (Option D: per-draw zero at reference age) --
@@ -860,13 +881,15 @@ _TD_UNDERSTOOD_KAPPA = KappaAnchorPriorParams(
 #    a linear mean agree to within a few percent on all four pools — so the gap
 #    against VG12's and VG13's posteriors (both near 16) is not an artefact of
 #    this estimator fitting the age curve more closely than an HSGP does.
-#  * **The DS joint frame fails the first test outright.** On its 671 rows a known
-#    kappa(24) = 317 comes back as 465, 842, 260 and 517 across two outcomes and
-#    two seeds, so no number read off it would mean anything. VG09, VG10 and VG16
-#    therefore keep their existing priors — which is a limitation, not a
-#    clearance: every pool that could be measured came out 3-10x its marginal
-#    value, and nothing rules that out for them. Nor is VG15 calibrated here,
-#    its cross-tabulated frame not being one the estimator reproduces.
+#  * **The DS joint frame recovers only a lower bound.** Section 22 replaces
+#    section 19's blanket exclusion with a measurement. Holding tau at its fitted
+#    value and varying only the truth, the estimator returns kappa *below* it by
+#    an amount that grows with the level — -2% at kappa(24) = 12, -4% at 41, -26%
+#    at 82, -36% at 163 — because a large kappa is near-binomial and the data stop
+#    distinguishing bigger from biggest. The estimates are therefore lower bounds
+#    rather than noise, and the block below uses them with the bias measured at
+#    the operating point divided back out and a deliberately wide sigma. tau
+#    itself recovers to within 6%, which is what section 23 calibrates from.
 #
 # sigma is 0.7 for the spoken and ratio anchors, as in the marginal blocks, and
 # 0.9 for the two understood ones. The wider setting is not caution for its own
@@ -932,6 +955,63 @@ _TD_YOUNG_Q_KAPPA_RE = KappaAnchorPriorParams(
     excess_young_sigma=0.7,
     excess_old_mu=math.log(27.0),
     excess_old_sigma=0.7,
+)
+
+# Down syndrome joint frame -- VG09, VG10, VG15, VG16, the four models carrying
+# subject random intercepts on *both* outcomes and therefore sharing one
+# calibration target. 671 understood and 645 nested-spoken rows over 8-115
+# months, 387 children at 1.73 administrations each.
+#
+# Section 19 left these on the legacy form because the frame failed its recovery
+# check. Section 22 re-runs that check properly and reaches a different verdict.
+# The failure was not scatter: the estimator is biased *downward* by a measured,
+# monotone amount, so its estimates are usable as lower bounds. Correcting each
+# by the bias measured at it -- kappa(24) 81.6 / 0.74 = 110 and kappa(48)
+# 20.3 / 0.62 = 33 for understood, 13.8 / 0.83 = 17 and 7.6 / 0.70 = 11 for the
+# ratio -- gives the medians below.
+#
+# What is *not* in doubt is that the legacy prior is wrong. All eight Down
+# syndrome joint models put b_kappa_mag_u at prior CDF 0.993-0.9999 against
+# HalfNormal(0.3), well mixed (ESS 313-3,028), and several put b_kappa_mag_s
+# there too with *negative* contraction -- the posterior wider than the prior,
+# the likelihood pushing outward against it. That is the pathology section 18
+# built the two-anchor form to remove, and removing it needs no view on the level
+# at all, since the anchored form has no slope prior to get wrong.
+#
+# sigma is 1.0 on all four anchors, wider than anywhere else in the family
+# (0.7 spoken, 0.8-0.9 understood). That is the honest width for this frame: the
+# bias correction is itself uncertain, the mean sweep moves the ratio's young
+# anchor by a factor of 1.8 across spline knot counts (the understood one is
+# stable to 0.4%), and 1.0 leaves the prior spanning 5-95% of 24-551 at the
+# understood young anchor, which covers the uncorrected estimate, the corrected
+# one and the current posterior alike. The floor keeps the shared weak default.
+
+_DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
+    # Totals 110 @ 24 mo and 33 @ 48 mo. The dev-config posteriors these replace
+    # sat at 66 and 20 under a prior centred near 13, so this moves the prior to
+    # where the data already were rather than moving the fit.
+    anchor_ages=(24.0, 48.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(106.0),
+    excess_young_sigma=1.0,
+    excess_old_mu=math.log(28.7),
+    excess_old_sigma=1.0,
+)
+
+_DS_JOINT_Q_KAPPA_RE = KappaAnchorPriorParams(
+    # The production ratio on the nested scale the engines use: spoken out of that
+    # child's own observed understood count, mean q. Totals 17 @ 24 mo and 11 @ 48.
+    # 469 of 1,114 spoken rows fall back to the marginal out-of-810 likelihood
+    # because the understood count is missing or violated, so this calibration
+    # covers the 58% on the nested scale and kappa_s governs both.
+    anchor_ages=(24.0, 48.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(12.6),
+    excess_young_sigma=1.0,
+    excess_old_mu=math.log(6.7),
+    excess_old_sigma=1.0,
 )
 
 VG01 = UnivariateModelDefinition(
@@ -1163,7 +1243,7 @@ VG08 = BivariateModelDefinition(
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
-    tau_subj_u_sigma=0.5,
+    tau_subj_u_sigma=1.5,
 )
 
 VG09 = BivariateModelDefinition(
@@ -1198,9 +1278,11 @@ VG09 = BivariateModelDefinition(
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
-    tau_subj_u_sigma=0.5,
+    tau_subj_u_sigma=1.5,
     use_subject_re_q=True,
-    tau_subj_q_sigma=0.5,
+    tau_subj_q_sigma=1.5,
+    kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_DS_JOINT_Q_KAPPA_RE,
 )
 
 VG10 = BivariateModelDefinition(
@@ -1235,13 +1317,15 @@ VG10 = BivariateModelDefinition(
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
-    tau_subj_u_sigma=0.5,
+    tau_subj_u_sigma=1.5,
     use_subject_re_q=True,
-    tau_subj_q_sigma=0.5,
+    tau_subj_q_sigma=1.5,
     # GP anchor constraint (Option D) — applied symmetrically to both trajectories
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,
     gp_anchor_age_months=54.0,
+    kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_DS_JOINT_Q_KAPPA_RE,
 )
 
 VG11 = UnivariateModelDefinition(
@@ -1273,7 +1357,7 @@ VG11 = UnivariateModelDefinition(
     # count while retaining >97% of observations.
     min_study_observations=200,
     use_subject_re=True,
-    tau_subject_sigma=0.5,
+    tau_subject_sigma=1.5,
     # Anchor the GP at the midpoint of slope_anchors (19 months) to remove the
     # GP–intercept ridge that arises when study REs are present.
     anchor_g_at_ref=True,
@@ -1314,7 +1398,7 @@ VG12 = UnivariateModelDefinition(
     # count while retaining >97% of observations.
     min_study_observations=200,
     use_subject_re=True,
-    tau_subject_sigma=0.5,
+    tau_subject_sigma=1.5,
     # Anchor the GP at the midpoint of slope_anchors (19 months).
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
@@ -1374,9 +1458,9 @@ VG13 = BivariateModelDefinition(
     # count while retaining >97% of observations.
     min_study_observations=200,
     use_subject_re_u=True,
-    tau_subj_u_sigma=0.5,
+    tau_subj_u_sigma=1.5,
     use_subject_re_q=True,
-    tau_subj_q_sigma=0.5,
+    tau_subj_q_sigma=1.5,
     # Anchor GPs at the midpoint of slope_anchors (13 months)
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,
@@ -1452,18 +1536,21 @@ VG15 = JointModelDefinition(
     # Subject random intercepts on all three trajectories. Signed data has more
     # repeated-subject structure than first feared (substantial repeats across
     # uk_01/02/04/05), so the sign-subject RE is strongly data-identified — its
-    # scale sits *well above* the HalfNormal(0.5) prior (dev posterior tau_subj_sign
-    # ~1.4, tight), reflecting large between-child variation in signing, and it
-    # improves out-of-sample fit. Kept at 0.5 (porting VG10); use_subject_re_sign
-    # gates a one-line fallback to study-RE-only if a future fit misbehaves. Note:
+    # scale sat *well above* the old HalfNormal(0.5) prior (posterior 1.082 at
+    # prior CDF 0.970), reflecting large between-child variation in signing, and it
+    # improves out-of-sample fit. That conflict is now resolved by the family-wide
+    # move to HalfNormal(1.5), which puts it at 0.53 — the signed ratio has no
+    # calibration of its own, so it inherits the scale rather than being fitted to
+    # one. use_subject_re_sign gates a one-line fallback to study-RE-only if a
+    # future fit misbehaves. Note:
     # the four-cell DM is fed population+study marginals only, so this RE does not
     # pull the headline association psi (see the engine comment + the #59 note).
     use_subject_re_u=True,
-    tau_subj_u_sigma=0.5,
+    tau_subj_u_sigma=1.5,
     use_subject_re_q=True,
-    tau_subj_q_sigma=0.5,
+    tau_subj_q_sigma=1.5,
     use_subject_re_sign=True,
-    tau_subj_sign_sigma=0.5,
+    tau_subj_sign_sigma=1.5,
     # Option D (ported from VG10): per-draw GP anchor at the reference age
     # (54 mo = midpoint of the (24, 84) anchors), applied to all three GPs to
     # remove the GP<->intercept redundancy that worsens once subject REs add
@@ -1472,6 +1559,12 @@ VG15 = JointModelDefinition(
     anchor_g_q_at_ref=True,
     anchor_g_sign_at_ref=True,
     gp_anchor_age_months=54.0,
+    # Understood and spoken share VG09's frame and specification, so they take
+    # the same two-anchor blocks. The signed ratio stays on the legacy form:
+    # nothing calibrates it, and its cross-tabulated cells are not a scale the
+    # conditional estimator reproduces.
+    kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_DS_JOINT_Q_KAPPA_RE,
 )
 
 # ============================================================
@@ -1510,9 +1603,9 @@ VG16 = BivariateModelDefinition(
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
-    tau_subj_u_sigma=0.5,
+    tau_subj_u_sigma=1.5,
     use_subject_re_q=True,
-    tau_subj_q_sigma=0.5,
+    tau_subj_q_sigma=1.5,
     use_cross_lag=True,
     # Headline uses the population-relative baseline: with 2-wave-dominated data the
     # pure within-child (own-intercept) baseline is biased by the short-T / Nickell
@@ -1542,6 +1635,8 @@ VG16 = BivariateModelDefinition(
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,
     gp_anchor_age_months=54.0,
+    kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_DS_JOINT_Q_KAPPA_RE,
 )
 
 MODEL_REGISTRY: dict[

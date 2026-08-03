@@ -31,10 +31,12 @@ from vocab_growth.models.definitions import (
     VG01,
     VG02,
     VG03,
+    VG08,
     VG09,
     VG10,
     VG11,
     VG13,
+    VG15,
     VG16,
     KappaAnchorPriorParams,
     KappaPriorParams,
@@ -389,12 +391,32 @@ def test_derived_rows_are_labelled_per_outcome():
     ) == []
 
 
-def test_vg13_anchors_both_outcomes_and_the_ds_joint_models_anchor_neither():
-    assert isinstance(VG13.kappa_u, KappaAnchorPriorParams)
-    assert isinstance(VG13.kappa_s, KappaAnchorPriorParams)
-    # The DS joint frame is too thin for a stable conditional estimate (see
-    # scripts/kappa_conditional_calibration.py --mean-sweep), so VG09/VG10/VG16
-    # deliberately keep the legacy priors.
-    for definition in (VG09, VG10, VG16):
-        assert isinstance(definition.kappa_u, KappaPriorParams), definition.model_id
-        assert isinstance(definition.kappa_s, KappaPriorParams), definition.model_id
+def test_every_joint_model_with_subject_effects_on_both_outcomes_is_anchored():
+    """The calibration target is the *specification*, not the model.
+
+    VG09, VG10, VG15 and VG16 carry subject intercepts on both understood and
+    `q` and share one frame, so one pair of blocks serves all four. VG13 is the
+    typically-developing counterpart. VG08 is the near miss the split has to get
+    right: it has a subject effect on understood but not on `q`, so the
+    conditional numbers are the wrong quantity for half of it and it stays whole
+    on the legacy form.
+    """
+    for definition in (VG13, VG09, VG10, VG15, VG16):
+        assert isinstance(definition.kappa_u, KappaAnchorPriorParams), definition.model_id
+        assert isinstance(definition.kappa_s, KappaAnchorPriorParams), definition.model_id
+
+    assert VG08.use_subject_re_u and not VG08.use_subject_re_q
+    assert isinstance(VG08.kappa_u, KappaPriorParams)
+    assert isinstance(VG08.kappa_s, KappaPriorParams)
+
+
+def test_vg15_anchors_speech_but_not_signing():
+    """The mixed case, which only VG15 exercises.
+
+    Its understood and spoken outcomes share the calibrated Down syndrome joint
+    frame; the signed ratio has no calibration at all, so the two forms coexist
+    in one model and the engine has to keep them apart.
+    """
+    assert isinstance(VG15.kappa_u, KappaAnchorPriorParams)
+    assert isinstance(VG15.kappa_s, KappaAnchorPriorParams)
+    assert isinstance(VG15.kappa_sign, KappaPriorParams)

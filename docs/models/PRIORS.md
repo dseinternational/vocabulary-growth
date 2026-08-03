@@ -4,7 +4,8 @@
 
 > [!NOTE]
 > Drafted by LLM-based AI tools (OpenAI Codex/GPT-5; "Evidence base" section and
-> prior–norm comparison by Claude Code/Opus 4.8).
+> prior–norm comparison by Claude Code/Opus 4.8; dispersion and random-effect
+> scale sections by Claude Code/Opus 5).
 
 > [!WARNING]
 > This is a working document for issue 89, last reviewed on 2026-07-01. It
@@ -312,7 +313,7 @@ a_kappa =  log kappa_excess_young - b_kappa * z_young
 
 Both sets of estimates come from `scripts/kappa_conditional_calibration.py`, which fits a saturated per-age mean alongside whichever effects the model carries — study effects and a quadrature-integrated subject effect for the random-effect models, neither for VG01-VG04. Each pool declares its own grouping and the estimator mirrors it. The `--recover` and `--mean-sweep` modes are what establish that a given pool can be calibrated at all; both must be run before adding one.
 
-`s = 0.9` on the two understood outcomes rather than 0.7 is not generic caution. Typically-developing understood `kappa` per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16 months, so the fitted rise is a two-parameter summary of a jagged profile and should not be stated more confidently than that.
+`s = 0.9` on the two understood outcomes rather than 0.7 is not generic caution. Typically-developing understood `kappa` per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16 months, so the fitted rise is a two-parameter summary of a jagged profile and should not be stated more confidently than that. What produces the jaggedness is now known — see "What a rising `kappa` on the understood outcomes means" below — and it is a further reason to keep these two anchors wide.
 
 Prior simulation on each model's own age grid:
 
@@ -330,35 +331,82 @@ Review notes:
 - The prior on `kappa` at any given age is **exactly invariant** to the pool's age standardisation: the interpolation weight is `(age - young) / (old - young)` in months, and the standardisation cancels. Resampling or a study filter cannot move it.
 - `kappa_min` is carried over from the legacy recalibration unchanged for the spoken and ratio outcomes. The anchored form leans on it harder — beyond the old anchor the floor alone sets the level — so its ~8% of prior mass below `kappa = 1` now shows at old ages. Tightening `kappa_min_sigma` is a candidate follow-up.
 - **The floor is not always a floor.** With `b_kappa > 0` the exponential term vanishes at young ages instead of old ones, so `kappa_min` becomes the _young_-age asymptote. That is why VG13's is 30 rather than 3: a third of its 8-18 month frame sits below the young anchor, and the 8-11 month cells estimate 23-32. VG12's conditional fit puts no mass on a floor at all (it goes to zero with an unbounded standard error, a rising curve never reaching one inside the frame), so it keeps the weak default and the anchors carry the level.
-- The sign of `b_kappa` is unconstrained, and this is what the comprehension models needed: their dispersion _rises_ with age, which `b_kappa_mag >= 0` cannot represent at any setting. For the spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls.
+- The sign of `b_kappa` is unconstrained, and this is what the comprehension models needed: their fitted `kappa` _rises_ with age, which `b_kappa_mag >= 0` cannot represent at any setting. For the spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls. On what the rise does and does not mean, see immediately below.
 - Dropping `kappa_min` entirely and using a pure log-linear `kappa` was tested and rejected: it costs 10 to 168 log-likelihood units against the floored form across the six pools.
-- **VG09, VG10 and VG16 stay on the legacy form deliberately.** Their shared Down syndrome joint frame — 671 rows spanning 12-46 months — is too thin to calibrate from: the conditional estimate moves by 80% depending on how flexible the mean model is, where the typically-developing pools move by 3%. VG15's cross-tabulated frame the estimator does not reproduce at all.
+- **The Down syndrome joint frame is calibrated as a lower bound, not a point estimate.** Its 671 comprehension rows are the whole Down syndrome comprehension dataset — every model in that population loads the same 1,218 unfiltered rows, so there is nothing to pool in — and no configuration of spline flexibility, age window or anchor pair recovers a known `kappa` to within 30%. But the failure is a one-directional, monotone downward bias rather than scatter: holding `tau` fixed and varying only the truth, `kappa`(24) recovers at −2% when the truth is 12, −4% at 41, −26% at 82 and −36% at 163, because a large `kappa` is near-binomial and the optimum slides down the flat ridge. VG09, VG10, VG15 and VG16 therefore take medians equal to each estimate divided by the bias measured at it, with `sigma = 1.0` — wider than anywhere else in the family. Their previous `HalfNormal(0.3)` slope prior was not defensible on any reading: all eight Down syndrome joint models put `b_kappa_mag_u` at prior CDF 0.993-0.9999, well mixed, and five of the eight have _negative_ contraction on the spoken slope — the posterior wider than the prior.
+- **VG05, VG07, VG08 and VG14 stay on the legacy form deliberately.** The calibration has to match the specification, and theirs differ: VG05 carries no random effects, VG07 only study ones, and VG08 a subject effect on understood but not on `q`. All three are steps in the VG05 → VG07 → VG08 → VG09 → VG10 lineage, which exists to isolate what each random effect does, so changing a prior partway along would confound it. VG14's frame is the signing subset.
+
+### What a rising `kappa` on the understood outcomes means
+
+VG12's and VG13's dispersion priors rise with age, and the two-anchor form exists partly so they can. That is a correct description of the models' `kappa` parameter and **not** a finding that comprehension becomes more variable as children get older. On the instrument's own scale it becomes less so.
+
+The cause is the 810-item reference scale interacting with a subject intercept whose scale is fixed in age. Comprehension is collected only on WG (396 items) and Oxford CDI (418), and those are the _easiest_ items, so as children work up a form the modelled proportion `y / 810` compresses: by 16-18 months the mean row sits at about half its form's extent. The apparent between-child spread on the logit scale therefore falls with age, a constant `tau_subject` cannot follow it, and `kappa(age)` — the only age-varying spread parameter in the likelihood — absorbs the residue. Where the observed spread crosses below `tau`, `kappa` runs away, which is what produces the 110.7 at 16 months in the per-cell profile above.
+
+Three measurements pin it down, all in section 21 of [`notes/202608020829-kappa-and-eta-q-prior-recalibration.md`](../../notes/202608020829-kappa-and-eta-q-prior-recalibration.md) and reproducible with `scripts/kappa_conditional_calibration.py --loading`:
+
+- Letting the subject loading vary with age costs one parameter and buys 111-237 log-likelihood units on the three affected pools, and reverses the sign of the fitted `kappa` trend on both understood outcomes.
+- `q` — the same children, the same design, a mean profile within 10% of understood's — shows **no** loading drift at all, worth 0.8 units. Its denominator is the child's own understood count, so the form's extent cancels.
+- Rescoring the identical rows out of each row's own form instead of 810 removes 84-96% of the drift.
+
+Two consequences. For the priors, none: the calibration must mirror the model's own structure, the registered models carry a constant `tau_subject`, and so a `kappa` prior fitted under that assumption is the right one for them. For reporting, `kappa` on the understood outcomes is a compound of observation-level dispersion and a subject scale the model holds fixed, and should not be quoted as a statement about children. The 810-item scale itself is not in question — it is the harmonisation this project deliberately adopts (see "Instrument scale" below) — only an untraced consequence of it.
 
 See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` for the calibration, the estimator correction behind it, and the forms that were rejected.
 
 ### Study and subject random-effect scale priors
 
 Study and subject random intercepts use non-centred Normal effects with
-HalfNormal scale priors. The common scale prior is:
+HalfNormal scale priors. The two levels take different scales:
 
 ```text
-tau ~ HalfNormal(0.5)
+study scales   tau_u, tau_q, tau_sign                      ~ HalfNormal(0.5)
+subject scales tau_subject, tau_subj_u, tau_subj_q, ...    ~ HalfNormal(1.5)
 ```
 
-On the logit scale, a one-standard-deviation shift has prior median about 0.34.
-As an odds multiplier, `exp(tau)` has prior median about 1.40 and a 95th
-percentile about 2.67.
+On the logit scale `HalfNormal(0.5)` has median 0.34 and `HalfNormal(1.5)` median
+1.01, with 5-95% of 0.09 to 2.94. As an odds multiplier, `exp(tau)` at the
+subject scale has prior median about 2.75.
+
+**The subject scales were `HalfNormal(0.5)` until the recalibration** and were the
+family's largest remaining prior-data conflict: all fourteen subject-scale
+parameters in the registry sat at prior CDF 0.86 to 0.994, none below. The
+conditional dispersion estimator
+(`scripts/kappa_conditional_calibration.py`) reports `tau` alongside `kappa` for
+every pool, because separating the two is what it exists to do, so a calibration
+had been available since the dispersion work and had simply not been read off
+it. It puts the subject scale at 0.74-0.77 on the typically-developing frames,
+0.85 on Down syndrome understood, and 1.12-1.15 on the two production ratios.
+`HalfNormal(1.5)` lands every one of those, and every current posterior, between
+prior CDF 0.38 and 0.64.
+
+Two details of that estimate are worth recording:
+
+- **It agrees with the posteriors to three significant figures** on all four
+  typically-developing parameters — 1.056 against 1.060 for VG11, 0.736 against
+  0.735 for VG12, 0.770 against 0.768 and 1.119 against 1.117 for VG13 — and to
+  within 3% on the five Down syndrome understood ones. A quadrature-integrated
+  maximum-likelihood GLMM and a Hamiltonian sampler with an HSGP mean reaching
+  the same number is independent corroboration of both.
+- The four that differ are all the Down syndrome ratio (estimate 1.147 against
+  posteriors 1.25-1.38). Its recovery check independently measures an 8% downward
+  bias on that pool, which accounts for VG15's gap exactly and about half of the
+  others'.
 
 Review notes:
 
-- This prior is regularising but not tiny. It allows meaningful study and child
-  differences.
-- Later DS models often estimate subject-level scales above this prior's centre,
-  especially for signing. That suggests real heterogeneity rather than purely
-  prior-driven variation, but the posterior-vs-prior comparison should be
-  documented in the technical report.
-- Subject random effects for sparse modalities remain a sensitivity target,
-  especially `tau_subj_sign` in VG15.
+- The family stays HalfNormal rather than moving to the LogNormal the `kappa`
+  anchors use. A scale prior with mass at zero lets a subject effect the data do
+  not support shrink away, and that is worth keeping even where the effect is
+  overwhelming. Widening the scale removes the conflict without giving it up.
+- **The study scales are unchanged and need no change**: their posteriors sit at
+  prior CDF 0.43 to 0.82 across every model carrying them. That the two levels
+  shared one default was the accident; only one level was mis-set. The estimator
+  fits study effects as fixed, so it offers no opinion on the study scale either.
+- `tau_subj_sign` (VG15) has no calibration of its own — nothing estimates a
+  signing subject scale — so it inherits the family setting. Its posterior at
+  1.082 was in the same tail as the rest and is now at prior CDF 0.53. Subject
+  random effects for sparse modalities remain a sensitivity target.
+- The `tau-wide` / `tau-narrow` sensitivity variants now bracket 1.5 for the
+  subject scales (3.0 and 0.75) and still bracket 0.5 for the study ones.
 
 ### VG15 association and four-cell concentration priors
 

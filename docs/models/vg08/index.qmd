@@ -16,7 +16,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; subject random-effect scale prior by Claude Code/Opus 5).
 :::
 
 ```{python}
@@ -100,7 +100,7 @@ For full details and discussion, please refer to the technical report.
 
 ## Priors
 
-The study and subject random-effect scale priors use HalfNormal(0.5) distributions on the logit scale. The subject-level understood prior is important because repeated observations can otherwise inflate residual dispersion and make within-child observations look independent.
+The study random-effect scale prior uses a HalfNormal(0.5) distribution on the logit scale and the subject one a HalfNormal(1.5), the latter calibrated (see `docs/models/PRIORS.md`). The subject-level understood prior is important because repeated observations can otherwise inflate residual dispersion and make within-child observations look independent.
 
 ### Understood trajectory
 

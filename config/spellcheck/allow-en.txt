@@ -141,3 +141,5 @@ parameterising
 BFGS
 GLMM
 uncalibrated
+rescore
+rescoring

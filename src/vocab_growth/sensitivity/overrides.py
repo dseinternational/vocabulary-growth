@@ -14,21 +14,36 @@ from __future__ import annotations
 
 import dataclasses
 
-from vocab_growth.models.definitions import KappaPriorParams
+from vocab_growth.models.definitions import (
+    KappaAnchorPriorParams,
+    KappaPriorParams,
+)
 
 
-def replace_kappa(kappa: KappaPriorParams, **overrides: float) -> KappaPriorParams:
-    """Return a NEW ``KappaPriorParams`` with the given fields overridden.
+def replace_kappa(
+    kappa: KappaPriorParams | KappaAnchorPriorParams, **overrides: float
+) -> KappaPriorParams | KappaAnchorPriorParams:
+    """Return a NEW kappa prior block with the given fields overridden.
 
     A fresh instance (rather than an in-place mutation) is required because
     ``dataclasses.replace`` on the parent definition copies the nested kappa
     objects by *reference*; an override must therefore supply a new object so the
     variant and the base do not share (and accidentally alias) one kappa prior.
+
+    Field names are checked against whichever form the block uses, so a variant
+    written for the legacy triple fails loudly on a migrated outcome instead of
+    silently doing nothing — which is how a stale sensitivity variant would
+    otherwise survive a migration.
     """
-    valid = {f.name for f in dataclasses.fields(KappaPriorParams)}
+    valid = {f.name for f in dataclasses.fields(type(kappa))}
     unknown = set(overrides) - valid
     if unknown:
-        raise ValueError(f"Unknown KappaPriorParams field(s): {sorted(unknown)}")
+        raise ValueError(
+            f"Unknown {type(kappa).__name__} field(s): {sorted(unknown)}. "
+            f"This block uses the "
+            f"{'two-anchor' if isinstance(kappa, KappaAnchorPriorParams) else 'legacy'}"
+            f" form, whose fields are {sorted(valid)}."
+        )
     return dataclasses.replace(kappa, **overrides)
 
 
