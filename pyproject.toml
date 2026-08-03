@@ -16,7 +16,7 @@ dependencies = [
   "arviz-stats>=1.2.0",
   "arviz>=1.2.0",
   "duckdb>=1.5.5",
-  "dse-research-utils>=0.9.0",
+  "dse-research-utils>=0.9.1",
   # jaxlib is conda-owned but only arrives transitively via jax; environment.yml
   # does not declare it (nothing here imports it directly — it is numpyro's
   # backend). Keep this floor at or below what the conda layer may solve to —
@@ -49,7 +49,7 @@ dev = [
 # dse-research-utils isn't published to PyPI — resolve it from the public git
 # tag. (The conda env in environment.yml installs it from the same tag in its
 # pip layer; this entry is only consumed by uv.)
-dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.9.0" }
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.9.1" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"
