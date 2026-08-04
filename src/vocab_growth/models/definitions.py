@@ -656,11 +656,14 @@ class JointModelDefinition:
     """Fixed HSGP age domain. ``None`` uses the observed age range; reporting
     query ages never determine the approximation domain."""
 
-    # -- Understood (U) slope priors (aligned with the recalibrated VG02 / VG05) --
-    p_slope_low_u_alpha: float = 1.0
-    p_slope_low_u_beta: float = 7.0
-    p_slope_hi_u_alpha: float = 2.0
-    p_slope_hi_u_beta: float = 1.5
+    # -- Understood (U) slope priors (matching VG05 and the rest of the DS joint
+    # family, including the 2026-08-04 anchor recalibration: see VG05 and
+    # notes/202608041216-ds-understood-trajectory-prior.md). VG15 is the only
+    # model built from this dataclass, so these defaults are its anchor priors. --
+    p_slope_low_u_alpha: float = 1.5
+    p_slope_low_u_beta: float = 8.0
+    p_slope_hi_u_alpha: float = 3.0
+    p_slope_hi_u_beta: float = 1.3
 
     # -- Speak-given-understood (q) slope priors (bivariate defaults) --
     p_slope_low_q_alpha: float = 1.0
@@ -1270,14 +1273,29 @@ VG05 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
-    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
-    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
-    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=7.0,
-    p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=1.5,
+    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
+    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
+    # ~100 words below the fitted one across 24-60 months and put 80% of prior
+    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
+    # 108 words, against a frame median of 132 over the densest band in the pool
+    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
+    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
+    # between the four administrations observed at 78-95 mo (median 554) and
+    # those same fitted anchors (658-663); the tails stay wide because the
+    # evidence there is thin. Both are scale calibration on the project's own
+    # frame, not an independent norm — there is none for DS comprehension.
+    #
+    # This corrects the *level* only. The prior is still logit-linear in age
+    # between the anchors while the trajectory is strongly concave on that scale,
+    # so lifting the line to fit 24-60 raises its backward extrapolation too and
+    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
+    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
+    # log-age mean, which is a graph change and therefore a new variant; see
+    # notes/202608041216-ds-understood-trajectory-prior.md.
+    p_slope_low_u_alpha=1.5,
+    p_slope_low_u_beta=8.0,
+    p_slope_hi_u_alpha=3.0,
+    p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
     # q anchors (weakly-informative, non-double-dipping): broadened from the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
@@ -1301,14 +1319,29 @@ VG07 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
-    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
-    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
-    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=7.0,
-    p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=1.5,
+    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
+    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
+    # ~100 words below the fitted one across 24-60 months and put 80% of prior
+    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
+    # 108 words, against a frame median of 132 over the densest band in the pool
+    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
+    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
+    # between the four administrations observed at 78-95 mo (median 554) and
+    # those same fitted anchors (658-663); the tails stay wide because the
+    # evidence there is thin. Both are scale calibration on the project's own
+    # frame, not an independent norm — there is none for DS comprehension.
+    #
+    # This corrects the *level* only. The prior is still logit-linear in age
+    # between the anchors while the trajectory is strongly concave on that scale,
+    # so lifting the line to fit 24-60 raises its backward extrapolation too and
+    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
+    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
+    # log-age mean, which is a graph change and therefore a new variant; see
+    # notes/202608041216-ds-understood-trajectory-prior.md.
+    p_slope_low_u_alpha=1.5,
+    p_slope_low_u_beta=8.0,
+    p_slope_hi_u_alpha=3.0,
+    p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
     # q anchors (weakly-informative, non-double-dipping): broadened from the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
@@ -1334,14 +1367,29 @@ VG08 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
-    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
-    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
-    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=7.0,
-    p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=1.5,
+    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
+    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
+    # ~100 words below the fitted one across 24-60 months and put 80% of prior
+    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
+    # 108 words, against a frame median of 132 over the densest band in the pool
+    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
+    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
+    # between the four administrations observed at 78-95 mo (median 554) and
+    # those same fitted anchors (658-663); the tails stay wide because the
+    # evidence there is thin. Both are scale calibration on the project's own
+    # frame, not an independent norm — there is none for DS comprehension.
+    #
+    # This corrects the *level* only. The prior is still logit-linear in age
+    # between the anchors while the trajectory is strongly concave on that scale,
+    # so lifting the line to fit 24-60 raises its backward extrapolation too and
+    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
+    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
+    # log-age mean, which is a graph change and therefore a new variant; see
+    # notes/202608041216-ds-understood-trajectory-prior.md.
+    p_slope_low_u_alpha=1.5,
+    p_slope_low_u_beta=8.0,
+    p_slope_hi_u_alpha=3.0,
+    p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
     # q anchors (weakly-informative, non-double-dipping): broadened from the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
@@ -1369,14 +1417,29 @@ VG09 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
-    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
-    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
-    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=7.0,
-    p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=1.5,
+    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
+    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
+    # ~100 words below the fitted one across 24-60 months and put 80% of prior
+    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
+    # 108 words, against a frame median of 132 over the densest band in the pool
+    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
+    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
+    # between the four administrations observed at 78-95 mo (median 554) and
+    # those same fitted anchors (658-663); the tails stay wide because the
+    # evidence there is thin. Both are scale calibration on the project's own
+    # frame, not an independent norm — there is none for DS comprehension.
+    #
+    # This corrects the *level* only. The prior is still logit-linear in age
+    # between the anchors while the trajectory is strongly concave on that scale,
+    # so lifting the line to fit 24-60 raises its backward extrapolation too and
+    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
+    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
+    # log-age mean, which is a graph change and therefore a new variant; see
+    # notes/202608041216-ds-understood-trajectory-prior.md.
+    p_slope_low_u_alpha=1.5,
+    p_slope_low_u_beta=8.0,
+    p_slope_hi_u_alpha=3.0,
+    p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
     # q anchors (weakly-informative, non-double-dipping): broadened from the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
@@ -1408,14 +1471,29 @@ VG10 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
-    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
-    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
-    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=7.0,
-    p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=1.5,
+    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
+    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
+    # ~100 words below the fitted one across 24-60 months and put 80% of prior
+    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
+    # 108 words, against a frame median of 132 over the densest band in the pool
+    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
+    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
+    # between the four administrations observed at 78-95 mo (median 554) and
+    # those same fitted anchors (658-663); the tails stay wide because the
+    # evidence there is thin. Both are scale calibration on the project's own
+    # frame, not an independent norm — there is none for DS comprehension.
+    #
+    # This corrects the *level* only. The prior is still logit-linear in age
+    # between the anchors while the trajectory is strongly concave on that scale,
+    # so lifting the line to fit 24-60 raises its backward extrapolation too and
+    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
+    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
+    # log-age mean, which is a graph change and therefore a new variant; see
+    # notes/202608041216-ds-understood-trajectory-prior.md.
+    p_slope_low_u_alpha=1.5,
+    p_slope_low_u_beta=8.0,
+    p_slope_hi_u_alpha=3.0,
+    p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
     # q anchors (weakly-informative, non-double-dipping): broadened from the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
@@ -1613,13 +1691,14 @@ VG14 = TrivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood trajectory: matches VG05 — anchors aligned with the recalibrated
-    # VG02 (#135): raise the 24 mo anchor (Beta(1,10) -> Beta(1,7)), soften the
-    # near-uniform 84 mo anchor (Beta(1.1,1.1) -> Beta(2,1.5)), widen eta_u to 0.6.
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=7.0,
-    p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=1.5,
+    # Understood trajectory: matches VG05, including the 2026-08-04 anchor
+    # recalibration (Beta(1,7) -> Beta(1.5,8) at 24 mo, Beta(2,1.5) -> Beta(3,1.3)
+    # at 84 mo) and eta_u at 0.6. See VG05 for the reasoning and
+    # notes/202608041216-ds-understood-trajectory-prior.md for the measurements.
+    p_slope_low_u_alpha=1.5,
+    p_slope_low_u_beta=8.0,
+    p_slope_hi_u_alpha=3.0,
+    p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
     # Spoken ratio q (weakly-informative, non-double-dipping): broadened from the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
@@ -1715,14 +1794,29 @@ VG16 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors aligned with the recalibrated VG02 (#135): raise the
-    # 24 mo anchor (Beta(1,10) -> Beta(1,7)) and soften the near-uniform 84 mo
-    # anchor (Beta(1.1,1.1) -> Beta(2,1.5)); widen eta_u (0.4 -> 0.6). The old
-    # joint U band sat ~2.5-3x below the empirical mean at 24-48 mo.
-    p_slope_low_u_alpha=1.0,
-    p_slope_low_u_beta=7.0,
-    p_slope_hi_u_alpha=2.0,
-    p_slope_hi_u_beta=1.5,
+    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
+    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
+    # ~100 words below the fitted one across 24-60 months and put 80% of prior
+    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
+    # 108 words, against a frame median of 132 over the densest band in the pool
+    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
+    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
+    # between the four administrations observed at 78-95 mo (median 554) and
+    # those same fitted anchors (658-663); the tails stay wide because the
+    # evidence there is thin. Both are scale calibration on the project's own
+    # frame, not an independent norm — there is none for DS comprehension.
+    #
+    # This corrects the *level* only. The prior is still logit-linear in age
+    # between the anchors while the trajectory is strongly concave on that scale,
+    # so lifting the line to fit 24-60 raises its backward extrapolation too and
+    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
+    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
+    # log-age mean, which is a graph change and therefore a new variant; see
+    # notes/202608041216-ds-understood-trajectory-prior.md.
+    p_slope_low_u_alpha=1.5,
+    p_slope_low_u_beta=8.0,
+    p_slope_hi_u_alpha=3.0,
+    p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
     # q anchors (weakly-informative, non-double-dipping): broadened from the
     # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
