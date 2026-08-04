@@ -127,10 +127,16 @@ def trim_reported_ages(
     :func:`vocab_growth.models.gp_utils.trend_and_gp`).
 
     This is post-processing of a fitted trace, deliberately not a change to the
-    query grid: the model graph, the ``query_id`` dimension and the fitted output
-    on disk are all untouched, so trimming what is reported never requires a
-    refit and never silently moves a posterior. The dropped ages remain in the
-    trace for anyone who wants them.
+    query grid: the model graph and the ``query_id`` dimension are untouched, so
+    trimming what is reported cannot move a posterior. That was checked directly
+    — refitting VG10 across the change at a fixed seed reproduced its diagnostics
+    bit-for-bit. The dropped ages remain in the trace for anyone who wants them.
+
+    It does not follow that changing the cap is free. These tables are written
+    during the fit pipeline and ``--render-only`` re-renders Quarto against the
+    CSVs already on disk rather than rebuilding them, so a new cap only takes
+    effect on a refit — and the cap is part of the recorded model definition, so
+    output produced under a different one is correctly reported as stale.
 
     ``max_age_months`` of ``None`` returns the frame unchanged, which is the
     default for every model whose outcomes share one evidential range.

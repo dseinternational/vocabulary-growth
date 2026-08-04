@@ -6,7 +6,7 @@
 > [!WARNING]
 > Analysis and implementation note, 2026-08-04. **Implemented**: `trend_and_gp` gains a one-sided `clamp_above_hi` option, exposed as the model-definition field `clamp_mean_above_hi_anchor` and switched on for the eight Down syndrome joint models (VG05, VG07–VG10, VG14–VG16). It is a graph change, so every one of those models needed a refit; **all eight have now been refitted** (§7 for VG10's first pass, §10 for the family).
 >
-> A second change followed and is recorded here too: comprehension reporting is trimmed to 72 months, where the comprehension evidence stops (§9). That one is report-time only and needs no refit — demonstrated directly in open item 13.
+> A second change followed and is recorded here too: comprehension reporting is trimmed to 72 months, where the comprehension evidence stops (§9). That one cannot move the posterior — demonstrated directly in open item 13 — though it does still require a refit to take effect, and it invalidated every existing fit; see §12.
 >
 > **This note corrects §3 and §5 of [202608041730](202608041730-ds-spoken-q-trajectory-prior.md).** That note concluded the residual the `q` mean cannot carry is an S-shape in the developmental curve, and that fixing it needed a mean form able to represent an S. Scored against the observed data rather than the fitted curve, that is wrong — see §2. The real defect is unbounded extrapolation above the high anchor, which is a different problem with a much smaller fix.
 
@@ -210,7 +210,9 @@ The counts differ trivially from item 10's because that used a strict `> 72`; on
 
 `report_max_age_understood = 72` on VG02, VG05, VG07-VG10 and VG14-VG16 — the nine models that report comprehension. It trims the understood and `q` summary tables and the production-ratio figure; spoken keeps the full grid.
 
-Deliberately **report-time only**. The query grid, the model graph, the `query_id` dimension and the traces on disk are all untouched, so this needs no refit and cannot move a number that is still reported — verified by asserting the trimmed frame equals the full frame's surviving rows, for both the table and the figure's CSV companion.
+Deliberately **report-time only**. The query grid, the model graph and the `query_id` dimension are untouched, so this cannot move a number that is still reported — verified by asserting the trimmed frame equals the full frame's surviving rows, for both the table and the figure's CSV companion, and confirmed end-to-end in open item 13.
+
+That it cannot move the posterior does **not** mean it is free to change; §12 records the correction.
 
 ### Scope, and what was left alone
 
@@ -257,4 +259,24 @@ The §9 trim landed on all seven — understood and `q` at 11 rows to 72 months,
 
     This refit doubles as a **direct test of the §9 claim that the trim is report-time only**. VG10 already carried the clamp, so the graph and the seed were unchanged and the diagnostics were predicted, in advance, to come back identical. They did — bit-for-bit to 15 significant figures: divergences 0, max R-hat 1.013949937150557, min ESS 342.59097511242754, the same five failing parameters and the same four BFMI values. The trim provably does not touch the trace, which also retrospectively justifies fitting the other seven on this branch rather than on `main`.
 
-14. **The report figure cache is stale.** `docs/report/figures/` still holds the pre-refit plots and tables. `sync_report_figures.py` validates reporting quality, so at `test` it needs `--allow-provisional`.
+14. **The report figure cache is stale.** `docs/report/figures/` still holds the pre-refit plots and tables. `sync_report_figures.py` validates reporting quality, so at `test` it needs `--allow-provisional` — and see §12, which currently blocks it.
+
+## 12. Correction: the trim was not free, and it invalidated every fit
+
+§9 and the field's own documentation claimed the trim "never requires a refit". **That was wrong on two counts**, found when `sync_report_figures.py --config test --allow-provisional` aborted.
+
+What is true, and was proved directly in open item 13, is narrower: the trim cannot move the **posterior**. Refitting VG10 across the change at a fixed seed reproduced its diagnostics bit-for-bit.
+
+What is false is the operational claim:
+
+1. **A new cap only takes effect on a refit.** The summary tables are written during the fit pipeline, and `--render-only` re-renders Quarto against the CSVs already on disk rather than rebuilding them. This was already known — it is the stated reason §10 fitted the family on the trim branch — but the docstrings said the opposite.
+2. **The field is part of the recorded model definition.** `fit_artifacts` compares `asdict(definition)` in full, so adding `report_max_age_understood` to each of the four definition classes moved _every_ model's recorded definition — including the six that merely carry the `None` default and whose reporting is byte-identical to before.
+
+The result is that VG01-VG04 and VG11-VG13 now fail validation. Diffed against their stored manifests, the sole difference for six of them is the added field; VG13 additionally carries `clamp_mean_above_hi_anchor` from the earlier change. VG02 is a genuine staleness — its cap is 72, so its tables really are out of date.
+
+The strict comparison is not obviously wrong. A fit whose tables were produced under a different cap **is** stale, and catching that is the guard working. The collateral is that any newly added defaulted field invalidates the whole registry, which is a general property of this validator rather than anything specific to this change.
+
+Two ways forward, not yet chosen:
+
+- **Refit VG01-VG04 and VG11-VG13.** Conservative, no change to a safety guard, and makes every manifest honest. VG02 needs it regardless. Roughly 40 minutes.
+- **Teach the validator that a field absent from a stored manifest matches when its current value is the dataclass default.** Principled — it captures "this field did not exist, and its value is the no-op default" — and stops the problem recurring. But it relaxes a guard, and it is only sound while every new default is genuinely the previous behaviour, which is a convention no test enforces.

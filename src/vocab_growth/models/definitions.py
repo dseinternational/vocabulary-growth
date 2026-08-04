@@ -332,8 +332,13 @@ class UnivariateModelDefinition:
     rejects it elsewhere rather than letting it be a silent no-op. Trims the
     summary tables to where the comprehension evidence stops. Purely
     post-processing: the query grid, the model graph and the fitted trace are
-    untouched, so setting or changing this never requires a refit. None reports
-    every query age. See ``posterior_analysis.trim_reported_ages``."""
+    untouched, so changing this cannot move the posterior — proved by refitting
+    VG10 across the change at a fixed seed and reproducing its diagnostics
+    bit-for-bit. It does still require re-running the fit: the summary tables are
+    written during the fit pipeline and ``--render-only`` does not regenerate
+    them, and this field is part of the recorded definition, so a fit produced
+    under a different value is correctly reported as stale. None reports every
+    query age. See ``posterior_analysis.trim_reported_ages``."""
 
     @property
     def model_type(self) -> ModelType:
@@ -491,8 +496,13 @@ class BivariateModelDefinition:
     Trims the understood and ``q`` summary tables and the production-ratio figure
     to where their evidence stops, leaving spoken on the full grid. Purely
     post-processing: the query grid, the model graph and the fitted trace are
-    untouched, so setting or changing this never requires a refit. None reports
-    every query age. See ``posterior_analysis.trim_reported_ages``."""
+    untouched, so changing this cannot move the posterior — proved by refitting
+    VG10 across the change at a fixed seed and reproducing its diagnostics
+    bit-for-bit. It does still require re-running the fit: the summary tables are
+    written during the fit pipeline and ``--render-only`` does not regenerate
+    them, and this field is part of the recorded definition, so a fit produced
+    under a different value is correctly reported as stale. None reports every
+    query age. See ``posterior_analysis.trim_reported_ages``."""
 
     # -- Data age filtering --
     max_age_months: int | None = None
@@ -668,7 +678,12 @@ class TrivariateModelDefinition:
     Trims the understood and ``q`` summary tables and the production-ratio figure
     to where their evidence stops, leaving spoken (and signed) on the full grid.
     Purely post-processing: the query grid, the model graph and the fitted trace
-    are untouched, so setting or changing this never requires a refit. None
+    are untouched, so changing this cannot move the posterior — proved by
+    refitting VG10 across the change at a fixed seed and reproducing its
+    diagnostics bit-for-bit. It does still require re-running the fit: the
+    summary tables are written during the fit pipeline and ``--render-only`` does
+    not regenerate them, and this field is part of the recorded definition, so a
+    fit produced under a different value is correctly reported as stale. None
     reports every query age. See ``posterior_analysis.trim_reported_ages``."""
 
     @property
@@ -825,7 +840,12 @@ class JointModelDefinition:
     Trims the understood and ``q`` summary tables and the production-ratio figure
     to where their evidence stops, leaving spoken (and signed) on the full grid.
     Purely post-processing: the query grid, the model graph and the fitted trace
-    are untouched, so setting or changing this never requires a refit. None
+    are untouched, so changing this cannot move the posterior — proved by
+    refitting VG10 across the change at a fixed seed and reproducing its
+    diagnostics bit-for-bit. It does still require re-running the fit: the
+    summary tables are written during the fit pipeline and ``--render-only`` does
+    not regenerate them, and this field is part of the recorded definition, so a
+    fit produced under a different value is correctly reported as stale. None
     reports every query age. See ``posterior_analysis.trim_reported_ages``."""
 
     # -- Signed data inclusion (inherits VG14's decision) --
@@ -1266,9 +1286,9 @@ VG02 = UnivariateModelDefinition(
     eta_sigma=0.6,
     # Comprehension reporting stops at 72 mo, matching the joint models. Only 15
     # of the 905 understood rows sit at or above it (95th percentile 64 mo), and
-    # 78 and 90 fall at or past the high anchor. Report-time only: no refit, and
-    # the whole-month companion table still covers the full observed span, where
-    # its n_obs column records the emptiness directly. See
+    # 78 and 90 fall at or past the high anchor. Reporting only -- it cannot move
+    # the posterior. The whole-month companion still covers the full observed span,
+    # where its n_obs column records the emptiness directly. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     kappa=_DS_UNDERSTOOD_KAPPA,
@@ -1409,8 +1429,8 @@ VG05 = BivariateModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
@@ -1484,8 +1504,8 @@ VG07 = BivariateModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
@@ -1561,8 +1581,8 @@ VG08 = BivariateModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
@@ -1642,8 +1662,8 @@ VG09 = BivariateModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
@@ -1727,8 +1747,8 @@ VG10 = BivariateModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
@@ -1949,8 +1969,8 @@ VG14 = TrivariateModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
@@ -2032,8 +2052,8 @@ VG15 = JointModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
@@ -2146,8 +2166,8 @@ VG16 = BivariateModelDefinition(
     # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
     # above 84 -- so the shared query grid quotes understood and q at ages where
     # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Report-time only: no refit, and spoken keeps the
-    # full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )

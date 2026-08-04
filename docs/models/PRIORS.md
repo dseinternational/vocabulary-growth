@@ -231,9 +231,19 @@ levelled-off extrapolation rather than an estimate.
 **Implemented 2026-08-04:** `report_max_age_understood = 72` on VG02, VG05, VG07-VG10
 and VG14-VG16. It trims the understood and `q` summary tables and the production-ratio
 figure; spoken keeps the full grid. This is post-processing of a fitted trace — the
-query grid, the model graph, the `query_id` dimension and the trace on disk are all
-unchanged, so it never requires a refit and cannot move a number that is still reported.
-The dropped ages remain in the trace.
+query grid, the model graph and the `query_id` dimension are unchanged, so it cannot
+move a number that is still reported, and refitting VG10 across the change at a fixed
+seed reproduced its diagnostics bit-for-bit. The dropped ages remain in the trace.
+
+Changing the cap is nonetheless **not** free. The summary tables are written during the
+fit pipeline, and `--render-only` re-renders Quarto against the CSVs already on disk
+rather than rebuilding them, so a new cap only takes effect on a refit. The field is
+also part of the recorded model definition, so a fit produced under a different value —
+including one produced before the field existed — is reported as stale by
+`sync_report_figures.py`. That is the intended behaviour and not a false alarm for a
+model whose cap actually changed; but note that adding the field moved _every_ model's
+recorded definition, so models that merely carry the `None` default were invalidated
+too.
 
 VG01 is left alone: it is production-only, and its data run to 115 months. The
 whole-month companion tables also keep the full observed span, where the `n_obs` column
