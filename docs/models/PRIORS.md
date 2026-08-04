@@ -90,14 +90,14 @@ the model machinery is shared:
 The main TD/DS differences are concentrated in the anchor ages and in a few
 anchor distributions:
 
-| Prior area            | DS                                                                                               | TD                                                                            | Interpretation                                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Anchor ages           | Usually 24 and 84 months.                                                                        | Usually 12 and 26 months; VG13 uses 10 and 16 months.                         | Priors are placed over different developmental windows.                                                            |
-| Spoken low anchor     | `Beta(1, 25)` at 24 months in VG01.                                                              | `Beta(1, 30)` at 12 months in VG03/VG11.                                      | Both concentrate near the floor after the young-age prior-predictive recalibration.                                |
-| Understood low anchor | `Beta(1, 7)` at 24 months in VG02; `Beta(1.5, 8)` in the DS joint models.                        | `Beta(1.2, 8)` at 12 months in VG04/VG12; `Beta(1, 15)` at 10 months in VG13. | The TD understood low anchor was recalibrated up off the floor (TD comprehension is already substantial young).    |
-| High anchor           | `Beta(2, 1.5)` at 84 months in VG01/VG02; `Beta(3, 1.3)` in the DS joint models.                 | Usually `Beta(1.3, 1.3)` at 26 months; VG13 uses `Beta(2, 6)` at 16 months.   | The TD high anchors were softened toward the middle from a more optimistic prior; DS high-age priors remain broad. |
-| Baseline `q` anchors  | `Beta(2, 12)` low and `Beta(3, 2)` high across the DS joint models (VG05, VG07-VG10, VG14-VG16). | `Beta(1, 10)` low and `Beta(2, 7)` high in VG13.                              | Weakly-informative; VG13's young-TD production ratio sits lower still.                                             |
-| Signing priors        | DS-only in VG14/VG15.                                                                            | Not modelled.                                                                 | There is no TD signing counterpart.                                                                                |
+| Prior area            | DS                                                                                                 | TD                                                                            | Interpretation                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Anchor ages           | Usually 24 and 84 months.                                                                          | Usually 12 and 26 months; VG13 uses 10 and 16 months.                         | Priors are placed over different developmental windows.                                                            |
+| Spoken low anchor     | `Beta(1, 25)` at 24 months in VG01.                                                                | `Beta(1, 30)` at 12 months in VG03/VG11.                                      | Both concentrate near the floor after the young-age prior-predictive recalibration.                                |
+| Understood low anchor | `Beta(1, 7)` at 24 months in VG02; `Beta(1.5, 8)` in the DS joint models.                          | `Beta(1.2, 8)` at 12 months in VG04/VG12; `Beta(1, 15)` at 10 months in VG13. | The TD understood low anchor was recalibrated up off the floor (TD comprehension is already substantial young).    |
+| High anchor           | `Beta(2, 1.5)` at 84 months in VG01/VG02; `Beta(3, 1.3)` in the DS joint models.                   | Usually `Beta(1.3, 1.3)` at 26 months; VG13 uses `Beta(2, 6)` at 16 months.   | The TD high anchors were softened toward the middle from a more optimistic prior; DS high-age priors remain broad. |
+| Baseline `q` anchors  | `Beta(2, 12)` low and `Beta(4, 1.2)` high across the DS joint models (VG05, VG07-VG10, VG14-VG16). | `Beta(1, 10)` low and `Beta(2, 7)` high in VG13.                              | Weakly-informative; VG13's young-TD production ratio sits lower still.                                             |
+| Signing priors        | DS-only in VG14/VG15.                                                                              | Not modelled.                                                                 | There is no TD signing counterpart.                                                                                |
 
 Review notes:
 
@@ -136,7 +136,7 @@ as a direct word count without also considering `p_U(a)`.
 | High-age young-TD understood anchor   | VG13                       | `Beta(2, 6)`     | Median 0.228, 5-95% 0.053-0.521, or about 185 words median out of 810. |
 | DS-joint low-age `q` anchor           | VG05, VG07-VG10, VG14-VG16 | `Beta(2, 12)`    | Median 0.126, 5-95% 0.028-0.316 of understood words.                   |
 | Young-TD low-age `q` anchor           | VG13                       | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259 of understood words.                   |
-| DS-joint high-age `q` anchor          | VG05, VG07-VG10, VG14-VG16 | `Beta(3, 2)`     | Median 0.614, 5-95% 0.249-0.902 of understood words.                   |
+| DS-joint high-age `q` anchor          | VG05, VG07-VG10, VG14-VG16 | `Beta(4, 1.2)`   | Median 0.805, 5-95% 0.438-0.978 of understood words.                   |
 | Young-TD high-age `q` anchor          | VG13                       | `Beta(2, 7)`     | Median 0.201, 5-95% 0.046-0.471 of understood words.                   |
 
 Review notes:
@@ -227,19 +227,27 @@ The common range is 6-18 months.
 | Standard U, spoken, and `q` smooths | `ell_unit ~ Beta(3, 3)`      | Median length-scale about 12 months; 5-95% about 8.3-15.7 months.                                      |
 | Signed-ratio smooth                 | `ell_unit_sign ~ Beta(2, 5)` | Median length-scale about 9.2 months; 5-95% about 6.8-13.0 months.                                     |
 | Standard GP amplitude               | `eta ~ HalfNormal(0.4)`      | Median logit-scale deviation about 0.27; 95% about 0.78.                                               |
-| `q`-ratio GP amplitude              | `eta_q ~ HalfNormal(0.20)`   | Median logit-scale deviation about 0.13; 95% about 0.39. Tightened from 0.4 (see below).               |
+| `q`-ratio GP amplitude              | `eta_q ~ HalfNormal(0.8)`    | Median logit-scale deviation about 0.54; 95% about 1.57. VG13 keeps `HalfNormal(0.20)` (see below).    |
 | Signed GP amplitude                 | `eta_sign ~ HalfNormal(0.4)` | Median about 0.27; 95% about 0.78 (reverted to standard — the three-anchor mean now carries the hump). |
 
 Review notes:
 
 - The standard length-scale prior encodes smooth developmental departures rather
   than rapid month-to-month oscillation.
-- The `q`-ratio GP amplitude `eta_q` was tightened from 0.4 to 0.20. Broadening the
-  `q` anchors (removing the double-dipping) surfaced a weakly-identified `q`
-  slope/intercept ridge in the subject-RE-on-`q` models (VG09/VG10/VG15/VG16);
-  tightening `eta_q` curbs the GP-vs-linear-trend competition and restores mixing
-  (VG10 `test` min ESS 120 → 450, divergences 6 → 2) without re-introducing any
-  data-informed prior. It is a smoothness assumption on `q`, not a data-tuned value.
+- The `q`-ratio GP amplitude `eta_q` was tightened from 0.4 to 0.20 to curb a
+  weakly-identified `q` slope/intercept ridge that broadening the `q` anchors had
+  surfaced, and was **widened to 0.8 on 2026-08-04**. The tightening was mis-scoped:
+  the conflict is not confined to the subject-RE-on-`q` models it was attributed to.
+  Every Down syndrome joint model sits at prior CDF 0.95-0.99 with contraction
+  0.03-0.16 — VG05, VG07 and VG08 included, which carry no subject RE on `q` at all,
+  and the Option D anchored models alongside the unanchored ones. What separates the
+  models is age span: `logit(q)` is S-shaped across the DS 8-115 month range and only
+  the GP can carry that curvature, so every model traversing it is prior-limited.
+  VG13 is the single exception (prior CDF 0.572) because its 8-18 month window sees
+  only the bottom limb of the S, and it keeps `HalfNormal(0.20)`. A `test`-config
+  control fit of VG10 at `eta_q = 0.4` cleared every remaining R-hat and ESS failure
+  and took divergences 2 → 0 with `tau_subj_q` unmoved, so the ridge does not return.
+  See [the note](../../notes/202608041730-ds-spoken-q-trajectory-prior.md).
 - The signed length-scale is shorter and its amplitude is larger because signing
   needs to express a hump that can rise and fall over the observed age window.
 - The signed GP prior is a key sensitivity target because signed data are sparse
@@ -526,10 +534,31 @@ not a within-child median):
 The DS-joint low-age `q` anchor, `Beta(2, 12)` (median 0.126), is centred on this
 independent TD `q(10–12 mo) ≈ 0.12` — an independent corroboration of the _level_,
 not a value read from the fitted DS data. VG13 uses lower `Beta(1, 10)` / `Beta(2, 7)`
-(medians 0.067 / 0.201), matching the younger empirical TD ratio above. The high-age
-DS `q` anchor, `Beta(3, 2)` (median 0.61), has no independent source and is
-deliberately broad (5-95% ~0.25-0.90), so the DS data — not the prior — set the
-84-month level.
+(medians 0.067 / 0.201), matching the younger empirical TD ratio above.
+
+The high-age DS `q` anchor has no independent source — there is no normative DS
+production ratio — and was `Beta(3, 2)` (median 0.614) on the reasoning that a broad
+prior would let the DS data set the 84-month level. It did not: VG10 put the fitted
+trend anchor at 0.929, above `Beta(3, 2)`'s own 95th percentile of 0.902, at prior
+CDF 0.972. **Recalibrated 2026-08-04 to `Beta(4, 1.2)`** (median 0.805, 5-95%
+0.438-0.978). The evidence is the DS frame's own **directly observed** production
+ratio — the per-child `spoken / understood` ratio on the 902 rows carrying both
+outcomes, which is data rather than a posterior quantity:
+
+| Age (months) |    18 |    24 |    30 |    36 |    42 |    48 |    54 |    60 |    66 |    72 |
+| ------------ | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: |
+| Observed `q` | 0.026 | 0.061 | 0.089 | 0.128 | 0.241 | 0.475 | 0.502 | 0.610 | 0.706 | 0.733 |
+| Rows         |   135 |   158 |   135 |   134 |    83 |    77 |    27 |    31 |    24 |    11 |
+
+A size-weighted least-squares line through `logit(q)` over these bands implies a
+trend `q(84)` of 0.946 (unweighted 0.924; restricted to 36 months and up, 0.943).
+The chosen median of 0.805 stops deliberately short of that, because the last band
+carrying both outcomes is 72 months at 11 rows and only one row in the pool has both
+outcomes above 78 months — the anchor age itself is extrapolated. This is scale
+calibration on the project's own frame, the same evidence class as the dispersion
+priors and the 2026-08-04 understood anchors, and it is not an independent norm.
+The low anchor is unchanged: it is well-centred already (fitted 0.117, prior CDF
+0.464, contraction 0.81).
 
 ### DS anchor priors vs independent cohorts
 
