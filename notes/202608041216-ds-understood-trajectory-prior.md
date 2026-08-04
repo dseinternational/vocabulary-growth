@@ -4,7 +4,10 @@
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
-> Analysis and implementation note, 2026-08-04. **Implemented:** the understood trend anchors on the eight Down syndrome joint models (§7). **Proposed, not implemented:** the `eta_u` widening (§6) and the log-age mean form (§5), which is the only change that addresses the finding at its root. Every fit quoted here is the `test`-config run of 2026-08-03 ([202608031341](202608031341-test-refit-after-data-and-prior-changes.md)) — 4 chains x 2,000 draws, not reporting quality. The eight Down syndrome joint fits are stale as of §7 and must be refitted before anything here is quoted.
+> Analysis and implementation note, 2026-08-04. **Implemented:** the understood trend anchors on the eight Down syndrome joint models (§7), and VG10 refitted against them (§10). **Proposed, not implemented:** the `eta_u` widening (§6) and the log-age mean form (§5), which is the only change that addresses the finding at its root. Every fit in §§1–9 is the `test`-config run of 2026-08-03 ([202608031341](202608031341-test-refit-after-data-and-prior-changes.md)) — 4 chains x 2,000 draws, not reporting quality; §10's refit is at the same configuration and is equally not reporting quality. **VG05, VG07, VG08, VG09, VG14, VG15 and VG16 remain stale** and must be refitted before anything from them is quoted.
+
+> [!IMPORTANT]
+> §10 refits VG10 and settles three things this note could only predict. The recalibration is **not over-committed**: both anchors move to prior CDF 0.51 and 0.66 with contraction unchanged at 0.89 and 0.90. It **did not move the answer**: the fitted population curve shifts by 0 to 2 words at every queried age, confirming §4's reading that the displacement was a prior-predictive failure and not a distorted posterior. And it **does nothing for `eta_u`**, which stays at prior CDF 0.880 with contraction 0.28 — §6's argument holds, and the log-age mean form (§5) remains the only proposal that addresses it.
 
 ## Summary
 
@@ -170,14 +173,62 @@ Verified after the change by rebuilding VG10 from the registered definition and 
 
 ## 8. Consequences
 
-1. **The eight Down syndrome joint fits are stale.** Priors are part of the model graph; every one of them needs refitting before any figure is quoted. They were already stale against the reporting configuration — the current fits are `test` config from 2026-08-03.
+1. **The eight Down syndrome joint fits are stale.** Priors are part of the model graph; every one of them needs refitting before any figure is quoted. They were already stale against the reporting configuration — the current fits are `test` config from 2026-08-03. VG10 has since been refitted (§10); the other seven have not.
 2. **PRIORS.md was wrong before this change and is updated by it.** Its anchor table listed the joint understood anchors as `Beta(1, 10)` and `Beta(1.1, 1.1)`, which is the pre-#135 state; the registry has read `Beta(1, 7)` / `Beta(2, 1.5)` since. Both rows are corrected and given the new values.
 3. **The evidence class is scale calibration, not an independent anchor.** There is no independent Down syndrome comprehension norm in the library — Berglund et al. (2001) is production-only — which the model definitions already state. This recalibration is centred on the project's own frame and on the fitted anchors of three models, so it is the same weaker evidence class already accepted for this trajectory, made more accurate. It is not the posterior-derived double-dipping that #155 removed from the `q` anchors: the target is the prior's _location on the observable words scale at two fixed ages_, checkable against the frame directly, and the tails are deliberately left wider than the fits.
 
 ## 9. Open
 
-1. **Fit a log-age mean variant** (§5) and compare against VG10 on the same frame. This is the substantive follow-up; everything else here is palliative.
+1. **Fit a log-age mean variant** (§5) and compare against VG10 on the same frame. This is the substantive follow-up; everything else here is palliative, and §10 confirms it — the recalibration left `eta_u` exactly where it was.
 2. **Recheck `eta_u`** after §5, or test `HalfNormal(0.9)` if the current form is kept (§6).
 3. **Measure VG02's prior predictive** and move its anchors if it shows the same displacement (§7).
-4. **Refit the eight** and confirm the anchors land nearer prior CDF 0.5 with contraction unchanged. If contraction drops materially the recalibration has over-committed.
+4. ~~**Refit the eight** and confirm the anchors land nearer prior CDF 0.5 with contraction unchanged.~~ Done for VG10 — §10, and the recalibration is not over-committed. **The remaining seven — VG05, VG07, VG08, VG09, VG14, VG15, VG16 — are still to refit.**
 5. The five unanchored models' anchor posteriors scatter from 34 to 67 words at 24 months (§4). That is a known consequence of the un-orthogonalised GP, but it means their reported `intercept_u` / `slope_u` should not be read developmentally.
+6. **`g_unit_u_hsgp_coeffs[2]` is now the model's only R-hat failure** (§10). The understood GP's low-order coefficients are where every remaining diagnostic failure sits, which is what §5 predicts should happen when the mean cannot supply the curvature.
+
+## 10. VG10 refitted against the new anchors
+
+`test` configuration, 4 chains x 2,000 draws, seed 47, no overrides — the same configuration as the 2026-08-03 run it is compared with, so the prior is the only thing that changed. 5m 22s, rendered.
+
+### The recalibration is not over-committed
+
+| parameter       | posterior median | prior CDF before | prior CDF after | contraction before | contraction after |
+| --------------- | ---------------- | ---------------- | --------------- | ------------------ | ----------------- |
+| `p_slope_low_u` | 110 → 111 words  | 0.642            | **0.511**       | 0.88               | 0.89              |
+| `p_slope_hi_u`  | 659 → 660 words  | 0.820            | **0.658**       | 0.92               | 0.90              |
+| `eta_u`         | 0.943 → 0.900    | 0.884            | **0.880**       | 0.29               | 0.28              |
+
+Both anchors move toward the middle of their priors with contraction unchanged, which is the result open item 4 asked for: the prior moved to where the data already were rather than pulling the data toward it. Had contraction fallen, the new priors would have been doing work the likelihood was previously doing.
+
+### It did not move the answer
+
+The fitted population curve for words understood, before and after, at every queried age:
+
+| age    | 12  | 18  | 24  | 30  | 36  | 42  | 48  | 54  | 60  | 66  | 72  | 78  | 84  | 90  |
+| ------ | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| before | 16  | 49  | 113 | 175 | 218 | 258 | 312 | 367 | 401 | 426 | 464 | 519 | 568 | 595 |
+| after  | 16  | 50  | 113 | 175 | 219 | 259 | 313 | 368 | 402 | 427 | 466 | 520 | 570 | 597 |
+
+Zero to two words, everywhere. This is the direct confirmation of §4: the anchors were data-informed at contraction 0.88–0.92 and the likelihood was already overruling the off-centre prior, so correcting the prior changes the prior predictive and nothing else. **No result previously reported from VG10 is revised by this change.**
+
+### `eta_u` is untouched, as §6 predicted
+
+Prior CDF 0.884 → 0.880, contraction 0.29 → 0.28. The anchor recalibration does not relieve the GP amplitude at all, because the strain does not come from the anchor levels — it comes from a mean that cannot express the trajectory's curvature. §5 remains the only proposal on the table that addresses it.
+
+### Diagnostics
+
+The convergence gate returns REVIEW, as it did before this change:
+
+|                | before                                                                                          | after                           |
+| -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------- |
+| gate           | not passed                                                                                      | not passed                      |
+| divergences    | 2                                                                                               | 2                               |
+| max R-hat      | 1.0177                                                                                          | **1.0110**                      |
+| min ESS        | 387                                                                                             | 283                             |
+| min BFMI       | 0.446                                                                                           | 0.453                           |
+| R-hat failures | `kappa_min_s`, `kappa_excess_old_s`, `b_kappa_s`, `a_kappa_s`, `g_unit_u_hsgp_coeffs[2]`, `[5]` | **`g_unit_u_hsgp_coeffs[2]`**   |
+| ESS failures   | `kappa_min_s`, `g_unit_u_hsgp_coeffs[2]`, `[3]`                                                 | `g_unit_u_hsgp_coeffs[2]`–`[5]` |
+
+REVIEW is the pre-existing status for VG10 at `test` and is not introduced here. What did change is where the failures sit. Six R-hat failures become one, and the four spoken-dispersion parameters clear entirely — plausibly because a better-centred understood trend leaves less for the rest of the graph to compensate for, though nothing here establishes that and it was not predicted.
+
+Every remaining failure, on both R-hat and ESS, is now a low-order coefficient of the understood GP. That is the same place §5 locates the problem, and it is the sharpest available evidence that the mean form rather than the anchor levels is what is left to fix. Min ESS falls from 387 to 283, which is the cost side of the same observation: the GP coefficients are being asked to do systematic work, and they mix poorly while doing it.
