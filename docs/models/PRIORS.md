@@ -210,6 +210,38 @@ recorded as an open item in
 VG11-VG13 are unaffected: their domains extend only two to four months past their high
 anchors.
 
+### Reported age range for comprehension
+
+The clamp fixes what the mean _does_ above the high anchor; it does not make an age with
+no data worth quoting. A model's `ages_query` grid is shared by every outcome it
+reports, but in the Down syndrome pool the outcomes are not observed over the same
+range:
+
+| Outcome    | Rows | 95th percentile |      Rows ≥ 72 mo |     Rows ≥ 84 mo |
+| ---------- | ---: | --------------: | ----------------: | ---------------: |
+| Understood |  905 |       64 months |  15 (15 children) |   5 (5 children) |
+| Spoken     | 1346 |       78 months | 104 (80 children) | 51 (44 children) |
+
+Comprehension effectively stops around 72 months. Reporting it — and `q`, which is a
+ratio _of_ comprehension and so inherits the narrower range — on the same grid as spoken
+quotes a median and an 89% interval at 78, 84 and 90 months from at most eight
+administrations, two of those ages at or past the high anchor where the mean is now a
+levelled-off extrapolation rather than an estimate.
+
+**Implemented 2026-08-04:** `report_max_age_understood = 72` on VG02, VG05, VG07-VG10
+and VG14-VG16. It trims the understood and `q` summary tables and the production-ratio
+figure; spoken keeps the full grid. This is post-processing of a fitted trace — the
+query grid, the model graph, the `query_id` dimension and the trace on disk are all
+unchanged, so it never requires a refit and cannot move a number that is still reported.
+The dropped ages remain in the trace.
+
+VG01 is left alone: it is production-only, and its data run to 115 months. The
+whole-month companion tables also keep the full observed span, where the `n_obs` column
+already records how thin the tail is — the trim is aimed at the curated 6-monthly table,
+which carries no such guard. The typically-developing grids stop at 30 months, well
+inside their data, so this asymmetry is specific to the Down syndrome pool. See
+[`notes/202608042030-q-mean-extrapolation.md`](../../notes/202608042030-q-mean-extrapolation.md).
+
 ### Signed ratio prior
 
 VG14 and VG15 model signing as `r(a) = P(sign | understood)`, whose developmental

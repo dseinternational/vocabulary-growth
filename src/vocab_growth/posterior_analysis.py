@@ -107,6 +107,39 @@ def add_probability_estimand_columns(
     return out
 
 
+def trim_reported_ages(
+    df: pd.DataFrame,
+    max_age_months: float | None,
+    *,
+    age_column: str = "age_months",
+) -> pd.DataFrame:
+    """Drop summary rows above the age at which a quantity's evidence stops.
+
+    A model's ``ages_query`` grid is shared by every outcome it reports, but the
+    outcomes are not observed over the same age range. In the Down syndrome pool
+    the two diverge sharply: comprehension is observed on 905 rows with a 95th
+    percentile of 64 months and only 15 rows at or above 72, whereas production
+    is observed on 1346 rows with a 95th percentile of 78 and 51 rows at or above
+    84. Reporting understood and ``q`` on the same grid as spoken therefore
+    quotes a median and an interval at ages where almost nothing was measured,
+    and — above the high slope anchor — where the mean is a levelled-off
+    extrapolation rather than an estimate (see
+    :func:`vocab_growth.models.gp_utils.trend_and_gp`).
+
+    This is post-processing of a fitted trace, deliberately not a change to the
+    query grid: the model graph, the ``query_id`` dimension and the fitted output
+    on disk are all untouched, so trimming what is reported never requires a
+    refit and never silently moves a posterior. The dropped ages remain in the
+    trace for anyone who wants them.
+
+    ``max_age_months`` of ``None`` returns the frame unchanged, which is the
+    default for every model whose outcomes share one evidential range.
+    """
+    if max_age_months is None:
+        return df
+    return df[df[age_column] <= max_age_months].reset_index(drop=True)
+
+
 def posterior_summary_table(
     X_query: np.ndarray,
     p_query: np.ndarray,

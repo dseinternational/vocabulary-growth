@@ -168,6 +168,8 @@ class ModelConfiguration(BaseModelConfiguration):
     """Prior distribution for the magnitude of the kappa parameter; legacy form only."""
     kappa_anchored: AnchoredKappaPriors | None = None
     """Two-anchor dispersion priors, in place of the three fields above."""
+    report_max_age_understood: int | None = None
+    """Highest query age reported, for a comprehension model. Reporting only."""
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -1271,6 +1273,14 @@ def posterior_summary(context: ModelFitContext):
         interval_kind=context.reporting.interval_kind,
     )
 
+    # A comprehension model may report a shorter grid than its query ages, where
+    # the comprehension evidence stops short of them. Validation confines this to
+    # an understood-outcome model, so it cannot be a silent no-op on a spoken one.
+    posterior_summary_df = posterior_analysis.trim_reported_ages(
+        posterior_summary_df,
+        getattr(context.model_config, "report_max_age_understood", None),
+    )
+
     dataframe_table(
         posterior_summary_df,
         title="Posterior summary at query ages",
@@ -1692,6 +1702,7 @@ def configure_univariate_priors(
         eta_dist=eta_dist,
         n_plot=definition.n_plot,
         ages_query=definition.ages_query,
+        report_max_age_understood=definition.report_max_age_understood,
         **kappa_fields,
     )
 

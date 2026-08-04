@@ -121,6 +121,9 @@ class BivariateModelConfiguration(BaseModelConfiguration):
     kappa_anchored_u: AnchoredKappaPriors | None = None
     kappa_anchored_s: AnchoredKappaPriors | None = None
 
+    # Reporting only — the age at which understood and q stop being reported.
+    report_max_age_understood: int | None = None
+
     def __post_init__(self) -> None:
         super().__post_init__()
         validate_kappa_fields(self, suffixes=("_u", "_s"))
@@ -359,6 +362,7 @@ def configure_bivariate_priors(
         eta_q_dist=eta_q_dist,
         n_plot=definition.n_plot,
         ages_query=definition.ages_query,
+        report_max_age_understood=definition.report_max_age_understood,
         # Kappa — understood and spoken, each in whichever form it carries
         **kappa_u_fields,
         **kappa_s_fields,
@@ -1074,6 +1078,9 @@ def posterior_summary(context: BivariateContext):
     has_subject_re = any(
         name in context.model_variables for name in ("tau_subj_u", "tau_subj_q")
     )
+    # Comprehension and production are not observed over the same age range, so
+    # understood and q may report a shorter grid than spoken.
+    report_max_u = context.model_config.report_max_age_understood
 
     # Understood summary
     summary_u = posterior_analysis.posterior_summary_table(
@@ -1091,6 +1098,7 @@ def posterior_summary(context: BivariateContext):
             n_trials=n_trials,
             ci_prob=ci_prob,
         )
+    summary_u = posterior_analysis.trim_reported_ages(summary_u, report_max_u)
     dataframe_table(
         summary_u, title="Posterior summary — words understood", show_index=False
     )
@@ -1137,6 +1145,7 @@ def posterior_summary(context: BivariateContext):
             "ci_hi": "q_ci_hi",
         }
     )
+    summary_q = posterior_analysis.trim_reported_ages(summary_q, report_max_u)
     dataframe_table(
         summary_q, title="Posterior summary — production rate q(a)", show_index=False
     )
@@ -1741,6 +1750,7 @@ def _run_bivariate_joint_plots(
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="production_rate",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["production_rate"] = fig
     plt.close(fig)

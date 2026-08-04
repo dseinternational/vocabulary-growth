@@ -999,10 +999,23 @@ def plot_production_rate(
     interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ) -> Figure:
-    """Plot the posterior of the production ratio q(a) = p_S(a) / p_U(a) over age."""
+    """Plot the posterior of the production ratio q(a) = p_S(a) / p_U(a) over age.
+
+    ``max_age_months`` stops the curve where the comprehension evidence stops.
+    ``q`` is a ratio *of* comprehension, so it inherits the narrower of the two
+    outcomes' age ranges, not the plot grid's — which spans the spoken data. It
+    is the model definition's ``report_max_age_understood``, and it trims the
+    saved CSV with the figure so the two cannot disagree.
+    """
     X_plot = samples.X_plot
     q_plot = samples.q_plot
+
+    if max_age_months is not None:
+        keep = X_plot <= max_age_months
+        X_plot = X_plot[keep]
+        q_plot = q_plot[keep, :]
 
     q_median = np.median(q_plot, axis=1)
     q_ci = intervals.bands(q_plot, ci_prob, interval_kind, sample_axis=1)

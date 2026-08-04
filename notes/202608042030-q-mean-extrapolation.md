@@ -184,4 +184,44 @@ The GP pull **at** 84 months is essentially unchanged across all three fits: -1.
 7. **Decide whether to keep this.** With item 6 answered the objection is gone: the prior-predictive gain is real, the mechanism is confirmed, the curves stay monotone, and there is no measurable convergence cost. The remaining question is scope rather than merit — see item 9.
 8. ~~**Why the R-hat failures moved.**~~ Withdrawn (§7). The failure counts swing 0, 1, 2 across seeds without the clamp and 5, 0, 3 with it, so which parameters appear is noise at this sampling configuration and there is nothing to explain.
 9. **VG10 does not reliably meet the convergence gate at `test`.** Max R-hat sits at 1.008-1.014 against a 1.01 threshold across all six fits in §7, so pass or fail turns on the seed. This predates everything in this note. Two consequences: single-fit gate outcomes on this model must not be quoted as evidence for or against a change, and the reporting-quality configuration's chain count should be confirmed adequate before any of this is reported.
-10. **Whether the analysis should be capped at 84 months** was raised separately and is _not_ the right fix for the defect in this note. Comprehension data effectively stop at about 72 months (9 rows in 72-84, 5 above 84), but spoken data above 84 are real and informative: within uk_01 alone the median runs 363 words at 72-84, 479 at 84-96 and 539 at 96-115, across 43 rows and 36 children, 22 of whom appear only above 84. A data cap would discard that to fix an unobserved-comprehension problem the likelihood already handles by outcome-wise missingness. The supportable version is to trim what is _reported_ for `u` and `q` to where their data end.
+10. ~~**Whether the analysis should be capped at 84 months**~~ was raised separately and is _not_ the right fix for the defect in this note. Comprehension data effectively stop at about 72 months (9 rows in 72-84, 5 above 84), but spoken data above 84 are real and informative: within uk_01 alone the median runs 363 words at 72-84, 479 at 84-96 and 539 at 96-115, across 43 rows and 36 children, 22 of whom appear only above 84. A data cap would discard that to fix an unobserved-comprehension problem the likelihood already handles by outcome-wise missingness. The supportable version is to trim what is _reported_ for `u` and `q` to where their data end — **done, §9**.
+
+## 9. Trimming what is reported for `u` and `q`
+
+Item 10's supportable version, implemented. This is the reporting counterpart of the clamp: §4 fixes what the mean _does_ above the high anchor, this stops quoting an age that has no data behind it.
+
+### The asymmetry
+
+The query grid is shared by every outcome a model reports, but the Down syndrome outcomes are not observed over the same range. Measured on VG10's own analysis frame (1349 rows, 737 children):
+
+| Outcome    | Rows |  95th pct |  Rows ≥ 72 mo | Rows ≥ 84 mo |
+| ---------- | ---: | --------: | ------------: | -----------: |
+| Understood |  905 | 64 months |  15 (15 kids) |   5 (5 kids) |
+| Spoken     | 1346 | 78 months | 104 (80 kids) | 51 (44 kids) |
+| Both (`q`) |  902 | 64 months |  15 (15 kids) |   5 (5 kids) |
+
+`q` tracks understood almost exactly — 902 of the 905 understood rows also carry spoken — because it is a ratio _of_ comprehension and inherits the narrower range. Understood's 95th percentile is 64 months, so the grid's top three ages (78, 84, 90) rest on at most eight administrations, and two of them sit at or past the high anchor where the mean is now a levelled-off extrapolation rather than an estimate.
+
+The counts differ trivially from item 10's because that used a strict `> 72`; one administration falls at exactly 72.0.
+
+### The change
+
+`report_max_age_understood = 72` on VG02, VG05, VG07-VG10 and VG14-VG16 — the nine models that report comprehension. It trims the understood and `q` summary tables and the production-ratio figure; spoken keeps the full grid.
+
+Deliberately **report-time only**. The query grid, the model graph, the `query_id` dimension and the traces on disk are all untouched, so this needs no refit and cannot move a number that is still reported — verified by asserting the trimmed frame equals the full frame's surviving rows, for both the table and the figure's CSV companion.
+
+### Scope, and what was left alone
+
+- **VG01** is production-only and its data run to 115 months. Trimming it would discard exactly the evidence that argued against the 84-month cap in item 10. Validation now _rejects_ the field on a non-comprehension model rather than letting it be a silent no-op.
+- **The whole-month companion tables** keep the full observed span. That is deliberate rather than an oversight: they carry an `n_obs` column that records the emptiness directly, which the curated 6-monthly table has no equivalent of. They are the exhaustive companion; the query table is the headline.
+- **The typically-developing models** stop at 30 months, well inside their data.
+- **The understood trajectory figures** (`posterior_predictive_median_trend_u`, `expected_learning_rate_u`, the joint u+s trajectory) still run the full plot grid. The production-ratio figure was trimmed because it sits directly beside the trimmed `q` table in the report chapter and the two disagreeing would be worse than either alone; the rest is a wider design question about whether a joint u+s figure should show its two curves over different spans — see open item 11.
+
+### Tests
+
+`tests/test_reported_age_range.py`, 30 tests. Beyond the helper's own behaviour, two failure modes specific to this design are covered directly: the value reaches the engines through the _configuration_ object rather than the definition, so a missing pass-through would raise only mid-fit — caught statically per engine, and mutation-checked by deleting one pass-through and confirming the test fails; and the cap is asserted to lie on the query grid and to actually remove ages, so it cannot silently become inert.
+
+## 10. Open
+
+11. **Whether the `u` trajectory figures should stop at 72 too.** The tables and the production-ratio figure now do. Leaving the trend and learning-rate figures on the full grid is defensible — they show the fitted curve, not a claim about evidence — but it is not obviously right, and the joint u+s figure would need a deliberate decision about showing two curves over different spans.
+12. **The seven stale DS joint models.** VG05, VG07, VG08, VG09, VG14, VG15 and VG16 carry the §4 graph change with fits that predate it. The §9 trim needs no refit, but those models do.

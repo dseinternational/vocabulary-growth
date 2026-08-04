@@ -66,6 +66,7 @@ from preliz.distributions.distributions import Continuous
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.intervals as intervals
+import vocab_growth.posterior_analysis as posterior_analysis
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -182,6 +183,9 @@ class JointModelConfiguration(BaseModelConfiguration):
     kappa_anchored_u: AnchoredKappaPriors | None = None
     kappa_anchored_s: AnchoredKappaPriors | None = None
     kappa_anchored_sign: AnchoredKappaPriors | None = None
+
+    # Reporting only — the age at which understood and q stop being reported.
+    report_max_age_understood: int | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -575,6 +579,7 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         tau_u_sigma=definition.tau_u_sigma,
         tau_q_sigma=definition.tau_q_sigma,
         tau_sign_sigma=definition.tau_sign_sigma,
+        report_max_age_understood=definition.report_max_age_understood,
     )
     context.set_model_config(config)
 
@@ -1354,8 +1359,11 @@ def posterior_summary(context: JointContext):
     ci_kind = context.reporting.interval_kind
     inner = intervals.INNER_CI_PROB
     od = context.reporting.output_dir
+    # Comprehension and production are not observed over the same age range, so
+    # understood and q may report a shorter grid than spoken and signed.
+    report_max_u = context.model_config.report_max_age_understood
 
-    def probability_summary(X, draws, prefix, label):
+    def probability_summary(X, draws, prefix, label, max_age=None):
         Ey = draws * n_trials
         p_o = intervals.bands(draws, ci_prob, ci_kind, sample_axis=1)
         p_i = intervals.bands(draws, inner, ci_kind, sample_axis=1)
@@ -1374,11 +1382,12 @@ def posterior_summary(context: JointContext):
             f"Ey_{prefix}_ci_lo": Ey_o[:, 0],
             f"Ey_{prefix}_ci_hi": Ey_o[:, 1],
         })
+        d = posterior_analysis.trim_reported_ages(d, max_age)
         d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
         dataframe_table(d.round(3), title=label, show_index=False)
         return d
 
-    def ratio_summary(X, draws, prefix):
+    def ratio_summary(X, draws, prefix, max_age=None):
         d = intervals.summarise(
             draws, X, name=f"{prefix}_query", outer=ci_prob, sample_axis=1
         ).rename(
@@ -1390,14 +1399,15 @@ def posterior_summary(context: JointContext):
                 "ci_hi": f"{prefix}_ci_hi",
             }
         )
+        d = posterior_analysis.trim_reported_ages(d, max_age)
         d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
         return d
 
-    probability_summary(s.X_query, s.p_u_query, "u", "Words understood")
+    probability_summary(s.X_query, s.p_u_query, "u", "Words understood", report_max_u)
     probability_summary(s.X_query, s.p_u_query * s.q_query, "s", "Words spoken")
     probability_summary(s.X_query, s.p_u_query * s.r_query, "sign", "Words signed")
     ratio_summary(s.X_query, s.r_query, "r")
-    ratio_summary(s.X_query, s.q_query, "q")
+    ratio_summary(s.X_query, s.q_query, "q", report_max_u)
 
     # Whole-month companions to the tables above. This engine draws no predictive
     # counts on the plot grid, so these carry the expected count only — matching
