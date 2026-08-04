@@ -4,7 +4,9 @@
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
-> Analysis and implementation note, 2026-08-04. **Implemented**: `trend_and_gp` gains a one-sided `clamp_above_hi` option, exposed as the model-definition field `clamp_mean_above_hi_anchor` and switched on for the eight Down syndrome joint models (VG05, VG07–VG10, VG14–VG16). It is a graph change, so every one of those models needs a refit; only VG10 has been refitted (§7).
+> Analysis and implementation note, 2026-08-04. **Implemented**: `trend_and_gp` gains a one-sided `clamp_above_hi` option, exposed as the model-definition field `clamp_mean_above_hi_anchor` and switched on for the eight Down syndrome joint models (VG05, VG07–VG10, VG14–VG16). It is a graph change, so every one of those models needed a refit; **all eight have now been refitted** (§7 for VG10's first pass, §10 for the family).
+>
+> A second change followed and is recorded here too: comprehension reporting is trimmed to 72 months, where the comprehension evidence stops (§9). That one is report-time only and needs no refit — demonstrated directly in open item 13.
 >
 > **This note corrects §3 and §5 of [202608041730](202608041730-ds-spoken-q-trajectory-prior.md).** That note concluded the residual the `q` mean cannot carry is an S-shape in the developmental curve, and that fixing it needed a mean form able to represent an S. Scored against the observed data rather than the fitted curve, that is wrong — see §2. The real defect is unbounded extrapolation above the high anchor, which is a different problem with a much smaller fix.
 
@@ -236,8 +238,9 @@ Fitting with §9 included rather than on plain `main` is deliberate. `--render-o
 | VG14  |   7 → **2** | 1.0048 → **1.0041** | 1241 → **1997** |    False |
 | VG15  |       2 → 3 | 1.0248 → **1.0074** |   379 → **479** |    False |
 | VG16  |   1 → **0** | 1.0113 → **1.0099** |   402 → **529** | **True** |
+| VG10  |       0 → 0 |     1.0139 → 1.0139 |       343 → 343 |    False |
 
-R-hat improved in five of seven, min ESS in six of seven, divergences in four of seven.
+R-hat improved in five of seven, min ESS in six of seven, divergences in four of seven. VG10 is the eighth row for completeness and is not part of that count: it already carried the clamp, so its later refit (open item 13) changed only its tables and reproduced its diagnostics exactly.
 
 > [!CAUTION]
 > **None of this is evidence that the clamp improves convergence.** §7 established that at `test` these gate outcomes turn on the sampler seed: VG10's max R-hat spans 1.008–1.014 across six fits against a 1.01 threshold. These are single fits at one seed, so VG16's newly clean gate and VG08's regression are equally likely to be noise. Quoting either as a treatment effect would repeat exactly the error §7 withdrew. Before any of this is reported, the reporting-quality configuration must be confirmed adequate (open item 9).
@@ -250,5 +253,8 @@ The §9 trim landed on all seven — understood and `q` at 11 rows to 72 months,
 
 11. **Whether the `u` trajectory figures should stop at 72 too.** The tables and the production-ratio figure now do. Leaving the trend and learning-rate figures on the full grid is defensible — they show the fitted curve, not a claim about evidence — but it is not obviously right, and the joint u+s figure would need a deliberate decision about showing two curves over different spans.
 12. ~~**The seven stale DS joint models.**~~ Done — §10.
-13. **VG10's tables are now the odd ones out.** It was refitted before §9 existed, so its understood and `q` tables still run to 90 while the other seven stop at 72. A six-minute refit fixes it, but it overwrites a current model of record and was outside the seven.
+13. ~~**VG10's tables are now the odd ones out.**~~ Done — refitted at `test`, seed 47, in 4m58s. All eight DS joint models now report understood and `q` to 72 months and spoken to 90.
+
+    This refit doubles as a **direct test of the §9 claim that the trim is report-time only**. VG10 already carried the clamp, so the graph and the seed were unchanged and the diagnostics were predicted, in advance, to come back identical. They did — bit-for-bit to 15 significant figures: divergences 0, max R-hat 1.013949937150557, min ESS 342.59097511242754, the same five failing parameters and the same four BFMI values. The trim provably does not touch the trace, which also retrospectively justifies fitting the other seven on this branch rather than on `main`.
+
 14. **The report figure cache is stale.** `docs/report/figures/` still holds the pre-refit plots and tables. `sync_report_figures.py` validates reporting quality, so at `test` it needs `--allow-provisional`.
