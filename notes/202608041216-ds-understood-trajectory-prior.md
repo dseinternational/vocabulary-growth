@@ -59,7 +59,7 @@ f_U(a)    = intercept + slope * z(a) + g_u(a)
 
 with `p_lo ~ Beta(1, 7)` at 24 months, `p_hi ~ Beta(2, 1.5)` at 84 ([`gp_utils.trend_and_gp`](../src/vocab_growth/models/gp_utils.py:152)). Under VG10's anchoring the GP `g_u` is orthogonalised against `[1, z]` on the observed rows and pinned to zero at 54 months, so it contributes no level and no linear component and its prior median is ~0. **The prior median population curve is therefore the straight line through the two anchor medians**, and everything below follows from that.
 
-Decomposing the prior-to-fitted gap against a logit-linear trend pinned at the *fitted* anchor values separates the two causes:
+Decomposing the prior-to-fitted gap against a logit-linear trend pinned at the _fitted_ anchor values separates the two causes:
 
 | age | prior | line through fitted anchors | fitted | gap  | from anchor level | from mean shape |
 | --- | ----- | --------------------------- | ------ | ---- | ----------------- | --------------- |
@@ -87,30 +87,30 @@ So this is a prior-predictive-check failure, not evidence that VG10's answer was
 
 One caveat on reading the anchors across the family. They only carry their nominal meaning — expected proportion at 24 and 84 months — in the models where the GP is orthogonalised against `[1, z]`. Elsewhere the mean and the GP are not separately identified, and the posterior anchors drift accordingly:
 
-| model                        | 24 mo anchor | 84 mo anchor | `eta_u` | `eta_u` prior CDF |
-| ---------------------------- | ------------ | ------------ | ------- | ----------------- |
-| VG05                         | 67           | 529          | 0.78    | 0.836             |
-| VG07                         | 62           | 490          | 0.74    | 0.804             |
-| VG08                         | 37           | 535          | 0.87    | 0.866             |
-| VG09                         | 34           | 539          | 0.86    | 0.861             |
-| **VG10** _(GP anchored)_     | **110**      | **659**      | 0.91    | 0.884             |
-| VG14                         | 65           | 531          | 0.78    | 0.823             |
-| **VG15** _(GP anchored)_     | **113**      | **663**      | 0.93    | 0.890             |
-| **VG16** _(GP anchored)_     | **109**      | **658**      | 0.92    | 0.887             |
+| model                    | 24 mo anchor | 84 mo anchor | `eta_u` | `eta_u` prior CDF |
+| ------------------------ | ------------ | ------------ | ------- | ----------------- |
+| VG05                     | 67           | 529          | 0.78    | 0.836             |
+| VG07                     | 62           | 490          | 0.74    | 0.804             |
+| VG08                     | 37           | 535          | 0.87    | 0.866             |
+| VG09                     | 34           | 539          | 0.86    | 0.861             |
+| **VG10** _(GP anchored)_ | **110**      | **659**      | 0.91    | 0.884             |
+| VG14                     | 65           | 531          | 0.78    | 0.823             |
+| **VG15** _(GP anchored)_ | **113**      | **663**      | 0.93    | 0.890             |
+| **VG16** _(GP anchored)_ | **109**      | **658**      | 0.92    | 0.887             |
 
-The three anchored models agree to within 4 words at 24 months and 5 at 84; the five unanchored ones scatter from 34 to 67. That is the ridge VG10 was built to remove, seen from a different direction, and it means the evidence about *where* the anchors belong comes from VG10, VG15 and VG16 only. The prior, however, is shared by all eight, so the displacement in §2 applies to all eight.
+The three anchored models agree to within 4 words at 24 months and 5 at 84; the five unanchored ones scatter from 34 to 67. That is the ridge VG10 was built to remove, seen from a different direction, and it means the evidence about _where_ the anchors belong comes from VG10, VG15 and VG16 only. The prior, however, is shared by all eight, so the displacement in §2 applies to all eight.
 
 ## 5. The mean form is the root cause
 
 Fitting each candidate two-parameter mean `logit(p) = a + b * t(age)` to the fitted population curve by least squares, and reading off what the GP is then left to carry:
 
-| mean form                        | RMS residual | max residual |
-| -------------------------------- | ------------ | ------------ |
-| **age** (current)                | 0.438        | **1.184**    |
-| **log(age)**                     | **0.139**    | **0.279**    |
-| sqrt(age)                        | 0.289        | 0.749        |
-| −1/age                           | 0.307        | 0.586        |
-| log(age) + age (3-parameter)     | 0.122        | 0.198        |
+| mean form                    | RMS residual | max residual |
+| ---------------------------- | ------------ | ------------ |
+| **age** (current)            | 0.438        | **1.184**    |
+| **log(age)**                 | **0.139**    | **0.279**    |
+| sqrt(age)                    | 0.289        | 0.749        |
+| −1/age                       | 0.307        | 0.586        |
+| log(age) + age (3-parameter) | 0.122        | 0.198        |
 
 Log-age cuts the RMS residual by a factor of 3.2 and the maximum by 4.2, and a third parameter buys almost nothing beyond it. The residual pattern under the current form is a single systematic hump — −1.18 at 12 months, +0.27 to +0.49 across 24–54, back to −0.38 at 90 — which is precisely the shape of the displacement in §2.
 
@@ -140,13 +140,13 @@ The temptation is to widen it, and it should be resisted for now. Widening `eta_
 
 Anchor levels are the wrong knob for a shape problem, but they are the right knob for the level, and the level is genuinely off. Five candidate pairs were drawn through the full prior predictive and scored by displacement from centred (50%) at each age, weighted by the comprehension rows each band holds:
 
-| variant                                 | row-weighted \|displacement − 50\| | worst |
-| --------------------------------------- | ---------------------------------- | ----- |
-| current `Beta(1,7)` / `Beta(2,1.5)`     | 25.2                               | 36.8  |
-| A `Beta(1.5,8)` / `Beta(2.5,1.5)`       | 21.8                               | 34.6  |
-| B `Beta(1.5,9)` / `Beta(2.5,1.3)`       | 21.8                               | 31.6  |
-| C `Beta(2,9)` / `Beta(2.5,1.2)`         | 18.6                               | 41.0  |
-| **D `Beta(1.5,8)` / `Beta(3,1.3)`**     | **19.7**                           | 33.5  |
+| variant                             | row-weighted \|displacement − 50\| | worst |
+| ----------------------------------- | ---------------------------------- | ----- |
+| current `Beta(1,7)` / `Beta(2,1.5)` | 25.2                               | 36.8  |
+| A `Beta(1.5,8)` / `Beta(2.5,1.5)`   | 21.8                               | 34.6  |
+| B `Beta(1.5,9)` / `Beta(2.5,1.3)`   | 21.8                               | 31.6  |
+| C `Beta(2,9)` / `Beta(2.5,1.2)`     | 18.6                               | 41.0  |
+| **D `Beta(1.5,8)` / `Beta(3,1.3)`** | **19.7**                           | 33.5  |
 
 **D is adopted**, on evidence rather than on the summary statistic:
 
@@ -155,10 +155,10 @@ Anchor levels are the wrong knob for a shape problem, but they are the right kno
 
 Effect on the prior predictive:
 
-| age                                | 12  | 18  | 24  | 30  | 36  | 42  | 48  | 54  | 60  | 72  | 84  |
-| ---------------------------------- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| % below frame median, current      | 25  | 47  | 70  | 81  | 86  | 85  | 87  | 84  | 66  | 68  | 61  |
-| % below frame median, **adopted**  | 16  | 36  | 59  | 72  | 77  | 71  | 72  | 64  | 41  | 48  | 43  |
+| age                               | 12  | 18  | 24  | 30  | 36  | 42  | 48  | 54  | 60  | 72  | 84  |
+| --------------------------------- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| % below frame median, current     | 25  | 47  | 70  | 81  | 86  | 85  | 87  | 84  | 66  | 68  | 61  |
+| % below frame median, **adopted** | 16  | 36  | 59  | 72  | 77  | 71  | 72  | 64  | 41  | 48  | 43  |
 
 Every band from 24 months up improves; 60–84 months lands close to centred. **The 12 and 18 month bands get worse** — 25% to 16% and 47% to 36% — for the reason §5 gives: lifting a straight line to fit its middle raises its backward extrapolation too. That is a known and accepted cost of this change, and the reason §5 rather than §7 is the fix.
 
@@ -172,7 +172,7 @@ Verified after the change by rebuilding VG10 from the registered definition and 
 
 1. **The eight Down syndrome joint fits are stale.** Priors are part of the model graph; every one of them needs refitting before any figure is quoted. They were already stale against the reporting configuration — the current fits are `test` config from 2026-08-03.
 2. **PRIORS.md was wrong before this change and is updated by it.** Its anchor table listed the joint understood anchors as `Beta(1, 10)` and `Beta(1.1, 1.1)`, which is the pre-#135 state; the registry has read `Beta(1, 7)` / `Beta(2, 1.5)` since. Both rows are corrected and given the new values.
-3. **The evidence class is scale calibration, not an independent anchor.** There is no independent Down syndrome comprehension norm in the library — Berglund et al. (2001) is production-only — which the model definitions already state. This recalibration is centred on the project's own frame and on the fitted anchors of three models, so it is the same weaker evidence class already accepted for this trajectory, made more accurate. It is not the posterior-derived double-dipping that #155 removed from the `q` anchors: the target is the prior's *location on the observable words scale at two fixed ages*, checkable against the frame directly, and the tails are deliberately left wider than the fits.
+3. **The evidence class is scale calibration, not an independent anchor.** There is no independent Down syndrome comprehension norm in the library — Berglund et al. (2001) is production-only — which the model definitions already state. This recalibration is centred on the project's own frame and on the fitted anchors of three models, so it is the same weaker evidence class already accepted for this trajectory, made more accurate. It is not the posterior-derived double-dipping that #155 removed from the `q` anchors: the target is the prior's _location on the observable words scale at two fixed ages_, checkable against the frame directly, and the tails are deliberately left wider than the fits.
 
 ## 9. Open
 
