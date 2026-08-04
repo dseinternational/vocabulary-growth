@@ -391,7 +391,7 @@ class BivariateModelDefinition:
     eta_u_sigma: float = 0.4
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
+    eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(
@@ -579,7 +579,7 @@ class TrivariateModelDefinition:
     eta_u_sigma: float = 0.4
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
+    eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
     # Signed GP favours a shorter lengthscale (~9 mo) than U/q so the signing
     # peak can stand apart from the post-60 mo collapse to near-zero, rather than
     # being smoothed into a monotone decline. (Shorter still only adds wiggle
@@ -699,7 +699,7 @@ class JointModelDefinition:
     eta_u_sigma: float = 0.6  # aligned with the recalibrated VG02 understood trajectory
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.20  # tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition that the broadened q anchors surface (smoothness prior, not double-dipping; VG09-note Option B)
+    eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
     eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
@@ -1297,14 +1297,25 @@ VG05 = BivariateModelDefinition(
     p_slope_hi_u_alpha=3.0,
     p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
-    # q anchors (weakly-informative, non-double-dipping): broadened from the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
-    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
-    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
+    # to remove prior-data double-dipping; the high anchor then recalibrated
+    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
+    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
+    # carrying the whole displacement. A weighted least-squares line through the
+    # directly observed spoken/understood ratio (902 rows with both outcomes,
+    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
+    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
+    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
+    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
+    # the observed extrapolation, because the last band carrying both outcomes is
+    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
+    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
+    # none for the DS production ratio. See
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
 )
 
 VG07 = BivariateModelDefinition(
@@ -1343,14 +1354,25 @@ VG07 = BivariateModelDefinition(
     p_slope_hi_u_alpha=3.0,
     p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
-    # q anchors (weakly-informative, non-double-dipping): broadened from the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
-    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
-    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
+    # to remove prior-data double-dipping; the high anchor then recalibrated
+    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
+    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
+    # carrying the whole displacement. A weighted least-squares line through the
+    # directly observed spoken/understood ratio (902 rows with both outcomes,
+    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
+    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
+    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
+    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
+    # the observed extrapolation, because the last band carrying both outcomes is
+    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
+    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
+    # none for the DS production ratio. See
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
 )
@@ -1391,14 +1413,25 @@ VG08 = BivariateModelDefinition(
     p_slope_hi_u_alpha=3.0,
     p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
-    # q anchors (weakly-informative, non-double-dipping): broadened from the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
-    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
-    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
+    # to remove prior-data double-dipping; the high anchor then recalibrated
+    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
+    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
+    # carrying the whole displacement. A weighted least-squares line through the
+    # directly observed spoken/understood ratio (902 rows with both outcomes,
+    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
+    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
+    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
+    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
+    # the observed extrapolation, because the last band carrying both outcomes is
+    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
+    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
+    # none for the DS production ratio. See
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -1441,14 +1474,25 @@ VG09 = BivariateModelDefinition(
     p_slope_hi_u_alpha=3.0,
     p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
-    # q anchors (weakly-informative, non-double-dipping): broadened from the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
-    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
-    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
+    # to remove prior-data double-dipping; the high anchor then recalibrated
+    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
+    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
+    # carrying the whole displacement. A weighted least-squares line through the
+    # directly observed spoken/understood ratio (902 rows with both outcomes,
+    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
+    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
+    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
+    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
+    # the observed extrapolation, because the last band carrying both outcomes is
+    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
+    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
+    # none for the DS production ratio. See
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -1495,14 +1539,25 @@ VG10 = BivariateModelDefinition(
     p_slope_hi_u_alpha=3.0,
     p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
-    # q anchors (weakly-informative, non-double-dipping): broadened from the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
-    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
-    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
+    # to remove prior-data double-dipping; the high anchor then recalibrated
+    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
+    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
+    # carrying the whole displacement. A weighted least-squares line through the
+    # directly observed spoken/understood ratio (902 rows with both outcomes,
+    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
+    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
+    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
+    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
+    # the observed extrapolation, because the last band carrying both outcomes is
+    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
+    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
+    # none for the DS production ratio. See
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -1651,6 +1706,15 @@ VG13 = BivariateModelDefinition(
     p_slope_low_q_beta=10.0,
     p_slope_hi_q_alpha=2.0,
     p_slope_hi_q_beta=7.0,
+    # Keep the pre-2026-08-04 q-GP amplitude. The family default was widened to
+    # 0.8 because logit(q) is S-shaped across the DS 8-115 mo range and the GP is
+    # the only term that can carry that curvature; over this model's 8-18 mo
+    # window only the bottom limb of that S is in view, a straight line on the
+    # logit scale is adequate, and VG13 is the one model in the family whose
+    # eta_q is not prior-limited (prior CDF 0.572 against 0.95-0.99 elsewhere).
+    # Widening here would buy nothing and would loosen a prior the data are
+    # content with. See notes/202608041730-ds-spoken-q-trajectory-prior.md.
+    eta_q_sigma=0.20,
     # Use all available bivariate rows in the 8–18 month window; study REs
     # absorb between-lab variation so no subsampling is required.
     sample_fraction=1.0,
@@ -1700,14 +1764,15 @@ VG14 = TrivariateModelDefinition(
     p_slope_hi_u_alpha=3.0,
     p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
-    # Spoken ratio q (weakly-informative, non-double-dipping): broadened from the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
-    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
-    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    # Spoken ratio q. Broadened from the VG07-posterior-derived
+    # Beta(3,22)/Beta(20,4); the high anchor then recalibrated 2026-08-04 from
+    # Beta(3,2) to Beta(4,1.2) alongside the rest of the DS joint family. q_low ~
+    # Beta(2,12) is unchanged. See VG05 for the calibration and
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
     # Signed ratio r uses the three-anchor tent + GP defined above.  uk_01's
     # signed-only field and uk_06's unverified field are excluded from the signed
     # likelihood by default; their understood/spoken observations remain.
@@ -1733,8 +1798,10 @@ VG15 = JointModelDefinition(
     # Issue #59 — subject random intercepts throughout + VG10 stabilisation:
     # Option A (ported from VG10), now broadened: the q anchors are
     # weakly-informative (q_low ~ Beta(2,12) at the independent TD q ~= 0.12
-    # centre; q_high ~ Beta(3,2) broad, no independent DS source), replacing the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). The u anchors are left
+    # centre), replacing the VG07-posterior-derived Beta(3,22)/Beta(20,4). The
+    # high anchor was recalibrated 2026-08-04 from Beta(3,2) to Beta(4,1.2)
+    # alongside the rest of the DS joint family — see VG05 for the calibration and
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md. The u anchors are left
     # unchanged, matching VG10. The signed mean is a three-anchor hump (tent),
     # inherited from the JointModelDefinition dataclass defaults (young/peak/old
     # sign anchors + GP), so there is no monotone signed slope to tighten; the
@@ -1742,8 +1809,8 @@ VG15 = JointModelDefinition(
     # removes the GP<->intercept ridge.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
     # Subject random intercepts on all three trajectories. Signed data has more
     # repeated-subject structure than first feared (substantial repeats across
     # uk_01/02/04/05), so the sign-subject RE is strongly data-identified — its
@@ -1818,14 +1885,25 @@ VG16 = BivariateModelDefinition(
     p_slope_hi_u_alpha=3.0,
     p_slope_hi_u_beta=1.3,
     eta_u_sigma=0.6,
-    # q anchors (weakly-informative, non-double-dipping): broadened from the
-    # VG07-posterior-derived Beta(3,22)/Beta(20,4). q_low ~ Beta(2,12) keeps the
-    # independent TD q(~12mo) ~= 0.12 centre; q_high ~ Beta(3,2) is broad (5-95%
-    # ~0.25-0.90, no independent DS source), so the data set the 84 mo level.
+    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
+    # to remove prior-data double-dipping; the high anchor then recalibrated
+    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
+    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
+    # carrying the whole displacement. A weighted least-squares line through the
+    # directly observed spoken/understood ratio (902 rows with both outcomes,
+    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
+    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
+    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
+    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
+    # the observed extrapolation, because the last band carrying both outcomes is
+    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
+    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
+    # none for the DS production ratio. See
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
     p_slope_low_q_alpha=2.0,
     p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=3.0,
-    p_slope_hi_q_beta=2.0,
+    p_slope_hi_q_alpha=4.0,
+    p_slope_hi_q_beta=1.2,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,

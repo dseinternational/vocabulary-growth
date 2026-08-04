@@ -92,6 +92,9 @@ This covers both ends rather than only the top. It places 1.3% of prior mass bel
 
 ## 5. `eta_q`
 
+> [!CAUTION]
+> **Superseded by [202608041730](202608041730-ds-spoken-q-trajectory-prior.md) §5, 2026-08-04.** The recommendation to widen `eta_q` was right and is now implemented — at `HalfNormal(0.8)` rather than the 0.4 proposed here — but the diagnosis below is wrong in two places. The conflict is **not** "confined to the models with both study and subject random effects": VG05, VG07 and VG08 carry no subject RE on `q` and sit at prior CDF 0.952–0.979, and the Option D anchored models sit alongside the unanchored ones, so the ridge-and-anchoring argument does not explain the pattern. VG05 is reported below at 0.352 and "not pressing the prior"; on its current trace it is 0.390 at prior CDF 0.952. What actually separates the models is age span — `logit(q)` is S-shaped across 8–115 months and only the GP can carry that, which is why short-window VG13 is the one model that does not press. The pre-registered control fit in the third paragraph below was run and is reported in the successor: the ridge does not return, `tau_subj_q` is unmoved, and VG10's remaining R-hat and ESS failures clear entirely.
+
 This is not a mis-scaling from evidence. PRIORS.md is explicit that `eta_q` was tightened from 0.4 to 0.20 to cure the weakly-identified `q` slope/intercept ridge in the subject-RE-on-`q` models (VG10 `test` min ESS 120 → 450, divergences 6 → 2), and describes the result as "a smoothness assumption on `q`, not a data-tuned value".
 
 The `dev` fits say otherwise. Five DS models land at 0.487–0.513 with contraction between −0.03 and 0.11 — that is, no contraction at all — and prior CDF 0.98–0.99. Because the prior is truncating, **0.50 is a lower bound on what the data want, not an estimate of it.**
