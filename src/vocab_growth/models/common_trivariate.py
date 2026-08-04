@@ -674,6 +674,7 @@ def build_model(
             X_all_z_data=X_all_z_data,
             grid=gp_grid,
             store_deterministic=False,
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -686,6 +687,7 @@ def build_model(
             X_all_z_data=X_all_z_data,
             grid=gp_grid,
             store_deterministic=False,
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
 
         # ---- Signed ratio: g_sign(a) -> r(a) = sigmoid(g_sign(a)) ----

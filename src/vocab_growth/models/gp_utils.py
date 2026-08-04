@@ -149,6 +149,30 @@ class GPGrid:
     L: list[float]
 
 
+#: Sharpness of the soft clamp above the high anchor, in units of the anchor span
+#: (``beta = _CLAMP_SOFTNESS / (sb_z - sa_z)``). Stating it relative to the span
+#: makes the rounding scale-free: whatever a model's age standardisation, the
+#: mean's largest departure from a hard ``min(z, sb_z)`` is
+#: ``slope * log(2) / beta`` = ``slope * (sb_z - sa_z) * log(2) / 50``, i.e. 1.4%
+#: of the anchor span, which for the Down syndrome 24-84 month anchors is about
+#: 0.8 months of age. Raising it sharpens the corner toward the hard clamp (and
+#: its elbow); lowering it rounds the corner further below the anchor, which eats
+#: into the region where ``p_slope_hi`` is meant to be interpretable.
+_CLAMP_SOFTNESS = 50.0
+
+
+def _soft_clamp_z(z, grid):
+    """Soft minimum of ``z`` and ``grid.sb_z`` — linear below, flat above.
+
+    Smooth everywhere, unlike ``pt.minimum``, so the mean has no derivative jump
+    at the anchor and the fitted curve inherits no elbow. Asymptotically exact in
+    both directions: the departure from ``min(z, sb_z)`` decays exponentially away
+    from the anchor and is at most ``log(2) / beta`` there.
+    """
+    beta = _CLAMP_SOFTNESS / (grid.sb_z - grid.sa_z)
+    return grid.sb_z - pt.softplus(beta * (grid.sb_z - z)) / beta
+
+
 def trend_and_gp(
     *,
     cfg_low,
@@ -162,6 +186,7 @@ def trend_and_gp(
     latent_name=None,
     anchor_idx=None,
     n_obs=None,
+    clamp_above_hi=False,
 ):
     """Logit-linear trend + HSGP deviation; return the full-grid latent.
 
@@ -171,10 +196,41 @@ def trend_and_gp(
     ``latent_name`` are stored as named ``Deterministic``\\ s (``dims=("all_id",)``);
     otherwise a plain tensor is returned (the trace-memory discipline used by the
     trivariate / joint engines). When ``anchor_idx`` is set the GP is
-    orthogonalised against this mean's identifiable basis ``[1, z]`` (coefficients
-    fitted on the first ``n_obs`` observed rows only) and pinned to zero at the
-    reference-age anchor row — so it carries only nonlinear curvature and its level
-    is fixed against ``intercept``/``slope`` (see :func:`_gp_from_mean`).
+    orthogonalised against this mean's identifiable basis (coefficients fitted on
+    the first ``n_obs`` observed rows only) and pinned to zero at the reference-age
+    anchor row — so it carries only nonlinear curvature and its level is fixed
+    against ``intercept``/``slope`` (see :func:`_gp_from_mean`).
+
+    ``clamp_above_hi`` levels the mean off above the high anchor instead of
+    extrapolating the line. The Down syndrome GP domain runs to 115 months while
+    the anchors sit at 24 and 84, so a quarter of the domain is extrapolation that
+    no prior constrains, and on the logit scale a line that has to climb several
+    logits between the anchors saturates there: VG10's fitted ``q`` mean alone
+    reaches 0.993 at 115 months (P(mean > 0.99) = 0.90 across the posterior)
+    against a realised 0.842, forcing the GP to spend −3.3 logits hauling it back
+    while it is idle (+0.08) at 48 months where the data are. Levelling off leaves
+    the GP free to carry departures rather than correct the mean's asymptote. It is
+    deliberately **one-sided**: below the low anchor the line extrapolates
+    accurately (VG10 ``q`` at 12 months is 0.019 by extrapolation against a fitted
+    0.022), and clamping there would instead pin young-age values at the 24-month
+    level, which is much worse. See notes/202608042030-q-mean-extrapolation.md.
+
+    The transition uses a **soft** minimum,
+    ``sb_z - softplus(beta * (sb_z - z)) / beta``, rather than ``min(z, sb_z)``.
+    A hard minimum is continuous but its derivative jumps at the anchor, and the
+    fitted curve inherits a visible elbow there — in the first VG10 refit it made
+    the spoken trajectory briefly *non-monotone* (428.6 words at 84.3 months
+    dipping to 426.6 at 85.6), which is not defensible in a growth-curve figure.
+    ``beta`` is set from the anchor span so the rounding is scale-free across
+    models; the mean's largest departure from the hard-clamped form is
+    ``slope * log(2) / beta``, at the anchor itself, decaying exponentially away
+    from it in both directions.
+
+    The cost is that ``p_slope_hi`` is no longer *exactly* the mean at the high
+    anchor age — it is short by ``slope * log(2) / beta``, which at
+    ``_CLAMP_SOFTNESS`` = 50 is 1.4% of the anchor span (about 0.8 months of age
+    for the Down syndrome models). Between the anchors the mean is otherwise
+    untouched, so both anchor priors carry over unchanged.
     """
     p_lo = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_hi = cfg_hi.to_pymc(f"p_slope_hi{suffix}")
@@ -185,8 +241,14 @@ def trend_and_gp(
         f"intercept{suffix}", logit(p_lo) - slope * grid.sa_z
     )
     z = X_all_z_data[:, 0]
-    mean_trend = intercept + slope * z
-    nuisance_basis = pt.stack([pt.ones_like(z), z], axis=1) if anchor_idx is not None else None
+    # The GP must be orthogonalised against whatever the mean can actually
+    # express, so the basis uses the same coordinate as the mean itself — with the
+    # clamp on, the direction the mean can move in is z_eff, not z.
+    z_eff = _soft_clamp_z(z, grid) if clamp_above_hi else z
+    mean_trend = intercept + slope * z_eff
+    nuisance_basis = (
+        pt.stack([pt.ones_like(z), z_eff], axis=1) if anchor_idx is not None else None
+    )
     return _gp_from_mean(
         mean_trend,
         cfg_ell=cfg_ell,

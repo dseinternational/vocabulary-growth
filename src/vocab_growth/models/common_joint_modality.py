@@ -873,6 +873,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_u else None,
             n_obs=n,
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
         h_all = trend_and_gp(
             cfg_low=config.p_slope_low_q_dist,
@@ -885,6 +886,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_q else None,
             n_obs=n,
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
         # Signed marginal: three-anchor "tent" hump mean (young/peak/old) + GP; the
         # study random intercept delta_sign is added at obs level below. The GP is

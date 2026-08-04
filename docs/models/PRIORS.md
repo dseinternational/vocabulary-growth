@@ -163,6 +163,53 @@ Review notes:
   documented in
   [`notes/202605131500-vg09-structural-options.md`](../../notes/202605131500-vg09-structural-options.md).
 
+### Mean extrapolation above the high anchor
+
+The two-anchor trajectories place priors on the expected proportion at a low and a
+high reference age and join them with a logit-linear segment. For the Down syndrome
+models that segment is fitted between 24 and 84 months but _evaluated_ over a GP
+domain running to **115 months**, so roughly a quarter of the domain — and 3.2% of
+spoken rows — is extrapolation that no prior constrains. On the logit scale a line climbing several
+logits between the anchors saturates there. In VG10 the fitted `q` mean alone reaches
+**0.993 at 115 months**, with P(mean > 0.99) = 0.90 across the posterior, against a
+realised 0.842; the GP is left spending −3.3 logits correcting the mean's asymptote
+while sitting idle (+0.08) at 48 months, where the data actually are. Understood shows
+the same defect about three times milder.
+
+**Implemented 2026-08-04:** `clamp_mean_above_hi_anchor` levels the mean off above the
+high anchor, with the GP's orthogonalisation basis using the same coordinate (see
+[`gp_utils.trend_and_gp`](../../src/vocab_growth/models/gp_utils.py)). It is switched on
+for VG05, VG07-VG10 and VG14-VG16.
+
+The transition is a **soft** minimum rather than `min(z, sb_z)`. A hard minimum is
+continuous but kinks at the anchor, and the fitted curve inherits an elbow — in the
+first VG10 refit it made the spoken trajectory briefly non-monotone (428.6 words at
+84.3 months dipping to 426.6 at 85.6), which is not acceptable in a growth-curve
+figure. The rounding is scale-free (sharpness set from the anchor span) and confined to
+roughly ±4 months of the anchor; at 96 and 115 months the soft and hard forms are
+identical, so the extrapolation fix is fully retained.
+
+The clamp is deliberately **one-sided**. Below the low anchor the line still
+extrapolates, and does so accurately — VG10's `q` at 12 months is 0.019 by
+extrapolation against a fitted 0.022 — whereas clamping there would pin young-age
+values at the 24-month level, a larger error than the one being corrected. Between the
+anchors nothing else changes, so every anchor prior in this document keeps its
+calibration. The one caveat is that smoothing costs exactness at the high anchor:
+`p_slope_hi` is now the mean at that age less `slope · log(2) / beta`, which on the DS
+grid moves the implied `q(84)` from 0.9402 to 0.9363. Flat is not claimed to be true —
+the realised `q` keeps rising slowly — but a GP adds a gentle rise onto a flat mean far
+more cheaply than it subtracts a large fall from a saturating one, and where there is no
+data a flat continuation is a better default than an assertion of near-total
+production. Prior median `q` at 115 months falls from 0.963 to 0.811, and P(`q` > 0.99)
+from 0.294 to 0.051.
+
+VG01 and VG02 share the same anchors and domain and therefore the same defect; they are
+built from `UnivariateModelDefinition`, which does not yet carry the field, and are
+recorded as an open item in
+[`notes/202608042030-q-mean-extrapolation.md`](../../notes/202608042030-q-mean-extrapolation.md).
+VG11-VG13 are unaffected: their domains extend only two to four months past their high
+anchors.
+
 ### Signed ratio prior
 
 VG14 and VG15 model signing as `r(a) = P(sign | understood)`, whose developmental

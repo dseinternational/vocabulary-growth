@@ -29,6 +29,9 @@ The prior is not displaced in one direction. It is **too flat**: 12× too high a
 
 ## 3. Why this is a different problem from the understood one
 
+> [!CAUTION]
+> **The S-shape conclusion below is wrong — corrected by [202608042030](202608042030-q-mean-extrapolation.md) §2, later the same day.** The residuals quoted here are scored against the _fitted_ `q` curve on the fourteen query ages with equal weight. The fitted curve already contains the GP's correction to the mean, so it measures the consequence of the defect rather than the shape of the data, and equal weighting gives 12 months — where `q` is essentially unobserved — the same say as 36 months, where 134 administrations sit. Scored against the **observed** ratio in size-weighted bands, a straight line on the logit scale is already adequate (weighted RMS 0.214); linear in `log(age)` is _worse_ (0.285); and the best three-anchor alternative improves it by about 10% (0.193). `logit(q)` is not meaningfully S-shaped where there are data. The real defect is unbounded extrapolation _above the high anchor_, which is now fixed by clamping the mean flat there — a much smaller change than the mean form this section calls for.
+
 The understood prior was displaced in _level_, and the fix was to move both anchors up. Here the level is roughly right on average and the _slope_ is wrong, so the fix is a rotation, not a translation.
 
 The two also differ in what the mean form can do about it. For understood, `logit(p_u)` is concave in age and a mean linear in `log(age)` cuts the residual the GP must carry from RMS 0.438 to 0.139. For `q` that reparameterisation barely helps — RMS 0.527 to 0.335, maximum residual 0.831 to 0.580 — because `logit(q)` is not concave but **S-shaped**. The fitted local slope runs +0.071 logit/month at 12–24, peaks at +0.118 at 24–36, then decays to +0.013 by 72–90. No monotone transformation of the age axis produces an S. Only the GP can.
@@ -59,6 +62,9 @@ This is scale calibration on the project's own frame — the same evidence class
 The low anchor is left alone. The data line implies 0.053 there against the prior's 0.126, which is a real discrepancy, but the fitted trend value is 0.117 and sits comfortably inside the prior with contraction 0.81 — the posterior is not asking for the move, and making it would be changing a parameter the likelihood is already informing well. It is recorded in §8 as an open question rather than acted on.
 
 ## 5. `eta_q`, and the correction to the earlier diagnosis
+
+> [!CAUTION]
+> **The _explanation_ below is superseded by [202608042030](202608042030-q-mean-extrapolation.md) §3; the widening itself stands, pending recheck.** This section attributes the pinned `eta_q` to `logit(q)` being S-shaped across the DS age range, so that only the GP could carry the curvature. The measurement that replaces it is more specific: the GP is _idle_ where the data are (+0.08 logits at 48 months) and spends its amplitude almost entirely hauling the mean back from its asymptote above 84 months, where the extrapolated line reaches `q` = 0.993 at 115. The age-span pattern in the table below is real and still discriminates the models correctly — a longer domain means more extrapolation past the high anchor — but the mechanism is extrapolation, not developmental curvature. Whether `eta_q` still needs `HalfNormal(0.8)` once the mean is clamped is open; see that note's §8.
 
 §5 of [202608020829](202608020829-kappa-and-eta-q-prior-recalibration.md) recommended reverting `eta_q` from `HalfNormal(0.20)` to `HalfNormal(0.4)`, on the argument that the tightening was a sampler patch for a `q` slope/intercept ridge, that VG10's Option D anchoring already removes that ridge structurally, and that the conflict was "confined to the models with both study and subject random effects (VG07–VG10, VG16)".
 
@@ -156,6 +162,9 @@ VG10 refitted at `test` (4 chains × 2,000 draws, seed 47, no overrides) with bo
 | ESS failures   | 4 understood GP coefficients | **none** |
 
 This reproduces the §5 control fit at the higher amplitude. VG10 has carried a REVIEW verdict throughout the 2026-08-03 and 2026-08-04 work; this is the first clean pass.
+
+> [!CAUTION]
+> **The clean pass is seed-specific and should not be read as a property of this change** — corrected by [202608042030](202608042030-q-mean-extrapolation.md) §7, later the same day. Refitting this exact configuration at two further sampler seeds gives max R-hat 1.0115 with 1 divergence and 1.0132 with 4, both failing the gate: it passes 1 time in 3. Max R-hat sits at 1.008-1.014 against a 1.01 threshold across every VG10 `test` fit measured, so pass or fail turns on the seed. The parameter results in this section are unaffected — the anchor and `eta_q` movements reproduce across seeds — but the diagnostics table above records one draw from a noisy distribution, not an improvement delivered by the recalibration.
 
 ### The priors now contain their posteriors
 

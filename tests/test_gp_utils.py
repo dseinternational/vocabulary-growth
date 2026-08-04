@@ -16,11 +16,14 @@ caller has already created).
 import numpy as np
 import preliz as pz
 import pymc as pm
+import pytensor.tensor as pt
 import pytest
 
 from vocab_growth.models.common import get_hsgp_hyperparams
 from vocab_growth.models.gp_utils import (
+    _CLAMP_SOFTNESS,
     GPGrid,
+    _soft_clamp_z,
     build_kappa_of_z_anchored,
     intercept_and_gp,
     make_kappa_of_z,
@@ -190,6 +193,191 @@ def test_trend_and_gp_anchor_adds_no_free_rv():
     # The anchor + orthogonalisation is a deterministic transform: same free RVs,
     # same order (no new sampled quantities).
     assert [v.name for v in plain.free_RVs] == [v.name for v in anchored.free_RVs]
+
+
+# --- clamp_above_hi ----------------------------------------------------------
+#
+# The mean levels off above the high anchor instead of extrapolating the line. The
+# transition is a soft minimum, so the mean stays differentiable and the fitted
+# curve inherits no elbow -- a hard min(z, sb_z) is continuous but kinks at the
+# anchor, which made VG10's spoken trajectory briefly non-monotone. Each test
+# draws the mean and the model's own intercept/slope jointly from one seeded draw,
+# so identities are checked against the same realisation.
+
+_SOFT_BETA = _CLAMP_SOFTNESS / (_GRID.sb_z - _GRID.sa_z)
+#: Largest departure of the soft form from a hard clamp, in z units, at the anchor.
+_SOFT_MAX_DZ = np.log(2.0) / _SOFT_BETA
+
+
+def _draw_mean(clamp, z_values, *, seed=17):
+    """Draw (f_all, intercept, slope) jointly from one model with eta driven to ~0.
+
+    A near-zero GP amplitude isolates the mean term, which is what the clamp
+    changes; ``g_unit`` is still built so the graph matches production use.
+    """
+    x = np.asarray(z_values, dtype=float).reshape(-1, 1)
+    n = x.shape[0]
+    with pm.Model(coords={"all_id": range(n), "x_dim": range(1)}) as m:
+        X = pm.Data("X_all_z", x, dims=("all_id", "x_dim"))
+        trend_and_gp(
+            cfg_low=pz.Beta(alpha=1, beta=15),
+            cfg_hi=pz.Beta(alpha=1.1, beta=1.1),
+            cfg_ell=pz.Beta(alpha=2, beta=2),
+            cfg_eta=pz.HalfNormal(sigma=1e-9),
+            suffix="",
+            X_all_z_data=X,
+            grid=_GRID,
+            store_deterministic=True,
+            latent_name="f_all",
+            clamp_above_hi=clamp,
+        )
+        f, icpt, slope = pm.draw(
+            [m["f_all"], m["intercept"], m["slope"]], random_seed=seed
+        )
+    return np.asarray(f), float(icpt), float(slope)
+
+
+def test_clamp_above_hi_levels_the_mean_off_past_the_high_anchor():
+    # _GRID anchors at sa_z = -1, sb_z = +1; the soft form is exact well above.
+    f, icpt, slope = _draw_mean(True, [2.0, 3.0, 4.0])
+    assert np.allclose(f, icpt + slope * _GRID.sb_z, atol=1e-6)
+
+
+def test_clamp_above_hi_leaves_the_mean_linear_well_below_the_high_anchor():
+    z = np.array([-2.0, -1.0, 0.0, 0.5])
+    f, icpt, slope = _draw_mean(True, z)
+    assert np.allclose(f, icpt + slope * z, atol=1e-4)
+
+
+def test_clamp_above_hi_still_extrapolates_below_the_low_anchor():
+    # One-sided by design: young-age extrapolation is accurate and must remain.
+    z = np.array([-3.0, -2.0, -1.0])
+    f, icpt, slope = _draw_mean(True, z)
+    assert np.allclose(f, icpt + slope * z, atol=1e-4)
+    assert f[0] < f[1] < f[2]  # still sloping, not pinned at the low anchor
+
+
+def test_clamp_above_hi_costs_a_bounded_offset_at_the_anchor_itself():
+    """The documented price of smoothness: p_slope_hi is no longer exact there."""
+    f, icpt, slope = _draw_mean(True, [_GRID.sb_z])
+    shortfall = (icpt + slope * _GRID.sb_z) - f[0]
+    assert 0.0 < shortfall
+    assert np.isclose(shortfall, slope * _SOFT_MAX_DZ, rtol=1e-3)
+
+
+def test_clamp_above_hi_keeps_the_mean_monotone_through_the_anchor():
+    """The property a hard min(z, sb_z) fails, and the reason for the soft form."""
+    z = np.linspace(_GRID.sb_z - 1.0, _GRID.sb_z + 1.0, 400)
+    f, _, _ = _draw_mean(True, z)
+    assert np.all(np.diff(f) > 0)  # monotone: no dip at the anchor
+
+
+def test_clamp_above_hi_has_no_derivative_jump_at_the_anchor():
+    """No single step may carry an appreciable share of the slope's fall to zero.
+
+    The slope necessarily *does* fall from its full value to zero across the
+    anchor; what distinguishes the soft form is that it does so gradually. With a
+    hard clamp the entire fall happens in one grid step, so this ratio is 1.
+    """
+    z = np.linspace(_GRID.sb_z - 1.0, _GRID.sb_z + 1.0, 4000)
+    f, _, _ = _draw_mean(True, z)
+    d1 = np.diff(f)
+    biggest_single_step = np.abs(np.diff(d1)).max()
+    total_fall = d1.max() - d1.min()
+    assert biggest_single_step / total_fall < 0.05
+
+
+def test_hard_clamp_would_jump_confirming_the_previous_test_can_fail():
+    """Control: on a hard clamp the whole fall happens at the kink.
+
+    The kink generally lands between two grid points rather than on one, so the
+    fall is split across at most two steps; the ratio is therefore near 1 but not
+    exactly 1. It still separates from the soft form's < 0.05 by an order of
+    magnitude, which is what makes the preceding test meaningful.
+    """
+    z = np.linspace(_GRID.sb_z - 1.0, _GRID.sb_z + 1.0, 4000)
+    hard = 1.7 * np.minimum(z, _GRID.sb_z)
+    d1 = np.diff(hard)
+    assert np.abs(np.diff(d1)).max() / (d1.max() - d1.min()) > 0.4
+
+
+def test_without_the_clamp_the_mean_keeps_extrapolating_above_the_high_anchor():
+    z = np.array([1.0, 2.0, 3.0])
+    f, icpt, slope = _draw_mean(False, z)
+    assert np.allclose(f, icpt + slope * z, atol=1e-6)
+    assert f[2] > f[0]  # the behaviour the clamp exists to remove
+
+
+def test_clamp_above_hi_adds_no_free_rv():
+    cfg = dict(
+        cfg_low=pz.Beta(alpha=1, beta=15),
+        cfg_hi=pz.Beta(alpha=1.1, beta=1.1),
+        cfg_ell=pz.Beta(alpha=2, beta=2),
+        cfg_eta=pz.HalfNormal(sigma=1.0),
+        suffix="",
+        grid=_GRID,
+        store_deterministic=True,
+        latent_name="f_all",
+    )
+    plain = _model_with(lambda X: trend_and_gp(X_all_z_data=X, **cfg))
+    clamped = _model_with(
+        lambda X: trend_and_gp(X_all_z_data=X, clamp_above_hi=True, **cfg)
+    )
+    # Same sampled quantities in the same order, so the RNG stream is unchanged.
+    assert [v.name for v in plain.free_RVs] == [v.name for v in clamped.free_RVs]
+
+
+def _anchored_gp(clamp, seed=5):
+    """Draw the anchored GP over a grid spanning both sides of the high anchor."""
+    x = np.linspace(-2.0, 3.0, 12).reshape(-1, 1)
+    with pm.Model(coords={"all_id": range(12), "x_dim": range(1)}) as m:
+        X = pm.Data("X_all_z", x, dims=("all_id", "x_dim"))
+        trend_and_gp(
+            cfg_low=pz.Beta(alpha=1, beta=15),
+            cfg_hi=pz.Beta(alpha=1.1, beta=1.1),
+            cfg_ell=pz.Beta(alpha=2, beta=2),
+            cfg_eta=pz.HalfNormal(sigma=1.0),
+            suffix="",
+            X_all_z_data=X,
+            grid=_GRID,
+            store_deterministic=True,
+            latent_name="f_all",
+            clamp_above_hi=clamp,
+            anchor_idx=0,
+            n_obs=12,
+        )
+        g = np.asarray(pm.draw(m["g"], random_seed=seed))
+    return g, x[:, 0]
+
+
+def test_clamp_above_hi_orthogonalises_against_the_clamped_coordinate():
+    """The GP must be projected out of what the mean can express, not out of z.
+
+    With the clamp on, the mean's identifiable directions are [1, z_eff];
+    orthogonalising against [1, z] instead would leave the GP able to mimic a
+    slope change above the high anchor. The projection removes both directions and
+    the result is then shifted to zero at the anchor row, which re-introduces a
+    constant — so the recoverable invariant is that the *centred* GP is orthogonal
+    to the slope column it was projected against.
+    """
+    g, z = _anchored_gp(clamp=True)
+    z_eff = np.asarray(
+        _soft_clamp_z(pt.as_tensor_variable(z), _GRID).eval()
+    )
+    centred = g - g.mean()
+    assert abs(float(centred @ z_eff)) < 1e-6
+    # ... and demonstrably not against the unclamped coordinate, which differs
+    # over the grid points above the high anchor.
+    assert abs(float(centred @ z)) > 1e-3
+    # The anchor contract still holds exactly.
+    assert abs(float(g[0])) < 1e-9
+
+
+def test_without_the_clamp_orthogonalisation_uses_the_raw_coordinate():
+    g, z = _anchored_gp(clamp=False)
+    centred = g - g.mean()
+    assert abs(float(centred @ z)) < 1e-6
+    assert abs(float(g[0])) < 1e-9
 
 
 def test_intercept_and_gp_intercept_is_free_no_slope():
