@@ -19,13 +19,13 @@
 
 Scored against the directly observed `spoken / understood` ratio, in three-month bands from 12 to 78 months with at least eight rows apiece, weighted by band size:
 
-| mean form                          | weighted RMS |   max abs residual |
-| ---------------------------------- | -----------: | -----------------: |
-| **linear in age (current)**        |    **0.214** |              0.555 |
-| linear in log(age)                 |        0.285 |              0.481 |
-| linear in sqrt(age)                |        0.222 |              0.485 |
-| quadratic in age                   |        0.207 |              0.494 |
-| best three-anchor (knots 12/48/84) |        0.193 |              0.386 |
+| mean form                          | weighted RMS | max abs residual |
+| ---------------------------------- | -----------: | ---------------: |
+| **linear in age (current)**        |    **0.214** |            0.555 |
+| linear in log(age)                 |        0.285 |            0.481 |
+| linear in sqrt(age)                |        0.222 |            0.485 |
+| quadratic in age                   |        0.207 |            0.494 |
+| best three-anchor (knots 12/48/84) |        0.193 |            0.386 |
 
 A straight line on the logit scale is already an adequate description of `logit(q)` where there are data. Linear in `log(age)` is **worse**, not better. The best three-anchor piecewise-linear alternative — which is what `tent_and_gp` would give — improves the weighted RMS by about 10%, and adds a parameter and a prior to do it. That does not justify a graph change, and §3 of the previous note should not be relied on.
 
@@ -60,8 +60,8 @@ The first implementation used a hard `pt.minimum`. It is continuous but its deri
 
 `beta` is set from the anchor span, `_CLAMP_SOFTNESS / (sb_z - sa_z)` with `_CLAMP_SOFTNESS = 50`, so the rounding is scale-free across models. On the Down syndrome grid (`z = (age − 39.0) / 20.0`, anchor span 2.993 in `z`) that gives `beta` = 16.7 and confines the rounding to a narrow window:
 
-| age (months)                | 24 | 48 | 72 | 80 | **84** | 88 | 96 | 115 |
-| --------------------------- | -: | -: | -: | -: | -----: | -: | -: | --: |
+| age (months)                |   24 |   48 |   72 |    80 |    **84** |    88 |   96 |  115 |
+| --------------------------- | ---: | ---: | ---: | ----: | --------: | ----: | ---: | ---: |
 | soft − hard `z_eff`, months | 0.00 | 0.00 | 0.00 | −0.04 | **−0.83** | −0.04 | 0.00 | 0.00 |
 
 The two forms are indistinguishable outside roughly ±4 months of the anchor, and identical at 96 and 115 — so the extrapolation fix, which is the whole point, is fully retained.
@@ -77,12 +77,12 @@ Flat is not true either — the realised `q` keeps rising to 0.842 at 115 months
 
 ### Prior predictive, before and after
 
-| age (months)          | 24 | 48 | 72 | 84 | 96 | 105 | 115 |
-| --------------------- | -: | -: | -: | -: | -: | --: | --: |
+| age (months)             |    24 |    48 |    72 |    84 |    96 |   105 |       115 |
+| ------------------------ | ----: | ----: | ----: | ----: | ----: | ----: | --------: |
 | prior median `q`, before | 0.121 | 0.359 | 0.679 | 0.810 | 0.900 | 0.938 | **0.963** |
 | prior median `q`, after  | 0.121 | 0.359 | 0.678 | 0.811 | 0.817 | 0.815 | **0.811** |
-| P(`q` > 0.99), before    | — | — | 0.011 | 0.046 | 0.124 | 0.193 | **0.294** |
-| P(`q` > 0.99), after     | — | — | 0.011 | 0.047 | 0.054 | 0.052 | **0.051** |
+| P(`q` > 0.99), before    |     — |     — | 0.011 | 0.046 | 0.124 | 0.193 | **0.294** |
+| P(`q` > 0.99), after     |     — |     — | 0.011 | 0.047 | 0.054 | 0.052 | **0.051** |
 
 Identical at and below the high anchor, as intended. Prior median spoken at 115 months falls from 670 to 427 words out of 810.
 
@@ -96,20 +96,20 @@ Switched on for the eight Down syndrome joint models. VG13 keeps it off — its 
 
 Seven tests in [`tests/test_gp_utils.py`](../tests/test_gp_utils.py): that the mean is flat above the high anchor and equals `intercept + slope * sb_z` there; that it is unchanged at and below the anchor; that it still slopes below the low anchor; that without the clamp it keeps extrapolating (the behaviour being removed); that no free RV is added or reordered; and that the anchored GP is orthogonal to the **clamped** slope column and demonstrably not to the raw one, while still pinned to zero at the reference row.
 
-The orthogonality assertions are on the *centred* GP. `_orthogonalise_and_anchor` projects and then shifts the residual to zero at the anchor row, which re-introduces a constant, so orthogonality to the constant column does not survive by construction; the slope-column invariant does.
+The orthogonality assertions are on the _centred_ GP. `_orthogonalise_and_anchor` projects and then shifts the residual to zero at the anchor row, which re-introduces a constant, so orthogonality to the constant column does not survive by construction; the slope-column invariant does.
 
 ## 7. VG10 refits — the elbow is fixed, the convergence cost is not
 
 VG10 refitted at `test` (4 chains x 2,000 draws, seed 47, no overrides) twice: once with the hard `min(z, sb_z)`, then again with the soft form now in the tree. 5m 56s and 5m 30s against 5m 42s without the clamp. The full test suite passes for both.
 
-| | no clamp | hard clamp | **soft clamp** |
-| --- | --: | --: | --: |
-| gate `passed` | True | False | **False** |
-| divergences | 0 | 3 | **0** |
-| max R-hat | 1.0084 | 1.0143 | **1.0139** |
-| min ESS | 433 | 404 | **343** |
-| min BFMI | 0.468 | 0.453 | **0.424** |
-| R-hat failures | none | 2 | **5** |
+|                | no clamp | hard clamp | **soft clamp** |
+| -------------- | -------: | ---------: | -------------: |
+| gate `passed`  |     True |      False |      **False** |
+| divergences    |        0 |          3 |          **0** |
+| max R-hat      |   1.0084 |     1.0143 |     **1.0139** |
+| min ESS        |      433 |        404 |        **343** |
+| min BFMI       |    0.468 |      0.453 |      **0.424** |
+| R-hat failures |     none |          2 |          **5** |
 
 ### What the soft form fixed
 
@@ -117,7 +117,7 @@ The elbow is gone. The fitted spoken and understood curves are **monotone over t
 
 ### What it did not fix
 
-**Neither variant recovers the clean convergence gate.** The soft form trades the hard form's 3 divergences for a lower minimum ESS (343 against 404) and *more* R-hat failures — five against two, now including `ell_unit_u`, `ell_u` and `tau_q`, where the hard clamp's were confined to two understood GP coefficients.
+**Neither variant recovers the clean convergence gate.** The soft form trades the hard form's 3 divergences for a lower minimum ESS (343 against 404) and _more_ R-hat failures — five against two, now including `ell_unit_u`, `ell_u` and `tau_q`, where the hard clamp's were confined to two understood GP coefficients.
 
 That two independent implementations both regress from a clean pass weakens the "probably run-to-run variation" hedge offered after the first refit. It does not settle it: this is still one fit per variant, and one no-clamp fit to compare against, so a lucky baseline is not excluded. Item 6 is the experiment that would decide it, and it is cheap.
 
@@ -125,13 +125,13 @@ None of these are catastrophic values — max R-hat 1.0139 against a 1.01 thresh
 
 ### The benefit is unchanged between the two forms
 
-| | no clamp | hard clamp | soft clamp |
-| --- | --: | --: | --: |
-| `q` mean alone at 115 mo | 0.993 | 0.940 | 0.940 |
-| GP pull at 115 mo (logit) | -3.29 | -1.46 | **-1.43** |
-| `eta_q` median / contraction | 0.855 / 0.35 | 0.696 / 0.42 | **0.685 / 0.42** |
-| `eta_u` median / contraction | 0.916 / 0.29 | 0.833 / 0.33 | **0.842 / 0.33** |
-| `p_slope_hi_q` / prior CDF | 0.931 / 0.819 | 0.940 / 0.845 | **0.940 / 0.846** |
+|                              |      no clamp |    hard clamp |        soft clamp |
+| ---------------------------- | ------------: | ------------: | ----------------: |
+| `q` mean alone at 115 mo     |         0.993 |         0.940 |             0.940 |
+| GP pull at 115 mo (logit)    |         -3.29 |         -1.46 |         **-1.43** |
+| `eta_q` median / contraction |  0.855 / 0.35 |  0.696 / 0.42 |  **0.685 / 0.42** |
+| `eta_u` median / contraction |  0.916 / 0.29 |  0.833 / 0.33 |  **0.842 / 0.33** |
+| `p_slope_hi_q` / prior CDF   | 0.931 / 0.819 | 0.940 / 0.845 | **0.940 / 0.846** |
 
 Both GP amplitudes fall and their contraction rises, identically under either form. That is §3's mechanism confirmed, and it is the substantive result of this note: the amplitudes were being consumed correcting the mean's asymptote, and stopping that lets the data inform them.
 
@@ -167,15 +167,16 @@ The GP pull **at** 84 months is essentially unchanged across all three fits: -1.
 1. **Refit the family.** VG05, VG07, VG08, VG09, VG14, VG15 and VG16 all carry the graph change with stale fits.
 2. **VG01 and VG02 — measured, and much less exposed than expected.** Same anchors and domain, but the saturation does not follow:
 
-   | model | mean alone at 115 mo | realised | GP pull | P(mean > 0.99) |
-   | ----- | -------------------: | -------: | ------: | -------------: |
-   | VG01  |            671 words |      488 |   −1.16 |          0.000 |
-   | VG02  |            725 words |      694 |   −0.36 |          0.003 |
-   | VG10 `q` |             0.993 |    0.842 |   −3.29 |      **0.896** |
+   | model    | mean alone at 115 mo | realised | GP pull | P(mean > 0.99) |
+   | -------- | -------------------: | -------: | ------: | -------------: |
+   | VG01     |            671 words |      488 |   −1.16 |          0.000 |
+   | VG02     |            725 words |      694 |   −0.36 |          0.003 |
+   | VG10 `q` |                0.993 |    0.842 |   −3.29 |      **0.896** |
 
    The reason is that `q` is a conditional **ratio** that genuinely approaches 1, so its logit saturates hard, whereas a vocabulary proportion out of 810 stays well short of the ceiling even at 115 months and its logit does not. The defect is therefore worst on ratio-valued trajectories, which is `q` — extending the clamp to `UnivariateModelDefinition` is low priority on this evidence.
 
    VG01 does have a separate and larger problem this measurement turned up: its mean sits at 47 words against a realised 185 at **48 months**, a GP pull of +1.57 inside the data-rich range. That is not extrapolation and is not addressed by anything here.
+
 3. **Whether `eta_q` should now come back down.** It was widened to `HalfNormal(0.8)` earlier the same day, on evidence that §3 here reinterprets. Partly answered: with the clamp, `eta_q` falls from 0.855 to 0.685 at prior CDF 0.643 with contraction 0.42, so the wider prior is no longer binding and is doing no harm — but 0.685 is well above what `HalfNormal(0.4)` would comfortably allow, so reverting the widening would reintroduce a conflict. Leave it at 0.8; revisit only if the clamp is kept and the family refit shows it settling lower.
 4. **The residual is still there.** Clamping does not make the mean match the data better between the anchors; §2 says a straight line is already adequate there, and the previous note's remaining prior-predictive gap at 54 months is not addressed by this change.
 5. ~~**A smooth clamp would remove the elbow.**~~ Done and kept — it is the implementation in the tree. It removed the elbow and the dip and took divergences back to zero, but did **not** recover the convergence (§7): min ESS fell further, 404 to 343, and R-hat failures rose from two to five. The predicted cost also materialised as predicted — `p_slope_hi` is short of the anchor value by `slope * log(2) / beta`, moving the implied `q(84)` from 0.9402 to 0.9363.
@@ -183,4 +184,4 @@ The GP pull **at** 84 months is essentially unchanged across all three fits: -1.
 7. **Decide whether to keep this.** With item 6 answered the objection is gone: the prior-predictive gain is real, the mechanism is confirmed, the curves stay monotone, and there is no measurable convergence cost. The remaining question is scope rather than merit — see item 9.
 8. ~~**Why the R-hat failures moved.**~~ Withdrawn (§7). The failure counts swing 0, 1, 2 across seeds without the clamp and 5, 0, 3 with it, so which parameters appear is noise at this sampling configuration and there is nothing to explain.
 9. **VG10 does not reliably meet the convergence gate at `test`.** Max R-hat sits at 1.008-1.014 against a 1.01 threshold across all six fits in §7, so pass or fail turns on the seed. This predates everything in this note. Two consequences: single-fit gate outcomes on this model must not be quoted as evidence for or against a change, and the reporting-quality configuration's chain count should be confirmed adequate before any of this is reported.
-10. **Whether the analysis should be capped at 84 months** was raised separately and is *not* the right fix for the defect in this note. Comprehension data effectively stop at about 72 months (9 rows in 72-84, 5 above 84), but spoken data above 84 are real and informative: within uk_01 alone the median runs 363 words at 72-84, 479 at 84-96 and 539 at 96-115, across 43 rows and 36 children, 22 of whom appear only above 84. A data cap would discard that to fix an unobserved-comprehension problem the likelihood already handles by outcome-wise missingness. The supportable version is to trim what is *reported* for `u` and `q` to where their data end.
+10. **Whether the analysis should be capped at 84 months** was raised separately and is _not_ the right fix for the defect in this note. Comprehension data effectively stop at about 72 months (9 rows in 72-84, 5 above 84), but spoken data above 84 are real and informative: within uk_01 alone the median runs 363 words at 72-84, 479 at 84-96 and 539 at 96-115, across 43 rows and 36 children, 22 of whom appear only above 84. A data cap would discard that to fix an unobserved-comprehension problem the likelihood already handles by outcome-wise missingness. The supportable version is to trim what is _reported_ for `u` and `q` to where their data end.
