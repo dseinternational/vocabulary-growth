@@ -324,6 +324,22 @@ class UnivariateModelDefinition:
     """Reference age (months) for the GP anchor. If None, defaults to the midpoint of
     slope_anchors."""
 
+    # -- Reporting range --
+    report_max_age_understood: int | None = None
+    """Highest query age (months) at which comprehension quantities are reported.
+
+    Only meaningful on a model whose ``outcome`` is ``UNDERSTOOD``; validation
+    rejects it elsewhere rather than letting it be a silent no-op. Trims the
+    summary tables to where the comprehension evidence stops. Purely
+    post-processing: the query grid, the model graph and the fitted trace are
+    untouched, so changing this cannot move the posterior — proved by refitting
+    VG10 across the change at a fixed seed and reproducing its diagnostics
+    bit-for-bit. It does still require re-running the fit: the summary tables are
+    written during the fit pipeline and ``--render-only`` does not regenerate
+    them, and this field is part of the recorded definition, so a fit produced
+    under a different value is correctly reported as stale. None reports every
+    query age. See ``posterior_analysis.trim_reported_ages``."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.UNIVARIATE
@@ -472,6 +488,21 @@ class BivariateModelDefinition:
     Down syndrome models, whose GP domain runs to 115 months against a high anchor
     at 84 — see ``gp_utils.trend_and_gp`` and
     notes/202608042030-q-mean-extrapolation.md."""
+
+    # -- Reporting range --
+    report_max_age_understood: int | None = None
+    """Highest query age (months) at which comprehension quantities are reported.
+
+    Trims the understood and ``q`` summary tables and the production-ratio figure
+    to where their evidence stops, leaving spoken on the full grid. Purely
+    post-processing: the query grid, the model graph and the fitted trace are
+    untouched, so changing this cannot move the posterior — proved by refitting
+    VG10 across the change at a fixed seed and reproducing its diagnostics
+    bit-for-bit. It does still require re-running the fit: the summary tables are
+    written during the fit pipeline and ``--render-only`` does not regenerate
+    them, and this field is part of the recorded definition, so a fit produced
+    under a different value is correctly reported as stale. None reports every
+    query age. See ``posterior_analysis.trim_reported_ages``."""
 
     # -- Data age filtering --
     max_age_months: int | None = None
@@ -640,6 +671,21 @@ class TrivariateModelDefinition:
     at 84 — see ``gp_utils.trend_and_gp`` and
     notes/202608042030-q-mean-extrapolation.md."""
 
+    # -- Reporting range --
+    report_max_age_understood: int | None = None
+    """Highest query age (months) at which comprehension quantities are reported.
+
+    Trims the understood and ``q`` summary tables and the production-ratio figure
+    to where their evidence stops, leaving spoken (and signed) on the full grid.
+    Purely post-processing: the query grid, the model graph and the fitted trace
+    are untouched, so changing this cannot move the posterior — proved by
+    refitting VG10 across the change at a fixed seed and reproducing its
+    diagnostics bit-for-bit. It does still require re-running the fit: the
+    summary tables are written during the fit pipeline and ``--render-only`` does
+    not regenerate them, and this field is part of the recorded definition, so a
+    fit produced under a different value is correctly reported as stale. None
+    reports every query age. See ``posterior_analysis.trim_reported_ages``."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.TRIVARIATE
@@ -786,6 +832,21 @@ class JointModelDefinition:
     Down syndrome models, whose GP domain runs to 115 months against a high anchor
     at 84 — see ``gp_utils.trend_and_gp`` and
     notes/202608042030-q-mean-extrapolation.md."""
+
+    # -- Reporting range --
+    report_max_age_understood: int | None = None
+    """Highest query age (months) at which comprehension quantities are reported.
+
+    Trims the understood and ``q`` summary tables and the production-ratio figure
+    to where their evidence stops, leaving spoken (and signed) on the full grid.
+    Purely post-processing: the query grid, the model graph and the fitted trace
+    are untouched, so changing this cannot move the posterior — proved by
+    refitting VG10 across the change at a fixed seed and reproducing its
+    diagnostics bit-for-bit. It does still require re-running the fit: the
+    summary tables are written during the fit pipeline and ``--render-only`` does
+    not regenerate them, and this field is part of the recorded definition, so a
+    fit produced under a different value is correctly reported as stale. None
+    reports every query age. See ``posterior_analysis.trim_reported_ages``."""
 
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk01_signed: bool = False
@@ -1223,6 +1284,13 @@ VG02 = UnivariateModelDefinition(
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     eta_sigma=0.6,
+    # Comprehension reporting stops at 72 mo, matching the joint models. Only 15
+    # of the 905 understood rows sit at or above it (95th percentile 64 mo), and
+    # 78 and 90 fall at or past the high anchor. Reporting only -- it cannot move
+    # the posterior. The whole-month companion still covers the full observed span,
+    # where its n_obs column records the emptiness directly. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     kappa=_DS_UNDERSTOOD_KAPPA,
 )
 
@@ -1356,6 +1424,14 @@ VG05 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1423,6 +1499,14 @@ VG07 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1492,6 +1576,14 @@ VG08 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1565,6 +1657,14 @@ VG09 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1642,6 +1742,14 @@ VG10 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1856,6 +1964,14 @@ VG14 = TrivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1931,6 +2047,14 @@ VG15 = JointModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -2037,6 +2161,14 @@ VG16 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
+    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
+    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
+    # above 84 -- so the shared query grid quotes understood and q at ages where
+    # almost nothing was measured, and above the 84 mo anchor where the mean is a
+    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
+    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -2133,6 +2265,20 @@ def validate_model_definition(definition) -> None:
         for age in definition.ages_query
     ) or list(definition.ages_query) != sorted(set(definition.ages_query)):
         raise ValueError(f"{prefix}.ages_query must be sorted with no duplicates.")
+    report_max_u = getattr(definition, "report_max_age_understood", None)
+    if report_max_u is not None:
+        # A univariate spoken model has no comprehension quantity to trim, so
+        # setting this there would silently do nothing.
+        outcome = getattr(definition, "outcome", None)
+        if outcome is not None and outcome is not Outcome.UNDERSTOOD:
+            raise ValueError(
+                f"{prefix}.report_max_age_understood applies to comprehension"
+                f" reporting, but the model's outcome is {outcome.value}."
+            )
+        if report_max_u < min(definition.ages_query):
+            raise ValueError(
+                f"{prefix}.report_max_age_understood would report no query age."
+            )
     if definition.n_plot <= 0:
         raise ValueError(f"{prefix}.n_plot must be positive.")
     if len(definition.ell_months_range) != 2 or not (

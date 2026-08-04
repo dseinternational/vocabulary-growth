@@ -4,7 +4,9 @@
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
-> Analysis and implementation note, 2026-08-04. **Implemented**: `trend_and_gp` gains a one-sided `clamp_above_hi` option, exposed as the model-definition field `clamp_mean_above_hi_anchor` and switched on for the eight Down syndrome joint models (VG05, VG07–VG10, VG14–VG16). It is a graph change, so every one of those models needs a refit; only VG10 has been refitted (§7).
+> Analysis and implementation note, 2026-08-04. **Implemented**: `trend_and_gp` gains a one-sided `clamp_above_hi` option, exposed as the model-definition field `clamp_mean_above_hi_anchor` and switched on for the eight Down syndrome joint models (VG05, VG07–VG10, VG14–VG16). It is a graph change, so every one of those models needed a refit; **all eight have now been refitted** (§7 for VG10's first pass, §10 for the family).
+>
+> A second change followed and is recorded here too: comprehension reporting is trimmed to 72 months, where the comprehension evidence stops (§9). That one cannot move the posterior — demonstrated directly in open item 13 — though it does still require a refit to take effect, and it invalidated every existing fit; see §12.
 >
 > **This note corrects §3 and §5 of [202608041730](202608041730-ds-spoken-q-trajectory-prior.md).** That note concluded the residual the `q` mean cannot carry is an S-shape in the developmental curve, and that fixing it needed a mean form able to represent an S. Scored against the observed data rather than the fitted curve, that is wrong — see §2. The real defect is unbounded extrapolation above the high anchor, which is a different problem with a much smaller fix.
 
@@ -184,4 +186,97 @@ The GP pull **at** 84 months is essentially unchanged across all three fits: -1.
 7. **Decide whether to keep this.** With item 6 answered the objection is gone: the prior-predictive gain is real, the mechanism is confirmed, the curves stay monotone, and there is no measurable convergence cost. The remaining question is scope rather than merit — see item 9.
 8. ~~**Why the R-hat failures moved.**~~ Withdrawn (§7). The failure counts swing 0, 1, 2 across seeds without the clamp and 5, 0, 3 with it, so which parameters appear is noise at this sampling configuration and there is nothing to explain.
 9. **VG10 does not reliably meet the convergence gate at `test`.** Max R-hat sits at 1.008-1.014 against a 1.01 threshold across all six fits in §7, so pass or fail turns on the seed. This predates everything in this note. Two consequences: single-fit gate outcomes on this model must not be quoted as evidence for or against a change, and the reporting-quality configuration's chain count should be confirmed adequate before any of this is reported.
-10. **Whether the analysis should be capped at 84 months** was raised separately and is _not_ the right fix for the defect in this note. Comprehension data effectively stop at about 72 months (9 rows in 72-84, 5 above 84), but spoken data above 84 are real and informative: within uk_01 alone the median runs 363 words at 72-84, 479 at 84-96 and 539 at 96-115, across 43 rows and 36 children, 22 of whom appear only above 84. A data cap would discard that to fix an unobserved-comprehension problem the likelihood already handles by outcome-wise missingness. The supportable version is to trim what is _reported_ for `u` and `q` to where their data end.
+10. ~~**Whether the analysis should be capped at 84 months**~~ was raised separately and is _not_ the right fix for the defect in this note. Comprehension data effectively stop at about 72 months (9 rows in 72-84, 5 above 84), but spoken data above 84 are real and informative: within uk_01 alone the median runs 363 words at 72-84, 479 at 84-96 and 539 at 96-115, across 43 rows and 36 children, 22 of whom appear only above 84. A data cap would discard that to fix an unobserved-comprehension problem the likelihood already handles by outcome-wise missingness. The supportable version is to trim what is _reported_ for `u` and `q` to where their data end — **done, §9**.
+
+## 9. Trimming what is reported for `u` and `q`
+
+Item 10's supportable version, implemented. This is the reporting counterpart of the clamp: §4 fixes what the mean _does_ above the high anchor, this stops quoting an age that has no data behind it.
+
+### The asymmetry
+
+The query grid is shared by every outcome a model reports, but the Down syndrome outcomes are not observed over the same range. Measured on VG10's own analysis frame (1349 rows, 737 children):
+
+| Outcome    | Rows |  95th pct |  Rows ≥ 72 mo | Rows ≥ 84 mo |
+| ---------- | ---: | --------: | ------------: | -----------: |
+| Understood |  905 | 64 months |  15 (15 kids) |   5 (5 kids) |
+| Spoken     | 1346 | 78 months | 104 (80 kids) | 51 (44 kids) |
+| Both (`q`) |  902 | 64 months |  15 (15 kids) |   5 (5 kids) |
+
+`q` tracks understood almost exactly — 902 of the 905 understood rows also carry spoken — because it is a ratio _of_ comprehension and inherits the narrower range. Understood's 95th percentile is 64 months, so the grid's top three ages (78, 84, 90) rest on at most eight administrations, and two of them sit at or past the high anchor where the mean is now a levelled-off extrapolation rather than an estimate.
+
+The counts differ trivially from item 10's because that used a strict `> 72`; one administration falls at exactly 72.0.
+
+### The change
+
+`report_max_age_understood = 72` on VG02, VG05, VG07-VG10 and VG14-VG16 — the nine models that report comprehension. It trims the understood and `q` summary tables and the production-ratio figure; spoken keeps the full grid.
+
+Deliberately **report-time only**. The query grid, the model graph and the `query_id` dimension are untouched, so this cannot move a number that is still reported — verified by asserting the trimmed frame equals the full frame's surviving rows, for both the table and the figure's CSV companion, and confirmed end-to-end in open item 13.
+
+That it cannot move the posterior does **not** mean it is free to change; §12 records the correction.
+
+### Scope, and what was left alone
+
+- **VG01** is production-only and its data run to 115 months. Trimming it would discard exactly the evidence that argued against the 84-month cap in item 10. Validation now _rejects_ the field on a non-comprehension model rather than letting it be a silent no-op.
+- **The whole-month companion tables** keep the full observed span. That is deliberate rather than an oversight: they carry an `n_obs` column that records the emptiness directly, which the curated 6-monthly table has no equivalent of. They are the exhaustive companion; the query table is the headline.
+- **The typically-developing models** stop at 30 months, well inside their data.
+- **The understood trajectory figures** (`posterior_predictive_median_trend_u`, `expected_learning_rate_u`, the joint u+s trajectory) still run the full plot grid. The production-ratio figure was trimmed because it sits directly beside the trimmed `q` table in the report chapter and the two disagreeing would be worse than either alone; the rest is a wider design question about whether a joint u+s figure should show its two curves over different spans — see open item 11.
+
+### Tests
+
+`tests/test_reported_age_range.py`, 30 tests. Beyond the helper's own behaviour, two failure modes specific to this design are covered directly: the value reaches the engines through the _configuration_ object rather than the definition, so a missing pass-through would raise only mid-fit — caught statically per engine, and mutation-checked by deleting one pass-through and confirming the test fails; and the cap is asserted to lie on the query grid and to actually remove ages, so it cannot silently become inert.
+
+## 10. The family refit
+
+All seven models carrying the §4 graph change with pre-clamp fits were refitted at `test` (4 chains × 2000 draws, seed 47 — the configuration their previous fits used), with `--render`, on a tree carrying both §4 and §9. Total wall time 44 minutes; every model exited 0.
+
+Fitting with §9 included rather than on plain `main` is deliberate. `--render-only` renders Quarto against the _existing_ summary CSVs and does not re-run `posterior_summary`, so the tables can only be regenerated by refitting; fitting without the trim would have forced a second 44-minute round. §9 is report-time only and provably does not touch the trace, so the posterior is identical either way.
+
+| model | divergences |           max R-hat |         min ESS |     gate |
+| ----- | ----------: | ------------------: | --------------: | -------: |
+| VG05  |  33 → **3** | 1.0076 → **1.0024** |  420 → **1830** |    False |
+| VG07  |       4 → 4 | 1.0058 → **1.0031** | 1014 → **1499** |    False |
+| VG08  |       1 → 2 |     1.0217 → 1.0398 |       208 → 135 |    False |
+| VG09  |  23 → **5** |     1.0132 → 1.0136 |   200 → **219** |    False |
+| VG14  |   7 → **2** | 1.0048 → **1.0041** | 1241 → **1997** |    False |
+| VG15  |       2 → 3 | 1.0248 → **1.0074** |   379 → **479** |    False |
+| VG16  |   1 → **0** | 1.0113 → **1.0099** |   402 → **529** | **True** |
+| VG10  |       0 → 0 |     1.0139 → 1.0139 |       343 → 343 |    False |
+
+R-hat improved in five of seven, min ESS in six of seven, divergences in four of seven. VG10 is the eighth row for completeness and is not part of that count: it already carried the clamp, so its later refit (open item 13) changed only its tables and reproduced its diagnostics exactly.
+
+> [!CAUTION]
+> **None of this is evidence that the clamp improves convergence.** §7 established that at `test` these gate outcomes turn on the sampler seed: VG10's max R-hat spans 1.008–1.014 across six fits against a 1.01 threshold. These are single fits at one seed, so VG16's newly clean gate and VG08's regression are equally likely to be noise. Quoting either as a treatment effect would repeat exactly the error §7 withdrew. Before any of this is reported, the reporting-quality configuration must be confirmed adequate (open item 9).
+
+Six of the seven now fail on divergences alone, having cleared R-hat, ESS and BFMI. The exceptions are **VG08** and **VG09**, whose R-hat and ESS failures cluster on the understood mean and the leading HSGP coefficients — `p_slope_low_u`, `slope_u`, `intercept_u`, `g_unit_u_hsgp_coeffs[0..2]`. That is the mean/GP aliasing signature, and it is structural to their place in the ladder rather than anything this note introduced: both carry subject random effects with `anchor_g_u_at_ref = False`, and the per-draw GP anchoring that breaks the degeneracy is precisely what VG10 and VG16 add.
+
+The §9 trim landed on all seven — understood and `q` at 11 rows to 72 months, spoken at 14 rows to 90. VG14 and VG15 additionally confirm that the _signed_ ratio `r` correctly keeps the full grid: it is a ratio of comprehension, but signing data do not stop where comprehension does.
+
+## 11. Open
+
+11. **Whether the `u` trajectory figures should stop at 72 too.** The tables and the production-ratio figure now do. Leaving the trend and learning-rate figures on the full grid is defensible — they show the fitted curve, not a claim about evidence — but it is not obviously right, and the joint u+s figure would need a deliberate decision about showing two curves over different spans.
+12. ~~**The seven stale DS joint models.**~~ Done — §10.
+13. ~~**VG10's tables are now the odd ones out.**~~ Done — refitted at `test`, seed 47, in 4m58s. All eight DS joint models now report understood and `q` to 72 months and spoken to 90.
+
+    This refit doubles as a **direct test of the §9 claim that the trim is report-time only**. VG10 already carried the clamp, so the graph and the seed were unchanged and the diagnostics were predicted, in advance, to come back identical. They did — bit-for-bit to 15 significant figures: divergences 0, max R-hat 1.013949937150557, min ESS 342.59097511242754, the same five failing parameters and the same four BFMI values. The trim provably does not touch the trace, which also retrospectively justifies fitting the other seven on this branch rather than on `main`.
+
+14. **The report figure cache is stale.** `docs/report/figures/` still holds the pre-refit plots and tables. `sync_report_figures.py` validates reporting quality, so at `test` it needs `--allow-provisional` — and see §12, which currently blocks it.
+
+## 12. Correction: the trim was not free, and it invalidated every fit
+
+§9 and the field's own documentation claimed the trim "never requires a refit". **That was wrong on two counts**, found when `sync_report_figures.py --config test --allow-provisional` aborted.
+
+What is true, and was proved directly in open item 13, is narrower: the trim cannot move the **posterior**. Refitting VG10 across the change at a fixed seed reproduced its diagnostics bit-for-bit.
+
+What is false is the operational claim:
+
+1. **A new cap only takes effect on a refit.** The summary tables are written during the fit pipeline, and `--render-only` re-renders Quarto against the CSVs already on disk rather than rebuilding them. This was already known — it is the stated reason §10 fitted the family on the trim branch — but the docstrings said the opposite.
+2. **The field is part of the recorded model definition.** `fit_artifacts` compares `asdict(definition)` in full, so adding `report_max_age_understood` to each of the four definition classes moved _every_ model's recorded definition — including the six that merely carry the `None` default and whose reporting is byte-identical to before.
+
+The result is that VG01-VG04 and VG11-VG13 now fail validation. Diffed against their stored manifests, the sole difference for six of them is the added field; VG13 additionally carries `clamp_mean_above_hi_anchor` from the earlier change. VG02 is a genuine staleness — its cap is 72, so its tables really are out of date.
+
+The strict comparison is not obviously wrong. A fit whose tables were produced under a different cap **is** stale, and catching that is the guard working. The collateral is that any newly added defaulted field invalidates the whole registry, which is a general property of this validator rather than anything specific to this change.
+
+Two ways forward, not yet chosen:
+
+- **Refit VG01-VG04 and VG11-VG13.** Conservative, no change to a safety guard, and makes every manifest honest. VG02 needs it regardless. Roughly 40 minutes.
+- **Teach the validator that a field absent from a stored manifest matches when its current value is the dataclass default.** Principled — it captures "this field did not exist, and its value is the no-op default" — and stops the problem recurring. But it relaxes a guard, and it is only sound while every new default is genuinely the previous behaviour, which is a convention no test enforces.
