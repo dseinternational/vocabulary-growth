@@ -9,6 +9,13 @@ on:
 permissions:
   contents: read
 
+# One run per branch: a new push to a pull request cancels the run still in
+# flight for it. Pushes to main are never cancelled, so every commit on the
+# default branch keeps its own complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   spellcheck:
     runs-on: ubuntu-26.04
@@ -45,15 +52,13 @@ jobs:
       - name: Lint
         run: ruff check src/ scripts/
 
+  # Linux only. Native Windows cannot solve the compiled stack at all
+  # (jax/jaxlib have no conda-forge win-64 build); Windows users work in Ubuntu
+  # on WSL, which is linux-64 and so is covered here. macOS (osx-arm64) is the
+  # local development platform and is exercised there; conda-lock.yml pins it,
+  # so CI does not spend a second full environment solve on it.
   model-fit-tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        # Native Windows is intentionally omitted: jax/jaxlib have no conda-forge
-        # win-64 build, so the compiled stack cannot solve there. Windows users
-        # work in Ubuntu on WSL (linux-64), which the ubuntu runner covers.
-        os: [ubuntu-26.04, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-26.04
     defaults:
       run:
         shell: bash -el {0}
