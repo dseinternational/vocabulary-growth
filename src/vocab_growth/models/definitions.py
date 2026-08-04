@@ -462,6 +462,17 @@ class BivariateModelDefinition:
     """Reference age (months) for the GP anchor constraint. If None, defaults to the
     midpoint of slope_anchors."""
 
+    # -- Mean extrapolation above the high anchor --
+    clamp_mean_above_hi_anchor: bool = False
+    """If True, level the logit-linear mean off above the high anchor age instead
+    of extrapolating the line. The transition is a soft minimum, so the mean stays
+    differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
+    VG10 spoken curve briefly non-monotone at the anchor. One-sided: below the low
+    anchor the line still extrapolates, which is accurate there. Applied to the
+    Down syndrome models, whose GP domain runs to 115 months against a high anchor
+    at 84 — see ``gp_utils.trend_and_gp`` and
+    notes/202608042030-q-mean-extrapolation.md."""
+
     # -- Data age filtering --
     max_age_months: int | None = None
     """Upper bound on age (inclusive, months) for data loading. None = no limit."""
@@ -618,6 +629,17 @@ class TrivariateModelDefinition:
     max_age_months: int | None = None
     """Upper bound on age (inclusive, months) for data loading. None = no limit."""
 
+    # -- Mean extrapolation above the high anchor --
+    clamp_mean_above_hi_anchor: bool = False
+    """If True, level the logit-linear mean off above the high anchor age instead
+    of extrapolating the line. The transition is a soft minimum, so the mean stays
+    differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
+    VG10 spoken curve briefly non-monotone at the anchor. One-sided: below the low
+    anchor the line still extrapolates, which is accurate there. Applied to the
+    Down syndrome models, whose GP domain runs to 115 months against a high anchor
+    at 84 — see ``gp_utils.trend_and_gp`` and
+    notes/202608042030-q-mean-extrapolation.md."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.TRIVARIATE
@@ -753,6 +775,17 @@ class JointModelDefinition:
     gp_anchor_age_months: float | None = None
     """Reference age (months) for the GP anchor. If None, defaults to the midpoint
     of slope_anchors."""
+
+    # -- Mean extrapolation above the high anchor --
+    clamp_mean_above_hi_anchor: bool = False
+    """If True, level the logit-linear mean off above the high anchor age instead
+    of extrapolating the line. The transition is a soft minimum, so the mean stays
+    differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
+    VG10 spoken curve briefly non-monotone at the anchor. One-sided: below the low
+    anchor the line still extrapolates, which is accurate there. Applied to the
+    Down syndrome models, whose GP domain runs to 115 months against a high anchor
+    at 84 — see ``gp_utils.trend_and_gp`` and
+    notes/202608042030-q-mean-extrapolation.md."""
 
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk01_signed: bool = False
@@ -1316,6 +1349,14 @@ VG05 = BivariateModelDefinition(
     p_slope_low_q_beta=12.0,
     p_slope_hi_q_alpha=4.0,
     p_slope_hi_q_beta=1.2,
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 VG07 = BivariateModelDefinition(
@@ -1375,6 +1416,14 @@ VG07 = BivariateModelDefinition(
     p_slope_hi_q_beta=1.2,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 VG08 = BivariateModelDefinition(
@@ -1436,6 +1485,14 @@ VG08 = BivariateModelDefinition(
     tau_q_sigma=0.5,
     use_subject_re_u=True,
     tau_subj_u_sigma=1.5,
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 VG09 = BivariateModelDefinition(
@@ -1501,6 +1558,14 @@ VG09 = BivariateModelDefinition(
     tau_subj_q_sigma=1.5,
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 VG10 = BivariateModelDefinition(
@@ -1570,6 +1635,14 @@ VG10 = BivariateModelDefinition(
     gp_anchor_age_months=54.0,
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 VG11 = UnivariateModelDefinition(
@@ -1776,6 +1849,14 @@ VG14 = TrivariateModelDefinition(
     # Signed ratio r uses the three-anchor tent + GP defined above.  uk_01's
     # signed-only field and uk_06's unverified field are excluded from the signed
     # likelihood by default; their understood/spoken observations remain.
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 VG15 = JointModelDefinition(
@@ -1843,6 +1924,14 @@ VG15 = JointModelDefinition(
     # conditional estimator reproduces.
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 # ============================================================
@@ -1941,6 +2030,14 @@ VG16 = BivariateModelDefinition(
     gp_anchor_age_months=54.0,
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    clamp_mean_above_hi_anchor=True,
 )
 
 MODEL_REGISTRY: dict[

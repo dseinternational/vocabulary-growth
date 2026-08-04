@@ -533,6 +533,7 @@ def build_model_re(
             latent_name="f_u_all",
             anchor_idx=i_anchor if anchor_g_u else None,
             n_obs=n,
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -548,6 +549,7 @@ def build_model_re(
             latent_name="h_all",
             anchor_idx=i_anchor if anchor_g_q else None,
             n_obs=n,
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
 
         # ============================================================

@@ -543,6 +543,7 @@ def build_model(
             grid=gp_grid,
             store_deterministic=True,
             latent_name="f_u_all",
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -556,6 +557,7 @@ def build_model(
             grid=gp_grid,
             store_deterministic=True,
             latent_name="h_all",
+            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
         )
 
         # ============================================================
