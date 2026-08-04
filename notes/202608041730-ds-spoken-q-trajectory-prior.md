@@ -19,21 +19,21 @@ The VG10 prior sample trajectories for words spoken sit visibly below the data c
 
 Prior median population spoken curve against the fitted one, words out of 810:
 
-| age (months)  |    12 |   18 |   24 |   30 |   36 |    48 |    54 |    60 |    72 |    84 |
-| ------------- | ----: | ---: | ---: | ---: | ---: | ----: | ----: | ----: | ----: | ----: |
-| prior median  |   4.4 |  7.3 | 11.7 | 18.9 | 29.6 |  67.6 |  95.8 | 131.6 | 223.7 | 326.9 |
-| fitted median |   0.4 |  1.7 |  6.0 | 16.6 | 41.0 | 147.8 | 209.3 | 257.7 | 329.7 | 406.8 |
+| age (months)  |    12 |   18 |   24 |   30 |    36 |    48 |    54 |    60 |    72 |    84 |
+| ------------- | ----: | ---: | ---: | ---: | ----: | ----: | ----: | ----: | ----: | ----: |
+| prior median  |   4.4 |  7.3 | 11.7 | 18.9 |  29.6 |  67.6 |  95.8 | 131.6 | 223.7 | 326.9 |
+| fitted median |   0.4 |  1.7 |  6.0 | 16.6 |  41.0 | 147.8 | 209.3 | 257.7 | 329.7 | 406.8 |
 | ratio         | 12.0× | 4.4× | 2.0× | 1.1× | 0.72× | 0.46× | 0.46× | 0.51× | 0.68× | 0.80× |
 
 The prior is not displaced in one direction. It is **too flat**: 12× too high at 12 months, 2.2× too low at 48–54, converging again by 84. The undershoot that prompted the investigation is real, and the overshoot at the young end is larger in ratio — invisible on the plot because it is four words against half a word.
 
 ## 3. Why this is a different problem from the understood one
 
-The understood prior was displaced in *level*, and the fix was to move both anchors up. Here the level is roughly right on average and the *slope* is wrong, so the fix is a rotation, not a translation.
+The understood prior was displaced in _level_, and the fix was to move both anchors up. Here the level is roughly right on average and the _slope_ is wrong, so the fix is a rotation, not a translation.
 
 The two also differ in what the mean form can do about it. For understood, `logit(p_u)` is concave in age and a mean linear in `log(age)` cuts the residual the GP must carry from RMS 0.438 to 0.139. For `q` that reparameterisation barely helps — RMS 0.527 to 0.335, maximum residual 0.831 to 0.580 — because `logit(q)` is not concave but **S-shaped**. The fitted local slope runs +0.071 logit/month at 12–24, peaks at +0.118 at 24–36, then decays to +0.013 by 72–90. No monotone transformation of the age axis produces an S. Only the GP can.
 
-That fact is the hinge of the whole note: it means the `q` trajectory *requires* GP curvature, which makes the amplitude prior on that GP load-bearing in a way it is not for understood.
+That fact is the hinge of the whole note: it means the `q` trajectory _requires_ GP curvature, which makes the amplitude prior on that GP load-bearing in a way it is not for understood.
 
 ## 4. The `q` trend line, and the evidence for moving it
 
@@ -64,17 +64,17 @@ The low anchor is left alone. The data line implies 0.053 there against the prio
 
 **The recommendation was right and the reasoning was wrong.** Fitted `eta_q` across the family, against `HalfNormal(0.20)`:
 
-| model                       | `eta_q` median | prior CDF | contraction | subject RE on `q` | Option D |
-| --------------------------- | -------------: | --------: | ----------: | ----------------- | -------- |
-| VG05                        |          0.390 |     0.952 |        0.07 | no                | no       |
-| VG07                        |          0.413 |     0.963 |        0.03 | no                | no       |
-| VG08                        |          0.455 |     0.979 |        0.09 | no                | no       |
-| VG09                        |          0.486 |     0.986 |        0.15 | yes               | no       |
-| VG10                        |          0.477 |     0.984 |        0.15 | yes               | yes      |
-| VG14                        |          0.387 |     0.951 |        0.09 | —                 | —        |
-| VG15                        |          0.452 |     0.978 |        0.16 | yes               | yes      |
-| VG16                        |          0.482 |     0.985 |        0.14 | yes               | yes      |
-| **VG13** (TD, 8–18 months)  |      **0.135** | **0.572** |        0.01 | yes               | yes      |
+| model                      | `eta_q` median | prior CDF | contraction | subject RE on `q` | Option D |
+| -------------------------- | -------------: | --------: | ----------: | ----------------- | -------- |
+| VG05                       |          0.390 |     0.952 |        0.07 | no                | no       |
+| VG07                       |          0.413 |     0.963 |        0.03 | no                | no       |
+| VG08                       |          0.455 |     0.979 |        0.09 | no                | no       |
+| VG09                       |          0.486 |     0.986 |        0.15 | yes               | no       |
+| VG10                       |          0.477 |     0.984 |        0.15 | yes               | yes      |
+| VG14                       |          0.387 |     0.951 |        0.09 | —                 | —        |
+| VG15                       |          0.452 |     0.978 |        0.16 | yes               | yes      |
+| VG16                       |          0.482 |     0.985 |        0.14 | yes               | yes      |
+| **VG13** (TD, 8–18 months) |      **0.135** | **0.572** |        0.01 | yes               | yes      |
 
 It is not a subject-random-effect phenomenon: VG05, VG07 and VG08 carry no subject RE on `q` and press just as hard. It is not an Option D phenomenon: the anchored models sit alongside the unanchored ones. §5's characterisation of VG05 as "not pressing the prior" at 0.352 came from a two-chain `dev` fit; on the current trace it is 0.390 at prior CDF 0.952.
 
@@ -84,17 +84,17 @@ What separates the models is **age span**, which is §3's finding arriving from 
 
 VG10 at `test`, `eta_q_sigma = 0.4`, via `dataclasses.replace` into a scratch output root — the test §5 pre-registered. 5m 28s.
 
-|                | model of record (0.20) | control (0.4) |
-| -------------- | ---------------------- | ------------- |
-| gate `passed`  | False                  | **True**      |
-| divergences    | 2                      | **0**         |
-| max R-hat      | 1.0110                 | 1.0093        |
-| min ESS        | 283                    | **483**       |
-| min BFMI       | 0.453                  | 0.471         |
-| R-hat failures | `g_unit_u_hsgp_coeffs[2]` | **none**   |
-| ESS failures   | 4 understood GP coefficients | **none** |
+|                | model of record (0.20)       | control (0.4) |
+| -------------- | ---------------------------- | ------------- |
+| gate `passed`  | False                        | **True**      |
+| divergences    | 2                            | **0**         |
+| max R-hat      | 1.0110                       | 1.0093        |
+| min ESS        | 283                          | **483**       |
+| min BFMI       | 0.453                        | 0.471         |
+| R-hat failures | `g_unit_u_hsgp_coeffs[2]`    | **none**      |
+| ESS failures   | 4 understood GP coefficients | **none**      |
 
-The ridge does not return, and `tau_subj_q` is unmoved (1.255 → 1.252, contraction 0.94 both). That last point matters: §5 warned that if `eta_q` inflated while `tau_subj_q` stayed high, the `q` GP and the subject effects would be aliased and no prior choice would help. Giving the GP room did not pull `tau_subj_q` down at all, which is evidence *against* that aliasing rather than for it.
+The ridge does not return, and `tau_subj_q` is unmoved (1.255 → 1.252, contraction 0.94 both). That last point matters: §5 warned that if `eta_q` inflated while `tau_subj_q` stayed high, the `q` GP and the subject effects would be aliased and no prior choice would help. Giving the GP room did not pull `tau_subj_q` down at all, which is evidence _against_ that aliasing rather than for it.
 
 The failures that cleared were on the **understood** GP, while the change was to the **q** GP. The plausible mechanism is the `p_s = p_u × q` coupling — if `q` cannot bend, the understood GP is recruited to supply spoken curvature through `p_u` and fights the understood likelihood. That is a conjecture; nothing here tests it, and it should not be repeated as established.
 
@@ -110,7 +110,7 @@ Prior median population spoken curve, same seed, three amplitudes:
 | 54           |  209.3 |          95.8 |  95.9 |  95.8 |
 | 84           |  406.8 |         326.9 | 321.7 | 314.8 |
 
-Unmoved, because the GP is zero-mean and widening its amplitude widens the band symmetrically on the logit scale. The fraction of prior mass below the fitted value at 54 months is 91.6% under all three settings. `eta_q` governs whether the model *can* represent the shape, not where the prior is centred; only the anchor change in §4 moves the curve.
+Unmoved, because the GP is zero-mean and widening its amplitude widens the band symmetrically on the logit scale. The fraction of prior mass below the fitted value at 54 months is 91.6% under all three settings. `eta_q` governs whether the model _can_ represent the shape, not where the prior is centred; only the anchor change in §4 moves the curve.
 
 ## 6. A prediction that failed
 
@@ -145,15 +145,15 @@ VG10 refitted at `test` (4 chains × 2,000 draws, seed 47, no overrides) with bo
 
 ### VG10 passes its convergence gate
 
-|                | before                       | after     |
-| -------------- | ---------------------------- | --------- |
-| gate `passed`  | False                        | **True**  |
-| divergences    | 2                            | **0**     |
-| max R-hat      | 1.0110                       | 1.0084    |
-| min ESS        | 283                          | **433**   |
-| min BFMI       | 0.453                        | 0.468     |
-| R-hat failures | `g_unit_u_hsgp_coeffs[2]`    | **none**  |
-| ESS failures   | 4 understood GP coefficients | **none**  |
+|                | before                       | after    |
+| -------------- | ---------------------------- | -------- |
+| gate `passed`  | False                        | **True** |
+| divergences    | 2                            | **0**    |
+| max R-hat      | 1.0110                       | 1.0084   |
+| min ESS        | 283                          | **433**  |
+| min BFMI       | 0.453                        | 0.468    |
+| R-hat failures | `g_unit_u_hsgp_coeffs[2]`    | **none** |
+| ESS failures   | 4 understood GP coefficients | **none** |
 
 This reproduces the §5 control fit at the higher amplitude. VG10 has carried a REVIEW verdict throughout the 2026-08-03 and 2026-08-04 work; this is the first clean pass.
 
@@ -174,8 +174,8 @@ This reproduces the §5 control fit at the higher amplitude. VG10 has carried a 
 
 ### It did not move the answer
 
-| age (months) |   12 |  24 |  36 |  48 |  54 |  60 |  66 |  72 |   84 |   90 |
-| ------------ | ---: | --: | --: | --: | --: | --: | --: | --: | ---: | ---: |
+| age (months)           |   12 |   24 |   36 |   48 |   54 |   60 |   66 |   72 |    84 |   90 |
+| ---------------------- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ----: | ---: |
 | spoken, change (words) | −0.1 | −0.1 | +0.4 | +2.3 | +1.5 | +3.9 | +5.6 | +4.3 | −11.1 | −8.7 |
 
 At most 5.6 words below 78 months and 11.1 at the top, against a curve running from 0.3 to 438 words; `q` moves by at most 0.035 and understood by at most 14 words. As with the understood recalibration, correcting an off-centre prior changes the prior predictive and leaves the reported answer where it was. Nothing previously reported from VG10 is revised.
