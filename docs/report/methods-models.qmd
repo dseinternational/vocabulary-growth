@@ -33,7 +33,7 @@ y_i \sim \mathrm{BetaBinomial}\!\left(N_{\text{trials}},\,\alpha_i,\,\beta_i\rig
 \beta_i = (1-p_i)\,\kappa_i .
 $$
 
-Smaller $\kappa_i$ implies greater dispersion (more between-child heterogeneity at a given age); larger $\kappa_i$ approaches the Binomial. Observations are assumed conditionally independent given the latent mean $p(z)$, the dispersion $\kappa(z)$, and the model parameters.
+Smaller $\kappa_i$ implies greater dispersion of the observed counts at a given age; larger $\kappa_i$ approaches the Binomial. It is tempting to gloss this as "more between-child heterogeneity", and we avoid doing so: on a bounded inventory $\kappa$ is a property of the count distribution rather than a measurement of latent spread between children, and @sec-kappa sets out why the two do not track each other. Observations are assumed conditionally independent given the latent mean $p(z)$, the dispersion $\kappa(z)$, and the model parameters.
 
 The item-exchangeability assumption is *not* relaxed by this construction: it survives inside the Binomial step, and it is false — words differ markedly in difficulty, which the checklist structure demonstrates directly (a model-free hypergeometric test against the three DSE checklists rejects it decisively). Two considerations establish that this does not threaten the estimates. First, under an item-response model with heterogeneous difficulties but equal discrimination, the total score is a *sufficient statistic* for a child's ability: the likelihood depends on the responses only through their sum, so modelling counts rather than individual words discards no information about ability, and difficulty heterogeneity can reach the model only through the distribution of the total. Second, that distributional effect is small where it matters. Heterogeneous difficulty makes the true count variance *lower* than Binomial — the opposite of the usual intuition — by an exact identity, $\sum_j p_j(1-p_j) = N\bar p(1-\bar p) - N\operatorname{Var}_j(p)$; but the Binomial kernel carries under 6% of total variance at every age in the fitted models, because between-child dispersion dominates it by one to two orders of magnitude, so even a 40% error in the kernel moves the total standard deviation by about 1%.
 
@@ -43,14 +43,16 @@ What item difficulty *does* affect is the interpretation of the production ratio
 
 ### Age-varying dispersion {#sec-kappa}
 
-Both experience and existing research indicate that variability in vocabulary among children grows over time as children making more progress diverge from those making less. We therefore let the conditional distribution become more dispersed with age by modelling the concentration as a decreasing function of age,
+Vocabulary counts are more dispersed at older ages than at younger ones, and both experience and existing research lead us to expect that. We therefore let the conditional distribution become more dispersed with age by modelling the concentration as a decreasing function of age,
 
 $$
 \kappa(z) = \kappa_{\min} + \exp\!\left(a_\kappa + b_\kappa z\right),
 \qquad b_\kappa < 0 .
 $$
 
-This encodes two assumptions. First, heterogeneity **increases** with age: because $b_\kappa < 0$, $\exp(a_\kappa + b_\kappa z)$ decreases, so $\kappa(z)$ decreases and dispersion increases. Second, the increase **levels off**: as $z \to \infty$, $\kappa(z) \to \kappa_{\min}$, giving a later-age plateau in dispersion. (Because the outcome is bounded, this does not require raw count variance to increase monotonically at every age — it allows greater heterogeneity around the mean trajectory on the latent scale.) We impose the monotone decline by setting $b_\kappa = -b_{\mathrm{mag}}$ with $b_{\mathrm{mag}} > 0$.
+This encodes two assumptions. First, heterogeneity **increases** with age: because $b_\kappa < 0$, $\exp(a_\kappa + b_\kappa z)$ decreases, so $\kappa(z)$ decreases and dispersion increases. Second, the increase **levels off**: as $z \to \infty$, $\kappa(z) \to \kappa_{\min}$, giving a later-age plateau in dispersion. We impose the monotone decline by setting $b_\kappa = -b_{\mathrm{mag}}$ with $b_{\mathrm{mag}} > 0$.
+
+These are assumptions about the model's concentration parameter, and it is worth being explicit about what they are not. On a bounded inventory $\kappa$ **cannot** be read as latent between-child heterogeneity: a fitted decline in $\kappa$ is quantitatively consistent with latent spread that does not grow at all, and this is true even under perfect item exchangeability, so it is not a defect of the item model. Nor do these data yield a corrected estimate of how far children really diverge — a total score sufficient for ability carries no information about the item structure that separating the two would require. What the fitted $\kappa(z)$ licenses is a statement about the dispersion of observed counts at a given age, not a measurement of underlying heterogeneity.
 
 ## The mean trajectory {#sec-mean}
 
@@ -130,7 +132,15 @@ q(a) = P(\text{speak} \mid \text{understood}) = \sigma(h(a)),
 p_S(a) = p_U(a)\,q(a),
 $$
 
-where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-mean). Because $q(a) \in (0,1)$, this enforces $p_S \le p_U$ by construction. The trivariate models add a **sign ratio**
+where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-mean). Because $q(a) \in (0,1)$, this enforces $p_S \le p_U$ by construction.
+
+Two properties of $q$ belong here, at its definition, rather than in a later caveat, because both bear on every comparison the report makes with it.
+
+**$q$ is a composition-weighted average, not an item-level probability.** The notation $P(\text{speak} \mid \text{understood})$ invites reading $q(a)$ as the probability that a given word is spoken once understood. It is not that. Words differ markedly in difficulty (@sec-betabinomial), and children at a given age understand different numbers of words and different *sets* of words, so $q(a)$ averages the per-word production probability over whatever vocabulary each contributing child happens to have. Two populations can differ in $q$ purely because their understood vocabularies are composed differently, with no difference in how readily any particular word is produced. The sufficiency argument in @sec-betabinomial is also the proof that this cannot be repaired within a sum-score model: a statistic sufficient for ability carries no information about item composition.
+
+**A contrast at matched comprehension is not a contrast at matched age.** Where the report compares Down syndrome and typically-developing children at the same level of comprehension, the two groups are **8–13 months apart in age** at that matched level. A difference in $q$ read off such a comparison is therefore a difference between groups that are simultaneously unlike in age and in vocabulary composition, and neither can be held fixed while varying the other. Both qualifications apply wherever $q$ is reported.
+
+The trivariate models add a **sign ratio**
 
 $$
 r(a) = P(\text{sign} \mid \text{understood}) = \sigma(g_{\text{sign}}(a)),

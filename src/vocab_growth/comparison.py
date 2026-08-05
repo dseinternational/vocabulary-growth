@@ -498,10 +498,16 @@ def implied_sd_y(p: np.ndarray, kappa: np.ndarray, n: int) -> np.ndarray:
 def overdispersion_factor(kappa: np.ndarray, n: int) -> np.ndarray:
     """Variance inflation vs a Binomial at the same mean: ``(kappa+n)/(kappa+1)``.
 
-    Mean-independent (a function of ``kappa`` and ``n`` only), so contrasting it
-    across populations isolates the pure concentration difference, unlike
-    :func:`implied_sd_y` which is confounded by where each population sits on the
-    mean-variance curve.
+    A function of ``kappa`` and ``n`` only, so it removes the explicit ``p(1-p)``
+    mean dependence that confounds :func:`implied_sd_y`, which is evaluated where
+    each population sits on the mean-variance curve.
+
+    That is the whole of the claim. It is **not** true that contrasting this factor
+    across populations isolates a pure concentration difference: ``kappa`` is itself
+    level-driven in this family, so a cross-population contrast still carries
+    whatever part of the dispersion difference comes from the two populations being
+    at different vocabulary levels. The reported ratio is robust; it simply does not
+    isolate what the name suggests.
     """
     return (kappa + n) / (kappa + 1.0)
 
