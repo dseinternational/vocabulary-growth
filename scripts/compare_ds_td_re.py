@@ -64,14 +64,30 @@ from vocab_growth import environment as env
 # DS comparator: VG10 spoken/understood sub-curve (study+subject REs). One-line
 # swap to vg07/vg08/vg09 for a sensitivity check (all carry random effects).
 DS_KEY = "vg10"
-# Dispersion needs a study-RE-ONLY DS model so the Beta-Binomial kappa is the
-# like-for-like between-child concentration: VG10's subject random intercepts
-# absorb child variance that the TD models (VG11/12, study-RE only) keep in
-# kappa, so a VG10-vs-TD kappa contrast is not consistent. VG07 is the
-# study-RE-only joint DS model. (Mean/rate/delay keep VG10 — subject REs are
-# mean-zero, so the population trajectory is unaffected.)
-DISP_DS_KEY = "vg07"
-# TD comparator per outcome: the univariate study-RE models.
+# Dispersion must contrast a kappa that means the same thing on both sides. What
+# kappa means depends on whether a subject random effect is present to absorb
+# between-child variance: without one, kappa carries that variance; with one, it
+# does not.
+#
+# This used to select VG07 (study-RE only) because VG11/VG12 were study-RE only
+# too, so VG07-vs-TD was the like-for-like pairing and VG10 was not. #164 added
+# child random effects to VG11/VG12/VG13, which inverted that: VG07's kappa now
+# carries child variance while the TD models' kappa does not, so the old pairing
+# contrasts incommensurable quantities and overstates DS dispersion. VG10 has
+# subject REs on both outcomes and is now the model that satisfies the original
+# criterion. Corrected 2026-08-05 during the full reporting refit; the July 2026
+# published dispersion contrast is affected and superseded.
+#
+# Known residual, not addressed here: VG10's kappa_s is the dispersion of the
+# production ratio q conditional on understood, whereas VG11's is the dispersion
+# of spoken counts marginally. That joint-vs-univariate difference predates this
+# correction and has not been audited — see the comparison book's caveat.
+#
+# (Mean/rate/delay keep VG10 — subject REs are mean-zero, so the population
+# trajectory is unaffected.)
+DISP_DS_KEY = "vg10"
+# TD comparator per outcome: the univariate models, which since #164 carry both
+# study and subject random effects.
 TD_KEYS = {"spoken": "vg11", "understood": "vg12"}
 
 OUT_DIR = env.comparisons_output_dir()
@@ -181,12 +197,14 @@ def run_outcome(outcome: str) -> None:
     ad = C.summarise_draws(A_ds - A_td, N_GRID, "words", with_p_gt0=True)
 
     # ---- 4. Dispersion: kappa, implied SD, overdispersion factor ----
-    # DS side uses the study-RE-only model (VG07), not VG10, so kappa is the
-    # like-for-like between-child concentration (see DISP_DS_KEY note). Pair its
-    # draws with the same TD subset; independence makes any pairing valid.
-    a7, p7, k7, _ = C.load_outcome_trajectory(DISP_DS_KEY, outcome)
-    i7 = C.align_draws(p7.shape[0], p_td.shape[0], seed=SEED + 1)[0]
-    P_ds, K_ds = C.interp_draws(a7, p7[i7], grid), C.interp_draws(a7, k7[i7], grid)
+    # DS side uses the model whose kappa means the same thing as the TD models'
+    # — i.e. one that also carries subject REs, so neither side's kappa absorbs
+    # between-child variance (see DISP_DS_KEY note). Pair its draws with the same
+    # TD subset; independence makes any pairing valid.
+    a_disp, p_disp, k_disp, _ = C.load_outcome_trajectory(DISP_DS_KEY, outcome)
+    i_disp = C.align_draws(p_disp.shape[0], p_td.shape[0], seed=SEED + 1)[0]
+    P_ds = C.interp_draws(a_disp, p_disp[i_disp], grid)
+    K_ds = C.interp_draws(a_disp, k_disp[i_disp], grid)
     P_td, K_td = C.interp_draws(ages_td, p_td, grid), C.interp_draws(ages_td, k_td, grid)
     SD_ds, SD_td = C.implied_sd_y(P_ds, K_ds, n), C.implied_sd_y(P_td, K_td, n)
     PHI_ds, PHI_td = C.overdispersion_factor(K_ds, n), C.overdispersion_factor(K_td, n)
