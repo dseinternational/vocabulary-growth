@@ -36,7 +36,7 @@ The typically developing comparison pool was widened from English-only to **Engl
 
 ### 2.2 The model family was completed, then independently reviewed
 
-Six models were added — the typically developing hierarchical models, a signing model, a joint sign-and-speech model, and a model that asks whether understanding earlier predicts speaking later *within the same child*. There are now **15 models**, and a canonical inventory that has to be updated whenever one changes.
+Six models were added — the typically developing hierarchical models, a signing model, a joint sign-and-speech model, and a model that asks whether understanding earlier predicts speaking later _within the same child_. There are now **15 models**, and a canonical inventory that has to be updated whenever one changes.
 
 They were then **independently statistically reviewed**, and the review's recommendations implemented. Duplicated model-building code across engines was consolidated, which sounds like housekeeping but matters: the same bug had been sitting in several copies.
 
@@ -81,7 +81,7 @@ Thirteen of fifteen models are fitted at reporting quality and valid. One (VG11)
 
 Two of the typically developing models carry a **soft convergence caveat** that we now understand and cannot remove. The cause was diagnosed this week: the models cannot cleanly separate "children genuinely differ from each other" from "measurements are noisy", because most typically developing children in the pool were measured only **once** — 1.21 observations per child. A test confirmed the mechanism by comparing against a Down syndrome model with 2.4× the repeat rate and much better behaviour.
 
-We tried to fix it by re-expressing the two quantities as a total and a split. **It did not work**, and the reason is informative: the problem rotated rather than disappearing. This is what happens when the obstacle is *missing information* rather than an awkward parameterisation. **No amount of computation will fix it; only measuring more children more than once would.**
+We tried to fix it by re-expressing the two quantities as a total and a split. **It did not work**, and the reason is informative: the problem rotated rather than disappearing. This is what happens when the obstacle is _missing information_ rather than an awkward parameterisation. **No amount of computation will fix it; only measuring more children more than once would.**
 
 That result is worth having. It converts a nagging technical warning into a stated limitation with a known cause.
 

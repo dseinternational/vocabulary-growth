@@ -65,6 +65,16 @@ The three axes that distinguish the models:
 | [VG15](vg15/index.qmd) | DS         | Understood + spoken + signed | VG14 + within-understood sign–speech association `psi` + study & subject random intercepts + VG10 stabilisation.                                                                                                          |
 | [VG16](vg16/index.qmd) | DS         | Understood + spoken          | VG09 + a within-child cross-lag (prior understood → current `q`): earlier receptive → later expressive. Population-relative headline (≈ null); the within-child (RI-CLPM) contrast is biased by short-T with 2-wave data. |
 
+### Model roles
+
+`methods-workflow.qmd` defines a four-way status taxonomy — **model of record** (the current source for a stated estimand), **development step** (retained to show how structure was added, but not preferred for headline estimates), **TD reference** (a typically-developing comparison model with a distinct population role), and **superseded** (replaced after a documented structural or data problem) — and names this inventory as the source of truth for them. Recording them here, because until now the taxonomy was defined but never applied.
+
+| Model | Role                                                                                                                                                                            |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VG10  | **Model of record** for the Down syndrome joint understood + spoken estimands. Confirmed by the study owner, 2026-08-05. Supersedes the 12 May review's recommendation of VG09. |
+
+**The remaining role assignments are outstanding and are owner decisions**, tracked in #190. They should not be inferred from this file's ordering. Two constraints are already fixed and any assignment must respect them: VG06 is retired and superseded by VG13; and `scripts/fit_recovery.py` treats `vg10`, `vg12` and `vg15` as the headline set, so those three at minimum carry reporting weight. A superseded model never supplies a number in the findings, so these assignments have to be settled before the findings chapters are written.
+
 ### Exploratory, unregistered prototypes
 
 VG17 and VG18 are exploratory sign-group comparison modules. They are deliberately excluded from `MODEL_REGISTRY`, `fit_model.py all`, and the numbered model inventory because they have not yet passed the specification and reporting workflow required of registered models. VG17 still uses the same harmonised signing-source rules as the registered signing models so exploratory comparisons cannot silently reintroduce non-comparable fields.
