@@ -89,6 +89,8 @@ recentring
 recomputation
 reflow
 reparameterisation
+reparameterisations
+recomputable
 reparameterise
 Reparameterise
 reparameterised
