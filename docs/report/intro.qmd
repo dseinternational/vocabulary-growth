@@ -7,7 +7,7 @@ Children with Down syndrome experience difficulties learning language [@naessLan
 
 Parents and practitioners working with people with Down syndrome report that past research has not focussed enough on practical issues that might make meaningful differences to their lives [@cristescuShapeResearchChange2024]. This has led to calls for researchers to makes it easier for families and educators to access evidence-based information to inform decisions related to real life issues [@cristescuShapeResearchChange2024].
 
-In our experience, families and educators are often interested in information about vocabulary development in children with Down syndrome. Common requests for information include the range of words understood or spoken at different ages, rates of word learning, and the range of ages at which a minimum number of words may be learned. Answers to questions about vocabulary development are of relevance to everyday teaching practice and early intervention. They may alleviate unwarranted concerns about slow progress and help to identify children experiencing additional or more complex difficulties. They can also inform teaching recommendations – for example, by estimating the range of ages within which most children are expected to attain specific skills.
+In our experience, families and educators are interested in information about vocabulary development in children with Down syndrome, including the range of words understood or spoken at different ages, rates of word learning, and the range of ages at which a minimum number of words may be learned. Answers to questions about vocabulary development are of relevance to everyday teaching practice and early intervention. They may alleviate unwarranted concerns about slow progress and may also help to identify children experiencing additional or more complex difficulties. They can also inform teaching recommendations – for example, by estimating the range of ages within which most children are expected to attain specific skills.
 
 This study therefore aims to describe the development of vocabulary knowledge in children with Down syndrome with a focus on interpretable statistics that can inform teaching and support.
 
@@ -39,7 +39,7 @@ Word learning accelerates rapidly for many typically developing children between
 
 [**TODO**]
 
-## Modelling and inference
+## Statistical modelling and inference
 
 Statistical modelling and inference provide methods for defining mathematical models and evaluating them against data to obtain evidence-based estimates of the parameters of interest [@coxPrinciplesStatisticalInference2006; @gelmanBayesianDataAnalysis2013; @wakefieldBayesianFrequentistRegression2013; @farrellComputationalModelingCognition2018; @spanosProbabilityTheoryStatistical2019; @mcelreathStatisticalRethinkingBayesian2020; @gelmanRegressionOtherStories2020; @chanStatisticalModelingComputation2025]. They are central to evaluating scientific theories and interpreting data, and can express what a theory means more precisely than words alone [@farrellComputationalModelingCognition2018, chapter 1].
 
@@ -47,9 +47,7 @@ A statistical model is a set of assumptions describing a process that could gene
 
 ### Statistical models
 
-Statistical models do not by themselves explain how the world works, though they can evaluate the predictions of models that do. A regression model reveals statistical relationships between predictors and outcomes, but those relationships acquire their real-world relevance only within an *empirical model* — an account of the real-world phenomenon that informs which statistical and process models can test it.[^empiricalmodelling]
-
-[^empiricalmodelling]: For a perspective on empirical modelling as a process for "learning from data" using statistical models, see Spanos [-@spanosProbabilityTheoryStatistical2019, chapter 1]. For further discussion of empirical, process-based and statistical models, see Van Oijen [-@vanoijenBayesianCompendium2024, chapter 1]. For further discussion of computational process models, see Farrell and Lewandowsky [-@farrellComputationalModelingCognition2018, chapter 1].
+Statistical models do not by themselves explain how the world works, though they can evaluate the predictions of models that do. A regression model reveals statistical relationships between predictors and outcomes, but those relationships acquire their real-world relevance only within an *empirical model* — an account of the real-world phenomenon that informs which statistical and process models can test it.[@spanosProbabilityTheoryStatistical2019, @vanoijenBayesianCompendium2024,@farrellComputationalModelingCognition2018].
 
 For example, we might explain word learning by proposing that children learn word meanings by hearing words spoken and recognising what they refer to. That explanation predicts that, as children have more opportunities to hear words, they will understand more of them over time — and we can build statistical models to test whether the observed data match that prediction (rising counts of words understood with age).
 
@@ -57,11 +55,11 @@ The mapping between the two runs both ways: one empirical model admits many stat
 
 > "Many models correspond to the same hypothesis, and many hypotheses correspond to a single model. This makes strict falsification impossible." [@mcelreathStatisticalRethinkingBayesian2020, page 4]
 
-Developing and evaluating models is therefore continual and iterative [@gelmanBayesianWorkflow2020]: a competing model may explain the data better, and new observations refine existing models, revise theories and motivate new ones — the workflow this report follows throughout (@sec-lineage-ds).
+Developing and evaluating models is therefore continual and iterative: a competing model may explain the data better, and new observations refine existing models, revise theories and motivate new ones [@gelmanStatisticalWorkflow2026].
 
 ### Inference
 
-There are different approaches to statistical inference, differing in their philosophical and mathematical foundations and in the conclusions they license [@gelmanBayesianDataAnalysis2013; @wakefieldBayesianFrequentistRegression2013; @spanosProbabilityTheoryStatistical2019; @mcelreathStatisticalRethinkingBayesian2020]. Bayesian methods remain uncommon in developmental Down syndrome research, but for the questions this study addresses they offer four concrete advantages, set out below: probability statements that mean what families take them to mean; uncertainty expressed as full distributions; a principled way to bring existing knowledge to bear; and direct predictions about individual children.
+There are different approaches to statistical inference, differing in their philosophical and mathematical foundations and in the conclusions they license [@gelmanBayesianDataAnalysis2013; @wakefieldBayesianFrequentistRegression2013; @spanosProbabilityTheoryStatistical2019; @mcelreathStatisticalRethinkingBayesian2020]. Bayesian methods remain uncommon in developmental Down syndrome research, but for the questions this study addresses they offer four concrete advantages: probability statements that mean what families take them to mean; uncertainty expressed as full distributions; a principled way to bring existing knowledge to bear; and direct predictions about individual children.
 
 #### Probability as uncertainty
 
@@ -82,12 +80,6 @@ Bayesian inference begins with a prior distribution -- what we consider plausibl
 ![**Bayesian updating** ($n = 100$). As @fig-bayes-update-20, but with 100 observations: the posterior distribution is now more concentrated around the observed mean.](figures/bayes_update_2.png){#fig-bayes-update-100}
 
 Frequentist uncertainty is instead grounded in how an estimation procedure behaves across repeated samples; a confidence interval is not a probability statement about where the true value lies and does not rank some values as more plausible than others [@moreyFallacyPlacingConfidence2016] -- a distinction that is, unfortunately, often misinterpreted in practice [@hoekstraRobustMisinterpretationConfidence2014]. A Bayesian posterior instead supports direct statements such as: "given our model and the data, the typical 36-month-old child with Down syndrome learns about 5 new words per month, with an 89% probability that the typical rate lies between 2 and 7." These are the statements families, practitioners and researchers tend to find useful -- and, as McElreath observes, the ones "scientists tend to project onto statistical results" in any case [@mcelreathStatisticalRethinkingBayesian2020]. Bayesian inference is also logically coherent and well suited to complex models [@bernardoBayesianStatistics2025; @wagenmakersBayesianInferencePsychology2018; @wagenmakersBayesianFrequentistInference2008].
-
-#### From *p*-values to posterior probabilities
-
-Readers used to frequentist reporting can map the familiar quantities onto their Bayesian counterparts directly. A **credible interval** is what a confidence interval is often mistaken for: a range that holds the parameter with the stated probability, given the model and the data. In place of a *p*-value we report a **posterior tail probability** -- the posterior mass on one side of a reference value, such as the probability $P(\psi > 1)$ that the sign--speech association exceeds independence, or the probability that a trajectory is rising. This reads as the probability of the claim itself, not the probability of data at least as extreme were some null true.
-
-Two consequences are worth stating plainly. First, a posterior can give **evidence for a "null"**: posterior mass concentrated near a reference value is positive evidence that an effect is small, whereas a non-significant *p*-value can only *fail to reject* one. Second, a tail probability is **not a *p*-value wearing a different threshold**. For a roughly symmetric posterior the one-sided tail probability (the "probability of direction", $pd$) and a two-sided *p*-value are related by $p \approx 2\,(1 - pd)$, so treating $pd \ge 0.975$ as though it were "significance at $p < 0.05$" merely reimports the significance grid this framing is meant to retire. We therefore lead with the interval and the tail probability, and where a verbal label is unavoidable we grade the *strength of the evidence* for a named claim on a transparent odds scale (used for the sign--speech association in @sec-findings-signing) rather than against a fixed cut-off.
 
 #### Using existing knowledge
 
