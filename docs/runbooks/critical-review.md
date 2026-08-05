@@ -9,14 +9,14 @@ Agreed 2026-08-05. Milestone-gated for now; the mechanical reviews are candidate
 
 Six substantive errors were found in the fortnight to 2026-08-05, and none of them was caught by a scheduled check — each surfaced by accident while someone was doing something else. The list is worth keeping in view, because the reviews below are designed around it rather than around a generic quality checklist:
 
-| What was wrong                                                          | How it was found                       |
-| ----------------------------------------------------------------------- | -------------------------------------- |
-| Numbers in prose stale against the fits behind them                     | By chance, repeatedly                  |
-| A reported effect stated in the wrong direction                         | Reading output, not the claim          |
-| Dispersion described as between-child heterogeneity, which it is not    | A challenge to the wording             |
-| A cross-population comparator pointed at a model without subject effects | Reading the comparator's source        |
-| An appendix the report cited as its disclosure mechanism was an empty stub | Following a cross-reference           |
-| Two analysis recommendations that were wrong — one withdrawn, one falsified by experiment | Checking them before acting |
+| What was wrong                                                                            | How it was found                |
+| ----------------------------------------------------------------------------------------- | ------------------------------- |
+| Numbers in prose stale against the fits behind them                                       | By chance, repeatedly           |
+| A reported effect stated in the wrong direction                                           | Reading output, not the claim   |
+| Dispersion described as between-child heterogeneity, which it is not                      | A challenge to the wording      |
+| A cross-population comparator pointed at a model without subject effects                  | Reading the comparator's source |
+| An appendix the report cited as its disclosure mechanism was an empty stub                | Following a cross-reference     |
+| Two analysis recommendations that were wrong — one withdrawn, one falsified by experiment | Checking them before acting     |
 
 The last row is the important one. Recommendations from any source, human or machine, need the same adversarial treatment as the numbers.
 
@@ -34,7 +34,7 @@ Each is defined by what it checks, what it must produce, and what would count as
 
 **Cadence:** after every refit, and before any draft freeze. Mechanical — automate first.
 
-> Precedent: `results-words-understood-spoken.qmd` generates every number *and the direction word* from `dq_facts()` at render time, so the paragraph cannot outlive its fits. That is the pattern; prose numbers should be the exception, and marked when illustrative.
+> Precedent: `results-words-understood-spoken.qmd` generates every number _and the direction word_ from `dq_facts()` at render time, so the paragraph cannot outlive its fits. That is the pattern; prose numbers should be the exception, and marked when illustrative.
 
 ### R2 — Claim and evidence
 
@@ -86,7 +86,7 @@ Each is defined by what it checks, what it must produce, and what would count as
 
 ### R7 — Adversarial statistical review
 
-**Checks:** an independent reader, briefed to *break* the conclusions rather than confirm them, attacks the headline claims — the identification of each estimand, the sensitivity of each to its priors, the population each generalises to, and whether a simpler explanation fits.
+**Checks:** an independent reader, briefed to _break_ the conclusions rather than confirm them, attacks the headline claims — the identification of each estimand, the sensitivity of each to its priors, the population each generalises to, and whether a simpler explanation fits.
 
 **Produces:** written challenges with responses recorded, including challenges that were accepted.
 
@@ -108,14 +108,14 @@ Each is defined by what it checks, what it must produce, and what would count as
 
 ## Milestone gates
 
-| Milestone            | Must pass                     |
-| -------------------- | ----------------------------- |
-| After any refit      | R1, R3, R4                    |
-| After any data change | R5, then a refit              |
-| Before a draft freeze | R1, R2, R4                    |
-| Before release        | all of R1–R9                  |
+| Milestone             | Must pass        |
+| --------------------- | ---------------- |
+| After any refit       | R1, R3, R4       |
+| After any data change | R5, then a refit |
+| Before a draft freeze | R1, R2, R4       |
+| Before release        | all of R1–R9     |
 
-A review that fails does not block the work; it blocks the *claim*. The disclose-and-publish path exists for exactly this reason — a known, stated limitation is publishable, an unstated one is not.
+A review that fails does not block the work; it blocks the _claim_. The disclose-and-publish path exists for exactly this reason — a known, stated limitation is publishable, an unstated one is not.
 
 ## Automation
 

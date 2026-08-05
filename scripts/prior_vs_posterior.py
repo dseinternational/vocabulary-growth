@@ -27,6 +27,12 @@ import preliz as pz
 from scipy import stats
 
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import (
+    FIT_MANIFEST_FILENAME,
+    FitValidationError,
+    normalise_for_json,
+    read_json,
+)
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     BivariateModelDefinition,
@@ -73,13 +79,32 @@ def kappa_priors(kp, suffix: str = "") -> dict[str, pz.distributions.distributio
 
 
 def univariate_priors(d: UnivariateModelDefinition) -> dict[str, pz.distributions.distributions.Continuous]:
-    return {
+    priors = {
         "ell_unit": pz.Beta(alpha=d.ell_unit_alpha, beta=d.ell_unit_beta),
         "eta": pz.HalfNormal(sigma=d.eta_sigma),
         "p_slope_low": pz.Beta(alpha=d.p_slope_low_alpha, beta=d.p_slope_low_beta),
         "p_slope_hi": pz.Beta(alpha=d.p_slope_hi_alpha, beta=d.p_slope_hi_beta),
         **kappa_priors(d.kappa),
     }
+    # The random-effect models carry scale priors the base univariate models do
+    # not. Omitting them left `tau` — VG12's worst-mixing parameter before the
+    # study block was centred — with no prior check at all.
+    if getattr(d, "tau_study_sigma", None) is not None and getattr(
+        d, "min_study_observations", None
+    ) is not None:
+        priors["tau"] = pz.HalfNormal(sigma=d.tau_study_sigma)
+    partition = getattr(d, "subject_variance_partition", None)
+    if partition is not None:
+        # Under the variance partition `tau_subject` is a Deterministic with no
+        # prior of its own; the budget and the split are what carry one. Checking
+        # the derived quantity against the prior it no longer has would be wrong.
+        priors["v_total"] = pz.LogNormal(mu=partition.total_mu, sigma=partition.total_sigma)
+        priors["subject_variance_share"] = pz.Beta(
+            alpha=partition.share_alpha, beta=partition.share_beta
+        )
+    elif getattr(d, "use_subject_re", False):
+        priors["tau_subject"] = pz.HalfNormal(sigma=d.tau_subject_sigma)
+    return priors
 
 
 def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.distributions.Continuous]:
@@ -196,7 +221,120 @@ def overlay_model(short: str, label: str,
     print(f"  {short}: wrote prior_vs_posterior.{{png,svg}}")
 
 
+CONFLICT_CDF = 0.95
+"""Prior CDF at the posterior mean above which a parameter counts as pressing."""
+CONTRACTION_FLOOR = 0.05
+"""Contraction below which the posterior is essentially reporting the prior back."""
+
+
+def conflict_table(short: str, label: str, definition) -> list[dict]:
+    """Prior-data conflict diagnostics for one model — review R3.
+
+    Two numbers per parameter. **Prior CDF** at the posterior mean says where the
+    data landed inside the prior: near 1 means the prior is a ceiling the
+    likelihood is pushing against. **Contraction**, ``1 - posterior sd / prior
+    sd``, says how much the data actually informed it: at or below zero the
+    posterior is no narrower than the prior, so the reported value is the prior
+    restated rather than an estimate.
+
+    Both matter and neither is sufficient. VG12's `eta` was flagged on the pair
+    (CDF 0.913, contraction 0.106) — pressing *and* uninformed. VG13's `eta_q`
+    sits mid-prior but with contraction below zero, which the CDF alone would
+    have passed. See notes/202608050900-td-hierarchical-geometry.md §5.
+    """
+    trace_path = os.path.join(MODELS_DIR, label, "trace.nc")
+    if not os.path.isfile(trace_path):
+        return []
+    # A trace fitted under a different definition must not be scored against the
+    # current priors: the result looks like a prior-data conflict but is only a
+    # mismatch. This bit the sweep's own first run — VG12's eta showed prior CDF
+    # 0.991 with contraction -0.670, which was an eta=1.0 posterior being read
+    # against the eta=0.5 prior it had just been reverted to.
+    manifest_path = os.path.join(MODELS_DIR, label, FIT_MANIFEST_FILENAME)
+    if os.path.isfile(manifest_path):
+        try:
+            stored = read_json(manifest_path).get("model", {}).get("definition")
+        except FitValidationError:
+            stored = None
+        if stored is not None and stored != normalise_for_json(definition):
+            print(f"  {short}: SKIPPED — trace predates the current definition (refit needed)")
+            return []
+    idata = az.from_netcdf(trace_path)
+    priors = (
+        bivariate_priors(definition)
+        if isinstance(definition, BivariateModelDefinition)
+        else univariate_priors(definition)
+    )
+    rows = []
+    for name, prior in priors.items():
+        if name not in idata.posterior.data_vars:
+            continue
+        x = np.asarray(idata.posterior[name].values).reshape(-1)
+        try:
+            prior_sd = float(np.sqrt(prior.var()))
+            cdf = float(prior.cdf(float(x.mean())))
+        except Exception:
+            continue
+        contraction = 1.0 - float(x.std()) / prior_sd if prior_sd > 0 else float("nan")
+        flags = []
+        if cdf >= CONFLICT_CDF:
+            flags.append("pressing")
+        if contraction <= CONTRACTION_FLOOR:
+            flags.append("uninformed")
+        rows.append(
+            dict(
+                model=short,
+                parameter=name,
+                posterior_mean=round(float(x.mean()), 4),
+                posterior_sd=round(float(x.std()), 4),
+                prior_cdf=round(cdf, 4),
+                contraction=round(contraction, 4),
+                flags="+".join(flags),
+            )
+        )
+    return rows
+
+
+def write_conflict_table() -> None:
+    import csv
+
+    rows = []
+    for short, (label, definition) in MODEL_LABELS.items():
+        rows.extend(conflict_table(short, label, definition))
+    if not rows:
+        print("No fitted traces found.")
+        return
+    out_dir = env.comparisons_output_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "prior_posterior_conflict.csv")
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    flagged = [r for r in rows if r["flags"]]
+    print(f"{len(rows)} parameters checked across {len(MODEL_LABELS)} models -> {path}")
+    print(f"\n{len(flagged)} FLAGGED:\n")
+    print(f"  {'model':7s} {'parameter':24s} {'post mean':>10s} {'priorCDF':>9s} {'contract':>9s}  flags")
+    for r in sorted(flagged, key=lambda r: (-r["prior_cdf"], r["contraction"])):
+        print(
+            f"  {r['model']:7s} {r['parameter']:24s} {r['posterior_mean']:10.4f} "
+            f"{r['prior_cdf']:9.3f} {r['contraction']:9.3f}  {r['flags']}"
+        )
+
+
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--table",
+        action="store_true",
+        help="Emit the prior-data conflict table (review R3) instead of the plots.",
+    )
+    args = parser.parse_args()
+    if args.table:
+        write_conflict_table()
+        return
     plot_styles.set_matplotlib_default_style()
     for short, (label, definition) in MODEL_LABELS.items():
         overlay_model(short, label, definition)
