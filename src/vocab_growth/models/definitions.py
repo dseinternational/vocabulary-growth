@@ -1982,21 +1982,27 @@ VG12 = UnivariateREModelDefinition(
     p_slope_low_beta=8.0,
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
-    # Widened 2026-08-05 from 0.5. At 0.5 the fitted amplitude was 0.855 with
-    # posterior sd 0.269 -- prior CDF 0.913, contraction 0.106 -- i.e. pressed into
-    # the prior's upper tail with the data barely narrowing it. That is the same
-    # signature that justified the 2026-08-04 widening of the DS joint models'
-    # eta_q (notes/202608041730), a pass that never reached the TD models. At 1.0
-    # the current fitted value sits at prior CDF 0.607 against a prior median of
-    # 0.674, so the amplitude is permitted rather than censored. Expect the
-    # posterior to rise somewhat, as VG10's eta_q did (0.477 -> 0.855) when it was
-    # freed. This is a *calibration* fix, not a geometry fix: eta does not appear
-    # among VG12's energy correlates, so it should not be expected to move the
-    # BFMI. VG13's two amplitudes are deliberately NOT widened -- they are already
-    # central (prior CDF 0.58, 0.57) but essentially uninformed (posterior/prior sd
-    # 0.92 and 1.00), so widening would inflate them rather than free them. See
-    # notes/202608050900-td-hierarchical-geometry.md §5 and §9 item 3.
-    eta_sigma=1.0,
+    # REVERTED to 0.5 on 2026-08-05, having been widened to 1.0 earlier the same
+    # day. The widening was a calibration fix: at 0.5 the fitted amplitude sat at
+    # prior CDF 0.913 with contraction 0.106, i.e. the model reporting its prior
+    # back, the same signature that justified the 2026-08-04 DS widening.
+    #
+    # It was withdrawn because it cost convergence. Three rep fits isolate it:
+    #     original (eta 0.5, no geometry changes)      2 divergences, BFMI 0.202
+    #     centring + partition + eta 1.0              29 divergences, BFMI 0.208
+    #     centring + partition + eta 0.5               2 divergences, BFMI 0.201
+    # Centring and the partition cost nothing; the widening alone caused all 27.
+    # It was already the only arm to raise divergences in the test-config trial
+    # (76 against 59). Widening a weakly identified parameter gave it room to
+    # wander: even at 1.0 it only reached prior CDF 0.810 with contraction 0.166,
+    # so the calibration was not actually bought.
+    #
+    # Divergences bias the whole posterior, while the miscalibration is local to a
+    # GP smoothing hyperparameter that is not a reported developmental quantity --
+    # so the trade is not worth taking. The calibration defect is real and stands
+    # recorded in notes/202608050900-td-hierarchical-geometry.md §5; fixing it
+    # needs a change that identifies the amplitude rather than merely freeing it.
+    eta_sigma=0.5,
     # WG + Oxford CDI only (WS comprehension is a production proxy).
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
