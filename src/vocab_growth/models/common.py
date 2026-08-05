@@ -1739,7 +1739,7 @@ def configure_univariate_priors(
 
     kappa_fields = _configure_kappa_priors(context, definition.kappa)
     partition_fields = _configure_variance_partition_priors(
-        context, definition.subject_variance_partition
+        context, getattr(definition, "subject_variance_partition", None)
     )
 
     config = ModelConfiguration(

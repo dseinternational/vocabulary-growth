@@ -10,8 +10,8 @@ failure (``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4, 7.1).
 
 What has to hold:
 
-1. no registered model uses it yet -- it is calibrated but unvalidated, and
-   attaching it is a graph change that would invalidate that model's fits;
+1. exactly VG11 and VG12 use it, each calibrated for its own outcome level --
+   attaching it anywhere else is a graph change that invalidates that model's fits;
 2. with it off, the graph is exactly what every existing fit was produced under;
 3. with it on, ``tau_subject`` and ``kappa_excess_young`` are *still present* under
    their usual names, because the DS/TD heterogeneity contrast and every summary
@@ -34,12 +34,20 @@ import vocab_growth.data_utils as vocab_data_utils
 from vocab_growth.models import common_univariate_re as cur
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.definitions import (
-    MODEL_REGISTRY,
     _TD_UNDERSTOOD_VARIANCE_PARTITION,
+    MODEL_REGISTRY,
     VG12,
 )
 
-SMALL = dataclasses.replace(VG12, sample_fraction=0.1, min_study_observations=20)
+# VG12 now ships with the partition on, so the "without" fixture disables it
+# explicitly; several tests below need the pre-change graph.
+SMALL = dataclasses.replace(
+    VG12,
+    sample_fraction=0.1,
+    min_study_observations=20,
+    centred_study_re=False,
+    subject_variance_partition=None,
+)
 PARTITIONED = dataclasses.replace(
     SMALL, subject_variance_partition=_TD_UNDERSTOOD_VARIANCE_PARTITION
 )
@@ -70,12 +78,35 @@ def _require_data():
         pytest.skip("prepared vocabulary DuckDB not available")
 
 
-def test_no_registered_model_uses_the_partition_yet():
-    for definition in MODEL_REGISTRY.values():
-        assert getattr(definition, "subject_variance_partition", None) is None, (
-            f"{definition.model_id} enables subject_variance_partition; it is "
-            "calibrated but not yet validated, and attaching it invalidates fits."
-        )
+def test_exactly_the_two_td_re_models_use_the_partition():
+    """VG11 and VG12 carry it; nothing else may acquire it silently.
+
+    Each attachment is a graph change that invalidates that model's fits, so a new
+    entry here must be a deliberate decision with a refit behind it.
+    """
+    enabled = {
+        d.model_id
+        for d in MODEL_REGISTRY.values()
+        if getattr(d, "subject_variance_partition", None) is not None
+    }
+    assert enabled == {"VG11", "VG12"}, enabled
+
+
+def test_each_partition_is_calibrated_for_its_own_outcome():
+    """`p0` is the one model-specific input and must reflect that model's level.
+
+    The budget and share priors are deliberately shared between VG11 and VG12 --
+    they are stated in logit-scale scatter, which is comparable across outcomes --
+    so a copy-paste error would show up as a shared `reference_proportion`.
+    """
+    from vocab_growth.models.definitions import VG11, VG12
+
+    vg11, vg12 = VG11.subject_variance_partition, VG12.subject_variance_partition
+    # Spoken at 12 months is far rarer than understood; the levels must differ.
+    assert vg11.reference_proportion < vg12.reference_proportion / 5
+    # ...while the priors on the budget and the split are the same.
+    for field in ("total_mu", "total_sigma", "share_alpha", "share_beta"):
+        assert getattr(vg11, field) == getattr(vg12, field), field
 
 
 def test_without_the_partition_the_scales_are_free_rvs(tmp_path, monkeypatch):
@@ -131,8 +162,9 @@ def test_partition_requires_the_anchored_kappa_form():
     """The budget allocates the two-anchor form's young anchor; the legacy
     parameterisation has no such quantity, so the pairing is rejected at
     configuration time rather than producing a misleading graph."""
-    from vocab_growth.models.common import ModelConfiguration
     import preliz as pz
+
+    from vocab_growth.models.common import ModelConfiguration
 
     with pytest.raises(ValueError, match="kappa_anchored must be configured"):
         ModelConfiguration(
@@ -154,8 +186,9 @@ def test_partition_requires_the_anchored_kappa_form():
 
 
 def test_partition_fields_must_be_set_together():
-    from vocab_growth.models.common import ModelConfiguration
     import preliz as pz
+
+    from vocab_growth.models.common import ModelConfiguration
 
     with pytest.raises(ValueError, match="must be set together"):
         ModelConfiguration(
@@ -176,8 +209,9 @@ def test_partition_fields_must_be_set_together():
 
 @pytest.mark.parametrize("p0", [0.0, 1.0, -0.1, 1.5])
 def test_reference_proportion_must_be_a_proportion(p0):
-    from vocab_growth.models.gp_utils import build_variance_partition
     import preliz as pz
+
+    from vocab_growth.models.gp_utils import build_variance_partition
 
     with pm.Model():
         with pytest.raises(ValueError, match="strictly in"):

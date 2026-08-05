@@ -120,9 +120,17 @@ def test_common_vg01_graph(tmp_path, monkeypatch):
 def test_univariate_re_vg11_graph(tmp_path, monkeypatch):
     free, det, _ = _names(_build("VG11", tmp_path, monkeypatch))
     assert {"p_slope_low", "p_slope_hi", "ell_unit", "eta"} <= free
-    assert {"tau_subject", "delta_subject_raw"} <= free
+    assert {"delta_subject_raw"} <= free
     assert {"slope", "intercept", "ell", "g", "f_all"} <= det
     assert "delta_subject" in det
+    # VG11 carries the variance partition, so the subject scale and the young
+    # dispersion anchor are derived from one shared budget rather than sampled as
+    # competing free scales. Both keep their names for downstream consumers.
+    assert {"v_total", "subject_variance_share"} <= free
+    assert {"tau_subject", "kappa_excess_young"} <= det
+    # ...and the centred study block, so `delta` is sampled directly.
+    assert "delta" in free
+    assert "delta_raw" not in free | det
 
 
 def test_bivariate_vg05_graph(tmp_path, monkeypatch):

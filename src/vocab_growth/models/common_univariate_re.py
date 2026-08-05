@@ -402,7 +402,9 @@ def build_univariate_re_model(
         # `centred_study_re` selects the centred branch below.
         tau = pm.HalfNormal("tau", sigma=definition.tau_study_sigma)
         zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
-        if definition.centred_study_re:
+        # getattr: VG17 derives its definition from VG01, a plain
+        # UnivariateModelDefinition without the random-effect geometry fields.
+        if getattr(definition, "centred_study_re", False):
             # Centred: sample `delta` directly with a tau-scaled sigma. Identical in
             # distribution to the non-centred branch -- scaling a zero-sum Gaussian's
             # sigma is the same as scaling its variate -- so this is a pure change of

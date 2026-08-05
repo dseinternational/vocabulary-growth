@@ -57,7 +57,16 @@ def _build(definition, tmp_path, monkeypatch):
 
 # A cheap stand-in for VG12: same engine and study block, a tenth of the rows.
 # Only the graph's *structure* is under test, so the subsample is immaterial.
-SMALL = dataclasses.replace(VG12, sample_fraction=0.1, min_study_observations=20)
+# Both geometry options are switched off explicitly, because VG12 now ships with
+# them on -- this fixture is the *pre-change* graph, which several tests below
+# need in order to show that the flag-off path is untouched.
+SMALL = dataclasses.replace(
+    VG12,
+    sample_fraction=0.1,
+    min_study_observations=20,
+    centred_study_re=False,
+    subject_variance_partition=None,
+)
 
 
 @pytest.fixture(scope="module")
@@ -66,16 +75,46 @@ def _require_data():
         pytest.skip("prepared vocabulary DuckDB not available")
 
 
-def test_flag_defaults_off_on_every_registered_univariate_model():
-    """No registered model may silently acquire the centred branch."""
-    from vocab_growth.models.definitions import MODEL_REGISTRY
+def test_only_the_re_models_carry_the_geometry_fields():
+    """The load-bearing invariant of the subclass refactor.
 
+    A fit is validated by comparing ``dataclasses.asdict`` of its definition
+    against the registered one, field for field, so a definition class that gains
+    a field invalidates every existing fit of that class -- including models that
+    never set it. The two geometry options therefore live on
+    ``UnivariateREModelDefinition`` and not on the shared base: VG01-VG04 have no
+    random effects at all, and putting the fields on the base would have made four
+    published models of record stale for no modelling reason.
+
+    If this test fails because a plain univariate model became a subclass
+    instance, that model needs a refit before it can be published again.
+    """
+    from vocab_growth.models.definitions import (
+        MODEL_REGISTRY,
+        UnivariateModelDefinition,
+        UnivariateREModelDefinition,
+    )
+
+    expected_re_models = {"VG11", "VG12"}
     for definition in MODEL_REGISTRY.values():
-        if hasattr(definition, "centred_study_re"):
-            assert definition.centred_study_re is False, (
-                f"{definition.model_id} enables centred_study_re; enabling it is a "
-                "graph change that invalidates that model's existing fits."
-            )
+        if not isinstance(definition, UnivariateModelDefinition):
+            continue
+        is_re = isinstance(definition, UnivariateREModelDefinition)
+        assert is_re == (definition.model_id in expected_re_models), (
+            f"{definition.model_id}: subclass={is_re}. Changing which class a "
+            "model uses changes its serialised definition and invalidates its fits."
+        )
+        if not is_re:
+            assert not hasattr(definition, "centred_study_re")
+            assert not hasattr(definition, "subject_variance_partition")
+
+
+def test_the_re_models_enable_centring():
+    """VG11 and VG12 ship with it on, per the VG12 trial (22x ESS on tau)."""
+    from vocab_growth.models.definitions import VG11, VG12
+
+    assert VG11.centred_study_re is True
+    assert VG12.centred_study_re is True
 
 
 def test_non_centred_branch_is_unchanged(_require_data, tmp_path, monkeypatch):
