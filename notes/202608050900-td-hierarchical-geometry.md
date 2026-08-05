@@ -62,6 +62,9 @@ Two-and-a-half times the repeat rate, roughly a third of the coupling, half the 
 
 This also explains why the problem is intrinsic rather than a tuning failure: no amount of extra tuning creates within-child replication that the data do not contain.
 
+> [!IMPORTANT]
+> **Read the rate claim with §9's qualification.** VG11 was refitted after this section was written and clears the BFMI threshold despite having the _lowest_ repeat rate of the three typically-developing models (13.4%). It has roughly twice VG12's within-child replication in absolute terms — 1,947 repeatedly-measured children to 1,000. The mechanism holds, but the operative quantity is the **absolute amount** of within-child replication, not the proportion of children who have any.
+
 ## 5. A second, separate finding: the TD `eta` priors were never recalibrated
 
 The 2026-08-04 pass recorded in [202608041730](202608041730-ds-spoken-q-trajectory-prior.md) widened the GP amplitude priors for the Down syndrome joint models, on the finding that they sat at prior CDF 0.95–0.99 with contraction 0.03–0.16. That pass did not reach the TD models. Computing the same diagnostic (contraction = 1 − posterior sd / prior sd, prior `HalfNormal(sigma)`):
@@ -158,7 +161,28 @@ Two things did work, and both are adopted for VG11 and VG12:
 
 ### Consequence
 
-Both TD models still fail the soft tier on BFMI and will still need the disclose-and-publish path. That is now a measured property of the data rather than an untried hypothesis: **the only remedy is more repeat measurement**, which no reparameterisation, prior, or tuning budget can substitute for.
+VG12 and VG13 still fail the soft tier on BFMI and will still need the disclose-and-publish path. That is now a measured property of the data rather than an untried hypothesis: **the only remedy is more repeat measurement**, which no reparameterisation, prior, or tuning budget can substitute for.
+
+### VG11's refit — and a qualification to §4
+
+VG11 was refitted at plain `rep` carrying both changes, and the result does not fit the story above cleanly:
+
+| check           | VG11                        |
+| --------------- | --------------------------- |
+| R-hat           | passes, max 1.0068          |
+| ESS             | passes; `tau` = **27,017**  |
+| **Energy BFMI** | **passes — 0.359 to 0.390** |
+| Divergences     | fails — 22                  |
+
+**VG11 clears the BFMI threshold that VG12 and VG13 fail.** §4 predicted the opposite: VG11 has the _lowest_ repeat rate of the three at 13.4%, against VG12's 17.2%.
+
+The rate is the wrong measure. In absolute terms VG11 has **1,947 repeatedly-measured children to VG12's 1,000**, over 18,522 observations to 7,052 — roughly twice the within-child replication and 2.6× the data, despite the lower fraction. Its `subject_variance_share` is correspondingly well identified (posterior sd 0.0105). So §4's mechanism survives, but it should be read as _the absolute quantity of within-child replication_, not the proportion of children who have any.
+
+That reading is not clean either: VG10 has only 308 repeat-measured children and the best BFMI of all (0.465). VG10 is a different engine on a different population, so the cross-engine comparison is weak — but it means the absolute-count reading is a better description than the rate, not a law.
+
+**What cannot be claimed:** that centring and the partition fixed VG11's BFMI. VG11 has never been fitted without them, so there is no baseline. It may simply be an easier model. The `test`-config trial on VG12 (above) is the only controlled comparison available, and there the changes did not move BFMI at all.
+
+VG11 still misses the soft tier on 22 divergent transitions, so it publishes through the caveated path — for divergences, not for energy.
 
 ## 10. Operational: VG11 is memory-bound, and subsampling is the wrong lever
 
