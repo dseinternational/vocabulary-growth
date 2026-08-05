@@ -33,7 +33,7 @@ Every model in this report is held to the same checks; the per-model evidence is
 
 Before observing the study outcomes, we draw trajectories and replicated vocabulary scores from the prior model. We require bounded scores, plausible levels at the youngest and oldest relevant ages, developmental changes that are smooth on a realistic time scale, and enough dispersion to represent heterogeneous children without assigning substantial probability to implausible extremes. A prior predictive failure is addressed by revising the scientific assumptions or their parameterisation, not by inspecting the posterior and quietly selecting a prior that reproduces the fitted result.
 
-### Convergence diagnostics
+### Convergence diagnostics {#sec-convergence}
 
 Every reported fit is screened against four diagnostics, applied uniformly across all models and in **two tiers**.
 

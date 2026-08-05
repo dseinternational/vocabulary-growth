@@ -9,6 +9,7 @@ BFMI
 Buckley
 callout
 Caselli
+caveated
 centered
 centile
 Checa
@@ -23,6 +24,7 @@ Deckers
 dexp
 duckdb
 Edgin
+elif
 elpd
 empiricalmodelling
 estimand
@@ -76,6 +78,7 @@ overfitting
 Palacios
 parameterisation
 parameterisations
+pathlib
 preliz
 PyMC
 pyplot
@@ -131,6 +134,7 @@ setsid
 unconverged
 docstrings
 workstream
+worktree
 dtype
 dtypes
 deterministics

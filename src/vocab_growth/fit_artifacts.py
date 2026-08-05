@@ -254,8 +254,10 @@ FitValidationPurpose = Literal[
     "resume",
     "render",
     "sync",
+    "sync-with-caveats",
     "provisional-sync",
     "publish",
+    "publish-with-caveats",
 ]
 
 
@@ -283,6 +285,27 @@ def fit_validation_kwargs(
     clean. ``provisional-sync`` deliberately does not ask for this, so
     ``sync_report_figures.py --allow-provisional`` remains the way to work
     locally with a caveated fit.
+
+    The ``-with-caveats`` purposes are the publication path for a fit that clears
+    the hard tier but not the soft one. They keep **every** other publication
+    check — reporting quality, rendered report, clean fit provenance, matching
+    definition, sampling effort and raw-data fingerprint — and relax only the
+    soft-tier requirement. They exist because the operative phrase above is *as
+    though it were clean*: the objection is misrepresentation, not invalidity.
+    ``methods-workflow.qmd`` §"Convergence diagnostics" states the same policy in
+    the report's own words — such a fit "remains reportable ... but it is marked,
+    and it cannot be syndicated into this report as a clean fit without that mark
+    being carried with it" — and for several models in this family a handful of
+    divergences or a BFMI slightly below 0.3 has not been removable without an
+    infeasible reparameterisation. A blanket refusal is therefore *stricter than
+    the documented policy*, and in practice blocks the whole report over the
+    typically-developing hierarchical models' intrinsic BFMI.
+
+    The mark is what makes this honest, so it is not optional: the caller must
+    carry the caveats into the rendered output. ``sync_report_figures.py``
+    discharges that by writing ``convergence_caveats.csv`` into the report figure
+    cache, which Appendix B renders. Prefer plain ``publish``/``sync`` whenever a
+    fit is clean; reach for these only for a fit whose caveats are being shown.
     """
     kwargs: dict[str, Any] = {
         "expected_definition": expected_definition,
@@ -303,12 +326,12 @@ def fit_validation_kwargs(
             expected_git=current_git,
             require_clean_checkout=True,
         )
-    elif purpose in {"sync", "publish"}:
+    elif purpose in {"sync", "publish", "sync-with-caveats", "publish-with-caveats"}:
         kwargs.update(
             require_reporting_quality=True,
             require_rendered_report=True,
             require_clean_fit=True,
-            require_clean_convergence=True,
+            require_clean_convergence=not purpose.endswith("-with-caveats"),
         )
     elif purpose != "render":
         raise ValueError(f"Unknown fit-validation purpose: {purpose!r}.")
