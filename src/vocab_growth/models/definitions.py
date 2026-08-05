@@ -220,6 +220,41 @@ class KappaAnchorPriorParams:
     """LogNormal sigma for the age term at the old anchor."""
 
 
+@dataclass
+class SubjectVariancePartitionParams:
+    """Priors for the shared scatter budget that ``tau_subject`` and ``kappa`` split.
+
+    Selects the reparameterisation described in
+    :func:`~vocab_growth.models.gp_utils.build_variance_partition`: instead of
+    giving the subject-effect scale and the young dispersion anchor independent
+    priors and letting them compete, one prior goes on the **total** logit-scale
+    scatter at the young anchor and one on the **share** of it that persistent
+    between-child differences explain.
+
+    Set this only where the ridge is measured. It is a graph change and it moves
+    the prior, so it needs a refit and a prior-predictive check; it is not a
+    drop-in for models that sample cleanly already. See
+    ``notes/202608050900-td-hierarchical-geometry.md`` §7.
+    """
+
+    reference_proportion: float
+    """Fixed proportion ``p0`` at which a Beta-Binomial concentration is converted
+    to a logit-scale variance, ``c = 1 / (p0 * (1 - p0))``.
+
+    Deliberately a constant rather than the fitted trajectory's value at the
+    anchor age: that keeps the reparameterisation independent of the mean
+    function, so the priors below do not change meaning when the trend does. Set
+    it to roughly the observed proportion at the young kappa anchor."""
+    total_mu: float
+    """LogNormal mu for the total logit-scale scatter at the young anchor."""
+    total_sigma: float
+    """LogNormal sigma for the total logit-scale scatter."""
+    share_alpha: float
+    """Beta alpha for the subject share of that scatter."""
+    share_beta: float
+    """Beta beta for the subject share of that scatter."""
+
+
 # ============================================================
 # Univariate model definition
 # ============================================================
@@ -286,11 +321,41 @@ class UnivariateModelDefinition:
     """Drop studies with fewer than this many observations before fitting study
     intercepts (None = keep all). Trims tiny, near-unidentified study intercepts
     that add parameters without informing the estimates."""
+    centred_study_re: bool = False
+    """If True, sample the study intercepts directly as
+    ``ZeroSumNormal(sigma=tau * sqrt(K/(K-1)))`` rather than as ``tau`` times a
+    unit-scale ``ZeroSumNormal``.
+
+    Prior-preserving: scaling a zero-sum Gaussian's sigma and scaling its variate
+    give the same distribution, so this changes the sampler's coordinates and
+    nothing else. It exists because the non-centred form of issue #65 is the wrong
+    side of the funnel trade-off once each study carries thousands of
+    observations — the typically-developing pools have a dozen studies over
+    several thousand rows, and there `tau` is the worst-mixing parameter in the
+    model (VG12 ESS 1313, against 2279-2325 for the dispersion and subject
+    scales).
+
+    Expect an ESS improvement on `tau` and nothing else: `tau`'s correlation with
+    the marginal energy is -0.023, ranking it 13th, so this is **not** a fix for
+    the energy BFMI failure that VG12 and VG13 record. That is driven by the
+    `tau_subject`/`kappa` variance partition. See
+    ``notes/202608050900-td-hierarchical-geometry.md`` §§2-3."""
 
     # -- Subject-level clustering --
     use_subject_re: bool = False
     """If True, add a subject-level random intercept to account for repeated
     assessments of the same child."""
+    subject_variance_partition: SubjectVariancePartitionParams | None = None
+    """If set, sample a shared scatter budget and a subject share rather than
+    giving ``tau_subject`` and the young ``kappa`` anchor competing priors.
+
+    Requires the two-anchor ``kappa`` form (:class:`KappaAnchorPriorParams`) and
+    ``use_subject_re``; validation rejects the other combinations. When set,
+    ``tau_subject_sigma`` and the ``kappa`` block's ``excess_young_*`` priors are
+    no longer used — the prior moves onto ``total_*`` and ``share_*`` — while
+    ``tau_subject`` and ``kappa_excess_young`` remain in the trace as
+    deterministics under their usual names. See
+    :class:`SubjectVariancePartitionParams`."""
     tau_subject_sigma: float = 1.5
     """HalfNormal scale for the subject intercept SD (logit scale).
 
@@ -1136,6 +1201,38 @@ _TD_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
     excess_old_sigma=0.9,
 )
 
+_TD_UNDERSTOOD_VARIANCE_PARTITION = SubjectVariancePartitionParams(
+    # Calibrated for VG12, 2026-08-05. NOT YET ATTACHED to any registered model:
+    # the reparameterisation is expected to fix VG12's energy BFMI but that has not
+    # been demonstrated, and attaching it is a graph change requiring a refit. See
+    # notes/202608050900-td-hierarchical-geometry.md §7.1 and §9 item 1.
+    #
+    # p0 is the observed comprehension proportion in the 11-13 month band, 84.3 of
+    # 810 items over 1,106 rows -- which independently reproduces the ~83-word
+    # Wordbank 12-month norm this model's low anchor is already tied to. It gives
+    # c = 1 / (p0 (1 - p0)) = 10.72.
+    reference_proportion=0.1041,
+    # Chosen so the induced marginals stay recognisably the current beliefs while
+    # the prior moves onto the budget and the split. Against the priors these
+    # replace -- tau_subject ~ HalfNormal(1.5), excess_young ~ LogNormal(log 40,
+    # 0.9) -- the induced 5/50/95 are:
+    #     tau_subject         0.38 / 0.79 / 1.59   (was 0.09 / 1.01 / 2.94)
+    #     kappa_excess_young  7.25 / 34.7 / 212    (was 9.10 / 40.0 / 176)
+    # The dispersion marginal is nearly unchanged. The subject marginal is tighter,
+    # necessarily: a shared budget cannot let both parameters range over 30x
+    # independently, and refusing to is the entire point.
+    #
+    # The share prior is deliberately NOT centred where the old priors implied
+    # (median 0.79). VG12's posterior implies a share of 0.598, so centring there
+    # would manufacture a prior-data conflict at prior CDF 0.04-0.12. Beta(3.9,
+    # 2.1) spans 0.33-0.92 across its 5-95% range and puts that posterior at CDF
+    # 0.368, with the total at CDF 0.383 -- both central, neither asserted.
+    total_mu=0.0,
+    total_sigma=0.8,
+    share_alpha=3.9,
+    share_beta=2.1,
+)
+
 _TD_YOUNG_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
     # VG13's understood outcome (8-18 months). Here the fit *does* identify a
     # floor, at 37, and it matters: a third of the frame sits below the young
@@ -1820,7 +1917,21 @@ VG12 = UnivariateModelDefinition(
     p_slope_low_beta=8.0,
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
-    eta_sigma=0.5,
+    # Widened 2026-08-05 from 0.5. At 0.5 the fitted amplitude was 0.855 with
+    # posterior sd 0.269 -- prior CDF 0.913, contraction 0.106 -- i.e. pressed into
+    # the prior's upper tail with the data barely narrowing it. That is the same
+    # signature that justified the 2026-08-04 widening of the DS joint models'
+    # eta_q (notes/202608041730), a pass that never reached the TD models. At 1.0
+    # the current fitted value sits at prior CDF 0.607 against a prior median of
+    # 0.674, so the amplitude is permitted rather than censored. Expect the
+    # posterior to rise somewhat, as VG10's eta_q did (0.477 -> 0.855) when it was
+    # freed. This is a *calibration* fix, not a geometry fix: eta does not appear
+    # among VG12's energy correlates, so it should not be expected to move the
+    # BFMI. VG13's two amplitudes are deliberately NOT widened -- they are already
+    # central (prior CDF 0.58, 0.57) but essentially uninformed (posterior/prior sd
+    # 0.92 and 1.00), so widening would inflate them rather than free them. See
+    # notes/202608050900-td-hierarchical-geometry.md §5 and §9 item 3.
+    eta_sigma=1.0,
     # WG + Oxford CDI only (WS comprehension is a production proxy).
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
