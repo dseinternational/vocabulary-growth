@@ -56,7 +56,11 @@ from vocab_growth.models.common import (
     sample_posterior_predictive as _base_sample_posterior_predictive,
 )
 from vocab_growth.models.definitions import UnivariateModelDefinition
-from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
+from vocab_growth.models.gp_utils import (
+    GPGrid,
+    build_variance_partition,
+    trend_and_gp,
+)
 from vocab_growth.reporting import (
     dataframe_table,
     key_value_table,
@@ -394,16 +398,46 @@ def build_univariate_re_model(
         # also shrink each marginal to Var = tau^2 * (K-1)/K; we rescale sigma by
         # sqrt(K/(K-1)) so the marginal per-study prior variance stays tau^2 (its
         # value before this change), leaving only the mean DOF removed. The tau * raw
-        # scaling keeps the funnel-avoiding non-centring of issue #65.
+        # scaling keeps the funnel-avoiding non-centring of issue #65 -- unless
+        # `centred_study_re` selects the centred branch below.
         tau = pm.HalfNormal("tau", sigma=definition.tau_study_sigma)
         zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
-        delta_raw = pm.ZeroSumNormal("delta_raw", sigma=zsn_sigma, dims="study_id")
-        delta = pm.Deterministic("delta", tau * delta_raw, dims="study_id")
+        # getattr: VG17 derives its definition from VG01, a plain
+        # UnivariateModelDefinition without the random-effect geometry fields.
+        if getattr(definition, "centred_study_re", False):
+            # Centred: sample `delta` directly with a tau-scaled sigma. Identical in
+            # distribution to the non-centred branch -- scaling a zero-sum Gaussian's
+            # sigma is the same as scaling its variate -- so this is a pure change of
+            # sampling coordinates, not of the prior. Preferred once each study
+            # carries thousands of observations, where the funnel that the
+            # non-centring exists to avoid does not form.
+            delta = pm.ZeroSumNormal("delta", sigma=tau * zsn_sigma, dims="study_id")
+        else:
+            delta_raw = pm.ZeroSumNormal("delta_raw", sigma=zsn_sigma, dims="study_id")
+            delta = pm.Deterministic("delta", tau * delta_raw, dims="study_id")
+
+        # The variance partition, when enabled, produces the subject scale here and
+        # the young dispersion anchor further down, from one shared budget. It is
+        # built before both so neither block can be written without the other.
+        partition_excess_young = None
+        if use_subject_re and config.has_variance_partition:
+            tau_subject, partition_excess_young = build_variance_partition(
+                config.variance_partition_total_dist,
+                config.variance_partition_share_dist,
+                reference_proportion=config.variance_partition_reference_proportion,
+                subject_scale_name="tau_subject",
+            )
+        elif config.has_variance_partition:
+            raise ValueError(
+                "subject_variance_partition is set but use_subject_re is False; "
+                "there is no subject scale for the budget to allocate."
+            )
 
         if use_subject_re:
-            tau_subject = pm.HalfNormal(
-                "tau_subject", sigma=definition.tau_subject_sigma
-            )
+            if partition_excess_young is None:
+                tau_subject = pm.HalfNormal(
+                    "tau_subject", sigma=definition.tau_subject_sigma
+                )
             delta_subject_raw = pm.Normal(
                 "delta_subject_raw", mu=0.0, sigma=1.0, dims="subject_id"
             )
@@ -454,7 +488,10 @@ def build_univariate_re_model(
         # ============================================================
 
         kappa_of_z = build_kappa_for_config(
-            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+            config,
+            X_obs_mean=X_obs_mean,
+            X_obs_std=X_obs_std,
+            excess_young_value=partition_excess_young,
         )
 
         kappa_obs = pm.Deterministic(

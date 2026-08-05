@@ -170,10 +170,43 @@ class ModelConfiguration(BaseModelConfiguration):
     """Two-anchor dispersion priors, in place of the three fields above."""
     report_max_age_understood: int | None = None
     """Highest query age reported, for a comprehension model. Reporting only."""
+    variance_partition_total_dist: Continuous | None = None
+    """Prior for the total logit-scale scatter at the young kappa anchor.
+
+    Set together with ``variance_partition_share_dist`` when the model splits one
+    scatter budget between the subject-effect scale and dispersion rather than
+    giving them competing priors. See
+    :func:`~vocab_growth.models.gp_utils.build_variance_partition`."""
+    variance_partition_share_dist: Continuous | None = None
+    """Prior for the subject share of that scatter."""
+    variance_partition_reference_proportion: float | None = None
+    """Fixed proportion at which concentration is converted to logit-scale variance."""
 
     def __post_init__(self) -> None:
         super().__post_init__()
         validate_kappa_fields(self)
+        partition = (
+            self.variance_partition_total_dist,
+            self.variance_partition_share_dist,
+            self.variance_partition_reference_proportion,
+        )
+        if any(p is not None for p in partition) and not all(
+            p is not None for p in partition
+        ):
+            raise ValueError(
+                "The variance-partition fields must be set together: "
+                "variance_partition_total_dist, variance_partition_share_dist "
+                "and variance_partition_reference_proportion."
+            )
+        if partition[0] is not None and self.kappa_anchored is None:
+            raise ValueError(
+                "The variance partition allocates the two-anchor kappa form's "
+                "young anchor, so kappa_anchored must be configured."
+            )
+
+    @property
+    def has_variance_partition(self) -> bool:
+        return self.variance_partition_total_dist is not None
 
 
 def _legacy_kappa_dists(config, suffix):
@@ -263,7 +296,9 @@ def kappa_anchor_derived_rows(config, *, X_obs_mean, X_obs_std, suffix=""):
     ]
 
 
-def build_kappa_for_config(config, *, X_obs_mean, X_obs_std, suffix=""):
+def build_kappa_for_config(
+    config, *, X_obs_mean, X_obs_std, suffix="", excess_young_value=None
+):
     """Create the dispersion RVs for whichever kappa form ``config`` carries.
 
     The single point where the two parameterisations diverge inside a model
@@ -271,9 +306,19 @@ def build_kappa_for_config(config, *, X_obs_mean, X_obs_std, suffix=""):
     reference ages on the z scale; the legacy form does not, and is emitted
     unchanged. ``suffix`` selects the outcome for the joint engines ("_u", "_s",
     "_sign") and names the resulting variables.
+
+    ``excess_young_value`` supplies the young anchor from outside, for the
+    variance-partition reparameterisation. It is only meaningful for the anchored
+    form, so pairing it with the legacy one is rejected rather than silently
+    ignored.
     """
     anchored = getattr(config, f"kappa_anchored{suffix}", None)
     if anchored is None:
+        if excess_young_value is not None:
+            raise ValueError(
+                "excess_young_value requires the two-anchor kappa form; the "
+                f"legacy parameterisation is configured for suffix {suffix!r}."
+            )
         kappa_min_dist, a_kappa_dist, b_kappa_mag_dist = _legacy_kappa_dists(
             config, suffix
         )
@@ -288,6 +333,7 @@ def build_kappa_for_config(config, *, X_obs_mean, X_obs_std, suffix=""):
             anchored.anchor_ages, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
         ),
         suffix=suffix,
+        excess_young_value=excess_young_value,
     )
 
 
@@ -1692,6 +1738,9 @@ def configure_univariate_priors(
     _plot_and_print_dist(context, p_slope_hi_dist, "p_slope_hi_dist")
 
     kappa_fields = _configure_kappa_priors(context, definition.kappa)
+    partition_fields = _configure_variance_partition_priors(
+        context, getattr(definition, "subject_variance_partition", None)
+    )
 
     config = ModelConfiguration(
         slope_anchors=definition.slope_anchors,
@@ -1704,9 +1753,29 @@ def configure_univariate_priors(
         ages_query=definition.ages_query,
         report_max_age_understood=definition.report_max_age_understood,
         **kappa_fields,
+        **partition_fields,
     )
 
     context.set_model_config(config)
+
+
+def _configure_variance_partition_priors(context: ModelFitContext, vp) -> dict:
+    """Build the scatter-budget priors, or nothing when the model does not use them.
+
+    Plots both under their own names, as the other prior blocks do, so a report
+    shows the quantities the model actually samples.
+    """
+    if vp is None:
+        return {}
+    total_dist = pz.LogNormal(mu=vp.total_mu, sigma=vp.total_sigma)
+    _plot_and_print_dist(context, total_dist, "v_total_dist")
+    share_dist = pz.Beta(alpha=vp.share_alpha, beta=vp.share_beta)
+    _plot_and_print_dist(context, share_dist, "subject_variance_share_dist")
+    return {
+        "variance_partition_total_dist": total_dist,
+        "variance_partition_share_dist": share_dist,
+        "variance_partition_reference_proportion": vp.reference_proportion,
+    }
 
 
 def _configure_kappa_priors(context: ModelFitContext, kp, suffix: str = "") -> dict:

@@ -79,6 +79,7 @@ def build_kappa_of_z_anchored(
     *,
     anchor_z,
     suffix="",
+    excess_young_value=None,
 ):
     """Create the two-anchor kappa RVs and return the dispersion closure.
 
@@ -116,7 +117,19 @@ def build_kappa_of_z_anchored(
             f"kappa anchor_z must be ordered (young, old); got {anchor_z!r}."
         )
     kappa_min = kappa_min_dist.to_pymc(f"kappa_min{suffix}")
-    excess_young = excess_young_dist.to_pymc(f"kappa_excess_young{suffix}")
+    if excess_young_value is None:
+        excess_young = excess_young_dist.to_pymc(f"kappa_excess_young{suffix}")
+    else:
+        # The young anchor is being supplied by the variance-partition
+        # reparameterisation (see `build_variance_partition`), which allocates it
+        # and the subject-effect scale from one shared budget. It keeps its usual
+        # name as a Deterministic so every downstream consumer -- the comparators,
+        # the posterior summaries, the recovery harness -- still finds it, and
+        # `excess_young_dist` goes unused because the prior now sits on the budget
+        # and the split rather than on this quantity directly.
+        excess_young = pm.Deterministic(
+            f"kappa_excess_young{suffix}", excess_young_value
+        )
     excess_old = excess_old_dist.to_pymc(f"kappa_excess_old{suffix}")
     log_young = pm.math.log(excess_young)
     log_old = pm.math.log(excess_old)
@@ -127,6 +140,73 @@ def build_kappa_of_z_anchored(
     _ = pm.Deterministic(f"kappa_young{suffix}", kappa_min + excess_young)
     _ = pm.Deterministic(f"kappa_old{suffix}", kappa_min + excess_old)
     return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
+
+
+def build_variance_partition(
+    total_dist,
+    share_dist,
+    *,
+    reference_proportion,
+    subject_scale_name,
+    suffix="",
+):
+    """Split one scatter budget between subject effects and dispersion.
+
+    The subject random-effect scale and the Beta-Binomial dispersion both describe
+    how far observations at a given age fall from the population trajectory —
+    ``tau_subject`` attributing that scatter to persistent between-child
+    differences, ``kappa`` to within-child noise. Sampled as two free scales they
+    compete for the same variance, and in the typically-developing hierarchical
+    models the resulting ridge is the dominant sampling pathology: VG12 records
+    ``corr(tau_subject, kappa_young) = +0.755`` with both parameters at the top of
+    the marginal-energy correlations (-0.812 and -0.783), which is what its energy
+    BFMI failure is made of. Only children measured more than once carry the
+    within-child replication that identifies the split, and the TD pool averages
+    1.21 observations per child.
+
+    This reparameterises the pair into the quantity the data *do* identify and the
+    one they do not:
+
+        v_total  — total logit-scale scatter at the young kappa anchor
+        share    — the fraction of it attributable to persistent child differences
+
+        tau_subject         = sqrt(share * v_total)
+        kappa_excess_young  = c / ((1 - share) * v_total)
+
+    where ``c = 1 / (p0 * (1 - p0))`` converts a Beta-Binomial concentration into
+    an approximate logit-scale variance by the delta method, at a **fixed**
+    reference proportion ``p0``. Fixing ``p0`` rather than reading it off the
+    fitted trajectory is deliberate: it keeps this a pure change of coordinates on
+    the two scale parameters, with no dependence on the mean function, so the
+    priors below mean the same thing regardless of what the trend does.
+
+    The young *excess* is allocated rather than total ``kappa`` so that positivity
+    is automatic — ``kappa_min`` remains a free asymptote and ``kappa_young =
+    kappa_min + excess_young`` is positive by construction.
+
+    Both original parameters are returned to the graph under their usual names, so
+    this changes what the sampler explores and not what the model reports; the
+    DS/TD heterogeneity contrast that ``tau_subject`` feeds is unaffected. The
+    prior does move, necessarily and by design — it now sits on the budget and the
+    split, which is where a prior on this pair can actually be reasoned about.
+
+    See ``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4 and 7.1.
+    """
+    if not 0.0 < float(reference_proportion) < 1.0:
+        raise ValueError(
+            "reference_proportion must lie strictly in (0, 1); got "
+            f"{reference_proportion!r}."
+        )
+    p0 = float(reference_proportion)
+    c = 1.0 / (p0 * (1.0 - p0))
+
+    v_total = total_dist.to_pymc(f"v_total{suffix}")
+    share = share_dist.to_pymc(f"subject_variance_share{suffix}")
+    subject_scale = pm.Deterministic(
+        subject_scale_name, pm.math.sqrt(share * v_total)
+    )
+    excess_young_value = c / ((1.0 - share) * v_total)
+    return subject_scale, excess_young_value
 
 
 @dataclass(frozen=True)
