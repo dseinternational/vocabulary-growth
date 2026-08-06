@@ -142,6 +142,25 @@ The June note concluded that "the peak age cannot be identified from these data 
 
 Whether it actually does is the open question, and it is exactly what the free-peak arm tests. If `peak_unit` is identified, VG15's study effects did the work VG14 could not. If it comes back at its prior, the June conclusion holds for VG15 too and the peak age is simply not recoverable from this data. Either outcome is worth having; neither is assumed.
 
+### Result: the peak age is identifiable in VG15, and it is earlier than the anchor
+
+| arm      | divergences | min BFMI | max R-hat | `peak_unit` contraction | peak age                      |
+| -------- | ----------: | -------: | --------: | ----------------------: | ----------------------------- |
+| fixed    |           2 |    0.510 |    1.0073 |                       — | 36.0 (asserted)               |
+| **free** |       **0** |    0.504 |    1.0097 |               **0.481** | **29.4 mo, 89% [23.9, 46.2]** |
+
+Three things, and none was guaranteed.
+
+1. **A moving knot samples.** Zero divergences against the fixed arm's two, BFMI and R-hat unchanged. The draw-dependent nuisance basis and the free knot in a piecewise-linear mean — both plausible geometry hazards — cost nothing here.
+2. **The peak age is identified.** Contraction 0.481, and the posterior interval [23.9, 46.2] against the prior's [21.5, 67.5]. Not sharp, but the data plainly inform it.
+3. **The estimate is 29.4 months, about six months _earlier_ than the fixed anchor** — and the peak height is unmoved (0.319 → 0.314), so this is a shift in shape, not level.
+
+That last point is worth dwelling on, because it is the reverse of §5a's withdrawn claim. The confounded analysis suggested the true peak was _later_ than 36; the properly adjusted answer is _earlier_. Study random effects absorb uk_02's high signing baseline, and once they do, the developmental peak moves earlier than the raw pooled ratio implies. A confounded comparison did not merely overstate a real effect — it pointed the wrong way.
+
+**The June conclusion does not extend to VG15.** [202606151700](202606151700-vg14-signed-ratio-shape-and-p-any-bias.md) found the peak age unidentifiable, but for VG14, which has no study random effects and whose age curve must therefore absorb composition. VG15 has them, and they are what makes the peak recoverable. The earlier finding stands for the model it was made about.
+
+**Not yet established**: that 29.4 months is the right answer rather than a better one. This is a single `test`-config arm against a prior deliberately centred elsewhere (Beta(2, 4), median 40 months), which is reassuring — the data pulled it down against the prior's pull — but it wants a `rep` fit and a prior-sensitivity check before it is reported. Enabling it is a graph change requiring a VG15 refit, and VG15 is a headline model.
+
 ## 6. Open
 
 1. Whether VG14 is partially informative or wholly replaced by VG15 — the decision its migration was done in anticipation of.
