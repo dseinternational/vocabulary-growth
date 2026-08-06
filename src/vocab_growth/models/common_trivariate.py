@@ -54,21 +54,24 @@ from vocab_growth.models.build_utils import (
 )
 from vocab_growth.models.calibration import write_trace_calibration
 from vocab_growth.models.common import (
+    AnchoredKappaPriors,
     BaseModelConfiguration,
     ModelFitContext,
+    _configure_kappa_priors,
     _plot_and_print_dist,
+    build_kappa_for_config,
     emit_monthly_summary,
     get_hsgp_hyperparams,
     render_model_graph,
     report,
     run_fit_pipeline,
+    validate_kappa_fields,
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
 from vocab_growth.models.definitions import TrivariateModelDefinition
 from vocab_growth.models.gp_utils import (
     GPGrid,
-    build_kappa_of_z,
     tent_and_gp,
     trend_and_gp,
 )
@@ -122,23 +125,35 @@ class TrivariateModelConfiguration(BaseModelConfiguration):
     eta_sign_dist: Continuous
     sign_anchor_ages: tuple[float, float, float]
 
-    # Kappa priors — understood
-    kappa_min_u_dist: Continuous
-    a_kappa_u_dist: Continuous
-    b_kappa_mag_u_dist: Continuous
+    # Kappa priors — understood (legacy form)
+    kappa_min_u_dist: Continuous | None = None
+    a_kappa_u_dist: Continuous | None = None
+    b_kappa_mag_u_dist: Continuous | None = None
 
-    # Kappa priors — spoken
-    kappa_min_s_dist: Continuous
-    a_kappa_s_dist: Continuous
-    b_kappa_mag_s_dist: Continuous
+    # Kappa priors — spoken (legacy form)
+    kappa_min_s_dist: Continuous | None = None
+    a_kappa_s_dist: Continuous | None = None
+    b_kappa_mag_s_dist: Continuous | None = None
 
-    # Kappa priors — signed
-    kappa_min_sign_dist: Continuous
-    a_kappa_sign_dist: Continuous
-    b_kappa_mag_sign_dist: Continuous
+    # Kappa priors — signed (legacy form)
+    kappa_min_sign_dist: Continuous | None = None
+    a_kappa_sign_dist: Continuous | None = None
+    b_kappa_mag_sign_dist: Continuous | None = None
+
+    # Two-anchor dispersion priors, in place of the triples above. This engine
+    # accepted only the legacy form until 2026-08-06, which is why VG14 still
+    # carried it while VG10 and VG15 had migrated — the definition was not the
+    # blocker, the engine was.
+    kappa_anchored_u: AnchoredKappaPriors | None = None
+    kappa_anchored_s: AnchoredKappaPriors | None = None
+    kappa_anchored_sign: AnchoredKappaPriors | None = None
 
     # Reporting only — the age at which understood and q stop being reported.
     report_max_age_understood: int | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_kappa_fields(self, suffixes=("_u", "_s", "_sign"))
 
 
 @dataclass
@@ -396,43 +411,23 @@ def configure_trivariate_priors(
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
 
-    kp_u = definition.kappa_u
-    kappa_min_u_dist = pz.LogNormal(mu=kp_u.kappa_min_mu, sigma=kp_u.kappa_min_sigma)
-    _plot_and_print_dist(context, kappa_min_u_dist, "kappa_min_u_dist")
-
-    a_kappa_u_dist = pz.Normal(mu=kp_u.a_kappa_mu, sigma=kp_u.a_kappa_sigma)
-    _plot_and_print_dist(context, a_kappa_u_dist, "a_kappa_u_dist")
-
-    b_kappa_mag_u_dist = pz.HalfNormal(sigma=kp_u.b_kappa_mag_sigma)
-    _plot_and_print_dist(context, b_kappa_mag_u_dist, "b_kappa_mag_u_dist")
+    kappa_u_fields = _configure_kappa_priors(
+        context, definition.kappa_u, "_u"
+    )
 
     # --- Kappa priors — spoken ---
     heading("Kappa priors — spoken", style="bold cyan")
 
-    kp_s = definition.kappa_s
-    kappa_min_s_dist = pz.LogNormal(mu=kp_s.kappa_min_mu, sigma=kp_s.kappa_min_sigma)
-    _plot_and_print_dist(context, kappa_min_s_dist, "kappa_min_s_dist")
-
-    a_kappa_s_dist = pz.Normal(mu=kp_s.a_kappa_mu, sigma=kp_s.a_kappa_sigma)
-    _plot_and_print_dist(context, a_kappa_s_dist, "a_kappa_s_dist")
-
-    b_kappa_mag_s_dist = pz.HalfNormal(sigma=kp_s.b_kappa_mag_sigma)
-    _plot_and_print_dist(context, b_kappa_mag_s_dist, "b_kappa_mag_s_dist")
+    kappa_s_fields = _configure_kappa_priors(
+        context, definition.kappa_s, "_s"
+    )
 
     # --- Kappa priors — signed ---
     heading("Kappa priors — signed", style="bold cyan")
 
-    kp_sign = definition.kappa_sign
-    kappa_min_sign_dist = pz.LogNormal(
-        mu=kp_sign.kappa_min_mu, sigma=kp_sign.kappa_min_sigma
+    kappa_sign_fields = _configure_kappa_priors(
+        context, definition.kappa_sign, "_sign"
     )
-    _plot_and_print_dist(context, kappa_min_sign_dist, "kappa_min_sign_dist")
-
-    a_kappa_sign_dist = pz.Normal(mu=kp_sign.a_kappa_mu, sigma=kp_sign.a_kappa_sigma)
-    _plot_and_print_dist(context, a_kappa_sign_dist, "a_kappa_sign_dist")
-
-    b_kappa_mag_sign_dist = pz.HalfNormal(sigma=kp_sign.b_kappa_mag_sigma)
-    _plot_and_print_dist(context, b_kappa_mag_sign_dist, "b_kappa_mag_sign_dist")
 
     # --- Configuration object ---
 
@@ -456,18 +451,13 @@ def configure_trivariate_priors(
         ell_unit_sign_dist=ell_unit_sign_dist,
         eta_sign_dist=eta_sign_dist,
         sign_anchor_ages=definition.sign_anchor_ages,
-        # Kappa — understood
-        kappa_min_u_dist=kappa_min_u_dist,
-        a_kappa_u_dist=a_kappa_u_dist,
-        b_kappa_mag_u_dist=b_kappa_mag_u_dist,
-        # Kappa — spoken
-        kappa_min_s_dist=kappa_min_s_dist,
-        a_kappa_s_dist=a_kappa_s_dist,
-        b_kappa_mag_s_dist=b_kappa_mag_s_dist,
-        # Kappa — signed
-        kappa_min_sign_dist=kappa_min_sign_dist,
-        a_kappa_sign_dist=a_kappa_sign_dist,
-        b_kappa_mag_sign_dist=b_kappa_mag_sign_dist,
+        # Dispersion, per outcome. Each dict carries whichever parameterisation
+        # that outcome uses -- the legacy triple or `kappa_anchored_*` -- so the
+        # three outcomes may differ, which VG14 now relies on (understood and
+        # spoken anchored, signed still legacy).
+        **kappa_u_fields,
+        **kappa_s_fields,
+        **kappa_sign_fields,
         n_plot=definition.n_plot,
         ages_query=definition.ages_query,
         report_max_age_understood=definition.report_max_age_understood,
@@ -833,11 +823,8 @@ def build_model(
         # Kappa — understood
         # ============================================================
 
-        kappa_u_of_z = build_kappa_of_z(
-            config.kappa_min_u_dist,
-            config.a_kappa_u_dist,
-            config.b_kappa_mag_u_dist,
-            suffix="_u",
+        kappa_u_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_u"
         )
 
         kappa_u_obs = pm.Deterministic(
@@ -850,11 +837,8 @@ def build_model(
         # Kappa — spoken
         # ============================================================
 
-        kappa_s_of_z = build_kappa_of_z(
-            config.kappa_min_s_dist,
-            config.a_kappa_s_dist,
-            config.b_kappa_mag_s_dist,
-            suffix="_s",
+        kappa_s_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_s"
         )
 
         kappa_s_obs = pm.Deterministic(
@@ -867,11 +851,8 @@ def build_model(
         # Kappa — signed
         # ============================================================
 
-        kappa_sign_of_z = build_kappa_of_z(
-            config.kappa_min_sign_dist,
-            config.a_kappa_sign_dist,
-            config.b_kappa_mag_sign_dist,
-            suffix="_sign",
+        kappa_sign_of_z = build_kappa_for_config(
+            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_sign"
         )
 
         kappa_sign_obs = pm.Deterministic(
