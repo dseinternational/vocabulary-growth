@@ -55,8 +55,12 @@ def test_batch_render_continues_after_one_model_fails(monkeypatch):
         for name in ("first", "bad", "last")
     ]
 
-    def render(output_dir):
-        calls.append(output_dir)
+    def render(output_dir, model_id=None):
+        # model_id is passed so _render_output can refresh the report template
+        # from docs/models/<model>/index.qmd before rendering; asserted below
+        # because dropping it silently reverts --render-only to re-rendering
+        # whatever template was current when the fit ran.
+        calls.append((output_dir, model_id))
         if output_dir == "/bad":
             raise RuntimeError("quarto failed")
 
@@ -64,7 +68,7 @@ def test_batch_render_continues_after_one_model_fails(monkeypatch):
 
     timings, failures = _MODULE._render_contexts(contexts)
 
-    assert calls == ["/first", "/bad", "/last"]
+    assert calls == [("/first", "first"), ("/bad", "bad"), ("/last", "last")]
     assert set(timings) == {"first", "bad", "last"}
     assert failures == {"bad": "RuntimeError: quarto failed"}
 
