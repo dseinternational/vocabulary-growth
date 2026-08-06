@@ -858,6 +858,14 @@ class JointModelDefinition:
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
     eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
+    # `ell_unit_sign` is unidentified in VG15 (contraction 0.033) and is
+    # DELIBERATELY left sampled, settled 2026-08-06. Fixing it at its prior median
+    # changes nothing measurable -- a maximum median shift of 0.0023 on r(a), +0.1%
+    # band width, convergence unchanged -- and removing the signed GP is worse: it
+    # fails the hard convergence tier and narrows the band 63% at 96 months,
+    # stripping the model's only honest signal of ignorance where signed data have
+    # run out. `sign_gp_mode` in the joint engine can express both alternatives;
+    # neither is an improvement. See notes/202608060900 section 5b.
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
     eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
@@ -865,6 +873,13 @@ class JointModelDefinition:
     n_plot: int = 500
     kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
     kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
+    # `kappa_sign` deliberately stays on the legacy dispersion form for VG15,
+    # settled 2026-08-06. Unlike VG05/VG07/VG08/VG14 -- migrated because their
+    # `b_kappa_mag_s` sat about four standard deviations beyond its prior with the
+    # posterior wider than it -- the signed block is well identified (contraction
+    # 0.429) at prior CDF 0.276, and the form's non-increasing-with-age constraint
+    # is not binding. The asymmetry with VG14 is two separate correct calls, not an
+    # inconsistency. See notes/202608060900-three-prior-conflicts.md section 5b.
     kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Association (Plackett log odds-ratio) --

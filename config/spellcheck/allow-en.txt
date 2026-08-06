@@ -140,6 +140,7 @@ worktree
 scratchpad
 worklist
 disclosable
+miscalibrated
 miscited
 overclaiming
 dtype

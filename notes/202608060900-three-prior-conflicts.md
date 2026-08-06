@@ -161,6 +161,53 @@ That last point is worth dwelling on, because it is the reverse of §5a's withdr
 
 **Not yet established**: that 29.4 months is the right answer rather than a better one. This is a single `test`-config arm against a prior deliberately centred elsewhere (Beta(2, 4), median 40 months), which is reassuring — the data pulled it down against the prior's pull — but it wants a `rep` fit and a prior-sensitivity check before it is reported. Enabling it is a graph change requiring a VG15 refit, and VG15 is a headline model.
 
+## 5b. VG15's two flags: both resolve to disclose, not change
+
+Settled 2026-08-06 after three `test`-config arms and direct measurement. Recorded because the conclusion reversed twice on the way, and the reversals are the useful part.
+
+### `kappa_sign` — leave legacy
+
+|                     |                                                          |
+| ------------------- | -------------------------------------------------------- |
+| `b_kappa_mag_sign`  | median 0.074, prior CDF 0.276, **contraction 0.429**     |
+| constraint binding? | P(< 0.02) = 0.170 — approaches zero but does not pile up |
+
+Well identified, comfortably inside its prior, and the legacy form's sign constraint (dispersion non-increasing with age) is not binding. This is **not** the defect VG05/VG07/VG08/VG14 carried, where the same parameter sat four standard deviations beyond its prior with the posterior wider than it. Migrating would be consistency churn on a headline model with a refit cost and no defect to fix.
+
+The resulting asymmetry — VG14 migrated, VG15's sign block not — is therefore two separate correct calls rather than an inconsistency, and is recorded as such so nobody "tidies" it later.
+
+### `ell_unit_sign` — unidentified, and inconsequential
+
+Three arms, all at `test`:
+
+| arm           | R-hat    | ESS      | div | min BFMI | max R-hat |
+| ------------- | -------- | -------- | --: | -------: | --------: |
+| baseline      | pass     | pass     |   2 |    0.510 |    1.0073 |
+| **fixed-ell** | pass     | pass     |   2 |    0.508 |    1.0065 |
+| no-gp         | **fail** | **fail** |   1 |    0.494 |    1.0143 |
+
+**`fixed-ell` changes nothing measurable.** Holding the length-scale at its prior median (0.2644, ell = 9.17 months — almost exactly the sampled posterior mean of 0.2685) gives a maximum absolute median shift of **0.0023** on `r(a)` and a mean band-width change of **+0.1%**. Convergence is marginally better. It removes one sampled parameter and moves nothing else.
+
+So the R3 flag is **real but benign**: `ell_unit_sign` genuinely is unidentified (contraction 0.033), and that has no consequence for anything VG15 reports. Fixing it would be tidiness bought with a headline refit.
+
+**`no-gp` is worse, for two reasons.** It failed the hard convergence tier outright (R-hat and ESS), and — the more interesting reason — removing the GP narrowed the band by 63% at 96 months, an age with essentially no signed observations. That is not an improvement. The wide band there is the model's _only honest signal of ignorance_ above 60 months, and the GP is what produces it.
+
+> [!CAUTION]
+> **Two positions of mine were wrong on the way to this.** First, that the signed GP's band was "wider than the data warrant" — the width where data are absent is honest ignorance, not inflation. Second, that the GP should therefore be fixed or dropped — fixing does nothing and dropping is actively harmful. The measurements corrected both. The direct measurement that started this (median GP contribution 7% of the tent's range against a per-age sd six times larger) was accurate; the _inference_ from it to "the band is miscalibrated" was not.
+
+### What this reframes
+
+The real defect is not the GP. It is that **`r(a)` is reported to 115 months at all**, on 23 observations above 60 and none between 84 and 96. Neither arm addresses that; trimming does, and the recommendation now has a second independent argument behind it — the band above 60 months is doing the work of saying "we do not know", which is exactly the range that should not be reported.
+
+### Disclosure obligations this creates
+
+"Disclose, don't change" is only honest if the disclosure happens. For the signing chapter (currently a stub, so it can be written correctly rather than corrected):
+
+1. `r(a)`'s **peak age is fixed at 36 months by construction**, not estimated — unless the free peak is adopted (§5's result: identifiable at 29.4 months).
+2. The signed GP's **length-scale is not identified**; the trajectory is parametric in practice.
+3. **ψ is estimated from uk_02 alone** (56 four-cell rows) and applied pool-wide.
+4. Signed **evidence stops around 60 months** while the reported range runs to 115.
+
 ## 6. Open
 
 1. Whether VG14 is partially informative or wholly replaced by VG15 — the decision its migration was done in anticipation of.
