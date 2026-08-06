@@ -137,6 +137,7 @@ unconverged
 docstrings
 workstream
 worktree
+scratchpad
 worklist
 disclosable
 miscited

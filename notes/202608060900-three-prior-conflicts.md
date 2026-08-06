@@ -8,11 +8,11 @@
 
 ## 0. Summary
 
-| Problem                                                  | Decision                             | Status                             |
-| -------------------------------------------------------- | ------------------------------------ | ---------------------------------- |
-| 1. `b_kappa_mag_s` pinned ~4σ beyond its prior            | Disclose for VG05/07/08; fix VG14    | **VG14 refitting**                 |
-| 2. `eta` presses its prior in four univariate models      | Test the mean-clamp hypothesis       | **Partially confirmed** (§3)       |
-| 3. VG13's GP hyperparameters uninformed                   | Test whether the window hides curve  | **Running** (§5)                   |
+| Problem                                              | Decision                            | Status                       |
+| ---------------------------------------------------- | ----------------------------------- | ---------------------------- |
+| 1. `b_kappa_mag_s` pinned ~4σ beyond its prior       | Disclose for VG05/07/08; fix VG14   | **VG14 refitting**           |
+| 2. `eta` presses its prior in four univariate models | Test the mean-clamp hypothesis      | **Partially confirmed** (§3) |
+| 3. VG13's GP hyperparameters uninformed              | Test whether the window hides curve | **Running** (§5)             |
 
 Two things found along the way were defects in the tooling rather than the models: the R3 sweep did not cover two model families (§2), and the trivariate engine could not express the fix Problem 1 needed (§4).
 
@@ -20,13 +20,13 @@ Two things found along the way were defects in the tooling rather than the model
 
 Extended to all 15 registered models, 219 parameters, 15 flagged. Three distinct problems, not one:
 
-- **`b_kappa_mag_s` at prior CDF 1.000 with negative contraction** in VG05, VG07, VG08 and VG14. The legacy dispersion form constrains `b_kappa_mag ≥ 0`, forcing dispersion to *fall* with age, and `HalfNormal(0.3)` caps how fast. The data want ~1.22 — about four standard deviations out — and the posterior is *wider* than the prior. A parameter pinned against a boundary is not an estimate.
+- **`b_kappa_mag_s` at prior CDF 1.000 with negative contraction** in VG05, VG07, VG08 and VG14. The legacy dispersion form constrains `b_kappa_mag ≥ 0`, forcing dispersion to _fall_ with age, and `HalfNormal(0.3)` caps how fast. The data want ~1.22 — about four standard deviations out — and the posterior is _wider_ than the prior. A parameter pinned against a boundary is not an estimate.
 - **`eta` pressing** in VG01 (0.960), VG03 (0.983), VG11 (0.958) and VG12. These are exactly the univariate models.
 - **GP hyperparameters uninformed**: VG13's `eta_q`, `ell_unit_u`, `ell_unit_q` (contraction ≤ 0.03), and VG15's `ell_unit_sign` (0.033).
 
 ## 2. The sweep had missed two model families
 
-VG14 and VG15 were excluded from `prior_vs_posterior.py` entirely, because their signed-ratio, `psi` and concentration priors were not reconstructed. The exclusion was **wholesale rather than partial**, so VG14's conflict went unseen on `b_kappa_mag_s` — a parameter in the *shared* bivariate block the sweep could already build.
+VG14 and VG15 were excluded from `prior_vs_posterior.py` entirely, because their signed-ratio, `psi` and concentration priors were not reconstructed. The exclusion was **wholesale rather than partial**, so VG14's conflict went unseen on `b_kappa_mag_s` — a parameter in the _shared_ bivariate block the sweep could already build.
 
 Fixed by `signing_priors` + a family-aware `model_priors` dispatch. Coverage went from 167 parameters across 13 models to 219 across 15, and immediately turned up **VG15's `ell_unit_sign` at contraction 0.033 — on a headline model**.
 
@@ -40,20 +40,20 @@ Hypothesis: `eta` presses because the parametric mean extrapolates past its high
 
 Both univariate engines now read the flag through `getattr`, and VG01 was fitted at `test` config with and without it. VG01 is the strongest test case — its extrapolation region is 84–115 months, ~29% of the GP domain, against ~18% for the typically-developing models.
 
-| arm          |   `eta` | prior CDF | contraction | `ell_unit` | divergences | min BFMI |
-| ------------ | ------: | --------: | ----------: | ---------: | ----------: | -------: |
-| baseline     |   1.031 |     0.961 |       0.265 |      0.490 |           0 |    0.873 |
-| **clamped**  | **0.883** | **0.923** |     0.284 |      0.491 |           1 |    0.868 |
+| arm         |     `eta` | prior CDF | contraction | `ell_unit` | divergences | min BFMI |
+| ----------- | --------: | --------: | ----------: | ---------: | ----------: | -------: |
+| baseline    |     1.031 |     0.961 |       0.265 |      0.490 |           0 |    0.873 |
+| **clamped** | **0.883** | **0.923** |       0.284 |      0.491 |           1 |    0.868 |
 
 **The mechanism is real and reproduces the joint models' signature** — amplitude down 14%, contraction up, and VG01 drops below the 0.95 flag threshold — with no side effects: the length-scale is unmoved, BFMI unchanged, and 0 → 1 divergences is noise.
 
 **But it reduces the pressure rather than removing it.** Prior CDF 0.923 is still the upper fifth of the prior. And VG01 is the best case; the typically-developing models have far smaller extrapolation regions, so expect less there.
 
-**Position:** adopt the clamp for the univariate models on the *extrapolation* argument, which is settled independently — an unbounded mean above the high anchor is a defect whatever `eta` does — and treat the amplitude improvement as a secondary benefit rather than a solution to Problem 2. `eta` remains an open problem, and the one obvious remedy is already known to fail: widening cost VG12 27 divergences without identifying the amplitude.
+**Position:** adopt the clamp for the univariate models on the _extrapolation_ argument, which is settled independently — an unbounded mean above the high anchor is a defect whatever `eta` does — and treat the amplitude improvement as a secondary benefit rather than a solution to Problem 2. `eta` remains an open problem, and the one obvious remedy is already known to fail: widening cost VG12 27 divergences without identifying the amplitude.
 
 ## 4. Problem 1 — and why VG14 had never been fixed
 
-The study owner's position, 2026-08-06: **VG05, VG07 and VG08 supply no reported number**, being superseded later in the lineage. That makes their boundary-pinned parameter *disclosable rather than fixable* — a development step can carry one provided the report says so. It also preserves the lineage: changing a prior partway through VG05 → VG07 → VG08 → VG09 → VG10 would confound the contrast the sequence exists to show.
+The study owner's position, 2026-08-06: **VG05, VG07 and VG08 supply no reported number**, being superseded later in the lineage. That makes their boundary-pinned parameter _disclosable rather than fixable_ — a development step can carry one provided the report says so. It also preserves the lineage: changing a prior partway through VG05 → VG07 → VG08 → VG09 → VG10 would confound the contrast the sequence exists to show.
 
 **VG14's role is undecided**, so it was fixed for completeness pending that decision.
 
@@ -72,7 +72,7 @@ That much stands. What follows did not.
 > [!CAUTION]
 > **Withdrawn.** I argued from VG13's posterior predictive calibration — mean errors of 0.01 words on 147, PIT means at 0.497–0.504 — that "there is no curvature the GP is failing to capture", and recommended dropping the GP. **The evidence does not support the claim.** The calibration has only two 12-month bands, and a two-band mean error is structurally blind to within-band shape: a straight chord across a curve gives near-zero average error in each band while being wrong throughout it.
 >
-> A finer monthly check does not settle it either, in the opposite direction. Residuals against the population-level curve are positive at ten of eleven ages (mean +14.3, two sign runs over eleven), which looks systematic — but that is almost certainly random-effect marginalisation, not trend misfit: with subject effects of sd ≈ 1 on the logit scale the mean over children sits above the sigmoid at the population mean, and the gap shrinks as `p` rises, which is the pattern observed. The whole-frame calibration compares the *marginal* predictive and matches to 0.007.
+> A finer monthly check does not settle it either, in the opposite direction. Residuals against the population-level curve are positive at ten of eleven ages (mean +14.3, two sign runs over eleven), which looks systematic — but that is almost certainly random-effect marginalisation, not trend misfit: with subject effects of sd ≈ 1 on the logit scale the mean over children sits above the sigmoid at the population mean, and the gap shrinks as `p` rises, which is the pattern observed. The whole-frame calibration compares the _marginal_ predictive and matches to 0.007.
 >
 > So: a fine-grained comparison against the wrong quantity, and a right-quantity comparison at the wrong resolution. Neither answers the question.
 
@@ -89,6 +89,6 @@ It matters beyond VG13's own fit — VG13 supplies the typically-developing side
 ## 6. Open
 
 1. Whether VG14 is partially informative or wholly replaced by VG15 — the decision its migration was done in anticipation of.
-2. `eta` in VG01, VG03, VG11, VG12. The clamp helps but does not resolve it; widening is known to fail. Needs something that *identifies* the amplitude.
+2. `eta` in VG01, VG03, VG11, VG12. The clamp helps but does not resolve it; widening is known to fail. Needs something that _identifies_ the amplitude.
 3. VG15's `ell_unit_sign` at contraction 0.033, on a headline model. Not yet investigated; likely the same class of problem as VG13's, since the signed data are sparser than the spoken.
 4. VG13's predictive intervals are much too wide — empirical coverage 0.99 at nominal 0.89. Separate from the GP question, and possibly the subject-marginal predictive being scored against children who are in the sample.
