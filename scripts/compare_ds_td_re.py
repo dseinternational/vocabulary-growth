@@ -318,8 +318,14 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
 
     _save_single(
         pre + "overdispersion",
+        # Both halves of the old title were wrong once DISP_DS_KEY moved to VG10.
+        # "study-RE only" described VG07; VG10 carries subject random effects too,
+        # which is the whole point of the repointing. "mean-independent" overclaims:
+        # the factor removes the explicit p(1-p) term, but kappa is itself
+        # level-driven in this family, so a cross-population contrast still carries
+        # part of the level difference (see comparison.overdispersion_factor).
         dict(xlabel="Age (months)", ylabel=r"Overdispersion $\varphi$",
-             title=f"Concentration (mean-independent, study-RE only) — words {outcome}"),
+             title=f"Overdispersion vs Binomial — words {outcome}"),
         overdispersion,
     )
 
@@ -391,7 +397,7 @@ def _print_summary(outcome, ew, lr, ad, disp, disp_ds_lab) -> None:
     for _, r in ad[ad["coverage"] >= MIN_COVERAGE].iterrows():
         print(f"    {int(r['words']):>3} words: {r['median']:5.1f} "
               f"[{r['ci_lo']:.1f}, {r['ci_hi']:.1f}]")
-    print(f"  Dispersion contrasts at key ages (DS={disp_ds_lab}, study-RE only):")
+    print(f"  Dispersion contrasts at key ages (DS={disp_ds_lab}, study + subject REs):")
     for a in KEY_AGES:
         print(f"    {a:>2} mo: kappa TD={_at_age(disp,a,'kappa_TD_median'):4.1f} "
               f"DS={_at_age(disp,a,'kappa_DS_median'):4.1f} "
