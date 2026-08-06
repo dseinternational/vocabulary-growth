@@ -4,7 +4,7 @@
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
-> Working record, 2026-08-06. Follows the R3 sweep in [202608051500](202608051500-report-critical-review.md) §4a, which flagged three distinct problems across the model family. This note records the options considered for each, the study owner's decisions, and what the tests actually showed. **Two of the three are resolved; the third is still running.** §5 records a claim of mine that was withdrawn under challenge.
+> Working record, 2026-08-06. Follows the R3 sweep in [202608051500](202608051500-report-critical-review.md) §4a, which flagged three distinct problems across the model family. This note records the options considered for each, the study owner's decisions, and what the tests actually showed. **Two of the three are resolved; the third is still running.** §5 and §5a each record a claim of mine that was withdrawn — the first under challenge, the second on finding a confound the project had already documented. Both were the same mistake: comparing a population-level model curve against a raw pooled empirical mean.
 
 ## 0. Summary
 
