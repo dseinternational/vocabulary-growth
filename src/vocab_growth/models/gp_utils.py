@@ -549,7 +549,26 @@ def _gp_from_mean(
     orthogonalised against ``nuisance_basis`` and pinned to zero at the reference
     row by :func:`_orthogonalise_and_anchor` (deterministic ops only — no new RVs).
     """
-    ell_unit = cfg_ell.to_pymc(f"ell_unit{suffix}")
+    if cfg_eta is None:
+        # No GP at all: the mean carries the whole latent. For an outcome whose GP
+        # hyperparameters are unidentifiable, sampling them adds prior-driven
+        # spread to the reported band without adding information -- VG15's signed
+        # GP contributes a posterior-median curve of at most 0.11 logits (7% of the
+        # tent's range) while injecting a per-age posterior sd of 0.269, six times
+        # larger. Dropping it makes a trajectory that is already parametric in
+        # substance parametric in form, and says so.
+        if store_deterministic:
+            return pm.Deterministic(latent_name, mean_trend, dims=("all_id",))
+        return mean_trend
+
+    if isinstance(cfg_ell, (int, float)):
+        # Fixed length-scale on the unit scale. Keeps the GP's flexibility while
+        # removing a hyperparameter the data cannot inform (VG15's `ell_unit_sign`
+        # reaches contraction 0.033). Still stored under its usual name so
+        # downstream readers do not need to know which branch produced it.
+        ell_unit = pm.Deterministic(f"ell_unit{suffix}", pt.as_tensor_variable(float(cfg_ell)))
+    else:
+        ell_unit = cfg_ell.to_pymc(f"ell_unit{suffix}")
     ell = pm.Deterministic(
         f"ell{suffix}", grid.ell_low_z + (grid.ell_high_z - grid.ell_low_z) * ell_unit
     )

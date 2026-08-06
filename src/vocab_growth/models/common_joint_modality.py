@@ -917,8 +917,21 @@ def build_model(context: JointContext, definition: JointModelDefinition):
                 if getattr(definition, "sign_peak_prior", None) is not None
                 else None
             ),
-            cfg_ell=config.ell_unit_sign_dist,
-            cfg_eta=config.eta_sign_dist,
+            # `sign_gp_mode` resolves the signed GP's unidentified hyperparameters:
+            # "sampled" (default, as shipped), "fixed-ell" (length-scale held at its
+            # prior median, amplitude still sampled), or "off" (no GP; the tent
+            # carries the latent). Read through getattr so no definition class
+            # changes and no existing model's graph moves.
+            cfg_ell=(
+                float(config.ell_unit_sign_dist.ppf(0.5))
+                if getattr(definition, "sign_gp_mode", "sampled") == "fixed-ell"
+                else config.ell_unit_sign_dist
+            ),
+            cfg_eta=(
+                None
+                if getattr(definition, "sign_gp_mode", "sampled") == "off"
+                else config.eta_sign_dist
+            ),
             suffix="_sign",
             X_all_z_data=X_all_z_data,
             grid=gp_grid,
