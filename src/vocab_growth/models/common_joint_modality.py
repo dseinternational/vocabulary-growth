@@ -905,6 +905,18 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             z_low=(sa_young - X_mean) / X_std,
             z_mid=(sa_peak - X_mean) / X_std,
             z_hi=(sa_old - X_mean) / X_std,
+            # Optional: estimate the peak age rather than assert it. Read from the
+            # definition so no configuration class changes -- adding a field to a
+            # definition class invalidates every existing fit of that class, and
+            # nothing here should do that until the change is chosen deliberately.
+            cfg_peak=(
+                pz.Beta(
+                    alpha=definition.sign_peak_prior[0],
+                    beta=definition.sign_peak_prior[1],
+                )
+                if getattr(definition, "sign_peak_prior", None) is not None
+                else None
+            ),
             cfg_ell=config.ell_unit_sign_dist,
             cfg_eta=config.eta_sign_dist,
             suffix="_sign",

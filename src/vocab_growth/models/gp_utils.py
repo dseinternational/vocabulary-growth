@@ -397,6 +397,7 @@ def tent_and_gp(
     z_low,
     z_mid,
     z_hi,
+    cfg_peak=None,
     cfg_ell,
     cfg_eta,
     suffix,
@@ -425,6 +426,22 @@ def tent_and_gp(
     p_low = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_mid = cfg_mid.to_pymc(f"p_slope_mid{suffix}")
     p_hi = cfg_hi.to_pymc(f"p_slope_hi{suffix}")
+    if cfg_peak is not None:
+        # Estimate WHERE the peak is, instead of asserting it. `peak_unit` places
+        # the middle anchor between the outer two; the ordering z_low < z_mid <
+        # z_hi therefore holds by construction, which a prior directly on the age
+        # could not guarantee. Standardisation is affine, so a unit position in z
+        # is the same unit position in months.
+        #
+        # The fixed anchor is not harmless. With the peak pinned at 36 months,
+        # VG15 under-predicts the signed ratio at every band above it -- mean
+        # residual +0.059 against -0.006 below, worst at 48-54 months where
+        # observed 0.365 against fitted 0.242 -- and the residual sign flips
+        # exactly at the knot, which random-effect marginalisation cannot produce.
+        # The observed ratio is a plateau from roughly 30 to 54 months, not a peak
+        # at 36. See notes/202608060900-three-prior-conflicts.md.
+        peak_unit = cfg_peak.to_pymc(f"peak_unit{suffix}")
+        z_mid = pm.Deterministic(f"z_peak{suffix}", z_low + peak_unit * (z_hi - z_low))
     slope_up = pm.Deterministic(
         f"slope_up{suffix}", (logit(p_mid) - logit(p_low)) / (z_mid - z_low)
     )
