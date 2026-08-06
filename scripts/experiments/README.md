@@ -29,15 +29,15 @@ record.
 
 ## What each one established
 
-| Harness                  | Question                                                                                       | Result recorded in                                                                                   |
-| ------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `geom_arm.py`            | Do centring the study block and the variance partition fix VG12's energy BFMI?                 | [`202608050900`](../../notes/202608050900-td-hierarchical-geometry.md) §9 — centring yes for ESS, partition **no** for BFMI |
-| `vg12_eta_isolate.py`    | Which of three simultaneous changes caused VG12's divergences to go 2 → 29?                    | Commit `5d2714e` — the `eta` widening, isolated and reverted                                             |
-| `clamp_arm.py`           | Does the mean clamp lower `eta` in the univariate models, as it did in the joint ones?         | [`202608060900`](../../notes/202608060900-three-prior-conflicts.md) §3 — partially; 14% lower, still pressing |
-| `vg13_ell_arm.py`        | Is VG13's 10-month window hiding curvature its GP cannot express?                              | [`202608060900`](../../notes/202608060900-three-prior-conflicts.md) §5                                    |
-| `calibrate_partition.py` | What budget and share priors reproduce the marginals the variance partition replaces?          | `definitions._TD_UNDERSTOOD_VARIANCE_PARTITION` comments                                                 |
-| `compare_arms.py`        | Scores a set of arms on BFMI, divergences, R-hat, ESS and the ridge correlation.               | Used by `geom_arm.py` runs                                                                               |
-| `verify_geometry.py`     | Recomputes every geometry number quoted in the note directly from the traces.                  | [`202608050900`](../../notes/202608050900-td-hierarchical-geometry.md) §§2–5                              |
+| Harness                  | Question                                                                               | Result recorded in                                                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `geom_arm.py`            | Do centring the study block and the variance partition fix VG12's energy BFMI?         | [`202608050900`](../../notes/202608050900-td-hierarchical-geometry.md) §9 — centring yes for ESS, partition **no** for BFMI |
+| `vg12_eta_isolate.py`    | Which of three simultaneous changes caused VG12's divergences to go 2 → 29?            | Commit `5d2714e` — the `eta` widening, isolated and reverted                                                                |
+| `clamp_arm.py`           | Does the mean clamp lower `eta` in the univariate models, as it did in the joint ones? | [`202608060900`](../../notes/202608060900-three-prior-conflicts.md) §3 — partially; 14% lower, still pressing               |
+| `vg13_ell_arm.py`        | Is VG13's 10-month window hiding curvature its GP cannot express?                      | [`202608060900`](../../notes/202608060900-three-prior-conflicts.md) §5                                                      |
+| `calibrate_partition.py` | What budget and share priors reproduce the marginals the variance partition replaces?  | `definitions._TD_UNDERSTOOD_VARIANCE_PARTITION` comments                                                                    |
+| `compare_arms.py`        | Scores a set of arms on BFMI, divergences, R-hat, ESS and the ridge correlation.       | Used by `geom_arm.py` runs                                                                                                  |
+| `verify_geometry.py`     | Recomputes every geometry number quoted in the note directly from the traces.          | [`202608050900`](../../notes/202608050900-td-hierarchical-geometry.md) §§2–5                                                |
 
 ## Running one
 

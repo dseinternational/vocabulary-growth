@@ -86,6 +86,25 @@ This inverts the recommendation back to **rescale** rather than **drop**, and fo
 
 It matters beyond VG13's own fit — VG13 supplies the typically-developing side of the matched-comprehension contrast in the only written results chapter. If it has been smoothing over an acceleration, that bears on the contrast.
 
+### Result: the test does not work, and that is the finding
+
+Both arms fitted at `test` config.
+
+| arm             | `ell_unit_u` | implied `ell` | `eta_u` | contraction | divergences | min BFMI | max R-hat |
+| --------------- | -----------: | ------------: | ------: | ----------: | ----------: | -------: | --------: |
+| baseline (6–18) |        0.509 |       12.1 mo |   0.319 |       0.090 |           3 |    0.240 |    1.0105 |
+| rescaled (2–8)  |        0.495 |        5.0 mo |   0.233 |       0.192 |     **140** |    0.258 |    1.0292 |
+
+**Three things, none of which answers the original question.**
+
+1. **Rescaling to (2, 8) is not a viable configuration.** 140 divergences against 3. Whatever the shorter length-scale buys, it wrecks the geometry, and a fit with 140 divergences cannot be trusted for parameter estimates either — which undercuts reading anything into its `eta_u`.
+2. **`ell_unit` sits at 0.50 in _both_ arms** — dead centre of its Beta(3,3) prior. The length-scale is unidentified whichever range it is given. That is a stronger and broader statement than "the window is shorter than the length-scale": rescaling the range did not make it identifiable, so the diagnosis in this section is right about the conclusion and incomplete about the cause.
+3. **PSIS-LOO cannot adjudicate.** On understood it reports 45% of Pareto k values above 0.7 with `p_loo` 3723 on 6358 observations; on spoken it fails outright ("All tail values are the same"). With per-child random effects, dropping one observation moves that child's effect substantially, which is exactly the regime where importance sampling breaks. The project already knows this — the 12 May review recorded PSIS-LOO instability and used K-fold leave-one-subject-out instead, and `scripts/kfold_loso.py` exists for it.
+
+So the ELPD comparison proposed above **cannot be run with the tool proposed**. The question — is there curvature in 8–18 months that VG13 is blind to? — remains open, and answering it needs K-fold LOSO rather than PSIS-LOO, at materially greater cost.
+
+What is now settled: **rescaling the length-scale is not the fix**, so of the four options in the original review, A is eliminated on evidence. Dropping the GP (B) or fixing its hyperparameters (C) remain, and both are consistent with a length-scale that is unidentified at any range.
+
 ## 6. Open
 
 1. Whether VG14 is partially informative or wholly replaced by VG15 — the decision its migration was done in anticipation of.
