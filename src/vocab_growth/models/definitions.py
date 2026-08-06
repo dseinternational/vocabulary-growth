@@ -2126,6 +2126,24 @@ VG14 = TrivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
+    # Migrated to the two-anchor dispersion form, 2026-08-06. VG14 had been left
+    # on the class-default legacy priors, where `b_kappa_mag ~ HalfNormal(0.3)`
+    # forces dispersion to fall with age and caps how fast. The spoken side
+    # rejected that: posterior mean 1.214, about four standard deviations beyond
+    # the prior, with contraction -0.09 -- the posterior wider than the prior. A
+    # parameter pinned against a boundary is not an estimate.
+    #
+    # These are not a new calibration. They are the same objects VG10 and VG15
+    # already use, and VG14 shares their population, outcomes, slope anchors and
+    # GP domain exactly, so adopting them removes a difference that was never
+    # deliberate. It also brings VG14 into line with VG15, the model it is most
+    # directly compared against.
+    #
+    # `kappa_sign` deliberately stays legacy, matching VG15: the signed block sits
+    # comfortably inside its prior (CDF 0.25, contraction 0.49) and has no reason
+    # to move. See notes/202608051500-report-critical-review.md section 4a.
+    kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_DS_JOINT_Q_KAPPA_RE,
     # Understood trajectory: matches VG05, including the 2026-08-04 anchor
     # recalibration (Beta(1,7) -> Beta(1.5,8) at 24 mo, Beta(2,1.5) -> Beta(3,1.3)
     # at 84 mo) and eta_u at 0.6. See VG05 for the reasoning and
