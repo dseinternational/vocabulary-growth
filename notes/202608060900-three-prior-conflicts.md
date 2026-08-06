@@ -105,6 +105,43 @@ So the ELPD comparison proposed above **cannot be run with the tool proposed**. 
 
 What is now settled: **rescaling the length-scale is not the fix**, so of the four options in the original review, A is eliminated on evidence. Dropping the GP (B) or fixing its hyperparameters (C) remain, and both are consistent with a length-scale that is unidentified at any range.
 
+## 5a. The signed ratio: why the GP will not find the hump
+
+Investigating VG15's `ell_unit_sign` (contraction 0.033) led into the signed-ratio mean. Recorded here because the structure is easy to misread: VG14 and VG15 _do_ carry a Gaussian process on the signed ratio, and it nonetheless cannot supply or move the hump.
+
+    logit r(a) = tent_mean(a)  +  eta_sign * g_hsgp(a)
+
+**Four independent reasons the GP cannot find the peak.**
+
+1. **A zero-mean GP has a flat prior median.** It can add smooth departures from a shape, not supply one. This is why the signed mean is parametric at all: #54 made it intercept-only and the level went prior-dominated; #154 replaced that with the three-anchor tent explicitly to obtain a hill-shaped prior median.
+2. **In VG15 the GP is orthogonalised against the whole tent basis** — all three hats, not just `[1, z]`. `tent_and_gp`'s docstring is explicit that this is so it "cannot mimic a shift of any anchor". The GP is _designed_ to be unable to move the peak.
+3. **Its length-scale is unidentified.** Contraction 0.033 in VG15 and 0.073 in VG14, which has no orthogonalisation at all — so this is not caused by (2). The cause is the data: 516 signed observations with **85% between 12 and 48 months**, 23 above 60, 7 above 72, none between 84 and 96, against a GP domain running to 115.
+4. **Its amplitude is only partly identified** (contraction 0.29–0.35), so even the departures it can express are weakly determined.
+
+The consequence for reporting is larger than the peak. VG15's signed trajectory is **parametric in practice**, so the credible band on `r(a)` is the uncertainty in three anchor heights propagated through a fixed shape — not uncertainty about the shape. It will read tighter than the evidence supports, most severely above 60 months where the shape is asserted and 23 observations remain.
+
+### Withdrawn: that the fixed peak demonstrably biases the fitted curve
+
+> [!CAUTION]
+> I compared VG15's population-level `r(a)` against the observed pooled ratio by age band, found mean residuals of −0.006 below 36 months and **+0.059 above** — worst at 48–54 months, observed 0.365 against fitted 0.242 — and argued the fixed knot was biasing the curve. I checked the random-effect marginalisation confound (the residual sign flips at the knot, which a level effect cannot produce) and concluded the bias was real.
+>
+> **It is not established.** The comparison is confounded by _study composition_, which I did not check, and which [202606151700](202606151700-vg14-signed-ratio-shape-and-p-any-bias.md) had already documented. Per-study pooled ratios span **uk_01 0.014, es_01 0.149, ie_02 0.320, uk_02 0.511** — a 36-fold spread. uk_02 supplies **52% of the 48–54 month band** against roughly 20–25% of the bands below it, and the ratio collapses at 54–60 when es_01 takes over. The apparent late peak tracks uk_02's rising share, not age.
+>
+> That is the same error as §5's, in a new place: comparing a population-level curve (random effects at zero) against a raw pooled empirical mean, when the grouping the model explicitly accounts for is also changing with age. Checking one confound is not checking the confounds.
+
+### What stands, and what the test now tests
+
+Unaffected by the above, because none of it rests on that comparison:
+
+- The peak sits at 36 months **by construction** — 77% of posterior draws peak within a month of the fixed anchor. Its height is estimated (contraction 0.76); its age is not estimated at all.
+- Therefore "signing peaks around three years" is a statement about anchor placement and must not be reported as a finding.
+- The GP cannot rescue this, for the four structural reasons above.
+- Signed evidence effectively stops around 60 months while `r(a)` is reported to 115.
+
+The June note concluded that "the peak age cannot be identified from these data with this model", on the composition argument now confirmed. **That conclusion was reached for VG14, which has no study random effects** — its age curve necessarily absorbs composition. VG15 _does_ carry study random intercepts, so between-study level is absorbed and the age curve has a chance to separate "this age signs more" from "uk_02 children sign more".
+
+Whether it actually does is the open question, and it is exactly what the free-peak arm tests. If `peak_unit` is identified, VG15's study effects did the work VG14 could not. If it comes back at its prior, the June conclusion holds for VG15 too and the peak age is simply not recoverable from this data. Either outcome is worth having; neither is assumed.
+
 ## 6. Open
 
 1. Whether VG14 is partially informative or wholly replaced by VG15 — the decision its migration was done in anticipation of.
