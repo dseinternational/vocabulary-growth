@@ -36,21 +36,23 @@ from vocab_growth.fit_artifacts import (
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     BivariateModelDefinition,
+    JointModelDefinition,
     KappaAnchorPriorParams,
+    TrivariateModelDefinition,
     UnivariateModelDefinition,
 )
 
 MODELS_DIR = env.models_output_dir()
 
-# Registry-derived: covers every univariate/bivariate model, matching the two
-# prior-dispatch functions below. Trivariate (VG14) and joint (VG15)
-# definitions carry extra priors (signed ratio, psi, conc) this script does
-# not build, so they are intentionally excluded rather than silently
-# under-plotted.
+# Registry-derived: every registered model. Trivariate (VG14) and joint (VG15)
+# were excluded until 2026-08-06 because their signed-ratio, psi and
+# concentration priors were not reconstructed here. That exclusion hid a real
+# defect -- VG14's `b_kappa_mag_s` sits 4 sigma beyond its prior, on a parameter
+# the sweep could already build. `signing_priors` closes the gap; see
+# `model_priors` for the dispatch.
 MODEL_LABELS = {
     d.model_id: (f"{d.model_id}-{d.config_name}", d)
     for d in MODEL_REGISTRY.values()
-    if isinstance(d, (UnivariateModelDefinition, BivariateModelDefinition))
 }
 
 
@@ -134,6 +136,54 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
     if getattr(d, "use_subject_re_q", False):
         priors["tau_subj_q"] = pz.HalfNormal(sigma=d.tau_subj_q_sigma)
     return priors
+
+
+def signing_priors(d) -> dict[str, pz.distributions.distributions.Continuous]:
+    """The extra priors the signing models carry beyond the bivariate set.
+
+    VG14 and VG15 add a third outcome with its own GP and a **three-anchor** mean
+    (low / mid / high) rather than the two-anchor form the other outcomes use, and
+    VG15 adds the sign-speech association and the Dirichlet-Multinomial
+    concentration. These were the reason the two models were excluded from the
+    sweep entirely — which is how VG14's 4-sigma `b_kappa_mag_s` conflict went
+    unseen, since that parameter is part of the *shared* bivariate set the sweep
+    could already reconstruct.
+    """
+    priors: dict = {
+        "ell_unit_sign": pz.Beta(alpha=d.ell_unit_sign_alpha, beta=d.ell_unit_sign_beta),
+        "eta_sign": pz.HalfNormal(sigma=d.eta_sign_sigma),
+        "p_slope_low_sign": pz.Beta(
+            alpha=d.p_slope_low_sign_alpha, beta=d.p_slope_low_sign_beta
+        ),
+        "p_slope_mid_sign": pz.Beta(
+            alpha=d.p_slope_mid_sign_alpha, beta=d.p_slope_mid_sign_beta
+        ),
+        "p_slope_hi_sign": pz.Beta(
+            alpha=d.p_slope_hi_sign_alpha, beta=d.p_slope_hi_sign_beta
+        ),
+        **kappa_priors(d.kappa_sign, "_sign"),
+    }
+    # VG15 only: the association and the concentration are given on the log scale,
+    # and the trace stores `log_psi` / `log_conc` under those names.
+    if getattr(d, "log_psi_sigma", None) is not None:
+        priors["log_psi"] = pz.Normal(mu=d.log_psi_mu, sigma=d.log_psi_sigma)
+    if getattr(d, "log_conc_sigma", None) is not None:
+        priors["log_conc"] = pz.Normal(mu=d.log_conc_mu, sigma=d.log_conc_sigma)
+    if getattr(d, "tau_sign_sigma", None) is not None:
+        priors["tau_sign"] = pz.HalfNormal(sigma=d.tau_sign_sigma)
+    if getattr(d, "use_subject_re_sign", False):
+        priors["tau_subj_sign"] = pz.HalfNormal(sigma=d.tau_subj_sign_sigma)
+    return priors
+
+
+def model_priors(d) -> dict[str, pz.distributions.distributions.Continuous]:
+    """Every prior this definition specifies, whichever family it belongs to."""
+    if isinstance(d, (TrivariateModelDefinition, JointModelDefinition)):
+        # Both carry the full bivariate understood/spoken block plus a sign block.
+        return {**bivariate_priors(d), **signing_priors(d)}
+    if isinstance(d, BivariateModelDefinition):
+        return bivariate_priors(d)
+    return univariate_priors(d)
 
 
 def _support_grid(prior, samples: np.ndarray) -> np.ndarray:
@@ -260,11 +310,7 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
             print(f"  {short}: SKIPPED — trace predates the current definition (refit needed)")
             return []
     idata = az.from_netcdf(trace_path)
-    priors = (
-        bivariate_priors(definition)
-        if isinstance(definition, BivariateModelDefinition)
-        else univariate_priors(definition)
-    )
+    priors = model_priors(definition)
     rows = []
     for name, prior in priors.items():
         if name not in idata.posterior.data_vars:

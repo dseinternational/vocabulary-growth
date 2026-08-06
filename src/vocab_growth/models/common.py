@@ -851,6 +851,12 @@ def build_model(
             ),
             store_deterministic=True,
             latent_name="f_all",
+            # getattr: the field lives on the joint definition classes only. The
+            # 2026-08-04 mean-extrapolation fix was applied to the joint models
+            # and never reached the univariate ones, which are exactly the models
+            # where `eta` still presses its prior (VG01, VG03, VG11, VG12). See
+            # notes/202608042030-q-mean-extrapolation.md.
+            clamp_above_hi=getattr(definition, "clamp_mean_above_hi_anchor", False),
         )
 
         # Slice for obs / plot / query

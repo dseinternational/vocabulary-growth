@@ -138,6 +138,7 @@ docstrings
 workstream
 worktree
 worklist
+disclosable
 miscited
 overclaiming
 dtype

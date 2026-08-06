@@ -69,9 +69,13 @@ The three axes that distinguish the models:
 
 `methods-workflow.qmd` defines a four-way status taxonomy — **model of record** (the current source for a stated estimand), **development step** (retained to show how structure was added, but not preferred for headline estimates), **TD reference** (a typically-developing comparison model with a distinct population role), and **superseded** (replaced after a documented structural or data problem) — and names this inventory as the source of truth for them. Recording them here, because until now the taxonomy was defined but never applied.
 
-| Model | Role                                                                                                                                                                            |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| VG10  | **Model of record** for the Down syndrome joint understood + spoken estimands. Confirmed by the study owner, 2026-08-05. Supersedes the 12 May review's recommendation of VG09. |
+| Model            | Role                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VG10             | **Model of record** for the Down syndrome joint understood + spoken estimands. Confirmed by the study owner, 2026-08-05. Supersedes the 12 May review's recommendation of VG09. |
+| VG05, VG07, VG08 | **Development steps.** The study owner's position, 2026-08-06: not expected to supply any reported number, being superseded by later models in the lineage.                     |
+| VG14             | **Open.** May be partially informative or wholly replaced by VG15; not decided as of 2026-08-06.                                                                                |
+
+This settles part of the prior-data conflict recorded in [`notes/202608051500-report-critical-review.md`](../../notes/202608051500-report-critical-review.md) §4a. VG05, VG07, VG08 **and VG14** all carry `b_kappa_mag_s` around four standard deviations beyond its prior, with the posterior wider than the prior — a parameter pinned at a boundary is not an estimate. For the three development steps that is disclosable rather than fixable, because a development step supplies no number. **VG14 is the one that matters**, and whether it needs migrating to the two-anchor dispersion form follows from its role decision rather than from the diagnostic.
 
 **The remaining role assignments are outstanding and are owner decisions**, tracked in #190. They should not be inferred from this file's ordering. Two constraints are already fixed and any assignment must respect them: VG06 is retired and superseded by VG13; and `scripts/fit_recovery.py` treats `vg10`, `vg12` and `vg15` as the headline set, so those three at minimum carry reporting weight. A superseded model never supplies a number in the findings, so these assignments have to be settled before the findings chapters are written.
 
