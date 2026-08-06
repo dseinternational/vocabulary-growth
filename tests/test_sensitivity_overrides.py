@@ -100,12 +100,17 @@ def test_registry_counts_and_models():
     # by the inverse `us01-implausible-reinstated` pair, which asks what changes if
     # that default exclusion is mistaken — the only remaining check on it, the
     # source author no longer holding the original files.
-    assert len(VARIANTS) == 41
+    #
+    # +3 on 2026-08-06: the three `sign-peak-age-*` variants. VG15's signed peak
+    # age became a sampled parameter that day, so for the first time there is
+    # something for a peak-age variant to vary — the existing `sign-peak-lo`/`-hi`
+    # pair varies the peak's HEIGHT, and could not have covered this.
+    assert len(VARIANTS) == 44
     assert len(variants_for("vg10")) == 11
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1
-    assert len(variants_for("vg15")) == 20
+    assert len(variants_for("vg15")) == 23
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -122,9 +127,9 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 20
+    assert len(all_vg15) == 23
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 20
+    assert len({d.config_name for d in all_vg15}) == 23
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")

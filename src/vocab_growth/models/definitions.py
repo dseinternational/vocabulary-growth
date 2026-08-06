@@ -840,6 +840,30 @@ class JointModelDefinition:
     # rationale. Study REs carry between-study level; the GP (anchored at 54 mo,
     # below) carries smooth departures.
     sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
+    sign_peak_prior: tuple[float, float] | None = None
+    """Beta(alpha, beta) on the signed peak's POSITION between the outer sign
+    anchors, or None to fix it at ``sign_anchor_ages[1]``.
+
+    Adopted for VG15 on 2026-08-06. With the peak fixed, `r(a)` peaked at the
+    middle anchor by construction -- 77% of posterior draws within a month of it --
+    so its height was estimated and its age simply asserted. "Signing peaks around
+    three years" was a statement about knot placement, not a finding.
+
+    Sampling the position rather than the age keeps ``z_low < z_mid < z_hi`` true by
+    construction, which a prior on the age could not. Measured on VG15 at `test`:
+    the peak age is identifiable (contraction 0.481) at 29.4 months, 89% ETI
+    [23.9, 46.2], against a prior interval of [21.5, 67.5] -- and the free knot
+    samples better than the fixed one (0 divergences against 2), despite making the
+    GP's nuisance basis draw-dependent.
+
+    The peak HEIGHT is unmoved (0.319 -> 0.314), so this changes shape, not level.
+
+    Note this does not extend to VG14, whose lack of study random effects means its
+    age curve must absorb between-study composition -- the reason
+    notes/202606151700 found the peak age unidentifiable there. That finding stands
+    for the model it was made about. See
+    notes/202608060900-three-prior-conflicts.md section 5.
+    """
     """Young / peak / old reference ages (months) for the signed-ratio hump."""
     p_slope_low_sign_alpha: float = 2.0
     p_slope_low_sign_beta: float = 20.0
@@ -2256,6 +2280,12 @@ VG15 = JointModelDefinition(
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,
     anchor_g_sign_at_ref=True,
+    # Peak age estimated rather than asserted, adopted 2026-08-06; see the field
+    # docstring on JointModelDefinition. Beta(2, 4) puts the prior median at 40
+    # months, deliberately ABOVE the 29.4 the data pull it to, so the estimate
+    # moves against the prior rather than with it. Checked by the three
+    # sign-peak-age-* sensitivity variants.
+    sign_peak_prior=(2.0, 4.0),
     gp_anchor_age_months=54.0,
     # Understood and spoken share VG09's frame and specification, so they take
     # the same two-anchor blocks. The signed ratio stays on the legacy form:

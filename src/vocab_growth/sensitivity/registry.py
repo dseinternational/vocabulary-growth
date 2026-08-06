@@ -63,6 +63,19 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_mid_sign_alpha": 2.0, "p_slope_mid_sign_beta": 6.0}},  # peak r ~0.26 (vs ~0.42)
     ("vg15", "sign-peak-hi"): {"suffix": "sign-peak-hi", "scalar": {
         "p_slope_mid_sign_alpha": 4.0, "p_slope_mid_sign_beta": 3.0}},  # peak r ~0.58
+    # Peak AGE priors. The two `sign-peak-lo`/`-hi` variants above vary the peak's
+    # HEIGHT; until 2026-08-06 the peak's age was a fixed anchor, so nothing could
+    # vary it. These three span the plausible range so the adopted Beta(2, 4)
+    # (median 40 mo) can be checked against a uniform prior and against priors
+    # pulling early and late. `sign-peak-age-late` is the sharpest test: its 89%
+    # interval starts at 37.6 months, above the fitted 29.4, so a posterior that
+    # stays near 29-30 under it is data-driven rather than prior-driven.
+    ("vg15", "sign-peak-age-uniform"): {"suffix": "sign-peak-age-uniform", "scalar": {
+        "sign_peak_prior": (1.0, 1.0)}},   # peak age median 55.5 mo, 89% [19.5, 91.5]
+    ("vg15", "sign-peak-age-early"): {"suffix": "sign-peak-age-early", "scalar": {
+        "sign_peak_prior": (1.5, 6.0)}},   # peak age median 29.0 mo, 89% [17.4, 52.0]
+    ("vg15", "sign-peak-age-late"): {"suffix": "sign-peak-age-late", "scalar": {
+        "sign_peak_prior": (4.0, 3.0)}},   # peak age median 61.9 mo, 89% [37.6, 83.1]
     ("vg15", "sign-old-hi"): {"suffix": "sign-old-hi", "scalar": {
         "p_slope_hi_sign_alpha": 2.0, "p_slope_hi_sign_beta": 8.0}},  # old r ~0.18 (words plateau)
     ("vg15", "sign-include-uk01"): {"suffix": "sign-include-uk01", "scalar": {
