@@ -140,6 +140,7 @@ worktree
 scratchpad
 worklist
 disclosable
+unassessable
 miscalibrated
 miscited
 overclaiming
