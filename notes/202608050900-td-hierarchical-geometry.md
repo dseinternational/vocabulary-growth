@@ -140,7 +140,33 @@ Removing them from _both_ populations avoids that, but forfeits partial pooling,
 
 **The general point.** The BFMI failure, the poor recovery and the `tau_subject`/`kappa` ridge are three symptoms of one cause: missing within-child replication. Removing the parameter does not supply the information. It relocates the problem into a quantity that _is_ reported, and hides it.
 
-Checked rather than argued: VG12's registered `single-admin` variant — one administration per child, which makes subject effects unidentifiable by construction — was run on 2026-08-07. It had never been run before; the Target 8 comparison reported it as "Variant fit not found (skip)".
+#### Checked rather than argued
+
+VG12's registered `single-admin` variant — one administration per child, which makes subject effects unidentifiable by construction — was run at `test` on 2026-08-07. It had never been run before; the Target 8 comparison reported it as "Variant fit not found (skip)", and it turned out to have been unbuildable since the variance partition was adopted (fixed in b17dce0).
+
+It confirms **both** halves of the argument at once, which is the useful thing about it.
+
+**The geometry is completely fixed.** Minimum energy BFMI goes 0.209 → **0.981**, from failing the soft tier to unimpeachable, and min ESS rises 577 → 956. Nothing else tried in this run moved BFMI at all. That is as direct a confirmation of the mechanism in §3 as the data can give: the energy pathology _is_ the `tau_subject`/`kappa` competition, and it disappears the moment the competition is removed.
+
+**And the variance lands exactly where predicted.** `kappa` collapses, and the overdispersion we report rises to match:
+
+| age (mo) | `kappa` base | `kappa` single-admin | ratio | `rho` base | `rho` single-admin | VIF base | VIF single-admin |
+| -------: | -----------: | -------------------: | ----: | ---------: | -----------------: | -------: | ---------------: |
+|        9 |         29.7 |                 10.7 |  0.36 |     0.0326 |             0.0853 |     27.3 |             70.0 |
+|       12 |         36.9 |                 11.2 |  0.30 |     0.0264 |             0.0822 |     22.4 |             67.5 |
+|       18 |         57.5 |                 12.1 |  0.21 |     0.0171 |             0.0762 |     14.8 |             62.6 |
+|       24 |         90.2 |                 13.2 |  0.15 |     0.0110 |             0.0705 |      9.9 |             58.1 |
+|       30 |         97.2 |                 13.4 |  0.14 |     0.0102 |             0.0696 |      9.2 |             57.3 |
+
+Read the VIF column. At 24 months the variance inflation factor — the headline "how much more variable than binomial" number — goes from **9.9 to 58.1, a factor of 5.9**, on the same population, same outcome, same engine. The age gradient inverts too: with subject effects the fitted `kappa` rises with age (dispersion falls as children spread out into a well-measured range); without them it is nearly flat, because it is no longer estimating dispersion, it is estimating dispersion plus every persistent between-child difference.
+
+VG10 would keep its subject effects. So the DS/TD heterogeneity contrast — the reported estimand — would compare a DS `kappa` holding measurement noise against a TD `kappa` holding noise **plus** between-child variance, and it would do so at roughly six-fold magnitude at the ages we report. That is the `DISP_DS_KEY` defect of 5 August in mirror image: same failure to notice that two `kappa`s from differently-structured models are not the same quantity.
+
+The trajectory moves as well: E[y] at 12 months goes 70.7 → 87.6 words, a 24% rise well outside the baseline 89% interval (68.8–72.6), and four of eight query ages fall outside. The comparison's verdict is `sensitive: Ey`.
+
+**One honest caveat on the evidence.** `single-admin` also thins the data (7,052 → 5,819 rows), so this is not a pure same-data contrast, and part of the E[y] movement is resampling rather than reparameterisation. But thinning cannot explain the `kappa` result: dropping rows removes information, which widens an interval — it does not shift a median by a factor of six in a consistent direction across every age. The mechanism is structural, not sampling: with one observation per child, between-child variance and residual noise are definitionally inseparable, and `kappa` is the only parameter left to hold both.
+
+**Conclusion.** Removing the subject random effects would buy clean diagnostics at the price of corrupting the quantity the study exists to report, and it would do so invisibly — the fit would pass every gate. Keeping them leaves a disclosed BFMI caveat on an interval. The caveat is the cheaper error, and it is the honest one.
 
 ### Rejected
 
