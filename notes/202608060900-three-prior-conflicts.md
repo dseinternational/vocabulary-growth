@@ -248,6 +248,28 @@ The quantities that miss are the tell: `tau_subject`, `subject_variance_share`, 
 
 **What this does and does not license.** The runbook is explicit that `coverage_ci89` is _not_ a coverage estimate — quantities within a replicate are strongly correlated and come from a single truth, and a calibration claim needs on the order of a hundred replicates. Five replicates cannot estimate coverage. What they do support is the comparison: five independent replicates, none approaching the nominal 89%, on a model whose stablemates reach 0.87 and 0.90 on the identical harness. VG12's numbers warrant more caution in the report than VG10's or VG15's, and that belongs in the text.
 
+## 5e. Target 8 prior sensitivity (#147): the priority check passes, four of seven do not converge
+
+Run under a separate output root, because `compare_sensitivity` resolves baselines from the **un-suffixed** model directory — fitting `test`-tier baselines in the normal root would have overwritten published `rep` models of record.
+
+| model | variant               | verdict                                         |
+| ----- | --------------------- | ----------------------------------------------- |
+| vg12  | **`hi-anchor-broad`** | **robust** — all quantities within baseline 89% |
+| vg12  | `eta-narrow`          | robust                                          |
+| vg10  | `eta-u-narrow`        | robust                                          |
+| vg12  | `lo-anchor-broad`     | non-converged (min ESS 364 < 400)               |
+| vg10  | `u-anchor-broad`      | non-converged                                   |
+| vg11  | `anchor-broad`        | non-converged                                   |
+| vg11  | `eta-narrow`          | non-converged                                   |
+
+**The check #147 called "the single most important" passes.** VG12's 26-month understood high anchor is the one recalibrated anchor with no independent CDI norm — WS is production-only, so it was labelled data-informed regularisation and the worry was that the prior was doing the work. It is not: reverting to a vague prior moves `p_slope_hi` by 0.0005 against a posterior sd of 0.009, and reported proportions by −0.09% to +0.60%. That anchor is set by the likelihood.
+
+**But four of seven are unassessable at the `test` tier**, and the pattern is not random: **every `anchor-broad` variant failed to converge**, while two of three `eta-narrow` variants passed. Broadening a trend anchor degrades sampling — consistent with the anchors being what pins the trend, so loosening one leaves it weakly identified. The failures are all marginal (R-hat 1.007–1.013, min ESS 346–541), so a longer tier would likely assess them.
+
+That is a statement about the _check_, not about the conclusions: the recalibrated anchors are not shown to be fragile, they are shown to be un-probed at this tier. #147 cannot be closed on this evidence, and the four should be re-run at a longer tier before it is.
+
+One reading caution: `eta-narrow` on vg12 is marked robust with a max |z| of 8.17. The verdict means every _reported_ quantity stayed inside the baseline's 89% intervals — not that nothing moved. Given `eta` is the weakly-identified parameter already documented in §5, a large z there is expected and is not evidence against robustness of the reported numbers.
+
 ## 6. Open
 
 1. Whether VG14 is partially informative or wholly replaced by VG15 — the decision its migration was done in anticipation of.
