@@ -208,6 +208,46 @@ The real defect is not the GP. It is that **`r(a)` is reported to 115 months at 
 3. **ψ is estimated from uk_02 alone** (56 four-cell rows) and applied pool-wide.
 4. Signed **evidence stops around 60 months** while the reported range runs to 115.
 
+## 5c. The free signed peak at reporting quality, and its prior sensitivity
+
+Adopted 2026-08-06, refitted at `rep` and checked against three alternative priors.
+
+**The `rep` fit is clean on all four convergence checks with 0 divergences**, in 34 minutes, and reproduces the `test` finding almost exactly: peak age **29.5 months**, 89% ETI [23.9, 46.3], contraction 0.477 (against 29.4 / [23.9, 46.2] / 0.481 at `test`).
+
+| arm                 | prior median | posterior peak |      89% ETI | contraction | converged |
+| ------------------- | -----------: | -------------: | -----------: | ----------: | --------- |
+| **model of record** |         40.4 |       **29.5** | [23.9, 46.3] |       0.477 | yes       |
+| test baseline       |         40.4 |           29.3 | [23.9, 45.9] |       0.509 | yes       |
+| early Beta(1.5, 6)  |         29.0 |           27.6 | [23.5, 40.3] |       0.492 | yes       |
+| uniform Beta(1, 1)  |         55.5 |       **29.4** | [23.7, 57.3] |       0.439 | **no**    |
+| late Beta(4, 3)     |         61.9 |           41.8 | [25.9, 73.9] |      −0.024 | **no**    |
+
+**The peak age is data-driven.** The uniform prior — flat across the whole 15–96 month range — puts it at 29.4 months, within 0.1 of the adopted prior's answer. The data pull the peak _down_ from every prior tried: 40.4 → 29.5, 55.5 → 29.4, 61.9 → 41.8. All three arms that converged cluster at **27.6–29.5**.
+
+> [!CAUTION]
+> **An interim reading of mine was wrong.** When only the `late` variant had finished I reported the peak as "prior-sensitive", on its posterior of 41.8 against the adopted 29.5 and its contraction of −0.024. That was premature: `late` is one of the two arms that **failed R-hat**, and the uniform prior — the neutral test — agrees with the adopted one to within 0.1 months. Reporting a single variant before its companions finished was the error, not the measurement.
+
+**The genuine limitation** is that two of three prior variants failed the hard convergence tier, so the sensitivity check is partial rather than clean. Both failures are at priors pulling the peak late, which is itself suggestive — the sampler struggles where the prior fights the likelihood — but that is an interpretation, not a measurement.
+
+## 5d. VG12 does not recover its own parameters
+
+Seven `test`-config recovery replicates, five assessed (two failed the convergence gate):
+
+| replicate           | converged | coverage 89% | max abs z |
+| ------------------- | --------- | -----------: | --------: |
+| r02                 | yes       |        0.400 |      7.30 |
+| r04                 | yes       |        0.400 |      5.78 |
+| r05                 | yes       |        0.700 |      4.56 |
+| r06                 | yes       |        0.475 |      4.70 |
+| r07                 | yes       |        0.575 |      4.22 |
+| **POOLED (5 of 7)** |           |    **0.510** |      7.30 |
+
+Against VG10's 0.867 and VG15's 0.905 on the same harness.
+
+The quantities that miss are the tell: `tau_subject`, `subject_variance_share`, `v_total`, the whole `kappa` block, `ell`, `eta` — and **`p_query`, a reported quantity**. That is the same weakness the BFMI failure and the `tau_subject`/`kappa` ridge point at, now visible from a third independent angle: simulate from VG12's own posterior and it cannot reliably recover what generated the data.
+
+**What this does and does not license.** The runbook is explicit that `coverage_ci89` is _not_ a coverage estimate — quantities within a replicate are strongly correlated and come from a single truth, and a calibration claim needs on the order of a hundred replicates. Five replicates cannot estimate coverage. What they do support is the comparison: five independent replicates, none approaching the nominal 89%, on a model whose stablemates reach 0.87 and 0.90 on the identical harness. VG12's numbers warrant more caution in the report than VG10's or VG15's, and that belongs in the text.
+
 ## 6. Open
 
 1. Whether VG14 is partially informative or wholly replaced by VG15 — the decision its migration was done in anticipation of.

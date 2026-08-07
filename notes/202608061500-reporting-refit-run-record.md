@@ -72,6 +72,16 @@ VG11 clears the threshold despite the lowest repeat _rate_, which forced a corre
 
 Because the Down syndrome side samples markedly better, any DS/TD heterogeneity contrast is **asymmetrically affected**: the typically-developing interval is the less reliable of the two. That belongs in the text of any such contrast, not only in the convergence appendix.
 
+## 6a. The disk filled, and it cost three fits
+
+On 2026-08-07 `/scratch` hit 100% — 433 GB, 108 KB free — killing three sensitivity fits and all three comparison steps outright (`rc=120`, two of them within 2 seconds), and stopping a recovery run mid-sequence. It also broke the shell's own output capture, so the first symptom was tooling failing rather than fits failing.
+
+The arithmetic is the same shape as the OOM in §2. This run holds fifteen reporting-quality models with multi-gigabyte traces, plus throwaway arms for every experiment: **68 GB of geometry and signed-GP arms, 36 GB of sensitivity fits, 45 GB of recovery replicates** — a single VG12 recovery replicate is 4.8 GB, and ten of them is 48 GB. Nothing prunes any of it.
+
+Recovered by deleting the throwaway experiment root (68 GB; every result already recorded in committed notes, and the harnesses preserved in `scripts/experiments/`) and the VG10/VG15 recovery traces whose matrices were already written (11 GB). Four of the seven queued VG12 replicates had in fact completed before the disk filled, so the loss was smaller than it first appeared.
+
+**The lesson is the same one the OOM taught and it was not learned:** the binding resource was checked for the previous failure mode and not for this one. Throwaway arms should be pruned as soon as their results are recorded, and recovery replicates scored and discarded rather than accumulated.
+
 ## 7. Outstanding
 
 **Running as this was written**: headline parameter recovery (VG10, VG12, VG15 at `test`, 3 replicates each).
