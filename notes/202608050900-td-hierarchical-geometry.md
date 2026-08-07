@@ -121,6 +121,27 @@ Implemented on branch `geometry/variance-partition`, trialled at `test` config (
 
 The two options therefore live on a new `UnivariateREModelDefinition` subclass carried only by VG11 and VG12. VG01–VG04 stay at 30 keys and stay valid — verified directly against their manifests. The engine reads both fields through `getattr`, so a plain definition still builds; VG17 derives from VG01 and never becomes a subclass instance.
 
+### Considered and rejected: removing the subject random effects
+
+Raised by the study owner on 2026-08-07, on reasonable grounds — 1.21 observations per child, a BFMI failure, poor parameter recovery, and a reparameterisation that did not help. If a parameter cannot be identified, why carry it?
+
+**The premise does not hold on its own.** VG11 has essentially the same observations per child (1.27) and a _lower_ repeat fraction (13.4% against VG12's 17.2%), carries subject random effects on the same engine, and clears BFMI comfortably at 0.359–0.390. Replication per child is therefore not what decides whether subject effects are viable; the absolute count is — 1,947 repeat-measured children against 1,000.
+
+**The decisive objection is where the variance would go.** `tau_subject` is not a reported estimand anywhere: it appears only in per-model diagnostic prose and internal scripts. The DS/TD heterogeneity contrast is carried by **`kappa`**, `sd_Y` and the overdispersion ratio. Removing subject effects does not delete between-child variance — it migrates it into `kappa`, which is exactly the quantity the contrast reports.
+
+So dropping them from VG12 while VG10 keeps them would give:
+
+- VG10's `kappa` = within-child noise
+- VG12's `kappa` = within-child noise **plus** between-child variance
+
+contrasted against one another. **That is the defect fixed on 2026-08-05, in mirror image.** `DISP_DS_KEY` pointed at VG07, which has no subject effects, against typically-developing models that have them, and the contrast was inverted as a result. Removing them from the typically-developing side would reintroduce the same asymmetry from the other direction, and this time it would look deliberate.
+
+Removing them from _both_ populations avoids that, but forfeits partial pooling, understates uncertainty for the 17% of children with repeat administrations, and changes VG10 — which converges cleanly and recovers well (coverage 0.867). Changing a model that is not broken to fix one that is, is the wrong trade.
+
+**The general point.** The BFMI failure, the poor recovery and the `tau_subject`/`kappa` ridge are three symptoms of one cause: missing within-child replication. Removing the parameter does not supply the information. It relocates the problem into a quantity that _is_ reported, and hides it.
+
+Checked rather than argued: VG12's registered `single-admin` variant — one administration per child, which makes subject effects unidentifiable by construction — was run on 2026-08-07. It had never been run before; the Target 8 comparison reported it as "Variant fit not found (skip)".
+
 ### Rejected
 
 **Restricting subject REs to repeatedly-measured children.** This would identify the split cleanly but is not available: the DS/TD heterogeneity contrast is a reported estimand, and dropping singletons from one population and not the other would make the two sides incomparable. It is worse than it first appears — the singletons' variance would not disappear, it would migrate into `kappa`, which is _itself_ a reported cross-population quantity.
