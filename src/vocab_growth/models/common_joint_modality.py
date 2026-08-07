@@ -186,6 +186,10 @@ class JointModelConfiguration(BaseModelConfiguration):
 
     # Reporting only — the age at which understood and q stop being reported.
     report_max_age_understood: int | None = None
+    report_max_age_signed: int | None = None
+    """Highest query age at which signed quantities are reported. Same mechanism
+    and the same caveats as ``report_max_age_understood`` -- post-processing only,
+    but part of the recorded definition, so a change needs a refit."""
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -580,6 +584,7 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         tau_q_sigma=definition.tau_q_sigma,
         tau_sign_sigma=definition.tau_sign_sigma,
         report_max_age_understood=definition.report_max_age_understood,
+        report_max_age_signed=definition.report_max_age_signed,
     )
     context.set_model_config(config)
 
@@ -1387,6 +1392,7 @@ def posterior_summary(context: JointContext):
     # Comprehension and production are not observed over the same age range, so
     # understood and q may report a shorter grid than spoken and signed.
     report_max_u = context.model_config.report_max_age_understood
+    report_max_sign = context.model_config.report_max_age_signed
 
     def probability_summary(X, draws, prefix, label, max_age=None):
         Ey = draws * n_trials
@@ -1430,8 +1436,10 @@ def posterior_summary(context: JointContext):
 
     probability_summary(s.X_query, s.p_u_query, "u", "Words understood", report_max_u)
     probability_summary(s.X_query, s.p_u_query * s.q_query, "s", "Words spoken")
-    probability_summary(s.X_query, s.p_u_query * s.r_query, "sign", "Words signed")
-    ratio_summary(s.X_query, s.r_query, "r")
+    probability_summary(
+        s.X_query, s.p_u_query * s.r_query, "sign", "Words signed", report_max_sign
+    )
+    ratio_summary(s.X_query, s.r_query, "r", report_max_sign)
     ratio_summary(s.X_query, s.q_query, "q", report_max_u)
 
     # Whole-month companions to the tables above. This engine draws no predictive
@@ -1492,6 +1500,9 @@ def posterior_summary(context: JointContext):
         "p_any_indep_median": np.median(s.p_any_indep_query, axis=1),
         "Ey_any_indep_median": np.median(Ey_i, axis=1),
     })
+    # Total expressive is a function of the signed ratio, so it can only be
+    # reported where signed evidence reaches -- the tighter of the two caps.
+    pany = posterior_analysis.trim_reported_ages(pany, report_max_sign)
     pany.to_csv(os.path.join(od, "posterior_summary_p_any.csv"), index=False)
     dataframe_table(pany.round(3), title="Total expressive p_any (identified vs independence)", show_index=False)
 

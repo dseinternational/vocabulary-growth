@@ -989,6 +989,25 @@ class JointModelDefinition:
     longer a *sensitivity* in its own right: those rows are masked by default, so
     on the primary frame this flag has nothing left to exclude. Use
     ``include_implausible_production`` below to interrogate that exclusion."""
+    report_max_age_signed: int | None = None
+    """Highest query age (months) at which signed quantities are reported.
+
+    The signed counterpart of ``report_max_age_understood``, and it exists for the
+    same reason: a model's ``ages_query`` grid is shared by every outcome, but the
+    outcomes are not observed over the same range. Signed is the sparsest -- 516
+    observations with 85% between 12 and 48 months, 23 above 60, 7 above 72 and
+    **none between 84 and 96** -- while the Down syndrome grid runs to 115. Above
+    about 60 months `r(a)` is the tent's extrapolation, not an estimate.
+
+    Applies to the signed counts, the signed ratio `r`, and total expressive
+    `p_any`, which is a function of the signed ratio and can only be reported where
+    signed evidence reaches.
+
+    Post-processing only, so it cannot move a posterior -- but it is part of the
+    recorded definition and the tables are written during the fit, so a change
+    needs a refit and `--render-only` will not pick it up. Same caveats as the
+    comprehension cap; see ``posterior_analysis.trim_reported_ages``.
+    """
     include_implausible_production: bool = False
     """Reinstate the us_01 production counts masked as implausible by default.
 
@@ -2308,6 +2327,11 @@ VG15 = JointModelDefinition(
     # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
     # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
+    # Signed evidence stops around 60 months: 23 of 516 signed observations lie
+    # above it, 7 above 72, and none between 84 and 96, while the grid runs to
+    # 115. Adopted 2026-08-07 on the same argument that capped comprehension at
+    # 72. Also caps p_any, which is a function of the signed ratio.
+    report_max_age_signed=60,
     clamp_mean_above_hi_anchor=True,
 )
 
