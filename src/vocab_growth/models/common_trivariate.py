@@ -1637,10 +1637,23 @@ def plot_signed_rate(
     output_dir: str | None = None,
     filename: str | None = None,
     support_range: tuple[float, float] | None = None,
+    max_age_months: float | None = None,
 ):
-    """Plot the posterior of the signed ratio r(a) = p_Sign(a) / p_U(a) over age."""
+    """Plot the posterior of the signed ratio r(a) = p_Sign(a) / p_U(a) over age.
+
+    ``support_range`` and ``max_age_months`` answer different questions and both
+    apply. The shading marks where *signing* observations stop, disclosing rather
+    than hiding the extrapolation; the cap stops the curve where *comprehension*
+    reporting stops, because ``r`` is a ratio of comprehension and cannot be
+    reported past the denominator's age range.
+    """
     X_plot = samples.X_plot
     r_plot = samples.r_plot
+
+    if max_age_months is not None:
+        keep = np.asarray(X_plot) <= max_age_months
+        X_plot = X_plot[keep]
+        r_plot = r_plot[keep, :]
 
     r_median = np.median(r_plot, axis=1)
     r_ci = intervals.bands(r_plot, ci_prob, interval_kind, sample_axis=1)
@@ -1688,14 +1701,28 @@ def plot_sign_speech_crossover(
     output_dir: str | None = None,
     filename: str | None = None,
     support_range: tuple[float, float] | None = None,
+    max_age_months: float | None = None,
 ):
-    """Plot signed rate r(a) against spoken rate q(a) — the sign->speech hand-off."""
-    X_plot = samples.X_plot
+    """Plot signed rate r(a) against spoken rate q(a) — the sign->speech hand-off.
 
-    q_median = np.median(samples.q_plot, axis=1)
-    q_hdi = intervals.bands(samples.q_plot, ci_prob, interval_kind, sample_axis=1)
-    r_median = np.median(samples.r_plot, axis=1)
-    r_hdi = intervals.bands(samples.r_plot, ci_prob, interval_kind, sample_axis=1)
+    Both ``q`` and ``r`` are ratios of comprehension, so ``max_age_months`` stops
+    the pair where comprehension reporting stops; ``support_range`` separately
+    shades where signing observations run out.
+    """
+    X_plot = samples.X_plot
+    q_plot = samples.q_plot
+    r_plot = samples.r_plot
+
+    if max_age_months is not None:
+        keep = np.asarray(X_plot) <= max_age_months
+        X_plot = X_plot[keep]
+        q_plot = q_plot[keep, :]
+        r_plot = r_plot[keep, :]
+
+    q_median = np.median(q_plot, axis=1)
+    q_hdi = intervals.bands(q_plot, ci_prob, interval_kind, sample_axis=1)
+    r_median = np.median(r_plot, axis=1)
+    r_hdi = intervals.bands(r_plot, ci_prob, interval_kind, sample_axis=1)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -2107,6 +2134,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         output_dir=output_dir,
         filename="signed_rate",
         support_range=signing_support_range,
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["signed_rate"] = fig
     plt.close(fig)
@@ -2118,6 +2146,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         output_dir=output_dir,
         filename="sign_speech_crossover",
         support_range=signing_support_range,
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["sign_speech_crossover"] = fig
     plt.close(fig)
@@ -2137,6 +2166,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         ci_prob=ci_prob,
         output_dir=output_dir,
         filename="comprehension_production_gap",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["comprehension_production_gap"] = fig
     plt.close(fig)

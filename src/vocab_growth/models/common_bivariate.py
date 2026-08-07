@@ -1298,10 +1298,26 @@ def plot_production_rate_by_understood(
     interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ):
-    """Plot production ratio q against expected words understood (median p_U * n_trials)."""
+    """Plot production ratio q against expected words understood (median p_U * n_trials).
+
+    ``max_age_months`` is essential here rather than cosmetic. The x axis is age
+    *reparameterised* by expected comprehension, so without the cap the curve
+    silently extends past ``report_max_age_understood`` -- the age at which the
+    age-space plot of the same quantity stops. Worse, the mean is clamped above
+    the upper slope anchor, so expected understood almost stops growing there and
+    the x axis compresses hard: a gentle drift in ``q`` over the extrapolated tail
+    is then drawn as a near-vertical step, which reads as a discovery about
+    vocabulary rather than an artefact of the transform.
+    """
     p_u_plot = samples.p_u_plot  # (n_plot, n_samples)
     q_plot = samples.q_plot  # (n_plot, n_samples)
+
+    if max_age_months is not None:
+        keep = np.asarray(samples.X_plot) <= max_age_months
+        p_u_plot = p_u_plot[keep, :]
+        q_plot = q_plot[keep, :]
 
     x_words = np.median(p_u_plot, axis=1) * n_trials
     q_median = np.median(q_plot, axis=1)
@@ -1352,15 +1368,27 @@ def plot_production_rate_predictive(
     samples: BivariateModelSamples,
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ):
     """Plot posterior predictive spoken/understood count ratio with 50% and 89% intervals.
 
     Uses posterior predictive counts (y_s / y_u). Samples where y_u == 0 are
     excluded per age point before computing summary statistics.
+
+    ``max_age_months`` applies the same comprehension cap as the population-level
+    :func:`plot_production_rate`. Without it the predictive twin of a capped plot
+    runs further than the plot it mirrors, and the pair disagree about where the
+    evidence ends.
     """
     X_plot = samples.X_plot
     y_u = samples.y_u_plot  # (n_plot, n_samples)
     y_s = samples.y_s_plot
+
+    if max_age_months is not None:
+        keep = np.asarray(X_plot) <= max_age_months
+        X_plot = X_plot[keep]
+        y_u = y_u[keep, :]
+        y_s = y_s[keep, :]
     outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
     pct = int(round(outer * 100))
 
@@ -1427,10 +1455,23 @@ def plot_understood_vs_spoken(
     n_draws: int = 200,
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ):
-    """Plot posterior expected words understood (x) vs words spoken (y) as spaghetti curves."""
+    """Plot posterior expected words understood (x) vs words spoken (y) as spaghetti curves.
+
+    ``max_age_months`` caps the curve at the comprehension reporting age: the x
+    axis is expected comprehension, so every point past that age is extrapolation
+    plotted on a compressed axis (see :func:`plot_production_rate_by_understood`).
+    """
+    X_plot = np.asarray(samples.X_plot)
     E_u = samples.p_u_plot * n_trials  # (n_plot, n_samples)
     E_s = samples.p_s_plot * n_trials
+
+    if max_age_months is not None:
+        keep = X_plot <= max_age_months
+        X_plot = X_plot[keep]
+        E_u = E_u[keep, :]
+        E_s = E_s[keep, :]
 
     n_available = E_u.shape[1]
     n_draws = min(n_draws, n_available)
@@ -1459,7 +1500,7 @@ def plot_understood_vs_spoken(
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
         _save_csv(pd.DataFrame({
-            "age_months": samples.X_plot,
+            "age_months": X_plot,
             "understood_median": E_u_median,
             "spoken_median": E_s_median,
         }), output_dir, filename)
@@ -1473,10 +1514,22 @@ def plot_understood_vs_spoken_predictive(
     n_draws: int = 200,
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ):
-    """Plot posterior predictive words understood (x) vs words spoken (y) as spaghetti curves."""
+    """Plot posterior predictive words understood (x) vs words spoken (y) as spaghetti curves.
+
+    ``max_age_months`` caps the curve at the comprehension reporting age, matching
+    the population-level :func:`plot_understood_vs_spoken`.
+    """
+    X_plot = np.asarray(samples.X_plot)
     y_u = samples.y_u_plot  # (n_plot, n_samples)
     y_s = samples.y_s_plot
+
+    if max_age_months is not None:
+        keep = X_plot <= max_age_months
+        X_plot = X_plot[keep]
+        y_u = y_u[keep, :]
+        y_s = y_s[keep, :]
 
     n_available = y_u.shape[1]
     n_draws = min(n_draws, n_available)
@@ -1505,7 +1558,7 @@ def plot_understood_vs_spoken_predictive(
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
         _save_csv(pd.DataFrame({
-            "age_months": samples.X_plot,
+            "age_months": X_plot,
             "understood_median": y_u_median,
             "spoken_median": y_s_median,
         }), output_dir, filename)
@@ -1520,6 +1573,7 @@ def plot_spoken_given_understood(
     interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ):
     """Predicted words spoken given words understood, by age (issue #112, Q1).
 
@@ -1533,6 +1587,14 @@ def plot_spoken_given_understood(
     """
     q_query = samples.q_query  # (n_query, n_samples)
     ages = np.asarray(samples.X_query)  # (n_query,)
+
+    # q is a ratio of comprehension, so ages past the comprehension reporting age
+    # are extrapolation. Drop them before selecting the fan, or the fan spends one
+    # of its five lines on an age the model declines to report q for elsewhere.
+    if max_age_months is not None:
+        keep = ages <= max_age_months
+        ages = ages[keep]
+        q_query = q_query[keep, :]
 
     # A few representative ages spanning the query range (keeps the fan legible).
     n_age = len(ages)
@@ -1763,6 +1825,7 @@ def _run_bivariate_joint_plots(
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="production_rate_by_understood",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["production_rate_by_understood"] = fig
     plt.close(fig)
@@ -1773,6 +1836,7 @@ def _run_bivariate_joint_plots(
         samples,
         output_dir=context.reporting.output_dir,
         filename="production_rate_predictive",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["production_rate_predictive"] = fig
     plt.close(fig)
@@ -1785,6 +1849,7 @@ def _run_bivariate_joint_plots(
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="comprehension_production_gap",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["comprehension_production_gap"] = fig
     plt.close(fig)
@@ -1796,6 +1861,7 @@ def _run_bivariate_joint_plots(
         n_trials=context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="understood_vs_spoken",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["understood_vs_spoken"] = fig
     plt.close(fig)
@@ -1807,6 +1873,7 @@ def _run_bivariate_joint_plots(
         n_trials=context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="understood_vs_spoken_predictive",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["understood_vs_spoken_predictive"] = fig
     plt.close(fig)
@@ -1819,6 +1886,7 @@ def _run_bivariate_joint_plots(
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="spoken_given_understood",
+        max_age_months=context.model_config.report_max_age_understood,
     )
     context.plots["spoken_given_understood"] = fig
     plt.close(fig)
