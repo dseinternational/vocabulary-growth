@@ -31,6 +31,34 @@ naive run hits. Distilled from the 2026-07-12 run
   output off the checkout: `--output-dir <scratch>` or `DSE_VOCAB_GROWTH_OUTPUT_DIR`.
   The report figure cache (`docs/report/figures/`) always stays in the checkout.
 - `rep` config = 6 chains / 6000 tune / 6000 draws / `target_accept` 0.95. The number of parallel cores is chosen for the host and does not affect fit compatibility.
+- Publishing needs `DSERESEARCH_BLOB_CONTAINER_URL` **and** the right identity — see below.
+
+### Uploading from an Azure VM: `DefaultAzureCredential` picks the wrong identity
+
+`upload.py` authenticates with `DefaultAzureCredential`, which prefers the **VM's managed identity** over your `az login` session. On a DSE research VM that managed identity has no write role on the container, so the upload fails on the first model with:
+
+```
+ErrorCode:AuthorizationPermissionMismatch
+This request is not authorized to perform this operation using this permission.
+```
+
+`az account show` reporting the right user is **not** evidence the upload will authenticate as that user. Check what the credential actually resolves to:
+
+```bash
+python -c "
+from azure.identity import DefaultAzureCredential; import base64, json
+t = DefaultAzureCredential().get_token('https://storage.azure.com/.default')
+p = t.token.split('.')[1]; p += '='*(-len(p)%4)
+c = json.loads(base64.urlsafe_b64decode(p)); print(c.get('upn') or c.get('appid'))"
+```
+
+An `appid` GUID rather than a `upn` means it chose the managed identity. Force the developer credential for the upload (azure-identity ≥ 1.23):
+
+```bash
+export AZURE_TOKEN_CREDENTIALS=dev
+```
+
+The failure is at least safe: validation runs for all models first, and the first blob write fails before anything is written, so a rejected upload cannot leave the published set half-replaced.
 
 ## 1. Fit
 
