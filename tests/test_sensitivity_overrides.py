@@ -183,3 +183,22 @@ def test_variants_are_single_factor_or_documented_pairs():
         }[model_key]
         assert v.model_type == base.model_type
         assert dataclasses.asdict(v) != dataclasses.asdict(base)
+
+
+def test_variants_that_disable_subject_effects_also_clear_the_partition():
+    """A variant turning off subject effects must clear the variance partition.
+
+    The partition allocates one scatter budget *between* the subject scale and the
+    young kappa anchor, so without a subject scale there is nothing to allocate and
+    the engine raises. Adopting the partition on VG11/VG12 broke both `single-admin`
+    variants for two days without any test noticing, because `build_variant` only
+    constructs the definition — the failure appears when a model graph is built
+    from it, which nothing here does.
+    """
+    for model_key in ("vg11", "vg12"):
+        (variant,) = build_variant(model_key, "single-admin")
+        assert variant.use_subject_re is False, model_key
+        assert variant.subject_variance_partition is None, (
+            f"{model_key} single-admin leaves the variance partition set while "
+            "disabling subject effects; the engine rejects that combination."
+        )

@@ -131,10 +131,19 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "tau_study_sigma": 1.0, "tau_subject_sigma": 3.0}},
     ("vg11", "tau-narrow"): {"suffix": "tau-narrow", "scalar": {
         "tau_study_sigma": 0.25, "tau_subject_sigma": 0.75}},
+    # `subject_variance_partition` must be cleared alongside `use_subject_re`: the
+    # partition allocates a shared scatter budget BETWEEN the subject scale and the
+    # young kappa anchor, so with no subject scale there is nothing to allocate and
+    # the engine rejects the combination. Adopting the partition on VG11/VG12
+    # (2026-08-05) silently broke these two variants until 2026-08-07 -- the
+    # registry test builds variant *definitions*, which still succeeded; the
+    # failure only appears when a model graph is built from one.
     ("vg11", "single-admin"): {"suffix": "single-admin", "scalar": {
-        "one_observation_per_subject": True, "use_subject_re": False}},
+        "one_observation_per_subject": True, "use_subject_re": False,
+        "subject_variance_partition": None}},
     ("vg12", "single-admin"): {"suffix": "single-admin", "scalar": {
-        "one_observation_per_subject": True, "use_subject_re": False}},
+        "one_observation_per_subject": True, "use_subject_re": False,
+        "subject_variance_partition": None}},
     ("vg13", "single-admin"): {"suffix": "single-admin", "scalar": {
         "one_observation_per_subject": True,
         "use_subject_re_u": False, "use_subject_re_q": False}},
