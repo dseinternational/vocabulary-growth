@@ -410,6 +410,13 @@ pd.DataFrame(rows).set_index("Age (mo)")
 
 ![Between-child spread in expected words σ_child — understood](ds_td_understood_re_subject_spread.png){#fig-sdc-u .lightbox fig-align="left"}
 
+**The two scales disagree, and the relative one reverses the absolute reading.**
+Children with Down syndrome differ from one another _more_ than typically developing children do, on both outcomes and at every age in the overlap, with posterior probability ≈ 1.00. For spoken words τ_DS runs 1.44 at 8 months to 1.27 at 30, against a constant τ_TD of 1.04 (ratio 0.72 rising to 0.82); for comprehension τ_DS is 0.79 against τ_TD 0.69 (ratio 0.87). Yet σ_child in words runs the other way by a wide margin — 173 words TD against 36 DS for spoken at 30 months — because the typically developing group sits at a far higher level, and the same relative spread around a larger mean is a larger absolute spread.
+
+Both statements describe the same posterior. Which one answers "are these children more alike?" depends on what is being asked: on the population-relative scale Down syndrome vocabulary is the _more_ variable of the two, while in absolute word counts it is much the less variable. Neither is the reading a glance at the overdispersion panel above would suggest, which is the point of separating the two sections.
+
+The age profiles differ by construction, and are worth reading as a check on the derivation. τ_TD is flat because the univariate models place a single intercept on the outcome's logit; τ_DS for comprehension is flat for the same reason. τ_DS for _spoken_ declines with age even though both of VG10's subject scales are constants, because the spoken logit is reached through $p_U$ and $q$ — that decline is a property of the product form, not a finding about children becoming more alike.
+
 Two caveats bound how far this contrast can be pushed. First, the priors are not
 symmetric: on the TD side $\tau_{subject}$ and $\kappa$ are sampled through the
 shared-budget reparameterisation, with an informative prior on how the budget
