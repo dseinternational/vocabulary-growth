@@ -136,7 +136,33 @@ The test:
 
 No sampling at all. The cost is I/O — reading the traces once — plus perhaps half a day to write it against the existing diagnostics code, and it should reuse the gate rather than reimplement it.
 
-**The one caveat, and it is the whole caveat.** Exactness holds only if warmup is unchanged. If a shorter configuration would also shorten warmup, adaptation differs and truncation no longer simulates it; that variant needs a genuine refit to confirm. Any recommendation coming out of this test should therefore state the warmup it assumes.
+**The one caveat, and it bites immediately.** Exactness holds only if warmup is unchanged — and **no existing named configuration isolates the draw count.** `tune` scales with `draws` in every one: `dev` 500/500 (2 chains), `test` 2000/2000 (4), `rep` 6000/6000 (6), `rep-lite` 4000/4000 (4). So a `rep` → `rep-lite` comparison changes chains, tuning and draws together, so truncation cannot reproduce it; only a "`rep` tuning, fewer draws" shape can be reproduced that way, and no such config exists today. The test therefore needs one new config shape, and any recommendation from it must state the warmup it assumes. Comparing a genuinely shorter _warmup_ still requires a refit.
+
+### 8.1 Per-model draws, or overrides for a few models?
+
+Raised 2026-08-08: if efficiency varies this much between models, should draws be set per model at each of `dev` / `test` / `rep`, rather than one blanket level?
+
+**Overrides for specific models, yes; a full per-model matrix, no** — and the number should be derived from an ESS target rather than chosen. Against a ~1,000 working target for the worst parameter (2.5× the gate's 400 floor, since 400 is the minimum for R-hat reliability, not for stable 89% interval bounds):
+
+| model    | worst `ess_bulk` at 36,000 | draws for ESS ≈ 1,000 | trace          |
+| -------- | -------------------------- | --------------------- | -------------- |
+| **VG11** | 1,008                      | **~35,700 — no room** | 53.6 GB        |
+| VG13     | 1,432                      | ~25,100 (70%)         | 40.6 → ~28 GB  |
+| VG10     | 2,819                      | ~12,800 (35%)         | 9.8 → ~3.5 GB  |
+| VG12     | 2,901                      | ~12,400 (34%)         | 21.3 → ~7.3 GB |
+
+**It saves least where it matters most.** Equalising ESS takes those four from ~125 GB to ~93 GB, a 26% cut, while VG11 — 43% of the total on its own — is untouched or needs _more_. The worst-mixing model is also the largest. So per-model draws is a defensible way to equalise inferential precision across the model set; it is a weak lever for artifact size, where §4 still dominates.
+
+It is also aimed at the wrong parameter. VG11's 2.8% efficiency is a geometry symptom — the worst movers are `eta`, `ell` and `ell_unit`, the GP hyperparameters — and its 22 divergences, like VG12's and VG13's BFMI failures, point at `target_accept` and `tune` rather than at draw count. If per-model overrides are introduced, those are the parameters more likely to earn one; spending draws instead institutionalises a workaround for something reparameterisation or a tighter length-scale prior should address, exactly as the variance partition was handled.
+
+Four mechanical constraints, all verified against the current code:
+
+1. **The configurations are shared.** They come from `dse_research_utils.statistics.models.sampling` and are used across DSE research repos, so per-model overrides must live in this repository rather than by editing those definitions.
+2. **The model reports would mark every override "approximate".** `docs/models/*/index.qmd` maps `(chains, draws)` to a configuration name, with `(6, 6000)` alone meaning reporting-grade. Any override renders as a bare "N chains × M draws" flagged approximate — which is already why VG08 and VG09, fitted at 6×8000, misreport. The companion change is to read the configuration name from `fit_manifest.json`, which records it, instead of inferring it from trace dimensions.
+3. **Validation has to learn the override too.** `validate_fit_output` compares `expected_sampling_parameters` against the manifest; an override that feeds the fit but not the check makes every overridden fit fail `sync_report_figures.py`.
+4. **Overrides already happen, unmanaged.** VG08 and VG09 at 6×8000 match no named configuration. The question is not whether exceptions exist but whether they are explicit, validated and visible in the report.
+
+Sequence: run the §8 truncation test at fixed `tune = 6000` to establish each model's actual draw requirement; adopt §4 for storage regardless of the outcome; then add overrides only where the test shows a model over- or under-sampled, with manifest-based configuration detection as a prerequisite for the report not to misdescribe them.
 
 **Order of resort.** For both stated goals — smaller artifacts and faster analysis — draws is the weaker lever. On VG11, 6×4000 gives 53.6 → ~36 GB while §4's `compact` gives roughly 10 GB, because the deterministics dominate. The persistence change is free and dominates on both axes; draws costs precision in every interval. Take §4 first, and treat draws as a separate decision on its own evidence. The two compose: 6×4000 plus `compact` is roughly −76%.
 
