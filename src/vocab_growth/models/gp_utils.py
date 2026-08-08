@@ -79,6 +79,7 @@ def build_kappa_of_z_anchored(
     *,
     anchor_z,
     suffix="",
+    excess_young_value=None,
 ):
     """Create the two-anchor kappa RVs and return the dispersion closure.
 
@@ -116,7 +117,19 @@ def build_kappa_of_z_anchored(
             f"kappa anchor_z must be ordered (young, old); got {anchor_z!r}."
         )
     kappa_min = kappa_min_dist.to_pymc(f"kappa_min{suffix}")
-    excess_young = excess_young_dist.to_pymc(f"kappa_excess_young{suffix}")
+    if excess_young_value is None:
+        excess_young = excess_young_dist.to_pymc(f"kappa_excess_young{suffix}")
+    else:
+        # The young anchor is being supplied by the variance-partition
+        # reparameterisation (see `build_variance_partition`), which allocates it
+        # and the subject-effect scale from one shared budget. It keeps its usual
+        # name as a Deterministic so every downstream consumer -- the comparators,
+        # the posterior summaries, the recovery harness -- still finds it, and
+        # `excess_young_dist` goes unused because the prior now sits on the budget
+        # and the split rather than on this quantity directly.
+        excess_young = pm.Deterministic(
+            f"kappa_excess_young{suffix}", excess_young_value
+        )
     excess_old = excess_old_dist.to_pymc(f"kappa_excess_old{suffix}")
     log_young = pm.math.log(excess_young)
     log_old = pm.math.log(excess_old)
@@ -127,6 +140,73 @@ def build_kappa_of_z_anchored(
     _ = pm.Deterministic(f"kappa_young{suffix}", kappa_min + excess_young)
     _ = pm.Deterministic(f"kappa_old{suffix}", kappa_min + excess_old)
     return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
+
+
+def build_variance_partition(
+    total_dist,
+    share_dist,
+    *,
+    reference_proportion,
+    subject_scale_name,
+    suffix="",
+):
+    """Split one scatter budget between subject effects and dispersion.
+
+    The subject random-effect scale and the Beta-Binomial dispersion both describe
+    how far observations at a given age fall from the population trajectory —
+    ``tau_subject`` attributing that scatter to persistent between-child
+    differences, ``kappa`` to within-child noise. Sampled as two free scales they
+    compete for the same variance, and in the typically-developing hierarchical
+    models the resulting ridge is the dominant sampling pathology: VG12 records
+    ``corr(tau_subject, kappa_young) = +0.755`` with both parameters at the top of
+    the marginal-energy correlations (-0.812 and -0.783), which is what its energy
+    BFMI failure is made of. Only children measured more than once carry the
+    within-child replication that identifies the split, and the TD pool averages
+    1.21 observations per child.
+
+    This reparameterises the pair into the quantity the data *do* identify and the
+    one they do not:
+
+        v_total  — total logit-scale scatter at the young kappa anchor
+        share    — the fraction of it attributable to persistent child differences
+
+        tau_subject         = sqrt(share * v_total)
+        kappa_excess_young  = c / ((1 - share) * v_total)
+
+    where ``c = 1 / (p0 * (1 - p0))`` converts a Beta-Binomial concentration into
+    an approximate logit-scale variance by the delta method, at a **fixed**
+    reference proportion ``p0``. Fixing ``p0`` rather than reading it off the
+    fitted trajectory is deliberate: it keeps this a pure change of coordinates on
+    the two scale parameters, with no dependence on the mean function, so the
+    priors below mean the same thing regardless of what the trend does.
+
+    The young *excess* is allocated rather than total ``kappa`` so that positivity
+    is automatic — ``kappa_min`` remains a free asymptote and ``kappa_young =
+    kappa_min + excess_young`` is positive by construction.
+
+    Both original parameters are returned to the graph under their usual names, so
+    this changes what the sampler explores and not what the model reports; the
+    DS/TD heterogeneity contrast that ``tau_subject`` feeds is unaffected. The
+    prior does move, necessarily and by design — it now sits on the budget and the
+    split, which is where a prior on this pair can actually be reasoned about.
+
+    See ``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4 and 7.1.
+    """
+    if not 0.0 < float(reference_proportion) < 1.0:
+        raise ValueError(
+            "reference_proportion must lie strictly in (0, 1); got "
+            f"{reference_proportion!r}."
+        )
+    p0 = float(reference_proportion)
+    c = 1.0 / (p0 * (1.0 - p0))
+
+    v_total = total_dist.to_pymc(f"v_total{suffix}")
+    share = share_dist.to_pymc(f"subject_variance_share{suffix}")
+    subject_scale = pm.Deterministic(
+        subject_scale_name, pm.math.sqrt(share * v_total)
+    )
+    excess_young_value = c / ((1.0 - share) * v_total)
+    return subject_scale, excess_young_value
 
 
 @dataclass(frozen=True)
@@ -317,6 +397,7 @@ def tent_and_gp(
     z_low,
     z_mid,
     z_hi,
+    cfg_peak=None,
     cfg_ell,
     cfg_eta,
     suffix,
@@ -345,6 +426,22 @@ def tent_and_gp(
     p_low = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_mid = cfg_mid.to_pymc(f"p_slope_mid{suffix}")
     p_hi = cfg_hi.to_pymc(f"p_slope_hi{suffix}")
+    if cfg_peak is not None:
+        # Estimate WHERE the peak is, instead of asserting it. `peak_unit` places
+        # the middle anchor between the outer two; the ordering z_low < z_mid <
+        # z_hi therefore holds by construction, which a prior directly on the age
+        # could not guarantee. Standardisation is affine, so a unit position in z
+        # is the same unit position in months.
+        #
+        # The fixed anchor is not harmless. With the peak pinned at 36 months,
+        # VG15 under-predicts the signed ratio at every band above it -- mean
+        # residual +0.059 against -0.006 below, worst at 48-54 months where
+        # observed 0.365 against fitted 0.242 -- and the residual sign flips
+        # exactly at the knot, which random-effect marginalisation cannot produce.
+        # The observed ratio is a plateau from roughly 30 to 54 months, not a peak
+        # at 36. See notes/202608060900-three-prior-conflicts.md.
+        peak_unit = cfg_peak.to_pymc(f"peak_unit{suffix}")
+        z_mid = pm.Deterministic(f"z_peak{suffix}", z_low + peak_unit * (z_hi - z_low))
     slope_up = pm.Deterministic(
         f"slope_up{suffix}", (logit(p_mid) - logit(p_low)) / (z_mid - z_low)
     )
@@ -452,7 +549,26 @@ def _gp_from_mean(
     orthogonalised against ``nuisance_basis`` and pinned to zero at the reference
     row by :func:`_orthogonalise_and_anchor` (deterministic ops only — no new RVs).
     """
-    ell_unit = cfg_ell.to_pymc(f"ell_unit{suffix}")
+    if cfg_eta is None:
+        # No GP at all: the mean carries the whole latent. For an outcome whose GP
+        # hyperparameters are unidentifiable, sampling them adds prior-driven
+        # spread to the reported band without adding information -- VG15's signed
+        # GP contributes a posterior-median curve of at most 0.11 logits (7% of the
+        # tent's range) while injecting a per-age posterior sd of 0.269, six times
+        # larger. Dropping it makes a trajectory that is already parametric in
+        # substance parametric in form, and says so.
+        if store_deterministic:
+            return pm.Deterministic(latent_name, mean_trend, dims=("all_id",))
+        return mean_trend
+
+    if isinstance(cfg_ell, (int, float)):
+        # Fixed length-scale on the unit scale. Keeps the GP's flexibility while
+        # removing a hyperparameter the data cannot inform (VG15's `ell_unit_sign`
+        # reaches contraction 0.033). Still stored under its usual name so
+        # downstream readers do not need to know which branch produced it.
+        ell_unit = pm.Deterministic(f"ell_unit{suffix}", pt.as_tensor_variable(float(cfg_ell)))
+    else:
+        ell_unit = cfg_ell.to_pymc(f"ell_unit{suffix}")
     ell = pm.Deterministic(
         f"ell{suffix}", grid.ell_low_z + (grid.ell_high_z - grid.ell_low_z) * ell_unit
     )

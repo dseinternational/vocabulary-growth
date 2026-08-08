@@ -96,8 +96,19 @@ def test_definition_rejects_kappa_anchor_outside_the_gp_domain():
 # conditional numbers below; VG08 has a subject effect on understood but not on
 # `q`, so it would need one of each. All three are lineage steps in the
 # VG05 -> VG07 -> VG08 -> VG09 -> VG10 sequence, where changing a prior partway
-# would confound the contrast the sequence exists to show. VG14's frame is the
-# signing subset, not this one. VG17/VG18 have had neither calibration.
+# would confound the contrast the sequence exists to show. That is a deliberate
+# exclusion, and it is why their `b_kappa_mag_s` sitting four standard deviations
+# beyond its prior is disclosed rather than fixed -- they supply no reported
+# number (see docs/models/README.md, model roles).
+#
+# VG14 was excluded on the stated grounds that its "frame is the signing subset,
+# not this one". That was wrong: VG14, VG15 and VG10 all fit the same 1,349-row
+# frame, and VG15 already uses these exact prior objects. VG14 was migrated on
+# 2026-08-06 -- see notes/202608051500-report-critical-review.md section 4a. The
+# real blocker was never the frame, it was that `common_trivariate` accepted only
+# the legacy form until the same date.
+#
+# VG17/VG18 have had neither calibration.
 _ANCHORED_OUTCOMES = {
     "vg01": {"kappa"},
     "vg02": {"kappa"},
@@ -108,6 +119,7 @@ _ANCHORED_OUTCOMES = {
     "vg11": {"kappa"},
     "vg12": {"kappa"},
     "vg13": {"kappa_u", "kappa_s"},
+    "vg14": {"kappa_u", "kappa_s"},
     "vg15": {"kappa_u", "kappa_s"},
     "vg16": {"kappa_u", "kappa_s"},
 }

@@ -220,6 +220,41 @@ class KappaAnchorPriorParams:
     """LogNormal sigma for the age term at the old anchor."""
 
 
+@dataclass
+class SubjectVariancePartitionParams:
+    """Priors for the shared scatter budget that ``tau_subject`` and ``kappa`` split.
+
+    Selects the reparameterisation described in
+    :func:`~vocab_growth.models.gp_utils.build_variance_partition`: instead of
+    giving the subject-effect scale and the young dispersion anchor independent
+    priors and letting them compete, one prior goes on the **total** logit-scale
+    scatter at the young anchor and one on the **share** of it that persistent
+    between-child differences explain.
+
+    Set this only where the ridge is measured. It is a graph change and it moves
+    the prior, so it needs a refit and a prior-predictive check; it is not a
+    drop-in for models that sample cleanly already. See
+    ``notes/202608050900-td-hierarchical-geometry.md`` §7.
+    """
+
+    reference_proportion: float
+    """Fixed proportion ``p0`` at which a Beta-Binomial concentration is converted
+    to a logit-scale variance, ``c = 1 / (p0 * (1 - p0))``.
+
+    Deliberately a constant rather than the fitted trajectory's value at the
+    anchor age: that keeps the reparameterisation independent of the mean
+    function, so the priors below do not change meaning when the trend does. Set
+    it to roughly the observed proportion at the young kappa anchor."""
+    total_mu: float
+    """LogNormal mu for the total logit-scale scatter at the young anchor."""
+    total_sigma: float
+    """LogNormal sigma for the total logit-scale scatter."""
+    share_alpha: float
+    """Beta alpha for the subject share of that scatter."""
+    share_beta: float
+    """Beta beta for the subject share of that scatter."""
+
+
 # ============================================================
 # Univariate model definition
 # ============================================================
@@ -347,6 +382,61 @@ class UnivariateModelDefinition:
     @property
     def outcome_label(self) -> str:
         return f"Words {self.outcome.value}"
+
+
+@dataclass
+class UnivariateREModelDefinition(UnivariateModelDefinition):
+    """A univariate model with random effects, plus the two sampling-geometry options.
+
+    These live on a subclass rather than on
+    :class:`UnivariateModelDefinition` for a concrete reason. A fit is validated
+    against the current registered definition by comparing
+    ``dataclasses.asdict`` field for field, so **adding a field to a definition
+    class invalidates every existing fit of that class** — including models that
+    never set it. VG01-VG04 are plain univariate models with no random effects at
+    all; putting these two fields on the shared base would have made four
+    published models of record stale for no modelling reason, VG03 alone costing a
+    2h50m refit. Only VG11, VG12 and the exploratory VG17 use the random-effect
+    engine, so only they carry the fields.
+
+    The engine reads both through ``getattr`` with a default, so a plain
+    :class:`UnivariateModelDefinition` still builds — VG17 derives its definition
+    from VG01 and never becomes a subclass instance.
+    """
+
+    centred_study_re: bool = False
+    """If True, sample the study intercepts directly as
+    ``ZeroSumNormal(sigma=tau * sqrt(K/(K-1)))`` rather than as ``tau`` times a
+    unit-scale ``ZeroSumNormal``.
+
+    Prior-preserving: scaling a zero-sum Gaussian's sigma and scaling its variate
+    give the same distribution, so this changes the sampler's coordinates and
+    nothing else. The non-centred form of issue #65 is the wrong side of the
+    funnel trade-off once each study carries thousands of observations.
+
+    Measured on VG12 at ``test``: ``tau`` ESS 310 -> 6,950, max R-hat 1.0133 ->
+    1.0057, divergences 59 -> 31. Energy BFMI unchanged (0.203 -> 0.194), exactly
+    as predicted — ``tau`` ranks 13th on energy correlation at -0.023, so this was
+    never a BFMI fix. See ``notes/202608050900-td-hierarchical-geometry.md``
+    §§2-3."""
+    subject_variance_partition: SubjectVariancePartitionParams | None = None
+    """If set, sample a shared scatter budget and a subject share rather than
+    giving ``tau_subject`` and the young ``kappa`` anchor competing priors.
+
+    Requires the two-anchor ``kappa`` form (:class:`KappaAnchorPriorParams`) and
+    ``use_subject_re``; validation rejects the other combinations. When set,
+    ``tau_subject_sigma`` and the ``kappa`` block's ``excess_young_*`` priors are
+    no longer used — the prior moves onto ``total_*`` and ``share_*`` — while
+    ``tau_subject`` and ``kappa_excess_young`` remain in the trace as
+    deterministics under their usual names.
+
+    Measured on VG12 at ``test``: divergences 59 -> 14, and ``v_total`` samples
+    cleanly (energy correlation -0.025). It does **not** fix the energy BFMI
+    (0.203 -> 0.192): the ridge does not dissolve, it rotates, with ``share``
+    inheriting the whole energy correlation at -0.737. That is the expected result
+    if the cause is missing within-child replication rather than bad coordinates,
+    which is what §4 of the note argues. Kept for the divergence reduction, not as
+    a BFMI remedy. See :class:`SubjectVariancePartitionParams`."""
 
 
 # ============================================================
@@ -750,6 +840,30 @@ class JointModelDefinition:
     # rationale. Study REs carry between-study level; the GP (anchored at 54 mo,
     # below) carries smooth departures.
     sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
+    sign_peak_prior: tuple[float, float] | None = None
+    """Beta(alpha, beta) on the signed peak's POSITION between the outer sign
+    anchors, or None to fix it at ``sign_anchor_ages[1]``.
+
+    Adopted for VG15 on 2026-08-06. With the peak fixed, `r(a)` peaked at the
+    middle anchor by construction -- 77% of posterior draws within a month of it --
+    so its height was estimated and its age simply asserted. "Signing peaks around
+    three years" was a statement about knot placement, not a finding.
+
+    Sampling the position rather than the age keeps ``z_low < z_mid < z_hi`` true by
+    construction, which a prior on the age could not. Measured on VG15 at `test`:
+    the peak age is identifiable (contraction 0.481) at 29.4 months, 89% ETI
+    [23.9, 46.2], against a prior interval of [21.5, 67.5] -- and the free knot
+    samples better than the fixed one (0 divergences against 2), despite making the
+    GP's nuisance basis draw-dependent.
+
+    The peak HEIGHT is unmoved (0.319 -> 0.314), so this changes shape, not level.
+
+    Note this does not extend to VG14, whose lack of study random effects means its
+    age curve must absorb between-study composition -- the reason
+    notes/202606151700 found the peak age unidentifiable there. That finding stands
+    for the model it was made about. See
+    notes/202608060900-three-prior-conflicts.md section 5.
+    """
     """Young / peak / old reference ages (months) for the signed-ratio hump."""
     p_slope_low_sign_alpha: float = 2.0
     p_slope_low_sign_beta: float = 20.0
@@ -768,6 +882,14 @@ class JointModelDefinition:
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
     eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
+    # `ell_unit_sign` is unidentified in VG15 (contraction 0.033) and is
+    # DELIBERATELY left sampled, settled 2026-08-06. Fixing it at its prior median
+    # changes nothing measurable -- a maximum median shift of 0.0023 on r(a), +0.1%
+    # band width, convergence unchanged -- and removing the signed GP is worse: it
+    # fails the hard convergence tier and narrows the band 63% at 96 months,
+    # stripping the model's only honest signal of ignorance where signed data have
+    # run out. `sign_gp_mode` in the joint engine can express both alternatives;
+    # neither is an improvement. See notes/202608060900 section 5b.
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
     eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
@@ -775,6 +897,13 @@ class JointModelDefinition:
     n_plot: int = 500
     kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
     kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
+    # `kappa_sign` deliberately stays on the legacy dispersion form for VG15,
+    # settled 2026-08-06. Unlike VG05/VG07/VG08/VG14 -- migrated because their
+    # `b_kappa_mag_s` sat about four standard deviations beyond its prior with the
+    # posterior wider than it -- the signed block is well identified (contraction
+    # 0.429) at prior CDF 0.276, and the form's non-increasing-with-age constraint
+    # is not binding. The asymmetry with VG14 is two separate correct calls, not an
+    # inconsistency. See notes/202608060900-three-prior-conflicts.md section 5b.
     kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Association (Plackett log odds-ratio) --
@@ -860,6 +989,25 @@ class JointModelDefinition:
     longer a *sensitivity* in its own right: those rows are masked by default, so
     on the primary frame this flag has nothing left to exclude. Use
     ``include_implausible_production`` below to interrogate that exclusion."""
+    report_max_age_signed: int | None = None
+    """Highest query age (months) at which signed quantities are reported.
+
+    The signed counterpart of ``report_max_age_understood``, and it exists for the
+    same reason: a model's ``ages_query`` grid is shared by every outcome, but the
+    outcomes are not observed over the same range. Signed is the sparsest -- 516
+    observations with 85% between 12 and 48 months, 23 above 60, 7 above 72 and
+    **none between 84 and 96** -- while the Down syndrome grid runs to 115. Above
+    about 60 months `r(a)` is the tent's extrapolation, not an estimate.
+
+    Applies to the signed counts, the signed ratio `r`, and total expressive
+    `p_any`, which is a function of the signed ratio and can only be reported where
+    signed evidence reaches.
+
+    Post-processing only, so it cannot move a posterior -- but it is part of the
+    recorded definition and the tables are written during the fit, so a change
+    needs a refit and `--render-only` will not pick it up. Same caveats as the
+    comprehension cap; see ``posterior_analysis.trim_reported_ages``.
+    """
     include_implausible_production: bool = False
     """Reinstate the us_01 production counts masked as implausible by default.
 
@@ -1134,6 +1282,70 @@ _TD_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
     excess_young_sigma=0.9,
     excess_old_mu=math.log(63.0),
     excess_old_sigma=0.9,
+)
+
+_TD_UNDERSTOOD_VARIANCE_PARTITION = SubjectVariancePartitionParams(
+    # Calibrated for VG12, 2026-08-05. NOT YET ATTACHED to any registered model:
+    # the reparameterisation is expected to fix VG12's energy BFMI but that has not
+    # been demonstrated, and attaching it is a graph change requiring a refit. See
+    # notes/202608050900-td-hierarchical-geometry.md §7.1 and §9 item 1.
+    #
+    # p0 is the observed comprehension proportion in the 11-13 month band, 84.3 of
+    # 810 items over 1,106 rows -- which independently reproduces the ~83-word
+    # Wordbank 12-month norm this model's low anchor is already tied to. It gives
+    # c = 1 / (p0 (1 - p0)) = 10.72.
+    reference_proportion=0.1041,
+    # Chosen so the induced marginals stay recognisably the current beliefs while
+    # the prior moves onto the budget and the split. Against the priors these
+    # replace -- tau_subject ~ HalfNormal(1.5), excess_young ~ LogNormal(log 40,
+    # 0.9) -- the induced 5/50/95 are:
+    #     tau_subject         0.38 / 0.79 / 1.59   (was 0.09 / 1.01 / 2.94)
+    #     kappa_excess_young  7.25 / 34.7 / 212    (was 9.10 / 40.0 / 176)
+    # The dispersion marginal is nearly unchanged. The subject marginal is tighter,
+    # necessarily: a shared budget cannot let both parameters range over 30x
+    # independently, and refusing to is the entire point.
+    #
+    # The share prior is deliberately NOT centred where the old priors implied
+    # (median 0.79). VG12's posterior implies a share of 0.598, so centring there
+    # would manufacture a prior-data conflict at prior CDF 0.04-0.12. Beta(3.9,
+    # 2.1) spans 0.33-0.92 across its 5-95% range and puts that posterior at CDF
+    # 0.368, with the total at CDF 0.383 -- both central, neither asserted.
+    total_mu=0.0,
+    total_sigma=0.8,
+    share_alpha=3.9,
+    share_beta=2.1,
+)
+
+_TD_SPOKEN_VARIANCE_PARTITION = SubjectVariancePartitionParams(
+    # VG11's counterpart of _TD_UNDERSTOOD_VARIANCE_PARTITION. The budget and share
+    # priors are *identical* to VG12's; the only model-specific input is p0, which
+    # is an empirical quantity rather than a choice. That is the design working as
+    # intended -- the priors are stated in units of logit-scale scatter, which is
+    # comparable across outcomes, while p0 carries the outcome's level.
+    #
+    # p0 = 9.57/810, the observed spoken proportion in the 11-13 month band over
+    # 1,177 rows. Spoken vocabulary at 12 months is tiny, so c = 1/(p0 (1-p0)) =
+    # 85.65 against VG12's 10.72.
+    #
+    # Induced marginals against the priors they replace -- tau_subject ~
+    # HalfNormal(1.5), excess_young ~ LogNormal(log 311, 0.7):
+    #     tau_subject         0.38 / 0.79 / 1.59   (was 0.09 / 1.01 / 2.94)
+    #     kappa_excess_young  57.9 / 277  / 1689   (was 98.3 / 311  / 984)
+    # Both medians land within ~20% of the ones they replace.
+    #
+    # CAUTION, and it is a real one: unlike VG12 there is no VG11 posterior to
+    # check the share prior against -- VG11 has never completed a fit. VG12's data
+    # implied a share of 0.598 where its old priors implied 0.79, so centring on
+    # the old implication would have manufactured a conflict. VG11 has an even
+    # lower repeat rate (13.4% against 17.2%), hence even less information about
+    # the split, so the share prior is deliberately left weak -- Beta(3.9, 2.1)
+    # spans 0.33-0.91 -- rather than centred anywhere in particular. Revisit once
+    # VG11 has a posterior. See notes/202608050900-td-hierarchical-geometry.md §7.
+    reference_proportion=0.0118,
+    total_mu=0.0,
+    total_sigma=0.8,
+    share_alpha=3.9,
+    share_beta=2.1,
 )
 
 _TD_YOUNG_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
@@ -1753,7 +1965,7 @@ VG10 = BivariateModelDefinition(
     clamp_mean_above_hi_anchor=True,
 )
 
-VG11 = UnivariateModelDefinition(
+VG11 = UnivariateREModelDefinition(
     model_id="VG11",
     config_name="age-spoken-td-re",
     banner=(
@@ -1794,10 +2006,18 @@ VG11 = UnivariateModelDefinition(
     # GP–intercept ridge that arises when study REs are present.
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
+    # Sampling geometry, enabled 2026-08-05 after the VG12 test-config trial in
+    # notes/202608050900-td-hierarchical-geometry.md §7. Centring the study block
+    # took tau's ESS from 310 to 6,950 and max R-hat from 1.0133 to 1.0057; the
+    # partition cut divergences from 59 to 14. Neither moves the energy BFMI --
+    # that is driven by missing within-child replication and is not reparameterisable
+    # away -- so this model is still expected to need the caveated publication path.
+    centred_study_re=True,
+    subject_variance_partition=_TD_SPOKEN_VARIANCE_PARTITION,
     kappa=_TD_SPOKEN_KAPPA_RE,
 )
 
-VG12 = UnivariateModelDefinition(
+VG12 = UnivariateREModelDefinition(
     model_id="VG12",
     config_name="age-understood-td-re",
     banner=(
@@ -1820,6 +2040,26 @@ VG12 = UnivariateModelDefinition(
     p_slope_low_beta=8.0,
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
+    # REVERTED to 0.5 on 2026-08-05, having been widened to 1.0 earlier the same
+    # day. The widening was a calibration fix: at 0.5 the fitted amplitude sat at
+    # prior CDF 0.913 with contraction 0.106, i.e. the model reporting its prior
+    # back, the same signature that justified the 2026-08-04 DS widening.
+    #
+    # It was withdrawn because it cost convergence. Three rep fits isolate it:
+    #     original (eta 0.5, no geometry changes)      2 divergences, BFMI 0.202
+    #     centring + partition + eta 1.0              29 divergences, BFMI 0.208
+    #     centring + partition + eta 0.5               2 divergences, BFMI 0.201
+    # Centring and the partition cost nothing; the widening alone caused all 27.
+    # It was already the only arm to raise divergences in the test-config trial
+    # (76 against 59). Widening a weakly identified parameter gave it room to
+    # wander: even at 1.0 it only reached prior CDF 0.810 with contraction 0.166,
+    # so the calibration was not actually bought.
+    #
+    # Divergences bias the whole posterior, while the miscalibration is local to a
+    # GP smoothing hyperparameter that is not a reported developmental quantity --
+    # so the trade is not worth taking. The calibration defect is real and stands
+    # recorded in notes/202608050900-td-hierarchical-geometry.md §5; fixing it
+    # needs a change that identifies the amplitude rather than merely freeing it.
     eta_sigma=0.5,
     # WG + Oxford CDI only (WS comprehension is a production proxy).
     # Study REs absorb between-lab variation, so subsampling is not needed.
@@ -1841,6 +2081,14 @@ VG12 = UnivariateModelDefinition(
     # Anchor the GP at the midpoint of slope_anchors (19 months).
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
+    # Sampling geometry, enabled 2026-08-05 after the VG12 test-config trial in
+    # notes/202608050900-td-hierarchical-geometry.md §7. Centring the study block
+    # took tau's ESS from 310 to 6,950 and max R-hat from 1.0133 to 1.0057; the
+    # partition cut divergences from 59 to 14. Neither moves the energy BFMI --
+    # that is driven by missing within-child replication and is not reparameterisable
+    # away -- so this model is still expected to need the caveated publication path.
+    centred_study_re=True,
+    subject_variance_partition=_TD_UNDERSTOOD_VARIANCE_PARTITION,
     kappa=_TD_UNDERSTOOD_KAPPA_RE,
 )
 
@@ -1936,6 +2184,24 @@ VG14 = TrivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
+    # Migrated to the two-anchor dispersion form, 2026-08-06. VG14 had been left
+    # on the class-default legacy priors, where `b_kappa_mag ~ HalfNormal(0.3)`
+    # forces dispersion to fall with age and caps how fast. The spoken side
+    # rejected that: posterior mean 1.214, about four standard deviations beyond
+    # the prior, with contraction -0.09 -- the posterior wider than the prior. A
+    # parameter pinned against a boundary is not an estimate.
+    #
+    # These are not a new calibration. They are the same objects VG10 and VG15
+    # already use, and VG14 shares their population, outcomes, slope anchors and
+    # GP domain exactly, so adopting them removes a difference that was never
+    # deliberate. It also brings VG14 into line with VG15, the model it is most
+    # directly compared against.
+    #
+    # `kappa_sign` deliberately stays legacy, matching VG15: the signed block sits
+    # comfortably inside its prior (CDF 0.25, contraction 0.49) and has no reason
+    # to move. See notes/202608051500-report-critical-review.md section 4a.
+    kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_DS_JOINT_Q_KAPPA_RE,
     # Understood trajectory: matches VG05, including the 2026-08-04 anchor
     # recalibration (Beta(1,7) -> Beta(1.5,8) at 24 mo, Beta(2,1.5) -> Beta(3,1.3)
     # at 84 mo) and eta_u at 0.6. See VG05 for the reasoning and
@@ -2033,6 +2299,12 @@ VG15 = JointModelDefinition(
     anchor_g_u_at_ref=True,
     anchor_g_q_at_ref=True,
     anchor_g_sign_at_ref=True,
+    # Peak age estimated rather than asserted, adopted 2026-08-06; see the field
+    # docstring on JointModelDefinition. Beta(2, 4) puts the prior median at 40
+    # months, deliberately ABOVE the 29.4 the data pull it to, so the estimate
+    # moves against the prior rather than with it. Checked by the three
+    # sign-peak-age-* sensitivity variants.
+    sign_peak_prior=(2.0, 4.0),
     gp_anchor_age_months=54.0,
     # Understood and spoken share VG09's frame and specification, so they take
     # the same two-anchor blocks. The signed ratio stays on the legacy form:
@@ -2055,6 +2327,11 @@ VG15 = JointModelDefinition(
     # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
     # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
+    # Signed evidence stops around 60 months: 23 of 516 signed observations lie
+    # above it, 7 above 72, and none between 84 and 96, while the grid runs to
+    # 115. Adopted 2026-08-07 on the same argument that capped comprehension at
+    # 72. Also caps p_any, which is a function of the signed ratio.
+    report_max_age_signed=60,
     clamp_mean_above_hi_anchor=True,
 )
 

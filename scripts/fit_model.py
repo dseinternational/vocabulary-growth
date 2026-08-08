@@ -7,6 +7,7 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 import argparse
 import importlib
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -55,9 +56,33 @@ def _fit_selected_models(selected, config: str):
     return contexts, timings, failures
 
 
-def _render_output(output_dir: str) -> None:
-    """Render one already-promoted fit without changing its lifecycle state."""
+def _render_output(output_dir: str, model_id: str | None = None) -> None:
+    """Render one already-promoted fit without changing its lifecycle state.
+
+    The report template is refreshed from ``docs/models/<model>/index.qmd`` first.
+    The fit stage copies the template into the output directory, so without this
+    ``--render-only`` would re-render whichever template was current when the fit
+    ran, and a fix to the report could never reach an existing fit.
+
+    That is not hypothetical: the soft-tier convergence callout was added to every
+    model report on 2026-08-05, and VG13 — one of the three fits that actually has
+    caveats to disclose — kept rendering without it. ``--render-only`` reported
+    success each time. A disclosure mechanism that silently discloses nothing is
+    the failure this whole path exists to prevent.
+
+    Only the template is refreshed. The trace, the summaries and the manifest are
+    untouched, and the caller has already validated the fit against the current
+    registered definition, so the refreshed template is being run against a fit it
+    is compatible with.
+    """
     qmd_path = os.path.join(output_dir, "index.qmd")
+    if model_id is not None:
+        template = os.path.join(
+            env.DOCS_DIR, "models", model_id.lower(), "index.qmd"
+        )
+        if not os.path.isfile(template):
+            raise FileNotFoundError(f"Report template is missing: {template}")
+        shutil.copy(template, qmd_path)
     if not os.path.isfile(qmd_path):
         raise FileNotFoundError(f"Quarto source is missing: {qmd_path}")
     # Quarto otherwise resolves the Jupyter kernel for the report's python cells
@@ -78,7 +103,9 @@ def _render_contexts(contexts):
         name = context.reporting.model_name.lower()
         render_started = time.perf_counter()
         try:
-            _render_output(context.reporting.output_dir)
+            _render_output(
+                context.reporting.output_dir, context.reporting.model_name
+            )
         except Exception as exc:
             failures[name] = f"{type(exc).__name__}: {exc}"
         finally:

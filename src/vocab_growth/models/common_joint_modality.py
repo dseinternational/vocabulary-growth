@@ -186,6 +186,10 @@ class JointModelConfiguration(BaseModelConfiguration):
 
     # Reporting only — the age at which understood and q stop being reported.
     report_max_age_understood: int | None = None
+    report_max_age_signed: int | None = None
+    """Highest query age at which signed quantities are reported. Same mechanism
+    and the same caveats as ``report_max_age_understood`` -- post-processing only,
+    but part of the recorded definition, so a change needs a refit."""
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -580,6 +584,7 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         tau_q_sigma=definition.tau_q_sigma,
         tau_sign_sigma=definition.tau_sign_sigma,
         report_max_age_understood=definition.report_max_age_understood,
+        report_max_age_signed=definition.report_max_age_signed,
     )
     context.set_model_config(config)
 
@@ -905,8 +910,33 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             z_low=(sa_young - X_mean) / X_std,
             z_mid=(sa_peak - X_mean) / X_std,
             z_hi=(sa_old - X_mean) / X_std,
-            cfg_ell=config.ell_unit_sign_dist,
-            cfg_eta=config.eta_sign_dist,
+            # Optional: estimate the peak age rather than assert it. Read from the
+            # definition so no configuration class changes -- adding a field to a
+            # definition class invalidates every existing fit of that class, and
+            # nothing here should do that until the change is chosen deliberately.
+            cfg_peak=(
+                pz.Beta(
+                    alpha=definition.sign_peak_prior[0],
+                    beta=definition.sign_peak_prior[1],
+                )
+                if getattr(definition, "sign_peak_prior", None) is not None
+                else None
+            ),
+            # `sign_gp_mode` resolves the signed GP's unidentified hyperparameters:
+            # "sampled" (default, as shipped), "fixed-ell" (length-scale held at its
+            # prior median, amplitude still sampled), or "off" (no GP; the tent
+            # carries the latent). Read through getattr so no definition class
+            # changes and no existing model's graph moves.
+            cfg_ell=(
+                float(config.ell_unit_sign_dist.ppf(0.5))
+                if getattr(definition, "sign_gp_mode", "sampled") == "fixed-ell"
+                else config.ell_unit_sign_dist
+            ),
+            cfg_eta=(
+                None
+                if getattr(definition, "sign_gp_mode", "sampled") == "off"
+                else config.eta_sign_dist
+            ),
             suffix="_sign",
             X_all_z_data=X_all_z_data,
             grid=gp_grid,
@@ -1362,6 +1392,7 @@ def posterior_summary(context: JointContext):
     # Comprehension and production are not observed over the same age range, so
     # understood and q may report a shorter grid than spoken and signed.
     report_max_u = context.model_config.report_max_age_understood
+    report_max_sign = context.model_config.report_max_age_signed
 
     def probability_summary(X, draws, prefix, label, max_age=None):
         Ey = draws * n_trials
@@ -1405,8 +1436,10 @@ def posterior_summary(context: JointContext):
 
     probability_summary(s.X_query, s.p_u_query, "u", "Words understood", report_max_u)
     probability_summary(s.X_query, s.p_u_query * s.q_query, "s", "Words spoken")
-    probability_summary(s.X_query, s.p_u_query * s.r_query, "sign", "Words signed")
-    ratio_summary(s.X_query, s.r_query, "r")
+    probability_summary(
+        s.X_query, s.p_u_query * s.r_query, "sign", "Words signed", report_max_sign
+    )
+    ratio_summary(s.X_query, s.r_query, "r", report_max_sign)
     ratio_summary(s.X_query, s.q_query, "q", report_max_u)
 
     # Whole-month companions to the tables above. This engine draws no predictive
@@ -1467,6 +1500,9 @@ def posterior_summary(context: JointContext):
         "p_any_indep_median": np.median(s.p_any_indep_query, axis=1),
         "Ey_any_indep_median": np.median(Ey_i, axis=1),
     })
+    # Total expressive is a function of the signed ratio, so it can only be
+    # reported where signed evidence reaches -- the tighter of the two caps.
+    pany = posterior_analysis.trim_reported_ages(pany, report_max_sign)
     pany.to_csv(os.path.join(od, "posterior_summary_p_any.csv"), index=False)
     dataframe_table(pany.round(3), title="Total expressive p_any (identified vs independence)", show_index=False)
 
@@ -1504,14 +1540,37 @@ def _run_joint_plots(context: JointContext):
     ci_kind = context.reporting.interval_kind
     X = s.X_plot
 
+    # Every curve below is a function of comprehension, and the sign-bearing ones
+    # are functions of the signed ratio too, so each inherits the reporting age of
+    # its narrowest input. Without this the tables stop at the cap while the
+    # figures beside them run to the end of the plot grid, and the pair disagree
+    # in print about where the evidence ends.
+    report_max_u = context.model_config.report_max_age_understood
+    report_max_sign = context.model_config.report_max_age_signed
+
+    def _keep(max_age):
+        if max_age is None:
+            return np.ones(len(X), dtype=bool)
+        return np.asarray(X) <= max_age
+
+    # p_any, the four-cell composition and r(a) all involve the signed ratio, so
+    # they stop at the earlier of the two caps.
+    sign_caps = [c for c in (report_max_u, report_max_sign) if c is not None]
+    keep_sign = _keep(min(sign_caps) if sign_caps else None)
+    keep_u = _keep(report_max_u)
+    X_sign = np.asarray(X)[keep_sign]
+    X_u = np.asarray(X)[keep_u]
+
     # 1) Data-identified p_any vs independence upper bound (expected counts)
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    id_med = np.median(s.p_any_plot, axis=1) * n_trials
-    id_hdi = intervals.bands(s.p_any_plot * n_trials, ci_prob, ci_kind, sample_axis=1)
-    ind_med = np.median(s.p_any_indep_plot, axis=1) * n_trials
-    ax.fill_between(X, id_hdi[:, 0], id_hdi[:, 1], alpha=0.20, color="C0")
-    ax.plot(X, id_med, lw=3, color="C0", label="Data-identified p_any (median)")
-    ax.plot(X, ind_med, lw=2.5, ls="--", color="C3",
+    id_med = np.median(s.p_any_plot[keep_sign, :], axis=1) * n_trials
+    id_hdi = intervals.bands(
+        s.p_any_plot[keep_sign, :] * n_trials, ci_prob, ci_kind, sample_axis=1
+    )
+    ind_med = np.median(s.p_any_indep_plot[keep_sign, :], axis=1) * n_trials
+    ax.fill_between(X_sign, id_hdi[:, 0], id_hdi[:, 1], alpha=0.20, color="C0")
+    ax.plot(X_sign, id_med, lw=3, color="C0", label="Data-identified p_any (median)")
+    ax.plot(X_sign, ind_med, lw=2.5, ls="--", color="C3",
             label="Independence upper bound (p_U·(1-(1-r)(1-q)))")
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Expected words produced (any modality)")
@@ -1520,7 +1579,7 @@ def _run_joint_plots(context: JointContext):
     ax.set_title("Total expressive vocabulary: identified vs independence bound")
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.png"), dpi=300)
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.svg"))
-    _save_csv(pd.DataFrame({"age_months": X, "identified_median": id_med,
+    _save_csv(pd.DataFrame({"age_months": X_sign, "identified_median": id_med,
                             "identified_ci_lo": id_hdi[:, 0], "identified_ci_hi": id_hdi[:, 1],
                             "independence_median": ind_med}), od, "p_any_identified_vs_bound")
     context.plots["p_any_identified_vs_bound"] = fig
@@ -1529,13 +1588,13 @@ def _run_joint_plots(context: JointContext):
     # 2) Four-cell composition trajectory (fractions of understood)
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     comp = {
-        "neither": (np.median(s.pi_neither_plot, axis=1), "C7"),
-        "sign-only": (np.median(s.pi_sign_only_plot, axis=1), "C2"),
-        "sign+speech": (np.median(s.pi_both_plot, axis=1), "C4"),
-        "speak-only": (np.median(s.pi_speak_only_plot, axis=1), "C1"),
+        "neither": (np.median(s.pi_neither_plot[keep_sign, :], axis=1), "C7"),
+        "sign-only": (np.median(s.pi_sign_only_plot[keep_sign, :], axis=1), "C2"),
+        "sign+speech": (np.median(s.pi_both_plot[keep_sign, :], axis=1), "C4"),
+        "speak-only": (np.median(s.pi_speak_only_plot[keep_sign, :], axis=1), "C1"),
     }
     for lab, (med, c) in comp.items():
-        ax.plot(X, med, lw=2.5, color=c, label=lab)
+        ax.plot(X_sign, med, lw=2.5, color=c, label=lab)
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Fraction of understood words")
     ax.set_ylim(0, 1)
@@ -1543,7 +1602,7 @@ def _run_joint_plots(context: JointContext):
     ax.set_title("Within-understood composition (sign-only → both → speak-only)")
     fig.savefig(os.path.join(od, "four_cell_composition.png"), dpi=300)
     fig.savefig(os.path.join(od, "four_cell_composition.svg"))
-    _save_csv(pd.DataFrame({"age_months": X, **{k: v[0] for k, v in comp.items()}}), od, "four_cell_composition")
+    _save_csv(pd.DataFrame({"age_months": X_sign, **{k: v[0] for k, v in comp.items()}}), od, "four_cell_composition")
     context.plots["four_cell_composition"] = fig
     plt.close(fig)
 
@@ -1563,12 +1622,12 @@ def _run_joint_plots(context: JointContext):
 
     # 4) signed rate r(a) and spoken rate q(a), population level
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    r_med = np.median(s.r_plot, axis=1)
-    r_hdi = intervals.bands(s.r_plot, ci_prob, ci_kind, sample_axis=1)
-    q_med = np.median(s.q_plot, axis=1)
-    ax.fill_between(X, r_hdi[:, 0], r_hdi[:, 1], alpha=0.18, color="C2")
-    ax.plot(X, r_med, lw=3, color="C2", label="r(a) signed")
-    ax.plot(X, q_med, lw=3, color="C1", label="q(a) spoken")
+    r_med = np.median(s.r_plot[keep_sign, :], axis=1)
+    r_hdi = intervals.bands(s.r_plot[keep_sign, :], ci_prob, ci_kind, sample_axis=1)
+    q_med = np.median(s.q_plot[keep_u, :], axis=1)
+    ax.fill_between(X_sign, r_hdi[:, 0], r_hdi[:, 1], alpha=0.18, color="C2")
+    ax.plot(X_sign, r_med, lw=3, color="C2", label="r(a) signed")
+    ax.plot(X_u, q_med, lw=3, color="C1", label="q(a) spoken")
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Fraction of understood words")
     ax.set_ylim(0, 1)

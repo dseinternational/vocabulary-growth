@@ -1073,10 +1073,22 @@ def plot_comprehension_production_gap(
     interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ) -> Figure:
-    """Plot the posterior of the comprehension-production gap (p_U - p_S) over age."""
+    """Plot the posterior of the comprehension-production gap (p_U - p_S) over age.
+
+    ``max_age_months`` stops the curve where the comprehension evidence stops, for
+    the same reason as :func:`plot_production_rate`: the gap is a *difference from*
+    comprehension, so it inherits comprehension's narrower age range rather than
+    the plot grid's, which spans the spoken data.
+    """
     X_plot = samples.X_plot
     gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
+
+    if max_age_months is not None:
+        keep = X_plot <= max_age_months
+        X_plot = X_plot[keep]
+        gap = gap[keep, :]
 
     gap_median = np.median(gap, axis=1)
     gap_ci = intervals.bands(gap, ci_prob, interval_kind, sample_axis=1)

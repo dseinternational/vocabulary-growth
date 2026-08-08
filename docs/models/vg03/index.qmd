@@ -149,6 +149,50 @@ descriptive_stats
 ## Diagnostics
 
 ```{python}
+#| label: convergence-caveats
+#| echo: false
+#| output: asis
+# Soft-tier caveats, read from this fit's own gate payload. Silent when the fit
+# is clean, so a clean report gains nothing and a caveated one cannot hide it.
+import json
+from pathlib import Path
+
+_gate_path = Path("diagnostics_summary.json")
+_marks = []
+if _gate_path.exists():
+    _gate = json.loads(_gate_path.read_text())
+    _checks = _gate.get("checks") or {}
+    _bfmi = [b for b in (_gate.get("bfmi_per_chain") or []) if b is not None]
+    if _checks.get("divergences") is False:
+        _marks.append(
+            f"**{_gate.get('divergences')} divergent transition(s)** — the sampler "
+            "failed to traverse part of the posterior, so reported expectations "
+            "may be biased."
+        )
+    if _checks.get("bfmi") is False:
+        _lo = f" (min {min(_bfmi):.3f})" if _bfmi else ""
+        _marks.append(
+            f"**Energy BFMI below 0.3**{_lo} — the energy chain explored the "
+            "posterior's tails poorly, so the interval bounds are less reliable "
+            "than the point estimates."
+        )
+
+if _marks:
+    print('::: {.callout-warning title="Soft-tier convergence caveats"}')
+    print()
+    print("This fit cleared the hard convergence tier (R-hat and effective sample")
+    print("size) but not the soft tier:")
+    print()
+    for _mark in _marks:
+        print(f"- {_mark}")
+    print()
+    print("It remains reportable and is published carrying this mark; see")
+    print("Appendix B of the technical report.")
+    print()
+    print(":::")
+```
+
+```{python}
 from dse_research_utils.statistics.diagnostics import style_diagnostics_table
 
 diagnostics = pd.read_csv("diagnostics.csv", index_col=0)

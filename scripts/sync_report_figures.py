@@ -32,24 +32,124 @@ repository-local ``output/`` default. The report figure store
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import shutil
 import tempfile
 import uuid
 from dataclasses import asdict
+from typing import Any
 
 import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
+    DIAGNOSTICS_SUMMARY_FILENAME,
     FitValidationError,
     fit_validation_kwargs,
+    read_convergence_caveats,
+    read_json,
     source_data_hash,
     validate_fit_output,
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 COPY_EXTS = (".svg", ".png", ".csv")
+
+CONVERGENCE_CAVEATS_TABLE = "convergence_caveats.csv"
+CONVERGENCE_DIAGNOSTICS_TABLE = "convergence_diagnostics.csv"
+
+
+def _write_csv(filename: str, header: list[str], rows: list[list[Any]]) -> str:
+    """Atomically (re)write one generated table into the report figure cache."""
+    os.makedirs(env.REPORT_FIGS_DIR, exist_ok=True)
+    path = os.path.join(env.REPORT_FIGS_DIR, filename)
+    tmp = f"{path}.{uuid.uuid4().hex}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        writer.writerows(rows)
+    os.replace(tmp, path)
+    return path
+
+
+def _write_convergence_records(model_sources: list[tuple[str, str]]) -> None:
+    """Record each synced model's achieved diagnostics and soft-tier caveats.
+
+    Emitted as CSV rather than left for the report to read from each fit's
+    ``diagnostics_summary.json``, because :data:`COPY_EXTS` deliberately syncs only
+    figures and summary tables — a JSON reader in the report would silently render
+    "pending" forever. Widening the allowlist would instead push the fit manifest
+    and lifecycle state into the cache, which the report has no use for.
+
+    Written on every sync, not only under ``--allow-caveats``, and always
+    rewritten — including to a header-only file when nothing is caveated. A stale
+    table left by an earlier run would otherwise keep asserting caveats against
+    fits that no longer carry them, or vanish and let a caveated fit render as
+    clean. Appendix B reads these files, so "no file" and "no caveats" must stay
+    distinguishable.
+
+    The rendered mark is what makes ``--allow-caveats`` honest rather than a way to
+    bypass the check, so this is deliberately not conditional on the flag.
+    """
+    diagnostics: list[list[Any]] = []
+    caveats: list[list[Any]] = []
+
+    # Resolve the model id from the registry rather than by splitting the directory
+    # name: sensitivity-variant directories share a model's prefix (e.g.
+    # VG10-...-us01-implausible-reinstated), so a prefix split would silently emit
+    # two rows for the same model id. Callers only pass registered labels, but the
+    # lookup makes that a guarantee rather than an assumption.
+    model_id_by_label = {
+        f"{d.model_id}-{d.config_name}": d.model_id for d in MODEL_REGISTRY.values()
+    }
+
+    for name, src in model_sources:
+        model_id = model_id_by_label.get(name)
+        if model_id is None:
+            continue
+        gate = read_json(os.path.join(src, DIAGNOSTICS_SUMMARY_FILENAME)) or {}
+        checks = gate.get("checks") or {}
+        bfmi = [b for b in (gate.get("bfmi_per_chain") or []) if b is not None]
+        soft = [
+            label
+            for label, ok in (
+                ("divergences", checks.get("divergences")),
+                ("BFMI", checks.get("bfmi")),
+            )
+            if ok is False
+        ]
+        diagnostics.append([
+            model_id,
+            gate.get("divergences"),
+            gate.get("max_rhat"),
+            gate.get("min_ess"),
+            min(bfmi) if bfmi else None,
+            ", ".join(soft),
+        ])
+        for caveat in read_convergence_caveats(src):
+            # Caveats read "<summary>: <consequence>"; keep both, split cleanly.
+            summary, _, consequence = caveat.partition(":")
+            caveats.append([model_id, summary.strip(), consequence.strip()])
+
+    _write_csv(
+        CONVERGENCE_DIAGNOSTICS_TABLE,
+        ["model", "divergences", "max_rhat", "min_ess", "min_bfmi", "soft_caveats"],
+        sorted(diagnostics),
+    )
+    _write_csv(
+        CONVERGENCE_CAVEATS_TABLE,
+        ["model", "caveat", "consequence"],
+        sorted(caveats),
+    )
+
+    if caveats:
+        print(f"  convergence caveats: {len(caveats)} recorded across "
+              f"{len({row[0] for row in caveats})} model(s)")
+        for model_id, summary, _ in sorted(caveats):
+            print(f"    {model_id}: {summary}")
+    else:
+        print("  convergence caveats: none")
 
 
 def _sync_dir(src: str, dst: str) -> int:
@@ -114,6 +214,17 @@ def main() -> None:
         action="store_true",
         help="Allow complete dev/test fits in the local cache.",
     )
+    parser.add_argument(
+        "--allow-caveats",
+        action="store_true",
+        help=(
+            "Sync reporting-quality fits that cleared the hard convergence tier "
+            "but carry soft-tier caveats (divergences, energy BFMI < 0.3). Every "
+            "other publication check still applies. The caveats are written to "
+            "convergence_caveats.csv in the figure cache and rendered by "
+            "Appendix B, so they travel with the numbers."
+        ),
+    )
     args = parser.parse_args()
     if args.models_only and args.comparisons_only:
         parser.error("Choose --models-only or --comparisons-only, not both.")
@@ -149,7 +260,9 @@ def main() -> None:
                 errors = validate_fit_output(
                     src,
                     **fit_validation_kwargs(
-                        "provisional-sync" if args.allow_provisional else "sync",
+                        "provisional-sync"
+                        if args.allow_provisional
+                        else ("sync-with-caveats" if args.allow_caveats else "sync"),
                         expected_definition=definition,
                         expected_sampling_config_name=args.config,
                         expected_sampling_parameters=asdict(expected_sampling),
@@ -175,6 +288,8 @@ def main() -> None:
                 n = _sync_dir(src, os.path.join(env.REPORT_FIGS_DIR, name))
                 total += n
                 print(f"  {name}: {n} files")
+
+            _write_convergence_records(model_sources)
         else:
             print(f"[skip] no models output dir: {models_dir}")
 

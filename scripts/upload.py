@@ -46,6 +46,16 @@ if __name__ == "__main__":
         help="Expected reporting sampling configuration (default: rep).",
     )
     parser.add_argument(
+        "--allow-caveats",
+        action="store_true",
+        help=(
+            "Publish a reporting-quality fit that cleared the hard convergence "
+            "tier but carries soft-tier caveats (divergences, energy BFMI < 0.3). "
+            "Every other publication check still applies. Use only when the "
+            "model report being published shows those caveats."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
@@ -84,7 +94,7 @@ if __name__ == "__main__":
 
         definition = MODEL_REGISTRY[model_id]
         validation_kwargs = fit_validation_kwargs(
-            "publish",
+            "publish-with-caveats" if args.allow_caveats else "publish",
             expected_definition=definition,
             expected_sampling_config_name=args.config,
             expected_sampling_parameters=asdict(expected_sampling),
