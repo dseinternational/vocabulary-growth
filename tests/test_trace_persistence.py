@@ -1,0 +1,193 @@
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+import numpy as np
+import pytest
+import xarray as xr
+
+from vocab_growth.fit_artifacts import (
+    TracePersistence,
+    plan_trace_persistence,
+    save_trace,
+)
+
+
+def _trace(*, subject_re: bool = True, raw_effect: bool = True, joint: bool = False) -> xr.DataTree:
+    """A trace shaped like the real ones: same group and dimension names."""
+    nc, nd, nobs, nplot, nall, nsub = 2, 5, 7, 4, 13, 3
+    r = np.random.default_rng(0)
+
+    def post(dims_sizes):
+        return (("chain", "draw", *dims_sizes[0]), r.normal(size=(nc, nd, *dims_sizes[1])))
+
+    data = {
+        # observation-sized deterministics: droppable
+        "f_obs": post((("obs_id",), (nobs,))),
+        "p_obs": post((("obs_id",), (nobs,))),
+        "kappa_obs": post((("obs_id",), (nobs,))),
+        # the concatenated obs+plot+query grid: droppable
+        "f_all": post((("all_id",), (nall,))),
+        "g_unit": post((("all_id",), (nall,))),
+        # reporting grid: must be kept
+        "p_plot": post((("plot_id",), (nplot,))),
+        "kappa_plot": post((("plot_id",), (nplot,))),
+        # free scalars: must be kept
+        "eta": (("chain", "draw"), r.normal(size=(nc, nd))),
+        "tau_subject": (("chain", "draw"), abs(r.normal(size=(nc, nd)))),
+    }
+    if subject_re:
+        data["delta_subject"] = post((("subject_id",), (nsub,)))
+        if raw_effect:
+            data["delta_subject_raw"] = post((("subject_id",), (nsub,)))
+    groups = {
+        "/posterior": xr.Dataset(data),
+        # observation-dimensioned but must never be touched
+        "/observed_data": xr.Dataset({"y_obs": (("obs_id",), r.integers(0, 9, nobs))}),
+        "/constant_data": xr.Dataset(
+            {"X_obs": (("obs_id",), r.normal(size=nobs)),
+             "X_plot": (("plot_id",), np.linspace(8, 30, nplot))}
+        ),
+        "/sample_stats": xr.Dataset({"diverging": (("chain", "draw"), np.zeros((nc, nd), bool))}),
+        "/log_likelihood": xr.Dataset(
+            {("y_u_obs" if joint else "y_obs"): (("chain", "draw", "obs_u_id" if joint else "obs_id"),
+                                                 r.normal(size=(nc, nd, nobs)))}
+        ),
+        "/posterior_predictive": xr.Dataset(
+            {"y_obs": (("chain", "draw", "obs_id"), r.integers(0, 9, (nc, nd, nobs))),
+             "y_plot": (("chain", "draw", "plot_id"), r.integers(0, 9, (nc, nd, nplot)))}
+        ),
+    }
+    return xr.DataTree.from_dict(groups)
+
+
+# ---- policy ----
+def test_full_drops_nothing():
+    assert plan_trace_persistence(_trace(), TracePersistence.FULL) == {}
+
+
+def test_compact_drops_observation_sized_and_all_grid():
+    plan = plan_trace_persistence(_trace(), "compact")
+    assert set(plan) == {"posterior"}
+    assert set(plan["posterior"]) >= {"f_obs", "p_obs", "kappa_obs", "f_all", "g_unit"}
+
+
+def test_compact_keeps_the_reporting_grid_and_free_scalars():
+    dropped = plan_trace_persistence(_trace(), "compact")["posterior"]
+    for keep in ("p_plot", "kappa_plot", "eta", "tau_subject"):
+        assert keep not in dropped
+
+
+def test_compact_drops_the_scaled_random_effect_but_keeps_its_raw_draw():
+    # delta = tau * delta_raw, so the scaled copy is exactly recoverable.
+    dropped = plan_trace_persistence(_trace(), "compact")["posterior"]
+    assert "delta_subject" in dropped
+    assert "delta_subject_raw" not in dropped
+
+
+def test_a_random_effect_without_a_raw_counterpart_is_kept():
+    # The centred branch samples `delta` directly; there the scaled copy is the
+    # only record of it and dropping it would lose the effect.
+    trace = _trace(subject_re=True, raw_effect=False)
+    assert "delta_subject" not in plan_trace_persistence(trace, "compact")["posterior"]
+
+
+def test_protected_groups_are_never_planned_for_dropping():
+    # observed_data/y_obs and constant_data/X_obs are obs_id-dimensioned; an
+    # unscoped dimension rule would delete the data itself.
+    plan = plan_trace_persistence(_trace(), "minimal")
+    for group in ("observed_data", "constant_data", "sample_stats"):
+        assert group not in plan
+
+
+def test_minimal_also_drops_stored_likelihood_and_predictive():
+    plan = plan_trace_persistence(_trace(), "minimal")
+    assert plan["log_likelihood"] == ["y_obs"]
+    assert plan["posterior_predictive"] == ["y_obs"]        # y_plot is grid-sized
+    assert "y_plot" not in plan["posterior_predictive"]
+
+
+def test_joint_models_per_outcome_likelihood_dims_are_recognised():
+    # Joint models index log_likelihood as obs_u_id / obs_s_id, not obs_id.
+    plan = plan_trace_persistence(_trace(joint=True), "minimal")
+    assert plan["log_likelihood"] == ["y_u_obs"]
+
+
+def test_unknown_tier_is_rejected():
+    with pytest.raises(ValueError):
+        plan_trace_persistence(_trace(), "smallish")
+
+
+# ---- writing ----
+def test_save_trace_does_not_mutate_the_in_memory_trace(tmp_path):
+    # Later pipeline stages read context.trace after the save; extract_model_samples
+    # needs f_obs, which compact drops from the file.
+    trace = _trace()
+    before = set(trace["posterior"].to_dataset().data_vars)
+    save_trace(trace, str(tmp_path), persistence="compact")
+    assert set(trace["posterior"].to_dataset().data_vars) == before
+    assert "f_obs" in before
+
+
+def test_saved_compact_trace_keeps_the_data_and_the_reporting_grid(tmp_path):
+    save_trace(_trace(), str(tmp_path), persistence="compact")
+    written = xr.open_datatree(tmp_path / "trace.nc")
+    try:
+        post = written["posterior"].to_dataset()
+        assert "f_obs" not in post and "f_all" not in post
+        assert {"p_plot", "kappa_plot", "eta", "tau_subject"} <= set(post.data_vars)
+        assert "y_obs" in written["observed_data"].to_dataset()
+        assert "X_plot" in written["constant_data"].to_dataset()
+        assert "y_obs" in written["log_likelihood"].to_dataset()   # kept at compact
+    finally:
+        written.close()
+
+
+def test_save_trace_full_is_byte_for_byte_what_it_always_was(tmp_path):
+    trace = _trace()
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    record = save_trace(trace, str(a), persistence="full")
+    trace.to_netcdf(b / "trace.nc")                              # the pre-change call
+    assert record == {"persistence": "full", "dropped": {}, "dropped_count": 0}
+    left, right = xr.open_datatree(a / "trace.nc"), xr.open_datatree(b / "trace.nc")
+    try:
+        assert set(left.children) == set(right.children)
+        for group in left.children:
+            xr.testing.assert_identical(
+                left[group].to_dataset(), right[group].to_dataset()
+            )
+    finally:
+        left.close()
+        right.close()
+
+
+def test_save_trace_reports_what_it_dropped(tmp_path):
+    record = save_trace(_trace(), str(tmp_path), persistence="minimal")
+    assert record["persistence"] == "minimal"
+    assert record["dropped_count"] == sum(len(v) for v in record["dropped"].values())
+    assert "f_obs" in record["dropped"]["posterior"]
+
+
+def test_a_tier_that_cannot_be_applied_fails_rather_than_silently_writing_full(tmp_path):
+    # The dangerous failure is not a crash, it is a `compact` request that finds
+    # no groups, plans nothing, and writes the full trace anyway: the artifact
+    # then looks correct and the policy has quietly done nothing.
+    class NotATrace:
+        def to_netcdf(self, path):  # pragma: no cover - must not be reached
+            raise AssertionError("wrote the trace despite an inapplicable tier")
+
+    with pytest.raises(TypeError, match="no readable 'posterior' group"):
+        save_trace(NotATrace(), str(tmp_path), persistence="compact")
+
+
+def test_full_still_writes_anything_that_can_write_itself(tmp_path):
+    # FULL applies no policy, so it must not require a DataTree.
+    written = []
+
+    class Minimal:
+        def to_netcdf(self, path):
+            written.append(path)
+
+    record = save_trace(Minimal(), str(tmp_path), persistence="full")
+    assert written and record["dropped_count"] == 0

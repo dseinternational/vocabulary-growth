@@ -67,6 +67,7 @@ import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.intervals as intervals
 import vocab_growth.posterior_analysis as posterior_analysis
+from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -1312,7 +1313,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         ),
     )
     context.dataframes["posterior_predictive_calibration"] = calibration_df
-    trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
+    save_trace(trace, context.reporting.output_dir)
 
     # Observed uk_02 four-cell counts / ages. Use the stored training mask so
     # held-out four-cell rows stay aligned with posterior_predictive["cells_obs"].

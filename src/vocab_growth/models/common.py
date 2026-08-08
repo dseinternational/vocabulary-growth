@@ -51,6 +51,7 @@ from vocab_growth.fit_artifacts import (
     CONVERGENCE_CAVEATS_FILENAME,
     CONVERGENCE_FAILURE_FILENAME,
     FIT_MANIFEST_FILENAME,
+    TracePersistence,
     convergence_caveats,
     create_staging_root,
     git_metadata,
@@ -58,6 +59,7 @@ from vocab_growth.fit_artifacts import (
     normalise_for_json,
     promote_staged_fit,
     retain_failed_fit,
+    save_trace,
     source_data_hash,
     write_fit_state,
     write_json_atomic,
@@ -1204,9 +1206,14 @@ def diagnostics(
     except ConvergenceGateError:
         # A failed reporting fit never reaches posterior-predictive sampling,
         # which normally writes trace.nc. Preserve the posterior here so the
-        # convergence failure can be investigated and reproduced.
-        context.trace.to_netcdf(
-            os.path.join(context.reporting.output_dir, "trace.nc")
+        # convergence failure can be investigated and reproduced. Pinned to
+        # `full` regardless of the configured tier: this trace exists only to be
+        # investigated, and a post-mortem should not have to work around a
+        # storage policy.
+        save_trace(
+            context.trace,
+            context.reporting.output_dir,
+            persistence=TracePersistence.FULL,
         )
         raise
 
@@ -1305,7 +1312,7 @@ def sample_posterior_predictive(
     )
     context.dataframes["posterior_predictive_calibration"] = calibration_df
 
-    trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
+    save_trace(trace, context.reporting.output_dir)
 
     sample_data = extract_model_samples(context.trace)
     context.set_model_samples(sample_data)
