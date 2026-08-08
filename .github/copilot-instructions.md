@@ -77,7 +77,7 @@ This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01
 ### Fit a model
 
 ```bash
-python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>]
+python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>] [--trace-persistence <tier>]
 ```
 
 - `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, or `all`.
@@ -86,6 +86,7 @@ python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-
 - `--render-only`: validate and render an existing compatible fit without sampling again.
 - `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
 - `--output-dir`: root directory for model output. Overrides the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable; both fall back to the repository-local `output/`.
+- `--trace-persistence`: how much of the trace to keep in `trace.nc` — `full` (default), `compact`, or `minimal`. Overrides the `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE` environment variable. It changes nothing about the posterior: `compact` drops the observation-sized deterministics (`f_obs`, `p_obs`, `kappa_obs`, the concatenated `*_all` grids) and the duplicated scaled random effects, all of which are recomputable from the free parameters — measured at 9.8 GB → 3.2 GB on VG10, with byte-identical reporting output. `minimal` additionally drops the stored `log_likelihood` and `posterior_predictive`, which is a real trade rather than a free saving: their consumers run during the fit, but recomputing LOO or a new predictive view later then needs a refit, and `kfold_loso.py` / `loso_compare.py` need a `full` fit. The tier actually written is recorded in `fit_manifest.json` under `artefacts.trace`, so a missing variable can be told from a truncated file. See `notes/202608081445-trace-persistence-tiers.md`.
 
 Output (traces, figures, summary tables) is written to `<output-root>/models/<model_name>/`. The output root is resolved (highest precedence first) from `--output-dir`, then the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable, then the repository-local `output/` default — so reporting-quality VM runs can redirect the multi-gigabyte traces to a scratch disk without changing the layout. `fit_model.py`, `fit_sensitivity.py`, `sync_report_figures.py`, and `upload.py` all honour the same resolution (`vocab_growth.environment.output_root`), and the disk preflight prints the resolved root. The report figure cache (`docs/report/figures/`, below) always stays in the checkout.
 

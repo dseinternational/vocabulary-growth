@@ -1,14 +1,19 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import json
+
 import numpy as np
 import pytest
 import xarray as xr
 
 from vocab_growth.fit_artifacts import (
+    TRACE_PERSISTENCE_ENV_VAR,
     TracePersistence,
+    configured_trace_persistence,
     plan_trace_persistence,
     save_trace,
+    set_trace_persistence,
 )
 
 
@@ -191,3 +196,88 @@ def test_full_still_writes_anything_that_can_write_itself(tmp_path):
 
     record = save_trace(Minimal(), str(tmp_path), persistence="full")
     assert written and record["dropped_count"] == 0
+
+
+# ---- configuration ----
+def test_the_default_is_full_so_existing_behaviour_is_unchanged(monkeypatch):
+    monkeypatch.delenv(TRACE_PERSISTENCE_ENV_VAR, raising=False)
+    set_trace_persistence(None)
+    assert configured_trace_persistence() is TracePersistence.FULL
+
+
+def test_the_environment_variable_is_honoured(monkeypatch):
+    set_trace_persistence(None)
+    monkeypatch.setenv(TRACE_PERSISTENCE_ENV_VAR, "  COMPACT  ")
+    assert configured_trace_persistence() is TracePersistence.COMPACT
+
+
+def test_an_explicit_override_beats_the_environment(monkeypatch):
+    monkeypatch.setenv(TRACE_PERSISTENCE_ENV_VAR, "compact")
+    set_trace_persistence("minimal")
+    try:
+        assert configured_trace_persistence() is TracePersistence.MINIMAL
+    finally:
+        set_trace_persistence(None)
+
+
+def test_a_bad_environment_value_is_rejected_by_name(monkeypatch):
+    set_trace_persistence(None)
+    monkeypatch.setenv(TRACE_PERSISTENCE_ENV_VAR, "smallish")
+    with pytest.raises(ValueError, match=TRACE_PERSISTENCE_ENV_VAR):
+        configured_trace_persistence()
+
+
+def test_save_trace_follows_the_configured_tier_without_being_told(tmp_path, monkeypatch):
+    # This is the plumbing: engines call save_trace(trace, dir) with no tier.
+    monkeypatch.delenv(TRACE_PERSISTENCE_ENV_VAR, raising=False)
+    set_trace_persistence("compact")
+    try:
+        record = save_trace(_trace(), str(tmp_path))
+    finally:
+        set_trace_persistence(None)
+    assert record["persistence"] == "compact"
+    assert "f_obs" in record["dropped"]["posterior"]
+
+
+def test_an_explicit_tier_pins_a_save_against_the_configuration(tmp_path, monkeypatch):
+    # The convergence-failure save relies on this: it must stay full even when
+    # the run is configured for compact, because it exists to be investigated.
+    monkeypatch.delenv(TRACE_PERSISTENCE_ENV_VAR, raising=False)
+    set_trace_persistence("minimal")
+    try:
+        record = save_trace(_trace(), str(tmp_path), persistence=TracePersistence.FULL)
+    finally:
+        set_trace_persistence(None)
+    assert record["persistence"] == "full"
+    assert record["dropped_count"] == 0
+
+
+# ---- manifest ----
+def test_the_manifest_records_what_was_actually_written(tmp_path):
+    manifest = tmp_path / "fit_manifest.json"
+    manifest.write_text(json.dumps({"schema_version": 1, "model": {"model_id": "VGxx"}}))
+    save_trace(_trace(), str(tmp_path), persistence="compact")
+    payload = json.loads(manifest.read_text())
+    assert payload["artefacts"]["trace"]["persistence"] == "compact"
+    assert "f_obs" in payload["artefacts"]["trace"]["dropped"]["posterior"]
+    assert payload["model"] == {"model_id": "VGxx"}      # untouched
+
+
+def test_the_manifest_records_the_pinned_tier_not_the_configured_one(tmp_path, monkeypatch):
+    # A manifest claiming `compact` beside a full trace would be worse than none.
+    manifest = tmp_path / "fit_manifest.json"
+    manifest.write_text(json.dumps({"schema_version": 1}))
+    monkeypatch.delenv(TRACE_PERSISTENCE_ENV_VAR, raising=False)
+    set_trace_persistence("compact")
+    try:
+        save_trace(_trace(), str(tmp_path), persistence=TracePersistence.FULL)
+    finally:
+        set_trace_persistence(None)
+    assert json.loads(manifest.read_text())["artefacts"]["trace"]["persistence"] == "full"
+
+
+def test_a_fit_that_writes_no_manifest_is_not_an_error(tmp_path):
+    # VG17 writes its trace without a manifest.
+    record = save_trace(_trace(), str(tmp_path), persistence="compact")
+    assert record["persistence"] == "compact"
+    assert not (tmp_path / "fit_manifest.json").exists()

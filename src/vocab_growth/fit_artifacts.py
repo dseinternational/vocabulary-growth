@@ -617,6 +617,46 @@ class TracePersistence(StrEnum):
     trade, not a free saving."""
 
 
+# Resolved at call time with the same precedence as the output root: an explicit
+# override (from `--trace-persistence`) > the environment variable > `full`.
+#
+# This deliberately does NOT live on `ModelDefinition`. Definition fields are
+# part of the model graph and its fingerprint — `td_languages` is one precisely
+# because changing it requires a refit — whereas how much of a trace is kept
+# changes nothing about the posterior. Putting it there would invalidate every
+# fitted model for a storage decision.
+TRACE_PERSISTENCE_ENV_VAR = "DSE_VOCAB_GROWTH_TRACE_PERSISTENCE"
+
+_trace_persistence_override: TracePersistence | None = None
+
+
+def set_trace_persistence(value: TracePersistence | str | None) -> None:
+    """Set a process-wide trace-persistence override (from ``--trace-persistence``).
+
+    Takes precedence over ``$DSE_VOCAB_GROWTH_TRACE_PERSISTENCE``. Pass ``None``
+    to clear it. Call once, early in a script's entry point, as with
+    :func:`vocab_growth.environment.set_output_root`.
+    """
+    global _trace_persistence_override
+    _trace_persistence_override = None if value is None else TracePersistence(value)
+
+
+def configured_trace_persistence() -> TracePersistence:
+    """Resolve the tier to use when a caller does not name one explicitly."""
+    if _trace_persistence_override is not None:
+        return _trace_persistence_override
+    raw = os.environ.get(TRACE_PERSISTENCE_ENV_VAR)
+    if not raw:
+        return TracePersistence.FULL
+    try:
+        return TracePersistence(raw.strip().lower())
+    except ValueError:
+        valid = ", ".join(tier.value for tier in TracePersistence)
+        raise ValueError(
+            f"${TRACE_PERSISTENCE_ENV_VAR} is {raw!r}; expected one of {valid}."
+        ) from None
+
+
 # Filtering is scoped to named groups on purpose. `observed_data` (the counts)
 # and `constant_data` (`X_obs`, and the `X_plot` grid the comparison suite
 # reads) are both observation-dimensioned, so an unscoped dimension rule would
@@ -737,29 +777,65 @@ def _filtered_trace(trace: Any, plan: dict[str, list[str]]) -> Any:
     return filtered
 
 
+def record_trace_persistence(output_dir: str, record: dict[str, Any]) -> bool:
+    """Store what :func:`save_trace` actually wrote in the fit manifest.
+
+    Recorded after the fact rather than when the manifest is first written,
+    because that happens at the end of the fit's first stage — long before the
+    trace exists, and before it is known whether a save was pinned to ``full``
+    (the convergence-failure path is). A manifest stating the *intended* tier
+    could therefore contradict the file beside it.
+
+    Returns whether a manifest was found; a fit that writes none (VG17) is not
+    an error.
+    """
+    path = os.path.join(output_dir, FIT_MANIFEST_FILENAME)
+    if not os.path.isfile(path):
+        return False
+    try:
+        manifest = read_json(path)
+    except FitValidationError:
+        return False
+    manifest.setdefault("artefacts", {})["trace"] = record
+    write_json_atomic(path, manifest)
+    return True
+
+
 def save_trace(
     trace: Any,
     output_dir: str,
     *,
-    persistence: TracePersistence | str = TracePersistence.FULL,
+    persistence: TracePersistence | str | None = None,
     filename: str = TRACE_FILENAME,
 ) -> dict[str, Any]:
     """Write ``trace`` to ``output_dir``, applying a persistence tier.
 
     The single place a fitted trace reaches disk, so the policy cannot drift
-    between model engines. Returns a record of what was written for the fit
-    manifest: a reader finding no ``f_obs`` can then tell "dropped by policy"
-    from "truncated or corrupt", which is not a distinction to leave to guesswork.
+    between model engines. ``persistence`` defaults to
+    :func:`configured_trace_persistence`, so the tier follows the process-wide
+    setting without every engine having to thread it through; pass one
+    explicitly to pin a particular save regardless of configuration.
+
+    The record is written into ``fit_manifest.json`` as well as returned, so a
+    later reader finding no ``f_obs`` can tell "dropped by policy" from
+    "truncated or corrupt" — not a distinction to leave to guesswork, given a
+    truncated trace is a failure this project has actually seen.
 
     ``trace`` is never modified — a non-``FULL`` tier filters a copy, because the
     fit pipeline goes on to read the in-memory trace after this returns.
     """
-    persistence = TracePersistence(persistence)
+    persistence = (
+        configured_trace_persistence()
+        if persistence is None
+        else TracePersistence(persistence)
+    )
     plan = plan_trace_persistence(trace, persistence)
     path = os.path.join(output_dir, filename)
     (_filtered_trace(trace, plan) if plan else trace).to_netcdf(path)
-    return {
+    record = {
         "persistence": persistence.value,
         "dropped": plan,
         "dropped_count": sum(len(names) for names in plan.values()),
     }
+    record_trace_persistence(output_dir, record)
+    return record

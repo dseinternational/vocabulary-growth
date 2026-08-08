@@ -22,8 +22,10 @@ import dse_research_utils.statistics.models.sampling as sampling
 from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
     FitValidationError,
+    TracePersistence,
     fit_validation_kwargs,
     require_valid_fit,
+    set_trace_persistence,
     source_data_hash,
 )
 from vocab_growth.models.common import (
@@ -212,6 +214,21 @@ if __name__ == "__main__":
             "redirecting heavy traces to a scratch disk on ephemeral VMs."
         ),
     )
+    parser.add_argument(
+        "--trace-persistence",
+        type=str,
+        default=None,
+        choices=[tier.value for tier in TracePersistence],
+        help=(
+            "How much of the trace to keep in trace.nc (overrides "
+            "$DSE_VOCAB_GROWTH_TRACE_PERSISTENCE; default: full). 'compact' "
+            "drops the observation-sized deterministics, which are recomputable "
+            "from the parameters and cost nothing statistically; 'minimal' also "
+            "drops the stored log-likelihood and posterior predictive, which "
+            "forecloses recomputing LOO or a new predictive check without "
+            "refitting. Does not affect the posterior."
+        ),
+    )
 
     freeze_support()
 
@@ -229,6 +246,10 @@ if __name__ == "__main__":
     # --output-dir wins over $DSE_VOCAB_GROWTH_OUTPUT_DIR, which wins over the
     # repo-local output/ default.
     env.set_output_root(args.output_dir)
+    # Same precedence for how much of each trace is kept. Resolved here so an
+    # invalid value fails at startup rather than at the save, which on a
+    # reporting fit is several hours in.
+    set_trace_persistence(args.trace_persistence)
 
     setup.init_script()
 
