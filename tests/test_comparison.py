@@ -232,3 +232,87 @@ def test_dq_contrast_facts_direction_undefined_for_two_points():
     ]))
     assert facts["rises"] is None              # no monotone claim from two points
     assert facts["positive"] == (100.0, 150.0)
+
+
+# ---- between-child heterogeneity (subject random-effect scale) ----
+def test_child_spread_single_returns_tau_exactly():
+    # One Normal intercept on the outcome's own logit: the SD of the child's logit
+    # p *is* tau, at every age and whatever the population trajectory does.
+    f = np.array([[-6.0, -2.0, 0.0, 3.0], [-1.0, -1.0, -1.0, -1.0]])
+    tau = np.array([0.4, 1.7])
+    tau_logit, _ = comparison.child_spread_single(f, tau, 810)
+    assert tau_logit.shape == f.shape
+    assert np.allclose(tau_logit[0], 0.4)
+    assert np.allclose(tau_logit[1], 1.7)
+
+
+def test_child_spread_single_word_sd_matches_monte_carlo():
+    rng = np.random.default_rng(20260808)
+    f = np.array([[-4.0, -1.0, 0.5]])
+    tau, n = 0.9, 810
+    _, sd_words = comparison.child_spread_single(f, np.array([tau]), n)
+    z = rng.standard_normal((400_000, 1))
+    p = 1.0 / (1.0 + np.exp(-(f + tau * z)))
+    assert np.allclose(sd_words[0], n * p.std(axis=0), rtol=0.02)
+
+
+def test_child_spread_product_matches_monte_carlo():
+    # The joint model's induced spoken scale is the quantity with no parameter to
+    # read off, so it is the one that has to be checked against brute force. Kept
+    # to moderate proportions: out in the lower tail the *Monte Carlo* estimate of
+    # a word SD is the noisy one, and the comparison stops testing the quadrature.
+    rng = np.random.default_rng(20260808)
+    f_u = np.array([[-2.0, 0.0, 1.0]])
+    h = np.array([[-1.5, 0.0, 0.5]])
+    tau_u, tau_q, n = 0.8, 1.4, 810
+    tau_logit, sd_words = comparison.child_spread_product(
+        f_u, h, np.array([tau_u]), np.array([tau_q]), n
+    )
+    z1 = rng.standard_normal((400_000, 1))
+    z2 = rng.standard_normal((400_000, 1))
+    p = (1.0 / (1.0 + np.exp(-(f_u + tau_u * z1)))) * (
+        1.0 / (1.0 + np.exp(-(h + tau_q * z2)))
+    )
+    logit_p = np.log(p) - np.log1p(-p)
+    assert np.allclose(tau_logit[0], logit_p.std(axis=0), rtol=0.02)
+    assert np.allclose(sd_words[0], n * p.std(axis=0), rtol=0.02)
+
+
+def test_child_spread_product_tau_varies_with_age_at_constant_scales():
+    # Both subject scales are constants, yet the induced spoken tau is age-varying
+    # because the product passes through two nonlinearities. This is why the joint
+    # model has no single spoken subject scale to contrast directly.
+    f_u = np.array([[-6.0, -3.0, 0.0]])
+    h = np.array([[-5.0, -2.0, 0.5]])
+    tau_logit, _ = comparison.child_spread_product(
+        f_u, h, np.array([1.0]), np.array([1.0]), 810
+    )
+    assert tau_logit[0, 0] > tau_logit[0, -1]
+    assert not np.allclose(tau_logit[0, 0], tau_logit[0, -1])
+
+
+def test_child_spread_product_quadrature_has_converged_at_the_default_node_count():
+    # Monte Carlo cannot referee the far lower tail (see above), so the tail is
+    # checked for node convergence instead: the shipped default must already agree
+    # with a far finer grid on the most extreme scales the DS fits could produce.
+    f_u = np.array([[-12.0, -6.0, -2.0]])
+    h = np.array([[-10.0, -4.0, -1.0]])
+    tau_u, tau_q = np.array([3.0]), np.array([3.0])
+    coarse = comparison.child_spread_product(f_u, h, tau_u, tau_q, 810)
+    fine = comparison.child_spread_product(f_u, h, tau_u, tau_q, 810, n_nodes=81)
+    assert np.allclose(coarse[0], fine[0], rtol=1e-4)     # tau
+    assert np.allclose(coarse[1], fine[1], rtol=5e-3)     # sd in words
+
+
+def test_child_spread_product_is_stable_in_the_far_lower_tail():
+    # DS spoken proportions at the young end are small enough that a naive
+    # log(p) - log(1-p) on a clipped p would report the clip. Nothing may be
+    # non-finite here.
+    f_u = np.array([[-30.0, -20.0, -12.0]])
+    h = np.array([[-25.0, -18.0, -10.0]])
+    tau_logit, sd_words = comparison.child_spread_product(
+        f_u, h, np.array([1.5]), np.array([2.0]), 810
+    )
+    assert np.all(np.isfinite(tau_logit))
+    assert np.all(np.isfinite(sd_words))
+    assert np.all(sd_words >= 0.0)

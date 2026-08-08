@@ -292,11 +292,33 @@ vocabulary explodes. (Understood is identified only to ~25 mo on TD support.)
 
 ## Between-child variability
 
-Beyond the mean, how does the _spread_ between children compare? Two quantities:
-the implied per-child word-count SD $\sigma_Y$ (absolute spread, which scales with
-the mean), and the mean-independent overdispersion factor $\varphi$ (pure
-concentration). The ratio $\varphi_{TD}/\varphi_{DS}$ > 1 means TD is more
-overdispersed at that age.
+Beyond the mean, how does the _spread_ between children compare? Both comparators
+carry study **and** child random effects, which splits the question in two, and the
+halves have to be read separately:
+
+- **Between-child heterogeneity** — how far children of the same age sit from one
+  another — lives in the subject random-effect scale $\tau$. This is the quantity
+  that answers "are children in this population more alike?", and it is reported in
+  @sec-between-child below.
+- **Residual dispersion** — what the Beta-Binomial layer still has to absorb once
+  the study and child effects have taken their share — lives in $\kappa$ and the
+  quantities derived from it, $\sigma_Y$ and $\varphi$. That is this section.
+
+Treating the second as if it were the first is the standard trap here, and in the
+TD models it is a specific one: $\tau_{subject}$ and $\kappa$ are an explicit
+reparameterisation of a *single* logit-scale scatter budget (see
+`models.gp_utils.build_variance_partition`), so reading either alone silently
+attributes the whole budget to whichever half is in view.
+
+Two derived quantities: the implied per-child word-count SD $\sigma_Y$ (absolute
+spread, which scales with the mean) and the overdispersion factor $\varphi =
+(\kappa + n)/(\kappa + 1)$, the variance inflation over a Binomial at the same
+mean. $\varphi$ removes the explicit $p(1-p)$ term that $\sigma_Y$ carries, but it
+is **not** mean-independent: $\kappa$ is itself level-driven in this family, so a
+cross-population contrast still carries part of the difference in where the two
+populations sit. A ratio $\varphi_{TD}/\varphi_{DS} > 1$ means TD counts are the
+more overdispersed *given the model's fitted means*, not that TD children vary
+more.
 
 ```{python}
 ds_s = pd.read_csv("ds_td_spoken_re_dispersion.csv")
@@ -319,8 +341,9 @@ pd.DataFrame(rows).set_index("Age (mo)")
 Two distinct stories:
 
 - **Comprehension:** the overdispersion factor is comparable across groups at all
-  ages (φ_TD/φ_DS ≈ 1); TD's larger _absolute_ spread σ_Y is essentially a
-  consequence of its larger mean. Relative between-child heterogeneity is similar.
+  ages (φ_TD/φ_DS ≈ 1) — the residual the Beta-Binomial layer carries is of similar
+  relative size in both. TD's larger _absolute_ spread σ_Y is essentially a
+  consequence of its larger mean.
 - **Production:** early DS spoken counts are slightly _more_ overdispersed than TD
   (φ_TD/φ_DS < 1 in the first months), but the ordering **reverses during the
   second year**: as TD production explodes its absolute spread balloons (σ_Y ~5 →
@@ -328,13 +351,76 @@ Two distinct stories:
   TD becomes the more overdispersed group. DS production is not just lower — it is
   also far less variable in absolute terms across the overlap.
 
+Read the second bullet with the floor in mind. At 8 months almost every TD child
+produces no words at all, so TD counts are near-Binomial there and φ is close to
+its lower limit; that is a floor, not a population of unusually similar children.
+The same mechanism compresses DS production across the whole overlap window.
+
 ![Between-child spread σ_Y — spoken](ds_td_spoken_re_spread.png){#fig-sd-s .lightbox fig-align="left"}
 
-![Concentration (overdispersion φ, study-RE only) — spoken](ds_td_spoken_re_overdispersion.png){#fig-phi-s .lightbox fig-align="left"}
+![Residual overdispersion φ (study + subject REs) — spoken](ds_td_spoken_re_overdispersion.png){#fig-phi-s .lightbox fig-align="left"}
 
 ![Between-child spread σ_Y — understood](ds_td_understood_re_spread.png){#fig-sd-u .lightbox fig-align="left"}
 
-![Concentration (overdispersion φ, study-RE only) — understood](ds_td_understood_re_overdispersion.png){#fig-phi-u .lightbox fig-align="left"}
+![Residual overdispersion φ (study + subject REs) — understood](ds_td_understood_re_overdispersion.png){#fig-phi-u .lightbox fig-align="left"}
+
+## Between-child heterogeneity {#sec-between-child}
+
+The contrast the previous section cannot make. $\tau$ is the SD, across children of
+the same age, of the child's own logit for this outcome — the population-relative
+measure of how much children differ — and $\sigma_{child}$ is the spread in
+expected words it induces, which is what a clinician would see. $\sigma_{child}$
+counts only persistent between-child differences: unlike $\sigma_Y$ it excludes
+the Beta-Binomial noise.
+
+$\tau$ is a parameter on the TD side (`tau_subject`, constant in age) but a
+*derived* quantity on the DS side. VG10 places its child effects on understood
+(`tau_subj_u`) and on the production ratio (`tau_subj_q`), with spoken built as
+$p_S = p_U \cdot q$, so it has no spoken child scale to read off, and the induced
+spoken $\tau$ varies with age even though both underlying scales are constants.
+Contrasting `tau_subj_q` against `tau_subject` directly would set the spread of a
+*conversion ratio* against the spread of a *level*; the derivation in
+`comparison.subject_heterogeneity` avoids that.
+
+```{python}
+he_s = pd.read_csv("ds_td_spoken_re_subject_heterogeneity.csv")
+he_u = pd.read_csv("ds_td_understood_re_subject_heterogeneity.csv")
+rows = []
+for a in [8, 12, 18, 24]:
+    rs, ru = _nearest(he_s, "age_months", a), _nearest(he_u, "age_months", a)
+    rows.append({
+        "Age (mo)": a,
+        "Spoken τ TD": f"{rs['tau_TD_median']:.2f}",
+        "Spoken τ DS": f"{rs['tau_DS_median']:.2f}",
+        "Spoken τ TD/DS": f"{rs['tau_ratio_median']:.2f}",
+        "Spoken σ_child TD": f"{rs['sdchild_TD_median']:.0f}",
+        "Spoken σ_child DS": f"{rs['sdchild_DS_median']:.0f}",
+        "Understood τ TD": f"{ru['tau_TD_median']:.2f}",
+        "Understood τ DS": f"{ru['tau_DS_median']:.2f}",
+        "Understood τ TD/DS": f"{ru['tau_ratio_median']:.2f}",
+    })
+pd.DataFrame(rows).set_index("Age (mo)")
+```
+
+![Between-child heterogeneity τ — spoken](ds_td_spoken_re_subject_tau.png){#fig-tau-s .lightbox fig-align="left"}
+
+![Between-child spread in expected words σ_child — spoken](ds_td_spoken_re_subject_spread.png){#fig-sdc-s .lightbox fig-align="left"}
+
+![Between-child heterogeneity τ — understood](ds_td_understood_re_subject_tau.png){#fig-tau-u .lightbox fig-align="left"}
+
+![Between-child spread in expected words σ_child — understood](ds_td_understood_re_subject_spread.png){#fig-sdc-u .lightbox fig-align="left"}
+
+Two caveats bound how far this contrast can be pushed. First, the priors are not
+symmetric: on the TD side $\tau_{subject}$ and $\kappa$ are sampled through the
+shared-budget reparameterisation, with an informative prior on how the budget
+splits, while on the DS side they are two free scales — so part of any $\tau$
+difference is a difference in prior structure, and the TD pool averages 1.21
+observations per child, which is what made that reparameterisation necessary in
+the first place. Second, $\tau$ is matched on *age*. At matched age the DS group
+sits near a floor where any spread measure is mechanically small, so a like-for-like
+reading of "are these children more alike" also wants the comparison at matched
+vocabulary level — which is what the attainment-delay and matched-comprehension
+sections provide.
 
 ## Sign-inclusive expressive gap
 
@@ -372,8 +458,10 @@ DS early vocabulary is best described as a **developmental stretch with a
 production-specific deficit**: comprehension is delayed and the delay widens with
 level; production is delayed _substantially more_ (~12–17 extra months at matched
 low vocabulary size, P > 0 ≈ 1.00), peaks several years later, and leaves ~90% of
-2-year-old children below the TD 10th centile for spoken words. Between-child
-_relative_ variability is comparable for comprehension but production stays
-compressed near the floor across the overlap. Signing partially — not wholly —
-compensates in the early years. Every headline here is recovered from the disjoint
+2-year-old children below the TD 10th centile for spoken words. Residual
+Beta-Binomial dispersion is comparable for comprehension, while DS production
+stays compressed near the floor across the overlap; how much children within each
+population differ from one another is a separate question, answered by $\tau$ in
+@sec-between-child rather than by anything in the dispersion section. Signing
+partially — not wholly — compensates in the early years. Every headline here is recovered from the disjoint
 fits with exact intervals, with no joint model required.
