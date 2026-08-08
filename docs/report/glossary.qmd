@@ -22,8 +22,11 @@ Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
 **Conditional probability**
 : The probability of one outcome given another. In the joint models, $q(a)=P(\text{spoken}\mid\text{understood},a)$ is the fraction of understood words expected also to be spoken at age $a$.
 
+**Between-child heterogeneity ($\tau$)**
+: The standard deviation, across children of the same age, of a child's own value on the logit scale — how much children within a population differ from one another. It is the scale of the subject random intercept, and it is a different quantity from the concentration $\kappa$: in a model carrying subject random effects, persistent between-child differences are absorbed by $\tau$ and $\kappa$ describes what remains.
+
 **Concentration ($\kappa$)**
-: The Beta-Binomial parameter controlling extra variation around the mean. Larger values approach a Binomial distribution; smaller values allow more dispersion.
+: The Beta-Binomial parameter controlling extra variation around the mean. Larger values approach a Binomial distribution; smaller values allow more dispersion. In models with subject random intercepts it is an observation-level residual, not a measure of how much children differ.
 
 **Credible interval**
 : An interval containing a stated proportion of the posterior probability for a parameter or derived quantity, conditional on the model, priors, and data.
@@ -63,6 +66,9 @@ Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
 
 **NUTS (No-U-Turn Sampler)**
 : The adaptive Hamiltonian Monte Carlo algorithm used to explore each model's posterior distribution. The project runs NUTS through PyMC with the nutpie sampler.
+
+**Overdispersion factor ($\varphi$)**
+: How much more variable a Beta-Binomial outcome is than a Binomial one with the same mean, equal to $(\kappa + n)/(\kappa + 1)$ for a checklist of $n$ items. It removes the explicit $p(1-p)$ term but is not mean-independent, because $\kappa$ itself moves with the level; comparing it across populations at different vocabulary levels therefore still carries part of that level difference.
 
 **Posterior distribution**
 : The probability distribution for parameters or derived quantities after combining the prior and likelihood for the observed data.

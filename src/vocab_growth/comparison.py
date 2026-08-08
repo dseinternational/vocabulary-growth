@@ -85,15 +85,22 @@ def _dataset(idata: az.InferenceData, group: str):
 
 
 def _load_reshaped_draws(
-    path: str, var_names: tuple[str, ...]
-) -> tuple[np.ndarray, list[np.ndarray]]:
+    path: str,
+    var_names: tuple[str, ...],
+    scalar_names: tuple[str, ...] = (),
+) -> tuple[np.ndarray, list[np.ndarray], dict[str, np.ndarray]]:
     """Load named posterior variables over the ``X_plot`` grid, draw-flattened.
 
     Shared tail of every population-trajectory loader below: opens the trace,
     reshapes each named posterior variable from ``(chain, draw, n_age)`` to
     ``(chain*draw, n_age)``, and age-sorts both the variables and the grid.
-    Returns ``(ages_sorted, [var_sorted, ...])`` in the same order as
-    ``var_names``.
+    Returns ``(ages_sorted, [var_sorted, ...], {scalar: draws})`` with the
+    grid variables in the same order as ``var_names``.
+
+    ``scalar_names`` additionally pulls per-draw *scalar* parameters (shape
+    ``(chain, draw)``, e.g. a random-effect scale) and flattens them the same
+    C-order way, so index ``i`` of a scalar and row ``i`` of a grid variable are
+    the same posterior draw.
     """
     d = az.from_netcdf(path)
     post = _dataset(d, "posterior")
@@ -105,7 +112,15 @@ def _load_reshaped_draws(
         arr = post[name].values  # (chain, draw, n_age)
         n_chain, n_draw, n_age = arr.shape
         arrays.append(arr.reshape(n_chain * n_draw, n_age)[:, order])
-    return ages[order], arrays
+    scalars = {}
+    for name in scalar_names:
+        if name not in post:
+            raise KeyError(
+                f"{os.path.basename(os.path.dirname(path))}: posterior has no "
+                f"variable {name!r}."
+            )
+        scalars[name] = np.asarray(post[name].values, dtype=float).reshape(-1)
+    return ages[order], arrays, scalars
 
 
 def load_population_trajectory(
@@ -117,7 +132,7 @@ def load_population_trajectory(
     over the plot grid; ``ages`` is sorted ascending in months. ``n_trials_``
     must match the checklist size used at fit time (see definitions.py).
     """
-    ages, (p_u, p_s) = _load_reshaped_draws(path, ("p_u_plot", "p_s_plot"))
+    ages, (p_u, p_s), _ = _load_reshaped_draws(path, ("p_u_plot", "p_s_plot"))
     return ages, p_u * n_trials_, p_s * n_trials_
 
 
@@ -130,7 +145,7 @@ def load_univariate_trajectory(
     plot grid; ``ages`` is sorted ascending. The single-outcome analogue of
     :func:`load_population_trajectory`.
     """
-    ages, (p,) = _load_reshaped_draws(path, ("p_plot",))
+    ages, (p,), _ = _load_reshaped_draws(path, ("p_plot",))
     return ages, p * n_trials_
 
 
@@ -479,7 +494,7 @@ def load_outcome_trajectory(
             f"{key}: model_type {mt} is not supported by load_outcome_trajectory."
         )
 
-    ages, (p, k) = _load_reshaped_draws(trace_path(key), (p_name, k_name))
+    ages, (p, k), _ = _load_reshaped_draws(trace_path(key), (p_name, k_name))
     return ages, p, k, n_trials(key)
 
 
@@ -510,6 +525,227 @@ def overdispersion_factor(kappa: np.ndarray, n: int) -> np.ndarray:
     isolate what the name suggests.
     """
     return (kappa + n) / (kappa + 1.0)
+
+
+# ----------------------------------------------------------------------------
+# Between-child heterogeneity (the subject random-effect scale)
+# ----------------------------------------------------------------------------
+# `kappa` — and therefore `overdispersion_factor` above — is an *observation*-level
+# parameter, applied to a child-and-study-specific `p_obs`. In a model carrying
+# subject random effects it is what is left after persistent between-child
+# differences have been absorbed, so it does not answer "how much do children in
+# this population differ from one another": that is the subject scale's job. The
+# two are not merely different, they are complementary — in the TD models they are
+# an explicit reparameterisation of one shared logit-scale scatter budget (see
+# `models.gp_utils.build_variance_partition`), so reading either alone attributes
+# the whole budget to whichever half is being looked at.
+#
+# The obstacle to contrasting the scales directly is that they do not all live on
+# the same latent scale. The univariate TD models put one subject intercept on the
+# logit of the outcome (`tau_subject`); the joint DS models put one on the logit of
+# *understood* (`tau_subj_u`) and one on the logit of the production *ratio*
+# (`tau_subj_q`), with spoken derived as p_u * q. So VG10 has no spoken subject
+# scale to read off, and `tau_subj_q` is not VG11's `tau_subject` in different
+# clothing. What both parameterisations *do* define is the between-child
+# distribution of the child's own logit p for the outcome in question, which is a
+# well-defined estimand in either. The functions below evaluate it — exactly for a
+# single logit intercept, by quadrature for the product form.
+
+
+def _gauss_hermite_standard_normal(n_nodes: int) -> tuple[np.ndarray, np.ndarray]:
+    """Nodes/weights for ``E[g(Z)] = sum(w * g(x))`` under ``Z ~ Normal(0, 1)``."""
+    x, w = np.polynomial.hermite_e.hermegauss(n_nodes)
+    return x, w / w.sum()
+
+
+def _log_sigmoid(x: np.ndarray) -> np.ndarray:
+    """``log(sigmoid(x))``, stable for large |x|."""
+    return -np.logaddexp(0.0, -x)
+
+
+def _sigmoid(x: np.ndarray) -> np.ndarray:
+    """Logistic function, overflow-free at both tails (underflows to 0 / 1)."""
+    return np.exp(_log_sigmoid(x))
+
+
+def _logit_sigmoid_product(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """``logit(sigmoid(a) * sigmoid(b))``, stable in both tails.
+
+    Uses ``1 - s(a)s(b) = s(-a) + s(a)s(-b)`` so the upper tail is a log-sum-exp
+    of two log-sigmoids rather than a cancelling subtraction. Needed because DS
+    spoken proportions at the young end of the grid are small enough that a naive
+    ``log(p) - log(1-p)`` on a clipped ``p`` would report the clip, not the model.
+    """
+    log_p = _log_sigmoid(a) + _log_sigmoid(b)
+    log_1mp = np.logaddexp(_log_sigmoid(-a), _log_sigmoid(a) + _log_sigmoid(-b))
+    return log_p - log_1mp
+
+
+def child_spread_single(
+    f: np.ndarray, tau: np.ndarray, n: int, *, n_nodes: int = 21
+) -> tuple[np.ndarray, np.ndarray]:
+    """Between-child spread when one Normal intercept sits on the outcome's logit.
+
+    ``f`` is the population logit ``(n_draw, n_age)``, ``tau`` the per-draw subject
+    scale ``(n_draw,)``; a child's logit is ``f + tau*Z``, ``Z ~ Normal(0, 1)``.
+    Returns ``(tau_logit, sd_child_words)``, both ``(n_draw, n_age)``: the SD of the
+    child's logit p — here exactly ``tau``, broadcast — and the SD across children
+    of that child's *expected* word count ``n*p`` (Beta-Binomial noise excluded,
+    since this is persistent between-child variation only).
+    """
+    x, w = _gauss_hermite_standard_normal(n_nodes)
+    tau_col = np.asarray(tau, dtype=float)[:, None]
+    m1 = np.zeros_like(f)
+    m2 = np.zeros_like(f)
+    for xi, wi in zip(x, w, strict=True):
+        p = _sigmoid(f + tau_col * xi)
+        m1 += wi * p
+        m2 += wi * p * p
+    sd_words = n * np.sqrt(np.maximum(m2 - m1 * m1, 0.0))
+    return np.broadcast_to(tau_col, f.shape).copy(), sd_words
+
+
+def child_spread_product(
+    f_u: np.ndarray,
+    h: np.ndarray,
+    tau_u: np.ndarray,
+    tau_q: np.ndarray,
+    n: int,
+    *,
+    n_nodes: int = 21,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Between-child spread of spoken in a joint ``p_s = p_u * q`` model.
+
+    A child's spoken proportion is ``sigmoid(f_u + tau_u*Z1) * sigmoid(h + tau_q*Z2)``
+    with independent standard Normal ``Z1``, ``Z2``, so the SD of the child's
+    *spoken* logit is neither ``tau_u`` nor ``tau_q`` and is age-varying even though
+    both scales are constants. Returns the same ``(tau_logit, sd_child_words)`` pair
+    as :func:`child_spread_single`, evaluated on a tensor Gauss-Hermite grid.
+
+    This is the quantity that is like-for-like with a univariate model's
+    ``tau_subject``; contrasting ``tau_subj_q`` against it instead would compare the
+    spread of a conversion ratio with the spread of a level.
+    """
+    x, w = _gauss_hermite_standard_normal(n_nodes)
+    tu = np.asarray(tau_u, dtype=float)[:, None]
+    tq = np.asarray(tau_q, dtype=float)[:, None]
+    p1 = np.zeros_like(f_u)
+    p2 = np.zeros_like(f_u)
+    l1 = np.zeros_like(f_u)
+    l2 = np.zeros_like(f_u)
+    for xi, wi in zip(x, w, strict=True):
+        a = f_u + tu * xi
+        for xj, wj in zip(x, w, strict=True):
+            b = h + tq * xj
+            weight = wi * wj
+            p = _sigmoid(a) * _sigmoid(b)
+            lg = _logit_sigmoid_product(a, b)
+            p1 += weight * p
+            p2 += weight * p * p
+            l1 += weight * lg
+            l2 += weight * lg * lg
+    tau_logit = np.sqrt(np.maximum(l2 - l1 * l1, 0.0))
+    sd_words = n * np.sqrt(np.maximum(p2 - p1 * p1, 0.0))
+    return tau_logit, sd_words
+
+
+def subject_heterogeneity(
+    key: str,
+    outcome: str = "spoken",
+    *,
+    ages: np.ndarray | None = None,
+    draws: np.ndarray | None = None,
+    n_nodes: int = 21,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """Return ``(ages, tau_logit, sd_child_words, n_trials)`` for one outcome.
+
+    The between-child counterpart of :func:`load_outcome_trajectory`: how far
+    children of the same age in this population sit from one another, on the
+    outcome's own logit scale and in expected words. Study effects are excluded
+    throughout, matching every other population-level curve in this module.
+
+    Dispatches on model type, mirroring :func:`load_outcome_trajectory`: univariate
+    RE models read ``f_plot`` + ``tau_subject``; bivariate RE models read
+    ``f_u_plot`` + ``tau_subj_u`` for understood, and additionally ``h_plot`` +
+    ``tau_subj_q`` for spoken, which needs :func:`child_spread_product`.
+
+    ``ages`` evaluates on a caller-supplied grid instead of the model's own plot
+    grid. The population logits are interpolated *before* the quadrature (they are
+    smooth in age; the derived SD need not be), which for a 0.5-month comparison
+    grid also keeps the tensor-quadrature cost an order of magnitude down.
+
+    ``draws`` selects posterior draws (an index array from :func:`align_draws`)
+    *before* the quadrature rather than after. The result is identical either way —
+    draws do not interact — but on a reporting-quality trace the tensor grid is the
+    expensive part, so subsetting first is worth the argument.
+    """
+    d = MODEL_REGISTRY[key]
+    mt = d.model_type
+    n = n_trials(key)
+    path = trace_path(key)
+
+    def _prepare(
+        native: np.ndarray, Y: np.ndarray, tau: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if draws is not None:
+            Y, tau = Y[draws], tau[draws]
+        if ages is None:
+            return native, Y, tau
+        out = np.asarray(ages, dtype=float)
+        return out, interp_draws(native, Y, out), tau
+
+    if mt is ModelType.UNIVARIATE:
+        if d.outcome.value != outcome:
+            raise ValueError(
+                f"{key} is a '{d.outcome.value}' model; cannot serve '{outcome}'."
+            )
+        if not getattr(d, "use_subject_re", False):
+            raise ValueError(
+                f"{key} carries no subject random effect; it has no between-child "
+                "scale to report. Use a model with use_subject_re=True."
+            )
+        native, (f,), scal = _load_reshaped_draws(path, ("f_plot",), ("tau_subject",))
+        grid, f, tau = _prepare(native, f, scal["tau_subject"])
+        tau_logit, sd_words = child_spread_single(f, tau, n, n_nodes=n_nodes)
+        return grid, tau_logit, sd_words, n
+
+    if mt is ModelType.BIVARIATE:
+        if outcome == "understood":
+            if not getattr(d, "use_subject_re_u", False):
+                raise ValueError(
+                    f"{key} carries no understood subject random effect "
+                    "(use_subject_re_u=False)."
+                )
+            native, (f_u,), scal = _load_reshaped_draws(
+                path, ("f_u_plot",), ("tau_subj_u",)
+            )
+            grid, f_u, tau_u = _prepare(native, f_u, scal["tau_subj_u"])
+            tau_logit, sd_words = child_spread_single(f_u, tau_u, n, n_nodes=n_nodes)
+            return grid, tau_logit, sd_words, n
+        if outcome == "spoken":
+            if not (
+                getattr(d, "use_subject_re_u", False)
+                and getattr(d, "use_subject_re_q", False)
+            ):
+                raise ValueError(
+                    f"{key}: the spoken between-child scale is induced by the "
+                    "understood *and* ratio subject effects; both use_subject_re_u "
+                    "and use_subject_re_q must be set."
+                )
+            native, (f_u, h), scal = _load_reshaped_draws(
+                path, ("f_u_plot", "h_plot"), ("tau_subj_u", "tau_subj_q")
+            )
+            grid, f_u, tau_u = _prepare(native, f_u, scal["tau_subj_u"])
+            _, h, tau_q = _prepare(native, h, scal["tau_subj_q"])
+            tau_logit, sd_words = child_spread_product(
+                f_u, h, tau_u, tau_q, n, n_nodes=n_nodes
+            )
+            return grid, tau_logit, sd_words, n
+        raise ValueError(f"outcome must be 'spoken' or 'understood', got {outcome!r}.")
+
+    raise ValueError(
+        f"{key}: model_type {mt} is not supported by subject_heterogeneity."
+    )
 
 
 def align_draws(
@@ -770,7 +1006,7 @@ def load_p_any_trajectory(
     ``p_any_words`` is ``(n_draw, n_age)`` expected word counts over the plot
     grid (signing included), for the DS sign-inclusive expressive contrast.
     """
-    ages, (p_any,) = _load_reshaped_draws(path, ("p_any_plot",))
+    ages, (p_any,), _ = _load_reshaped_draws(path, ("p_any_plot",))
     return ages, p_any * n_trials_
 
 
