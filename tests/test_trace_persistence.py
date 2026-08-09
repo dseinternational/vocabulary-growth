@@ -328,3 +328,45 @@ def test_the_guard_reads_the_manifest_without_opening_the_trace(tmp_path):
     assert not (tmp_path / "trace.nc").exists()
     with pytest.raises(FitValidationError):
         require_full_trace(str(tmp_path), purpose="LOSO")
+
+
+# ---- non-centred effects named for their distribution (z_*) ----
+def _joint_modality_trace() -> xr.DataTree:
+    """The joint-modality / trivariate naming: `delta_u` beside `z_u`, no `_raw`."""
+    nc, nd, nstudy, nsub, nsign = 2, 5, 6, 4, 3
+    r = np.random.default_rng(1)
+
+    def var(dim, size):
+        return (("chain", "draw", dim), r.normal(size=(nc, nd, size)))
+
+    return xr.DataTree.from_dict({
+        "/posterior": xr.Dataset({
+            "delta_u": var("study_id", nstudy),
+            "z_u": var("study_id", nstudy),
+            "delta_subj_u": var("subject_id", nsub),
+            "z_subj_u": var("subject_id", nsub),
+            # delta_sign scatters z_sign (sign-informed studies only) into a
+            # zero-filled vector over every study: not an elementwise scaling.
+            "delta_sign": var("study_id", nstudy),
+            "z_sign": var("z_sign_dim_0", nsign),
+            "tau_u": (("chain", "draw"), abs(r.normal(size=(nc, nd)))),
+        }),
+        "/observed_data": xr.Dataset({"y_obs": (("obs_id",), r.integers(0, 9, 3))}),
+    })
+
+
+def test_effects_named_z_are_recognised_as_raw_counterparts():
+    # The joint-modality engines name the offset for its distribution, not the
+    # effect. Without this the duplication stays and the saving does not happen.
+    dropped = plan_trace_persistence(_joint_modality_trace(), "compact")["posterior"]
+    assert "delta_u" in dropped
+    assert "delta_subj_u" in dropped
+    assert "z_u" not in dropped and "z_subj_u" not in dropped
+
+
+def test_a_scattered_effect_is_kept_because_it_is_not_a_scaling():
+    # delta_sign is built by scattering z_sign into a wider vector, so it cannot
+    # be rebuilt from z_sign and a scale. Dimensions differ, so it must survive.
+    dropped = plan_trace_persistence(_joint_modality_trace(), "compact")["posterior"]
+    assert "delta_sign" not in dropped
+    assert "z_sign" not in dropped

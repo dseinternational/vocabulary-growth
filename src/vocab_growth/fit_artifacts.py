@@ -698,19 +698,42 @@ def _group_dataset(trace: Any, group: str) -> Any | None:
     return node.to_dataset() if hasattr(node, "to_dataset") else node
 
 
+def _raw_counterpart(name: str, dataset: Any) -> str | None:
+    """The unscaled draw a scaled random effect was built from, if it is stored.
+
+    Non-centred effects store both halves of ``delta = tau * raw``, under two
+    naming conventions in this codebase: ``delta_subject`` beside
+    ``delta_subject_raw`` (the univariate and bivariate RE engines), and
+    ``delta_u`` beside ``z_u`` (the joint-modality and trivariate engines, which
+    name the offset for its distribution rather than for the effect).
+
+    The dimensions must match. VG15's ``delta_sign`` is built by scattering
+    ``z_sign`` — which is indexed over sign-informed studies only — into a
+    zero-filled vector over every study, so it is *not* an elementwise scaling
+    and cannot be rebuilt from ``z_sign`` and a scale alone. Requiring identical
+    dimensions rejects that pairing and keeps the effect.
+    """
+    candidates = [f"{name}_raw"]
+    if name.startswith("delta_"):
+        candidates.append(f"z_{name.removeprefix('delta_')}")
+    variables = dataset.data_vars
+    for candidate in candidates:
+        if candidate in variables and variables[candidate].dims == variables[name].dims:
+            return candidate
+    return None
+
+
 def _droppable_variables(dataset: Any, *, drop_derived_effects: bool) -> list[str]:
     """Names in ``dataset`` that a non-``FULL`` tier would not persist."""
-    present = set(dataset.data_vars)
     dropped: list[str] = []
     for name, variable in dataset.data_vars.items():
         if any(_is_recomputable_dim(dim) for dim in variable.dims):
             dropped.append(name)
-        elif drop_derived_effects and f"{name}_raw" in present:
-            # Non-centred random effects store both halves of `delta = tau *
-            # delta_raw`. The raw draw and the scale are both kept, so the
-            # scaled copy is exactly recoverable and need not be persisted.
-            # Guarded on `_raw` being present: the centred branch samples
-            # `delta` directly, and there the scaled copy is the only record.
+        elif drop_derived_effects and _raw_counterpart(name, dataset) is not None:
+            # The raw draw survives and every scale is a retained scalar, so the
+            # scaled copy is exactly recoverable. Guarded on the raw being
+            # present: the centred branch samples the effect directly, and there
+            # the scaled copy is the only record of it.
             dropped.append(name)
     return sorted(dropped)
 

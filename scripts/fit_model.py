@@ -23,6 +23,7 @@ from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
     FitValidationError,
     TracePersistence,
+    configured_trace_persistence,
     fit_validation_kwargs,
     require_valid_fit,
     set_trace_persistence,
@@ -246,10 +247,13 @@ if __name__ == "__main__":
     # --output-dir wins over $DSE_VOCAB_GROWTH_OUTPUT_DIR, which wins over the
     # repo-local output/ default.
     env.set_output_root(args.output_dir)
-    # Same precedence for how much of each trace is kept. Resolved here so an
-    # invalid value fails at startup rather than at the save, which on a
-    # reporting fit is several hours in.
+    # Same precedence for how much of each trace is kept. Setting the override
+    # is not enough to validate it: with the flag omitted this only clears the
+    # override, and the environment variable would not be parsed until the first
+    # save — several hours into a reporting fit. Resolve it here so a bad value
+    # fails at startup.
     set_trace_persistence(args.trace_persistence)
+    configured_trace_persistence()
 
     setup.init_script()
 
