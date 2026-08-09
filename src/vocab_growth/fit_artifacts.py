@@ -839,3 +839,47 @@ def save_trace(
     }
     record_trace_persistence(output_dir, record)
     return record
+
+
+def read_trace_persistence_record(output_dir: str) -> dict[str, Any] | None:
+    """Return the ``artefacts.trace`` record from a fit's manifest, if it has one."""
+    path = os.path.join(output_dir, FIT_MANIFEST_FILENAME)
+    if not os.path.isfile(path):
+        return None
+    try:
+        manifest = read_json(path)
+    except FitValidationError:
+        return None
+    record = manifest.get("artefacts", {}).get("trace")
+    return record if isinstance(record, dict) else None
+
+
+def require_full_trace(output_dir: str, *, purpose: str) -> None:
+    """Raise unless this fit's trace was persisted in full.
+
+    For the consumers that need the observation-sized posterior or the stored
+    log-likelihood — the cross-validation tools — which a ``compact`` or
+    ``minimal`` fit does not carry. Checked from the manifest *before* the trace
+    is opened, so a reporting-quality read of tens of gigabytes is not spent to
+    arrive at a ``KeyError`` on a variable that was never going to be there.
+
+    A fit with no persistence record predates the setting and was written in
+    full, so it passes.
+    """
+    record = read_trace_persistence_record(output_dir)
+    tier = (record or {}).get("persistence")
+    if tier is None or tier == TracePersistence.FULL.value:
+        return
+    dropped = sorted(
+        name
+        for names in (record or {}).get("dropped", {}).values()
+        for name in names
+    )
+    examples = ", ".join(dropped[:4]) + (" …" if len(dropped) > 4 else "")
+    raise FitValidationError(
+        f"{purpose} needs a trace saved in full, but {output_dir} was written "
+        f"with trace persistence {tier!r}"
+        + (f" (dropped {examples})" if dropped else "")
+        + ". Refit with --trace-persistence full, or set "
+        f"${TRACE_PERSISTENCE_ENV_VAR}=full."
+    )

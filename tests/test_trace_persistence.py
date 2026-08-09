@@ -9,9 +9,11 @@ import xarray as xr
 
 from vocab_growth.fit_artifacts import (
     TRACE_PERSISTENCE_ENV_VAR,
+    FitValidationError,
     TracePersistence,
     configured_trace_persistence,
     plan_trace_persistence,
+    require_full_trace,
     save_trace,
     set_trace_persistence,
 )
@@ -281,3 +283,48 @@ def test_a_fit_that_writes_no_manifest_is_not_an_error(tmp_path):
     record = save_trace(_trace(), str(tmp_path), persistence="compact")
     assert record["persistence"] == "compact"
     assert not (tmp_path / "fit_manifest.json").exists()
+
+
+# ---- guard for consumers that need a full trace ----
+def _fit_dir(tmp_path, manifest: dict | None):
+    if manifest is not None:
+        (tmp_path / "fit_manifest.json").write_text(json.dumps(manifest))
+    return str(tmp_path)
+
+
+def test_require_full_trace_passes_a_full_fit(tmp_path):
+    save_trace(_trace(), _fit_dir(tmp_path, {"schema_version": 1}), persistence="full")
+    require_full_trace(str(tmp_path), purpose="Leave-one-study-out")
+
+
+def test_require_full_trace_passes_a_fit_that_predates_the_setting(tmp_path):
+    # Every fit written before this existed was full and carries no record;
+    # those must keep working rather than be refused for lacking a field.
+    require_full_trace(_fit_dir(tmp_path, {"schema_version": 1}), purpose="LOSO")
+    require_full_trace(_fit_dir(tmp_path, None), purpose="LOSO")
+
+
+def test_require_full_trace_rejects_a_compacted_fit_and_says_how_to_fix_it(tmp_path):
+    save_trace(_trace(), _fit_dir(tmp_path, {"schema_version": 1}), persistence="compact")
+    with pytest.raises(FitValidationError) as excinfo:
+        require_full_trace(str(tmp_path), purpose="Leave-one-study-out")
+    message = str(excinfo.value)
+    assert "Leave-one-study-out" in message
+    assert "'compact'" in message
+    assert "--trace-persistence full" in message
+    assert "f_obs" in message            # names what is actually absent
+
+
+def test_require_full_trace_rejects_a_minimal_fit(tmp_path):
+    save_trace(_trace(), _fit_dir(tmp_path, {"schema_version": 1}), persistence="minimal")
+    with pytest.raises(FitValidationError, match="'minimal'"):
+        require_full_trace(str(tmp_path), purpose="LOSO")
+
+
+def test_the_guard_reads_the_manifest_without_opening_the_trace(tmp_path):
+    # The point of checking the manifest is to fail before reading tens of GB,
+    # so it must not need the trace to be present at all.
+    _fit_dir(tmp_path, {"artefacts": {"trace": {"persistence": "compact", "dropped": {}}}})
+    assert not (tmp_path / "trace.nc").exists()
+    with pytest.raises(FitValidationError):
+        require_full_trace(str(tmp_path), purpose="LOSO")
