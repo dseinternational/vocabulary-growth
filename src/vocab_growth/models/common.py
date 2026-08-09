@@ -1633,7 +1633,15 @@ def enforce_convergence_gate(
                 "carries sampling caveats:\n\n"
                 + "".join(f"  - {caveat}\n" for caveat in caveats)
                 + "\nThe fit remains reportable; publication as a clean fit is "
-                "blocked (sync_report_figures.py --allow-provisional overrides).\n"
+                "blocked. To publish it as what it is, use\n"
+                "  sync_report_figures.py --allow-caveats\n"
+                "which relaxes only this check and keeps every other publication "
+                "requirement — reporting quality, rendered report, clean fit "
+                "provenance, matching definition, sampling effort and raw-data "
+                "fingerprint. --allow-provisional also proceeds, but it relaxes "
+                "publication provenance more broadly for local development work, "
+                "so it is not the publication path. Either way these caveats are "
+                "written to the figure cache and reported with the numbers.\n"
             )
         console.print()
         for caveat in caveats:

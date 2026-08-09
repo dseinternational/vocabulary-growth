@@ -32,15 +32,22 @@ Estimands, per outcome, written to the configured comparisons dir (default
   many months behind TD the DS population reaches each vocabulary level v
   (a flat D(v) ⇒ pure shift; a rising D(v) ⇒ developmental stretch).
 * ``ds_td_<outcome>_re_dispersion.csv``        — concentration κ, implied word
-  SD σ_Y, and the mean-independent overdispersion factor φ for each population,
-  with the contrasts Δκ, Δσ_Y, φ_TD/φ_DS. (κ and σ_Y tell different stories;
-  φ isolates pure concentration.)
+  SD σ_Y, and the overdispersion factor φ for each population, with the contrasts
+  Δκ, Δσ_Y, φ_TD/φ_DS. All three are *observation*-level: in these models κ is
+  what the Beta-Binomial layer carries once the study and subject random effects
+  have taken their share, so none of them is the between-child contrast.
+* ``ds_td_<outcome>_re_subject_heterogeneity.csv`` — the between-child contrast
+  proper: τ, the SD across children of the child's own logit for this outcome,
+  and the spread in expected words σ_child it induces, per population, with
+  Δτ, τ_TD/τ_DS and Δσ_child. See ``comparison.subject_heterogeneity`` for why
+  this is not simply VG10's ``tau_subj_q`` read against VG11's ``tau_subject``.
 
 Each panel is emitted as its own standalone figure (linear axes, no subplot
 grids) so the figures are usable individually:
 ``ds_td_<outcome>_re_{expected_words,learning_rate,attainment_delay,spread,
-spread_contrast,overdispersion}.{png,svg}`` and, for the comprehension-matched
-view, ``ds_td_comprehension_{q_at_U,dq,latency,q_at_age}.{png,svg}``.
+spread_contrast,overdispersion,subject_tau,subject_spread}.{png,svg}`` and, for
+the comprehension-matched view,
+``ds_td_comprehension_{q_at_U,dq,latency,q_at_age}.{png,svg}``.
 
 Usage::
 
@@ -218,6 +225,29 @@ def run_outcome(outcome: str) -> None:
         phi_ratio=C.summarise_draws(PHI_td / PHI_ds, grid),
     )
 
+    # ---- 5. Between-child heterogeneity: the subject random-effect scale ----
+    # Everything in block 4 is observation-level. With subject REs on both sides
+    # kappa is the *residual* left after persistent child differences are absorbed,
+    # so it cannot answer "do DS children differ from one another more or less than
+    # TD children do" — the subject scale answers that, and the two are two halves
+    # of one scatter budget in the TD models. tau is the SD of the child's own
+    # logit for this outcome, which is defined identically in both
+    # parameterisations even though VG10 reaches it through p_u and q rather than
+    # through a single spoken intercept (comparison.subject_heterogeneity).
+    _, TAU_ds, SDC_ds, _ = C.subject_heterogeneity(
+        DISP_DS_KEY, outcome, ages=grid, draws=i_disp)
+    _, TAU_td, SDC_td, _ = C.subject_heterogeneity(
+        td_key, outcome, ages=grid, draws=ib)
+    het = _merge(
+        grid, "age_months",
+        tau_TD=C.summarise_draws(TAU_td, grid), tau_DS=C.summarise_draws(TAU_ds, grid),
+        dtau=C.summarise_draws(TAU_td - TAU_ds, grid, with_p_gt0=True),
+        tau_ratio=C.summarise_draws(TAU_td / TAU_ds, grid),
+        sdchild_TD=C.summarise_draws(SDC_td, grid),
+        sdchild_DS=C.summarise_draws(SDC_ds, grid),
+        dsdchild=C.summarise_draws(SDC_td - SDC_ds, grid, with_p_gt0=True),
+    )
+
     # ---- Write CSVs ----
     os.makedirs(OUT_DIR, exist_ok=True)
     prefix = os.path.join(OUT_DIR, f"ds_td_{outcome}_re_")
@@ -225,6 +255,7 @@ def run_outcome(outcome: str) -> None:
     lr.to_csv(prefix + "learning_rate.csv", index=False)
     ad.to_csv(prefix + "attainment_delay.csv", index=False)
     disp.to_csv(prefix + "dispersion.csv", index=False)
+    het.to_csv(prefix + "subject_heterogeneity.csv", index=False)
 
     _plot_outcome(outcome, td_key, grid,
                   C.summarise_draws(W_td, grid), C.summarise_draws(W_ds, grid),
@@ -233,9 +264,11 @@ def run_outcome(outcome: str) -> None:
                   C.summarise_draws(SD_td, grid), C.summarise_draws(SD_ds, grid),
                   C.summarise_draws(SD_td - SD_ds, grid),
                   C.summarise_draws(PHI_td, grid), C.summarise_draws(PHI_ds, grid),
+                  C.summarise_draws(TAU_td, grid), C.summarise_draws(TAU_ds, grid),
+                  C.summarise_draws(SDC_td, grid), C.summarise_draws(SDC_ds, grid),
                   C.model_label(DISP_DS_KEY))
 
-    _print_summary(outcome, ew, lr, ad, disp, C.model_label(DISP_DS_KEY))
+    _print_summary(outcome, ew, lr, ad, disp, het, C.model_label(DISP_DS_KEY))
 
 
 # ----------------------------------------------------------------------------
@@ -252,7 +285,8 @@ def _save_single(filename: str, ax_setup: dict, draw) -> None:
 
 
 def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
-                  SD_td, SD_ds, dSD, PHI_td, PHI_ds, disp_ds_lab) -> None:
+                  SD_td, SD_ds, dSD, PHI_td, PHI_ds,
+                  TAU_td, TAU_ds, SDC_td, SDC_ds, disp_ds_lab) -> None:
     td_lab, ds_lab = C.model_label(td_key), C.model_label(DS_KEY)
     pre = f"ds_td_{outcome}_re_"
 
@@ -329,6 +363,29 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
         overdispersion,
     )
 
+    def subject_tau(ax):
+        _band(ax, TAU_td, "age_months", td_lab, COL_TD)
+        _band(ax, TAU_ds, "age_months", disp_ds_lab, COL_DS)
+
+    _save_single(
+        pre + "subject_tau",
+        dict(xlabel="Age (months)", ylabel=r"Between-child SD $\tau$ (logit)",
+             title=f"Between-child heterogeneity — words {outcome}"),
+        subject_tau,
+    )
+
+    def subject_spread(ax):
+        _band(ax, SDC_td, "age_months", td_lab, COL_TD)
+        _band(ax, SDC_ds, "age_months", disp_ds_lab, COL_DS)
+
+    _save_single(
+        pre + "subject_spread",
+        dict(xlabel="Age (months)",
+             ylabel=r"Between-child SD $\sigma_{child}$ (words)",
+             title=f"Between-child spread in expected words — {outcome}"),
+        subject_spread,
+    )
+
 
 def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
                         da_td, da_ds, qa_td, qa_ds) -> None:
@@ -384,7 +441,7 @@ def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
     )
 
 
-def _print_summary(outcome, ew, lr, ad, disp, disp_ds_lab) -> None:
+def _print_summary(outcome, ew, lr, ad, disp, het, disp_ds_lab) -> None:
     print(f"  Expected words & learning rate at key ages ({outcome}):")
     for a in KEY_AGES:
         print(f"    {a:>2} mo: TD={_at_age(ew,a,'TD_median'):6.1f}  "
@@ -397,7 +454,8 @@ def _print_summary(outcome, ew, lr, ad, disp, disp_ds_lab) -> None:
     for _, r in ad[ad["coverage"] >= MIN_COVERAGE].iterrows():
         print(f"    {int(r['words']):>3} words: {r['median']:5.1f} "
               f"[{r['ci_lo']:.1f}, {r['ci_hi']:.1f}]")
-    print(f"  Dispersion contrasts at key ages (DS={disp_ds_lab}, study + subject REs):")
+    print(f"  Residual (observation-level) dispersion at key ages "
+          f"(DS={disp_ds_lab}, study + subject REs):")
     for a in KEY_AGES:
         print(f"    {a:>2} mo: kappa TD={_at_age(disp,a,'kappa_TD_median'):4.1f} "
               f"DS={_at_age(disp,a,'kappa_DS_median'):4.1f} "
@@ -406,6 +464,15 @@ def _print_summary(outcome, ew, lr, ad, disp, disp_ds_lab) -> None:
               f"DS={_at_age(disp,a,'sdY_DS_median'):4.1f} "
               f"(Δσ_Y P>0={_at_age(disp,a,'dsdY_p_gt0'):.2f})  |  "
               f"φ_TD/φ_DS={_at_age(disp,a,'phi_ratio_median'):.2f}")
+    print("  Between-child heterogeneity at key ages (the subject scale):")
+    for a in KEY_AGES:
+        print(f"    {a:>2} mo: tau TD={_at_age(het,a,'tau_TD_median'):5.2f} "
+              f"DS={_at_age(het,a,'tau_DS_median'):5.2f} "
+              f"(ratio={_at_age(het,a,'tau_ratio_median'):4.2f}, "
+              f"P(TD>DS)={_at_age(het,a,'dtau_p_gt0'):.2f})  |  "
+              f"σ_child TD={_at_age(het,a,'sdchild_TD_median'):5.1f} "
+              f"DS={_at_age(het,a,'sdchild_DS_median'):5.1f} words "
+              f"(P(TD>DS)={_at_age(het,a,'dsdchild_p_gt0'):.2f})")
 
 
 # ----------------------------------------------------------------------------
@@ -483,8 +550,29 @@ def _verify() -> None:
     for v in (50.0, 100.0, 200.0):
         d = C.first_crossing_age(w_ds, ages, v) - C.first_crossing_age(w_td, ages, v)
         assert np.allclose(d, shift, atol=0.2), (v, d)
+
+    # Between-child quadrature against brute-force Monte Carlo over the subject
+    # REs. The product form is the one worth checking: its tau is an induced
+    # quantity, not a parameter, so an error here would be invisible downstream.
+    rng = np.random.default_rng(SEED)
+    f_u = np.array([[-4.0, -1.5, 0.5]])
+    h = np.array([[-3.0, -1.0, 0.0]])
+    tau_u, tau_q = np.array([0.9]), np.array([1.3])
+    tau_g, sd_g = C.child_spread_product(f_u, h, tau_u, tau_q, n)
+    z1 = rng.standard_normal((400_000, 1))
+    z2 = rng.standard_normal((400_000, 1))
+    p_mc = (1 / (1 + np.exp(-(f_u + tau_u[0] * z1)))) * (
+        1 / (1 + np.exp(-(h + tau_q[0] * z2))))
+    lg_mc = np.log(p_mc) - np.log1p(-p_mc)
+    assert np.allclose(tau_g[0], lg_mc.std(axis=0), rtol=0.02), (tau_g, lg_mc.std(axis=0))
+    assert np.allclose(sd_g[0], n * p_mc.std(axis=0), rtol=0.02), (sd_g, n * p_mc.std(axis=0))
+    # The single-intercept form must return tau itself, exactly.
+    tau_s, _ = C.child_spread_single(np.zeros((1, 3)), np.array([0.7]), n)
+    assert np.allclose(tau_s, 0.7), tau_s
+
     print("self-check OK: implied_sd_y == scipy.betabinom.std; "
-          "D(v) recovers a constant age shift.\n")
+          "D(v) recovers a constant age shift; between-child quadrature "
+          "matches Monte Carlo.\n")
 
 
 def main() -> None:
