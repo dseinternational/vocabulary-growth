@@ -41,6 +41,7 @@ from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import require_full_trace
 
 EPSILON = 1e-12
 # TODO(#131): derive from definition.n_trials (this script keys off trace
@@ -327,6 +328,15 @@ def main() -> None:
         if not os.path.exists(trace_path):
             print(f"  {spec.short}: trace not found at {trace_path} — skipping")
             continue
+        # Marginal LOSO reconstructs the held-out predictive from the
+        # observation-level posterior (f_u_obs, h_obs, kappa_*_obs, delta_*) and
+        # aggregates the stored log-likelihood, none of which a compacted fit
+        # carries. Checked before the read: these traces run to tens of
+        # gigabytes, and a KeyError after loading one is a poor way to learn it.
+        require_full_trace(
+            os.path.dirname(trace_path),
+            purpose=f"Leave-one-study-out for {spec.short}",
+        )
         print(f"Loading {spec.short} trace …", flush=True)
         idata = az.from_netcdf(trace_path)
 

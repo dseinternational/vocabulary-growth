@@ -19,12 +19,13 @@ import subprocess
 import uuid
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
 FIT_MANIFEST_FILENAME = "fit_manifest.json"
 FIT_STATE_FILENAME = "fit_state.json"
+TRACE_FILENAME = "trace.nc"
 CONVERGENCE_FAILURE_FILENAME = "CONVERGENCE_FAILED.txt"
 CONVERGENCE_CAVEATS_FILENAME = "CONVERGENCE_CAVEATS.txt"
 """Marker for a fit that cleared the hard gate but has sampling caveats.
@@ -580,3 +581,328 @@ def retain_failed_fit(staged_output_dir: str, output_root: str) -> str | None:
         destination = f"{destination}-{uuid.uuid4().hex[:8]}"
     os.replace(staged_output_dir, destination)
     return destination
+
+
+# ----------------------------------------------------------------------------
+# Trace persistence
+# ----------------------------------------------------------------------------
+# The posterior of these models is dominated by deterministic functions of the
+# free parameters evaluated at every observation. On a reporting fit of VG03
+# (10.94 GB, 4,075 observations, 6 x 6,000 draws) `f_obs`/`p_obs`/`kappa_obs`
+# and the concatenated `f_all`/`g`/`g_unit` grids account for ~7 GB, while the
+# free parameters and `sample_stats` together come to ~0.1 GB. Dropping the
+# recomputable half is a storage policy and nothing more: it is applied when
+# writing, to a copy, never to the in-memory trace that the rest of the fit
+# pipeline goes on to use.
+#
+# See `notes/202608081445-trace-persistence-tiers.md`.
+
+
+class TracePersistence(StrEnum):
+    """How much of a fitted trace to persist to ``trace.nc``."""
+
+    FULL = "full"
+    """Store everything. The default, and what every fit before this did."""
+
+    COMPACT = "compact"
+    """Drop observation-sized posterior deterministics and the duplicated scaled
+    random effects. ``log_likelihood`` and ``posterior_predictive`` are kept, so
+    LOO and predictive checks can still be recomputed from the file."""
+
+    MINIMAL = "minimal"
+    """Additionally drop the observation-sized ``log_likelihood`` and
+    ``posterior_predictive`` entries. Their consumers run during the fit and
+    persist their own output, but recomputing LOO or a new predictive view later
+    without refitting is no longer possible. Unlike ``COMPACT`` this is a real
+    trade, not a free saving."""
+
+
+# Resolved at call time with the same precedence as the output root: an explicit
+# override (from `--trace-persistence`) > the environment variable > `full`.
+#
+# This deliberately does NOT live on `ModelDefinition`. Definition fields are
+# part of the model graph and its fingerprint — `td_languages` is one precisely
+# because changing it requires a refit — whereas how much of a trace is kept
+# changes nothing about the posterior. Putting it there would invalidate every
+# fitted model for a storage decision.
+TRACE_PERSISTENCE_ENV_VAR = "DSE_VOCAB_GROWTH_TRACE_PERSISTENCE"
+
+_trace_persistence_override: TracePersistence | None = None
+
+
+def set_trace_persistence(value: TracePersistence | str | None) -> None:
+    """Set a process-wide trace-persistence override (from ``--trace-persistence``).
+
+    Takes precedence over ``$DSE_VOCAB_GROWTH_TRACE_PERSISTENCE``. Pass ``None``
+    to clear it. Call once, early in a script's entry point, as with
+    :func:`vocab_growth.environment.set_output_root`.
+    """
+    global _trace_persistence_override
+    _trace_persistence_override = None if value is None else TracePersistence(value)
+
+
+def configured_trace_persistence() -> TracePersistence:
+    """Resolve the tier to use when a caller does not name one explicitly."""
+    if _trace_persistence_override is not None:
+        return _trace_persistence_override
+    raw = os.environ.get(TRACE_PERSISTENCE_ENV_VAR)
+    if not raw:
+        return TracePersistence.FULL
+    try:
+        return TracePersistence(raw.strip().lower())
+    except ValueError:
+        valid = ", ".join(tier.value for tier in TracePersistence)
+        raise ValueError(
+            f"${TRACE_PERSISTENCE_ENV_VAR} is {raw!r}; expected one of {valid}."
+        ) from None
+
+
+# Filtering is scoped to named groups on purpose. `observed_data` (the counts)
+# and `constant_data` (`X_obs`, and the `X_plot` grid the comparison suite
+# reads) are both observation-dimensioned, so an unscoped dimension rule would
+# delete the data itself; `sample_stats` is the sampler's own record and is
+# what a convergence post-mortem needs.
+_COMPACT_GROUPS = ("posterior",)
+_MINIMAL_GROUPS = ("log_likelihood", "posterior_predictive")
+
+
+def _is_observation_dim(dim: str) -> bool:
+    """True for an observation-indexed dimension.
+
+    Covers the joint models, whose ``log_likelihood`` is indexed per outcome
+    (``obs_u_id``, ``obs_s_id``) even where their posterior uses a single
+    ``obs_id``.
+    """
+    return dim == "obs_id" or (dim.startswith("obs_") and dim.endswith("_id"))
+
+
+def _is_recomputable_dim(dim: str) -> bool:
+    """True for dimensions whose variables are recomputable from the parameters.
+
+    ``all_id`` is the concatenated obs+plot+query predictor grid (``f_all``,
+    ``g``, ``g_unit``). It goes with the observation dimensions because the
+    slices anything downstream actually reads are stored separately as
+    ``*_plot`` and ``*_query``.
+    """
+    return dim == "all_id" or _is_observation_dim(dim)
+
+
+def _group_dataset(trace: Any, group: str) -> Any | None:
+    """Return ``group`` as an xarray Dataset, or ``None`` if absent."""
+    try:
+        node = trace[group]
+    except (KeyError, TypeError):
+        node = getattr(trace, group, None)
+    if node is None:
+        return None
+    return node.to_dataset() if hasattr(node, "to_dataset") else node
+
+
+def _raw_counterpart(name: str, dataset: Any) -> str | None:
+    """The unscaled draw a scaled random effect was built from, if it is stored.
+
+    Non-centred effects store both halves of ``delta = tau * raw``, under two
+    naming conventions in this codebase: ``delta_subject`` beside
+    ``delta_subject_raw`` (the univariate and bivariate RE engines), and
+    ``delta_u`` beside ``z_u`` (the joint-modality and trivariate engines, which
+    name the offset for its distribution rather than for the effect).
+
+    The dimensions must match. VG15's ``delta_sign`` is built by scattering
+    ``z_sign`` — which is indexed over sign-informed studies only — into a
+    zero-filled vector over every study, so it is *not* an elementwise scaling
+    and cannot be rebuilt from ``z_sign`` and a scale alone. Requiring identical
+    dimensions rejects that pairing and keeps the effect.
+    """
+    candidates = [f"{name}_raw"]
+    if name.startswith("delta_"):
+        candidates.append(f"z_{name.removeprefix('delta_')}")
+    variables = dataset.data_vars
+    for candidate in candidates:
+        if candidate in variables and variables[candidate].dims == variables[name].dims:
+            return candidate
+    return None
+
+
+def _droppable_variables(dataset: Any, *, drop_derived_effects: bool) -> list[str]:
+    """Names in ``dataset`` that a non-``FULL`` tier would not persist."""
+    dropped: list[str] = []
+    for name, variable in dataset.data_vars.items():
+        if any(_is_recomputable_dim(dim) for dim in variable.dims):
+            dropped.append(name)
+        elif drop_derived_effects and _raw_counterpart(name, dataset) is not None:
+            # The raw draw survives and every scale is a retained scalar, so the
+            # scaled copy is exactly recoverable. Guarded on the raw being
+            # present: the centred branch samples the effect directly, and there
+            # the scaled copy is the only record of it.
+            dropped.append(name)
+    return sorted(dropped)
+
+
+def plan_trace_persistence(
+    trace: Any, persistence: TracePersistence | str = TracePersistence.FULL
+) -> dict[str, list[str]]:
+    """Return ``{group: [variable, ...]}`` that ``persistence`` would not persist.
+
+    Pure: inspects the trace and decides, without writing anything. Separated
+    from :func:`save_trace` so the policy can be tested, and reported in the fit
+    manifest, without a file round-trip.
+    """
+    persistence = TracePersistence(persistence)
+    if persistence is TracePersistence.FULL:
+        return {}
+    if _group_dataset(trace, "posterior") is None:
+        # Without this, an object whose groups cannot be read yields an empty
+        # plan and is then written in full — silently ignoring the requested
+        # tier. A storage policy that quietly does nothing is worse than one
+        # that fails, because the artifact looks correct.
+        raise TypeError(
+            f"Cannot apply persistence={persistence.value!r} to a trace of type "
+            f"{type(trace).__name__}: it has no readable 'posterior' group."
+        )
+    groups = list(_COMPACT_GROUPS)
+    if persistence is TracePersistence.MINIMAL:
+        groups += list(_MINIMAL_GROUPS)
+    plan: dict[str, list[str]] = {}
+    for group in groups:
+        dataset = _group_dataset(trace, group)
+        if dataset is None:
+            continue
+        names = _droppable_variables(
+            dataset, drop_derived_effects=group == "posterior"
+        )
+        if names:
+            plan[group] = names
+    return plan
+
+
+def _filtered_trace(trace: Any, plan: dict[str, list[str]]) -> Any:
+    """A copy of ``trace`` with ``plan``'s variables removed, leaving it unchanged."""
+    # Imported here rather than at module scope: everything else in this module
+    # is stdlib, and it is imported by tooling that has no other reason to pull
+    # in xarray.
+    import xarray as xr
+
+    if not hasattr(trace, "children"):
+        # Reached only after sampling has finished, so fail with something that
+        # names the cause rather than an AttributeError on a several-hour fit.
+        raise TypeError(
+            f"Cannot filter a trace of type {type(trace).__name__}: expected an "
+            "xarray DataTree (what ArviZ has used for every group since 1.0). "
+            f"Save with persistence={TracePersistence.FULL.value!r} instead."
+        )
+    groups = {}
+    for name, node in trace.children.items():
+        dataset = node.to_dataset()
+        drop = plan.get(name)
+        groups[f"/{name}"] = dataset.drop_vars(drop) if drop else dataset
+    filtered = xr.DataTree.from_dict(groups)
+    filtered.attrs.update(trace.attrs)
+    return filtered
+
+
+def record_trace_persistence(output_dir: str, record: dict[str, Any]) -> bool:
+    """Store what :func:`save_trace` actually wrote in the fit manifest.
+
+    Recorded after the fact rather than when the manifest is first written,
+    because that happens at the end of the fit's first stage — long before the
+    trace exists, and before it is known whether a save was pinned to ``full``
+    (the convergence-failure path is). A manifest stating the *intended* tier
+    could therefore contradict the file beside it.
+
+    Returns whether a manifest was found; a fit that writes none (VG17) is not
+    an error.
+    """
+    path = os.path.join(output_dir, FIT_MANIFEST_FILENAME)
+    if not os.path.isfile(path):
+        return False
+    try:
+        manifest = read_json(path)
+    except FitValidationError:
+        return False
+    manifest.setdefault("artefacts", {})["trace"] = record
+    write_json_atomic(path, manifest)
+    return True
+
+
+def save_trace(
+    trace: Any,
+    output_dir: str,
+    *,
+    persistence: TracePersistence | str | None = None,
+    filename: str = TRACE_FILENAME,
+) -> dict[str, Any]:
+    """Write ``trace`` to ``output_dir``, applying a persistence tier.
+
+    The single place a fitted trace reaches disk, so the policy cannot drift
+    between model engines. ``persistence`` defaults to
+    :func:`configured_trace_persistence`, so the tier follows the process-wide
+    setting without every engine having to thread it through; pass one
+    explicitly to pin a particular save regardless of configuration.
+
+    The record is written into ``fit_manifest.json`` as well as returned, so a
+    later reader finding no ``f_obs`` can tell "dropped by policy" from
+    "truncated or corrupt" — not a distinction to leave to guesswork, given a
+    truncated trace is a failure this project has actually seen.
+
+    ``trace`` is never modified — a non-``FULL`` tier filters a copy, because the
+    fit pipeline goes on to read the in-memory trace after this returns.
+    """
+    persistence = (
+        configured_trace_persistence()
+        if persistence is None
+        else TracePersistence(persistence)
+    )
+    plan = plan_trace_persistence(trace, persistence)
+    path = os.path.join(output_dir, filename)
+    (_filtered_trace(trace, plan) if plan else trace).to_netcdf(path)
+    record = {
+        "persistence": persistence.value,
+        "dropped": plan,
+        "dropped_count": sum(len(names) for names in plan.values()),
+    }
+    record_trace_persistence(output_dir, record)
+    return record
+
+
+def read_trace_persistence_record(output_dir: str) -> dict[str, Any] | None:
+    """Return the ``artefacts.trace`` record from a fit's manifest, if it has one."""
+    path = os.path.join(output_dir, FIT_MANIFEST_FILENAME)
+    if not os.path.isfile(path):
+        return None
+    try:
+        manifest = read_json(path)
+    except FitValidationError:
+        return None
+    record = manifest.get("artefacts", {}).get("trace")
+    return record if isinstance(record, dict) else None
+
+
+def require_full_trace(output_dir: str, *, purpose: str) -> None:
+    """Raise unless this fit's trace was persisted in full.
+
+    For the consumers that need the observation-sized posterior or the stored
+    log-likelihood — the cross-validation tools — which a ``compact`` or
+    ``minimal`` fit does not carry. Checked from the manifest *before* the trace
+    is opened, so a reporting-quality read of tens of gigabytes is not spent to
+    arrive at a ``KeyError`` on a variable that was never going to be there.
+
+    A fit with no persistence record predates the setting and was written in
+    full, so it passes.
+    """
+    record = read_trace_persistence_record(output_dir)
+    tier = (record or {}).get("persistence")
+    if tier is None or tier == TracePersistence.FULL.value:
+        return
+    dropped = sorted(
+        name
+        for names in (record or {}).get("dropped", {}).values()
+        for name in names
+    )
+    examples = ", ".join(dropped[:4]) + (" …" if len(dropped) > 4 else "")
+    raise FitValidationError(
+        f"{purpose} needs a trace saved in full, but {output_dir} was written "
+        f"with trace persistence {tier!r}"
+        + (f" (dropped {examples})" if dropped else "")
+        + ". Refit with --trace-persistence full, or set "
+        f"${TRACE_PERSISTENCE_ENV_VAR}=full."
+    )

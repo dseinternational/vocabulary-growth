@@ -29,6 +29,7 @@ import numpy as np
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
+from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -595,7 +596,7 @@ def sample_posterior_predictive_re(
         ((definition.outcome.value, "y_obs", None),),
     )
     context.dataframes["posterior_predictive_calibration"] = calibration_df
-    trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
+    save_trace(trace, context.reporting.output_dir)
     context.set_model_samples(extract_model_samples(trace))
 
 

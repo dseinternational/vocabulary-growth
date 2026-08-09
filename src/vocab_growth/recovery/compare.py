@@ -38,6 +38,7 @@ import pandas as pd
 import xarray as xr
 
 from vocab_growth import intervals
+from vocab_growth.fit_artifacts import require_full_trace
 from vocab_growth.sensitivity.compare import diagnostics_gate
 
 # Dimensions whose elements are reported individually. Observation-level
@@ -390,6 +391,15 @@ def compare_replicate(
         raise FileNotFoundError(f"No recovery trace at {trace_path}.")
     truth = _as_dataset(
         truth_tree["posterior"] if "posterior" in getattr(truth_tree, "children", {}) else truth_tree
+    )
+    # Targets are the intersection of truth and posterior, so anything the fit
+    # did not persist drops out of the score silently rather than failing. The
+    # scaled random effects are exactly the targets a compacted trace omits (the
+    # `_raw` offsets are deliberately excluded from scoring), so a compacted
+    # recovery fit would report a quietly smaller target set as if it were the
+    # whole one.
+    require_full_trace(
+        os.path.dirname(trace_path), purpose="Parameter-recovery scoring"
     )
     with xr.open_datatree(trace_path) as tree:
         posterior_full = _as_dataset(tree["posterior"])

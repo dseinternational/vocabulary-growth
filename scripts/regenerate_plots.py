@@ -45,6 +45,7 @@ from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
     FitValidationError,
     fit_validation_kwargs,
+    require_full_trace,
     require_valid_fit,
     source_data_hash,
 )
@@ -153,6 +154,12 @@ def _rebuild_context(model_id: str, config: str, output_root_dir: str):
     configure(context, definition)
     build_model(context, definition)
 
+    # extract_model_samples reads f_obs and p_obs, which a compacted fit does
+    # not carry. Checked before the load so this fails by name rather than as a
+    # KeyError partway through redrawing figures.
+    require_full_trace(
+        reporting_config.output_dir, purpose=f"Plot regeneration for {model_id}"
+    )
     trace_path = os.path.join(reporting_config.output_dir, "trace.nc")
     context.set_trace(az.from_netcdf(trace_path))
     return context, definition, engine

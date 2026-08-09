@@ -46,6 +46,7 @@ import vocab_growth.environment as local_env
 import vocab_growth.intervals as intervals
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
+from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -1364,7 +1365,7 @@ def sample_posterior_predictive(context: TrivariateContext, definition=None):
     )
     context.dataframes["posterior_predictive_calibration"] = calibration_df
 
-    trace.to_netcdf(os.path.join(context.reporting.output_dir, "trace.nc"))
+    save_trace(trace, context.reporting.output_dir)
 
     sample_data = extract_model_samples(context.trace)
     context.set_model_samples(sample_data)

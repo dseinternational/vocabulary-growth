@@ -40,6 +40,7 @@ import pytensor.tensor as pt
 import vocab_growth.data_utils as vocab_data_utils
 from vocab_growth import environment as env
 from vocab_growth import intervals
+from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -231,7 +232,7 @@ def fit(config: str = "test", outcome="spoken", label="VG17", subdir="VG17-age-s
 
     out_dir = os.path.join(env.output_root(), "models", subdir)
     os.makedirs(out_dir, exist_ok=True)
-    idata.to_netcdf(os.path.join(out_dir, "trace.nc"))
+    save_trace(idata, out_dir)
 
     # convergence
     ndiv = int(idata.sample_stats["diverging"].values.sum())
