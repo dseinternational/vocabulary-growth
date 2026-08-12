@@ -430,9 +430,9 @@ def prepare_joint_data(
     each split into four-cell rows (Dirichlet-Multinomial) and marginal-only rows
     (marginal likelihoods); nz_01 contributes a within-produced three-cell DM.
 
-    Note that es_01's non-vocal modality is symbolic gesture rather than taught
-    sign, so its cells widen what psi measures -- see
-    ``JointModelDefinition.include_es01_cells``.
+    es_01's non-vocal modality is called gestural by its source but is scored per
+    lexical item on an adapted CDI, so it is the same construct as the taught-sign
+    counts -- see ``JointModelDefinition.include_es01_cells``.
     """
     # Subject random intercepts (issue #59) need a per-child identifier in both
     # data sources (the merged view and the raw uk_02 cross-tab CSV).
@@ -535,8 +535,9 @@ def prepare_joint_data(
 
     # es_01 (Galeote): the same within-understood partition, derived from the
     # source's recorded totals and their recorded union. Its non-vocal modality is
-    # a symbolic-gesture lexicon rather than a taught sign one, so including these
-    # cells widens what psi measures — see JointModelDefinition.include_es01_cells.
+    # scored per lexical item, the same coding uk_02 and uk_07 apply to signs, and
+    # its own association is carried by delta_psi — see
+    # JointModelDefinition.include_es01_cells.
     if definition.include_es01_cells:
         four_es, marg_es = _load_es01_four_cell()
         four_es_cols = {

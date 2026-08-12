@@ -1099,25 +1099,25 @@ class JointModelDefinition:
     # -- es_01 (Galeote) within-understood cross-tab inclusion --
     include_es01_cells: bool = True
     """Whether es_01's within-understood four-cell cross-tab enters the
-    Dirichlet-Multinomial that identifies psi. **Default False**, unlike the other
-    two cross-tab flags, and the reason is a finding rather than caution.
+    Dirichlet-Multinomial that identifies psi. **Default True** since 2026-08-12,
+    when psi gained a study-level term.
 
     es_01's cells are derivable — its fourth column is a recorded union. The
     original table's columns are TOTAL COMPREHENSIÓN, TOTAL PRODUCTION, TOTAL
     GESTURES and WORD PRODUCED + GESTURES ONLY, the last being what Galeote et al.
     (2011) call "total lexical production combining the two modalities" — so the
     four cells follow by subtraction and 185 of 186 rows yield a valid partition at
-    11-71 months. Wiring them would more than double the rows identifying psi and
-    anchor it at the young end, where uk_02 is otherwise alone.
+    11-71 months. They more than double the rows identifying psi and anchor it at
+    the young end, where uk_02 is otherwise alone.
 
-    Default **True** since 2026-08-12, when ``psi`` gained a study-level term. Before
-    that it was False, and the reason was not the construct. es_01's third column scores "gestures representing specific
-    lexical items", each tied to one of the 651 checklist words — a per-word lexical
-    marker on an adapted CDI, structurally the same coding uk_02 and uk_07 use. It
-    is the same measurement.
+    It defaulted False for the nine days before that, and the reason was never the
+    construct. es_01's third column scores "gestures representing specific lexical
+    items", each tied to one of the 651 checklist words — a per-word lexical marker
+    on an adapted CDI, structurally the same coding uk_02 and uk_07 use. It is the
+    same measurement.
 
-    The problem is that the sources already informing ``psi`` disagree about it
-    substantially, and ``psi`` has nowhere to put that. Mantel-Haenszel odds ratios
+    The reason was that the sources already informing ``psi`` disagree about it
+    substantially, and ``psi`` had nowhere to put that. Mantel-Haenszel odds ratios
     over the same cells, stratified by child:
 
     =======  =====  =========  =================  ==========  ===============
@@ -1149,13 +1149,14 @@ class JointModelDefinition:
     both UK sources come from contexts where it is, and uk_07 is an intervention
     trial — though four studies cannot test that.
 
-    **``psi`` is the only latent in this model with no study-level term.** ``delta_u``,
-    ``delta_q`` and ``delta_sign`` are all study random intercepts; ``log_psi`` is a
-    bare global scalar. So a pooled ``psi`` is a precision-weighted average over
-    whichever sources happen to be in the pool — which is why it moved from 1.80 to
-    2.49 when uk_07 arrived, and why adding es_01's 185 rows (more than the uk_02
-    and uk_07 four-cell rows combined) would drag the headline toward independence
-    as an artefact of composition rather than a finding.
+    That heterogeneity was disqualifying only because **``psi`` was the only latent
+    in this model with no study-level term.** ``delta_u``, ``delta_q`` and ``delta_sign``
+    are all study random intercepts; ``log_psi`` was a bare global scalar. So a pooled
+    ``psi`` was a precision-weighted average over whichever sources happened to be in
+    the pool — which is why it moved from 1.80 to 2.49 when uk_07 arrived, and why
+    adding es_01's 185 rows (more than the uk_02 and uk_07 four-cell rows combined)
+    would have dragged the headline toward independence as an artefact of composition
+    rather than a finding.
 
     That is now handled: ``delta_psi`` is a zero-sum study random intercept over the
     psi-informed studies, so each source carries its own association and the reported
