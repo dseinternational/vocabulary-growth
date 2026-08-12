@@ -87,7 +87,7 @@ def prepare_bivariate_re_data(
     )
     if use_subject_codes:
         columns = columns + ["subject_id"]
-    if definition.exclude_us01_spoken_ceiling:
+    if definition.exclude_us01_spoken_ceiling or definition.dse_native_only:
         columns = columns + ["survey_vocab_max"]
 
     df = vocab_data_utils.load_data(
@@ -106,6 +106,11 @@ def prepare_bivariate_re_data(
     if definition.exclude_us01_spoken_ceiling:
         df, ceiling_rows_excluded = (
             vocab_data_utils.exclude_us01_spoken_ceiling_rows(df)
+        )
+    non_native_rows_excluded = 0
+    if definition.dse_native_only:
+        df, non_native_rows_excluded = (
+            vocab_data_utils.restrict_to_dse_native_administrations(df)
         )
     analysis_df = df[columns].copy()
 
@@ -189,6 +194,11 @@ def prepare_bivariate_re_data(
         )
     if definition.exclude_us01_spoken_ceiling:
         counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
+    if definition.dse_native_only:
+        # Logged because a zero here means the variant has stopped biting and is
+        # silently fitting the model of record's data, which is a failure that
+        # looks exactly like a pass.
+        counts.append(("Non-native-ceiling rows excluded", non_native_rows_excluded))
     if definition.include_implausible_production:
         counts.append((
             "us_01 implausible production reinstated",

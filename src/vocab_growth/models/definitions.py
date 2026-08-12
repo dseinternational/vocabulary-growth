@@ -604,6 +604,26 @@ class BivariateModelDefinition:
     longer a *sensitivity* in its own right: those rows are masked by default, so
     on the primary frame this flag has nothing left to exclude. Use
     ``include_implausible_production`` below to interrogate that exclusion."""
+    dse_native_only: bool = False
+    """Restrict the pool to administrations recorded natively on the 810 reference.
+
+    The models score every count against ``n_trials = 810``, so a 416-item Oxford
+    CDI count enters on the same denominator as an 810-item DSE Checklists count.
+    That harmonisation assumes the shorter form's items are the easier ones, and
+    the sufficiency result in notes/202607261540 is the proof that no aggregate
+    analysis of these data can test it: a statistic sufficient for ability carries
+    no information about item composition. So the assumption is not probed by
+    running the model differently -- it is probed by removing the rows that need
+    it, which is what this flag does (issue #190).
+
+    It is the widest-scoped sensitivity in the registry, and deliberately so: 278
+    of the merged view's 1,521 Down syndrome rows survive, from 194 children
+    across ie_01 (its 810 wave only), ie_02, uk_02 (DSE form only) and uk_06,
+    spanning 9-115 months. Comprehension is the least affected outcome -- 259 of
+    987 understood observations survive, against 264 of 1,428 spoken -- because
+    the short forms are production-heavy, so expect the spoken trajectory to move
+    more than the understood one.
+    """
     include_implausible_production: bool = False
     """Reinstate the us_01 production counts masked as implausible by default.
 
@@ -1010,6 +1030,30 @@ class JointModelDefinition:
     longer a *sensitivity* in its own right: those rows are masked by default, so
     on the primary frame this flag has nothing left to exclude. Use
     ``include_implausible_production`` below to interrogate that exclusion."""
+    dse_native_only: bool = False
+    """Restrict the pool to administrations recorded natively on the 810 reference.
+
+    The models score every count against ``n_trials = 810``, so a 416-item Oxford
+    CDI count enters on the same denominator as an 810-item DSE Checklists count.
+    That harmonisation assumes the shorter form's items are the easier ones, and
+    the sufficiency result in notes/202607261540 is the proof that no aggregate
+    analysis of these data can test it: a statistic sufficient for ability carries
+    no information about item composition. So the assumption is not probed by
+    running the model differently -- it is probed by removing the rows that need
+    it, which is what this flag does (issue #190).
+
+    It is the widest-scoped sensitivity in the registry, and deliberately so: 278
+    of the merged view's 1,521 Down syndrome rows survive, from ie_01 (its 810
+    wave only), ie_02, uk_02 (DSE form only) and uk_06.
+
+    The cost is legible in what leaves. es_01, nz_01 and uk_07 are all on shorter
+    forms, so the only cross-tab source left is uk_02's DSE form -- all 56 of its
+    four-cell rows are that form -- and ``psi`` falls back to its single-study
+    branch with no ``delta_psi`` or ``tau_psi`` to estimate. The variant therefore
+    answers the denominator question and the between-study question together and
+    cannot separate them. Read it against the model of record for the trajectory
+    shapes, not for ``psi``.
+    """
     report_max_age_signed: int | None = None
     """Highest query age (months) at which signed quantities are reported.
 

@@ -143,6 +143,54 @@ def test_us01_ceiling_sensitivity_excludes_only_ws_ceiling_rows():
     ]
 
 
+def test_dse_native_restriction_keeps_only_the_810_reference_form():
+    """Native means the form's own ceiling IS the reference, not merely close.
+
+    uk_02 ran both instruments, so the filter has to work per row rather than per
+    study, and a row whose ceiling was never recorded has to go: an unknown form
+    cannot be shown to need no harmonisation, which is the only thing the variant
+    admits rows on.
+    """
+    frame = pd.DataFrame(
+        {
+            "study": ["ie_02", "uk_02", "uk_02", "uk_04", "es_01", "uk_03"],
+            "survey_vocab_max": [810, 810, 416, 416, 651, None],
+        }
+    )
+
+    filtered, dropped = data_utils.restrict_to_dse_native_administrations(frame)
+
+    assert dropped == 4
+    assert filtered["study"].tolist() == ["ie_02", "uk_02"]
+    assert (filtered["survey_vocab_max"] == data_utils.DSE_NATIVE_VOCAB_MAX).all()
+
+
+def test_dse_native_restriction_on_the_real_pool():
+    """The real sources: which studies survive, and how much of each outcome.
+
+    Pinned because the variant's whole value is the size of what it removes — if a
+    later source arrives on the 810 reference, or an existing one is re-coded, the
+    check silently becomes a different check and the numbers quoted in the flag
+    docstring stop being true.
+    """
+    pool = data_utils.load_data(
+        population=Population.DOWN_SYNDROME,
+        columns=[
+            "study", "age", "understood", "spoken", "signed",
+            "survey_vocab_max", "subject_id",
+        ],
+    )
+    native, dropped = data_utils.restrict_to_dse_native_administrations(pool)
+
+    assert len(native) == 278
+    assert dropped == len(pool) - 278
+    assert sorted(native["study"].unique()) == ["ie_01", "ie_02", "uk_02", "uk_06"]
+    assert native["subject_id"].nunique() == 194
+    assert int(native["understood"].notna().sum()) == 259
+    assert int(native["spoken"].notna().sum()) == 264
+    assert int(native["signed"].notna().sum()) == 218
+
+
 def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:

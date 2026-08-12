@@ -115,6 +115,10 @@ EPSILON = math_constants.EPSILON
 
 # The two sources with the four-cell within-understood cross-tabulation.
 UK02_STUDY_ID = "uk_02"
+# uk_02 ran two instruments. Its `form` column separates them, and only the DSE
+# arm is native to the 810-item reference (the other is the 416-item Oxford CDI),
+# which the DSE-native sensitivity needs to tell apart.
+UK02_DSE_FORM = "DSE"
 # uk_07 (PACT-DS) records comprehension alongside modality-exclusive expressive
 # cells, so its four cells are derivable: understood_only = understood - produced.
 UK07_STUDY_ID = "uk_07"
@@ -444,7 +448,7 @@ def prepare_joint_data(
     merged_columns = ["study", "age", "understood", "spoken", "signed"]
     if use_subject_codes:
         merged_columns = merged_columns + ["subject_id"]
-    if definition.exclude_us01_spoken_ceiling:
+    if definition.exclude_us01_spoken_ceiling or definition.dse_native_only:
         merged_columns = merged_columns + ["survey_vocab_max"]
 
     merged = vocab_data_utils.load_data(
@@ -452,19 +456,38 @@ def prepare_joint_data(
         columns=merged_columns,
         include_implausible_production=definition.include_implausible_production,
     )
+    # The DSE-native sensitivity drops every source on a shorter form, which
+    # includes three of the four cross-tab sources. Their cell blocks are gated
+    # off below rather than left to the row filter, because those blocks read
+    # their own CSVs and the merged-view filter would never see them.
+    native_only = definition.dse_native_only
+    non_native_rows_excluded = 0
+    if native_only:
+        merged, non_native_rows_excluded = (
+            vocab_data_utils.restrict_to_dse_native_administrations(merged)
+        )
+    use_uk07_cells = definition.include_uk07_cells and not native_only
+    use_es01_cells = definition.include_es01_cells and not native_only
+    use_nz01_cells = definition.include_nz01_cells and not native_only
     # uk_02, uk_07 and nz_01 are handled via their cross-tab paths below, so
     # exclude their marginals from the merged view here to avoid double counting.
     # (nz_01 is dropped entirely when include_nz01_cells is False; uk_07 falls back
     # to its merged-view marginals when include_uk07_cells is False, because unlike
     # nz_01 its marginals are usable on their own.)
     cross_tab_studies = [UK02_STUDY_ID, NZ01_STUDY_ID]
-    if definition.include_uk07_cells:
+    if use_uk07_cells:
         cross_tab_studies.append(UK07_STUDY_ID)
-    if definition.include_es01_cells:
+    if use_es01_cells:
         cross_tab_studies.append(ES01_STUDY_ID)
     other = merged[~merged["study"].isin(cross_tab_studies)].copy()
 
     four, marg = _load_uk02_four_cell()
+    if native_only:
+        # uk_02 ran both forms; only its DSE arm is on the native 810 reference.
+        # All 56 four-cell rows are that arm, so the cross-tab survives intact
+        # and only Oxford marginals leave.
+        four = four[four["form"].eq(UK02_DSE_FORM)].copy()
+        marg = marg[marg["form"].eq(UK02_DSE_FORM)].copy()
     # uk_02 four-cell rows: the four-cell sum is the authoritative understood
     # total; cells feed the DM; marginal spoken/signed are set NaN because they
     # are subsumed by the DM and would otherwise be double counted.
@@ -504,7 +527,7 @@ def prepare_joint_data(
     # uk_02 there is no partition-versus-total mismatch to reconcile. Marginal
     # spoken/signed are NaN on the four-cell rows for the same no-double-counting
     # reason. See data/vocab_data_uk_07.md.
-    if definition.include_uk07_cells:
+    if use_uk07_cells:
         four07, marg07 = _load_uk07_four_cell()
         four07_cols = {
             "study": UK07_STUDY_ID,
@@ -538,7 +561,7 @@ def prepare_joint_data(
     # scored per lexical item, the same coding uk_02 and uk_07 apply to signs, and
     # its own association is carried by delta_psi — see
     # JointModelDefinition.include_es01_cells.
-    if definition.include_es01_cells:
+    if use_es01_cells:
         four_es, marg_es = _load_es01_four_cell()
         four_es_cols = {
             "study": ES01_STUDY_ID,
@@ -572,7 +595,7 @@ def prepare_joint_data(
     # nz_01's (real-key) CSV is committed separately; tolerate its absence (CI,
     # unit tests, or a checkout predating the data) so the model still builds.
     nz01_csv = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
-    if definition.include_nz01_cells and os.path.exists(nz01_csv):
+    if use_nz01_cells and os.path.exists(nz01_csv):
         frames.append(_load_nz01_produced_cells())
     analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
@@ -650,12 +673,19 @@ def prepare_joint_data(
         ("nz_01 produced-cell rows (DM)", n_prod),
         ("include_uk01_signed", definition.include_uk01_signed),
         ("uk_01 signed-only rows dropped", sign_source_dropped.get("uk_01", 0)),
-        ("include_nz01_cells", definition.include_nz01_cells),
-        ("include_uk07_cells", definition.include_uk07_cells),
-        ("include_es01_cells", definition.include_es01_cells),
+        # The effective values, not the definition's: the DSE-native sensitivity
+        # turns all three off regardless of what was requested, and a banner that
+        # reported the request would contradict the row counts above it.
+        ("include_nz01_cells", use_nz01_cells),
+        ("include_uk07_cells", use_uk07_cells),
+        ("include_es01_cells", use_es01_cells),
     ]
     if definition.exclude_us01_spoken_ceiling:
         counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
+    if native_only:
+        # A zero here means the variant has stopped biting and is silently fitting
+        # the model of record's data — a failure that looks exactly like a pass.
+        counts.append(("Non-native-ceiling rows excluded", non_native_rows_excluded))
     if definition.include_implausible_production:
         # No age bound: this engine's load_data call above passes none, so the
         # reported count has to be taken over the same frame or it misstates what

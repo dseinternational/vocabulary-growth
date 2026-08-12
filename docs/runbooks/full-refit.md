@@ -81,6 +81,23 @@ python scripts/compare_sensitivity.py vg15 --variant us01-implausible-reinstated
 
 Check the fit log's observation counts: each variant prints `us_01 implausible production reinstated` and it must read 22. A zero there means the variant has stopped biting and the comparison is worthless — treat it as a failure, not a pass. Note 22 rather than 30: the other 8 masked administrations stay masked under the independent duplicated-outcome rule, which has its own flag.
 
+### The 810-item reference denominator
+
+`dse-native-only` is the other pair that is not optional in a published refit, and it is the only check on an assumption the report otherwise states and moves past. Every model scores raw counts against `n_trials = 810`, so a 416-item Oxford CDI count enters on a denominator its form never used; that is sound only if the shorter forms hold the easier items. The sufficiency result (`notes/202607261540-item-difficulty-and-the-aggregate-likelihood.md`) is the proof that no aggregate analysis of these data can test that — a statistic sufficient for ability carries no information about item composition — so the assumption is probed by deleting the rows that need it rather than by modelling it.
+
+```bash
+python scripts/fit_sensitivity.py vg10 dse-native-only --config rep
+python scripts/fit_sensitivity.py vg15 dse-native-only --config rep
+python scripts/compare_sensitivity.py vg10 --variant dse-native-only
+python scripts/compare_sensitivity.py vg15 --variant dse-native-only
+```
+
+Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, which must read 1,243 against the current pool. It is the widest-scoped variant registered — 278 of 1,521 rows survive, from ie_01's 810 wave, ie_02, uk_02's DSE arm and uk_06 — so expect wide intervals and read it for whether the trajectory _shapes_ hold, not for agreement to three significant figures. On VG15 it also leaves uk_02 as the only cross-tab source, so `psi` falls back to its single-study branch: that fit answers the denominator question, not the association one.
+
+### VG15's `psi` after the study-level term
+
+Four further VG15 variants exist for the 2026-08-12 changes and cost a fit each. `tau-psi-narrow` and `tau-psi-wide` bracket the between-study scale, which was set from the measured spread and so is data-informed in exactly the way Target 8 was created for; with four informed studies it is weakly identified and governs how far the per-study values shrink toward the reported centre. `psi-drop-es01` and `psi-drop-uk07` remove one source's cross-tab while keeping its marginals, so U, q and r are untouched and only the association loses evidence — es_01 is the one to run if only one is affordable, being 185 of the 434 `psi`-informing rows and the only source sitting at independence.
+
 ### Default (sequential, resumable)
 
 ```bash

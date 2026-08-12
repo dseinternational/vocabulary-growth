@@ -177,10 +177,55 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "scalar": {"include_implausible_production": True},
     },
 
+    # The 810-item reference denominator. Every model scores raw counts against
+    # n_trials = 810, so counts from the 416-item Oxford CDI, the 396/680-item
+    # MB-CDI forms, the 651-item CDI-Down, the 674-item Reading CDI and the
+    # 675-item NZCDI all enter on a denominator their form did not use. That is
+    # sound only if the shorter forms hold the easier items, and the sufficiency
+    # result (notes/202607261540) proves no aggregate analysis of these data can
+    # test it — a statistic sufficient for ability carries no information about
+    # item composition. The assumption is therefore probed by deleting the rows
+    # that need it, not by re-running the model differently.
+    #
+    # This is the widest-scoped variant registered: 278 of 1,521 rows survive.
+    # On vg15 it also collapses psi to its single-study branch, because uk_02's
+    # DSE arm is the only cross-tab source native to 810 — so read it for the
+    # trajectory shapes, not for the association. Both engines print the excluded
+    # count, so a variant that stopped biting shows up rather than passing quietly.
+    ("vg10", "dse-native-only"): {
+        "suffix": "dse-native-only",
+        "scalar": {"dse_native_only": True},
+    },
+    ("vg15", "dse-native-only"): {
+        "suffix": "dse-native-only",
+        "scalar": {"dse_native_only": True},
+    },
+
     # -- Target 6: VG15 psi (association) --
     ("vg15", "psi-neutral"): {"suffix": "psi-neutral", "scalar": {"log_psi_mu": 0.0, "log_psi_sigma": 0.5}},
     ("vg15", "psi-broad"): {"suffix": "psi-broad", "scalar": {"log_psi_mu": 0.0, "log_psi_sigma": 1.0}},
     ("vg15", "psi-strong"): {"suffix": "psi-strong", "scalar": {"log_psi_mu": 0.6, "log_psi_sigma": 0.5}},
+
+    # The between-study spread of psi. tau_psi_sigma = 1.0 was set from the
+    # measured spread (an order of magnitude across four sources), which makes it
+    # data-informed rather than independently justified — the condition that put
+    # every trajectory anchor under Target 8. With only four informed studies
+    # tau_psi is weakly identified, so the prior does real work on how far the
+    # per-study values shrink toward the population centre, and therefore on the
+    # headline psi itself. Narrow forces near-pooling (roughly the pre-2026-08-12
+    # behaviour); wide lets each source sit where its own cells put it.
+    ("vg15", "tau-psi-narrow"): {"suffix": "tau-psi-narrow", "scalar": {"tau_psi_sigma": 0.3}},
+    ("vg15", "tau-psi-wide"): {"suffix": "tau-psi-wide", "scalar": {"tau_psi_sigma": 2.0}},
+
+    # Source composition of psi. Each flag drops one source's cross-tab while
+    # keeping its marginals, so U, q and r are unchanged and only the association
+    # loses evidence. es_01 is the one that matters most: it is 185 of the 434
+    # psi-informing rows and the only source at independence, so "what is the
+    # headline without Spain" is the first question the heterogeneity table
+    # invites. uk_07 is registered alongside it because it is an intervention
+    # trial, and its arrival is what moved psi from 1.80 to 2.49.
+    ("vg15", "psi-drop-es01"): {"suffix": "psi-drop-es01", "scalar": {"include_es01_cells": False}},
+    ("vg15", "psi-drop-uk07"): {"suffix": "psi-drop-uk07", "scalar": {"include_uk07_cells": False}},
 
     # -- Target 7: VG15 four-cell concentration --
     ("vg15", "conc-broad"): {"suffix": "conc-broad", "scalar": {"log_conc_sigma": 1.5}},

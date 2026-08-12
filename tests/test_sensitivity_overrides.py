@@ -110,12 +110,20 @@ def test_registry_counts_and_models():
     # ceiling variants. The source confirmed uk_06 used the standard DSE
     # checklists, whose column 2 is "understands and signs" — a total sign count —
     # so uk_06 is now included by default and the variant cannot vary anything.
-    assert len(VARIANTS) == 43
-    assert len(variants_for("vg10")) == 11
+    #
+    # +6 on 2026-08-12, all closing gaps the uk_07/es_01 work opened or exposed:
+    # the `dse-native-only` pair (the 810 reference denominator, #190 — the first
+    # check on the harmonisation the sufficiency result proves no aggregate
+    # analysis can test), the `tau-psi-*` pair (a data-informed prior on a newly
+    # added, weakly identified parameter, the same condition that created
+    # Target 8), and the `psi-drop-*` pair (psi's source composition, which both
+    # inclusion flags advertise but nothing ran).
+    assert len(VARIANTS) == 49
+    assert len(variants_for("vg10")) == 12
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1
-    assert len(variants_for("vg15")) == 22
+    assert len(variants_for("vg15")) == 27
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -132,9 +140,9 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 22
+    assert len(all_vg15) == 27
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 22
+    assert len({d.config_name for d in all_vg15}) == 27
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
@@ -172,6 +180,51 @@ def test_implausible_production_reinstatement_is_registered_and_bites():
     # The baselines must not carry the flag, or the variant would be a no-op.
     assert VG10.include_implausible_production is False
     assert VG15.include_implausible_production is False
+
+
+def test_dse_native_variant_is_registered_and_bites():
+    """The 810-denominator check must exist, flip the flag, and move real rows.
+
+    This is the only check on the harmonisation that carries a 416-item Oxford
+    count onto an 810-item denominator, and the sufficiency result
+    (notes/202607261540) is the proof that no aggregate analysis of these data can
+    test that assumption instead. A variant that silently stopped removing rows
+    would read as robustness it has not demonstrated.
+    """
+    for model, model_id in (("vg10", "VG10"), ("vg15", "VG15")):
+        (variant,) = build_variant(model, "dse-native-only")
+        assert variant.dse_native_only is True
+        assert variant.model_id == model_id
+        assert "dse-native-only" in variant.config_name
+
+    assert VG10.dse_native_only is False
+    assert VG15.dse_native_only is False
+
+
+def test_psi_variants_cover_the_scale_and_the_sources():
+    """psi's two untested degrees of freedom after the 2026-08-12 study term.
+
+    ``tau_psi_sigma`` was set from the measured between-study spread, which makes
+    it data-informed rather than externally justified — the condition Target 8
+    exists for — and with four informed studies it is weakly identified, so it
+    governs how far the per-study values shrink and therefore the headline itself.
+    Separately, both cross-tab inclusion flags document that setting them False
+    isolates a source's pull on psi, which nothing ran until these variants.
+    """
+    (narrow,) = build_variant("vg15", "tau-psi-narrow")
+    (wide,) = build_variant("vg15", "tau-psi-wide")
+    assert narrow.tau_psi_sigma < VG15.tau_psi_sigma < wide.tau_psi_sigma
+
+    # Each source variant drops exactly one cross-tab and leaves the other alone,
+    # so the contrast attributes movement to that source rather than to "fewer
+    # cells in general".
+    (no_es01,) = build_variant("vg15", "psi-drop-es01")
+    assert (no_es01.include_es01_cells, no_es01.include_uk07_cells) == (False, True)
+    (no_uk07,) = build_variant("vg15", "psi-drop-uk07")
+    assert (no_uk07.include_es01_cells, no_uk07.include_uk07_cells) == (True, False)
+
+    # Both must be on in the model of record, or the variants are no-ops.
+    assert VG15.include_es01_cells and VG15.include_uk07_cells
 
 
 def test_build_variant_rejects_unknown():

@@ -489,3 +489,52 @@ def test_es01_real_cells_reconcile_and_sit_near_independence():
         "the include_es01_cells default was justified on it sitting there while "
         "the other cross-tab sources sit well above it."
     )
+
+
+def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02():
+    """The DSE-native sensitivity on the real sources, through the real engine.
+
+    Three things have to hold together, and only the third is obvious from the
+    flag. The merged view must lose every source on a shorter form. The three
+    cross-tab blocks that read their own CSVs must be gated off too — a row filter
+    on the merged view would never see them, so without the gate uk_07, es_01 and
+    nz_01 would slip back in through the side door carrying exactly the
+    harmonisation the variant exists to remove. And uk_02, which ran both
+    instruments, must keep its DSE arm alone.
+    """
+    context = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name="TEST_VG15_NATIVE",
+            config_name="test",
+            output_root_dir=str(env.OUTPUT_DIR),
+            ci_prob=0.90,
+            interval_kind="hdi",
+        ),
+        sampling=sampling.get_sampling_configuration("test"),
+    )
+    native = dataclasses.replace(VG15, dse_native_only=True)
+    cjm.prepare_joint_data(context, native)
+    df = context.analysis_df
+
+    # Only the four sources whose form IS the 810-item reference.
+    assert set(df["study"]) == {"ie_01", "ie_02", "uk_02", "uk_06"}
+
+    # The cross-tab side door: uk_07 and es_01 are on 674- and 651-item forms, so
+    # their cells must be absent even though both inclusion flags are still True.
+    assert native.include_uk07_cells and native.include_es01_cells
+    cells = df[df["signed_spoken"].notna()]
+    assert set(cells["study"]) == {"uk_02"}
+    # All 56 of uk_02's four-cell rows are its DSE arm, so the cross-tab survives
+    # whole and only Oxford marginals leave.
+    assert len(cells) == 56
+    # nz_01's within-produced cells go the same way: its 675-item NZCDI is not the
+    # reference form, so its three-cell block contributes nothing here either.
+    assert "nz_01" not in set(df["study"])
+    if "prod_total" in df.columns:
+        assert df["prod_total"].notna().sum() == 0
+
+    # psi therefore has one informed study and falls back to its single-study
+    # branch. The variant answers the denominator question and the between-study
+    # question at once and cannot separate them — which is why it is documented as
+    # a trajectory-shape check rather than a psi check.
+    assert cells["study"].nunique() == 1
