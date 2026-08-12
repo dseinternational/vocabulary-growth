@@ -63,7 +63,9 @@ This is the largest movement anywhere in the refit, and it is where uk_07 suppli
 
 Note [202606151700](202606151700-vg14-signed-ratio-shape-and-p-any-bias.md) identified the apparent peak-then-recede as largely a between-study boundary and could not settle it. It now has data behind it rather than the tent prior's extrapolation, and the answer is that the recede is real but far weaker than the published fits show.
 
-**This is currently invisible in the reports.** `report_max_age_signed = 60` trims every signed table and figure at 60 months, and the docstring justifying that cap is now factually stale: it says signed has "23 above 60, 7 above 72 and none between 84 and 96", so "above about 60 months `r(a)` is the tent's extrapolation, not an estimate". It is now 87 above 60 and 23 above 72, from 18 additional children. The cap is part of the recorded definition, so moving it needs another refit — a study-owner decision, not a silent widening of what gets published.
+**This was invisible in the reports, and the cap has moved.** `report_max_age_signed = 60` trimmed every signed table and figure at 60 months, and the docstring justifying that cap had gone stale: it read "23 above 60, 7 above 72 and none between 84 and 96", so "above about 60 months `r(a)` is the tent's extrapolation, not an estimate". It is now 87 above 60 and 23 above 72, from 18 additional children.
+
+On that evidence the study owner **raised the cap to 84**. The 72–84 band now carries 15 observations from real children rather than nothing, so reporting it is no longer extrapolation. 84–96 stays out deliberately: 8 observations from a single source is evidence but not enough to publish a curve on, and 84 is also the Down syndrome models' high trend anchor, above which the mean is clamped rather than fitted. The cap is part of the recorded definition, so the change is folded into the clean-tree refit rather than needing a third pass.
 
 ## 6. Finding: older-age comprehension dispersion falls sharply
 
@@ -103,15 +105,16 @@ VG15's spoken and signed LOO components exclude rows represented by the four-cel
 
 ## 10. Outstanding
 
-- [ ] Commit the wiring and re-run the DS pool from a clean tree (§7).
-- [ ] Decide `report_max_age_signed` — 60 is now too conservative and hides the largest finding (§5).
+- [x] Commit the wiring and re-run the DS pool from a clean tree (§7) — committed on `feat/uk07-pactds`; the clean-tree refit follows in a second commit.
+- [x] Decide `report_max_age_signed` — raised from 60 to **84** by the study owner on the §5 evidence. 84–96 stays out: 8 observations from one source, and 84 is the trend's high anchor.
+- [x] `uk_06` signing construct — now tracked as [#211](https://github.com/dseinternational/vocabulary-growth/issues/211). See the appendix below for the evidence it carries.
 - [ ] Refit the five TD models on the VM; VG11 will not fit locally (§7).
 - [ ] Regenerate `output/comparisons/` — the DS/TD comparison artefacts still reflect the pre-uk_07 DS fits.
-- [ ] `uk_06` signing construct: still unverified, still untracked. See [`202608120030-uk06-open-question`](#appendix-uk_06) below.
+- [ ] Say in the comparison book that VG14-against-VG15 LOO is non-comparable, and by how much more (§9).
 
 ## Appendix: uk_06 {#appendix-uk_06}
 
-Asked in passing during this work: where is the uk_06 sign-construct verification? Nowhere. The 15 June decision to include it ([202606151700](202606151700-vg14-signed-ratio-shape-and-p-any-bias.md) §3) was reversed on 16 July by `8ea6227`, which set `include_uk06 = False` "until its field dictionary confirms comparability". It is **not** on issue #190 §C, whose source-codebook list holds only the ie_01 Checklist 1 denominator and the uk_01 `understood` coding, so it has no owner and no tracking item.
+Asked in passing during this work: where is the uk_06 sign-construct verification? It was nowhere; it is now [#211](https://github.com/dseinternational/vocabulary-growth/issues/211). The 15 June decision to include it ([202606151700](202606151700-vg14-signed-ratio-shape-and-p-any-bias.md) §3) was reversed on 16 July by `8ea6227`, which set `include_uk06 = False` "until its field dictionary confirms comparability". It is **not** on issue #190 §C, whose source-codebook list holds only the ie_01 Checklist 1 denominator and the uk_01 `understood` coding, so it has no owner and no tracking item.
 
 Two observations sharpen the question. The upstream preparation record names the source column `CheckUnderAndSign` ("understands and signs") from a DSE checklist with four categories — understands, understands-and-signs, imitates, uses-spontaneously. In the data, `signed + spoken > understood` on **7 of 11 rows**, which is impossible if those categories were a mutually exclusive ladder. So they are overlapping per-word ticks, and a word both signed and said is counted in both columns — which is the total-sign construct, and argues _against_ the `uk_01` signed-only reading the mask implicitly fears.
 
