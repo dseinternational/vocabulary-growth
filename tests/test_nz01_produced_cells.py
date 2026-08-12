@@ -38,6 +38,32 @@ def _write_nz01_csv(path):
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
+def _write_uk07_csv(path):
+    """A minimal uk_07 fixture — prepare_joint_data always loads this CSV."""
+    pd.DataFrame(
+        [
+            dict(
+                subject_id="uk07_c", group="control", sex="F", timepoint="t1",
+                age=40.0, understood=50, spoken=8, signed=3, spoken_signed=4,
+                produced=15, survey_vocab_max=674,
+            )
+        ]
+    ).to_csv(path, index=False)
+
+
+def _write_es01_csv(path):
+    """A minimal es_01 fixture — prepare_joint_data always loads this CSV."""
+    pd.DataFrame(
+        [
+            dict(
+                subject_id="es_c", pair_id=1, group="DS", sex="F", age=40,
+                age_days=1200, mental_age=20.0, mental_age_level=5,
+                understood=60, spoken=20, gestured=10, spoken_or_gestured=25,
+            )
+        ]
+    ).to_csv(path, index=False)
+
+
 def test_nz01_loader_maps_cells_and_drops_zero_produced(tmp_path, monkeypatch):
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_nz01_csv(tmp_path / "vocab_data_nz_01.csv")
@@ -75,6 +101,8 @@ def _prepare_context(tmp_path, monkeypatch, definition):
             )
         ]
     ).to_csv(tmp_path / "vocab_data_uk_02.csv", index=False)
+    _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+    _write_es01_csv(tmp_path / "vocab_data_es_01.csv")
 
     # A few complete marginal DS rows so the data-prep summary's per-column
     # normality checks have observations on every outcome (an all-NaN column

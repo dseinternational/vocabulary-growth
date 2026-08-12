@@ -9,7 +9,10 @@ import time
 import duckdb
 import pandas as pd
 
-from vocab_growth.data_utils import vocab_combined_view_sql
+from vocab_growth.data_utils import (
+    drop_uk07_withheld_administrations,
+    vocab_combined_view_sql,
+)
 from vocab_growth.reporting import (
     console,
     format_duration,
@@ -33,6 +36,7 @@ _sources = {
     "vocab_uk_06": "./data/vocab_data_uk_06.csv",
     "vocab_nz_01": "./data/vocab_data_nz_01.csv",
     "vocab_es_01": "./data/vocab_data_es_01.csv",
+    "vocab_uk_07": "./data/vocab_data_uk_07.csv",
     "vocab_us_01": "./data/vocab_data_us_01.csv",
 }
 # nz_01 (Foster-Cohen) is added with the real anonymisation key in a separate
@@ -76,6 +80,21 @@ vocab_uk_05_df = _loaded["vocab_uk_05"]
 vocab_us_02_df = _loaded["vocab_us_02"]
 vocab_uk_06_df = _loaded["vocab_uk_06"]
 vocab_es_01_df = _loaded["vocab_es_01"]
+
+# Exclude the uk_07 administrations withheld pending clarification with the source
+# team — one row at 58 months recording 191 words understood against 489 produced,
+# the only row in the source where production exceeds comprehension, at the end of
+# a reported comprehension decline. Dropped here at load so it is absent from the
+# merged CSV, the DuckDB vocab_uk_07 table and the vocab_combined view alike; the
+# same helper guards VG15's cross-tab path, which reads this CSV directly. See
+# data_utils.UK07_WITHHELD_ADMINISTRATIONS for the reasoning and how to reinstate.
+vocab_uk_07_df, _uk07_withheld = drop_uk07_withheld_administrations(
+    _loaded["vocab_uk_07"]
+)
+console.print(
+    f"[yellow]uk_07 administrations withheld pending source clarification:[/yellow] "
+    f"{_uk07_withheld}"
+)
 
 # Prepare the data for merging
 vocab_to_merge = vocab_uk_01_df[["subject_id", "age", "understood", "spoken"]].copy()
@@ -188,6 +207,17 @@ es_01_to_merge = vocab_es_01_df.loc[
 ].copy()
 es_01_to_merge["study"] = 12
 
+# UK 7 (uk_07, PACT-DS): a longitudinal Down syndrome dataset from a feasibility
+# RCT, three time points per child on a 674-item CDI. Its expressive columns are
+# modality-exclusive cells (says-only / signs-only / both), following the nz_01
+# convention, so the any-modality spoken marginal is word-only + both
+# (spoken + spoken_signed). Both trial arms are pooled here; `group` stays in the
+# vocab_uk_07 table for a stratified analysis. The signed marginal and the
+# produced union reach the models through the vocab_combined view.
+uk_07_to_merge = vocab_uk_07_df[["subject_id", "age", "understood"]].copy()
+uk_07_to_merge["spoken"] = vocab_uk_07_df["spoken"] + vocab_uk_07_df["spoken_signed"]
+uk_07_to_merge["study"] = 13
+
 
 merged_df = pd.concat(
     [
@@ -204,6 +234,7 @@ merged_df = pd.concat(
         ireland_2_to_merge,
         nz_01_to_merge,
         es_01_to_merge,
+        uk_07_to_merge,
     ],
     ignore_index=True,
 )
@@ -324,6 +355,13 @@ con.execute(
     """
     CREATE TABLE vocab_es_01 AS
     SELECT * FROM vocab_es_01_df
+    """
+)
+
+con.execute(
+    """
+    CREATE TABLE vocab_uk_07 AS
+    SELECT * FROM vocab_uk_07_df
     """
 )
 

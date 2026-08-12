@@ -738,13 +738,6 @@ class TrivariateModelDefinition:
     the model estimand and the other sources use total signed vocabulary.  This
     switch exists only for a source-sensitivity comparison.
     """
-    include_uk06: bool = False
-    """Re-include uk_06's unverified signing field.
-
-    False by default until its field dictionary confirms comparability with the
-    total-sign construct.  Understood and spoken uk_06 observations remain in the
-    fit regardless of this flag.
-    """
 
     # -- Data age filtering --
     max_age_months: int | None = None
@@ -920,6 +913,36 @@ class JointModelDefinition:
     tau_u_sigma: float = 0.5
     tau_q_sigma: float = 0.5
     tau_sign_sigma: float = 0.5
+    tau_psi_sigma: float = 1.0
+    """HalfNormal sigma for the between-study SD of log psi.
+
+    Wider than the other three (0.5) because the measured heterogeneity is wider.
+    Mantel-Haenszel odds ratios over the cross-tab sources run from 0.90 (es_01) to
+    about 14 (uk_07, nz_01) — roughly 2.8 on the log scale, so a between-study SD
+    near 1 is what the data show, and a HalfNormal(0.5) would fight it.
+
+    **Why this is a study term and not an age term.** The obvious alternative --
+    that the association varies with age, and the sources differ only because they
+    cover different ages -- was tested and rejected. uk_07's psi-informing rows have
+    a median age of 60 months against 38 for uk_02 and 32 for es_01, and fitted
+    without a study term age looks strong (+0.381 per year, z = +5.78). But age
+    alone fits worse than study alone (weighted SSR 2688 against 1640) and adds
+    nothing on top of it (1640 -> 1640); and in the 34-56 month window where all
+    three within-understood sources overlap, es_01 and uk_02 are matched at exactly
+    41 months and still differ six-fold (1.00 against 5.94, with uk_07 at 11.89).
+    Coverage would not have supported an age term regardless: three-way overlap
+    exists only at 30-60 months, so any curvature in the tails would be one study's
+    intercept re-labelled as a trend. See
+    notes/202608121030-psi-heterogeneity-and-age-invariance.md and
+    scripts/psi_heterogeneity_audit.py.
+
+    Only four studies inform psi, so ``tau_psi`` is weakly identified and the prior
+    does real work. That is a reason to report it with its interval and treat the
+    per-study values as the primary read, not a reason to pool them: pooling does
+    not make the heterogeneity go away, it hides it in a headline that then moves
+    with source composition (psi went 1.80 to 2.49 on adding uk_07 alone). The
+    non-centred ``tau * z`` parameterisation keeps the funnel manageable at this
+    group count."""
 
     # -- Subject-level random intercepts (VG08-VG10 pattern, issue #59) --
     #
@@ -980,8 +1003,6 @@ class JointModelDefinition:
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk01_signed: bool = False
     """Re-include uk_01's signed-only field for a source-sensitivity fit."""
-    include_uk06: bool = False
-    """Re-include uk_06's unverified signing field for a source-sensitivity fit."""
     exclude_us01_spoken_ceiling: bool = False
     """Exclude us_01 WS spoken counts at the 680-word ceiling.
 
@@ -994,10 +1015,43 @@ class JointModelDefinition:
 
     The signed counterpart of ``report_max_age_understood``, and it exists for the
     same reason: a model's ``ages_query`` grid is shared by every outcome, but the
-    outcomes are not observed over the same range. Signed is the sparsest -- 516
-    observations with 85% between 12 and 48 months, 23 above 60, 7 above 72 and
-    **none between 84 and 96** -- while the Down syndrome grid runs to 115. Above
-    about 60 months `r(a)` is the tent's extrapolation, not an estimate.
+    outcomes are not observed over the same range. Signed is still the sparsest
+    outcome, and the Down syndrome grid runs to 115 months, so a cap is still
+    needed -- but **where** it belongs changed when uk_07 (PACT-DS) entered the
+    pool on 2026-08-12.
+
+    The cap was 60. Its justification was a count: of 593 signed observations, 46
+    were above 60 months and **none above 72** -- so beyond about 60 months
+    ``r(a)`` was the tent's extrapolation rather than an estimate. Two changes on
+    2026-08-12 rebuilt that tail. uk_07 contributes 82 signed observations spanning
+    34-95 months from 30 children, and uk_06's 11 observations at 60-115 months
+    were unmasked once the source confirmed its signing field is a total (see
+    ``data_utils.UNCERTAIN_SIGN_STUDIES``). The count now reads:
+
+    ======================  ==========  =========
+    band                    before      after
+    ======================  ==========  =========
+    60-72 months            46          69
+    72-84 months            **0**       17
+    84-96 months            **0**       8
+    96-120 months           **0**       4
+    above 60 months, total  46          98
+    above 72 months, total  **0**       29
+    ======================  ==========  =========
+
+    So the cap is 84: the 72-84 band now carries 17 observations from two
+    independent sources rather than nothing, and reporting it is no longer
+    extrapolation. Above 84 is left out deliberately -- 12 observations from 10
+    children, thinning to one source per band, is evidence but not enough to
+    publish a curve on, and 84 is also the Down syndrome models' high trend anchor
+    (see ``clamp_above_hi``), above which the mean is clamped rather than fitted.
+    Those records still inform the fit; they are only withheld from the tables.
+
+    This is not a cosmetic widening. At 72 months the refit puts ``r`` at 0.198
+    against 0.156 before, and at 90 months 0.182 against 0.098 -- the post-peak
+    decline is real but far shallower than the pre-uk_07 fits showed, and at 60
+    months that finding was entirely hidden. See
+    notes/202608120030-uk07-pactds-integration-and-ds-refit.md §5.
 
     Applies to the signed counts, the signed ratio `r`, and total expressive
     `p_any`, which is a function of the signed ratio and can only be reported where
@@ -1027,6 +1081,91 @@ class JointModelDefinition:
     (its production-only, 675-item marginals are not comparable to the 810-item
     marginal likelihoods); the flag is kept for reversibility and for isolating
     nz_01's pull on psi."""
+
+    # -- uk_07 (PACT-DS) within-understood cross-tab inclusion --
+    include_uk07_cells: bool = True
+    """If True (default), uk_07's within-understood four-cell cross-tab (neither /
+    sign-only / speech-only / both) enters the same Dirichlet-Multinomial that
+    identifies psi from uk_02, roughly doubling the rows that identify it and
+    extending their age span from 19-56 months out to 95 (see
+    common_joint_modality).
+
+    Unlike ``include_nz01_cells``, setting this False does **not** drop the study:
+    uk_07's understood/spoken/signed marginals are on an ordinary comprehension-
+    plus-production footing, so they fall back into the marginal likelihoods and
+    uk_07 keeps informing U, q and r. The flag therefore isolates uk_07's pull on
+    the association alone, which is what a sensitivity comparison wants."""
+
+    # -- es_01 (Galeote) within-understood cross-tab inclusion --
+    include_es01_cells: bool = True
+    """Whether es_01's within-understood four-cell cross-tab enters the
+    Dirichlet-Multinomial that identifies psi. **Default True** since 2026-08-12,
+    when psi gained a study-level term.
+
+    es_01's cells are derivable — its fourth column is a recorded union. The
+    original table's columns are TOTAL COMPREHENSIÓN, TOTAL PRODUCTION, TOTAL
+    GESTURES and WORD PRODUCED + GESTURES ONLY, the last being what Galeote et al.
+    (2011) call "total lexical production combining the two modalities" — so the
+    four cells follow by subtraction and 185 of 186 rows yield a valid partition at
+    11-71 months. They more than double the rows identifying psi and anchor it at
+    the young end, where uk_02 is otherwise alone.
+
+    It defaulted False for the nine days before that, and the reason was never the
+    construct. es_01's third column scores "gestures representing specific lexical
+    items", each tied to one of the 651 checklist words — a per-word lexical marker
+    on an adapted CDI, structurally the same coding uk_02 and uk_07 use. It is the
+    same measurement.
+
+    The reason was that the sources already informing ``psi`` disagree about it
+    substantially, and ``psi`` had nowhere to put that. Mantel-Haenszel odds ratios
+    over the same cells, stratified by child:
+
+    =======  =====  =========  =================  ==========  ===============
+    source   rows   MH OR      reference set      per-child   non-vocal words
+                                                  OR < 1      also spoken
+    =======  =====  =========  =================  ==========  ===============
+    uk_02      56     6.09     within understood     4%          50.4%
+    uk_07      82    13.90     within understood    11%          72.2%
+    nz_01     111    14.63     all 675 items         4%          44.8%
+    es_01     185     0.90     within understood    45%          30.8%
+    =======  =====  =========  =================  ==========  ===============
+
+    Two caveats on that table. MH is a crude descriptive statistic on the observed
+    cells, not ``psi`` itself, which is a population-conditioned quantity defined
+    against the fitted r and q. And nz_01 has no comprehension total, so its
+    "neither" cell spans all unproduced items rather than understood-but-unproduced,
+    which inflates its OR — on the same data uk_07 reads 13.90 within understood and
+    40.72 over all 674 items. Magnitudes are therefore only comparable within a
+    reference set. The per-child sign and the share-also-spoken column need no
+    "neither" cell and are comparable throughout.
+
+    What survives every control is that es_01 sits at independence while the three
+    sign sources are positive: by age band it runs 0.30-1.12 against 4.4-41.6 for
+    uk_02 and 4.4-18.1 for uk_07, with no overlap in any band, and matched on
+    expressive vocabulary (30-300 words) it is 1.05 against 4.80 and 9.68. On the
+    conditioning-free share-also-spoken measure it is the low end of a continuous
+    gradient rather than categorically apart. Either way the spread across sources
+    is large, plausibly reflecting whether signing was taught alongside speech —
+    both UK sources come from contexts where it is, and uk_07 is an intervention
+    trial — though four studies cannot test that.
+
+    That heterogeneity was disqualifying only because **``psi`` was the only latent
+    in this model with no study-level term.** ``delta_u``, ``delta_q`` and ``delta_sign``
+    are all study random intercepts; ``log_psi`` was a bare global scalar. So a pooled
+    ``psi`` was a precision-weighted average over whichever sources happened to be in
+    the pool — which is why it moved from 1.80 to 2.49 when uk_07 arrived, and why
+    adding es_01's 185 rows (more than the uk_02 and uk_07 four-cell rows combined)
+    would have dragged the headline toward independence as an artefact of composition
+    rather than a finding.
+
+    That is now handled: ``delta_psi`` is a zero-sum study random intercept over the
+    psi-informed studies, so each source carries its own association and the reported
+    population value is a shrunk centre with ``tau_psi`` quantifying the spread. With
+    the heterogeneity modelled rather than averaged away, pooling these cells adds
+    evidence instead of moving the headline by composition, and the flag defaults
+    True. Setting it False isolates es_01's contribution. See
+    data/vocab_data_es_01.md and
+    notes/202608120030-uk07-pactds-integration-and-ds-refit.md."""
 
     @property
     def model_type(self) -> ModelType:
@@ -2327,11 +2466,16 @@ VG15 = JointModelDefinition(
     # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
     # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    # Signed evidence stops around 60 months: 23 of 516 signed observations lie
-    # above it, 7 above 72, and none between 84 and 96, while the grid runs to
-    # 115. Adopted 2026-08-07 on the same argument that capped comprehension at
-    # 72. Also caps p_any, which is a function of the signed ratio.
-    report_max_age_signed=60,
+    # Signed evidence now reaches 84 months. Adopted 2026-08-07 at 60 on the same
+    # argument that capped comprehension at 72 -- then 46 of 593 signed
+    # observations lay above 60 and none above 72. uk_07 (PACT-DS) adds 82
+    # observations at 34-95 months and uk_06's 11 at 60-115 were unmasked, taking
+    # 72-84 from 0 rows to 17 and above-60 from 46 to 98, so 60 no longer marks
+    # where the evidence stops -- it hid the pool's only real measurement of the
+    # post-peak signing decline. Above 84 stays out: 12 observations from 10
+    # children thinning to one source per band, and 84 is the trend's high anchor.
+    # Also caps p_any, a function of the signed ratio.
+    report_max_age_signed=84,
     clamp_mean_above_hi_anchor=True,
 )
 

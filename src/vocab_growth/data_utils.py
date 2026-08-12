@@ -97,8 +97,25 @@ without item-level re-derivation.  Keep the source rows for understood/spoken
 outcomes while masking only their ``signed`` value by default.
 """
 
-UNCERTAIN_SIGN_STUDIES = ("uk_06",)
-"""Studies whose signing-field construct has not yet been source-verified."""
+UNCERTAIN_SIGN_STUDIES: tuple[str, ...] = ()
+"""Studies whose signing-field construct has not yet been source-verified.
+
+Empty since 2026-08-12. It held ``uk_06`` from 16 July, when its inclusion was
+reversed pending confirmation that its signing field measured total sign use rather
+than uk_01's sign-only construct (issue #211).
+
+The source has now confirmed uk_06 used the **standard DSE checklists, as in
+ie_01/ie_02**, whose completion instructions make each of columns 2-5 conditional on
+comprehension -- column 2 is "understands and signs (tick for imitated signs as well
+as for spontaneous signs)". That is a *total* sign count, so uk_06 is comparable with
+uk_02, nz_01, es_01 and uk_07 and needs no mask. The committed data agrees on every
+row: ``signed`` and ``spoken`` are both nested within ``understood`` 11 times out of
+11, and ``signed + spoken`` exceeds ``understood`` on 7 of 11 -- impossible under a
+mutually exclusive reading, exactly as overlapping per-word ticks predict.
+
+The constant is kept rather than deleted: it is the mechanism for the next source
+whose construct is unverified, and emptying it records that this one was resolved by
+evidence rather than quietly dropped. See data/vocab_data_uk_06.md."""
 
 INCOMPLETE_ADMINISTRATION_CEILINGS: dict[str, tuple[int, ...]] = {"ie_01": (460,)}
 """Per-study ``survey_vocab_max`` values marking a partial administration.
@@ -174,6 +191,57 @@ percentile for comprehension and are retained, on the study owner's judgement th
 they are clinically unusual but should not be excluded. They are a sensitivity
 target, not a defect.
 """
+
+
+UK07_WITHHELD_ADMINISTRATIONS: tuple[tuple[str, str], ...] = (
+    ("ID_44BA6806E829CE6B", "t3"),
+)
+"""uk_07 administrations withheld pending clarification with the source team.
+
+Keyed by ``(subject_id, timepoint)``. One administration is listed: at 58 months
+this child records 191 words understood against 489 produced. It is the only row
+in the source where production exceeds comprehension, and it sits at the end of a
+reported comprehension decline (349 → 291 → 191 across the three visits) while
+production rises (185 → 263 → 489). The likeliest reading is a parent-report
+artefact — only the expressive columns completed at the later visit — but that is
+a hypothesis about how the form was filled in, not something the aggregate counts
+can settle.
+
+Withheld rather than retained-and-flagged, which is what ie_01's seven such
+records get. The difference is that ie_01's are a known, stable property of a
+closed source, whereas this one is an open question with a reachable source team,
+so the row is held out until the study owner has an explanation. Removing the
+entry from this tuple and re-running ``scripts/prepare_data.py`` reinstates it.
+This is the same treatment as the ie_02 subject excluded in ``prepare_data.py``.
+
+Applied at CSV load, so the row is absent from the ``vocab_uk_07`` table, the
+``vocab_combined`` view, ``vocab_data_merged.csv`` and VG15's cross-tab path
+alike — there is no route by which a model can see it.
+"""
+
+
+def drop_uk07_withheld_administrations(
+    raw: pd.DataFrame,
+    *,
+    subject_col: str = "subject_id",
+) -> tuple[pd.DataFrame, int]:
+    """Drop the uk_07 rows listed in :data:`UK07_WITHHELD_ADMINISTRATIONS`.
+
+    Takes the raw uk_07 CSV frame (``subject_id`` and ``timepoint`` columns) and
+    returns it without the withheld administrations, plus the number removed.
+    Both readers of that CSV — ``scripts/prepare_data.py`` and the VG15
+    cross-tab loader — call this, so neither can drift from the other.
+    """
+    required = {subject_col, "timepoint"}
+    missing = required - set(raw.columns)
+    if missing:
+        raise KeyError(
+            "uk_07 withholding requires columns: " + ", ".join(sorted(missing))
+        )
+
+    keys = pd.MultiIndex.from_arrays([raw[subject_col], raw["timepoint"]])
+    drop = keys.isin(UK07_WITHHELD_ADMINISTRATIONS)
+    return raw.loc[~drop].reset_index(drop=True), int(drop.sum())
 
 
 def mask_incomparable_signed_outcomes(
@@ -819,7 +887,10 @@ def _sql_string_list(values: tuple[str, ...]) -> str:
 #     Down syndrome. Two of its children sit exactly at the comprehension ceiling
 #     (legitimate but censored: their true receptive vocabulary is at least 651),
 #     which the guard keeps — it drops only counts strictly above the ceiling.
-#   uk_01 and it_01 carry a per-row source ceiling.
+#   - Reading CDI (uk_07) = 674 words, the University of Reading adaptation used by
+#     the PACT-DS trial, which adds a per-item sign coding. Nothing in the source
+#     reaches the ceiling on any of the four counts.
+#   uk_01, it_01 and uk_07 carry a per-row source ceiling.
 #
 # Form-ceiling guard (issues #128/#131): exclude rows whose word count exceeds
 # the native item ceiling of the checklist form they came from
@@ -1113,6 +1184,51 @@ def vocab_combined_view_sql() -> str:
         651                                 as survey_vocab_max  -- CDI-Down
     FROM vocab_es_01 as ves01
     WHERE ves01."group" = 'DS'
+    UNION ALL
+    -- uk_07 (PACT-DS; Burgoyne, Baxter, Hartwell, Pagnamenta & Stojanovik): a UK
+    -- feasibility randomised controlled trial of a parent-delivered early language
+    -- intervention. 30 children with Down syndrome, three assessment points each
+    -- (83 retained rows, 34-95 months), on the 674-item "Reading CDI" -- the
+    -- University of Reading adaptation, which adds a per-item sign coding.
+    --
+    -- Its expressive columns are modality-EXCLUSIVE cells, the nz_01 convention
+    -- rather than the uk_01/ie_02/uk_04/uk_05 one: `spoken` is says-only (no
+    -- sign), `signed` is signs-only (no says), `spoken_signed` is both. So the
+    -- any-modality marginals are spoken = a + c and signed = b + c, and the
+    -- source's `produced` is already the union of all three, each word once.
+    -- `signed` is therefore a TOTAL sign count -- comparable with uk_02, nz_01 and
+    -- es_01 without item-level re-derivation, and so not a SIGNED_ONLY_STUDIES
+    -- case. 81 of the 83 rows carry a non-zero total, from all 30 children.
+    --
+    -- Unlike nz_01 this source also records comprehension, so every row carries
+    -- `understood`. That makes uk_07 the second source after uk_02 supplying the
+    -- four-cell WITHIN-UNDERSTOOD cross-tab that identifies the sign-speech
+    -- association psi: understood_only = understood - produced, plus the three
+    -- cells above. VG15 consumes those cells from the raw CSV (see
+    -- common_joint_modality) and drops uk_07's marginals there to avoid double
+    -- counting; this view's marginals feed every other model.
+    --
+    -- Both trial arms are pooled. The models describe vocabulary against age, not
+    -- treatment effect, and the arm is a property of the child rather than of the
+    -- measurement; `group` stays in vocab_uk_07 for a stratified analysis, and the
+    -- intervention arm's T1-T3 growth being partly programme-driven is recorded as
+    -- a source caveat.
+    --
+    -- One administration (58 months, 191 understood against 489 produced) is
+    -- withheld pending clarification with the source team, and so is absent from
+    -- vocab_uk_07 itself -- see UK07_WITHHELD_ADMINISTRATIONS. It is the only row
+    -- in the source where production exceeds comprehension, and the only one whose
+    -- understood_only cross-tab cell would be negative. 82 rows remain.
+    SELECT 'uk_07'                                        as study,
+        vuk07.subject_id,
+        vuk07.sex,
+        vuk07.age,
+        vuk07.understood,
+        vuk07.spoken + vuk07.spoken_signed                as spoken,
+        vuk07.signed + vuk07.spoken_signed                as signed,
+        vuk07.produced,
+        vuk07.survey_vocab_max  -- 674, constant, carried in the source
+    FROM vocab_uk_07 as vuk07
     ) vc
     WHERE {_CEILING_GUARD_KEEP}
     """

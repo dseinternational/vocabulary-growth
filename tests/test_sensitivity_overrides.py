@@ -105,12 +105,17 @@ def test_registry_counts_and_models():
     # age became a sampled parameter that day, so for the first time there is
     # something for a peak-age variant to vary — the existing `sign-peak-lo`/`-hi`
     # pair varies the peak's HEIGHT, and could not have covered this.
-    assert len(VARIANTS) == 44
+    #
+    # -1 on 2026-08-12: `sign-include-uk06` retired on the same principle as the
+    # ceiling variants. The source confirmed uk_06 used the standard DSE
+    # checklists, whose column 2 is "understands and signs" — a total sign count —
+    # so uk_06 is now included by default and the variant cannot vary anything.
+    assert len(VARIANTS) == 43
     assert len(variants_for("vg10")) == 11
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1
-    assert len(variants_for("vg15")) == 23
+    assert len(variants_for("vg15")) == 22
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -127,9 +132,9 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 23
+    assert len(all_vg15) == 22
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 23
+    assert len({d.config_name for d in all_vg15}) == 22
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
@@ -141,6 +146,13 @@ def test_build_variant_all_and_named():
     for model in ("vg10", "vg15"):
         with pytest.raises(KeyError, match="us01-ceiling-excluded"):
             build_variant(model, "us01-ceiling-excluded")
+
+    # Same principle for sign-include-uk06. It asked "what if uk_06's signing IS
+    # comparable?" — answered on 2026-08-12 when the source confirmed the standard
+    # DSE checklists, after which uk_06 is included by default and the variant has
+    # nothing left to vary. See data/vocab_data_uk_06.md and issue #211.
+    with pytest.raises(KeyError, match="sign-include-uk06"):
+        build_variant("vg15", "sign-include-uk06")
 
 
 def test_implausible_production_reinstatement_is_registered_and_bites():

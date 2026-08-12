@@ -80,8 +80,6 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_hi_sign_alpha": 2.0, "p_slope_hi_sign_beta": 8.0}},  # old r ~0.18 (words plateau)
     ("vg15", "sign-include-uk01"): {"suffix": "sign-include-uk01", "scalar": {
         "include_uk01_signed": True}},
-    ("vg15", "sign-include-uk06"): {"suffix": "sign-include-uk06", "scalar": {
-        "include_uk06": True}},
 
     # -- Target 4: kappa (dispersion): VG10 (U/S) and VG15 (adds sign) --
     #

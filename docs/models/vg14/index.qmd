@@ -70,7 +70,7 @@ This model adds **signing** as a third production modality alongside speaking. I
 - **Outcomes:** words understood, spoken, and signed.
 - **Decomposition:** spoken and signed vocabularies are each modelled as fractions of understood vocabulary.
 - **Signing structure:** signed ratio has a three-anchor tent mean plus GP, allowing a rise and decline.
-- **Source harmonisation:** `uk_01` sign-only and unverified `uk_06` signing values are masked in the primary analysis and available only as sensitivities.
+- **Source harmonisation:** `uk_01` sign-only signing values are masked in the primary analysis and available as a sensitivity. `uk_06` signing is included — its construct was verified with the source on 2026-08-12.
 - **Total expressive vocabulary:** `p_any` is an independence-based upper bound, not a data-identified union.
 
 :::
@@ -90,7 +90,7 @@ $$
 p_S(a) = p_U(a) \cdot q(a), \qquad p_\text{Sign}(a) = p_U(a) \cdot r(a),
 $$
 
-where $q(a) = \text{sigmoid}(h(a))$ is the **production ratio** (the fraction of understood words that are spoken at age $a$) and $r(a) = \text{sigmoid}(g_\text{sign}(a))$ is the **signed ratio** (the fraction of understood words that are signed). Since $q(a), r(a) \in (0, 1)$, this enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction. The understood trajectory $f_U(a)$ and spoken-ratio trajectory $h(a)$ each have a linear trend plus a Gaussian process. The signed-ratio trajectory uses a three-anchor tent mean plus a Gaussian process for smooth departures. For paired, logically nested observations, spoken and signed counts are modelled conditionally on the observed understood count; records without usable understood data retain marginal Beta-Binomial likelihoods over the full inventory. `uk_01` and `uk_06` remain available for understood/spoken estimation, but their signing fields are masked in the primary model.
+where $q(a) = \text{sigmoid}(h(a))$ is the **production ratio** (the fraction of understood words that are spoken at age $a$) and $r(a) = \text{sigmoid}(g_\text{sign}(a))$ is the **signed ratio** (the fraction of understood words that are signed). Since $q(a), r(a) \in (0, 1)$, this enforces $p_S \leq p_U$ and $p_\text{Sign} \leq p_U$ by construction. The understood trajectory $f_U(a)$ and spoken-ratio trajectory $h(a)$ each have a linear trend plus a Gaussian process. The signed-ratio trajectory uses a three-anchor tent mean plus a Gaussian process for smooth departures. For paired, logically nested observations, spoken and signed counts are modelled conditionally on the observed understood count; records without usable understood data retain marginal Beta-Binomial likelihoods over the full inventory. `uk_01` remains available for understood/spoken estimation, but its signing field is masked in the primary model.
 
 ### Total expressive vocabulary
 
@@ -321,7 +321,7 @@ The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ is the fraction of understoo
 
 ::: {.callout-warning title="The peak age and the decline are study-confounded — not a precise developmental fact"}
 
-The peak age and any later decline are not identifiable precisely from VG14. Comparable total-sign observations are sparse at the edges of the age range, and this baseline has no study random effects, so its age curve cannot reliably separate developmental change from source composition. The primary analysis now excludes the non-comparable `uk_01` sign-only field and the unverified `uk_06` signing field; earlier numerical descriptions that relied on those records require refitting and must not be interpreted as current estimates. VG15 is the preferred signing model when study composition and sign-speech overlap matter.
+The peak age and any later decline are not identifiable precisely from VG14. Comparable total-sign observations are sparse at the edges of the age range, and this baseline has no study random effects, so its age curve cannot reliably separate developmental change from source composition. The primary analysis excludes the non-comparable `uk_01` sign-only field; `uk_06`'s signing is included since its construct was verified on 2026-08-12. Earlier numerical descriptions require refitting and must not be interpreted as current estimates. VG15 is the preferred signing model when study composition and sign-speech overlap matter.
 
 :::
 

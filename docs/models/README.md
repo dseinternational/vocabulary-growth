@@ -148,7 +148,7 @@ This decomposition keeps spoken and signed vocabulary bounded by comprehension b
 construction, and lets the models report directly on quantities of practical
 interest (how much of what a child understands they can also say or sign).
 
-The primary signing analyses mask `uk_01` signing values because that source records sign-only rather than total signed words, and mask `uk_06` signing values pending source verification. Their understood and spoken outcomes remain in the models; explicit sensitivity variants can reintroduce either signing source.
+The primary signing analyses mask `uk_01` signing values because that source records sign-only rather than total signed words; its understood and spoken outcomes remain in the models, and an explicit sensitivity variant can reintroduce its signing. `uk_06`'s signing was masked from 16 July 2026 pending source verification and was **reinstated on 12 August** — the source confirmed the standard DSE checklists, whose column 2 is "understands and signs", a total sign count (see `data/vocab_data_uk_06.md`).
 
 ### Random intercepts and GP anchoring
 
@@ -223,8 +223,8 @@ qualifying observations can contribute.
   starting point that gives an upper bound on combined production.
 - **VG15** — replaces that independence assumption with a directly estimated
   **within-understood sign–speech association** (`psi`, a scalar Plackett odds
-  ratio identified from the four-cell sign/speak cross-tabulation in the `uk_02`
-  dataset). It adds **study and subject random intercepts on all three
+  ratio identified from the four-cell sign/speak cross-tabulations in the `uk_02`
+  and `uk_07` datasets). It adds **study and subject random intercepts on all three
   trajectories** and carries VG10's stabilisation (per-draw GP anchor at 54
   months with the tightened `q`-GP amplitude `eta_q`), yielding a
   **data-identified** total expressive vocabulary rather than VG14's
