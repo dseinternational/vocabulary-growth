@@ -37,13 +37,33 @@ def test_mask_incomparable_signed_outcomes_preserves_other_outcomes():
 
     masked, dropped = data_utils.mask_incomparable_signed_outcomes(frame)
 
-    assert dropped == {"uk_01": 1, "uk_06": 1}
+    # uk_01 alone: its `signed` is a sign-ONLY count. uk_06 was masked here until
+    # 2026-08-12, when the source confirmed the standard DSE checklists — column 2
+    # is "understands and signs", a total — so it is no longer masked.
+    assert dropped == {"uk_01": 1}
     assert masked["understood"].tolist() == frame["understood"].tolist()
     assert masked["spoken"].tolist() == frame["spoken"].tolist()
     assert np.isnan(masked.loc[0, "signed"])
-    assert np.isnan(masked.loc[1, "signed"])
+    assert masked.loc[1, "signed"] == 30       # uk_06 retained
     assert masked.loc[2, "signed"] == 40
     assert frame["signed"].tolist() == [20, 30, 40]
+
+
+def test_uncertain_sign_studies_is_empty_but_the_mechanism_survives():
+    """uk_06 left the list on evidence; the guard stays for the next source.
+
+    Emptying the tuple rather than deleting it keeps the route open for a future
+    source whose signing construct is unverified, and records that this one was
+    resolved rather than quietly dropped (issue #211).
+    """
+    assert data_utils.UNCERTAIN_SIGN_STUDIES == ()
+
+    # The report lists every *excluded* study, so an empty tuple means no study is
+    # reported under the uncertain heading at all.
+    frame = pd.DataFrame({"study": ["uk_06"], "signed": [30]})
+    kept, dropped = data_utils.mask_incomparable_signed_outcomes(frame)
+    assert "uk_06" not in dropped
+    assert kept.loc[0, "signed"] == 30
 
 
 def test_mask_incomparable_signed_outcomes_can_reinclude_sources():

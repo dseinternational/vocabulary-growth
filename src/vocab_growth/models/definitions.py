@@ -738,13 +738,6 @@ class TrivariateModelDefinition:
     the model estimand and the other sources use total signed vocabulary.  This
     switch exists only for a source-sensitivity comparison.
     """
-    include_uk06: bool = False
-    """Re-include uk_06's unverified signing field.
-
-    False by default until its field dictionary confirms comparability with the
-    total-sign construct.  Understood and spoken uk_06 observations remain in the
-    fit regardless of this flag.
-    """
 
     # -- Data age filtering --
     max_age_months: int | None = None
@@ -1010,8 +1003,6 @@ class JointModelDefinition:
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk01_signed: bool = False
     """Re-include uk_01's signed-only field for a source-sensitivity fit."""
-    include_uk06: bool = False
-    """Re-include uk_06's unverified signing field for a source-sensitivity fit."""
     exclude_us01_spoken_ceiling: bool = False
     """Exclude us_01 WS spoken counts at the 680-word ceiling.
 
@@ -1030,26 +1021,31 @@ class JointModelDefinition:
     pool on 2026-08-12.
 
     The cap was 60. Its justification was a count: of 593 signed observations, 46
-    were above 60 months, 7 above 72, and **none between 84 and 96** -- so above
-    about 60 months ``r(a)`` was the tent's extrapolation rather than an estimate.
-    uk_07 contributes 82 signed observations spanning 34-95 months, from 30
-    children, and the count now reads:
+    were above 60 months and **none above 72** -- so beyond about 60 months
+    ``r(a)`` was the tent's extrapolation rather than an estimate. Two changes on
+    2026-08-12 rebuilt that tail. uk_07 contributes 82 signed observations spanning
+    34-95 months from 30 children, and uk_06's 11 observations at 60-115 months
+    were unmasked once the source confirmed its signing field is a total (see
+    ``data_utils.UNCERTAIN_SIGN_STUDIES``). The count now reads:
 
     ======================  ==========  =========
     band                    before      after
     ======================  ==========  =========
-    60-72 months            46          64
-    72-84 months            **0**       15
+    60-72 months            46          69
+    72-84 months            **0**       17
     84-96 months            **0**       8
-    above 60 months, total  46          87
+    96-120 months           **0**       4
+    above 60 months, total  46          98
+    above 72 months, total  **0**       29
     ======================  ==========  =========
 
-    So the cap is 84: the 72-84 band now carries 15 observations from real
-    children rather than nothing, and reporting it is no longer extrapolation.
-    84-96 is left out deliberately -- 8 observations from a single source is
-    evidence, but not enough to publish a curve on, and 84 is also the Down
-    syndrome models' high trend anchor (see ``clamp_above_hi``), above which the
-    mean is clamped rather than fitted.
+    So the cap is 84: the 72-84 band now carries 17 observations from two
+    independent sources rather than nothing, and reporting it is no longer
+    extrapolation. Above 84 is left out deliberately -- 12 observations from 10
+    children, thinning to one source per band, is evidence but not enough to
+    publish a curve on, and 84 is also the Down syndrome models' high trend anchor
+    (see ``clamp_above_hi``), above which the mean is clamped rather than fitted.
+    Those records still inform the fit; they are only withheld from the tables.
 
     This is not a cosmetic widening. At 72 months the refit puts ``r`` at 0.198
     against 0.156 before, and at 90 months 0.182 against 0.098 -- the post-peak
@@ -2471,12 +2467,13 @@ VG15 = JointModelDefinition(
     report_max_age_understood=72,
     # Signed evidence now reaches 84 months. Adopted 2026-08-07 at 60 on the same
     # argument that capped comprehension at 72 -- then 46 of 593 signed
-    # observations lay above 60, 7 above 72, and none between 84 and 96. uk_07
-    # (PACT-DS) adds 82 observations at 34-95 months, taking 72-84 from 0 rows to
-    # 15 and above-60 from 46 to 87, so 60 no longer marks where the evidence
-    # stops -- it hides the pool's only real measurement of the post-peak signing
-    # decline. 84-96 stays out: 8 observations from one source, and 84 is the
-    # trend's high anchor. Also caps p_any, a function of the signed ratio.
+    # observations lay above 60 and none above 72. uk_07 (PACT-DS) adds 82
+    # observations at 34-95 months and uk_06's 11 at 60-115 were unmasked, taking
+    # 72-84 from 0 rows to 17 and above-60 from 46 to 98, so 60 no longer marks
+    # where the evidence stops -- it hid the pool's only real measurement of the
+    # post-peak signing decline. Above 84 stays out: 12 observations from 10
+    # children thinning to one source per band, and 84 is the trend's high anchor.
+    # Also caps p_any, a function of the signed ratio.
     report_max_age_signed=84,
     clamp_mean_above_hi_anchor=True,
 )

@@ -97,8 +97,25 @@ without item-level re-derivation.  Keep the source rows for understood/spoken
 outcomes while masking only their ``signed`` value by default.
 """
 
-UNCERTAIN_SIGN_STUDIES = ("uk_06",)
-"""Studies whose signing-field construct has not yet been source-verified."""
+UNCERTAIN_SIGN_STUDIES: tuple[str, ...] = ()
+"""Studies whose signing-field construct has not yet been source-verified.
+
+Empty since 2026-08-12. It held ``uk_06`` from 16 July, when its inclusion was
+reversed pending confirmation that its signing field measured total sign use rather
+than uk_01's sign-only construct (issue #211).
+
+The source has now confirmed uk_06 used the **standard DSE checklists, as in
+ie_01/ie_02**, whose completion instructions make each of columns 2-5 conditional on
+comprehension -- column 2 is "understands and signs (tick for imitated signs as well
+as for spontaneous signs)". That is a *total* sign count, so uk_06 is comparable with
+uk_02, nz_01, es_01 and uk_07 and needs no mask. The committed data agrees on every
+row: ``signed`` and ``spoken`` are both nested within ``understood`` 11 times out of
+11, and ``signed + spoken`` exceeds ``understood`` on 7 of 11 -- impossible under a
+mutually exclusive reading, exactly as overlapping per-word ticks predict.
+
+The constant is kept rather than deleted: it is the mechanism for the next source
+whose construct is unverified, and emptying it records that this one was resolved by
+evidence rather than quietly dropped. See data/vocab_data_uk_06.md."""
 
 INCOMPLETE_ADMINISTRATION_CEILINGS: dict[str, tuple[int, ...]] = {"ie_01": (460,)}
 """Per-study ``survey_vocab_max`` values marking a partial administration.

@@ -268,7 +268,6 @@ def prepare_trivariate_data(
     df, sign_source_dropped = vocab_data_utils.mask_incomparable_signed_outcomes(
         df,
         include_signed_only=definition.include_uk01_signed,
-        include_uncertain=definition.include_uk06,
     )
 
     analysis_df = df[["study", "age", "understood", "spoken", "signed"]].copy()
@@ -298,11 +297,6 @@ def prepare_trivariate_data(
                 f"uk_01 signed-only dropped "
                 f"(include_uk01_signed={definition.include_uk01_signed})",
                 sign_source_dropped.get("uk_01", 0),
-            ),
-            (
-                f"uk_06 unverified signed dropped "
-                f"(include_uk06={definition.include_uk06})",
-                sign_source_dropped.get("uk_06", 0),
             ),
         ],
     )

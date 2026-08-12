@@ -585,7 +585,6 @@ def prepare_joint_data(
         vocab_data_utils.mask_incomparable_signed_outcomes(
             analysis_df,
             include_signed_only=definition.include_uk01_signed,
-            include_uncertain=definition.include_uk06,
         )
     )
 
@@ -650,8 +649,6 @@ def prepare_joint_data(
         ("nz_01 produced-cell rows (DM)", n_prod),
         ("include_uk01_signed", definition.include_uk01_signed),
         ("uk_01 signed-only rows dropped", sign_source_dropped.get("uk_01", 0)),
-        ("include_uk06", definition.include_uk06),
-        ("uk_06 unverified signed rows dropped", sign_source_dropped.get("uk_06", 0)),
         ("include_nz01_cells", definition.include_nz01_cells),
         ("include_uk07_cells", definition.include_uk07_cells),
         ("include_es01_cells", definition.include_es01_cells),
