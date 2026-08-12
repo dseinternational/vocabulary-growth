@@ -11,7 +11,7 @@ Integrating `uk_07` ([202608120030](202608120030-uk07-pactds-integration-and-ds-
 
 ## 2. es_01 does supply them, and the source says so
 
-The Galeote table's four columns are labelled **TOTAL COMPREHENSIÓN**, **TOTAL PRODUCTION**, **TOTAL GESTURES**, **WORD PRODUCED + GESTURES ONLY**, the last being what Galeote et al. (2011) describe as "total lexical production combining the two modalities (oral + gestural production)". So the third column is a *total* and the fourth a de-duplicated union, and the four cells follow by subtraction:
+The Galeote table's four columns are labelled **TOTAL COMPREHENSIÓN**, **TOTAL PRODUCTION**, **TOTAL GESTURES**, **WORD PRODUCED + GESTURES ONLY**, the last being what Galeote et al. (2011) describe as "total lexical production combining the two modalities (oral + gestural production)". So the third column is a _total_ and the fourth a de-duplicated union, and the four cells follow by subtraction:
 
 ```
 understood_only = understood − union
@@ -25,11 +25,11 @@ both            = spoken + gestured − union
 Two independent checks, because a mislabelled column would be expensive here:
 
 - **The disjoint reading is impossible.** If `spoken` and `gestured` were exclusive cells — the `nz_01`/`uk_07` convention — then `union = spoken + gestured` would hold identically. It holds on 52 of 186 DS rows; the other 134 have a union strictly smaller, by a median of 7 words and up to 212. The 52 are not a rival explanation: 17 have zero spoken words (overlap arithmetically forced to zero), and their median spoken vocabulary is 2 words against 58 among the rest.
-- **The intersection parse is impossible.** "WORD PRODUCED + GESTURES ONLY" could be misread as "produced by word *and* gesture only". Column 4 exceeds `min(spoken, gestured)` on all 186 rows.
+- **The intersection parse is impossible.** "WORD PRODUCED + GESTURES ONLY" could be misread as "produced by word _and_ gesture only". Column 4 exceeds `min(spoken, gestured)` on all 186 rows.
 
 ### A framing that was wrong
 
-An earlier draft of this work treated es_01's gestures as a *different construct* from taught signs, and set `include_es01_cells = False` on that basis. That was corrected by the study owner: the CDI-Down's third column scores "gestures representing specific lexical items", each tied to one of the 651 checklist words — a per-word lexical marker on an adapted CDI, structurally the same coding `uk_02`, `uk_07` and `nz_01` apply to signs. The terminology differs; the measurement does not. The heterogeneity below is therefore a real difference between samples, not an artefact of what was being counted.
+An earlier draft of this work treated es_01's gestures as a _different construct_ from taught signs, and set `include_es01_cells = False` on that basis. That was corrected by the study owner: the CDI-Down's third column scores "gestures representing specific lexical items", each tied to one of the 651 checklist words — a per-word lexical marker on an adapted CDI, structurally the same coding `uk_02`, `uk_07` and `nz_01` apply to signs. The terminology differs; the measurement does not. The heterogeneity below is therefore a real difference between samples, not an artefact of what was being counted.
 
 ## 3. The sources disagree by an order of magnitude
 
@@ -62,7 +62,7 @@ By the study's own matching stratum, both groups start in strong substitution an
 | 6        | 0.88 | 3.53 |
 | 7        | 0.80 | 1.48 |
 
-TD climbs to 2.6–3.5; DS plateaus near 1 and never converges. (Sparse 2×2 tables bias odds ratios toward 0, so the lowest levels overstate the floor.) The substantive reading is that TD children gesture words they are also learning to say, while DS children — who have a specific expressive-speech deficit relative to comprehension — gesture what they *cannot* say. Where signing is **taught** as sign-and-say pairs, as it is in the UK and New Zealand, both modalities land on the same words by construction.
+TD climbs to 2.6–3.5; DS plateaus near 1 and never converges. (Sparse 2×2 tables bias odds ratios toward 0, so the lowest levels overstate the floor.) The substantive reading is that TD children gesture words they are also learning to say, while DS children — who have a specific expressive-speech deficit relative to comprehension — gesture what they _cannot_ say. Where signing is **taught** as sign-and-say pairs, as it is in the UK and New Zealand, both modalities land on the same words by construction.
 
 ### It is not uk_07's intervention
 
@@ -73,7 +73,7 @@ TD climbs to 2.6–3.5; DS plateaus near 1 and never converges. (Sparse 2×2 tab
 | control      | 23.96 | 19.03 | 13.68 | 17.93  |
 | intervention | 8.41  | 13.35 | 16.04 | 11.65  |
 
-The **control** arm is higher, and the gap is present at t1 before any intervention — a baseline imbalance at 15 per arm, not an effect. Both arms sit far above `es_01` regardless, so the association is a property of uk_07's context rather than its trial. (Weakly suggestive and not leaned on: the intervention arm rises across timepoints while control falls, which is equally consistent with regression to the mean.)
+The **control** arm is higher, and the gap is present at t1 before any intervention — a baseline imbalance at 15 per arm, not an effect. Both arms sit far above `es_01` regardless, so the association is a property of uk_07's context rather than its trial. (Weakly suggestive and not leaned on: the intervention arm rises across the three assessment points while control falls, which is equally consistent with regression to the mean.)
 
 ## 4. Age: investigated, and rejected
 
@@ -81,7 +81,7 @@ The **control** arm is higher, and the gap is present at t1 before any intervent
 
 The initial test regressed per-child log odds ratio on age **with study fixed effects**, and found nothing: +0.009 per year (SE 0.062, z = +0.14), with no individual source significant either (`uk_02` z = −0.30, `uk_07` z = +1.61, `es_01` z = −0.85).
 
-That result was correct but did not answer the question asked. Study fixed effects absorb between-study age differences **by construction**, so it could only ever speak to *within*-study age variation. The study owner caught this: `uk_07`'s children are markedly older than the rest, so its high association could be an age effect that the study dummy was silently swallowing.
+That result was correct but did not answer the question asked. Study fixed effects absorb between-study age differences **by construction**, so it could only ever speak to _within_-study age variation. The study owner caught this: `uk_07`'s children are markedly older than the rest, so its high association could be an age effect that the study dummy was silently swallowing.
 
 | source  | median age of ψ-informing rows | IQR   |
 | ------- | ------------------------------ | ----- |
@@ -101,7 +101,7 @@ The concern is well-founded on its face. Fitted **without** a study term, age lo
 | study only               | **1640**     |
 | study + age              | **1640**     |
 
-Study alone fits far better than age alone, and adding age on top of study improves the fit by *nothing*. Once the study is known, age is uninformative; once age is known, study still carries an order of magnitude.
+Study alone fits far better than age alone, and adding age on top of study improves the fit by _nothing_. Once the study is known, age is uninformative; once age is known, study still carries an order of magnitude.
 
 **The age-matched contrast** — restricting to the window where all three within-understood sources overlap:
 
@@ -123,11 +123,11 @@ Three-way overlap exists only at 30–60 months. Below 20 months is `es_01` alon
 
 Against expressive vocabulary the study-specific slopes are large, individually significant, and **opposite in sign** — which is why the pooled study-adjusted slope is ~0 (−0.030, z = −0.36):
 
-| scope   | slope on log produced vocabulary | z         |
-| ------- | -------------------------------- | --------- |
-| `uk_02` | +0.555                           | +2.92     |
-| `uk_07` | +0.731                           | +3.13     |
-| `es_01` | −0.348                           | −3.63     |
+| scope   | slope on log produced vocabulary | z     |
+| ------- | -------------------------------- | ----- |
+| `uk_02` | +0.555                           | +2.92 |
+| `uk_07` | +0.731                           | +3.13 |
+| `es_01` | −0.348                           | −3.63 |
 
 **But produced vocabulary is a circular covariate**: `produced = sign_only + speak_only + both`, three of the four cells that define $\psi$. Raising it at fixed comprehension shrinks `neither` and mechanically lowers the ratio, so the induced bias is **negative**. The two positive slopes run against that bias and are conservative; `es_01`'s negative slope runs with it and is not established.
 
@@ -140,7 +140,7 @@ Against expressive vocabulary the study-specific slopes are large, individually 
 
 So `es_01`'s apparent fall was the circularity. The taught-sign side cannot be tested this way — neither `uk_02` nor `uk_07` carries an external developmental measure in its CSV.
 
-**This is the open question, and it is cheap to close.** `uk_07`'s UK Data Service deposit holds Mullen Scales visual-reception and fine-motor age equivalents at all three timepoints (`T{1,2,3}MullenCombinedAE`); they were simply not extracted, since only the CDI, age, sex and arm were carried across. Extracting them and re-running §5 would establish whether uk_07's +0.731 survives a covariate external to the cells. If it does, a level-varying $\psi$ with **study-specific slopes** is worth building — not age, and not a shared trend. If it does not, the study-varying scalar is the right stopping point.
+**This is the open question, and it is cheap to close.** `uk_07`'s UK Data Service deposit holds Mullen Scales visual-reception and fine-motor age equivalents at all three assessment points (`T{1,2,3}MullenCombinedAE`); they were simply not extracted, since only the CDI, age, sex and arm were carried across. Extracting them and re-running §5 would establish whether uk_07's +0.731 survives a covariate external to the cells. If it does, a level-varying $\psi$ with **study-specific slopes** is worth building — not age, and not a shared trend. If it does not, the study-varying scalar is the right stopping point.
 
 ## 6. What was implemented
 
@@ -169,4 +169,4 @@ With four groups `tau_psi` is weakly identified and the prior does real work. **
 - [ ] Extract `uk_07`'s Mullen age equivalents upstream and re-run §5 (the deciding evidence for a level-varying $\psi$).
 - [ ] Refit VG15 at `rep` — the graph changed; no other model reads this engine.
 - [ ] `docs/models/vg15/index.qmd` still says $\psi$ is identified by "~60 uk_02 rows" and calls it a single scalar. Both are now wrong.
-- [ ] Consider whether the substantive reading — that $\psi$ marks whether the non-vocal lexicon was *taught alongside* speech or arose *compensatorily* — belongs in the report's discussion. It is the most interpretable thing this parameter has produced, and it is a claim about practice that the data support but cannot prove.
+- [ ] Consider whether the substantive reading — that $\psi$ marks whether the non-vocal lexicon was _taught alongside_ speech or arose _as compensation for its absence_ — belongs in the report's discussion. It is the most interpretable thing this parameter has produced, and it is a claim about practice that the data support but cannot prove.
