@@ -994,10 +994,38 @@ class JointModelDefinition:
 
     The signed counterpart of ``report_max_age_understood``, and it exists for the
     same reason: a model's ``ages_query`` grid is shared by every outcome, but the
-    outcomes are not observed over the same range. Signed is the sparsest -- 516
-    observations with 85% between 12 and 48 months, 23 above 60, 7 above 72 and
-    **none between 84 and 96** -- while the Down syndrome grid runs to 115. Above
-    about 60 months `r(a)` is the tent's extrapolation, not an estimate.
+    outcomes are not observed over the same range. Signed is still the sparsest
+    outcome, and the Down syndrome grid runs to 115 months, so a cap is still
+    needed -- but **where** it belongs changed when uk_07 (PACT-DS) entered the
+    pool on 2026-08-12.
+
+    The cap was 60. Its justification was a count: of 593 signed observations, 46
+    were above 60 months, 7 above 72, and **none between 84 and 96** -- so above
+    about 60 months ``r(a)`` was the tent's extrapolation rather than an estimate.
+    uk_07 contributes 82 signed observations spanning 34-95 months, from 30
+    children, and the count now reads:
+
+    ======================  ==========  =========
+    band                    before      after
+    ======================  ==========  =========
+    60-72 months            46          64
+    72-84 months            **0**       15
+    84-96 months            **0**       8
+    above 60 months, total  46          87
+    ======================  ==========  =========
+
+    So the cap is 84: the 72-84 band now carries 15 observations from real
+    children rather than nothing, and reporting it is no longer extrapolation.
+    84-96 is left out deliberately -- 8 observations from a single source is
+    evidence, but not enough to publish a curve on, and 84 is also the Down
+    syndrome models' high trend anchor (see ``clamp_above_hi``), above which the
+    mean is clamped rather than fitted.
+
+    This is not a cosmetic widening. At 72 months the refit puts ``r`` at 0.198
+    against 0.156 before, and at 90 months 0.182 against 0.098 -- the post-peak
+    decline is real but far shallower than the pre-uk_07 fits showed, and at 60
+    months that finding was entirely hidden. See
+    notes/202608120030-uk07-pactds-integration-and-ds-refit.md §5.
 
     Applies to the signed counts, the signed ratio `r`, and total expressive
     `p_any`, which is a function of the signed ratio and can only be reported where
@@ -1027,6 +1055,20 @@ class JointModelDefinition:
     (its production-only, 675-item marginals are not comparable to the 810-item
     marginal likelihoods); the flag is kept for reversibility and for isolating
     nz_01's pull on psi."""
+
+    # -- uk_07 (PACT-DS) within-understood cross-tab inclusion --
+    include_uk07_cells: bool = True
+    """If True (default), uk_07's within-understood four-cell cross-tab (neither /
+    sign-only / speech-only / both) enters the same Dirichlet-Multinomial that
+    identifies psi from uk_02, roughly doubling the rows that identify it and
+    extending their age span from 19-56 months out to 95 (see
+    common_joint_modality).
+
+    Unlike ``include_nz01_cells``, setting this False does **not** drop the study:
+    uk_07's understood/spoken/signed marginals are on an ordinary comprehension-
+    plus-production footing, so they fall back into the marginal likelihoods and
+    uk_07 keeps informing U, q and r. The flag therefore isolates uk_07's pull on
+    the association alone, which is what a sensitivity comparison wants."""
 
     @property
     def model_type(self) -> ModelType:
@@ -2327,11 +2369,15 @@ VG15 = JointModelDefinition(
     # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
     # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    # Signed evidence stops around 60 months: 23 of 516 signed observations lie
-    # above it, 7 above 72, and none between 84 and 96, while the grid runs to
-    # 115. Adopted 2026-08-07 on the same argument that capped comprehension at
-    # 72. Also caps p_any, which is a function of the signed ratio.
-    report_max_age_signed=60,
+    # Signed evidence now reaches 84 months. Adopted 2026-08-07 at 60 on the same
+    # argument that capped comprehension at 72 -- then 46 of 593 signed
+    # observations lay above 60, 7 above 72, and none between 84 and 96. uk_07
+    # (PACT-DS) adds 82 observations at 34-95 months, taking 72-84 from 0 rows to
+    # 15 and above-60 from 46 to 87, so 60 no longer marks where the evidence
+    # stops -- it hides the pool's only real measurement of the post-peak signing
+    # decline. 84-96 stays out: 8 observations from one source, and 84 is the
+    # trend's high anchor. Also caps p_any, a function of the signed ratio.
+    report_max_age_signed=84,
     clamp_mean_above_hi_anchor=True,
 )
 

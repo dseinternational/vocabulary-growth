@@ -10,6 +10,8 @@ marginal-only set. Otherwise the NaN cell casts to a negative integer and trips
 the four-cell count validation in ``build_model``.
 """
 
+import dataclasses
+
 import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
@@ -51,6 +53,19 @@ def _write_uk02_csv(path):
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
+def _write_uk07_csv(path, rows=None):
+    """A uk_07 fixture — prepare_joint_data always loads this CSV."""
+    if rows is None:
+        rows = [
+            dict(
+                subject_id="uk07_c", group="control", sex="F", timepoint="t1",
+                age=40.0, understood=50, spoken=8, signed=3, spoken_signed=4,
+                produced=15, survey_vocab_max=674,
+            )
+        ]
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+
 def test_four_cell_loader_routes_incomplete_rows_to_marginal(tmp_path, monkeypatch):
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
@@ -74,6 +89,7 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
 ):
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
+    _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
 
     merged = pd.DataFrame(
         [
@@ -118,6 +134,117 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
     four_rows = analysis_df[analysis_df["signed_spoken"].notna()]
     np.testing.assert_array_equal(four_rows["understood"], four_rows["cell_total"])
     assert 22 not in set(four_rows["understood"])
+
+
+def test_uk07_loader_derives_the_fourth_cell_and_guards_the_partition(
+    tmp_path, monkeypatch
+):
+    """uk_07's fourth cell is ``understood - produced``; a row where that would be
+    negative (production above comprehension) or where nothing is understood
+    carries no within-understood composition and must fall back to marginals."""
+    monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    _write_uk07_csv(
+        tmp_path / "vocab_data_uk_07.csv",
+        rows=[
+            # 50 understood, 15 produced -> understood_only = 35. Four-cell.
+            dict(
+                subject_id="ok", group="control", sex="F", timepoint="t1",
+                age=40.0, understood=50, spoken=8, signed=3, spoken_signed=4,
+                produced=15, survey_vocab_max=674,
+            ),
+            # Production above comprehension -> no non-negative fourth cell.
+            dict(
+                subject_id="over", group="control", sex="M", timepoint="t3",
+                age=58.0, understood=10, spoken=8, signed=3, spoken_signed=4,
+                produced=15, survey_vocab_max=674,
+            ),
+            # Nothing understood -> no composition at all.
+            dict(
+                subject_id="zero", group="intervention", sex="M", timepoint="t1",
+                age=36.0, understood=0, spoken=0, signed=0, spoken_signed=0,
+                produced=0, survey_vocab_max=674,
+            ),
+        ],
+    )
+
+    four, marg = cjm._load_uk07_four_cell()
+
+    assert list(four["subject_id"]) == ["ok"]
+    assert sorted(marg["subject_id"]) == ["over", "zero"]
+    row = four.iloc[0]
+    assert row["understood_only"] == 35
+    # The four cells partition the understood total exactly, so cell_total is the
+    # recorded comprehension count rather than something to reconcile against it.
+    assert (
+        row["understood_only"] + row["signed"] + row["spoken"] + row["spoken_signed"]
+        == row["understood"]
+    )
+
+
+def test_uk07_cells_join_uk02_in_the_psi_likelihood(tmp_path, monkeypatch):
+    """With ``include_uk07_cells`` on, uk_07 rows enter as four-cell rows and their
+    marginals are dropped from the merged view (no double counting); with it off,
+    uk_07 stays in the fit through its marginals — unlike nz_01, which leaves."""
+    monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
+    _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+
+    merged = pd.DataFrame(
+        [
+            {
+                "study": "uk_07",
+                "age": 40.0,
+                "understood": 50,
+                "spoken": 12,
+                "signed": 7,
+                "subject_id": "uk07_c",
+            },
+            {
+                "study": "uk_05",
+                "age": 25.0,
+                "understood": 30,
+                "spoken": 5,
+                "signed": 2,
+                "subject_id": "valid_child",
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        cjm.vocab_data_utils,
+        "load_data",
+        lambda **kwargs: merged[kwargs["columns"]],
+    )
+
+    def _prepared(definition):
+        context = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name="TEST_VG15_UK07",
+                config_name="test",
+                output_root_dir=str(tmp_path),
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("test"),
+        )
+        cjm.prepare_joint_data(context, definition)
+        return context.analysis_df
+
+    on = _prepared(VG15)
+    uk07_on = on[on["study"] == "uk_07"]
+    assert len(uk07_on) == 1
+    assert uk07_on.iloc[0]["signed_spoken"] == 4          # a four-cell row
+    assert pd.isna(uk07_on.iloc[0]["spoken"])             # marginals suppressed
+    assert pd.isna(uk07_on.iloc[0]["signed"])
+    # It is a within-understood cross-tab, so it joins uk_02 in the same term.
+    cell_studies = set(on.loc[on["signed_spoken"].notna(), "study"])
+    assert cell_studies == {"uk_02", "uk_07"}
+
+    off = _prepared(dataclasses.replace(VG15, include_uk07_cells=False))
+    uk07_off = off[off["study"] == "uk_07"]
+    assert len(uk07_off) == 1
+    assert pd.isna(uk07_off.iloc[0]["signed_spoken"])     # no cross-tab term
+    assert uk07_off.iloc[0]["spoken"] == 12               # marginals retained
+    assert uk07_off.iloc[0]["signed"] == 7
 
 
 def test_plackett_pi_both_stable_and_correct_at_psi_one():

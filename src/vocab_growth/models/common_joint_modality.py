@@ -8,7 +8,7 @@ model (VG15): issue #49 Option 3.
 VG15 extends the trivariate VG14 with two things VG14 assumed away:
 
 1.  A within-understood sign-speech ASSOCIATION (a single scalar Plackett odds
-    ratio ``psi``), identified from the uk_02 four-cell cross-tabulation
+    ratio ``psi``), identified from the uk_02 and uk_07 four-cell cross-tabulations
     (sign-only / sign+speech / speech-only / understood-only). This replaces
     VG14's independence-based ``p_any`` upper bound with a *data-identified*
     total expressive vocabulary.
@@ -31,13 +31,13 @@ Latent scale (all out of N = 810 checklist words, the DSE reference inventory):
 Likelihoods use the observed understood count as the denominator for spoken
 and signed outcomes when the counts are jointly available and logically
 nested. Rows without a usable understood count retain a marginal likelihood.
-The uk_02 rows with a four-cell cross-tabulation use that joint composition
-term instead of duplicate spoken and signed likelihood contributions:
+The rows with a four-cell cross-tabulation use that joint composition term
+instead of duplicate spoken and signed likelihood contributions:
     - understood ~ BetaBinomial(810, p_U)              (all DS studies)
     - spoken | understood ~ BetaBinomial(understood, q)
     - signed | understood ~ BetaBinomial(understood, r)
-    - uk_02 four cells ~ DirichletMultinomial(total, conc * [pi_*])  (the one
-      item-level joint term; identifies psi)
+    - uk_02 / uk_07 four cells ~ DirichletMultinomial(total, conc * [pi_*])
+      (the within-understood joint term; identifies psi)
 
 This is a self-contained module (like common_trivariate.py); it does not import
 from or modify the bivariate / trivariate engines. The full-grid intermediates
@@ -113,8 +113,11 @@ from vocab_growth.reporting import (
 
 EPSILON = math_constants.EPSILON
 
-# uk_02 is the only source with the four-cell within-understood cross-tabulation.
+# The two sources with the four-cell within-understood cross-tabulation.
 UK02_STUDY_ID = "uk_02"
+# uk_07 (PACT-DS) records comprehension alongside modality-exclusive expressive
+# cells, so its four cells are derivable: understood_only = understood - produced.
+UK07_STUDY_ID = "uk_07"
 # nz_01 (Foster-Cohen) carries a production-only three-cell (within-produced)
 # cross-tabulation: word-only, sign-only, both. No comprehension.
 NZ01_STUDY_ID = "nz_01"
@@ -280,6 +283,44 @@ def _load_uk02_four_cell():
     return four, marg
 
 
+def _load_uk07_four_cell():
+    """Load uk_07 (PACT-DS) rows as a four-cell within-understood cross-tab.
+
+    uk_07 records comprehension per item alongside a three-way *modality-exclusive*
+    expressive coding — says-only, signs-only, both — so the fourth cell follows by
+    subtraction: ``understood_only = understood - produced``, where ``produced`` is
+    the source's own sum of the three expressive cells. That is the same
+    within-understood partition uk_02 supplies, and it is what identifies psi.
+
+    Two guards, mirroring ``_load_uk02_four_cell``. A row whose production exceeds
+    its comprehension has no non-negative ``understood_only`` cell, and a row with
+    no understood words carries no composition; both are routed to the marginal
+    set, where the recorded spoken/signed margins still inform the model. Neither
+    fires on the current source: the one administration that would have failed the
+    first is withheld before this point (see
+    ``data_utils.UK07_WITHHELD_ADMINISTRATIONS``). They are kept so the guarantee
+    holds for whatever the source becomes, rather than for what it is today.
+
+    Returns ``(four_cell_df, marginal_df)`` with the any-modality marginals
+    re-derived on the marginal rows exactly as ``vocab_combined`` does them.
+    """
+    path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_07.csv")
+    raw, _withheld = vocab_data_utils.drop_uk07_withheld_administrations(
+        pd.read_csv(path)
+    )
+    raw["understood_only"] = raw["understood"] - raw["produced"]
+    usable = (
+        raw[["understood", "produced", "spoken", "signed", "spoken_signed"]]
+        .notna()
+        .all(axis=1)
+        & (raw["understood_only"] >= 0)
+        & (raw["understood"] > 0)
+    )
+    four = raw[usable].copy()
+    marg = raw[~usable].copy()
+    return four, marg
+
+
 def _load_nz01_produced_cells():
     """Load nz_01 (Foster-Cohen) rows as a within-produced three-cell cross-tab.
 
@@ -320,9 +361,10 @@ def prepare_joint_data(
 ):
     """Load and prepare data for the joint model.
 
-    Non-uk_02 DS studies contribute understood/spoken/signed marginals (from the
-    merged view). uk_02 is taken from its raw CSV and split into four-cell rows
-    (Dirichlet-Multinomial) and marginal-only rows (marginal likelihoods).
+    Studies without a cross-tab contribute understood/spoken/signed marginals
+    (from the merged view). uk_02 and uk_07 are taken from their raw CSVs and each
+    split into four-cell rows (Dirichlet-Multinomial) and marginal-only rows
+    (marginal likelihoods); nz_01 contributes a within-produced three-cell DM.
     """
     # Subject random intercepts (issue #59) need a per-child identifier in both
     # data sources (the merged view and the raw uk_02 cross-tab CSV).
@@ -342,10 +384,15 @@ def prepare_joint_data(
         columns=merged_columns,
         include_implausible_production=definition.include_implausible_production,
     )
-    # uk_02 and nz_01 are handled via their cross-tab paths below, so exclude their
-    # marginals from the merged view here to avoid double counting. (nz_01 is
-    # dropped entirely when include_nz01_cells is False.)
-    other = merged[~merged["study"].isin([UK02_STUDY_ID, NZ01_STUDY_ID])].copy()
+    # uk_02, uk_07 and nz_01 are handled via their cross-tab paths below, so
+    # exclude their marginals from the merged view here to avoid double counting.
+    # (nz_01 is dropped entirely when include_nz01_cells is False; uk_07 falls back
+    # to its merged-view marginals when include_uk07_cells is False, because unlike
+    # nz_01 its marginals are usable on their own.)
+    cross_tab_studies = [UK02_STUDY_ID, NZ01_STUDY_ID]
+    if definition.include_uk07_cells:
+        cross_tab_studies.append(UK07_STUDY_ID)
+    other = merged[~merged["study"].isin(cross_tab_studies)].copy()
 
     four, marg = _load_uk02_four_cell()
     # uk_02 four-cell rows: the four-cell sum is the authoritative understood
@@ -380,6 +427,42 @@ def prepare_joint_data(
     marg_df = pd.DataFrame(marg_cols)
 
     frames = [other, marg_df, four_df]
+
+    # uk_07 (PACT-DS): the same within-understood four-cell partition, derived from
+    # its modality-exclusive expressive cells. Its `understood` is the recorded
+    # comprehension total and equals the four-cell sum by construction, so unlike
+    # uk_02 there is no partition-versus-total mismatch to reconcile. Marginal
+    # spoken/signed are NaN on the four-cell rows for the same no-double-counting
+    # reason. See data/vocab_data_uk_07.md.
+    if definition.include_uk07_cells:
+        four07, marg07 = _load_uk07_four_cell()
+        four07_cols = {
+            "study": UK07_STUDY_ID,
+            "age": four07["age"].to_numpy(dtype=float),
+            "understood": four07["understood"].to_numpy(dtype=float),
+            "spoken": np.nan,
+            "signed": np.nan,
+            "understood_only": four07["understood_only"].to_numpy(dtype=float),
+            "signed_only": four07["signed"].to_numpy(dtype=float),
+            "spoken_only": four07["spoken"].to_numpy(dtype=float),
+            "signed_spoken": four07["spoken_signed"].to_numpy(dtype=float),
+            "cell_total": four07["understood"].to_numpy(dtype=float),
+        }
+        # Marginal-only uk_07 rows (none in the current source) carry the
+        # any-modality marginals the vocab_combined view derives.
+        marg07_cols = {
+            "study": UK07_STUDY_ID,
+            "age": marg07["age"].to_numpy(dtype=float),
+            "understood": marg07["understood"].to_numpy(dtype=float),
+            "spoken": (marg07["spoken"] + marg07["spoken_signed"]).to_numpy(dtype=float),
+            "signed": (marg07["signed"] + marg07["spoken_signed"]).to_numpy(dtype=float),
+        }
+        if use_subject_codes:
+            four07_cols["subject_id"] = four07["subject_id"].to_numpy()
+            marg07_cols["subject_id"] = marg07["subject_id"].to_numpy()
+        frames.append(pd.DataFrame(four07_cols))
+        frames.append(pd.DataFrame(marg07_cols))
+
     # nz_01's (real-key) CSV is committed separately; tolerate its absence (CI,
     # unit tests, or a checkout predating the data) so the model still builds.
     nz01_csv = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
@@ -439,6 +522,9 @@ def prepare_joint_data(
     n_s = int(analysis_df["spoken"].notna().sum())
     n_sign = int(analysis_df["signed"].notna().sum())
     n_cells = int(analysis_df["signed_spoken"].notna().sum())
+    has_cells = analysis_df["signed_spoken"].notna()
+    n_cells_uk02 = int((has_cells & analysis_df["study"].eq(UK02_STUDY_ID)).sum())
+    n_cells_uk07 = int((has_cells & analysis_df["study"].eq(UK07_STUDY_ID)).sum())
     n_prod = (
         int(analysis_df["prod_signed_spoken"].notna().sum())
         if "prod_signed_spoken" in analysis_df.columns
@@ -451,13 +537,16 @@ def prepare_joint_data(
         ("Understood observed", n_u),
         ("Spoken observed (marginal)", n_s),
         ("Signed observed (marginal)", n_sign),
-        ("uk_02 four-cell rows (DM)", n_cells),
+        ("Four-cell rows (DM, identify psi)", n_cells),
+        ("  of which uk_02", n_cells_uk02),
+        ("  of which uk_07", n_cells_uk07),
         ("nz_01 produced-cell rows (DM)", n_prod),
         ("include_uk01_signed", definition.include_uk01_signed),
         ("uk_01 signed-only rows dropped", sign_source_dropped.get("uk_01", 0)),
         ("include_uk06", definition.include_uk06),
         ("uk_06 unverified signed rows dropped", sign_source_dropped.get("uk_06", 0)),
         ("include_nz01_cells", definition.include_nz01_cells),
+        ("include_uk07_cells", definition.include_uk07_cells),
     ]
     if definition.exclude_us01_spoken_ceiling:
         counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))

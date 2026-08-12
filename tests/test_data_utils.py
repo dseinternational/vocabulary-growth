@@ -724,6 +724,7 @@ _SOURCE_TABLE_SCHEMAS = {
     "vocab_ie_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
     "vocab_nz_01": "subject_id VARCHAR, age BIGINT, not_spoken_or_signed BIGINT, signed BIGINT, spoken_signed BIGINT, spoken BIGINT",
     "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex VARCHAR, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
+    "vocab_uk_07": 'subject_id VARCHAR, "group" VARCHAR, sex VARCHAR, timepoint VARCHAR, age BIGINT, understood INTEGER, spoken INTEGER, signed INTEGER, spoken_signed INTEGER, produced INTEGER, survey_vocab_max INTEGER',
     "vocab_us_01": "subject_id VARCHAR, form VARCHAR, age DOUBLE, sex VARCHAR, dev_status VARCHAR, comprehension INTEGER, production INTEGER, survey_vocab_max INTEGER, in_norming_window BOOLEAN",
 }
 
@@ -988,6 +989,162 @@ def test_es01_carries_the_651_item_cdi_down_ceiling(tmp_path, monkeypatch):
 
     assert list(es["subject_id"]) == ["at_ceiling"]
     assert list(es["survey_vocab_max"]) == [651]
+
+
+# ---- uk_07: modality-exclusive cells become any-modality marginals ----
+#
+# uk_07 (PACT-DS) records the three expressive cells separately — says-only,
+# signs-only, and both — following the nz_01 convention rather than the uk_01 /
+# ie_02 / uk_04 / uk_05 one, where `spoken` and `signed` are already totals.
+# Reading its cells as totals would understate both marginals by the overlap, so
+# the view must re-derive them. Unlike nz_01 it also carries comprehension.
+
+_UK07_COLUMNS = (
+    'subject_id, "group", sex, timepoint, age, understood, spoken, signed, '
+    "spoken_signed, produced, survey_vocab_max"
+)
+
+
+def _uk07_db(tmp_path, rows):
+    """A vocabulary DB whose only DS source rows are the supplied uk_07 records."""
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            f"INSERT INTO vocab_uk_07 ({_UK07_COLUMNS}) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+    return db_path
+
+
+def test_uk07_exclusive_cells_become_any_modality_marginals(tmp_path, monkeypatch):
+    # says-only 200, signs-only 30, both 90: the any-modality marginals are
+    # spoken = 200 + 90 = 290 and signed = 30 + 90 = 120, and `produced` is the
+    # source's own union of all three (320), not spoken + signed.
+    db_path = _uk07_db(
+        tmp_path,
+        [("c1", "control", "F", "t1", 60, 500, 200, 30, 90, 320, 674)],
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    row = data_utils.load_combined_data()
+    row = row[row["study"] == "uk_07"].iloc[0]
+
+    assert row["understood"] == 500
+    assert row["spoken"] == 290
+    assert row["signed"] == 120
+    assert row["sex"] == "F"
+
+    # load_combined_data does not select `produced`, so assert it on the view
+    # itself — the signing engines read that column directly.
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        (produced,) = con.execute(
+            "SELECT produced FROM vocab_combined WHERE study = 'uk_07'"
+        ).fetchone()
+    assert produced == 320       # the recorded union, not 290 + 120
+
+
+def test_uk07_pools_both_trial_arms_and_keeps_repeat_visits(tmp_path, monkeypatch):
+    # The trial arm is a property of the child, not of the measurement, so both
+    # arms enter the pool; and a child's three time points are three rows sharing
+    # one subject id, which the repeated-measures models cluster on.
+    db_path = _uk07_db(
+        tmp_path,
+        [
+            ("c1", "control", "M", "t1", 40, 200, 50, 10, 20, 80, 674),
+            ("c1", "control", "M", "t2", 50, 300, 90, 10, 30, 130, 674),
+            ("c1", "control", "M", "t3", 55, 350, 120, 5, 40, 165, 674),
+            ("c2", "intervention", "F", "t1", 44, 210, 60, 12, 18, 90, 674),
+        ],
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    uk = data_utils.load_combined_data()
+    uk = uk[uk["study"] == "uk_07"]
+
+    assert len(uk) == 4
+    assert sorted(uk["subject_id"].unique()) == ["c1", "c2"]
+    assert sorted(uk.loc[uk["subject_id"] == "c1", "age"]) == [40, 50, 55]
+
+
+def test_uk07_carries_the_674_item_reading_cdi_ceiling(tmp_path, monkeypatch):
+    # A count at the form ceiling is kept; one above it is impossible and dropped.
+    db_path = _uk07_db(
+        tmp_path,
+        [
+            ("at_ceiling", "control", "F", "t3", 90, 674, 400, 20, 100, 520, 674),
+            ("impossible", "control", "M", "t3", 90, 675, 400, 20, 100, 520, 674),
+        ],
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    uk = data_utils.load_combined_data()
+    uk = uk[uk["study"] == "uk_07"]
+
+    assert list(uk["subject_id"]) == ["at_ceiling"]
+    assert list(uk["survey_vocab_max"]) == [674]
+
+
+def test_uk07_signing_is_a_total_and_is_not_masked(tmp_path, monkeypatch):
+    # uk_07's re-derived `signed` counts words signed whether or not also spoken,
+    # so it is comparable with uk_02/nz_01/es_01 and is not a SIGNED_ONLY_STUDIES
+    # or UNCERTAIN_SIGN_STUDIES case — the signing harmonisation must leave it be.
+    assert "uk_07" not in data_utils.SIGNED_ONLY_STUDIES
+    assert "uk_07" not in data_utils.UNCERTAIN_SIGN_STUDIES
+
+    db_path = _uk07_db(
+        tmp_path,
+        [("c1", "intervention", "M", "t2", 66, 400, 100, 25, 60, 185, 674)],
+    )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    uk = data_utils.load_combined_data()
+    uk = uk[uk["study"] == "uk_07"]
+    masked, dropped = data_utils.mask_incomparable_signed_outcomes(uk)
+
+    assert "uk_07" not in dropped      # only excluded studies are reported
+    assert masked.iloc[0]["signed"] == 85
+
+
+def test_uk07_withheld_administrations_are_dropped_at_csv_load():
+    # The withheld row is keyed by (subject_id, timepoint), so a different
+    # timepoint for the same child, and the same timepoint for a different child,
+    # both survive. Reinstatement is removing the entry from the constant.
+    subject, timepoint = data_utils.UK07_WITHHELD_ADMINISTRATIONS[0]
+    raw = pd.DataFrame(
+        {
+            "subject_id": [subject, subject, "other", "other"],
+            "timepoint": [timepoint, "t1", timepoint, "t1"],
+            "understood": [191, 349, 400, 380],
+            "produced": [489, 185, 200, 150],
+        }
+    )
+    out, dropped = data_utils.drop_uk07_withheld_administrations(raw)
+
+    assert dropped == 1
+    assert len(out) == 3
+    assert not ((out["subject_id"] == subject) & (out["timepoint"] == timepoint)).any()
+    assert list(out.index) == [0, 1, 2]                  # index reset
+
+    with pytest.raises(KeyError):
+        data_utils.drop_uk07_withheld_administrations(raw.drop(columns=["timepoint"]))
+
+
+def test_uk07_withheld_row_is_the_only_production_above_comprehension_row():
+    # Pins why the row is withheld, against the committed source: it is the sole
+    # administration whose production exceeds its comprehension. If a data update
+    # changes that, this test says so rather than letting the constant go stale.
+    raw = pd.read_csv(os.path.join(data_utils.local_env.DATA_DIR, "vocab_data_uk_07.csv"))
+    violations = raw[raw["produced"] > raw["understood"]]
+
+    assert len(violations) == 1
+    assert (
+        violations.iloc[0]["subject_id"],
+        violations.iloc[0]["timepoint"],
+    ) == data_utils.UK07_WITHHELD_ADMINISTRATIONS[0]
+
+    kept, _dropped = data_utils.drop_uk07_withheld_administrations(raw)
+    assert (kept["produced"] <= kept["understood"]).all()
 
 
 def test_mask_incomplete_administrations_reports_counts_and_needs_columns():

@@ -223,8 +223,8 @@ qualifying observations can contribute.
   starting point that gives an upper bound on combined production.
 - **VG15** — replaces that independence assumption with a directly estimated
   **within-understood sign–speech association** (`psi`, a scalar Plackett odds
-  ratio identified from the four-cell sign/speak cross-tabulation in the `uk_02`
-  dataset). It adds **study and subject random intercepts on all three
+  ratio identified from the four-cell sign/speak cross-tabulations in the `uk_02`
+  and `uk_07` datasets). It adds **study and subject random intercepts on all three
   trajectories** and carries VG10's stabilisation (per-draw GP anchor at 54
   months with the tightened `q`-GP amplitude `eta_q`), yielding a
   **data-identified** total expressive vocabulary rather than VG14's
