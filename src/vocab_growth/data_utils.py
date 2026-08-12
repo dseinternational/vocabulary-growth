@@ -628,6 +628,51 @@ def exclude_us01_spoken_ceiling_rows(
     return df.loc[~at_ws_ceiling].reset_index(drop=True), int(at_ws_ceiling.sum())
 
 
+DSE_NATIVE_VOCAB_MAX: int = 810
+"""The DSE Checklists' own item count, and the pool's common reference inventory.
+
+Every model scores raw counts against ``n_trials = 810``, so for sources whose
+form is *not* the DSE Checklists this is a harmonisation: a 416-item Oxford CDI
+count of 200 and an 810-item DSE count of 200 are treated as the same quantity.
+That is defensible only if the shorter form's items are the easier ones -- the
+difficulty-ordering assumption -- which no aggregate analysis of these data can
+test (see notes/202607261540 on sufficiency). Restricting the pool to rows
+recorded natively at 810 removes the assumption instead of testing it, which is
+what :func:`restrict_to_dse_native_administrations` is for.
+"""
+
+
+def restrict_to_dse_native_administrations(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, int]:
+    """Keep only administrations recorded natively on the 810-item DSE Checklists.
+
+    A sensitivity-analysis transformation, not a primary inclusion rule. It
+    answers what the trajectories look like when no count has been carried onto
+    a denominator its form did not use: 278 of the Down syndrome pool's 1,521
+    rows survive, from 194 children across ie_01 (its 810 wave only), ie_02,
+    uk_02 (DSE form only) and uk_06 -- 259 understood, 264 spoken and 218 signed
+    observations spanning 9-115 months. Every other source is on a shorter form
+    and drops out entirely, es_01, nz_01, uk_07 and us_01 among them.
+
+    Rows whose ceiling is unrecorded are dropped rather than kept: an unknown
+    form cannot be shown to be the native one, and the point of the variant is
+    to admit only what is known to need no harmonisation.
+    """
+    required = {"survey_vocab_max"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "The DSE-native sensitivity requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    native = pd.to_numeric(df["survey_vocab_max"], errors="coerce").eq(
+        DSE_NATIVE_VOCAB_MAX
+    )
+    return df.loc[native].reset_index(drop=True), int((~native).sum())
+
+
 FORM_AGE_FLOORS: dict[str, dict[int, int]] = {
     "us_01": {396: 8, 680: 16},
 }
