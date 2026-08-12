@@ -928,6 +928,21 @@ class JointModelDefinition:
     about 14 (uk_07, nz_01) — roughly 2.8 on the log scale, so a between-study SD
     near 1 is what the data show, and a HalfNormal(0.5) would fight it.
 
+    **Why this is a study term and not an age term.** The obvious alternative --
+    that the association varies with age, and the sources differ only because they
+    cover different ages -- was tested and rejected. uk_07's psi-informing rows have
+    a median age of 60 months against 38 for uk_02 and 32 for es_01, and fitted
+    without a study term age looks strong (+0.381 per year, z = +5.78). But age
+    alone fits worse than study alone (weighted SSR 2688 against 1640) and adds
+    nothing on top of it (1640 -> 1640); and in the 34-56 month window where all
+    three within-understood sources overlap, es_01 and uk_02 are matched at exactly
+    41 months and still differ six-fold (1.00 against 5.94, with uk_07 at 11.89).
+    Coverage would not have supported an age term regardless: three-way overlap
+    exists only at 30-60 months, so any curvature in the tails would be one study's
+    intercept re-labelled as a trend. See
+    notes/202608121030-psi-heterogeneity-and-age-invariance.md and
+    scripts/psi_heterogeneity_audit.py.
+
     Only four studies inform psi, so ``tau_psi`` is weakly identified and the prior
     does real work. That is a reason to report it with its interval and treat the
     per-study values as the primary read, not a reason to pool them: pooling does

@@ -68,7 +68,7 @@ This model (issue #49, Option 3) estimates the **within-understood association**
 
 - **Population:** children with Down syndrome.
 - **Outcomes:** words understood, spoken, signed, and four-cell sign/speech composition.
-- **Association:** scalar Plackett odds ratio `psi`, identified mainly from `uk_02`.
+- **Association:** Plackett odds ratio `psi` with a study-level random intercept, identified from four cross-tab sources.
 - **Hierarchy:** study and subject random intercepts on understood, `q`, and signing.
 - **Stabilisation:** VG10-style GP anchors at 54 months, with the tightened `q`-GP amplitude `eta_q`.
 
@@ -87,7 +87,7 @@ $$
 p_U(a) = \text{sigmoid}(f_U(a)), \quad r(a) = P(\text{sign}\mid\text{understood}) = \text{sigmoid}(g(a)), \quad q(a) = P(\text{speak}\mid\text{understood}) = \text{sigmoid}(h(a)),
 $$
 
-$f_U$ and $h$ are a linear trend plus an HSGP on the logit scale; the signed mean $g$ is a three-anchor, piecewise logit-linear tent plus an HSGP for smooth departures. A single scalar **Plackett odds ratio** $\psi$ links sign and speech within understood words:
+$f_U$ and $h$ are a linear trend plus an HSGP on the logit scale; the signed mean $g$ is a three-anchor, piecewise logit-linear tent plus an HSGP for smooth departures. A **Plackett odds ratio** $\psi$ links sign and speech within understood words, age-invariant but carrying a study-level random intercept (see the note under [Likelihoods](#likelihoods)):
 
 $$
 \pi_\text{both} = C(r, q; \psi), \quad \pi_\text{sign-only} = r - \pi_\text{both}, \quad \pi_\text{speak-only} = q - \pi_\text{both}, \quad \pi_\text{neither} = 1 - r - q + \pi_\text{both}.
@@ -105,7 +105,7 @@ which sits _below_ VG14's independence upper bound $p_U(1-(1-r)(1-q))$ whenever 
 
 **Subject random intercepts** ($\delta_{u,\text{subj}}, \delta_{q,\text{subj}}, \delta_{\text{sign},\text{subj}}$, non-centred, also observation-level) are added on all three trajectories, so within-child repeated measurements are not treated as independent. Adding a third level term to each predictor sharpens the **VG10 stabilisation** ported here: each GP is **anchored to pass through zero at the reference age (54 months) for every draw**, removing the GP↔intercept level redundancy that otherwise lets the linear/intercept term, the GP, and the random effects all encode the same global level, and the `q`-GP amplitude `eta_q` is tightened to `HalfNormal(0.20)` as a smoothness prior. The `q` age anchors themselves are the shared weakly-informative DS-joint priors (`Beta(2, 12)` / `Beta(3, 2)`), matching VG09 and VG10. The reported population curves set every random effect to zero. Earlier numerical claims about the sign-subject scale and predictive improvement require re-estimation under the nested likelihood and harmonised signing sources.
 
-The association $\psi$ is deliberately kept **decoupled** from the subject random effects: the four-cell likelihood is fed the population+study marginals only. $\psi$ is identified from ~62 uk_02 cross-tab rows (≈34 children), and the per-child sign offset is co-identified with $\psi$ from those same rows; letting it into the four-cell composition would make the headline association pivot on a thinly identified random effect. $\psi$ here is therefore a **population-conditioned** within-understood odds ratio, comparable to the study-RE-only VG15.
+The association $\psi$ is deliberately kept **decoupled** from the subject random effects: the four-cell likelihood is fed the population+study marginals only. $\psi$ is identified from the cross-tab rows, and the per-child sign offset is co-identified with $\psi$ from those same rows; letting it into the four-cell composition would make the headline association pivot on a thinly identified random effect. $\psi$ here is therefore a **population-conditioned** within-understood odds ratio, comparable to the study-RE-only VG15.
 
 ### Likelihoods
 
@@ -115,9 +115,15 @@ The association $\psi$ is deliberately kept **decoupled** from the subject rando
 
 The Dirichlet-Multinomial four-cell likelihood is excluded from LOO-CV by design: it is not a per-observation Beta-Binomial like the three word-count components, so LOO-CV is reported for words understood, spoken and signed only, matching every other model's scope. The spoken and signed LOO components exclude rows represented by the four-cell likelihood, avoiding duplicate scoring.
 
-::: {.callout-important title="psi is identified by two studies — descriptive / exploratory"}
+::: {.callout-important title="psi is heterogeneous across studies — descriptive / exploratory"}
 
-The association $\psi$ is identified by the 138 rows carrying a four-cell cross-tab: 56 from `uk_02` (20–56 months) and 82 from `uk_07` (34–95 months). It remains a **single scalar** (the data do not support an age-varying association at this sample size) and **descriptive/exploratory**, but it no longer rests on one study or one age window — the two sources overlap between 34 and 56 months and between them span 20–95. The four-cell composition below ~20 months, and $p_\text{any}$ there, still lean on the marginal trajectories plus scalar-$\psi$ extrapolation. `uk_07` is a randomised trial sample, so its intervention arm's growth across the three assessment points is partly programme-driven; `include_uk07_cells=False` isolates its pull on $\psi$ while keeping its marginals in the fit. The primary analysis masks `uk_01` signing because it records sign-only rather than total signed words, and masks `uk_06` signing pending source verification; both are explicit source sensitivities.
+The association $\psi$ is identified by 434 rows across four sources: 56 four-cell rows from `uk_02` (20–56 months), 82 from `uk_07` (34–95), 185 from `es_01` (11–71), and 111 within-produced three-cell rows from `nz_01` (30–66).
+
+$\psi$ carries a **study-level random intercept** (`delta_psi`), zero-summed over the sources that inform it. This is not a refinement but a correction: the four sources disagree about the association by an order of magnitude, and until 2026-08-12 $\psi$ was the only latent in this model without a study term — so the reported value was a precision-weighted average over whichever sources happened to be in the pool, and moved from 1.80 to 2.49 on adding `uk_07` alone. **The per-study values are the primary read; the population $\psi$ is a shrunk centre, not a consensus**, and `tau_psi` should be reported beside it.
+
+$\psi$ remains **age-invariant**, and that was tested rather than assumed. `uk_07`'s rows are markedly older (median 60 months against 38 and 32), so its high association is a natural candidate for an age effect — but age alone fits worse than study alone (weighted SSR 2688 against 1640) and adds nothing on top of it, and where all three within-understood sources overlap at 34–56 months, `es_01` and `uk_02` are matched at exactly 41 months and still differ six-fold. Three-way age overlap exists only at 30–60 months, so an age term's tails would be one study's intercept re-labelled as a trend. See `notes/202608121030-psi-heterogeneity-and-age-invariance.md`, reproduced by `scripts/psi_heterogeneity_audit.py`.
+
+The parameter stays **descriptive/exploratory**. The four-cell composition below ~11 months, and $p_\text{any}$ there, still lean on the marginal trajectories plus $\psi$ extrapolation. `uk_07` is a randomised trial sample, though its association is present in both arms at baseline and is a property of its context rather than its trial; `include_uk07_cells=False` and `include_es01_cells=False` isolate each source's pull on $\psi$ while keeping its marginals in the fit. The primary analysis masks `uk_01` signing because it records sign-only rather than total signed words, and masks `uk_06` signing pending source verification (#211); both are explicit source sensitivities.
 
 :::
 
