@@ -7,7 +7,7 @@ A Spanish sample of **186 children with Down syndrome** and **186 typically deve
 
 The sample matches that reported in Galeote, M., Sebastián, E., Checa, E., Rey, R., & Soto, P. (2011). The development of vocabulary in Spanish children with Down syndrome: comprehension, production, and gestures. _Journal of Intellectual & Developmental Disability_, 36(3), 184–196. <https://doi.org/10.3109/13668250.2011.599317> — "186 children with DS and 186 children with TD, with a mental age (MA) of 8–29 months and matched on gender and MA".
 
-This is the only source in this repository that carries a **typically developing comparison group**. Its non-vocal expressive modality is a **symbolic gesture** lexicon rather than a formal sign lexicon; it is read as this repository's `signed` construct (see [Measurement and column semantics](#measurement-and-column-semantics)).
+This is the only source in this repository that carries a **typically developing comparison group**. Its non-vocal expressive modality is described by the source as *gestural*, but it is a **lexical** one — gestures representing specific lexical items, each tied to one of the 651 checklist words and scored per word, which is the same coding `uk_02`, `uk_07` and `nz_01` apply to signs. It is read as this repository's `signed` construct (see [Measurement and column semantics](#measurement-and-column-semantics)); the terminology differs, the measurement does not.
 
 ## Fields
 
@@ -51,7 +51,29 @@ For each word the parent reports whether the child understands it, says it, and/
 | `gestured`           | Words expressed by symbolic gesture — a **total**, including words also spoken                   |
 | `spoken_or_gestured` | Words said **or** expressed by symbolic gesture — a union, each word counted once                |
 
-The number of words expressed in _both_ modalities is `spoken + gestured − spoken_or_gestured`. Among the Down syndrome children it is 0 for 52 and up to 212; for 6 of them every gestured word is also spoken. All 186 carry a non-zero gestural total.
+### The source's own column labels
+
+The four counts are labelled in the original Galeote table as:
+
+| original label                    | column here          |
+| --------------------------------- | -------------------- |
+| **TOTAL COMPREHENSIÓN**           | `understood`         |
+| **TOTAL PRODUCTION**              | `spoken`             |
+| **TOTAL GESTURES**                | `gestured`           |
+| **WORD PRODUCED + GESTURES ONLY** | `spoken_or_gestured` |
+
+These labels settle the two questions that matter, and are recorded here so the convention is readable from the source rather than re-derived.
+
+First, **`gestured` is a total**, counting words gestured whether or not they are also spoken. The label says so, and the fourth column's construction confirms it: the qualifier "ONLY" is there because the union adds just the gestures *not* already counted in production — which is only necessary if the third column is not gesture-only. Galeote et al. (2011) describe the fourth column as "total lexical production combining the two modalities (oral + gestural production)".
+
+Second, **`spoken_or_gestured` is a union, not an intersection.** "WORD PRODUCED + GESTURES ONLY" could be misparsed as "words produced by word *and* gesture only". The data rules that out: the column exceeds `min(spoken, gestured)` on all 186 rows, and is at least `spoken` on 186 of 186.
+
+The reading is also forced arithmetically, independently of the labels. If `spoken` and `gestured` were disjoint cells — the `nz_01`/`uk_07` convention — then `spoken_or_gestured = spoken + gestured` would hold identically on every row. It holds on only 52 of 186 (and 56 of 186 TD rows); the other 134 have a union strictly smaller than the sum, by a median of 7 words and up to 212. Those 52 are not a rival explanation: 17 have zero spoken words, so their overlap is arithmetically forced to zero, and the median spoken vocabulary among them is 2 words against 58 among the rest — the overlap appears exactly where a child says enough words for some to also be gestured.
+
+The number of words expressed in _both_ modalities is therefore `spoken + gestured − spoken_or_gestured`. Among the Down syndrome children it is 0 for 52 and up to 212; for 6 of them every gestured word is also spoken. All 186 carry a non-zero gestural total.
+
+> [!NOTE]
+> Contrast `uk_07` and `nz_01`, where `spoken` and `signed` **are** disjoint cells and the additive identity does hold exactly (83 of 83 rows for uk_07). The same arithmetic test separates the two conventions, so it is worth running on any new source rather than reading the column names.
 
 ### The matched-pair design
 
@@ -65,7 +87,37 @@ The `vocab_combined` view admits the **Down syndrome children only** (`group = '
 
 Two caveats sit behind that mapping. Symbolic gestures are not a formal sign language, so es_01's signing construct is a near neighbour of the taught-sign lexicons in `uk_01`, `uk_02` and `nz_01` rather than the identical thing; and the view masks the `signed` value of any row whose gestural total exceeds its own union, which is impossible (one row, see Known issues).
 
-es_01 also supports a **four-cell within-understood cross-tab** — neither, spoken-only, gestured-only, both — of the kind `common_joint_modality` builds for `uk_02`, since `both = spoken + gestured − spoken_or_gestured` and `neither = understood − spoken_or_gestured` are both derivable. Wiring that would let es_01 inform the sign–speech overlap `psi` directly instead of only through its marginals. It is not wired here: it is a model change rather than a data change, and the one inconsistent row yields a negative cell.
+### The four-cell cross-tab, and why it is not pooled into `psi`
+
+es_01 supports a **four-cell within-understood cross-tab** — neither, spoken-only, gestured-only, both — of the kind `common_joint_modality` builds for `uk_02` and `uk_07`:
+
+```
+understood_only = understood        − spoken_or_gestured
+spoken_only     = spoken_or_gestured − gestured
+gestured_only   = spoken_or_gestured − spoken
+both            = spoken + gestured  − spoken_or_gestured
+```
+
+These sum to `understood` identically, and **185 of 186 rows yield a valid partition** at 11–71 months. The exception is the known defective row (`pair_id` 148, see Known issues), whose `spoken_only` is −4; it routes to the marginal set, keeping its comprehension and spoken counts while its gestural total stays masked.
+
+The loader (`common_joint_modality._load_es01_four_cell`) is implemented and tested, but **`include_es01_cells` defaults to `False`** — es_01 reaches the models through its marginals. The reason is not the construct. es_01's third column scores gestures representing specific lexical items, each tied to one of the 651 checklist words: a per-word lexical marker on an adapted CDI, structurally the same coding `uk_02`, `uk_07` and `nz_01` use. It is the same measurement.
+
+The reason is that the sources already informing $\psi$ disagree about it substantially, and $\psi$ has nowhere to put that.
+
+| source  | rows | MH odds ratio | reference set     | per-child OR < 1 | non-vocal words also spoken |
+| ------- | ---- | ------------- | ----------------- | ---------------- | --------------------------- |
+| `uk_02` | 56   | 6.09          | within understood | 4%               | 50.4%                       |
+| `uk_07` | 82   | 13.90         | within understood | 11%              | 72.2%                       |
+| `nz_01` | 111  | 14.63         | all 675 items     | 4%               | 44.8%                       |
+| `es_01` | 185  | **0.90**      | within understood | **45%**          | 30.8%                       |
+
+Two caveats. Mantel-Haenszel is a crude descriptive statistic on the observed cells, not $\psi$ itself, which is population-conditioned against the fitted $r$ and $q$. And `nz_01` has no comprehension total, so its "neither" cell spans all unproduced items rather than understood-but-unproduced, which inflates its odds ratio — the same data for `uk_07` reads 13.90 within understood and 40.72 over all 674 items. Magnitudes compare only within a reference set; the per-child sign and the share-also-spoken column need no "neither" cell and compare throughout.
+
+What survives every control is that es_01 sits at independence while the three sign sources are positive. By age band it runs 0.30–1.12 against 4.4–41.6 for `uk_02` and 4.4–18.1 for `uk_07`, with no overlap in any band; matched on expressive vocabulary (30–300 words) it is 1.05 against 4.80 and 9.68. On the conditioning-free share-also-spoken measure it is the low end of a continuous gradient rather than categorically apart. Either way the spread is large, plausibly reflecting whether signing was taught alongside speech — both UK sources come from contexts where it is, and `uk_07` is an intervention trial — though four studies cannot test that.
+
+**$\psi$ is the only latent in VG15 with no study-level term.** `delta_u`, `delta_q` and `delta_sign` are all study random intercepts; `log_psi` is a bare global scalar. A pooled $\psi$ is therefore a precision-weighted average over whichever sources are in the pool — which is why it moved from 1.80 to 2.49 when `uk_07` arrived, and why adding es_01's 185 rows would drag the headline toward independence as an artefact of composition rather than a finding.
+
+The fix is a study-level term on $\psi$, after which these cells should be in and the flag should default `True`. Until then `include_es01_cells=True` runs the comparison deliberately.
 
 ## Known issues
 

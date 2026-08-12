@@ -920,6 +920,21 @@ class JointModelDefinition:
     tau_u_sigma: float = 0.5
     tau_q_sigma: float = 0.5
     tau_sign_sigma: float = 0.5
+    tau_psi_sigma: float = 1.0
+    """HalfNormal sigma for the between-study SD of log psi.
+
+    Wider than the other three (0.5) because the measured heterogeneity is wider.
+    Mantel-Haenszel odds ratios over the cross-tab sources run from 0.90 (es_01) to
+    about 14 (uk_07, nz_01) — roughly 2.8 on the log scale, so a between-study SD
+    near 1 is what the data show, and a HalfNormal(0.5) would fight it.
+
+    Only four studies inform psi, so ``tau_psi`` is weakly identified and the prior
+    does real work. That is a reason to report it with its interval and treat the
+    per-study values as the primary read, not a reason to pool them: pooling does
+    not make the heterogeneity go away, it hides it in a headline that then moves
+    with source composition (psi went 1.80 to 2.49 on adding uk_07 alone). The
+    non-centred ``tau * z`` parameterisation keeps the funnel manageable at this
+    group count."""
 
     # -- Subject-level random intercepts (VG08-VG10 pattern, issue #59) --
     #
@@ -1069,6 +1084,76 @@ class JointModelDefinition:
     plus-production footing, so they fall back into the marginal likelihoods and
     uk_07 keeps informing U, q and r. The flag therefore isolates uk_07's pull on
     the association alone, which is what a sensitivity comparison wants."""
+
+    # -- es_01 (Galeote) within-understood cross-tab inclusion --
+    include_es01_cells: bool = True
+    """Whether es_01's within-understood four-cell cross-tab enters the
+    Dirichlet-Multinomial that identifies psi. **Default False**, unlike the other
+    two cross-tab flags, and the reason is a finding rather than caution.
+
+    es_01's cells are derivable — its fourth column is a recorded union. The
+    original table's columns are TOTAL COMPREHENSIÓN, TOTAL PRODUCTION, TOTAL
+    GESTURES and WORD PRODUCED + GESTURES ONLY, the last being what Galeote et al.
+    (2011) call "total lexical production combining the two modalities" — so the
+    four cells follow by subtraction and 185 of 186 rows yield a valid partition at
+    11-71 months. Wiring them would more than double the rows identifying psi and
+    anchor it at the young end, where uk_02 is otherwise alone.
+
+    Default **True** since 2026-08-12, when ``psi`` gained a study-level term. Before
+    that it was False, and the reason was not the construct. es_01's third column scores "gestures representing specific
+    lexical items", each tied to one of the 651 checklist words — a per-word lexical
+    marker on an adapted CDI, structurally the same coding uk_02 and uk_07 use. It
+    is the same measurement.
+
+    The problem is that the sources already informing ``psi`` disagree about it
+    substantially, and ``psi`` has nowhere to put that. Mantel-Haenszel odds ratios
+    over the same cells, stratified by child:
+
+    =======  =====  =========  =================  ==========  ===============
+    source   rows   MH OR      reference set      per-child   non-vocal words
+                                                  OR < 1      also spoken
+    =======  =====  =========  =================  ==========  ===============
+    uk_02      56     6.09     within understood     4%          50.4%
+    uk_07      82    13.90     within understood    11%          72.2%
+    nz_01     111    14.63     all 675 items         4%          44.8%
+    es_01     185     0.90     within understood    45%          30.8%
+    =======  =====  =========  =================  ==========  ===============
+
+    Two caveats on that table. MH is a crude descriptive statistic on the observed
+    cells, not ``psi`` itself, which is a population-conditioned quantity defined
+    against the fitted r and q. And nz_01 has no comprehension total, so its
+    "neither" cell spans all unproduced items rather than understood-but-unproduced,
+    which inflates its OR — on the same data uk_07 reads 13.90 within understood and
+    40.72 over all 674 items. Magnitudes are therefore only comparable within a
+    reference set. The per-child sign and the share-also-spoken column need no
+    "neither" cell and are comparable throughout.
+
+    What survives every control is that es_01 sits at independence while the three
+    sign sources are positive: by age band it runs 0.30-1.12 against 4.4-41.6 for
+    uk_02 and 4.4-18.1 for uk_07, with no overlap in any band, and matched on
+    expressive vocabulary (30-300 words) it is 1.05 against 4.80 and 9.68. On the
+    conditioning-free share-also-spoken measure it is the low end of a continuous
+    gradient rather than categorically apart. Either way the spread across sources
+    is large, plausibly reflecting whether signing was taught alongside speech —
+    both UK sources come from contexts where it is, and uk_07 is an intervention
+    trial — though four studies cannot test that.
+
+    **``psi`` is the only latent in this model with no study-level term.** ``delta_u``,
+    ``delta_q`` and ``delta_sign`` are all study random intercepts; ``log_psi`` is a
+    bare global scalar. So a pooled ``psi`` is a precision-weighted average over
+    whichever sources happen to be in the pool — which is why it moved from 1.80 to
+    2.49 when uk_07 arrived, and why adding es_01's 185 rows (more than the uk_02
+    and uk_07 four-cell rows combined) would drag the headline toward independence
+    as an artefact of composition rather than a finding.
+
+    That is now handled: ``delta_psi`` is a zero-sum study random intercept over the
+    psi-informed studies, so each source carries its own association and the reported
+    population value is a shrunk centre with ``tau_psi`` quantifying the spread. With
+    the heterogeneity modelled rather than averaged away, pooling these cells adds
+    evidence instead of moving the headline by composition, and the flag defaults
+    True. Setting it False isolates es_01's contribution. See
+    data/vocab_data_es_01.md and
+    notes/202608120030-uk07-pactds-integration-and-ds-refit.md."""
 
     @property
     def model_type(self) -> ModelType:

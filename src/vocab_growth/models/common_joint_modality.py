@@ -8,7 +8,7 @@ model (VG15): issue #49 Option 3.
 VG15 extends the trivariate VG14 with two things VG14 assumed away:
 
 1.  A within-understood sign-speech ASSOCIATION (a single scalar Plackett odds
-    ratio ``psi``), identified from the uk_02 and uk_07 four-cell cross-tabulations
+    ratio ``psi``), identified from the uk_02, uk_07 and es_01 four-cell cross-tabulations
     (sign-only / sign+speech / speech-only / understood-only). This replaces
     VG14's independence-based ``p_any`` upper bound with a *data-identified*
     total expressive vocabulary.
@@ -36,7 +36,7 @@ instead of duplicate spoken and signed likelihood contributions:
     - understood ~ BetaBinomial(810, p_U)              (all DS studies)
     - spoken | understood ~ BetaBinomial(understood, q)
     - signed | understood ~ BetaBinomial(understood, r)
-    - uk_02 / uk_07 four cells ~ DirichletMultinomial(total, conc * [pi_*])
+    - uk_02 / uk_07 / es_01 four cells ~ DirichletMultinomial(total, conc * [pi_*])
       (the within-understood joint term; identifies psi)
 
 This is a self-contained module (like common_trivariate.py); it does not import
@@ -118,6 +118,9 @@ UK02_STUDY_ID = "uk_02"
 # uk_07 (PACT-DS) records comprehension alongside modality-exclusive expressive
 # cells, so its four cells are derivable: understood_only = understood - produced.
 UK07_STUDY_ID = "uk_07"
+# es_01 (Galeote) records comprehension, a spoken total, a symbolic-gesture total
+# and their recorded union, from which the same four cells follow by subtraction.
+ES01_STUDY_ID = "es_01"
 # nz_01 (Foster-Cohen) carries a production-only three-cell (within-produced)
 # cross-tabulation: word-only, sign-only, both. No comprehension.
 NZ01_STUDY_ID = "nz_01"
@@ -166,6 +169,7 @@ class JointModelConfiguration(BaseModelConfiguration):
     tau_u_sigma: float
     tau_q_sigma: float
     tau_sign_sigma: float
+    tau_psi_sigma: float
 
     # Kappa priors (age-varying dispersion) — understood / spoken / signed.
     # Legacy triples; None on an outcome that uses the two-anchor form below.
@@ -228,6 +232,12 @@ class JointModelSamples:
 
     # Association scalar
     psi: np.ndarray  # shape (n_samples,)
+    # Per-study association and its between-study SD. `psi_study` is (n_studies,
+    # n_samples); studies with no cross-tab carry exactly the population value.
+    # `tau_psi` is None when fewer than two studies inform psi (nothing to estimate).
+    psi_study: np.ndarray
+    psi_study_names: list
+    tau_psi: np.ndarray | None
 
     # uk_02 four-cell posterior predictive (counts) and observed
     cell_obs: np.ndarray  # (n_cells_obs, 4) observed
@@ -321,6 +331,60 @@ def _load_uk07_four_cell():
     return four, marg
 
 
+def _load_es01_four_cell():
+    """Load es_01 (Galeote) rows as a four-cell within-understood cross-tab.
+
+    es_01 records four totals per child. In the original table they are labelled
+    TOTAL COMPREHENSIÓN, TOTAL PRODUCTION, TOTAL GESTURES and WORD PRODUCED +
+    GESTURES ONLY — the last being what Galeote et al. (2011) describe as "total
+    lexical production combining the two modalities". So the third column is a
+    *total* (words gestured whether or not also spoken) and the fourth is a
+    de-duplicated union, and the four cells follow by subtraction::
+
+        understood_only = understood        - union
+        spoken_only     = union             - gestured
+        signed_only     = union             - spoken
+        signed_spoken   = spoken + gestured - union
+
+    which sum to ``understood`` identically. That the fourth column is a union
+    rather than a disjoint cell is not an assumption: a disjoint reading forces
+    ``union == spoken + gestured`` on every row, and 134 of the 186 Down syndrome
+    rows have a union strictly smaller than that sum.
+
+    Guards mirror ``_load_uk07_four_cell``: a row with any negative cell, or with
+    no understood words, carries no composition and is routed to the marginal set.
+    One row of 186 fails (1 spoken, 15 gestured, union 11 — a union smaller than
+    one of its parts, so ``spoken_only`` is negative); its comprehension and spoken
+    marginals still inform the model, and its ``signed`` is masked there on the
+    same reasoning the ``vocab_combined`` view applies.
+
+    Returns ``(four_cell_df, marginal_df)``. Down syndrome children only — the
+    matched typically developing group stays out of this relation, as it does in
+    the view.
+    """
+    path = os.path.join(local_env.DATA_DIR, "vocab_data_es_01.csv")
+    raw = pd.read_csv(path)
+    raw = raw[raw["group"] == "DS"].copy()
+
+    union = raw["spoken_or_gestured"]
+    raw["understood_only"] = raw["understood"] - union
+    raw["spoken_only"] = union - raw["gestured"]
+    raw["signed_only"] = union - raw["spoken"]
+    raw["signed_spoken"] = raw["spoken"] + raw["gestured"] - union
+
+    cells = ["understood_only", "spoken_only", "signed_only", "signed_spoken"]
+    usable = (
+        raw[["understood", "spoken", "gestured", "spoken_or_gestured"]]
+        .notna()
+        .all(axis=1)
+        & (raw[cells] >= 0).all(axis=1)
+        & (raw["understood"] > 0)
+    )
+    four = raw[usable].copy()
+    marg = raw[~usable].copy()
+    return four, marg
+
+
 def _load_nz01_produced_cells():
     """Load nz_01 (Foster-Cohen) rows as a within-produced three-cell cross-tab.
 
@@ -362,9 +426,13 @@ def prepare_joint_data(
     """Load and prepare data for the joint model.
 
     Studies without a cross-tab contribute understood/spoken/signed marginals
-    (from the merged view). uk_02 and uk_07 are taken from their raw CSVs and each
-    split into four-cell rows (Dirichlet-Multinomial) and marginal-only rows
+    (from the merged view). uk_02, uk_07 and es_01 are taken from their raw CSVs and
+    each split into four-cell rows (Dirichlet-Multinomial) and marginal-only rows
     (marginal likelihoods); nz_01 contributes a within-produced three-cell DM.
+
+    Note that es_01's non-vocal modality is symbolic gesture rather than taught
+    sign, so its cells widen what psi measures -- see
+    ``JointModelDefinition.include_es01_cells``.
     """
     # Subject random intercepts (issue #59) need a per-child identifier in both
     # data sources (the merged view and the raw uk_02 cross-tab CSV).
@@ -392,6 +460,8 @@ def prepare_joint_data(
     cross_tab_studies = [UK02_STUDY_ID, NZ01_STUDY_ID]
     if definition.include_uk07_cells:
         cross_tab_studies.append(UK07_STUDY_ID)
+    if definition.include_es01_cells:
+        cross_tab_studies.append(ES01_STUDY_ID)
     other = merged[~merged["study"].isin(cross_tab_studies)].copy()
 
     four, marg = _load_uk02_four_cell()
@@ -463,6 +533,41 @@ def prepare_joint_data(
         frames.append(pd.DataFrame(four07_cols))
         frames.append(pd.DataFrame(marg07_cols))
 
+    # es_01 (Galeote): the same within-understood partition, derived from the
+    # source's recorded totals and their recorded union. Its non-vocal modality is
+    # a symbolic-gesture lexicon rather than a taught sign one, so including these
+    # cells widens what psi measures — see JointModelDefinition.include_es01_cells.
+    if definition.include_es01_cells:
+        four_es, marg_es = _load_es01_four_cell()
+        four_es_cols = {
+            "study": ES01_STUDY_ID,
+            "age": four_es["age"].to_numpy(dtype=float),
+            "understood": four_es["understood"].to_numpy(dtype=float),
+            "spoken": np.nan,
+            "signed": np.nan,
+            "understood_only": four_es["understood_only"].to_numpy(dtype=float),
+            "signed_only": four_es["signed_only"].to_numpy(dtype=float),
+            "spoken_only": four_es["spoken_only"].to_numpy(dtype=float),
+            "signed_spoken": four_es["signed_spoken"].to_numpy(dtype=float),
+            "cell_total": four_es["understood"].to_numpy(dtype=float),
+        }
+        # Marginal-only es_01 rows keep understood and spoken. `signed` is left NaN
+        # rather than passed through: a row only lands here because its cells do not
+        # reconcile, which is exactly the condition under which the view masks its
+        # gestural total as unusable.
+        marg_es_cols = {
+            "study": ES01_STUDY_ID,
+            "age": marg_es["age"].to_numpy(dtype=float),
+            "understood": marg_es["understood"].to_numpy(dtype=float),
+            "spoken": marg_es["spoken"].to_numpy(dtype=float),
+            "signed": np.nan,
+        }
+        if use_subject_codes:
+            four_es_cols["subject_id"] = four_es["subject_id"].to_numpy()
+            marg_es_cols["subject_id"] = marg_es["subject_id"].to_numpy()
+        frames.append(pd.DataFrame(four_es_cols))
+        frames.append(pd.DataFrame(marg_es_cols))
+
     # nz_01's (real-key) CSV is committed separately; tolerate its absence (CI,
     # unit tests, or a checkout predating the data) so the model still builds.
     nz01_csv = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
@@ -525,6 +630,7 @@ def prepare_joint_data(
     has_cells = analysis_df["signed_spoken"].notna()
     n_cells_uk02 = int((has_cells & analysis_df["study"].eq(UK02_STUDY_ID)).sum())
     n_cells_uk07 = int((has_cells & analysis_df["study"].eq(UK07_STUDY_ID)).sum())
+    n_cells_es01 = int((has_cells & analysis_df["study"].eq(ES01_STUDY_ID)).sum())
     n_prod = (
         int(analysis_df["prod_signed_spoken"].notna().sum())
         if "prod_signed_spoken" in analysis_df.columns
@@ -540,6 +646,7 @@ def prepare_joint_data(
         ("Four-cell rows (DM, identify psi)", n_cells),
         ("  of which uk_02", n_cells_uk02),
         ("  of which uk_07", n_cells_uk07),
+        ("  of which es_01", n_cells_es01),
         ("nz_01 produced-cell rows (DM)", n_prod),
         ("include_uk01_signed", definition.include_uk01_signed),
         ("uk_01 signed-only rows dropped", sign_source_dropped.get("uk_01", 0)),
@@ -547,6 +654,7 @@ def prepare_joint_data(
         ("uk_06 unverified signed rows dropped", sign_source_dropped.get("uk_06", 0)),
         ("include_nz01_cells", definition.include_nz01_cells),
         ("include_uk07_cells", definition.include_uk07_cells),
+        ("include_es01_cells", definition.include_es01_cells),
     ]
     if definition.exclude_us01_spoken_ceiling:
         counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
@@ -673,6 +781,7 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         tau_u_sigma=definition.tau_u_sigma,
         tau_q_sigma=definition.tau_q_sigma,
         tau_sign_sigma=definition.tau_sign_sigma,
+        tau_psi_sigma=definition.tau_psi_sigma,
         report_max_age_understood=definition.report_max_age_understood,
         report_max_age_signed=definition.report_max_age_signed,
     )
@@ -1133,6 +1242,42 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # --- association ---
         log_psi = config.log_psi_dist.to_pymc("log_psi")
         psi = pm.Deterministic("psi", pm.math.exp(log_psi))
+
+        # Study-level term on the association. Until 2026-08-12 psi was the only
+        # latent here without one -- delta_u, delta_q and delta_sign are all study
+        # random intercepts -- which made the reported association a
+        # precision-weighted average over whichever cross-tab sources happened to be
+        # in the pool. It moved 1.80 -> 2.49 on adding uk_07 alone, and the sources
+        # disagree far more than that: Mantel-Haenszel odds ratios over the same
+        # cells run uk_02 6.09, uk_07 13.90, nz_01 14.63, es_01 0.90.
+        #
+        # Zero-summed over the psi-informed studies only, for the reason given above
+        # for delta_sign: a study with no cross-tab never enters a psi term, so
+        # letting it carry an offset would only counterbalance the informed ones.
+        # Informed = the within-understood four-cell rows (idx_cells) plus nz_01's
+        # within-produced three-cell rows (idx_prod), which also identify psi.
+        psi_informed = np.unique(
+            np.concatenate([
+                study_codes[idx_cells],
+                study_codes[idx_prod],
+            ]).astype(int)
+        )
+        n_psi_studies = int(psi_informed.size)
+        if n_psi_studies > 1:
+            tau_psi = pm.HalfNormal("tau_psi", sigma=config.tau_psi_sigma)
+            zsn_sigma_psi = float(np.sqrt(n_psi_studies / (n_psi_studies - 1)))
+            z_psi = pm.ZeroSumNormal("z_psi", sigma=zsn_sigma_psi, shape=n_psi_studies)
+            delta_psi_full = pt.set_subtensor(
+                pt.zeros(n_studies)[psi_informed], tau_psi * z_psi
+            )
+        else:
+            # One informed study (or none): there is no between-study contrast to
+            # estimate, and a zero-sum over a single element is degenerate.
+            delta_psi_full = pt.zeros(n_studies)
+        delta_psi = pm.Deterministic("delta_psi", delta_psi_full, dims="study_id")
+        # Per-study association, the quantity the heterogeneity is read from.
+        pm.Deterministic("psi_study", pm.math.exp(log_psi + delta_psi), dims="study_id")
+        log_psi_obs = log_psi + delta_psi[study_codes]
         log_conc = config.log_conc_dist.to_pymc("log_conc")
         conc = pm.Deterministic("conc", pm.math.exp(log_conc))
 
@@ -1187,7 +1332,8 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # population-conditioned association decoupled from the per-child sign RE.
         r_c = pm.math.clip(r_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
         q_c = pm.math.clip(q_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
-        pi_both_c = _plackett_pi_both(r_c, q_c, psi)
+        psi_c = pm.math.exp(log_psi_obs[idx_cells])
+        pi_both_c = _plackett_pi_both(r_c, q_c, psi_c)
         pi_sign_c = pm.math.maximum(r_c - pi_both_c, EPSILON)
         pi_speak_c = pm.math.maximum(q_c - pi_both_c, EPSILON)
         pi_neither_c = pm.math.maximum(1 - r_c - q_c + pi_both_c, EPSILON)
@@ -1203,12 +1349,14 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # composition. nz_01 has no comprehension, so we condition on produced:
         # drop the unobservable "neither" (understood_only) cell from the Plackett
         # within-understood composition and renormalise over {sign_only, speak_only,
-        # both}. Same psi/conc and population+study marginals as the uk_02 DM, so the
-        # two cross-tab sources jointly identify psi.
+        # both}. Same conc and population+study marginals as the uk_02 DM, and the
+        # same per-study psi construction, so every cross-tab source identifies its
+        # own psi and they share the population level through the zero-sum.
         if idx_prod.size:
             r_p = pm.math.clip(r_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
             q_p = pm.math.clip(q_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
-            pi_both_p = _plackett_pi_both(r_p, q_p, psi)
+            psi_p = pm.math.exp(log_psi_obs[idx_prod])
+            pi_both_p = _plackett_pi_both(r_p, q_p, psi_p)
             pi_sign_p = pm.math.maximum(r_p - pi_both_p, EPSILON)
             pi_speak_p = pm.math.maximum(q_p - pi_both_p, EPSILON)
             pi_both_p = pm.math.maximum(pi_both_p, EPSILON)
@@ -1222,6 +1370,9 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # ============================================================
         # Reporting deterministics (population, plot/query): four-cell + p_any
         # ============================================================
+        # These use the POPULATION psi (no study shift), matching p_u_plot/q_plot/
+        # r_plot above: the reported composition and p_any are population quantities.
+        # Per-study associations are reported separately from `psi_study`.
         for grid, rg, qg, pug in [("plot", r_plot, q_plot, p_u_plot), ("query", r_query, q_query, p_u_query)]:
             pi_both = _plackett_pi_both(rg, qg, psi)
             pm.Deterministic(f"pi_both_{grid}", pi_both, dims=f"{grid}_id")
@@ -1462,6 +1613,15 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         p_any_query=_extract(trace, "p_any_query", "query_id"),
         p_any_indep_query=_extract(trace, "p_any_indep_query", "query_id"),
         psi=np.array(trace.posterior["psi"].stack(sample=("chain", "draw")).values),
+        psi_study=np.array(
+            trace.posterior["psi_study"].stack(sample=("chain", "draw")).values
+        ),
+        psi_study_names=sorted(context.analysis_df["study"].unique()),
+        tau_psi=(
+            np.array(trace.posterior["tau_psi"].stack(sample=("chain", "draw")).values)
+            if "tau_psi" in trace.posterior
+            else None
+        ),
         cell_obs=cell_counts,
         cell_pred=cell_pred,
         cell_ages=cell_ages,
@@ -1610,11 +1770,47 @@ def posterior_summary(context: JointContext):
         "P_psi_gt_1": [float((psi > 1).mean())],
     })
     psi_df.to_csv(os.path.join(od, "posterior_summary_psi.csv"), index=False)
-    key_value_table("Association psi", [
+    key_value_table("Association psi (population)", [
         ("psi median", round(float(np.median(psi)), 3)),
         (f"psi {pct}% HDI", (round(float(psi_lo), 3), round(float(psi_hi), 3))),
         ("P(psi > 1)", round(float((psi > 1).mean()), 3)),
     ])
+
+    # Per-study association. This is the primary read on a parameter the sources
+    # disagree about: the population value is a shrunk centre, not a consensus.
+    # Studies with no cross-tab sit at exactly the population value (delta_psi = 0)
+    # and are omitted -- they carry no information about the association.
+    psi_study = s.psi_study
+    rows = []
+    for i, name in enumerate(s.psi_study_names):
+        draws = psi_study[i]
+        if np.allclose(draws, psi):
+            continue                      # uninformed: delta_psi pinned to 0
+        lo50, hi50 = intervals.interval_1d(draws, inner, "hdi")
+        lo, hi = intervals.interval_1d(draws, ci_prob, "hdi")
+        rows.append({
+            "study": name,
+            "psi_median": float(np.median(draws)),
+            "psi_ci50_lo": float(lo50), "psi_ci50_hi": float(hi50),
+            "psi_ci_lo": float(lo), "psi_ci_hi": float(hi),
+            "P_psi_gt_1": float((draws > 1).mean()),
+        })
+    if rows:
+        psi_study_df = pd.DataFrame(rows)
+        psi_study_df.to_csv(
+            os.path.join(od, "posterior_summary_psi_study.csv"), index=False
+        )
+        dataframe_table(
+            psi_study_df.round(3),
+            title="Association psi by study (cross-tab sources only)",
+            show_index=False,
+        )
+    if s.tau_psi is not None:
+        tau_lo, tau_hi = intervals.interval_1d(s.tau_psi, ci_prob, "hdi")
+        key_value_table("Between-study SD of log psi", [
+            ("tau_psi median", round(float(np.median(s.tau_psi)), 3)),
+            (f"tau_psi {pct}% HDI", (round(float(tau_lo), 3), round(float(tau_hi), 3))),
+        ])
 
 
 # ============================================================

@@ -66,6 +66,19 @@ def _write_uk07_csv(path, rows=None):
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
+def _write_es01_csv(path, rows=None):
+    """An es_01 fixture — prepare_joint_data always loads this CSV."""
+    if rows is None:
+        rows = [
+            dict(
+                subject_id="es_c", pair_id=1, group="DS", sex="F", age=40,
+                age_days=1200, mental_age=20.0, mental_age_level=5,
+                understood=60, spoken=20, gestured=10, spoken_or_gestured=25,
+            )
+        ]
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+
 def test_four_cell_loader_routes_incomplete_rows_to_marginal(tmp_path, monkeypatch):
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
@@ -90,6 +103,7 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
     _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+    _write_es01_csv(tmp_path / "vocab_data_es_01.csv")
 
     merged = pd.DataFrame(
         [
@@ -143,6 +157,7 @@ def test_uk07_loader_derives_the_fourth_cell_and_guards_the_partition(
     negative (production above comprehension) or where nothing is understood
     carries no within-understood composition and must fall back to marginals."""
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    _write_es01_csv(tmp_path / "vocab_data_es_01.csv")
     _write_uk07_csv(
         tmp_path / "vocab_data_uk_07.csv",
         rows=[
@@ -188,6 +203,7 @@ def test_uk07_cells_join_uk02_in_the_psi_likelihood(tmp_path, monkeypatch):
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
     _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+    _write_es01_csv(tmp_path / "vocab_data_es_01.csv")
 
     merged = pd.DataFrame(
         [
@@ -237,7 +253,7 @@ def test_uk07_cells_join_uk02_in_the_psi_likelihood(tmp_path, monkeypatch):
     assert pd.isna(uk07_on.iloc[0]["signed"])
     # It is a within-understood cross-tab, so it joins uk_02 in the same term.
     cell_studies = set(on.loc[on["signed_spoken"].notna(), "study"])
-    assert cell_studies == {"uk_02", "uk_07"}
+    assert cell_studies == {"uk_02", "uk_07", "es_01"}
 
     off = _prepared(dataclasses.replace(VG15, include_uk07_cells=False))
     uk07_off = off[off["study"] == "uk_07"]
@@ -270,3 +286,206 @@ def test_plackett_pi_both_stable_and_correct_at_psi_one():
         disc = np.sqrt(S * S - 4.0 * p * (p - 1.0) * r * q)
         textbook = (S - disc) / (2.0 * (p - 1.0))
         assert np.isclose(f(p)[0], textbook)
+
+
+# ---- es_01 (Galeote): four cells derived from the recorded union ----
+#
+# The source's fourth column is a recorded UNION ("WORD PRODUCED + GESTURES ONLY"
+# in the original table; "total lexical production combining the two modalities"
+# in Galeote et al. 2011), and its third is a gestural TOTAL. So the four cells
+# follow by subtraction and sum to `understood` identically. A disjoint reading of
+# the third column would force union == spoken + gestured, which 134 of the 186
+# real rows violate.
+
+
+def test_es01_loader_derives_four_cells_from_the_recorded_union(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    _write_es01_csv(
+        tmp_path / "vocab_data_es_01.csv",
+        rows=[
+            # understood 60, spoken 20, gestured 10, union 25
+            #   -> both = 20 + 10 - 25 = 5, spoken_only = 25 - 10 = 15,
+            #      gesture_only = 25 - 20 = 5, understood_only = 60 - 25 = 35
+            dict(
+                subject_id="ok", pair_id=1, group="DS", sex="F", age=40,
+                age_days=1200, mental_age=20.0, mental_age_level=5,
+                understood=60, spoken=20, gestured=10, spoken_or_gestured=25,
+            ),
+            # The real defective row: a union smaller than one of its parts, so
+            # spoken_only = 11 - 15 is negative -> marginal-only.
+            dict(
+                subject_id="bad", pair_id=148, group="DS", sex="M", age=24,
+                age_days=720, mental_age=12.7, mental_age_level=2,
+                understood=82, spoken=1, gestured=15, spoken_or_gestured=11,
+            ),
+            # The matched typically developing partner must never reach this
+            # relation, whatever its counts.
+            dict(
+                subject_id="td", pair_id=1, group="TD", sex="F", age=20,
+                age_days=600, mental_age=20.0, mental_age_level=5,
+                understood=60, spoken=20, gestured=10, spoken_or_gestured=25,
+            ),
+        ],
+    )
+
+    four, marg = cjm._load_es01_four_cell()
+
+    assert list(four["subject_id"]) == ["ok"]
+    assert list(marg["subject_id"]) == ["bad"]          # TD is filtered, not routed
+
+    row = four.iloc[0]
+    assert row["understood_only"] == 35
+    assert row["spoken_only"] == 15
+    assert row["signed_only"] == 5
+    assert row["signed_spoken"] == 5
+    # The defining property: the partition is exhaustive within understood.
+    assert (
+        row["understood_only"] + row["spoken_only"]
+        + row["signed_only"] + row["signed_spoken"]
+    ) == row["understood"]
+
+
+def test_es01_cells_join_the_psi_likelihood_and_fall_back_when_off(
+    tmp_path, monkeypatch
+):
+    """With ``include_es01_cells`` on, es_01 enters as four-cell rows with its
+    marginals suppressed; with it off it stays in the fit through its marginals."""
+    monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
+    _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+    _write_es01_csv(tmp_path / "vocab_data_es_01.csv")
+
+    merged = pd.DataFrame(
+        [
+            {"study": "es_01", "age": 40.0, "understood": 60, "spoken": 20,
+             "signed": 10, "subject_id": "es_c"},
+            {"study": "uk_05", "age": 25.0, "understood": 30, "spoken": 5,
+             "signed": 2, "subject_id": "valid_child"},
+        ]
+    )
+    monkeypatch.setattr(
+        cjm.vocab_data_utils, "load_data", lambda **kwargs: merged[kwargs["columns"]]
+    )
+
+    def _prepared(definition):
+        context = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name="TEST_VG15_ES01",
+                config_name="test",
+                output_root_dir=str(tmp_path),
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("test"),
+        )
+        cjm.prepare_joint_data(context, definition)
+        return context.analysis_df
+
+    on = _prepared(VG15)                       # default: cells on
+    es_on = on[on["study"] == "es_01"]
+    assert len(es_on) == 1
+    assert es_on.iloc[0]["signed_spoken"] == 5           # a four-cell row
+    assert pd.isna(es_on.iloc[0]["spoken"])              # marginals suppressed
+    assert pd.isna(es_on.iloc[0]["signed"])
+
+    off = _prepared(dataclasses.replace(VG15, include_es01_cells=False))
+    es_off = off[off["study"] == "es_01"]
+    assert len(es_off) == 1
+    assert pd.isna(es_off.iloc[0]["signed_spoken"])      # no cross-tab term
+    assert es_off.iloc[0]["spoken"] == 20                # marginals retained
+    assert es_off.iloc[0]["signed"] == 10
+
+
+def test_es01_defective_row_keeps_its_marginals_but_not_its_gestural_total(
+    tmp_path, monkeypatch
+):
+    """A row lands in the marginal set only because its cells do not reconcile —
+    which is exactly the condition under which the view masks its gestural total.
+    Passing that total through here would reintroduce what the view rejects."""
+    monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
+    _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+    _write_es01_csv(
+        tmp_path / "vocab_data_es_01.csv",
+        rows=[
+            dict(
+                subject_id="bad", pair_id=148, group="DS", sex="M", age=24,
+                age_days=720, mental_age=12.7, mental_age_level=2,
+                understood=82, spoken=1, gestured=15, spoken_or_gestured=11,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        cjm.vocab_data_utils,
+        "load_data",
+        lambda **kwargs: pd.DataFrame(
+            [{"study": "uk_05", "age": 25.0, "understood": 30, "spoken": 5,
+              "signed": 2, "subject_id": "valid_child"}]
+        )[kwargs["columns"]],
+    )
+
+    context = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name="TEST_VG15_ES01_BAD",
+            config_name="test",
+            output_root_dir=str(tmp_path),
+            ci_prob=0.90,
+            interval_kind="hdi",
+        ),
+        sampling=sampling.get_sampling_configuration("test"),
+    )
+    cjm.prepare_joint_data(context, VG15)
+    row = context.analysis_df.query("study == 'es_01'").iloc[0]
+
+    assert pd.isna(row["signed_spoken"])   # no composition
+    assert row["understood"] == 82         # comprehension survives
+    assert row["spoken"] == 1              # oral production survives
+    assert pd.isna(row["signed"])          # the impossible gestural total does not
+
+
+def test_psi_carries_a_study_term_and_all_cross_tab_sources_are_on():
+    """psi was once the only latent here with no study-level term.
+
+    delta_u, delta_q and delta_sign were all study random intercepts while log_psi
+    was a bare global scalar — so the reported association was a precision-weighted
+    average over whichever cross-tab sources were in the pool, and it moved 1.80 to
+    2.49 on adding uk_07 alone. The sources disagree far more than that
+    (Mantel-Haenszel, stratified by child: uk_02 6.09, uk_07 13.90, nz_01 14.63,
+    es_01 0.90).
+
+    With delta_psi in place the heterogeneity is estimated rather than averaged
+    away, so every cross-tab source is admitted. This pins both halves: turning a
+    source back off must stay possible, but the defaults must not silently revert
+    to pooling into a study-invariant psi.
+    """
+    assert VG15.include_uk07_cells is True
+    assert VG15.include_es01_cells is True
+    assert VG15.include_nz01_cells is True
+    # The between-study scale is wider than the trajectory taus (0.5) because the
+    # measured spread is wider; a tighter prior would fight the data.
+    assert VG15.tau_psi_sigma == 1.0
+
+
+def test_es01_real_cells_reconcile_and_sit_near_independence():
+    """The real source, not a fixture: the partition must be exact, and the
+    association must still be the one the default is justified on."""
+    four, marg = cjm._load_es01_four_cell()
+
+    assert len(four) == 185 and len(marg) == 1     # one known defective row
+
+    cells = ["understood_only", "spoken_only", "signed_only", "signed_spoken"]
+    # Exhaustive within understood, on every row, with no negative cell.
+    assert (four[cells].sum(axis=1) == four["understood"]).all()
+    assert (four[cells] >= 0).all().all()
+
+    # Mantel-Haenszel across children, the estimator quoted in the flag docstring.
+    total = four[cells].sum(axis=1)
+    num = (four["signed_spoken"] * four["understood_only"] / total).sum()
+    den = (four["signed_only"] * four["spoken_only"] / total).sum()
+    assert 0.7 < num / den < 1.2, (
+        "es_01's sign-speech association has moved away from independence; "
+        "the include_es01_cells default was justified on it sitting there while "
+        "the other cross-tab sources sit well above it."
+    )
