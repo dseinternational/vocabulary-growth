@@ -1679,13 +1679,16 @@ VG02 = UnivariateModelDefinition(
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     eta_sigma=0.6,
-    # Comprehension reporting stops at 72 mo, matching the joint models. Only 15
-    # of the 905 understood rows sit at or above it (95th percentile 64 mo), and
-    # 78 and 90 fall at or past the high anchor. Reporting only -- it cannot move
-    # the posterior. The whole-month companion still covers the full observed span,
-    # where its n_obs column records the emptiness directly. See
+    # Comprehension reporting stops at 84 mo, matching the joint models; raised from
+    # 72 on 2026-08-13 once uk_07 and the reinstated uk_06 signing rows rebuilt the
+    # older tail. 38 of the 987 understood rows now sit at or above 72 (95th
+    # percentile 69 mo), 25 of them from 20 children in the 72-84 band. Above 84
+    # only 13 rows from 11 children remain, and 84 is the high trend anchor past
+    # which the mean is levelled off rather than fitted. Reporting only -- it cannot
+    # move the posterior. The whole-month companion still covers the full observed
+    # span, where its n_obs column records the emptiness directly. See
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    report_max_age_understood=84,
     kappa=_DS_UNDERSTOOD_KAPPA,
 )
 
@@ -1819,14 +1822,21 @@ VG05 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1894,14 +1904,21 @@ VG07 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -1971,14 +1988,21 @@ VG08 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -2052,14 +2076,21 @@ VG09 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -2137,14 +2168,21 @@ VG10 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -2413,14 +2451,21 @@ VG14 = TrivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     clamp_mean_above_hi_anchor=True,
 )
 
@@ -2502,14 +2547,21 @@ VG15 = JointModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     # Signed evidence now reaches 84 months. Adopted 2026-08-07 at 60 on the same
     # argument that capped comprehension at 72 -- then 46 of 593 signed
     # observations lay above 60 and none above 72. uk_07 (PACT-DS) adds 82
@@ -2626,14 +2678,21 @@ VG16 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
+    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
+    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
+    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
+    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
+    # test, and the same threshold, the study owner applied when raising
+    # report_max_age_signed from 60 to 84 in #212.
+    # 84 and no further, for two reasons that coincide: at or above it understood
+    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
+    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
+    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84. Reporting only -- it cannot move the posterior. See
+    # notes/202608042030-q-mean-extrapolation.md.
+    report_max_age_understood=84,
     clamp_mean_above_hi_anchor=True,
 )
 

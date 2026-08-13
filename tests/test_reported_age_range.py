@@ -4,9 +4,10 @@
 """Comprehension reporting stops where the comprehension evidence stops.
 
 The query grid is shared by every outcome a model reports, but the outcomes are
-not observed over the same ages: in the Down syndrome pool understood has 15
-rows at or above 72 months against spoken's 104. ``report_max_age_understood``
-trims understood and ``q`` without touching spoken.
+not observed over the same ages: in the Down syndrome pool understood has 38
+rows at or above 72 months against spoken's 127, and above 84 only 13 against
+59. ``report_max_age_understood`` trims understood and ``q`` without touching
+spoken.
 
 Two failure modes are specific to this design and neither shows up in a unit
 test of the helper alone, so they are tested directly:
@@ -117,9 +118,14 @@ def test_every_engine_passes_the_cap_from_definition_to_configuration(module):
 
 
 @pytest.mark.parametrize("model_id", TRIMMED_MODELS)
-def test_comprehension_reporting_stops_at_72_months(model_id):
+def test_comprehension_reporting_stops_at_84_months(model_id):
+    """Raised from 72 to 84 on 2026-08-13. uk_07 and the reinstated uk_06 rows
+    rebuilt the older tail, so the 72-84 band carries 25 rows from 20 children
+    across five studies rather than the near-nothing the 72 cap was set against.
+    84 and no further: above it understood has 13 rows from 11 children, and 84
+    is the high trend anchor past which the mean is levelled off, not fitted."""
     definition = getattr(D, model_id)
-    assert definition.report_max_age_understood == 72
+    assert definition.report_max_age_understood == 84
 
 
 def test_the_cap_lies_on_the_query_grid():
