@@ -52,6 +52,22 @@ CAPPED_TRIVARIATE_CALLS = [
     "plot_comprehension_production_gap",
 ]
 
+# Which cap each call site must carry. Passing *a* cap is not enough: until
+# 2026-08-13 the trivariate sign-derived figures were passed
+# ``report_max_age_understood``, so they satisfied the "is it capped?" test above
+# while being trimmed by the wrong outcome's evidence -- and raising the
+# comprehension cap from 72 to 84 moved VG14's signed figures as a side effect.
+# Keyed by plot function; every other capped call uses the comprehension cap.
+SIGN_DERIVED_CALLS = frozenset({"plot_signed_rate", "plot_sign_speech_crossover"})
+
+
+def _expected_cap_attr(func_name: str) -> str:
+    return (
+        "report_max_age_signed"
+        if func_name in SIGN_DERIVED_CALLS
+        else "report_max_age_understood"
+    )
+
 
 def _call_sites(module, func_name):
     """Every ast.Call to ``func_name`` in ``module``'s source."""
@@ -81,6 +97,30 @@ def test_reporting_pipeline_passes_the_age_cap(module, func_name):
             f"{module.__name__} calls {func_name} without max_age_months "
             f"(line {call.lineno}). Comprehension- and sign-derived plots must "
             "stop where their evidence stops; see this module's docstring."
+        )
+
+
+@pytest.mark.parametrize(
+    ("module", "func_name"),
+    [(common_bivariate, n) for n in CAPPED_BIVARIATE_CALLS]
+    + [(common_trivariate, n) for n in CAPPED_TRIVARIATE_CALLS],
+)
+def test_each_call_site_passes_the_cap_for_its_own_outcome(module, func_name):
+    """The cap passed must belong to the outcome plotted.
+
+    A sign-derived figure trimmed by ``report_max_age_understood`` is capped, so
+    the test above passes, but it stops where *comprehension* evidence stops and
+    moves whenever a comprehension decision is taken. That is the actual defect
+    found on VG14 on 2026-08-13.
+    """
+    expected = _expected_cap_attr(func_name)
+    for call in _call_sites(module, func_name):
+        kw = next(k for k in call.keywords if k.arg == "max_age_months")
+        attr = getattr(kw.value, "attr", None)
+        assert attr == expected, (
+            f"{module.__name__} calls {func_name} with max_age_months="
+            f"...{attr} (line {call.lineno}), expected {expected}. A plot must be "
+            "trimmed by its own outcome's reporting cap, not another's."
         )
 
 

@@ -779,7 +779,9 @@ class TrivariateModelDefinition:
     """Highest query age (months) at which comprehension quantities are reported.
 
     Trims the understood and ``q`` summary tables and the production-ratio figure
-    to where their evidence stops, leaving spoken (and signed) on the full grid.
+    to where their evidence stops, leaving spoken on the full grid. Signed has its
+    own cap, ``report_max_age_signed``; before 2026-08-13 it did not, and the
+    sign-derived figures silently borrowed this one.
     Purely post-processing: the query grid, the model graph and the fitted trace
     are untouched, so changing this cannot move the posterior — proved by
     refitting VG10 across the change at a fixed seed and reproducing its
@@ -788,6 +790,30 @@ class TrivariateModelDefinition:
     not regenerate them, and this field is part of the recorded definition, so a
     fit produced under a different value is correctly reported as stale. None
     reports every query age. See ``posterior_analysis.trim_reported_ages``."""
+
+    report_max_age_signed: int | None = None
+    """Highest query age (months) at which signed quantities are reported.
+
+    The trivariate counterpart of ``JointModelDefinition.report_max_age_signed``,
+    added 2026-08-13. The cap was introduced for VG15 alone (``feat(vg15)``), so
+    VG14 -- the only trivariate model, and the one whose signed results uk_07
+    moved most -- never had one. Its two consequences were wrong in the same
+    direction:
+
+    * ``plot_signed_rate`` and ``plot_sign_speech_crossover`` were passed
+      ``report_max_age_understood``, so the signed figures were trimmed by the
+      *comprehension* cap. Raising that cap from 72 to 84 moved VG14's signed
+      figures as a side effect, which nobody decided.
+    * the ``r(a)`` summary table was not trimmed at all, so it ran to the top of
+      the query grid at 90 while the figure beside it stopped at 72 -- the
+      table/figure disagreement ``tests/test_reporting_age_caps.py`` exists to
+      catch, inverted.
+
+    Set to 84 on VG14, matching VG15 on the same evidence: uk_07 rebuilt the
+    signed tail, the study owner raised VG15's cap from 60 to 84 in #212, and 84
+    is the high trend anchor above which the mean is levelled off rather than
+    fitted. Purely post-processing, but part of the recorded definition, so
+    changing it requires a refit. None reports every query age."""
 
     @property
     def model_type(self) -> ModelType:
@@ -2466,6 +2492,10 @@ VG14 = TrivariateModelDefinition(
     # above 84. Reporting only -- it cannot move the posterior. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=84,
+    # Signed gets its own cap rather than inheriting the comprehension one, which
+    # is what it did until 2026-08-13. 84 matches VG15's report_max_age_signed on
+    # the same evidence, and stops the r(a) table where the r(a) figure stops.
+    report_max_age_signed=84,
     clamp_mean_above_hi_anchor=True,
 )
 

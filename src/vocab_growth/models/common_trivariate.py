@@ -151,6 +151,10 @@ class TrivariateModelConfiguration(BaseModelConfiguration):
 
     # Reporting only — the age at which understood and q stop being reported.
     report_max_age_understood: int | None = None
+    # Reporting only — the age at which signed quantities stop being reported.
+    # Distinct from the comprehension cap: the sign-derived figures used to be
+    # trimmed by that one, so a comprehension decision silently moved them.
+    report_max_age_signed: int | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -456,6 +460,7 @@ def configure_trivariate_priors(
         n_plot=definition.n_plot,
         ages_query=definition.ages_query,
         report_max_age_understood=definition.report_max_age_understood,
+        report_max_age_signed=definition.report_max_age_signed,
     )
 
     context.set_model_config(config)
@@ -1383,9 +1388,11 @@ def posterior_summary(context: TrivariateContext):
     n_trials = context.model_data.n_trials
     ci_prob = context.reporting.ci_prob
     ci_kind = context.reporting.interval_kind
-    # Comprehension and production are not observed over the same age range, so
-    # understood and q may report a shorter grid than spoken and signed.
+    # Comprehension, production and signing are not observed over the same age
+    # range, so understood/q and signed each report their own grid; spoken keeps
+    # the full one.
     report_max_u = context.model_config.report_max_age_understood
+    report_max_sign = context.model_config.report_max_age_signed
 
     # Understood summary
     summary_u = posterior_analysis.posterior_summary_table(
@@ -1474,6 +1481,7 @@ def posterior_summary(context: TrivariateContext):
             "ci_hi": "r_ci_hi",
         }
     )
+    summary_r = posterior_analysis.trim_reported_ages(summary_r, report_max_sign)
     dataframe_table(
         summary_r, title="Posterior summary — signed rate r(a)", show_index=False
     )
@@ -2129,7 +2137,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         output_dir=output_dir,
         filename="signed_rate",
         support_range=signing_support_range,
-        max_age_months=context.model_config.report_max_age_understood,
+        max_age_months=context.model_config.report_max_age_signed,
     )
     context.plots["signed_rate"] = fig
     plt.close(fig)
@@ -2141,7 +2149,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         output_dir=output_dir,
         filename="sign_speech_crossover",
         support_range=signing_support_range,
-        max_age_months=context.model_config.report_max_age_understood,
+        max_age_months=context.model_config.report_max_age_signed,
     )
     context.plots["sign_speech_crossover"] = fig
     plt.close(fig)
