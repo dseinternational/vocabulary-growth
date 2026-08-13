@@ -221,10 +221,22 @@ def _draw_ppc_count_distribution(
     ax.fill_betweenx(
         [0, ylim_max * 0.96], lo50, hi50, color=plot_styles.COLOUR_GREEN, alpha=0.18
     )
+    # Both bands are annotated. The inner one was drawn but unlabelled, which left
+    # the reader to guess what the darker shading meant -- and the two are easy to
+    # confuse precisely because an equal-tailed interval is asymmetric about the
+    # median, so neither band's edges sit where an eye expects them to.
+    inner_pct = int(round(intervals.INNER_CI_PROB * 100))
     ax.text(
         hi + label_off,
         ylim_max * 0.9,
         f"{pct}% {kind_label}: {lo:.0f} to {hi:.0f}",
+        color=plot_styles.COLOUR_GREEN,
+        ha="center",
+    )
+    ax.text(
+        hi + label_off,
+        ylim_max * 0.82,
+        f"{inner_pct}% {kind_label}: {lo50:.0f} to {hi50:.0f}",
         color=plot_styles.COLOUR_GREEN,
         ha="center",
     )
