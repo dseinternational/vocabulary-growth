@@ -4,7 +4,7 @@
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
-> Run record and findings. The fits described here were produced from a **dirty checkout** and are therefore analytically valid but **not publishable** — see §7. Every difference reported is attributable to uk_07 alone: the baseline is the 2026-08-06 published set, whose `source_data_hash` matches this data tree with `vocab_data_uk_07.csv` removed, byte for byte.
+> Run record and findings. The fits described here were produced from a **dirty checkout** and are therefore analytically valid but **not publishable** — see §7. Every difference reported is attributable to uk_07 alone: the baseline is the 2026-08-06 published set, whose `source_data_hash` matches this data tree with `vocab_data_uk_07.csv` removed, byte for byte. **These are not the models of record.** uk_06's signing was reinstated the day after these fits ran, which moves §5 in particular — see §5a for the numbers to quote.
 
 ## 1. What was added
 
@@ -66,6 +66,28 @@ Note [202606151700](202606151700-vg14-signed-ratio-shape-and-p-any-bias.md) iden
 **This was invisible in the reports, and the cap has moved.** `report_max_age_signed = 60` trimmed every signed table and figure at 60 months, and the docstring justifying that cap had gone stale: it read "23 above 60, 7 above 72 and none between 84 and 96", so "above about 60 months `r(a)` is the tent's extrapolation, not an estimate". It is now 87 above 60 and 23 above 72, from 18 additional children.
 
 On that evidence the study owner **raised the cap to 84**. The 72–84 band now carries 15 observations from real children rather than nothing, so reporting it is no longer extrapolation. 84–96 stays out deliberately: 8 observations from a single source is evidence but not enough to publish a curve on, and 84 is also the Down syndrome models' high trend anchor, above which the mean is clamped rather than fitted. The cap is part of the recorded definition, so the change is folded into the clean-tree refit rather than needing a third pass.
+
+### 5a. Superseded by the clean-tree refit — read these numbers instead
+
+The table above is a record of the 11 August fit, in which uk_07 was the only change. It is **not** the model of record. Two things happened after it, both of which move this finding, so the "after" column should not be quoted forward.
+
+**uk_06's signing was reinstated** ([`de0c18b`](https://github.com/dseinternational/vocabulary-growth/commit/de0c18b), 12 August, closing #211) once the study owner confirmed its construct is the standard DSE checklist total rather than uk_01's sign-only field. That adds 11 signed observations, **all of them at 60–115 months** — precisely the band this finding is about. Signed observations go 675 → 686, and the above-60 count goes from the 87 quoted above to 98. So the effect measured here is uk_07's alone only up to 12 August; from then on it is uk_07 **and** uk_06, and the two cannot be separated in the models of record.
+
+**The signed reporting cap became its own field** ([`4ff48e5`](https://github.com/dseinternational/vocabulary-growth/commit/4ff48e5)). Until then `report_max_age_signed` existed only on `JointModelDefinition`, so VG14's sign-derived figures and its `r(a)` table were trimmed by `report_max_age_understood` — which meant raising the _comprehension_ cap from 72 to 84 moved VG14's _signed_ output as an unintended side effect, and the `r(a)` table ran to 90 untrimmed. `r(90)` in the table above is therefore beyond what VG14 now reports at all, and should not be quoted.
+
+Current models of record (VG14 at `rep`, clean tree at `4ff48e5`, uk_07 + uk_06), median with 89% CI, to the 84-month cap:
+
+| VG14                  | 2026-08-06 fit | model of record      |
+| --------------------- | -------------- | -------------------- |
+| `r(48)`               | 0.318          | 0.340 [0.311, 0.378] |
+| `r(60)`               | 0.205          | 0.249 [0.213, 0.281] |
+| `r(72)`               | 0.156          | 0.211 [0.172, 0.249] |
+| `r(84)`               | —              | 0.198 [0.152, 0.261] |
+| words signed at 84 mo | —              | 105.2 [79.2, 141.4]  |
+
+Only the 48- and 60-month rows of the left column were ever _published_: `report_max_age_signed` was 60 then, so 72 and beyond were read off the trace, not the report. They are shown for continuity with the table above, which used the same source.
+
+The finding itself stands and is slightly strengthened. The recede after the peak is real but far weaker than the published fits show, and on the current evidence `r` is close to flat from 72 to 84 (0.211 → 0.198, intervals overlapping heavily) rather than continuing to fall.
 
 ## 6. Finding: older-age comprehension dispersion falls sharply
 
