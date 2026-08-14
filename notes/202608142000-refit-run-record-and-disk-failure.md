@@ -12,9 +12,9 @@ A full reporting-quality (`rep`) refit of VG01–VG16, recorded and published. T
 
 ## 2. Model decisions taken during the run
 
-**The 84-month clamp was applied to the wrong things** ([202608141200](202608141200-clamp-q-only.md)). `clamp_mean_above_hi_anchor` levelled *both* the understood mean and `q` above the high anchor; because spoken is `p_U * q`, the spoken trajectory inherited both and carried a visible corner at 84 months — the sharpest feature of its whole trajectory. Measurement settled it: extrapolating VG10's own fitted anchors past the clamp gives `q = 0.996` at 115 months with `P(mean > 0.99) = 0.999`, while understood reaches 0.962 and never crosses 0.99 in any draw. Only `q` ever needed clamping. `CLAMP_Q_ONLY` is now the setting on all eight DS joint models, and the old behaviour survives as the `clamp-both` variant so the decision keeps a check that can still fail. The variant proved **robust** — 395 of 395 reported quantities within the baseline 89% interval — which establishes the corner as a presentation defect, not an inferential one.
+**The 84-month clamp was applied to the wrong things** ([202608141200](202608141200-clamp-q-only.md)). `clamp_mean_above_hi_anchor` levelled _both_ the understood mean and `q` above the high anchor; because spoken is `p_U * q`, the spoken trajectory inherited both and carried a visible corner at 84 months — the sharpest feature of its whole trajectory. Measurement settled it: extrapolating VG10's own fitted anchors past the clamp gives `q = 0.996` at 115 months with `P(mean > 0.99) = 0.999`, while understood reaches 0.962 and never crosses 0.99 in any draw. Only `q` ever needed clamping. `CLAMP_Q_ONLY` is now the setting on all eight DS joint models, and the old behaviour survives as the `clamp-both` variant so the decision keeps a check that can still fail. The variant proved **robust** — 395 of 395 reported quantities within the baseline 89% interval — which establishes the corner as a presentation defect, not an inferential one.
 
-**Reporting ages are now a policy, not a per-figure decision.** `src/vocab_growth/reporting_ages.py` caps comprehension and anything expressed as a ratio of it at 84 months, and spoken at 90 (derived from `max(ages_query)` rather than a new definition field, which would have invalidated every fingerprint). An output-based test walks the fitted artefacts and fails on any that reports past its cap. It found two classes a code audit had missed: `pmf`/`cdf` carry age in *column names* (`pmf_90m`), invisible to an age-column scan; and `regenerate_plots.py` re-runs the plot stage only, so summary-stage tables stay stale until a refit — recorded as `KNOWN_STALE`, with a guard that fails when an entry stops being needed. That guard fired within the hour of VG15's refit, which is what it is for.
+**Reporting ages are now a policy, not a per-figure decision.** `src/vocab_growth/reporting_ages.py` caps comprehension and anything expressed as a ratio of it at 84 months, and spoken at 90 (derived from `max(ages_query)` rather than a new definition field, which would have invalidated every fingerprint). An output-based test walks the fitted artefacts and fails on any that reports past its cap. It found two classes a code audit had missed: `pmf`/`cdf` carry age in _column names_ (`pmf_90m`), invisible to an age-column scan; and `regenerate_plots.py` re-runs the plot stage only, so summary-stage tables stay stale until a refit — recorded as `KNOWN_STALE`, with a guard that fails when an entry stops being needed. That guard fired within the hour of VG15's refit, which is what it is for.
 
 **Proposal A1 is registered on VG10 and is not a candidate model of record** (§4).
 
@@ -32,11 +32,11 @@ The output volume reached 100% and five in-flight refits died on `[Errno 28] No 
 
 **The cause was the trace tier, not the disk size.** Every fit that run wrote at the default `full` when `compact` gives byte-identical reporting output. `scripts/compact_traces.py` (new) applies the tier to traces already written, reusing the fit pipeline's own policy code so what it drops is exactly what a compacted fit would never have written. Applied to 21 fits:
 
-| | before | after |
-| --- | ---: | ---: |
-| 21 traces | 229 GB | **77 GB** |
+|            |    before |         after |
+| ---------- | --------: | ------------: |
+| 21 traces  |    229 GB |     **77 GB** |
 | VG13 alone | 54.19 GiB | **15.06 GiB** |
-| volume | 100% full | **63%** |
+| volume     | 100% full |       **63%** |
 
 VG10, VG12 and VG15's models of record were left at `full`, because recovery scoring — and `regenerate_plots.py`, and `loso_compare.py` — refuses a compacted trace, and those three are `fit_recovery.py`'s headline set.
 
@@ -54,13 +54,13 @@ Three analyses ran alongside the fitting, in the order the questions arose.
 
 **Proposal A1, registered and fitted.** Given the chance to put age variation on the between-child scale, the data take it decisively:
 
-| | understood | production ratio `q` |
-| --- | --- | --- |
-| `tau_subj` 24 → 48 mo | 0.716 → 0.829 | 0.969 → 1.418 |
-| ratio | **1.159** [1.084, 1.241] | **1.462** [1.347, 1.590] |
-| `P(log ratio > 0)` | 1.000 | 1.000 |
+|                       | understood               | production ratio `q`     |
+| --------------------- | ------------------------ | ------------------------ |
+| `tau_subj` 24 → 48 mo | 0.716 → 0.829            | 0.969 → 1.418            |
+| ratio                 | **1.159** [1.084, 1.241] | **1.462** [1.347, 1.590] |
+| `P(log ratio > 0)`    | 1.000                    | 1.000                    |
 
-Against the model of record over the same anchors, where `kappa` carries all of it: `kappa_u` falls 2.64× and `kappa_s` 1.66×. A1's flat `kappa_u` of 38.0 sits at the geometric mean of the record's 65.4 and 24.7 (40.2) — **it replaces the decline with its average and re-expresses the age variation as widening.** Whether it fits *better* is untested and needs LOO against a record fitted under the same clamp; and the widening it reports is an upper bound, because A1 cannot represent children crossing and drift has nowhere else to go.
+Against the model of record over the same anchors, where `kappa` carries all of it: `kappa_u` falls 2.64× and `kappa_s` 1.66×. A1's flat `kappa_u` of 38.0 sits at the geometric mean of the record's 65.4 and 24.7 (40.2) — **it replaces the decline with its average and re-expresses the age variation as widening.** Whether it fits _better_ is untested and needs LOO against a record fitted under the same clamp; and the widening it reports is an upper bound, because A1 cannot represent children crossing and drift has nowhere else to go.
 
 **The relaxation was chosen by likelihood, not by argument** ([202608141900](202608141900-child-slope-implementation-plan.md) §2). Fitting three candidate within-child structures to the adjusted residuals rejects the AR(1) outright — persistence collapses to zero on both outcomes — and selects a random slope, which survives restriction to the 334 children with repeated production measures. As a by-product, A1's no-crossing assumption (the same model with the intercept–slope correlation pinned to 1) costs 6.28 on 1 df where there is power to test it. **That gate was run before the implementation plan was written and overturned a recommendation this project had recorded an hour earlier**; §10.6 of the tracking note states what was wrong with it.
 
