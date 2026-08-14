@@ -153,11 +153,59 @@ Two artefacts to read past, both visible in the measurement column rather than a
 
 **Decision, 2026-08-14: A1 is registered as a sensitivity on VG10 and is not a candidate model of record.** The variant is `vg10 / a1-tau-age-varying`, and it is parameterised so the model of record is nested at zero — `tau_subj_*_young` keeps the record's `HalfNormal(1.5)` exactly, `log_tau_subj_*_ratio ~ Normal(0, 0.5)` is the single added parameter, and both `kappa` blocks are held flat over the same 24/48-month anchors. Its purpose is the diagnostic quantity and nothing more: **how much of `kappa`'s fitted decline is misattributed between-child widening.** The relaxations in §10 are the fix; A1 is the measurement that says how much fixing is needed.
 
-## 10. What would strengthen it
-
 > [!NOTE]
 > **Frames do not match, deliberately.** The item-difficulty note's fitted frame has 832 children, 460 singletons and 372 with repeats. This note's tracking sets are per outcome and differently masked: 767 children with 334 repeats on spoken, 610 with 253 on comprehension. Do not equate 372 with 334 or 253.
 
-## 9. What would strengthen it
+## 10. The real fix: what a within-child age-varying random effect would buy
 
-A within-child model with an age-varying random effect — a random slope, or a latent AR(1) — would estimate drift directly rather than inferring it from binned correlations, and would handle the unbalanced designs properly.
+A1 is a measurement, not a repair. The repair is a model in which the child's departure from the population trajectory is itself a function of age. Two structures are usually proposed for that, and the repeated measures say which one these data want.
+
+### 10.1 What the fix has to separate
+
+Three things are currently entangled in two parameters. **Persistent** between-child differences sit in `tau_subj`, which is constant. **Occasion-to-occasion** movement has nowhere of its own and is absorbed by `kappa` alongside sampling noise. **Drift** — a child systematically changing standing over months — is representable by nothing at all, so it too lands on `kappa`. §5's decomposition is the same three quantities measured from outside the model; a structure that names all three is what would let the models estimate them.
+
+### 10.2 Random slopes
+
+Give each child a rate as well as a level, correlated:
+
+```
+f_i(a) = mu(a) + b0_i + b1_i * (a - a_ref)
+(b0_i, b1_i) ~ MVN(0, Sigma)      Sigma = diag(tau0, tau1) Omega diag(tau0, tau1)
+```
+
+`tau0` is the between-child spread at the reference age; `tau1` is the spread of child-specific **rates**; the off-diagonal `rho01` says whether children who start ahead also gain faster. Three consequences matter here. Children **cross**, so the lag-correlation decay of §3 is representable rather than assumed away. The spread is quadratic in age — `tau0² + 2 rho01 tau0 tau1 D + tau1² D²` — so widening is _implied_ by the parameters rather than imposed as a shape, and it can widen, narrow, or do neither. And `rho01` is a reportable scientific quantity in its own right: fan-out versus catch-up, stated as a number.
+
+**The data support a slope on production and cannot yet see one on comprehension.** Fitting each child's own slope through their residuals, and subtracting the sampling variance the within-child noise implies:
+
+| outcome           | children (≥3 obs) | SD(child slope), logit/month | drift at 1 SD over 24 months |
+| ----------------- | ----------------: | ---------------------------: | ---------------------------: |
+| **DS spoken**     |               182 |     **0.051** [0.023, 0.070] | **1.22 logits** [0.55, 1.67] |
+| **DS understood** |               100 |         0.000 [0.000, 0.024] |        0.00 logits [0, 0.58] |
+
+Against a between-child SD of about 1.7 logits, two years of drift at one standard deviation moves a child roughly **70% of the whole between-child spread** on production. That is not a refinement; it is a first-order feature the models cannot represent. On comprehension the estimate hits its floor — the observed slope spread is _below_ what noise alone predicts — so the honest reading is an upper bound, and the windows are short (span median 11 months, p90 15) so it is a weak one.
+
+`corr(child level, child slope)` is **+0.18** [0.05, 0.31] on production at a mean window age of 41 months: mild fan-out.
+
+### 10.3 Latent AR(1), and why it is the better fit here
+
+Replace the constant offset with a child-level process over age:
+
+```
+f_i(a) = mu(a) + u_i(a),    cov(u_i(a), u_i(a')) = tau_subj² exp(-|a - a'| / ell_child)
+```
+
+Two parameters where there was one. `tau_subj` is still the between-child amplitude; **`ell_child` is the persistence, in months, and it is the tracking statistic this note measures reported as a model parameter.** The current models are nested at `ell_child -> infinity`, and pure occasion noise is `ell_child -> 0`, so a posterior for `ell_child` is a direct answer to "how long does standing last" rather than a comparison between models.
+
+**The measurement that chooses between §10.2 and §10.3.** A permanent random slope _accumulates_: a slope SD of 0.051 logit/month sustained across 18→84 months would add `(0.051 × 66)² = 11.3` to the variance, taking the spread far past the 1.18→1.71 actually observed in §9. The drift is real over one- to two-year windows and **does not accumulate over five years**. Drift that appears locally and cancels globally is **mean-reverting**, which is what an AR(1)/Ornstein–Uhlenbeck component is and what a permanent random slope is not.
+
+The natural form is therefore both parts: a permanent intercept plus a transient mean-reverting component, whose three parameters map one-to-one onto §5's three-way decomposition. Fitting `rho(lag) = w + (1 - w) exp(-lag / ell)` to the disattenuated correlations gives `w = 0.77`, `ell ≈ 0` on comprehension — a permanent intercept plus occasion noise, i.e. close to what the models already assume — and on production a single exponential with `ell ≈ 35` months that fits poorly, because the observed decay is flat to 18 months and then falls off a cliff in a bin holding 59 children. **The production long-lag behaviour is the least well determined quantity in this note and the one the fix most depends on.** That is an argument for fitting the structure, not for asserting its parameters from these summaries.
+
+### 10.4 Where A1 lands once the fix exists
+
+A1's age-varying `tau` is not wrong; it is stacked on the wrong base. Placed on the _amplitude_ of a mean-reverting child process, `tau(age)` estimates whether the between-child spread widens **while children are still permitted to cross** — which is A1's question with its one measured-false assumption removed. That ordering is the recommendation: the relaxation first, A1's `tau(age)` on top of it second, and the registered A1 variant meanwhile as the diagnostic of how much of `kappa`'s decline is at stake.
+
+### 10.5 What it would cost, and what has to be checked
+
+The subject random effects have one construction site per engine (`common_univariate_re`, `common_bivariate_re`, `common_joint_modality`), and the shift they produce is already applied at observation level, so the seam is narrow. Random slopes are the cheaper change: a second coordinate per child, non-centred through an `LKJCholeskyCov`, doubling the random-effect dimension (832 children × 2). The AR(1) form needs the child's latent values at their own observation ages, which is block-diagonal with blocks of at most 8 — cheap in principle, but it must be written as a padded rectangular recursion rather than a scan to sample at a tolerable speed.
+
+Two checks gate either of them, and neither is optional. **Parameter recovery under the new structure**, sited at young ages on production for the reason §5 gives. And **the singleton share**: 433 of 767 children on production and 357 of 610 on comprehension contribute one observation, so they inform the population trajectory and nothing about persistence. 182 children carry three or more production observations, 100 carry three or more comprehension observations, and those are the rows that would identify a persistence parameter. It is enough to try. It is not enough to assume it will succeed.

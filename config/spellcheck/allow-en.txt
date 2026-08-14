@@ -52,6 +52,7 @@ NZCDI
 Næss
 Odorico
 Oijen
+Ornstein
 Pagnamenta
 Palacios
 Plunkett
@@ -69,6 +70,7 @@ Thal
 Tovar
 Trivariate
 UKRI
+Uhlenbeck
 Vehtari
 Walle
 Wilcoxon
