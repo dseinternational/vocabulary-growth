@@ -17,6 +17,11 @@ naive run hits. Distilled from the 2026-07-12 run
 - Three things bite every time: the **DuckDB lock** on concurrent fits, the
   **R-hat gate rounding** (need `dse-research-utils >= v0.6.0`), and the
   **understood-GP R-hat ridge** in the DS joint/hierarchical models.
+- **Before the TD phase**, do the two-minute setup in
+  [Surviving an OOM](#surviving-an-oom-precautions-before-launching-the-memory-heavy-models):
+  add swap (the box has none), and launch each phase in its own systemd scope. In
+  the 2026-08-13 run a single overrun killed a seven-hour fit plus three unrelated
+  ones, because they shared a scope and there was nothing to swap to.
 
 ## 0. Prerequisites
 
@@ -120,7 +125,117 @@ memory-heavy. So:
     | xargs -P 5 -I {} python scripts/fit_model.py {} --config rep --output-dir <scratch>
   ```
 - **TD models** (`vg03 vg04 vg13 vg11 vg12`): **strictly one at a time** — the
-  full-data TD fits can OOM if stacked.
+  full-data TD fits can OOM if stacked. `vg03` and `vg04` are the exception and may
+  share the box; `vg11`, `vg12` and `vg13` must not share it with anything, including
+  a batch of small DS sensitivity fits (see below).
+
+### Surviving an OOM: precautions before launching the memory-heavy models
+
+On 2026-08-13 a kernel OOM killed `vg13` after **7h05m of successful sampling** and
+took three unrelated sensitivity fits and both drivers with it, costing about ten
+hours. Every item below is a direct consequence. Do all of them before starting the
+TD phase; they take about two minutes.
+
+**1. Provision swap first. The box ships with none.** 251 GB of RAM and `Total swap = 0kB`
+means a transient overshoot is an instant kill rather than a slowdown.
+
+```bash
+sudo fallocate -l 128G /scratch/swapfile && sudo chmod 600 /scratch/swapfile
+sudo mkswap /scratch/swapfile && sudo swapon /scratch/swapfile
+sudo sysctl -w vm.swappiness=10   # backstop only, not a working store
+```
+
+Put it on the scratch NVMe, not the 29 GB root. Deliberately **not** added to
+`/etc/fstab`: it is a per-run measure, and a run does not survive a reboot anyway.
+
+**2. Size the models by their peak, not their steady state.** This is the trap.
+`vg13` sampled for seven hours at a steady ~120 GB and then took **+100 GB in 90
+seconds** in the post-sampling assembly step (InferenceData construction, stored
+`log_likelihood`, the observation-sized deterministics), peaking at **232 GB anon-RSS**:
+
+```
+22:50:29 used_GB=143   22:51:29 used_GB=192   22:52:29 used_GB=244  → killed
+22:50:59 used_GB=164   22:51:59 used_GB=220
+```
+
+A fit that has looked comfortable all night can still die at the last step, and
+there is no resume — the whole fit is lost. Budget headroom of roughly **2× the
+observed sampling plateau**. The historical "`vg11` peaks at 157 GB" figure is a
+plateau measurement and should not be read as a peak.
+
+**3. Give every job its own systemd scope.** This is what turned one lost fit into
+four. All jobs were launched inside one tmux window, so they shared a single systemd
+scope, and when the kernel killed one process systemd applied `OOMPolicy` to the
+whole scope: `tmux-spawn-….scope: Failed with result 'oom-kill'`. Launch each phase
+in its own scope, and cap any batch that is not the one you are protecting:
+
+```bash
+# the protected long job
+systemd-run --user --scope --collect --unit=vg-td -p OOMPolicy=continue \
+  -- bash run_td.sh &
+# small fits alongside it can never be what pushes the box over
+systemd-run --user --scope --collect --unit=vg-sens -p MemoryMax=64G -p OOMPolicy=continue \
+  -- bash run_sens.sh &
+```
+
+`MemoryMax` contains an overrun inside the offending cgroup, so a runaway 30-minute
+sensitivity fit dies alone instead of killing a seven-hour one.
+
+> [!IMPORTANT]
+> **A systemd scope does not inherit conda activation.** The first relaunch after the
+> crash failed all three TD jobs in 0m with `ModuleNotFoundError: No module named
+'dse_research_utils'`. Source and activate inside the driver script, and assert it
+> before any fit starts, so the failure is one line rather than a silent batch of
+> zero-minute FAILs:
+>
+> ```bash
+> source /opt/conda/etc/profile.d/conda.sh
+> conda activate dse-vocab-growth
+> python -c "import dse_research_utils" || { echo "env not activated" >&2; exit 1; }
+> ```
+
+**4. Sample per-process RSS, not machine-wide `used_GB`.** A machine-level sampler
+records that the box hit 244 GB but not which process did it — after the 2026-08-13
+kill, `vg13` could only be distinguished from its three co-tenants by reading the
+kernel log. Log `ps -eo rss=,args=` filtered to the fit scripts, so the next model's
+budget comes from measurement (`scripts/memwatch.sh`).
+
+**5. Read the kernel log before re-running anything.** `sudo dmesg -T | grep -i oom`
+and `journalctl --since …` distinguish the three cases that look identical from the
+status file — a real convergence failure, a process killed by the OOM killer, and a
+process killed as collateral scope teardown. The three sensitivity fits killed here
+had left the **known non-fatal** PyTensor rewrite traceback
+([pymc-devs/pytensor#2349](https://github.com/pymc-devs/pytensor/issues/2349)) at the
+end of their logs, which reads convincingly as the cause and is not.
+
+> [!WARNING]
+> **The driver records nothing when the scope is torn down.** A `run_job` wrapper
+> writes `OK`/`FAIL` only if it outlives the job, and it does not survive an
+> `oom-kill` scope teardown. So an OOM leaves the status file showing `START` with no
+> terminal line — indistinguishable from "still running" until you check `pgrep`.
+> Never infer success or liveness from the status file alone.
+
+### Do not edit tracked files while a fit is launching
+
+`write_fit_manifest` runs **immediately after stage 0** ("Prepare data"), within
+seconds of launch, and records `git status --porcelain --untracked-files=normal` for
+the **whole tree** — not just the code. Any tracked file modified in that window,
+including a note or a runbook, sets `code.dirty = true` and makes the fit
+unpublishable: `check_fit.py --purpose publish` rejects it with "The fit was produced
+from a dirty or unverifiable checkout", and you discover it hours later.
+
+The window is short, but the failure is silent and expensive. Commit or stash before
+launching a batch, and confirm afterwards by reading the staged manifests rather than
+waiting for the publish gate:
+
+```bash
+python - <<'PY'
+import glob, json
+for m in sorted(glob.glob("output/.staging/*/models/*/fit_manifest.json")):
+    j = json.load(open(m))
+    print(f"{m.split('/')[-2][:52]:54s} dirty={j['code']['dirty']} commit={j['code']['commit'][:7]}")
+PY
+```
 
 ### Config choice for the full-data TD models
 
@@ -172,6 +287,19 @@ small DS models are fast at `rep` anyway, so this only pays off on the big-data 
 > stack the DS pool on top of a TD fit or the convergence refits. With threads
 > pinned, 5 DS fits (30 cores) run cleanly on a 32-core box.
 
+> [!NOTE]
+> **The four env vars do not pin nutpie's own thread pool.** They control BLAS and
+> numba, but nutpie's Rust sampler sizes its pool from the core count independently.
+> Measured on 2026-08-14 with all four set to `1` and 6 chains requested: `vg13` held
+> **33** threads and each concurrent `vg15` sensitivity **78** — 189 threads on 32
+> cores. Observed load stayed near `concurrency × chains` (21.6 against 18 expected),
+> so the surplus threads are mostly parked rather than competing, and this is a
+> smaller effect than the BLAS oversubscription above. Still, budget by
+> `concurrency × chains` and verify with `uptime` rather than trusting the env vars,
+> and treat a thread count far above the chain count as expected, not as a fault.
+> `RAYON_NUM_THREADS=1` is the likely lever but is **untested here** — measure before
+> relying on it.
+
 ## 2. Verify convergence (do not trust the banner alone)
 
 For every model confirm, on **unrounded** diagnostics: max R-hat ≤ 1.01, min ESS ≥
@@ -186,6 +314,39 @@ r = az.rhat(dt["posterior"].to_dataset())
 print("max r_hat:", max(float(v.max()) for v in r.data_vars.values()))
 PY
 ```
+
+### Expect diagnostics to move on a refit — but only for models with child effects
+
+Refitting the same commit against the same data does **not** reproduce diagnostics
+bit-for-bit for every model, and a docstring claiming otherwise misled a day of this
+run. The split is clean and worth knowing before you start comparing runs:
+
+- **Models without child random effects reproduce exactly.** `vg05` (max R-hat
+  1.00092, min ESS 7408), `vg07` and `vg14` were byte-identical across repeat fits —
+  `vg14` across all three of its fits in the 2026-08-13 run.
+- **Models with child random effects drift.** `vg08` moved 1.00437 → 1.00851 and
+  `vg09` 1.00452 → 1.00623 with min ESS 1365 → 1102, on identical code and data.
+  `vg10`, `vg15` and `vg16` drift likewise.
+
+**The estimates are unaffected — only the diagnostics move.** `vg09`'s posterior
+means agreed to **≤ 0.023 posterior SDs** across the refit. So treat a changed R-hat
+on a random-effects model as sampling variation, not as evidence that something
+changed; verify by comparing posterior means in SD units before investigating.
+
+The corollary is a real scheduling risk: **`vg08` sits on the gate boundary**
+(R-hat 1.00851 against 1.01, a margin of 0.0015) at the strongest tuning available
+(16000/10000/0.99) and is the single longest DS fit at 202 m. Any change that forces
+a DS refit is a coin-flip on `vg08` passing, and there is no stronger setting left to
+escalate to. Weigh that before taking a change that re-fingerprints the DS family.
+
+> [!WARNING]
+> **Reporting-only fields live inside the fingerprinted model definition.** Changing
+> a value that affects nothing but which ages get printed — `report_max_age_understood`,
+> `report_max_age_signed` — changes the definition, which invalidates every affected
+> model of record and forces a **full refit**. That cost three refits on 2026-08-13.
+> `regenerate_plots.py` cannot rescue it either: it validates the definition first,
+> and its own docstring names "a missing reporting-age cap" as the motivating case it
+> does not cover. Batch all reporting-cap decisions **before** the fitting phase.
 
 ### Known ridge: the understood-GP block
 

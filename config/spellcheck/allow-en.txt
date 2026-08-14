@@ -101,6 +101,7 @@ elpd
 empiricalmodelling
 estimand
 estimands
+fallocate
 hightune
 hyperparameters
 hyperpriors
@@ -152,10 +153,13 @@ resumable
 reweighting
 rhat
 scratchpad
+sens
 setsid
 signspeech
 spanos
 subj
+swapfile
+swapon
 timepoint
 toddlerhood
 unassessable
