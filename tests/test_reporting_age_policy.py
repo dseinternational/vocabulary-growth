@@ -61,23 +61,21 @@ BY_STEM = {
     "posterior_summary_p_any": ReportedQuantity.SIGNED,
 }
 
-# Artefacts written by the *summary* stage rather than the plot stage, on models
-# fitted before the 84/90 policy landed on 2026-08-14.
+# Artefacts written by the *summary* stage rather than the plot stage, which
+# ``regenerate_plots.py`` cannot refresh because it re-runs the plot stage only.
+# When the 84/90 reporting-age policy landed on 2026-08-14 the code that writes
+# them was corrected immediately, but the tables already on disk stayed stale
+# until their models were refitted; everything else in the family was fixed by
+# regeneration alone.
 #
-# ``regenerate_plots.py`` re-runs the plot stage only, so it cannot refresh
-# these: the code that writes them is now correct and any new fit produces them
-# capped, but the tables sitting in the output directory stay stale until VG14
-# and VG15 are refitted. Everything else in the family was fixed by regeneration
-# without a refit.
-#
-# This list is debt, not policy. Empty it when those two models are refitted --
-# ``test_known_stale_entries_are_still_needed`` fails if an entry becomes
-# unnecessary, so it cannot quietly outlive the problem. VG15's six entries were
-# cleared on 2026-08-14 by its clamp-q-only refit, which the guard caught within
-# the hour; VG14 is later in the same queue.
-KNOWN_STALE = {
-    "vg14": {"posterior_summary_p_any", "posterior_summary_sign"},
-}
+# **Now empty, and that is the intended end state.** VG15's six entries cleared
+# when its clamp-q-only refit landed at 14:32 on 2026-08-14 and VG14's two when
+# its refit landed at 17:11, each caught by
+# ``test_known_stale_entries_are_still_needed`` within the hour. Keep the
+# mechanism: it is the only thing that distinguishes "this artefact is stale and
+# we know it" from "this artefact violates the policy", and the next time a
+# summary-stage format changes there will be a window that needs it again.
+KNOWN_STALE: dict[str, set[str]] = {}
 
 # Not age-indexed reports: descriptive frames, diagnostics, provenance.
 IGNORE_STEMS = {
