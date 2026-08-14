@@ -128,8 +128,18 @@ def test_registry_counts_and_models():
     # while understood reaches 0.962 and never crosses 0.99 in any draw. This
     # variant makes that a fit rather than an argument. See
     # notes/202608141200-clamp-q-only.md.
-    assert len(VARIANTS) == 50
-    assert len(variants_for("vg10")) == 13
+    #
+    # +1 on 2026-08-14: `a1-tau-age-varying`, Proposal A1 — the age variation
+    # moved off `kappa` and onto the between-child scale, on VG10 only. Unlike
+    # every variant above it this is a GRAPH change, carried on the existing
+    # `tau_subj_*_sigma` fields (as CLAMP_Q_ONLY is carried on
+    # `clamp_mean_above_hi_anchor`) so no definition gains a field and no
+    # fingerprint moves. It is registered as a diagnostic, not a candidate model
+    # of record: scaling one per-child deviate by tau(age) imposes perfect rank
+    # correlation across age, which is measured at 0.28 beyond two years. See
+    # notes/202607261540 §9 and notes/202608141600 §§8-10.
+    assert len(VARIANTS) == 51
+    assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1

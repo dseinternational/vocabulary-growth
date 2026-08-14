@@ -156,56 +156,69 @@ Two artefacts to read past, both visible in the measurement column rather than a
 > [!NOTE]
 > **Frames do not match, deliberately.** The item-difficulty note's fitted frame has 832 children, 460 singletons and 372 with repeats. This note's tracking sets are per outcome and differently masked: 767 children with 334 repeats on spoken, 610 with 253 on comprehension. Do not equate 372 with 334 or 253.
 
-## 10. The real fix: what a within-child age-varying random effect would buy
+## 10. The real fix: which relaxation, decided by likelihood
 
-A1 is a measurement, not a repair. The repair is a model in which the child's departure from the population trajectory is itself a function of age. Two structures are usually proposed for that, and the repeated measures say which one these data want.
+A1 is a measurement, not a repair. The repair is a model in which the child's departure from the population trajectory is itself a function of age. Three structures are candidates, and rather than argue from the binned correlations, §10.3 fits all three to the same residuals and lets the likelihood choose. That check cost an hour and **overturned the recommendation this section originally carried** — see §10.6.
 
 ### 10.1 What the fix has to separate
 
-Three things are currently entangled in two parameters. **Persistent** between-child differences sit in `tau_subj`, which is constant. **Occasion-to-occasion** movement has nowhere of its own and is absorbed by `kappa` alongside sampling noise. **Drift** — a child systematically changing standing over months — is representable by nothing at all, so it too lands on `kappa`. §5's decomposition is the same three quantities measured from outside the model; a structure that names all three is what would let the models estimate them.
+Three things are entangled in two parameters. **Persistent** between-child differences sit in `tau_subj`, which is constant. **Occasion-to-occasion** movement has nowhere of its own and is absorbed by `kappa` alongside sampling noise. **Drift** — a child systematically changing standing over months — is representable by nothing at all, so it too lands on `kappa`. §5's decomposition is the same three quantities measured from outside the model; a structure that names all three is what would let the models estimate them.
 
-### 10.2 Random slopes
+### 10.2 The three candidates
 
-Give each child a rate as well as a level, correlated:
+Writing `u_i(a)` for child `i`'s departure at age `a`:
 
-```
-f_i(a) = mu(a) + b0_i + b1_i * (a - a_ref)
-(b0_i, b1_i) ~ MVN(0, Sigma)      Sigma = diag(tau0, tau1) Omega diag(tau0, tau1)
-```
+- **Constant intercept** (what VG08–VG10 have): `u_i(a) = b0_i`. One parameter, no drift, no crossing, spread flat in age.
+- **Random slope**: `u_i(a) = b0_i + b1_i (a - a_ref)` with `(b0_i, b1_i) ~ MVN(0, Sigma)`. Children cross whenever their rates differ; the spread is quadratic in age; `rho01` says whether children ahead also gain faster. **A1 is this model with `rho01` pinned to 1** — a single per-child deviate scaled by an age function is exactly a rank-one covariance — so A1's no-crossing assumption becomes a one-degree-of-freedom hypothesis inside it.
+- **Latent AR(1) / Ornstein–Uhlenbeck**: `cov(u_i(a), u_i(a')) = tau_perm² + tau_tran² exp(-|a - a'| / ell_child)`. A permanent part plus a mean-reverting transient with a persistence `ell_child` in months.
 
-`tau0` is the between-child spread at the reference age; `tau1` is the spread of child-specific **rates**; the off-diagonal `rho01` says whether children who start ahead also gain faster. Three consequences matter here. Children **cross**, so the lag-correlation decay of §3 is representable rather than assumed away. The spread is quadratic in age — `tau0² + 2 rho01 tau0 tau1 D + tau1² D²` — so widening is _implied_ by the parameters rather than imposed as a shape, and it can widen, narrow, or do neither. And `rho01` is a reportable scientific quantity in its own right: fan-out versus catch-up, stated as a number.
+### 10.3 Fitting all three to the same residuals
 
-**The data support a slope on production and cannot yet see one on comprehension.** Fitting each child's own slope through their residuals, and subtracting the sampling variance the within-child noise implies:
+Each child's adjusted scores are a multivariate normal with the structure above plus a **known** per-observation binomial sampling variance on the diagonal and a free occasion term. Singletons contribute (they inform the marginal variance and its age dependence); children with repeats carry the within-child structure. Fitted by maximum likelihood, `2 x delta logL` against the constant-intercept baseline:
 
-| outcome           | children (≥3 obs) | SD(child slope), logit/month | drift at 1 SD over 24 months |
-| ----------------- | ----------------: | ---------------------------: | ---------------------------: |
-| **DS spoken**     |               182 |     **0.051** [0.023, 0.070] | **1.22 logits** [0.55, 1.67] |
-| **DS understood** |               100 |         0.000 [0.000, 0.024] |        0.00 logits [0, 0.58] |
+| structure                               |     spoken, all 767 | spoken, repeats 334 | understood, all 610 | understood, repeats 253 |
+| --------------------------------------- | ------------------: | ------------------: | ------------------: | ----------------------: |
+| **+ random slope** (2 df)               |           **36.05** |           **20.81** |           **27.09** |                    0.82 |
+| **cost of imposing `rho01 = 1`** (1 df) |               −1.49 |           **−6.28** |               −2.56 |                   −0.32 |
+| **+ AR(1) transient**                   | `ell -> 0`, no gain |                   — | `ell -> 0`, no gain |                       — |
 
-Against a between-child SD of about 1.7 logits, two years of drift at one standard deviation moves a child roughly **70% of the whole between-child spread** on production. That is not a refinement; it is a first-order feature the models cannot represent. On comprehension the estimate hits its floor — the observed slope spread is _below_ what noise alone predicts — so the honest reading is an upper bound, and the windows are short (span median 11 months, p90 15) so it is a weak one.
+Fitted parameters on the repeated-measures children — the rows that carry within-child information:
 
-`corr(child level, child slope)` is **+0.18** [0.05, 0.31] on production at a mean window age of 41 months: mild fan-out.
+| outcome               | `tau0` (at ref age) | `tau1` per month | `rho01` | `sigma_occ` |
+| --------------------- | ------------------: | ---------------: | ------: | ----------: |
+| DS spoken (36 mo)     |               1.222 |           0.0243 |  +0.431 |       0.620 |
+| DS understood (32 mo) |               0.962 |           0.0101 |  +0.086 |       0.583 |
 
-### 10.3 Latent AR(1), and why it is the better fit here
+### 10.4 What the likelihood selects
 
-Replace the constant offset with a child-level process over age:
+**The AR(1) is rejected outright, on both outcomes.** The persistence collapses to zero — `2 x delta logL` is −12.9 at `ell = 3` months, −52.2 at 24 and −81.1 at 48 on production — which says the within-child deviation has **no memory beyond the occasion**. A permanent intercept plus independent occasion noise is what fits, and that is what VG08–VG10 already have. Whatever is missing from those models, an autocorrelated child process is not it.
 
-```
-f_i(a) = mu(a) + u_i(a),    cov(u_i(a), u_i(a')) = tau_subj² exp(-|a - a'| / ell_child)
-```
+**Random slopes are supported on production, and survive the test that matters.** Restricted to the 334 children with repeated spoken measures — where the estimate cannot be borrowing from cross-sectional widening — the slope gains 20.81 on 2 df and `tau1` _rises_ to 0.0243 logit/month. So this is genuine within-child drift.
 
-Two parameters where there was one. `tau_subj` is still the between-child amplitude; **`ell_child` is the persistence, in months, and it is the tracking statistic this note measures reported as a model parameter.** The current models are nested at `ell_child -> infinity`, and pure occasion noise is `ell_child -> 0`, so a posterior for `ell_child` is a direct answer to "how long does standing last" rather than a comparison between models.
+**A1's no-crossing assumption is rejected by that same within-child evidence.** Freeing `rho01` from 1 to 0.431 buys 6.28 on 1 df (p ≈ 0.012) on the repeats-only production fit. Note where the test has power: on all 767 children the same comparison is worth only 1.49, because singletons say nothing about whether children cross. This is the §8 rank-correlation finding restated inside a likelihood, and it agrees with it.
 
-**The measurement that chooses between §10.2 and §10.3.** A permanent random slope _accumulates_: a slope SD of 0.051 logit/month sustained across 18→84 months would add `(0.051 × 66)² = 11.3` to the variance, taking the spread far past the 1.18→1.71 actually observed in §9. The drift is real over one- to two-year windows and **does not accumulate over five years**. Drift that appears locally and cancels globally is **mean-reverting**, which is what an AR(1)/Ornstein–Uhlenbeck component is and what a permanent random slope is not.
+**Comprehension is the opposite case, and the honest reading is a power limit.** The slope is worth 27.09 across all 610 children but **0.82** on the 253 with repeats. So comprehension's widening is, on this evidence, **cross-sectional rather than within-child**: the spread between children grows with age, without any individual child measurably drifting. That is A1's structure, not a random slope. But the comprehension repeats span a median of 11 months and a 90th percentile of 15, so "no detectable drift" here is a statement about the design as much as about the children.
 
-The natural form is therefore both parts: a permanent intercept plus a transient mean-reverting component, whose three parameters map one-to-one onto §5's three-way decomposition. Fitting `rho(lag) = w + (1 - w) exp(-lag / ell)` to the disattenuated correlations gives `w = 0.77`, `ell ≈ 0` on comprehension — a permanent intercept plus occasion noise, i.e. close to what the models already assume — and on production a single exponential with `ell ≈ 35` months that fits poorly, because the observed decay is flat to 18 months and then falls off a cliff in a bin holding 59 children. **The production long-lag behaviour is the least well determined quantity in this note and the one the fix most depends on.** That is an argument for fitting the structure, not for asserting its parameters from these summaries.
+### 10.5 Where that leaves each proposal
 
-### 10.4 Where A1 lands once the fix exists
+- **Production wants random slopes with `rho01` free.** Children cross, and the model must let them.
+- **Comprehension is consistent with A1** — an age-varying scale and no crossing — and the data cannot currently distinguish that from no drift at all.
+- **Neither wants an AR(1).**
 
-A1's age-varying `tau` is not wrong; it is stacked on the wrong base. Placed on the _amplitude_ of a mean-reverting child process, `tau(age)` estimates whether the between-child spread widens **while children are still permitted to cross** — which is A1's question with its one measured-false assumption removed. That ordering is the recommendation: the relaxation first, A1's `tau(age)` on top of it second, and the registered A1 variant meanwhile as the diagnostic of how much of `kappa`'s decline is at stake.
+A single structure covering both is the random-slope model, which contains A1 at `rho01 = 1` and the current models at `tau1 = 0`. Fitting it to both outcomes and reading `rho01` and `tau1` per outcome answers all three questions at once, with the models of record and A1 nested inside as testable special cases.
 
-### 10.5 What it would cost, and what has to be checked
+### 10.6 Correction: the accumulation argument that pointed at AR(1)
 
-The subject random effects have one construction site per engine (`common_univariate_re`, `common_bivariate_re`, `common_joint_modality`), and the shift they produce is already applied at observation level, so the seam is narrow. Random slopes are the cheaper change: a second coordinate per child, non-centred through an `LKJCholeskyCov`, doubling the random-effect dimension (832 children × 2). The AR(1) form needs the child's latent values at their own observation ages, which is block-diagonal with blocks of at most 8 — cheap in principle, but it must be written as a padded rectangular recursion rather than a scan to sample at a tolerable speed.
+This section first argued that a permanent random slope must be wrong because it _accumulates_: a slope SD of 0.051 logit/month sustained from 18 to 84 months would add `(0.051 x 66)² = 11.3` to the variance, far past the 1.18 → 1.71 observed in §9 — and that drift which appears locally but cancels globally is mean-reverting, i.e. an AR(1).
 
-Two checks gate either of them, and neither is optional. **Parameter recovery under the new structure**, sited at young ages on production for the reason §5 gives. And **the singleton share**: 433 of 767 children on production and 357 of 610 on comprehension contribute one observation, so they inform the population trajectory and nothing about persistence. 182 children carry three or more production observations, 100 carry three or more comprehension observations, and those are the rows that would identify a persistence parameter. It is enough to try. It is not enough to assume it will succeed.
+**The premise was a bad estimate.** 0.051 came from a moment estimator — per-child OLS slopes on the 182 children with three or more observations and a usable span, minus an assumed sampling variance. That subset is selected and the slopes are individually very noisy. The likelihood above, using all 767 children and the full covariance rather than per-child point estimates, puts `tau1` at **0.0184–0.0243** logit/month, a third to a half of it. At that value the accumulation is not excessive: the fitted model implies a between-child spread rising from about 1.13 at 24 months to 1.56 at 72, which is close to what §9 measures. The argument against random slopes therefore fails, and the structure it recommended instead is separately rejected by the likelihood.
+
+The moment estimator's other conclusion — that comprehension shows no slope — happens to survive, but for a different reason than it gave: not because 100 children showed nothing, but because the within-child evidence across all 253 repeat-measured children is worth 0.82 on 2 df.
+
+### 10.7 What it would cost, and what has to be checked
+
+The subject random effects have one construction site per engine (`common_univariate_re`, `common_bivariate_re`, `common_joint_modality`), and Proposal A1 has already built the observation-level, age-dependent subject shift in the bivariate engine — so the seam a random slope needs now exists. The change is a second coordinate per child through an `LKJCholeskyCov`, doubling the random-effect dimension (832 children x 2).
+
+Two checks gate it, and neither is optional. **Parameter recovery under the new structure**, sited at young ages on production for the reason §5 gives. And **the singleton share**: 433 of 767 children on production and 357 of 610 on comprehension contribute one observation, so they inform the marginal spread and nothing about drift or crossing — as the two columns of §10.3's table show directly. 334 and 253 children carry the questions that matter. It is enough to try. It is not enough to assume it will succeed.
+
+The implementation plan is [202608141900](202608141900-child-slope-implementation-plan.md).

@@ -245,6 +245,127 @@ def spread_by_age_band(d: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# ------------------------------------------------- within-child structure (ML)
+
+
+def _child_blocks(d: pd.DataFrame, min_obs: int = 1) -> list[tuple]:
+    """Per-child ``(ages, residuals, known sampling variances)``, ages ascending."""
+    out = []
+    for _, g in d.groupby("child"):
+        if len(g) < min_obs:
+            continue
+        g = g.sort_values("age")
+        v = 1.0 / (
+            g["n_items"].values * g["p_hat"].values * (1 - g["p_hat"].values)
+        )
+        out.append((g.age.values.astype(float), g["resid"].values, v))
+    return out
+
+
+def _neg_loglik(blocks, centre, tau0, tau1, rho01, sigma_occ, ell=None, tau_tran=None):
+    """Gaussian log-likelihood of the adjusted scores under one child structure.
+
+    Each child is one multivariate normal. The diagonal carries the **known**
+    binomial sampling variance per observation plus a free occasion term, so the
+    child structure is estimated against a measurement model rather than
+    absorbing it. Passing ``ell``/``tau_tran`` adds a mean-reverting
+    (Ornstein-Uhlenbeck) component instead of, or alongside, the slope.
+    """
+    total = 0.0
+    for a, r, v in blocks:
+        c = a - centre
+        S = (
+            tau0**2
+            + rho01 * tau0 * tau1 * (c[:, None] + c[None, :])
+            + tau1**2 * np.outer(c, c)
+        )
+        if ell is not None:
+            S = S + tau_tran**2 * np.exp(-np.abs(a[:, None] - a[None, :]) / ell)
+        S = S + np.diag(v + sigma_occ**2)
+        try:
+            chol = np.linalg.cholesky(S)
+        except np.linalg.LinAlgError:
+            return 1e10
+        z = np.linalg.solve(chol, r)
+        total += 2 * np.log(np.diag(chol)).sum() + z @ z
+    return 0.5 * total
+
+
+def fit_child_structure(blocks, centre, *, slope=True, fix_rho=None):
+    """Maximum-likelihood fit of one child structure. Returns ``(params, negll)``.
+
+    ``slope=False`` is the constant-intercept baseline the models of record
+    carry; ``fix_rho=1.0`` is Proposal A1 (one deviate scaled by an age function
+    is a rank-one covariance, i.e. perfect rank correlation). Several starting
+    values are tried because the slope scale is small and the surface is flat
+    near ``tau1 = 0``.
+    """
+    from scipy.optimize import minimize
+
+    def objective(theta):
+        tau0 = np.exp(theta[0])
+        if not slope:
+            return _neg_loglik(blocks, centre, tau0, 0.0, 0.0, np.exp(theta[1]))
+        tau1, sigma_occ = np.exp(theta[1]), np.exp(theta[2])
+        rho = fix_rho if fix_rho is not None else np.tanh(theta[3])
+        return _neg_loglik(blocks, centre, tau0, tau1, rho, sigma_occ)
+
+    if not slope:
+        starts = [[np.log(1.2), np.log(0.6)]]
+    else:
+        tail = [] if fix_rho is not None else [0.0]
+        starts = [
+            [np.log(1.2), np.log(s), np.log(0.6), *tail]
+            for s in (0.008, 0.02, 0.05)
+        ]
+    best = None
+    for start in starts:
+        r = minimize(
+            objective,
+            start,
+            method="Nelder-Mead",
+            options={"xatol": 1e-4, "fatol": 1e-4, "maxiter": 10000},
+        )
+        if best is None or r.fun < best.fun:
+            best = r
+    params = {"tau0": float(np.exp(best.x[0]))}
+    if slope:
+        params["tau1"] = float(np.exp(best.x[1]))
+        params["sigma_occ"] = float(np.exp(best.x[2]))
+        params["rho01"] = float(fix_rho if fix_rho is not None else np.tanh(best.x[3]))
+    else:
+        params["tau1"] = 0.0
+        params["rho01"] = 0.0
+        params["sigma_occ"] = float(np.exp(best.x[1]))
+    return params, float(best.fun)
+
+
+def report_child_structure(population: str, outcome: str) -> None:
+    """Which within-child structure the repeated measures actually support.
+
+    Reports ``2 * delta logL`` against the constant-intercept baseline the models
+    of record carry, for all children and for the repeated-measures children
+    alone. The two columns matter separately: singletons inform the marginal
+    spread and its age dependence, but say nothing about whether a child drifts
+    or whether children cross, so a slope that appears only in the first column
+    is cross-sectional widening rather than drift.
+    """
+    d = adjusted_scores(population, outcome)
+    centre = float(np.median(d.age.values.astype(float)))
+    print(f"\n{'=' * 72}\n{population.upper()} / {outcome} — within-child structure "
+          f"(ages centred at {centre:.0f} mo)\n{'=' * 72}")
+    for label, min_obs in (("all children", 1), ("repeats only", 2)):
+        blocks = _child_blocks(d, min_obs)
+        _, ll_flat = fit_child_structure(blocks, centre, slope=False)
+        params, ll_slope = fit_child_structure(blocks, centre)
+        _, ll_rho1 = fit_child_structure(blocks, centre, fix_rho=1.0)
+        print(f"  {label:14s} n={len(blocks):4d}   tau0={params['tau0']:.3f}  "
+              f"tau1={params['tau1']:.4f}/mo  rho01={params['rho01']:+.3f}  "
+              f"sigma_occ={params['sigma_occ']:.3f}")
+        print(f"     slope vs constant intercept  2dlogL = {2 * (ll_flat - ll_slope):7.2f} (2 df)")
+        print(f"     free rho vs rho=1 (A1)       2dlogL = {2 * (ll_rho1 - ll_slope):7.2f} (1 df)")
+
+
 # ----------------------------------------------------------------- reporting
 
 
@@ -339,6 +460,9 @@ def main() -> None:
     # with developmental stage, so repeat DS restricted to the same ages.
     for outcome in ("spoken", "understood"):
         report("ds", outcome, args.boot, max_age=30)
+    # Which within-child structure the repeated measures support (section 10).
+    for outcome in ("spoken", "understood"):
+        report_child_structure("ds", outcome)
 
 
 if __name__ == "__main__":
