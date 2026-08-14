@@ -89,7 +89,24 @@ COL_D = plot_styles.COLOUR_GREEN
 COL_ALT = plot_styles.COLOUR_PURPLE if hasattr(plot_styles, "COLOUR_PURPLE") else "C3"
 
 
-def _band(ax, frame, x, label, colour, *, cov=0.0):
+def _band(ax, frame, x, label, colour, *, cov=MIN_COVERAGE):
+    """Plot a median line and interval band, dropping low-coverage grid points.
+
+    The default is :data:`MIN_COVERAGE` deliberately. It used to be ``0.0``,
+    which silently overrode ``plot_summary_band``'s own 0.80 default and made
+    *this wrapper* weaker than the library function it delegates to — so the
+    level-indexed panels, which pass ``cov`` explicitly, were filtered while
+    every age-indexed panel was not. On the delay-by-age panel that drew the
+    curves a third of the way past the point where the typically-developing
+    comparator runs out: both equivalent ages saturate at VG13's 18-month
+    ceiling, so the delays rise 1:1 with age and their difference is forced to
+    zero, and at 40 months the plotted interval was a single draw (coverage
+    2.8e-05). Filtering removes exactly that region and nothing else — the
+    sign-inclusive and below-percentile panels are fully covered, so the
+    default costs them no points.
+
+    Pass ``cov=0.0`` to opt out, deliberately and visibly.
+    """
     C.plot_summary_band(ax, frame, x, label, colour, min_coverage=cov)
 
 

@@ -443,8 +443,8 @@ def prepare_joint_data(
     (marginal likelihoods); nz_01 contributes a within-produced three-cell DM.
 
     es_01's non-vocal modality is called gestural by its source but is scored per
-    lexical item on an adapted CDI, so it is the same construct as the taught-sign
-    counts -- see ``JointModelDefinition.include_es01_cells``.
+    lexical item on an adapted CDI, so it is the same construct as the other
+    sources' signed counts -- see ``JointModelDefinition.include_es01_cells``.
     """
     # Subject random intercepts (issue #59) need a per-child identifier in both
     # data sources (the merged view and the raw uk_02 cross-tab CSV).
