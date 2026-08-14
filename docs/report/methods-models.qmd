@@ -90,6 +90,25 @@ $$
 
 This gives an interpretable baseline on the logit scale while the GP captures smooth departures. The reference ages and the priors on $p_{x_a}, p_{x_b}$ are **model-specific** (e.g. 24 and 84 months for the Down syndrome models; 12 and 26 months for the typically developing models) and are tabulated in each model's appendix.
 
+### Levelling the trend above the high anchor {#sec-clamp}
+
+The Down syndrome joint models evaluate the trajectory over 8–115 months while their anchors sit at 24 and 84, so about a quarter of the domain lies above the high anchor, where no prior constrains the trend. On the logit scale a line steep enough to climb between the anchors saturates over that distance. Extrapolated to 115 months, VG10's production-ratio mean alone reaches 0.993 — $P(\text{mean} > 0.99) = 0.90$ across the posterior — against a realised 0.842. The GP is then spent hauling the mean back, $-3.3$ logits at the top of the range, while sitting idle ($+0.08$) at 48 months where the data are.
+
+We therefore level the trend off above the high anchor, replacing $z$ in the linear term with
+
+$$
+z_{\text{eff}} = z_b - \frac{1}{\beta}\operatorname{softplus}\!\big(\beta\,(z_b - z)\big),
+\qquad \beta = \frac{50}{z_b - z_a},
+$$
+
+so the mean rises linearly below $z_b$ and flattens above it, leaving the GP free to carry departures rather than correct an asymptote. The same coordinate is used for the projection basis in @sec-gpanchor, so the two constraints stay consistent.
+
+Three properties are deliberate. **The clamp is one-sided:** below the low anchor the line extrapolates accurately — VG10's production ratio at 12 months is 0.019 by extrapolation against 0.022 fitted — and clamping there would instead pin young-age values at the 24-month level, which is much worse. **The transition is smooth rather than a hard minimum:** $\min(z, z_b)$ is continuous but its derivative jumps at the anchor and the fitted curve inherits a visible elbow, which in the first VG10 refit made the spoken trajectory briefly non-monotone, falling from 428.6 words at 84.3 months to 426.6 at 85.6. **The softness is scale-free:** setting $\beta$ from the anchor span makes the largest departure from the hard-clamped form $\beta_1 \log 2 / \beta$, or 1.4% of the anchor span — about 0.8 months of age for the Down syndrome models — whatever the age standardisation.
+
+The cost is that $p_{x_b}$ is no longer exactly the mean at the high anchor age, falling short by that same amount. Between the anchors the mean is untouched, so both anchor priors carry over unchanged.
+
+This applies to the Down syndrome joint and signing models (VG05, VG07–VG10, VG14–VG16), set by `clamp_mean_above_hi_anchor` in each model definition. The typically developing models do not use it: their evaluation domains extend barely beyond their high anchors. The univariate Down syndrome baselines, VG01 and VG02, extrapolate the line across the full domain.
+
 ### HSGP approximation {#sec-hsgp}
 
 Exact GP inference requires an $O(n^3)$ Cholesky factorisation. With several hundred observations per model this is feasible but costly inside MCMC, so we use the **Hilbert-space GP (HSGP)** approximation [@solinHilbertSpaceMethods2020; @riutort-mayolPracticalHilbertSpace2022], a finite basis-function representation that generates $g_{\mathrm{unit}}$ from a unit-variance kernel and then rescales by $\eta$. Approximation quality depends on the basis size $m$ (accuracy vs cost), the boundary factor $c$ (the approximation domain, $c$ times the half-range of the standardised evaluation grid about its midpoint, must cover every point the basis is evaluated at), and the length-scale $\ell$ (shorter scales need more basis functions). We select $m$ and $c$ following PyMC's `approx_hsgp_hyperparams` recommendations for the specified range of $\ell$ [@abril-plaPyMCModernComprehensive2023; @riutort-mayolPracticalHilbertSpace2022].
