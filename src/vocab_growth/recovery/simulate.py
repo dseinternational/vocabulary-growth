@@ -573,11 +573,19 @@ def simulate_replicate(
     n_prior_draws: int = 64,
     random_seed: int = 20260725,
     output_root: str | None = None,
+    definition=None,
 ) -> SimulationResult:
     """Simulate one synthetic dataset for ``model_key`` at a known truth.
 
     Returns the simulated frame and truth draw, and writes both plus a
     provenance record to :func:`simulation_dir`.
+
+    ``definition`` overrides the model of record so a registered sensitivity
+    variant can be simulated from its own structure; see
+    :func:`vocab_growth.recovery.refit.fit_recovery_replicate`. With
+    ``truth_source="posterior"`` the truth is then read from the *variant's* own
+    trace, which is the only coherent choice: a variant carrying parameters the
+    record does not have has nowhere else to get them.
     """
     if truth_source not in {"posterior", "prior"}:
         raise ValueError("truth_source must be 'posterior' or 'prior'.")
@@ -585,7 +593,7 @@ def simulate_replicate(
         raise ValueError("replicate is 1-based.")
 
     target = recovery_target(model_key)
-    definition = MODEL_REGISTRY[model_key]
+    definition = MODEL_REGISTRY[model_key] if definition is None else definition
     spec = target.spec
     root = output_root if output_root is not None else env.output_root()
     directory = simulation_dir(definition, replicate, root)

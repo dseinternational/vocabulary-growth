@@ -300,7 +300,13 @@ def kappa_anchor_derived_rows(config, *, X_obs_mean, X_obs_std, suffix=""):
 
 
 def build_kappa_for_config(
-    config, *, X_obs_mean, X_obs_std, suffix="", excess_young_value=None
+    config,
+    *,
+    X_obs_mean,
+    X_obs_std,
+    suffix="",
+    excess_young_value=None,
+    hold_constant=False,
 ):
     """Create the dispersion RVs for whichever kappa form ``config`` carries.
 
@@ -313,7 +319,11 @@ def build_kappa_for_config(
     ``excess_young_value`` supplies the young anchor from outside, for the
     variance-partition reparameterisation. It is only meaningful for the anchored
     form, so pairing it with the legacy one is rejected rather than silently
-    ignored.
+    ignored. ``hold_constant`` (Proposal A1) is rejected on the same grounds: the
+    legacy form's slope is a free ``b_kappa_mag``, so pinning it flat there would
+    be a different change to a different parameterisation, and silently ignoring
+    the flag would let an A1 variant report a dispersion trajectory it believes
+    it has switched off.
     """
     anchored = getattr(config, f"kappa_anchored{suffix}", None)
     if anchored is None:
@@ -321,6 +331,11 @@ def build_kappa_for_config(
             raise ValueError(
                 "excess_young_value requires the two-anchor kappa form; the "
                 f"legacy parameterisation is configured for suffix {suffix!r}."
+            )
+        if hold_constant:
+            raise ValueError(
+                "hold_constant requires the two-anchor kappa form; the legacy "
+                f"parameterisation is configured for suffix {suffix!r}."
             )
         kappa_min_dist, a_kappa_dist, b_kappa_mag_dist = _legacy_kappa_dists(
             config, suffix
@@ -337,6 +352,7 @@ def build_kappa_for_config(
         ),
         suffix=suffix,
         excess_young_value=excess_young_value,
+        hold_constant=hold_constant,
     )
 
 

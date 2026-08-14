@@ -288,6 +288,70 @@ class SubjectVariancePartitionParams:
     """Beta beta for the subject share of that scatter."""
 
 
+@dataclass(frozen=True)
+class AgeVaryingSubjectScale:
+    """Proposal A1: an age-varying between-child scale, with ``kappa`` held flat.
+
+    Supplied **in place of** a scalar ``tau_subj_*_sigma`` / ``tau_subject_sigma``.
+    That is deliberate: the field it replaces already selects the subject-effect
+    scale, so A1 needs no new definition field, and the fifteen models of record
+    keep their fingerprints (a new field would appear in every ``asdict`` and
+    invalidate every fit). The same trick carries
+    :data:`CLAMP_Q_ONLY` on ``clamp_mean_above_hi_anchor``.
+
+    The scale is log-linear in standardised age between two reference ages, and
+    is parameterised so the model of record is **nested at zero**::
+
+        tau_young       ~ HalfNormal(young_sigma)      # the record's own prior
+        log_tau_ratio   ~ Normal(0, log_ratio_sigma)   # log(tau_old / tau_young)
+        tau(z)          = tau_young * exp(log_tau_ratio * (z - z_young) / (z_old - z_young))
+
+    Two properties follow, and both are the point of the design. At the young
+    anchor the prior on the subject scale is *exactly* the prior the model of
+    record places on its constant ``tau``, so the variant is one-factor. And
+    ``log_tau_ratio = 0`` reproduces the model of record exactly, so the
+    posterior for that one parameter answers "does the spread between children
+    widen with age?" as a credible interval around a null, rather than as a
+    model comparison. A multiplicative ratio also keeps the scale positive
+    without taking a logarithm of a ``HalfNormal`` that can approach zero.
+
+    ``hold_kappa_constant`` is part of A1 rather than a separate switch: the
+    proposal is that the age variation belongs on the between-child parameter,
+    so it is *moved* rather than duplicated. It forces ``b_kappa = 0`` in the
+    paired dispersion block — ``kappa_u`` for the understood scale, ``kappa_s``
+    for the production one — leaving the dispersion *level* free.
+
+    Structural caveat, stated where it cannot be missed: scaling a single
+    per-child deviate by ``tau(age)`` imposes **perfect rank correlation of
+    children across age**. Children never cross. That is measured, not assumed
+    — about 0.75-0.83 disattenuated out to two years and 0.28 beyond — so this
+    is registered-sensitivity material and not a candidate model of record. See
+    ``notes/202607261540-item-difficulty-and-the-aggregate-likelihood.md`` §9
+    and ``notes/202608141600-rank-stability-tracking.md`` §8.
+    """
+
+    anchor_ages: tuple[float, float]
+    """Reference ages (months) for the young and old ends of the scale. Set these
+    to the paired ``kappa`` block's anchors so the two parameters contest the
+    same span."""
+    young_sigma: float
+    """HalfNormal scale at the young anchor. Set it to the scalar
+    ``tau_subj_*_sigma`` this object replaces, or the variant is not one-factor."""
+    log_ratio_sigma: float
+    """Normal scale for ``log(tau_old / tau_young)``. Zero is 'no widening'."""
+    hold_kappa_constant: bool = True
+    """Force the paired ``kappa`` block flat in age (level still free)."""
+
+
+def subject_scale_spec(value) -> AgeVaryingSubjectScale | None:
+    """Return the A1 spec a subject-scale field carries, or ``None`` if scalar.
+
+    The one place the overloaded field is interpreted. Engines call this rather
+    than testing types inline, so "is this model A1?" has a single answer.
+    """
+    return value if isinstance(value, AgeVaryingSubjectScale) else None
+
+
 # ============================================================
 # Univariate model definition
 # ============================================================

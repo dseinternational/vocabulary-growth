@@ -30,7 +30,12 @@ from __future__ import annotations
 
 import math
 
-from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.definitions import (
+    _DS_JOINT_Q_KAPPA_RE,
+    _DS_JOINT_UNDERSTOOD_KAPPA_RE,
+    MODEL_REGISTRY,
+    AgeVaryingSubjectScale,
+)
 from vocab_growth.sensitivity.overrides import make_variant
 
 # (model_key, variant_name) -> {"suffix": str, "scalar"?: dict, "kappa"?: dict}
@@ -259,6 +264,38 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # out under.) See notes/202608141200-clamp-q-only.md.
 ("vg10", "clamp-both"): {"suffix": "clamp-both", "scalar": {
         "clamp_mean_above_hi_anchor": True}},
+
+    # VG10 Proposal A1 -- the age variation moved off `kappa` and onto the
+    # between-child scale. `tau_subj_*` becomes log-linear in age between the
+    # SAME two anchors the kappa blocks use (24 and 48 months), and both kappa
+    # blocks are held flat, so the two parameters contest one span rather than
+    # one of them absorbing what the other cannot express. Registered on VG10
+    # alone: it is the model of record whose `kappa` decline the report reads
+    # developmentally, and the diagnostic only needs one model to answer how
+    # much of that decline is misattributed widening.
+    #
+    # `log_tau_subj_*_ratio ~ Normal(0, 0.5)` is centred on the model of record
+    # (ratio 1, no widening) and puts 89% of its mass on a 24->48 month ratio in
+    # [0.48, 2.1]; the tracking note's non-measurement spread rises by about 1.4x
+    # over that span on DS spoken, so the prior brackets the measured effect
+    # without asserting it. The young anchor keeps HalfNormal(1.5) exactly, so
+    # this is one factor: the constant scale becoming a slope.
+    #
+    # NOT a candidate model of record, and the reason is measured rather than
+    # stylistic: scaling one per-child deviate by tau(age) imposes perfect rank
+    # correlation across age, and the observed disattenuated correlation is 0.28
+    # beyond two years. See notes/202607261540 §9 and notes/202608141600 §8.
+    ("vg10", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subj_u_sigma": AgeVaryingSubjectScale(
+            anchor_ages=_DS_JOINT_UNDERSTOOD_KAPPA_RE.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        ),
+        "tau_subj_q_sigma": AgeVaryingSubjectScale(
+            anchor_ages=_DS_JOINT_Q_KAPPA_RE.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
 
     # VG11 (TD spoken anchors, #138): revert the (norm-anchored) spoken band and eta.
     ("vg11", "anchor-broad"): {"suffix": "anchor-broad", "scalar": {

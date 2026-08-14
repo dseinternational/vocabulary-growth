@@ -124,6 +124,37 @@ Three consequences.
 
 Finally, the relaxations the note names as future work — random slopes, or a child-level longitudinal function — are what the 24–60 month decay calls for. A1 cannot represent crossing at all, so if the widening it finds is real, some of it may be drift the model has nowhere else to put.
 
+## 9. Does the spread between children widen with age? The direct measurement
+
+A1 exists to estimate one quantity: whether the between-child spread grows. The same adjusted scores answer it descriptively, without fitting anything. Each age band's residual SD is decomposed by subtracting the mean binomial sampling variance, leaving between-child **plus** occasion variation — not between-child alone, because one cross-sectional band cannot separate the two. `spread_by_age_band` in the harness reproduces it.
+
+| band (mo) |         n | DS spoken | DS understood |
+| --------- | --------: | --------: | ------------: |
+| 8–18      | 149 / 128 |  **0.00** |          1.22 |
+| 18–30     | 364 / 289 |      1.18 |          1.21 |
+| 30–42     | 307 / 261 |      1.64 |          1.21 |
+| 42–60     | 338 / 205 |      1.69 |          1.40 |
+| 60–84     |  211 / 91 |      1.71 |      **2.06** |
+| 84–120    |    59 / — |      1.46 |             — |
+
+_Non-measurement SD on the logit scale. Row counts are spoken / understood._
+
+**The widening is real, and the two modalities do it at different times.** Production spreads out early — 1.18 at 18–30 months to 1.64 by 30–42 — and then **plateaus** at about 1.70 for the next forty months. Comprehension is flat at 1.21 to 42 months and then **rises late**, to 2.06 at 60–84.
+
+Two artefacts to read past, both visible in the measurement column rather than argued around. The 8–18 month spoken zero is the floor effect of §5 in its starkest form: the measurement SD (1.108) exceeds the observed one (1.056), so the subtraction hits its bound. It is not an absence of variation between children; it is an inability to see any. And the 84–120 month dip rests on 59 observations from 50 children, at ages where the logit scale compresses against the 810-word ceiling — treat it as "no evidence of further widening", not as narrowing.
+
+**The consequence for the models of record.** VG08–VG10 hold `tau_subj_*` constant, so nothing in them can represent any of this; the only parameter free to vary with age is `kappa`. Its fitted decline — `kappa_u` from roughly 110 at 24 months to 33 at 48 in the calibration the DS joint family carries — is therefore doing double duty, and some unknown share of it is between-child widening wearing the wrong parameter's name. **That is exactly A1's charge, and the table supports it.**
+
+**It does not follow that A1 should be adopted**, and this note's own measurements are why.
+
+- **The fan shape is wrong in both directions.** A1 scales one deviate by `tau(age)`; between two anchors that is monotone. Production rises then plateaus, comprehension is flat then rises. A two-anchor `tau` misfits each, and misfits them oppositely.
+- **"Hold `kappa` constant" is right for one outcome and wrong for the other.** §5 puts genuine occasion variation at 4.7% of adjusted variance on spoken and **18.0%** on understood. Pinning `kappa` is defensible for production; on comprehension it would push real occasion-to-occasion movement into `tau_subj(age)` and inflate the widening being measured.
+- **Below 30 months on production the two are not separable at all** (§5), which is where the production widening starts.
+
+**Decision, 2026-08-14: A1 is registered as a sensitivity on VG10 and is not a candidate model of record.** The variant is `vg10 / a1-tau-age-varying`, and it is parameterised so the model of record is nested at zero — `tau_subj_*_young` keeps the record's `HalfNormal(1.5)` exactly, `log_tau_subj_*_ratio ~ Normal(0, 0.5)` is the single added parameter, and both `kappa` blocks are held flat over the same 24/48-month anchors. Its purpose is the diagnostic quantity and nothing more: **how much of `kappa`'s fitted decline is misattributed between-child widening.** The relaxations in §10 are the fix; A1 is the measurement that says how much fixing is needed.
+
+## 10. What would strengthen it
+
 > [!NOTE]
 > **Frames do not match, deliberately.** The item-difficulty note's fitted frame has 832 children, 460 singletons and 372 with repeats. This note's tracking sets are per outcome and differently masked: 767 children with 334 repeats on spoken, 610 with 253 on comprehension. Do not equate 372 with 334 or 253.
 

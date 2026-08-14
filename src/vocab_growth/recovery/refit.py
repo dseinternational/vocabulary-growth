@@ -118,10 +118,19 @@ def fit_recovery_replicate(
     *,
     replicate: int = 1,
     output_root: str | None = None,
+    definition=None,
 ) -> ModelFitContext:
-    """Refit ``model_key`` to replicate ``replicate``'s simulated data."""
+    """Refit ``model_key`` to replicate ``replicate``'s simulated data.
+
+    ``definition`` overrides the model of record, for recovering a registered
+    *sensitivity variant* — Proposal A1 is the first, and its whole claim is a
+    structural one, so it needs recovery under its own structure rather than the
+    record's. The engine plumbing still resolves from ``model_key``: a variant
+    shares its base model's engine by construction, and reading the spec off the
+    variant would let a mis-registered override quietly select a different one.
+    """
     target = recovery_target(model_key)
-    definition = MODEL_REGISTRY[model_key]
+    definition = MODEL_REGISTRY[model_key] if definition is None else definition
     root = output_root if output_root is not None else env.output_root()
     directory = simulation_dir(definition, replicate, root)
     if not os.path.isdir(directory):
@@ -146,12 +155,15 @@ def fit_recovery_replicate(
 
 
 def recovery_fit_dir(
-    model_key: str, replicate: int, output_root: str | None = None
+    model_key: str,
+    replicate: int,
+    output_root: str | None = None,
+    definition=None,
 ) -> str:
     """Directory a recovery replicate's fit is promoted to."""
     import dse_research_utils.statistics.models.reporting as model_reporting
 
-    definition = MODEL_REGISTRY[model_key]
+    definition = MODEL_REGISTRY[model_key] if definition is None else definition
     root = output_root if output_root is not None else env.output_root()
     return model_reporting.ReportingConfiguration(
         model_name=definition.model_id,

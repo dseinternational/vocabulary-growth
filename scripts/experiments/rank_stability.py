@@ -204,6 +204,47 @@ def reliability_bound(d: pd.DataFrame) -> float:
     return float(max(0.0, (total - np.mean(err)) / total))
 
 
+AGE_BANDS = [(8, 18), (18, 30), (30, 42), (42, 60), (60, 84), (84, 120)]
+
+
+def spread_by_age_band(d: pd.DataFrame) -> pd.DataFrame:
+    """Non-measurement spread of the adjusted score, by age band.
+
+    The quantity Proposal A1 exists to estimate: does the spread between children
+    widen with age? Each band's observed residual SD is decomposed by subtracting
+    the mean binomial sampling variance from :func:`reliability_bound`, leaving
+    between-child *plus* occasion variation — not between-child alone, because a
+    single cross-sectional band cannot separate the two.
+
+    Read on the logit scale, which is the scale the models work on and the one
+    the residuals are defined on. It compresses near 0 and 1, so a band whose
+    counts sit against the floor or the ceiling understates the spread; the
+    ``measurement SD`` column is what says whether that is happening.
+    """
+    rows = []
+    for lo, hi in AGE_BANDS:
+        band = d[(d.age >= lo) & (d.age < hi)]
+        if len(band) < 30:
+            continue
+        observed = float(np.std(band["resid"].values, ddof=1))
+        err = 1.0 / (
+            band["n_items"].values * band["p_hat"].values * (1 - band["p_hat"].values)
+        )
+        measurement = float(np.sqrt(np.mean(err)))
+        trait = float(np.sqrt(max(0.0, observed**2 - np.mean(err))))
+        rows.append(
+            {
+                "band": f"{lo}-{hi}",
+                "n": len(band),
+                "children": int(band.child.nunique()),
+                "sd_observed": observed,
+                "sd_measurement": measurement,
+                "sd_non_measurement": trait,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 # ----------------------------------------------------------------- reporting
 
 
@@ -268,6 +309,14 @@ def report(population: str, outcome: str, n_boot: int, max_age: float | None = N
         dis = min(1.0, rho / rel) if rel > 0 else np.nan
         print(f"  {a:4d}-{b:<5d} {len(sub):7d} {sub.child.nunique():9d} "
               f"{rho:7.3f} [{clo:7.3f},{chi:7.3f}] {dis:8.3f}")
+
+    bands = spread_by_age_band(d)
+    if len(bands):
+        print("\n  Spread of the adjusted score by age band (logit scale):")
+        print(f"  {'band':>8s} {'n':>6s} {'SD obs':>8s} {'SD meas':>8s} {'SD non-meas':>12s}")
+        for _, r in bands.iterrows():
+            print(f"  {r.band:>8s} {r.n:6d} {r.sd_observed:8.3f} "
+                  f"{r.sd_measurement:8.3f} {r.sd_non_measurement:12.3f}")
 
     ct, f = quartile_table(d)
     print(f"\n  Quartile at first vs last observation (n={f['n']}):")

@@ -52,6 +52,7 @@ from vocab_growth.reporting import (
     key_value_table,
     pipeline_summary,
 )
+from vocab_growth.sensitivity.registry import build_variant
 
 RECOVERY_COMPARISON_SUBDIR = os.path.join("comparisons", "recovery")
 
@@ -70,25 +71,32 @@ def _comparison_dir() -> str:
     return path
 
 
-def _score(model_key: str) -> None:
+def _resolve_definition(model_key: str, variant: str | None):
+    """The definition to recover: the model of record, or a registered variant."""
+    if variant is None:
+        return MODEL_REGISTRY[model_key], model_key
+    definition = build_variant(model_key, variant)[0]
+    return definition, f"{model_key}-{variant}"
+
+
+def _score(model_key: str, definition, label: str) -> None:
     """Score every simulated replicate of one model and write its recovery matrix.
 
     Deliberately scores every replicate that exists rather than only the ones the
     current invocation ran: the matrix is the model's whole recovery record, and
     re-scoring a single replicate of a staged run must not drop the others.
     """
-    definition = MODEL_REGISTRY[model_key]
     query_ages = pd.Series(definition.ages_query).to_numpy()
     out_dir = _comparison_dir()
     summaries: list[dict] = []
     replicates = available_replicates(definition)
     if not replicates:
-        console.print(f"[yellow]{model_key}: no simulated replicates found.[/yellow]")
+        console.print(f"[yellow]{label}: no simulated replicates found.[/yellow]")
         return
 
     for replicate in replicates:
         sim_dir = simulation_dir(definition, replicate)
-        fit_dir = recovery_fit_dir(model_key, replicate)
+        fit_dir = recovery_fit_dir(model_key, replicate, definition=definition)
         if not os.path.isdir(sim_dir):
             console.print(f"[yellow]skip r{replicate:02d}: no simulation at {sim_dir}[/yellow]")
             continue
@@ -105,11 +113,11 @@ def _score(model_key: str) -> None:
             truth_source=record["simulation"]["truth_source"],
             query_ages=query_ages,
         )
-        prefix = f"recovery_{model_key}_r{replicate:02d}"
+        prefix = f"recovery_{label}_r{replicate:02d}"
         table.to_csv(os.path.join(out_dir, f"{prefix}.csv"), index=False)
         if len(aggregates):
             aggregates.to_csv(os.path.join(out_dir, f"{prefix}_aggregates.csv"), index=False)
-            dataframe_table(aggregates, title=f"{model_key} r{replicate:02d} — random-effect recovery")
+            dataframe_table(aggregates, title=f"{label} r{replicate:02d} — random-effect recovery")
         summaries.append(summary)
 
         worst = table.reindex(table["z"].abs().sort_values(ascending=False).index).head(8)
@@ -125,15 +133,15 @@ def _score(model_key: str) -> None:
                     "within_ci89",
                 ]
             ],
-            title=f"{model_key} r{replicate:02d} — largest standardised errors",
+            title=f"{label} r{replicate:02d} — largest standardised errors",
         )
 
     if not summaries:
-        console.print(f"[yellow]{model_key}: nothing to score.[/yellow]")
+        console.print(f"[yellow]{label}: nothing to score.[/yellow]")
         return
 
     matrix = pd.DataFrame([*summaries, pooled_row(summaries)])
-    matrix_path = os.path.join(out_dir, f"recovery_matrix_{model_key}.csv")
+    matrix_path = os.path.join(out_dir, f"recovery_matrix_{label}.csv")
     matrix.to_csv(matrix_path, index=False)
     dataframe_table(
         matrix[
@@ -147,7 +155,7 @@ def _score(model_key: str) -> None:
                 "verdict",
             ]
         ],
-        title=f"Parameter recovery — {MODEL_REGISTRY[model_key].model_id}",
+        title=f"Parameter recovery — {definition.model_id} [{label}]",
     )
     console.print(f"[dim]Recovery matrix: {matrix_path}[/dim]")
 
@@ -159,6 +167,15 @@ if __name__ == "__main__":
         help=(
             "Model key, 'headline' for the three models issue #163 gates "
             f"({', '.join(HEADLINE_MODELS)}), or 'all' for every supported model."
+        ),
+    )
+    parser.add_argument(
+        "--variant",
+        default=None,
+        help=(
+            "Recover a registered sensitivity variant instead of the model of "
+            "record (e.g. a1-tau-age-varying). Requires a single model, and with "
+            "--truth posterior requires that variant to have been fitted."
         ),
     )
     parser.add_argument(
@@ -229,6 +246,17 @@ if __name__ == "__main__":
         console.print(f"[bold red]{exc}[/bold red]")
         sys.exit(1)
 
+    if args.variant is not None and args.model in {"headline", "all"}:
+        console.print(
+            "[bold red]--variant applies to one model; name it explicitly.[/bold red]"
+        )
+        sys.exit(1)
+    try:
+        definitions = {key: _resolve_definition(key, args.variant) for key in models}
+    except KeyError as exc:
+        console.print(f"[bold red]{exc}[/bold red]")
+        sys.exit(1)
+
     replicates = (
         sorted(set(args.replicate)) if args.replicate else list(range(1, args.replicates + 1))
     )
@@ -239,7 +267,7 @@ if __name__ == "__main__":
     key_value_table(
         "Parameter-recovery run plan",
         [
-            ("Models", ", ".join(models)),
+            ("Models", ", ".join(label for _, label in definitions.values())),
             ("Replicates", ", ".join(f"r{r:02d}" for r in replicates)),
             ("Truth source", args.truth),
             ("Sampling config", args.config),
@@ -267,8 +295,9 @@ if __name__ == "__main__":
     failures: dict[str, str] = {}
 
     for model_key in models:
+        definition, model_label = definitions[model_key]
         for replicate in replicates:
-            label = f"{model_key} r{replicate:02d}"
+            label = f"{model_label} r{replicate:02d}"
             started = time.perf_counter()
             try:
                 if do_simulate:
@@ -279,10 +308,14 @@ if __name__ == "__main__":
                         truth_source=args.truth,
                         n_prior_draws=args.n_prior_draws,
                         random_seed=args.random_seed,
+                        definition=definition,
                     )
                 if do_fit:
                     fit_recovery_replicate(
-                        model_key, args.config, replicate=replicate
+                        model_key,
+                        args.config,
+                        replicate=replicate,
+                        definition=definition,
                     )
             except Exception as exc:  # one replicate must not sink the run
                 failures[label] = f"{type(exc).__name__}: {exc}"
@@ -291,10 +324,10 @@ if __name__ == "__main__":
 
         if do_compare:
             try:
-                _score(model_key)
+                _score(model_key, definition, model_label)
             except Exception as exc:
-                failures[f"{model_key} compare"] = f"{type(exc).__name__}: {exc}"
-                console.print(f"[bold red]{model_key} scoring failed:[/bold red] {exc}")
+                failures[f"{model_label} compare"] = f"{type(exc).__name__}: {exc}"
+                console.print(f"[bold red]{model_label} scoring failed:[/bold red] {exc}")
 
     if len(timings) > 1:
         pipeline_summary("Recovery run summary", timings)

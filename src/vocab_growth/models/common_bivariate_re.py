@@ -36,6 +36,7 @@ from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
     standardize_ages,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
@@ -56,8 +57,12 @@ from vocab_growth.models.common_bivariate import (
     sample,
     sample_posterior_predictive,
 )
-from vocab_growth.models.definitions import BivariateModelDefinition, clamp_targets
-from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
+from vocab_growth.models.definitions import (
+    BivariateModelDefinition,
+    clamp_targets,
+    subject_scale_spec,
+)
+from vocab_growth.models.gp_utils import GPGrid, build_subject_scale_of_z, trend_and_gp
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.reporting import (
     dataframe_table,
@@ -600,31 +605,92 @@ def build_model_re(
         # Subject-level random intercepts (non-centered)
         # ============================================================
 
+        # Proposal A1 (registered sensitivity): where a subject-scale field
+        # carries an `AgeVaryingSubjectScale` instead of a scalar, the per-child
+        # deviate is scaled by tau(age) at each observation's own age and the
+        # paired kappa block is held flat. The scalar path below is untouched and
+        # emits exactly the ops it always did, so every model of record keeps its
+        # graph. `tau_*_of_z` is carried forward to emit the plot/query scales
+        # once the standardised grids exist.
+        spec_u = subject_scale_spec(definition.tau_subj_u_sigma)
+        spec_q = subject_scale_spec(definition.tau_subj_q_sigma)
+        tau_u_of_z = tau_q_of_z = None
+        # Built here rather than reusing the named `z_obs` Deterministic, which is
+        # created further down: reordering that would change every model's graph.
+        z_obs_raw = (
+            X_all_z_data[i_obs0:i_obs1, 0]
+            if (spec_u is not None or spec_q is not None)
+            else None
+        )
+
         if use_subject_re_u:
-            tau_subj_u = pm.HalfNormal(
-                "tau_subj_u", sigma=definition.tau_subj_u_sigma
-            )
-            delta_subj_u_raw = pm.Normal(
-                "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
-            )
-            delta_subj_u = pm.Deterministic(
-                "delta_subj_u", tau_subj_u * delta_subj_u_raw, dims="subject_id"
-            )
-            subject_shift_u = delta_subj_u[subject_obs]
+            if spec_u is None:
+                tau_subj_u = pm.HalfNormal(
+                    "tau_subj_u", sigma=definition.tau_subj_u_sigma
+                )
+                delta_subj_u_raw = pm.Normal(
+                    "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                delta_subj_u = pm.Deterministic(
+                    "delta_subj_u", tau_subj_u * delta_subj_u_raw, dims="subject_id"
+                )
+                subject_shift_u = delta_subj_u[subject_obs]
+            else:
+                tau_u_of_z, tau_subj_u_young = build_subject_scale_of_z(
+                    spec_u,
+                    anchor_z=standardize_anchor_ages(
+                        spec_u.anchor_ages,
+                        X_obs_mean=X_obs_mean,
+                        X_obs_std=X_obs_std,
+                    ),
+                    name="tau_subj_u",
+                )
+                delta_subj_u_raw = pm.Normal(
+                    "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                # `delta_subj_u` keeps its name and its per-child meaning, read at
+                # the young anchor; the shift applied to the likelihood is the
+                # age-scaled one.
+                _ = pm.Deterministic(
+                    "delta_subj_u",
+                    tau_subj_u_young * delta_subj_u_raw,
+                    dims="subject_id",
+                )
+                subject_shift_u = tau_u_of_z(z_obs_raw) * delta_subj_u_raw[subject_obs]
         else:
             subject_shift_u = 0.0
 
         if use_subject_re_q:
-            tau_subj_q = pm.HalfNormal(
-                "tau_subj_q", sigma=definition.tau_subj_q_sigma
-            )
-            delta_subj_q_raw = pm.Normal(
-                "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
-            )
-            delta_subj_q = pm.Deterministic(
-                "delta_subj_q", tau_subj_q * delta_subj_q_raw, dims="subject_id"
-            )
-            subject_shift_q = delta_subj_q[subject_obs]
+            if spec_q is None:
+                tau_subj_q = pm.HalfNormal(
+                    "tau_subj_q", sigma=definition.tau_subj_q_sigma
+                )
+                delta_subj_q_raw = pm.Normal(
+                    "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                delta_subj_q = pm.Deterministic(
+                    "delta_subj_q", tau_subj_q * delta_subj_q_raw, dims="subject_id"
+                )
+                subject_shift_q = delta_subj_q[subject_obs]
+            else:
+                tau_q_of_z, tau_subj_q_young = build_subject_scale_of_z(
+                    spec_q,
+                    anchor_z=standardize_anchor_ages(
+                        spec_q.anchor_ages,
+                        X_obs_mean=X_obs_mean,
+                        X_obs_std=X_obs_std,
+                    ),
+                    name="tau_subj_q",
+                )
+                delta_subj_q_raw = pm.Normal(
+                    "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                _ = pm.Deterministic(
+                    "delta_subj_q",
+                    tau_subj_q_young * delta_subj_q_raw,
+                    dims="subject_id",
+                )
+                subject_shift_q = tau_q_of_z(z_obs_raw) * delta_subj_q_raw[subject_obs]
         else:
             subject_shift_q = 0.0
 
@@ -731,12 +797,34 @@ def build_model_re(
             "z_query", X_all_z_data[i_query0:i_query1, 0], dims=("query_id",)
         )
 
+        # Proposal A1's age-varying subject scale, reported on the same grids as
+        # kappa so the two can be read against each other — which is the whole
+        # point of the variant.
+        if tau_u_of_z is not None:
+            _ = pm.Deterministic(
+                "tau_subj_u_plot", tau_u_of_z(z_plot), dims="plot_id"
+            )
+            _ = pm.Deterministic(
+                "tau_subj_u_query", tau_u_of_z(z_query), dims="query_id"
+            )
+        if tau_q_of_z is not None:
+            _ = pm.Deterministic(
+                "tau_subj_q_plot", tau_q_of_z(z_plot), dims="plot_id"
+            )
+            _ = pm.Deterministic(
+                "tau_subj_q_query", tau_q_of_z(z_query), dims="query_id"
+            )
+
         # ============================================================
         # Kappa — understood
         # ============================================================
 
         kappa_u_of_z = build_kappa_for_config(
-            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_u"
+            config,
+            X_obs_mean=X_obs_mean,
+            X_obs_std=X_obs_std,
+            suffix="_u",
+            hold_constant=spec_u is not None and spec_u.hold_kappa_constant,
         )
 
         kappa_u_obs = pm.Deterministic(
@@ -750,7 +838,11 @@ def build_model_re(
         # ============================================================
 
         kappa_s_of_z = build_kappa_for_config(
-            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_s"
+            config,
+            X_obs_mean=X_obs_mean,
+            X_obs_std=X_obs_std,
+            suffix="_s",
+            hold_constant=spec_q is not None and spec_q.hold_kappa_constant,
         )
 
         kappa_s_obs = pm.Deterministic(

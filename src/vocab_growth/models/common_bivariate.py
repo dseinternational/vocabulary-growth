@@ -948,6 +948,20 @@ def diagnostics(context: BivariateContext):
     )
 
 
+def _subject_scales(context: BivariateContext, name: str):
+    """The A1 plot/query subject scales for ``name``, or ``(None, None)``.
+
+    Their presence is what tells the predictive path that the subject scale is
+    age-varying; a model of record emits neither and takes the scalar branch, so
+    its predictive graph is unchanged.
+    """
+    plot = context.model_variables.get(f"{name}_plot")
+    query = context.model_variables.get(f"{name}_query")
+    if plot is None or query is None:
+        return None, None
+    return plot, query
+
+
 def sample_posterior_predictive(context: BivariateContext, definition=None):
     """Sample from the posterior predictive distribution.
 
@@ -982,17 +996,34 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             tau_subj_u = context.model_variables["tau_subj_u"]
             f_u_plot_var = context.model_variables["f_u_plot"]
             f_u_query_var = context.model_variables["f_u_query"]
-            delta_u_marg = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_subj_u)
-            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_marg)
-            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_marg)
+            plot_scale, query_scale = _subject_scales(context, "tau_subj_u")
+            if plot_scale is None:
+                delta_u_marg = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_subj_u)
+                delta_u_plot = delta_u_query = delta_u_marg
+            else:
+                # Proposal A1: one standard deviate per draw, scaled by tau(age),
+                # so the unseen child stays the *same* child across the grid while
+                # the spread it is drawn from widens or narrows with age.
+                z_child_u = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=1.0)
+                delta_u_plot = z_child_u * plot_scale
+                delta_u_query = z_child_u * query_scale
+            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_plot)
+            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_query)
 
         if use_subject_re_q:
             tau_subj_q = context.model_variables["tau_subj_q"]
             h_plot_var = context.model_variables["h_plot"]
             h_query_var = context.model_variables["h_query"]
-            delta_q_marg = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q)
-            q_plot = pm.math.sigmoid(h_plot_var + delta_q_marg)
-            q_query = pm.math.sigmoid(h_query_var + delta_q_marg)
+            plot_scale, query_scale = _subject_scales(context, "tau_subj_q")
+            if plot_scale is None:
+                delta_q_marg = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q)
+                delta_q_plot = delta_q_query = delta_q_marg
+            else:
+                z_child_q = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=1.0)
+                delta_q_plot = z_child_q * plot_scale
+                delta_q_query = z_child_q * query_scale
+            q_plot = pm.math.sigmoid(h_plot_var + delta_q_plot)
+            q_query = pm.math.sigmoid(h_query_var + delta_q_query)
             p_s_query = p_u_query * q_query
         elif use_subject_re_u:
             # Marginal U but not q: rebuild p_s from new p_u and original q.

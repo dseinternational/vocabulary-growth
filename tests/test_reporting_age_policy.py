@@ -72,17 +72,11 @@ BY_STEM = {
 #
 # This list is debt, not policy. Empty it when those two models are refitted --
 # ``test_known_stale_entries_are_still_needed`` fails if an entry becomes
-# unnecessary, so it cannot quietly outlive the problem.
+# unnecessary, so it cannot quietly outlive the problem. VG15's six entries were
+# cleared on 2026-08-14 by its clamp-q-only refit, which the guard caught within
+# the hour; VG14 is later in the same queue.
 KNOWN_STALE = {
     "vg14": {"posterior_summary_p_any", "posterior_summary_sign"},
-    "vg15": {
-        "expected_counts_by_month_s",
-        "expected_counts_by_month_sign",
-        "expected_counts_by_month_u",
-        "posterior_summary_monthly_s",
-        "posterior_summary_monthly_sign",
-        "posterior_summary_monthly_u",
-    },
 }
 
 # Not age-indexed reports: descriptive frames, diagnostics, provenance.
