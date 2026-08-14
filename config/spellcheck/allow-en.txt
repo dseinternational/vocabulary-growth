@@ -81,7 +81,9 @@ approximator
 apraxia
 arrowsize
 asis
+baselining
 bimodality
+blobfuse
 callout
 caveated
 centered
