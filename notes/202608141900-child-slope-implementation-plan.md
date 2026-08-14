@@ -14,16 +14,16 @@ VG08–VG10 give each child a **constant** offset from the population trajectory
 
 [202608141600](202608141600-rank-stability-tracking.md) §10.3 fits three candidate structures to the adjusted residuals by maximum likelihood, against a known per-observation binomial sampling variance. Result, as `2 x delta logL` over the constant-intercept baseline:
 
-| structure                              | spoken, all 767 | spoken, repeats 334 | understood, all 610 | understood, repeats 253 |
-| -------------------------------------- | --------------: | ------------------: | ------------------: | ----------------------: |
-| **+ random slope** (2 df)              |       **36.05** |           **20.81** |           **27.09** |                    0.82 |
-| **cost of imposing `rho01 = 1`** (1 df) |          −1.49 |           **−6.28** |               −2.56 |                   −0.32 |
-| **+ AR(1) transient**                  | `ell -> 0`, no gain |                 — | `ell -> 0`, no gain |                       — |
+| structure                               |     spoken, all 767 | spoken, repeats 334 | understood, all 610 | understood, repeats 253 |
+| --------------------------------------- | ------------------: | ------------------: | ------------------: | ----------------------: |
+| **+ random slope** (2 df)               |           **36.05** |           **20.81** |           **27.09** |                    0.82 |
+| **cost of imposing `rho01 = 1`** (1 df) |               −1.49 |           **−6.28** |               −2.56 |                   −0.32 |
+| **+ AR(1) transient**                   | `ell -> 0`, no gain |                   — | `ell -> 0`, no gain |                       — |
 
 Three conclusions, and they set the whole design:
 
 1. **A random slope, not an AR(1).** The mean-reverting alternative collapses to zero persistence on both outcomes — the within-child deviation has no memory beyond the occasion — so an autocorrelated child process is not what is missing.
-2. **The production slope is genuine within-child drift**, not cross-sectional widening: it survives restriction to the 334 children with repeated spoken measures, where `tau1` *rises* to 0.0243 logit/month.
+2. **The production slope is genuine within-child drift**, not cross-sectional widening: it survives restriction to the 334 children with repeated spoken measures, where `tau1` _rises_ to 0.0243 logit/month.
 3. **Comprehension shows the opposite pattern**: worth 27.09 across all 610 children and **0.82** across the 253 with repeats. Its widening is cross-sectional. The model must be able to represent both cases and let the outcome decide, which the random slope does — `tau1 = 0` is the null and is inside it.
 
 This is also the first direct test of Proposal A1's structure: A1 is the random slope with `rho01` pinned to 1 (one deviate scaled by an age function is a rank-one covariance). Freeing it costs 6.28 on 1 df on the repeats-only production fit (p ≈ 0.012). **A1's no-crossing assumption is rejected where there is power to test it.**
@@ -61,11 +61,11 @@ shift(obs) = b[subject_obs, 0] + b[subject_obs, 1] * (age_obs - ref) / 12
 
 Four notes on choices that are not arbitrary.
 
-**The Cholesky is written out rather than drawn from `LKJCholeskyCov`.** For `n = 2`, LKJ(η) on the correlation is exactly `(rho + 1)/2 ~ Beta(η, η)`, so `Beta(2, 2)` *is* LKJ(2) here. Writing it explicitly keeps `tau0`, `tau1` and `rho01` as named free variables that the posterior summaries, the prior-vs-posterior check and the recovery scorer can each read directly, instead of a packed triangular vector they would all have to unpack.
+**The Cholesky is written out rather than drawn from `LKJCholeskyCov`.** For `n = 2`, LKJ(η) on the correlation is exactly `(rho + 1)/2 ~ Beta(η, η)`, so `Beta(2, 2)` _is_ LKJ(2) here. Writing it explicitly keeps `tau0`, `tau1` and `rho01` as named free variables that the posterior summaries, the prior-vs-posterior check and the recovery scorer can each read directly, instead of a packed triangular vector they would all have to unpack.
 
 **The slope is per year.** `tau1` in logit/month is 0.02-ish and a prior on that scale is unreadable; per year it is 0.12–0.29, and `HalfNormal(0.5)` has median 0.34, covers both fitted values comfortably, and keeps mass near zero so a slope the data do not support shrinks away.
 
-**Both subject effects carry a slope.** The tracking analysis measures drift on the *spoken proportion*, and VG10 builds spoken as `p_u * q` — so the evidence cannot say whether the drift belongs to `f_u` or to `h`. Expect the two `tau1`s to be individually poorly identified and correlated, and report their joint implication for spoken rather than each alone.
+**Both subject effects carry a slope.** The tracking analysis measures drift on the _spoken proportion_, and VG10 builds spoken as `p_u * q` — so the evidence cannot say whether the drift belongs to `f_u` or to `h`. Expect the two `tau1`s to be individually poorly identified and correlated, and report their joint implication for spoken rather than each alone.
 
 **The seam already exists.** Proposal A1 built the observation-level, age-dependent subject shift in `common_bivariate_re` (commit `06d2502`); a random slope is a different age function through the same seam. `common_univariate_re` and `common_joint_modality` are untouched by this plan.
 
@@ -94,14 +94,14 @@ Each is a stop, not a checkpoint.
 
 ## 6. Sequence and cost
 
-| step | work                                                                     | cost                   |
-| ---- | ------------------------------------------------------------------------ | ---------------------- |
-| 1    | `SubjectSlopePriorParams`, the definition subclass, VG19's registration   | half a day             |
-| 2    | `build_child_slope` in `gp_utils.py`; engine branch in `common_bivariate_re` | half a day          |
-| 3    | Name preservation, predictive branch, `comparison.py` age-varying spread  | a day                  |
-| 4    | G2 prior predictive; `dev` fit; tests                                     | half a day + minutes   |
-| 5    | G3 recovery, 3 replicates at `test`                                       | a few hours of sampling |
-| 6    | G5 fit at `rep`; G4 comparison; report page                               | ~2h sampling + a day   |
+| step | work                                                                         | cost                    |
+| ---- | ---------------------------------------------------------------------------- | ----------------------- |
+| 1    | `SubjectSlopePriorParams`, the definition subclass, VG19's registration      | half a day              |
+| 2    | `build_child_slope` in `gp_utils.py`; engine branch in `common_bivariate_re` | half a day              |
+| 3    | Name preservation, predictive branch, `comparison.py` age-varying spread     | a day                   |
+| 4    | G2 prior predictive; `dev` fit; tests                                        | half a day + minutes    |
+| 5    | G3 recovery, 3 replicates at `test`                                          | a few hours of sampling |
+| 6    | G5 fit at `rep`; G4 comparison; report page                                  | ~2h sampling + a day    |
 
 Sampling cost: the random-effect dimension doubles (832 children x 2), so budget **1.5–2x VG10's 60 minutes** at `rep`, and memory in the same band as the rest of the DS joint family — this is not a VG11/VG13-class job.
 

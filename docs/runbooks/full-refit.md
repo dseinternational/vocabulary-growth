@@ -32,9 +32,14 @@ naive run hits. Distilled from the 2026-07-12 run
   tell-tale of the old rounding.
 - Data current: `python scripts/prepare_data.py` (confirm the 810 reference scale;
   see `docs/report/methods-data.qmd`).
-- Disk: `rep` traces are ~4–15 GB **each**. Budget ~20 GB × n_models and redirect
-  output off the checkout: `--output-dir <scratch>` or `DSE_VOCAB_GROWTH_OUTPUT_DIR`.
-  The report figure cache (`docs/report/figures/`) always stays in the checkout.
+- Disk: **set `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact` before you start**, and
+  redirect output off the checkout with `--output-dir <scratch>` or
+  `DSE_VOCAB_GROWTH_OUTPUT_DIR`. The report figure cache
+  (`docs/report/figures/`) always stays in the checkout. Sizing and the
+  exceptions are in [Surviving a full disk](#surviving-a-full-disk) — read it
+  before the first fit, not after. The old advice here ("~20 GB × n_models") was
+  wrong by more than a factor of two, because a run fits far more _variants_ than
+  models.
 - `rep` config = 6 chains / 6000 tune / 6000 draws / `target_accept` 0.95. The number of parallel cores is chosen for the host and does not affect fit compatibility.
 - Publishing needs `DSERESEARCH_BLOB_CONTAINER_URL` **and** the right identity — see below.
 
@@ -131,6 +136,33 @@ memory-heavy. So:
   full-data TD fits can OOM if stacked. `vg03` and `vg04` are the exception and may
   share the box; `vg11`, `vg12` and `vg13` must not share it with anything, including
   a batch of small DS sensitivity fits (see below).
+
+### Surviving a full disk
+
+On 2026-08-14 at 16:12 the output volume reached 100% and five in-flight refits died on `[Errno 28] No space left on device` — VG16 and VG14 part-way through writing `trace.nc`, and VG10, VG07 and VG05 before they had started. Nothing warned first: the fits simply failed at the moment they wrote.
+
+**The cause was the trace tier, not the disk size.** Every fit that run wrote at the default `--trace-persistence full`. `compact` drops observation-sized deterministics that are recomputable from the free parameters, and the reporting output is byte-identical. Applied afterwards to 21 fits it took **229 GB to 77 GB** — the volume went from 100% to 63% with no loss of anything the report reads.
+
+**Set the tier before the run:**
+
+```bash
+export DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact
+```
+
+**Three models should stay at `full`: VG10, VG12 and VG15.** They are `fit_recovery.py`'s headline set, and recovery scoring refuses a compacted trace up front — as do `regenerate_plots.py` and `loso_compare.py`. Pass `--trace-persistence full` for those three specifically. Everything else can be compacted, at the cost of needing a refit if its plots ever have to be regenerated.
+
+**Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates. At `full` that exceeds 400 GB; at `compact` it is roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB is comfortable at `compact`; 1 TB at `full`.**
+
+**Recovering a volume that is already full**: `scripts/compact_traces.py` applies the tier to traces already written. It reuses the same policy code the fit pipeline uses, verifies each rewrite carries every free parameter the original had before atomically replacing it, and records the tier in `fit_manifest.json`. It processes smallest-first, which matters — each rewrite needs room for its output beside the original, so the small traces buy the space the large ones need.
+
+```bash
+python scripts/compact_traces.py --dry-run
+python scripts/compact_traces.py --exclude VG10-... --exclude VG12-... --exclude VG15-...
+```
+
+Note that it will not touch a model whose fit is mid-promotion, and that it distinguishes a live staging directory from one an `ENOSPC` crash left behind by checking the PID embedded in the name — the aftermath of a full disk is full of stale staging directories, and a _live_ fit of some other model is usually exactly what the space is being reclaimed for.
+
+**On provisioning.** Check `lsblk` before assuming the box is at its limit: this VM had two unmounted 440 GB NVMe devices alongside the one in use. Longer term the output root belongs on a **managed disk rather than the Azure temp disk** — not for speed (the local NVMe measured 472 MB/s sequential, and this workload writes each trace once, so storage is nowhere near the critical path) but because the temp disk is wiped on deallocation, which forces the VM to stay running through the idle stretches of a multi-day run, and because a managed disk can be grown online. Do not put `trace.nc` on blobfuse or Azure Files: netCDF here is HDF5, whose metadata I/O and POSIX assumptions make network filesystems a corruption risk. Blob remains the archive tier via `upload.py`.
 
 ### Surviving an OOM: precautions before launching the memory-heavy models
 
