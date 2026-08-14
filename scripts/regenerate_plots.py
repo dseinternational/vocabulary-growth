@@ -68,14 +68,28 @@ PLOT_SUFFIXES = (".png", ".svg")
 # context-derived inputs it uses are ``n_trials`` and the reporting caps, which
 # agree -- but that is a coincidence of the current plot code, not a guarantee,
 # so each model is routed through the engine that actually fitted it.
+#
+# ``plots_call`` names the plot stage's calling convention, which differs by
+# engine: ``definition`` passes the model definition, ``context`` passes nothing
+# beyond the context, and ``outcome_label`` passes the definition's outcome label
+# as a keyword (the single-outcome stage is shared across models that plot
+# different outcomes, so the label is not recoverable from the context).
 ENGINES = {
+    "univariate": {
+        "module": "vocab_growth.models.common",
+        "prepare": "prepare_univariate_data",
+        "priors": "configure_univariate_priors",
+        "build": "build_model",
+        "plots": "run_standard_plots",
+        "plots_call": "outcome_label",
+    },
     "bivariate": {
         "module": "vocab_growth.models.common_bivariate",
         "prepare": "prepare_bivariate_data",
         "priors": "configure_bivariate_priors",
         "build": "build_model",
         "plots": "_run_bivariate_joint_plots",
-        "plots_takes_definition": True,
+        "plots_call": "definition",
     },
     "bivariate_re": {
         "module": "vocab_growth.models.common_bivariate_re",
@@ -83,7 +97,7 @@ ENGINES = {
         "priors": "configure_bivariate_priors",
         "build": "build_model_re",
         "plots": "_run_bivariate_joint_plots",
-        "plots_takes_definition": True,
+        "plots_call": "definition",
     },
     "trivariate": {
         "module": "vocab_growth.models.common_trivariate",
@@ -91,7 +105,7 @@ ENGINES = {
         "priors": "configure_trivariate_priors",
         "build": "build_model",
         "plots": "_run_trivariate_plots",
-        "plots_takes_definition": False,
+        "plots_call": "context",
     },
     "joint": {
         "module": "vocab_growth.models.common_joint_modality",
@@ -99,11 +113,15 @@ ENGINES = {
         "priors": "configure_joint_priors",
         "build": "build_model",
         "plots": "_run_joint_plots",
-        "plots_takes_definition": False,
+        "plots_call": "context",
     },
 }
 
 ENGINE_BY_MODEL = {
+    "vg01": "univariate",
+    "vg02": "univariate",
+    "vg03": "univariate",
+    "vg04": "univariate",
     "vg05": "bivariate",
     "vg07": "bivariate_re",
     "vg08": "bivariate_re",
@@ -240,10 +258,15 @@ def regenerate(model_id: str, config: str, dry_run: bool = False) -> bool:
             resample_pp(context, definition)
 
         _, plots = _resolve(engine["module"], engine["plots"])
-        if engine["plots_takes_definition"]:
+        plots_call = engine["plots_call"]
+        if plots_call == "definition":
             plots(context, definition)
-        else:
+        elif plots_call == "outcome_label":
+            plots(context, outcome_label=definition.outcome_label)
+        elif plots_call == "context":
             plots(context)
+        else:
+            raise ValueError(f"unknown plots_call {plots_call!r} for {model_id}")
     except Exception as exc:  # noqa: BLE001 - report and keep the fit intact
         shutil.rmtree(staging_root, ignore_errors=True)
         console.print(f"[bold red][failed][/bold red] {model_id}: {type(exc).__name__}: {exc}")
