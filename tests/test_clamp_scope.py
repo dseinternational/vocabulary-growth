@@ -54,37 +54,45 @@ def test_true_and_false_still_serialise_as_booleans():
         assert json.dumps(normalise_for_json(value)) == json.dumps(value)
 
 
-@pytest.mark.parametrize("model_id", sorted(MODEL_REGISTRY))
-def test_registered_definitions_serialise_the_clamp_as_a_bool(model_id):
-    """No model of record opts into ``"q_only"``; it is a sensitivity variant only.
+# Every DS joint model adopted CLAMP_Q_ONLY on 2026-08-14. Pinning the set makes
+# a model silently joining or leaving it visible, because either way it is a
+# definition change that invalidates that model and demands a refit.
+CLAMP_Q_ONLY_MODELS = {"vg05", "vg07", "vg08", "vg09", "vg10", "vg14", "vg15", "vg16"}
 
-    If one ever does, this test should be updated deliberately -- the change
-    invalidates that model and demands a refit.
-    """
+
+@pytest.mark.parametrize("model_id", sorted(MODEL_REGISTRY))
+def test_the_clamp_scope_of_every_model_is_the_one_recorded(model_id):
     payload = normalise_for_json(MODEL_REGISTRY[model_id])
     if "clamp_mean_above_hi_anchor" not in payload:
         pytest.skip(f"{model_id} has no clamp field")
-    assert isinstance(payload["clamp_mean_above_hi_anchor"], bool), (
-        f"{model_id} serialises the clamp as "
-        f"{payload['clamp_mean_above_hi_anchor']!r}, which changes its fingerprint"
-    )
+    value = payload["clamp_mean_above_hi_anchor"]
+    if model_id in CLAMP_Q_ONLY_MODELS:
+        assert value == CLAMP_Q_ONLY, (
+            f"{model_id} should clamp q only; got {value!r}"
+        )
+        assert clamp_targets(value) == (False, True)
+    else:
+        assert isinstance(value, bool) and value is False, (
+            f"{model_id} is not in the q-only set but serialises {value!r}"
+        )
 
 
-def test_the_variant_clamps_q_only_and_leaves_the_baseline_alone():
+def test_the_variant_is_now_the_inverse_of_the_adopted_behaviour():
+    """`clamp-q-only` became the model of record, so the variant restores `True`."""
     base = MODEL_REGISTRY["vg10"]
-    variant = build_variant("vg10", "clamp-q-only")[0]
+    variant = build_variant("vg10", "clamp-both")[0]
 
-    assert clamp_targets(base.clamp_mean_above_hi_anchor) == (True, True)
-    assert clamp_targets(variant.clamp_mean_above_hi_anchor) == (False, True)
-    assert variant.config_name.endswith("clamp-q-only")
+    assert clamp_targets(base.clamp_mean_above_hi_anchor) == (False, True)
+    assert clamp_targets(variant.clamp_mean_above_hi_anchor) == (True, True)
+    assert variant.config_name.endswith("clamp-both")
     # make_variant must not mutate the registered definition.
-    assert base.clamp_mean_above_hi_anchor is True
+    assert base.clamp_mean_above_hi_anchor == CLAMP_Q_ONLY
 
 
 def test_the_variant_changes_only_the_clamp():
     """A one-factor variant: everything else must match the model of record."""
     base = MODEL_REGISTRY["vg10"]
-    variant = build_variant("vg10", "clamp-q-only")[0]
+    variant = build_variant("vg10", "clamp-both")[0]
     ignore = {"clamp_mean_above_hi_anchor", "config_name", "banner"}
     differing = [
         f.name

@@ -1911,7 +1911,7 @@ VG05 = BivariateModelDefinition(
     # above 84. Reporting only -- it cannot move the posterior. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG07 = BivariateModelDefinition(
@@ -1993,7 +1993,7 @@ VG07 = BivariateModelDefinition(
     # above 84. Reporting only -- it cannot move the posterior. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG08 = BivariateModelDefinition(
@@ -2077,7 +2077,7 @@ VG08 = BivariateModelDefinition(
     # above 84. Reporting only -- it cannot move the posterior. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG09 = BivariateModelDefinition(
@@ -2165,7 +2165,7 @@ VG09 = BivariateModelDefinition(
     # above 84. Reporting only -- it cannot move the posterior. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG10 = BivariateModelDefinition(
@@ -2257,7 +2257,7 @@ VG10 = BivariateModelDefinition(
     # above 84. Reporting only -- it cannot move the posterior. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG11 = UnivariateREModelDefinition(
@@ -2544,7 +2544,7 @@ VG14 = TrivariateModelDefinition(
     # is what it did until 2026-08-13. 84 matches VG15's report_max_age_signed on
     # the same evidence, and stops the r(a) table where the r(a) figure stops.
     report_max_age_signed=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG15 = JointModelDefinition(
@@ -2650,7 +2650,7 @@ VG15 = JointModelDefinition(
     # children thinning to one source per band, and 84 is the trend's high anchor.
     # Also caps p_any, a function of the signed ratio.
     report_max_age_signed=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 # ============================================================
@@ -2771,7 +2771,7 @@ VG16 = BivariateModelDefinition(
     # above 84. Reporting only -- it cannot move the posterior. See
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 MODEL_REGISTRY: dict[
