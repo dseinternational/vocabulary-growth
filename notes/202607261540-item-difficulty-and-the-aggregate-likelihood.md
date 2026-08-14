@@ -204,6 +204,26 @@ All three are **registered-sensitivity material at most, gated on the Route 1 re
 
 Its parameterisation is chosen so that answer is readable off one parameter. The model of record is **nested at zero**: `tau_subj_*_young` keeps VG10's own `HalfNormal(1.5)`, the single added parameter is `log_tau_subj_*_ratio ~ Normal(0, 0.5)` — the log ratio of the scale at 48 months to the scale at 24 — and `kappa_u` / `kappa_s` are held flat over the _same_ two anchors, so the two parameters contest one span rather than one absorbing what the other cannot express. A posterior interval for `log_tau_subj_q_ratio` excluding zero is direct evidence that `kappa`'s decline was doing work that belongs elsewhere; one containing zero says these data cannot tell. `scripts/fit_recovery.py --variant a1-tau-age-varying` runs its recovery under its own structure (`docs/runbooks/parameter-recovery.md`).
 
+**Result, 2026-08-14.** The variant fitted at `rep` in 35 minutes and converged cleanly — 0 divergences, max R-hat 1.0028, minimum ESS 2,278, better than the model of record's usual. Given the chance to put age variation on the between-child scale, the data take it, on both outcomes and without ambiguity:
+
+| quantity                            | understood               | production ratio `q`     |
+| ----------------------------------- | ------------------------ | ------------------------ |
+| `tau_subj` at 24 mo                 | 0.716                    | 0.969                    |
+| `tau_subj` at 48 mo                 | 0.829                    | 1.418                    |
+| **ratio 48/24**                     | **1.159** [1.084, 1.241] | **1.462** [1.347, 1.590] |
+| `P(log ratio > 0)`                  | **1.000**                | **1.000**                |
+| `kappa` (held flat by construction) | 38.0                     | 18.6                     |
+
+Against the model of record over the same two anchors, where `kappa` carries all of it and `tau_subj` is constant: `kappa_u` falls **2.64x** [2.14, 3.28] and `kappa_s` **1.66x** [1.30, 2.10], with `tau_subj_u` fixed at 0.796 and `tau_subj_q` at 1.288.
+
+So the two models describe one phenomenon through different parameters, and the arithmetic is legible: A1's flat `kappa_u` of 38.0 sits almost exactly at the geometric mean of the model of record's 65.4 and 24.7 (40.2). **A1 replaces the dispersion decline with its average and re-expresses the age variation as between-child widening.** That is the answer to "how much of `kappa`'s decline is misattributed widening": on these data, a decline of that size can be traded for a 1.16-fold (comprehension) or 1.46-fold (production) widening of the child scale, and the fit does not object.
+
+Two things this does **not** establish, and neither should be skipped when it is quoted.
+
+**Whether A1 fits better is not yet tested.** That needs LOO against a model of record fitted under the _same_ clamp setting, and the VG10 fit on disk predates `CLAMP_Q_ONLY` — it fails `check_fit --purpose publish` on exactly that ground. The comparison above is between-parameter and robust to the clamp (whose effect is on the mean above 84 months, far from the 24/48-month dispersion anchors), but a likelihood comparison is not, and is deferred until VG10's refit lands.
+
+**The widening A1 reports is an upper bound, for a reason this project has now measured.** A1 cannot represent children crossing, and [202608141600](202608141600-rank-stability-tracking.md) §10 rejects that constraint on the within-child evidence (freeing the intercept-slope correlation from 1 buys 6.28 on 1 df, p ~ 0.012, on the repeats-only production fit). Drift that the model has no way to express still has to go somewhere, and widening `tau(age)` is the only place left for it. **A1 therefore measures widening-plus-drift and reports the sum as widening** — which is precisely the argument for the child-slope relaxation planned in [202608141900](202608141900-child-slope-implementation-plan.md), where the two are separate parameters.
+
 **Proposal B — a difficulty-mixed link (interpretive; consumes a calibration).** Keep the Beta-Binomial entirely and change only the inverse link: `p = sum_k w_k * logistic(f - d_k)` with `w_k = n_k / 810` and `d_k` fixed from a calibration. Measured consequences, with `d_k = -logit(pooled stratum proportions) = (-0.71, +0.19, +1.08)` — an anchor that puts `f = 0` at the observed profile (`p = 0.398`) and therefore carries the checklist-weighted mean difficulty of +0.44 into every absolute `f`:
 
 | quantity                        | plain | mixed |
