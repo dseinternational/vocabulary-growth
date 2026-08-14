@@ -40,6 +40,7 @@ naive run hits. Distilled from the 2026-07-12 run
   before the first fit, not after. The old advice here ("~20 GB × n_models") was
   wrong by more than a factor of two, because a run fits far more _variants_ than
   models.
+- **Run `prepare_data.py` in any fresh checkout, worktree or clone before `pytest`.** `data/vocabulary.duckdb` and `data/vocab_data_merged.csv` are generated and gitignored, and the tests that read the real pool (the `dse_native_only` ones in `test_data_utils.py` and `test_joint_four_cell.py`) fail without them — with an error about the pool, not about a missing file, so it reads as a code regression. Hit while validating a merge in a `git worktree` on 2026-08-14.
 - `rep` config = 6 chains / 6000 tune / 6000 draws / `target_accept` 0.95. The number of parallel cores is chosen for the host and does not affect fit compatibility.
 - Publishing needs `DSERESEARCH_BLOB_CONTAINER_URL` **and** the right identity — see below.
 
