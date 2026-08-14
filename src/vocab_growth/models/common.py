@@ -47,6 +47,7 @@ import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import (
     CONVERGENCE_CAVEATS_FILENAME,
     CONVERGENCE_FAILURE_FILENAME,
@@ -1381,6 +1382,7 @@ def emit_monthly_summary(
     y_label: str = "Word count",
     dataframes: dict | None = None,
     plots: dict | None = None,
+    max_age_months: float | None = None,
 ):
     """Write the whole-month summary table and its expected-count figure.
 
@@ -1404,6 +1406,11 @@ def emit_monthly_summary(
         ci_prob=ci_prob,
         interval_kind=interval_kind,
     )
+    # One trim serves both artefacts. The table and the figure are built from
+    # this frame, so capping here is why they cannot disagree -- the same reason
+    # the frame is shared in the first place. See
+    # :mod:`vocab_growth.reporting_ages` for which cap each outcome takes.
+    monthly = posterior_analysis.trim_reported_ages(monthly, max_age_months)
     monthly.to_csv(os.path.join(output_dir, f"{stem}.csv"), index=False)
     if dataframes is not None:
         dataframes[stem] = monthly
@@ -1426,10 +1433,24 @@ def emit_monthly_summary(
     return monthly
 
 
-def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word count"):
+def run_standard_plots(
+    context: ModelFitContext,
+    *,
+    outcome_label: str = "Word count",
+    quantity: reporting_ages.ReportedQuantity | None = None,
+):
     """
     Run the standard set of posterior predictive plots for single-outcome models.
+
+    ``quantity`` says which outcome is being plotted, so every artefact below
+    stops where that outcome's evidence stops. It is optional only so an
+    engine that has not been told can still draw the full grid; the
+    single-outcome pipeline always passes it.
     """
+    max_age_months = (
+        None if quantity is None
+        else reporting_ages.max_age_for(context.model_config, quantity)
+    )
     plotting.plot_posterior_predictive_count_distributions_by_query_age(
         X_query=context.model_samples.X_query,
         y_query=context.model_samples.y_query,
@@ -1438,6 +1459,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_count_distributions",
         x_label=outcome_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_pmf(
@@ -1447,6 +1469,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_pmf",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_cdf(
@@ -1456,6 +1479,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_cdf",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1465,6 +1489,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.y_obs,
         output_dir=context.reporting.output_dir,
         filename="plot_posterior_predictive_median_trend",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1478,6 +1503,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="plot_posterior_predictive_median_trend_smoothed",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1487,6 +1513,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1500,6 +1527,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate_smoothed",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_kappa(
@@ -1511,6 +1539,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="posterior_kappa",
+        max_age_months=max_age_months,
     )
 
 
@@ -2085,7 +2114,11 @@ def fit_single_outcome_model(
             ("Posterior summary", posterior_summary),
             (
                 "Plots",
-                lambda ctx: run_standard_plots(ctx, outcome_label=outcome_label),
+                lambda ctx: run_standard_plots(
+                    ctx,
+                    outcome_label=outcome_label,
+                    quantity=reporting_ages.quantity_for_outcome(definition.outcome),
+                ),
             ),
             ("Report", report),
         ],

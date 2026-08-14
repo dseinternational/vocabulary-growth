@@ -56,7 +56,7 @@ from vocab_growth.models.common_bivariate import (
     sample,
     sample_posterior_predictive,
 )
-from vocab_growth.models.definitions import BivariateModelDefinition
+from vocab_growth.models.definitions import BivariateModelDefinition, clamp_targets
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.reporting import (
@@ -530,6 +530,12 @@ def build_model_re(
             L=L,
         )
 
+        # One flag, two means: see definitions.clamp_targets. 'q_only' is
+        # truthy, so testing the raw value would clamp both.
+        _clamp_u, _clamp_q = clamp_targets(
+            definition.clamp_mean_above_hi_anchor
+        )
+
         # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
         f_u_all = trend_and_gp(
             cfg_low=config.p_slope_low_u_dist,
@@ -543,7 +549,7 @@ def build_model_re(
             latent_name="f_u_all",
             anchor_idx=i_anchor if anchor_g_u else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_u,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -559,7 +565,7 @@ def build_model_re(
             latent_name="h_all",
             anchor_idx=i_anchor if anchor_g_q else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_q,
         )
 
         # ============================================================

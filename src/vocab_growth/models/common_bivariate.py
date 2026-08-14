@@ -32,6 +32,7 @@ import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.intervals as intervals
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -57,7 +58,7 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
-from vocab_growth.models.definitions import BivariateModelDefinition
+from vocab_growth.models.definitions import BivariateModelDefinition, clamp_targets
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.plotting import (
@@ -537,6 +538,12 @@ def build_model(
             L=L,
         )
 
+        # One flag, two means: see definitions.clamp_targets. 'q_only' is
+        # truthy, so testing the raw value would clamp both.
+        _clamp_u, _clamp_q = clamp_targets(
+            definition.clamp_mean_above_hi_anchor
+        )
+
         # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
         f_u_all = trend_and_gp(
             cfg_low=config.p_slope_low_u_dist,
@@ -548,7 +555,7 @@ def build_model(
             grid=gp_grid,
             store_deterministic=True,
             latent_name="f_u_all",
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_u,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -562,7 +569,7 @@ def build_model(
             grid=gp_grid,
             store_deterministic=True,
             latent_name="h_all",
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_q,
         )
 
         # ============================================================
@@ -1167,8 +1174,22 @@ def plot_understood_spoken_trajectory(
     n_trials: int,
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months_understood: float | None = None,
+    max_age_months_spoken: float | None = None,
 ):
-    """Plot both understood and spoken posterior predictive median trends on one figure."""
+    """Plot both understood and spoken posterior predictive median trends on one figure.
+
+    This figure carries **two** outcomes with different evidence, so it takes two
+    caps rather than one: understood stops at its comprehension cap and spoken at
+    its own, and each series is trimmed independently. A single
+    ``max_age_months`` could only have been the narrower of the two, which would
+    have thrown away the spoken tail the figure exists to show. See
+    :mod:`vocab_growth.reporting_ages`.
+
+    The companion CSV keeps one row per age out to the wider cap, and blanks the
+    understood columns beyond the narrower one — so a reader can see that
+    comprehension stops being reported rather than inferring it from a short row.
+    """
     X_plot = samples.X_plot
 
     outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
@@ -1183,24 +1204,31 @@ def plot_understood_spoken_trajectory(
     y_s_ci = intervals.bands(samples.y_s_plot, outer, "eti", sample_axis=1)
     y_s_ci50 = intervals.bands(samples.y_s_plot, inner, "eti", sample_axis=1)
 
+    ku = np.ones_like(X_plot, dtype=bool) if max_age_months_understood is None \
+        else X_plot <= max_age_months_understood
+    ks = np.ones_like(X_plot, dtype=bool) if max_age_months_spoken is None \
+        else X_plot <= max_age_months_spoken
+
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     # Understood bands
-    ax.fill_between(X_plot, y_u_ci[:, 0], y_u_ci[:, 1], alpha=0.15, color="C0")
-    ax.fill_between(X_plot, y_u_ci50[:, 0], y_u_ci50[:, 1], alpha=0.25, color="C0")
-    ax.plot(X_plot, y_u_median, lw=3, color="C0", label="Words understood (median)")
+    ax.fill_between(X_plot[ku], y_u_ci[ku, 0], y_u_ci[ku, 1], alpha=0.15, color="C0")
+    ax.fill_between(X_plot[ku], y_u_ci50[ku, 0], y_u_ci50[ku, 1], alpha=0.25, color="C0")
+    ax.plot(X_plot[ku], y_u_median[ku], lw=3, color="C0", label="Words understood (median)")
 
     # Spoken bands
-    ax.fill_between(X_plot, y_s_ci[:, 0], y_s_ci[:, 1], alpha=0.15, color="C1")
-    ax.fill_between(X_plot, y_s_ci50[:, 0], y_s_ci50[:, 1], alpha=0.25, color="C1")
-    ax.plot(X_plot, y_s_median, lw=3, color="C1", label="Words spoken (median)")
+    ax.fill_between(X_plot[ks], y_s_ci[ks, 0], y_s_ci[ks, 1], alpha=0.15, color="C1")
+    ax.fill_between(X_plot[ks], y_s_ci50[ks, 0], y_s_ci50[ks, 1], alpha=0.25, color="C1")
+    ax.plot(X_plot[ks], y_s_median[ks], lw=3, color="C1", label="Words spoken (median)")
 
-    # Observed data
+    # Observed data, each modality trimmed with its own curve.
     X_obs = samples.X_obs
-    u_mask = ~np.isnan(samples.y_u_obs)
+    u_cap = np.inf if max_age_months_understood is None else max_age_months_understood
+    s_cap = np.inf if max_age_months_spoken is None else max_age_months_spoken
+    u_mask = ~np.isnan(samples.y_u_obs) & (X_obs <= u_cap)
     if u_mask.any():
         ax.scatter(X_obs[u_mask], samples.y_u_obs[u_mask], s=10, alpha=0.2, color="C0")
-    s_mask = ~np.isnan(samples.y_s_obs)
+    s_mask = ~np.isnan(samples.y_s_obs) & (X_obs <= s_cap)
     if s_mask.any():
         ax.scatter(X_obs[s_mask], samples.y_s_obs[s_mask], s=10, alpha=0.2, color="C1")
 
@@ -1212,19 +1240,21 @@ def plot_understood_spoken_trajectory(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        blank_u = np.where(ku, 1.0, np.nan)
+        blank_s = np.where(ks, 1.0, np.nan)
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
-            "understood_median": y_u_median,
-            "understood_ci50_lo": y_u_ci50[:, 0],
-            "understood_ci50_hi": y_u_ci50[:, 1],
-            "understood_ci_lo": y_u_ci[:, 0],
-            "understood_ci_hi": y_u_ci[:, 1],
-            "spoken_median": y_s_median,
-            "spoken_ci50_lo": y_s_ci50[:, 0],
-            "spoken_ci50_hi": y_s_ci50[:, 1],
-            "spoken_ci_lo": y_s_ci[:, 0],
-            "spoken_ci_hi": y_s_ci[:, 1],
-        }), output_dir, filename)
+            "understood_median": y_u_median * blank_u,
+            "understood_ci50_lo": y_u_ci50[:, 0] * blank_u,
+            "understood_ci50_hi": y_u_ci50[:, 1] * blank_u,
+            "understood_ci_lo": y_u_ci[:, 0] * blank_u,
+            "understood_ci_hi": y_u_ci[:, 1] * blank_u,
+            "spoken_median": y_s_median * blank_s,
+            "spoken_ci50_lo": y_s_ci50[:, 0] * blank_s,
+            "spoken_ci50_hi": y_s_ci50[:, 1] * blank_s,
+            "spoken_ci_lo": y_s_ci[:, 0] * blank_s,
+            "spoken_ci_hi": y_s_ci[:, 1] * blank_s,
+        })[ku | ks], output_dir, filename)
 
     return fig
 
@@ -1234,16 +1264,26 @@ def plot_understood_spoken_trajectory_intervals(
     n_trials: int,
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months_understood: float | None = None,
+    max_age_months_spoken: float | None = None,
 ):
     """Plot understood and spoken posterior predictive medians with 50% and 89% equal-tailed intervals.
 
     The bands summarise the posterior predictive draws (``y_u_plot`` / ``y_s_plot``),
     not the mean trajectory, and are equal-tailed per the house convention in
     :mod:`vocab_growth.intervals` — counts are not on the HDI short-list.
+
+    Two caps, one per outcome, for the reason given in
+    :func:`plot_understood_spoken_trajectory`.
     """
     X_plot = samples.X_plot
     outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
     pct = int(round(outer * 100))
+
+    ku = np.ones_like(X_plot, dtype=bool) if max_age_months_understood is None \
+        else X_plot <= max_age_months_understood
+    ks = np.ones_like(X_plot, dtype=bool) if max_age_months_spoken is None \
+        else X_plot <= max_age_months_spoken
 
     # Understood bands (equal-tailed)
     y_u_median = np.median(samples.y_u_plot, axis=1)
@@ -1258,14 +1298,14 @@ def plot_understood_spoken_trajectory_intervals(
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     # Understood bands
-    ax.fill_between(X_plot, y_u_ci[:, 0], y_u_ci[:, 1], alpha=0.15, color="C0", label=f"Words understood ({pct}% interval)")
-    ax.fill_between(X_plot, y_u_ci50[:, 0], y_u_ci50[:, 1], alpha=0.25, color="C0", label="Words understood (50% interval)")
-    ax.plot(X_plot, y_u_median, lw=3, color="C0", label="Words understood (median)")
+    ax.fill_between(X_plot[ku], y_u_ci[ku, 0], y_u_ci[ku, 1], alpha=0.15, color="C0", label=f"Words understood ({pct}% interval)")
+    ax.fill_between(X_plot[ku], y_u_ci50[ku, 0], y_u_ci50[ku, 1], alpha=0.25, color="C0", label="Words understood (50% interval)")
+    ax.plot(X_plot[ku], y_u_median[ku], lw=3, color="C0", label="Words understood (median)")
 
     # Spoken bands
-    ax.fill_between(X_plot, y_s_ci[:, 0], y_s_ci[:, 1], alpha=0.15, color="C1", label=f"Words spoken ({pct}% interval)")
-    ax.fill_between(X_plot, y_s_ci50[:, 0], y_s_ci50[:, 1], alpha=0.25, color="C1", label="Words spoken (50% interval)")
-    ax.plot(X_plot, y_s_median, lw=3, color="C1", label="Words spoken (median)")
+    ax.fill_between(X_plot[ks], y_s_ci[ks, 0], y_s_ci[ks, 1], alpha=0.15, color="C1", label=f"Words spoken ({pct}% interval)")
+    ax.fill_between(X_plot[ks], y_s_ci50[ks, 0], y_s_ci50[ks, 1], alpha=0.25, color="C1", label="Words spoken (50% interval)")
+    ax.plot(X_plot[ks], y_s_median[ks], lw=3, color="C1", label="Words spoken (median)")
 
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Word count")
@@ -1275,19 +1315,21 @@ def plot_understood_spoken_trajectory_intervals(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        blank_u = np.where(ku, 1.0, np.nan)
+        blank_s = np.where(ks, 1.0, np.nan)
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
-            "understood_median": y_u_median,
-            "understood_ci50_lo": y_u_ci50[:, 0],
-            "understood_ci50_hi": y_u_ci50[:, 1],
-            "understood_ci_lo": y_u_ci[:, 0],
-            "understood_ci_hi": y_u_ci[:, 1],
-            "spoken_median": y_s_median,
-            "spoken_ci50_lo": y_s_ci50[:, 0],
-            "spoken_ci50_hi": y_s_ci50[:, 1],
-            "spoken_ci_lo": y_s_ci[:, 0],
-            "spoken_ci_hi": y_s_ci[:, 1],
-        }), output_dir, filename)
+            "understood_median": y_u_median * blank_u,
+            "understood_ci50_lo": y_u_ci50[:, 0] * blank_u,
+            "understood_ci50_hi": y_u_ci50[:, 1] * blank_u,
+            "understood_ci_lo": y_u_ci[:, 0] * blank_u,
+            "understood_ci_hi": y_u_ci[:, 1] * blank_u,
+            "spoken_median": y_s_median * blank_s,
+            "spoken_ci50_lo": y_s_ci50[:, 0] * blank_s,
+            "spoken_ci50_hi": y_s_ci50[:, 1] * blank_s,
+            "spoken_ci_lo": y_s_ci[:, 0] * blank_s,
+            "spoken_ci_hi": y_s_ci[:, 1] * blank_s,
+        })[ku | ks], output_dir, filename)
 
     return fig
 
@@ -1669,8 +1711,15 @@ def _run_bivariate_outcome_plots(
     suffix: str,
     outcome_label: str,
     y_label: str,
+    max_age_months: float | None = None,
 ):
-    """Run the standard per-outcome plotting pipeline for a bivariate model."""
+    """Run the standard per-outcome plotting pipeline for a bivariate model.
+
+    ``max_age_months`` is this outcome's reporting cap, resolved by the caller
+    from :mod:`vocab_growth.reporting_ages`. Every artefact below is a pure
+    function of one outcome, so they all take the same cap -- which is the point
+    of resolving it once here rather than at each call.
+    """
     emit_monthly_summary(
         output_dir=output_dir,
         X_plot=samples.X_plot,
@@ -1682,6 +1731,7 @@ def _run_bivariate_outcome_plots(
         suffix=suffix,
         outcome_label=outcome_label.lower(),
         y_label=y_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_count_distributions_by_query_age(
@@ -1692,6 +1742,7 @@ def _run_bivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_count_distributions_{suffix}",
         x_label=f"{outcome_label} (count)",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_pmf(
@@ -1702,6 +1753,7 @@ def _run_bivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_pmf_{suffix}",
         x_label=f"{outcome_label} (count)",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_cdf(
@@ -1712,6 +1764,7 @@ def _run_bivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_cdf_{suffix}",
         x_label=f"{outcome_label} (count)",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1722,6 +1775,7 @@ def _run_bivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_median_trend_{suffix}",
         y_label=y_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1736,6 +1790,7 @@ def _run_bivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_median_trend_{suffix}_smoothed",
         y_label=y_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1746,6 +1801,7 @@ def _run_bivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"expected_learning_rate_{suffix}",
         y_label=f"Estimated {outcome_label.lower()} gain per month",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1760,6 +1816,7 @@ def _run_bivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"expected_learning_rate_{suffix}_smoothed",
         y_label=f"Estimated {outcome_label.lower()} gain per month",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_kappa(
@@ -1771,6 +1828,7 @@ def _run_bivariate_outcome_plots(
         ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"posterior_kappa_{suffix}",
+        max_age_months=max_age_months,
     )
 
 
@@ -1791,6 +1849,12 @@ def _run_bivariate_joint_plots(
         n_trials=context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="joint_trajectory",
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
     )
     context.plots["joint_trajectory"] = fig
     plt.close(fig)
@@ -1802,6 +1866,12 @@ def _run_bivariate_joint_plots(
         n_trials=context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="joint_trajectory_intervals",
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
     )
     context.plots["joint_trajectory_intervals"] = fig
     plt.close(fig)
@@ -1910,6 +1980,9 @@ def _run_bivariate_joint_plots(
         suffix="u",
         outcome_label="Words understood",
         y_label="Predicted words understood",
+        max_age_months=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
     )
 
     # ---- Per-outcome plots: spoken ----
@@ -1930,6 +2003,9 @@ def _run_bivariate_joint_plots(
         suffix="s",
         outcome_label="Words spoken",
         y_label="Predicted words spoken",
+        max_age_months=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
     )
 
 

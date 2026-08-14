@@ -67,6 +67,7 @@ import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.intervals as intervals
 import vocab_growth.posterior_analysis as posterior_analysis
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -92,7 +93,7 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
-from vocab_growth.models.definitions import JointModelDefinition
+from vocab_growth.models.definitions import JointModelDefinition, clamp_targets
 from vocab_growth.models.gp_utils import (
     GPGrid,
     tent_and_gp,
@@ -140,6 +141,13 @@ PROD_CELL_COLUMNS = ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken
 # ============================================================
 # Dataclasses
 # ============================================================
+
+
+_QUANTITY_BY_SUFFIX = {
+    "u": reporting_ages.ReportedQuantity.UNDERSTOOD,
+    "s": reporting_ages.ReportedQuantity.SPOKEN,
+    "sign": reporting_ages.ReportedQuantity.SIGNED,
+}
 
 
 @dataclass
@@ -1088,6 +1096,12 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             dims=("obs_sign_id",),
         )
 
+        # One flag, two means: see definitions.clamp_targets. 'q_only' is
+        # truthy, so testing the raw value would clamp both.
+        _clamp_u, _clamp_q = clamp_targets(
+            definition.clamp_mean_above_hi_anchor
+        )
+
         # Latent full-grid trajectories (plain tensors), built by the shared
         # gp_utils helpers. Option D anchors each GP (per-draw zero at the
         # reference age) when the matching flag is set.
@@ -1110,7 +1124,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_u else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_u,
         )
         h_all = trend_and_gp(
             cfg_low=config.p_slope_low_q_dist,
@@ -1123,7 +1137,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_q else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_q,
         )
         # Signed marginal: three-anchor "tent" hump mean (young/peak/old) + GP; the
         # study random intercept delta_sign is added at obs level below. The GP is
@@ -1754,6 +1768,9 @@ def posterior_summary(context: JointContext):
             y_label=f"Expected {label}",
             dataframes=context.dataframes,
             plots=context.plots,
+            max_age_months=reporting_ages.max_age_for(
+                context.model_config, _QUANTITY_BY_SUFFIX[suffix]
+            ),
         )
 
     # Data-identified p_any vs independence (expected counts)

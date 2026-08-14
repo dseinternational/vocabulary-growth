@@ -138,6 +138,39 @@ class ModelType(Enum):
     JOINT = "joint"
 
 
+#: ``clamp_mean_above_hi_anchor`` value that levels off **only** the production
+#: ratio ``q``, leaving the understood mean free above the high anchor.
+CLAMP_Q_ONLY = "q_only"
+
+
+def clamp_targets(value: bool | str) -> tuple[bool, bool]:
+    """Return ``(clamp_understood, clamp_q)`` for a ``clamp_mean_above_hi_anchor``.
+
+    The flag started as a single boolean applied to both means. Measurement on
+    2026-08-14 showed the saturation it was added for is ``q``'s alone:
+    extrapolating VG10's own fitted anchors past the clamp gives ``q`` 0.996 at
+    115 months with ``P(mean > 0.99) = 0.999``, while the understood mean reaches
+    0.962 and **never** crosses 0.99 in any posterior draw. The unclamped DS
+    controls agree — VG01 and VG02 share this pool and these anchors with no
+    clamp, and neither saturates nor shows a corner at 84 months.
+
+    Because spoken is ``p_U(a) * q(a)``, clamping both means compounds: the
+    spoken trajectory inherits two levelled-off factors, which is what makes the
+    corner at 84 months so much sharper than either factor alone.
+
+    ``"q_only"`` is spelled as a string rather than added as a second boolean
+    field on purpose. ``fit_manifest.json`` fingerprints the definition with
+    ``asdict`` and compares it as whole-object equality, so a *new* field would
+    add a key to all fifteen models' definitions and invalidate every model of
+    record at once. Widening this field's domain leaves ``True``/``False``
+    serialising exactly as before, so only a definition that actually opts in
+    changes. See ``notes/202608141200-clamp-q-only.md``.
+    """
+    if value == CLAMP_Q_ONLY:
+        return False, True
+    return bool(value), bool(value)
+
+
 # ============================================================
 # Shared prior defaults (same default kappa shape reused by every model)
 # ============================================================
@@ -569,7 +602,12 @@ class BivariateModelDefinition:
     midpoint of slope_anchors."""
 
     # -- Mean extrapolation above the high anchor --
-    clamp_mean_above_hi_anchor: bool = False
+    clamp_mean_above_hi_anchor: bool | str = False
+    """Level the mean off above the high slope anchor instead of extrapolating.
+
+    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
+    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
+    rather than testing truthiness -- ``"q_only"`` is truthy."""
     """If True, level the logit-linear mean off above the high anchor age instead
     of extrapolating the line. The transition is a soft minimum, so the mean stays
     differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
@@ -764,7 +802,12 @@ class TrivariateModelDefinition:
     """Upper bound on age (inclusive, months) for data loading. None = no limit."""
 
     # -- Mean extrapolation above the high anchor --
-    clamp_mean_above_hi_anchor: bool = False
+    clamp_mean_above_hi_anchor: bool | str = False
+    """Level the mean off above the high slope anchor instead of extrapolating.
+
+    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
+    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
+    rather than testing truthiness -- ``"q_only"`` is truthy."""
     """If True, level the logit-linear mean off above the high anchor age instead
     of extrapolating the line. The transition is a soft minimum, so the mean stays
     differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
@@ -1021,7 +1064,12 @@ class JointModelDefinition:
     of slope_anchors."""
 
     # -- Mean extrapolation above the high anchor --
-    clamp_mean_above_hi_anchor: bool = False
+    clamp_mean_above_hi_anchor: bool | str = False
+    """Level the mean off above the high slope anchor instead of extrapolating.
+
+    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
+    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
+    rather than testing truthiness -- ``"q_only"`` is truthy."""
     """If True, level the logit-linear mean off above the high anchor age instead
     of extrapolating the line. The transition is a soft minimum, so the mean stays
     differentiable and the fitted curve inherits no elbow; a hard ``min`` made the

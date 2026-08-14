@@ -41,6 +41,7 @@ import dse_research_utils.environment.setup as setup
 import dse_research_utils.statistics.models.reporting as model_reporting
 import dse_research_utils.statistics.models.sampling as sampling
 
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
     FitValidationError,
@@ -262,7 +263,15 @@ def regenerate(model_id: str, config: str, dry_run: bool = False) -> bool:
         if plots_call == "definition":
             plots(context, definition)
         elif plots_call == "outcome_label":
-            plots(context, outcome_label=definition.outcome_label)
+            # The single-outcome stage also needs to know *which* outcome, or it
+            # redraws uncapped -- caught by tests/test_reporting_age_policy.py
+            # when VG02's pmf/cdf came back with a 90-month column against an
+            # 84-month cap.
+            plots(
+                context,
+                outcome_label=definition.outcome_label,
+                quantity=reporting_ages.quantity_for_outcome(definition.outcome),
+            )
         elif plots_call == "context":
             plots(context)
         else:

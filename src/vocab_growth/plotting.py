@@ -274,6 +274,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     filename: str | None = None,
     x_label: str = "Word count",
     count_axis_max: int | None = None,
+    max_age_months: float | None = None,
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts, as a histogram.
@@ -288,6 +289,17 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     own ISO A-landscape file ``{filename}_{age}m.{png,svg}`` and the summary
     table ``{filename}.csv`` (issue #123).
     """
+    # ``max_age_months`` drops query ages past the outcome's reporting cap. This
+    # grid is the one place the two came apart: ``ages_query`` runs to 90, so the
+    # understood panels were drawn at 90 while every other understood artefact
+    # stopped at 84. See :mod:`vocab_growth.reporting_ages`.
+    X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    y_query = np.asarray(y_query)
+    if max_age_months is not None:
+        keep = X_query <= max_age_months
+        X_query = X_query[keep]
+        y_query = y_query[keep, ...]
+
     nq = len(X_query)
     axis_max = n_trials if count_axis_max is None else count_axis_max
 
@@ -384,10 +396,19 @@ def plot_posterior_predictive_pmf(
     output_dir: str | None = None,
     filename: str | None = None,
     x_label: str = "Word count",
+    max_age_months: float | None = None,
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts as a PMF on a common support.
+
+    ``max_age_months`` drops query ages past the outcome's reporting cap. Age
+    lives in the *column names* here (``pmf_84m``), not in a column, so this
+    table is easy to miss when auditing which artefacts are capped — it was.
     """
+    X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    if max_age_months is not None:
+        X_query = X_query[X_query <= max_age_months]
+
     all_draws = []
     idxs = []
     for a in X_query:
@@ -445,7 +466,17 @@ def plot_posterior_predictive_cdf(
     output_dir: str | None = None,
     filename: str | None = None,
     x_label: str = "Words spoken (count)",
+    max_age_months: float | None = None,
 ) -> Figure:
+    """For each query age, plot the posterior predictive CDF of counts.
+
+    ``max_age_months`` drops query ages past the outcome's reporting cap; as in
+    :func:`plot_posterior_predictive_pmf`, age is carried in the column names.
+    """
+    X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    if max_age_months is not None:
+        X_query = X_query[X_query <= max_age_months]
+
     draws_by_age = []
     plot_idx_by_age = []
 
@@ -575,6 +606,7 @@ def plot_posterior_predictive_median_trend(
     output_dir: str | None = None,
     filename: str | None = None,
     y_label: str = "Predicted word count",
+    max_age_months: float | None = None,
 ):
     """
     Plot the posterior predictive distribution of counts as a function of age,
@@ -611,6 +643,18 @@ def plot_posterior_predictive_median_trend(
     y_plot = np.asarray(y_plot)
     x_obs = np.asarray(x_obs).reshape(-1)
     y_obs = np.asarray(y_obs).reshape(-1)
+
+    # Trim before smoothing, and trim the scattered observations with the curve.
+    # Leaving the points in place would run the x axis past the reported range
+    # and invite the trimmed curve to be read as a finding about the trajectory
+    # rather than as the edge of what is reported.
+    if max_age_months is not None:
+        keep = X_plot <= max_age_months
+        X_plot = X_plot[keep]
+        y_plot = y_plot[keep, :] if y_plot.ndim == 2 else y_plot[keep]
+        keep_obs = x_obs <= max_age_months
+        x_obs = x_obs[keep_obs]
+        y_obs = y_obs[keep_obs]
 
     if y_plot.ndim != 2:
         raise ValueError("y_plot must have shape (n_grid, n_samples).")
@@ -716,10 +760,16 @@ def plot_expected_learning_rate(
     savgol_polyorder: int = 3,
     smooth_intervals: bool = True,
     y_label: str = "Estimated word score gain per month",
+    max_age_months: float | None = None,
 ):
     """
     Plot the posterior distribution of the estimated learning rate
     (estimated gain in spoken words per month) across age.
+
+    ``max_age_months`` stops the curve where its outcome's evidence stops, and
+    is applied *before* smoothing so the Savitzky-Golay window cannot pull
+    values from beyond the cap back across it. See
+    :mod:`vocab_growth.reporting_ages`.
 
     The is the derivative of the conditional expectation of the count given the
     latent function f. The posterior uncertainty bands show how that estimated
@@ -765,6 +815,11 @@ def plot_expected_learning_rate(
     x_plot_values = np.asarray(X_plot, dtype=float).reshape(-1)
     # f_plot arrives as (n_plot, n_samples); transpose to (n_samples, n_plot)
     f_plot_values = np.asarray(f_plot).T
+
+    if max_age_months is not None:
+        keep = x_plot_values <= max_age_months
+        x_plot_values = x_plot_values[keep]
+        f_plot_values = f_plot_values[:, keep]
 
     if f_plot_values.shape[1] != x_plot_values.shape[0]:
         raise ValueError(
@@ -872,10 +927,16 @@ def plot_posterior_kappa(
     interval_kind: intervals.IntervalKind = "hdi",
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ) -> tuple[Figure, pd.DataFrame, pd.DataFrame]:
     """
     Plot the posterior distribution of κ(age) on the plot grid, and return
     summary DataFrames for both the plot grid and query ages.
+
+    ``max_age_months`` stops the curve where its outcome's evidence stops. κ is
+    the dispersion *of one outcome*, so it takes that outcome's cap -- see
+    :mod:`vocab_growth.reporting_ages`. It trims the query grid as well as the
+    plot grid, and the saved CSVs with the figure, so none of them can disagree.
 
     Parameters
     ----------
@@ -911,6 +972,14 @@ def plot_posterior_kappa(
     kappa_plot_samps = np.asarray(kappa_plot)
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
     kappa_query_samps = np.asarray(kappa_query)
+
+    if max_age_months is not None:
+        keep_plot = X_plot <= max_age_months
+        X_plot = X_plot[keep_plot]
+        kappa_plot_samps = kappa_plot_samps[keep_plot, :]
+        keep_query = X_query <= max_age_months
+        X_query = X_query[keep_query]
+        kappa_query_samps = kappa_query_samps[keep_query, :]
 
     inner = intervals.INNER_CI_PROB
     kind_label = "HDI" if interval_kind == "hdi" else "interval"

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import math
 
-from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.definitions import CLAMP_Q_ONLY, MODEL_REGISTRY
 from vocab_growth.sensitivity.overrides import make_variant
 
 # (model_key, variant_name) -> {"suffix": str, "scalar"?: dict, "kappa"?: dict}
@@ -244,6 +244,19 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_low_u_alpha": 1.0, "p_slope_low_u_beta": 10.0,
         "p_slope_hi_u_alpha": 1.1, "p_slope_hi_u_beta": 1.1}},
     ("vg10", "eta-u-narrow"): {"suffix": "eta-u-narrow", "scalar": {"eta_u_sigma": 0.4}},
+
+    # VG10 clamp scope. `clamp_mean_above_hi_anchor` levels BOTH the understood
+    # mean and `q` off above the 84 mo anchor, and because spoken is p_U * q the
+    # spoken trajectory inherits both — which is why its corner at 84 is far
+    # sharper than either factor's. The recorded justification is `q`'s
+    # saturation, and measurement says that is all it is: extrapolating VG10's
+    # own fitted anchors past the clamp gives q = 0.996 at 115 mo with
+    # P(mean > 0.99) = 0.999, while understood reaches 0.962 and never crosses
+    # 0.99 in any draw. This variant clamps `q` only, so the question "is
+    # clamping p_U doing necessary work?" is answered by a fit rather than by
+    # argument. See notes/202608141200-clamp-q-only.md.
+    ("vg10", "clamp-q-only"): {"suffix": "clamp-q-only", "scalar": {
+        "clamp_mean_above_hi_anchor": CLAMP_Q_ONLY}},
 
     # VG11 (TD spoken anchors, #138): revert the (norm-anchored) spoken band and eta.
     ("vg11", "anchor-broad"): {"suffix": "anchor-broad", "scalar": {

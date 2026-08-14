@@ -46,6 +46,7 @@ import vocab_growth.environment as local_env
 import vocab_growth.intervals as intervals
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -70,7 +71,7 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
-from vocab_growth.models.definitions import TrivariateModelDefinition
+from vocab_growth.models.definitions import TrivariateModelDefinition, clamp_targets
 from vocab_growth.models.gp_utils import (
     GPGrid,
     tent_and_gp,
@@ -658,6 +659,12 @@ def build_model(
             L=L,
         )
 
+        # One flag, two means: see definitions.clamp_targets. 'q_only' is
+        # truthy, so testing the raw value would clamp both.
+        _clamp_u, _clamp_q = clamp_targets(
+            definition.clamp_mean_above_hi_anchor
+        )
+
         # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
         f_u_all = trend_and_gp(
             cfg_low=config.p_slope_low_u_dist,
@@ -668,7 +675,7 @@ def build_model(
             X_all_z_data=X_all_z_data,
             grid=gp_grid,
             store_deterministic=False,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_u,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -681,7 +688,7 @@ def build_model(
             X_all_z_data=X_all_z_data,
             grid=gp_grid,
             store_deterministic=False,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_q,
         )
 
         # ---- Signed ratio: g_sign(a) -> r(a) = sigmoid(g_sign(a)) ----
@@ -1440,6 +1447,8 @@ def posterior_summary(context: TrivariateContext):
         ci_prob=ci_prob,
         interval_kind=ci_kind,
     )
+    # Signed reporting stops where signing evidence stops, like the r(a) table.
+    summary_sign = posterior_analysis.trim_reported_ages(summary_sign, report_max_sign)
     dataframe_table(
         summary_sign, title="Posterior summary — words signed", show_index=False
     )
@@ -1514,6 +1523,9 @@ def posterior_summary(context: TrivariateContext):
             "Ey_any_ci_hi": Ey_any_out[:, 1],
         }
     )
+    # p_any is p_U * (1 - (1 - r)(1 - q)) -- conditioned on understood, so it
+    # inherits the narrower signed/comprehension cap rather than spoken's.
+    summary_p_any = posterior_analysis.trim_reported_ages(summary_p_any, report_max_sign)
     dataframe_table(
         summary_p_any,
         title="Posterior summary — total expressive vocabulary p_any(a)",
@@ -1536,9 +1548,21 @@ def plot_understood_spoken_signed_trajectory(
     n_trials: int,
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months_understood: float | None = None,
+    max_age_months_spoken: float | None = None,
+    max_age_months_signed: float | None = None,
 ):
-    """Plot understood, spoken and signed posterior predictive median trends."""
+    """Plot understood, spoken and signed posterior predictive median trends.
+
+    Three outcomes with three different evidence bases, so three caps: each
+    series is trimmed independently and the companion CSV blanks each column
+    past its own cap. See :mod:`vocab_growth.reporting_ages`.
+    """
     X_plot = samples.X_plot
+    _all = np.ones_like(X_plot, dtype=bool)
+    ku = _all if max_age_months_understood is None else X_plot <= max_age_months_understood
+    ks = _all if max_age_months_spoken is None else X_plot <= max_age_months_spoken
+    ksg = _all if max_age_months_signed is None else X_plot <= max_age_months_signed
 
     outer, inner = intervals.DEFAULT_CI_PROB, intervals.INNER_CI_PROB
     y_u_median = np.quantile(samples.y_u_plot, 0.50, axis=1)
@@ -1555,17 +1579,17 @@ def plot_understood_spoken_signed_trajectory(
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    ax.fill_between(X_plot, y_u_ci[:, 0], y_u_ci[:, 1], alpha=0.12, color="C0")
-    ax.fill_between(X_plot, y_u_ci50[:, 0], y_u_ci50[:, 1], alpha=0.22, color="C0")
-    ax.plot(X_plot, y_u_median, lw=3, color="C0", label="Words understood (median)")
+    ax.fill_between(X_plot[ku], y_u_ci[ku, 0], y_u_ci[ku, 1], alpha=0.12, color="C0")
+    ax.fill_between(X_plot[ku], y_u_ci50[ku, 0], y_u_ci50[ku, 1], alpha=0.22, color="C0")
+    ax.plot(X_plot[ku], y_u_median[ku], lw=3, color="C0", label="Words understood (median)")
 
-    ax.fill_between(X_plot, y_s_ci[:, 0], y_s_ci[:, 1], alpha=0.12, color="C1")
-    ax.fill_between(X_plot, y_s_ci50[:, 0], y_s_ci50[:, 1], alpha=0.22, color="C1")
-    ax.plot(X_plot, y_s_median, lw=3, color="C1", label="Words spoken (median)")
+    ax.fill_between(X_plot[ks], y_s_ci[ks, 0], y_s_ci[ks, 1], alpha=0.12, color="C1")
+    ax.fill_between(X_plot[ks], y_s_ci50[ks, 0], y_s_ci50[ks, 1], alpha=0.22, color="C1")
+    ax.plot(X_plot[ks], y_s_median[ks], lw=3, color="C1", label="Words spoken (median)")
 
-    ax.fill_between(X_plot, y_sign_ci[:, 0], y_sign_ci[:, 1], alpha=0.12, color="C2")
-    ax.fill_between(X_plot, y_sign_ci50[:, 0], y_sign_ci50[:, 1], alpha=0.22, color="C2")
-    ax.plot(X_plot, y_sign_median, lw=3, color="C2", label="Words signed (median)")
+    ax.fill_between(X_plot[ksg], y_sign_ci[ksg, 0], y_sign_ci[ksg, 1], alpha=0.12, color="C2")
+    ax.fill_between(X_plot[ksg], y_sign_ci50[ksg, 0], y_sign_ci50[ksg, 1], alpha=0.22, color="C2")
+    ax.plot(X_plot[ksg], y_sign_median[ksg], lw=3, color="C2", label="Words signed (median)")
 
     # Observed data
     X_obs = samples.X_obs
@@ -1590,27 +1614,30 @@ def plot_understood_spoken_signed_trajectory(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+        _blank_ku = np.where(ku, 1.0, np.nan)
+        _blank_ks = np.where(ks, 1.0, np.nan)
+        _blank_ksg = np.where(ksg, 1.0, np.nan)
         _save_csv(
             pd.DataFrame(
                 {
                     "age_months": X_plot,
-                    "understood_median": y_u_median,
-                    "understood_ci50_lo": y_u_ci50[:, 0],
-                    "understood_ci50_hi": y_u_ci50[:, 1],
-                    "understood_ci_lo": y_u_ci[:, 0],
-                    "understood_ci_hi": y_u_ci[:, 1],
-                    "spoken_median": y_s_median,
-                    "spoken_ci50_lo": y_s_ci50[:, 0],
-                    "spoken_ci50_hi": y_s_ci50[:, 1],
-                    "spoken_ci_lo": y_s_ci[:, 0],
-                    "spoken_ci_hi": y_s_ci[:, 1],
-                    "signed_median": y_sign_median,
-                    "signed_ci50_lo": y_sign_ci50[:, 0],
-                    "signed_ci50_hi": y_sign_ci50[:, 1],
-                    "signed_ci_lo": y_sign_ci[:, 0],
-                    "signed_ci_hi": y_sign_ci[:, 1],
+                    "understood_median": y_u_median * _blank_ku,
+                    "understood_ci50_lo": y_u_ci50[:, 0] * _blank_ku,
+                    "understood_ci50_hi": y_u_ci50[:, 1] * _blank_ku,
+                    "understood_ci_lo": y_u_ci[:, 0] * _blank_ku,
+                    "understood_ci_hi": y_u_ci[:, 1] * _blank_ku,
+                    "spoken_median": y_s_median * _blank_ks,
+                    "spoken_ci50_lo": y_s_ci50[:, 0] * _blank_ks,
+                    "spoken_ci50_hi": y_s_ci50[:, 1] * _blank_ks,
+                    "spoken_ci_lo": y_s_ci[:, 0] * _blank_ks,
+                    "spoken_ci_hi": y_s_ci[:, 1] * _blank_ks,
+                    "signed_median": y_sign_median * _blank_ksg,
+                    "signed_ci50_lo": y_sign_ci50[:, 0] * _blank_ksg,
+                    "signed_ci50_hi": y_sign_ci50[:, 1] * _blank_ksg,
+                    "signed_ci_lo": y_sign_ci[:, 0] * _blank_ksg,
+                    "signed_ci_hi": y_sign_ci[:, 1] * _blank_ksg,
                 }
-            ),
+            )[ku | ks | ksg],
             output_dir,
             filename,
         )
@@ -1844,6 +1871,7 @@ def _run_trivariate_outcome_plots(
     suffix: str,
     outcome_label: str,
     y_label: str,
+    max_age_months: float | None = None,
 ):
     """Run the standard per-outcome plotting pipeline for a trivariate outcome."""
     emit_monthly_summary(
@@ -1857,6 +1885,7 @@ def _run_trivariate_outcome_plots(
         suffix=suffix,
         outcome_label=outcome_label.lower(),
         y_label=y_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_count_distributions_by_query_age(
@@ -1867,6 +1896,7 @@ def _run_trivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_count_distributions_{suffix}",
         x_label=f"{outcome_label} (count)",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_pmf(
@@ -1877,6 +1907,7 @@ def _run_trivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_pmf_{suffix}",
         x_label=f"{outcome_label} (count)",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_cdf(
@@ -1887,6 +1918,7 @@ def _run_trivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_cdf_{suffix}",
         x_label=f"{outcome_label} (count)",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1897,6 +1929,7 @@ def _run_trivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_median_trend_{suffix}",
         y_label=y_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1911,6 +1944,7 @@ def _run_trivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"posterior_predictive_median_trend_{suffix}_smoothed",
         y_label=y_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1921,6 +1955,7 @@ def _run_trivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"expected_learning_rate_{suffix}",
         y_label=f"Estimated {outcome_label.lower()} gain per month",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1935,6 +1970,7 @@ def _run_trivariate_outcome_plots(
         output_dir=output_dir,
         filename=f"expected_learning_rate_{suffix}_smoothed",
         y_label=f"Estimated {outcome_label.lower()} gain per month",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_kappa(
@@ -1946,6 +1982,7 @@ def _run_trivariate_outcome_plots(
         ci_prob=ci_prob,
         output_dir=output_dir,
         filename=f"posterior_kappa_{suffix}",
+        max_age_months=max_age_months,
     )
 
 
@@ -2103,7 +2140,19 @@ def _run_trivariate_plots(context: TrivariateContext):
 
     # ---- Joint trajectory (understood, spoken, signed) ----
     fig = plot_understood_spoken_signed_trajectory(
-        samples, n_trials=n_trials, output_dir=output_dir, filename="joint_trajectory"
+        samples,
+        n_trials=n_trials,
+        output_dir=output_dir,
+        filename="joint_trajectory",
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
+        max_age_months_signed=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SIGNED
+        ),
     )
     context.plots["joint_trajectory"] = fig
     plt.close(fig)
@@ -2191,6 +2240,9 @@ def _run_trivariate_plots(context: TrivariateContext):
         suffix="u",
         outcome_label="Words understood",
         y_label="Predicted words understood",
+        max_age_months=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
     )
 
     # ---- Per-outcome plots: spoken ----
@@ -2210,6 +2262,9 @@ def _run_trivariate_plots(context: TrivariateContext):
         suffix="s",
         outcome_label="Words spoken",
         y_label="Predicted words spoken",
+        max_age_months=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
     )
 
     # ---- Per-outcome plots: signed ----
@@ -2229,6 +2284,9 @@ def _run_trivariate_plots(context: TrivariateContext):
         suffix="sign",
         outcome_label="Words signed",
         y_label="Predicted words signed",
+        max_age_months=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SIGNED
+        ),
     )
 
 

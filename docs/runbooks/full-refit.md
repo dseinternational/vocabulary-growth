@@ -75,7 +75,7 @@ The failure is at least safe: validation runs for all models first, and the firs
 
 The old `us01-ceiling-excluded` variants **no longer exist** and `fit_sensitivity.py` raises `KeyError` for them: they excluded records that the Edgin audit established as invalid and that are now masked by default, so they could not fail (`notes/202607261245-edgin-duplicated-outcome-records.md` §§9–10, 13).
 
-They are replaced by the inverse. `us01-implausible-reinstated` puts the 22 masked spoken observations back and refits, answering what changes if the default exclusion is itself mistaken. This is not optional in a published refit: the source author no longer holds the original data files, so the exclusion can never be confirmed at source, and this pair is the only evidence a reader has for whether the headline joint trajectories depend on our judgement.
+They are replaced by the inverse. `us01-implausible-reinstated` puts the masked spoken observations back and refits, answering what changes if the default exclusion is itself mistaken. This is not optional in a published refit: the source author no longer holds the original data files, so the exclusion can never be confirmed at source, and this pair is the only evidence a reader has for whether the headline joint trajectories depend on our judgement.
 
 ```bash
 python scripts/fit_sensitivity.py vg10 us01-implausible-reinstated --config rep
@@ -84,7 +84,10 @@ python scripts/compare_sensitivity.py vg10 --variant us01-implausible-reinstated
 python scripts/compare_sensitivity.py vg15 --variant us01-implausible-reinstated
 ```
 
-Check the fit log's observation counts: each variant prints `us_01 implausible production reinstated` and it must read 22. A zero there means the variant has stopped biting and the comparison is worthless — treat it as a failure, not a pass. Note 22 rather than 30: the other 8 masked administrations stay masked under the independent duplicated-outcome rule, which has its own flag.
+Check the fit log's observation counts: each variant prints `us_01 implausible production reinstated` and it must read **11** against the current pool. A zero there means the variant has stopped biting and the comparison is worthless — treat it as a failure, not a pass.
+
+> [!NOTE]
+> **Re-pinned from 22 to 11 on 2026-08-14.** The old figure was correct when `us_01` came from the Wordbank by-child export; rebuilding it from the Edgin item-level contributor files changed which administrations trip the near-ceiling and longitudinal-collapse signatures. Verified three ways rather than assumed: `vg10` and `vg15` independently log 11; `vg10`'s frame goes from 1,428 spoken observations at baseline to 1,439 in the variant, exactly +11; and the loader confirms it directly — `include_implausible_production=True` takes `us_01` from 211 to 222 spoken observations, whole-pool 1,428 to 1,439. Row counts are unchanged at 230 either way, because the rule blanks the `spoken` value rather than dropping the row. The old note about "22 rather than 30, the other 8 under the duplicated-outcome rule" no longer describes the current pool and has been dropped; the duplicated-outcome rule is still independent and still has its own flag.
 
 ### The 810-item reference denominator
 
@@ -214,6 +217,33 @@ end of their logs, which reads convincingly as the cause and is not.
 > `oom-kill` scope teardown. So an OOM leaves the status file showing `START` with no
 > terminal line — indistinguishable from "still running" until you check `pgrep`.
 > Never infer success or liveness from the status file alone.
+
+### Reporting age caps, and what `regenerate_plots.py` can and cannot fix
+
+Every figure and table stops where its own outcome's evidence stops. The policy
+lives in `src/vocab_growth/reporting_ages.py` — understood **84**, spoken **90**,
+signed **84**, and anything conditioned on understood (`q`, `r`, `p_any`,
+comprehension gaps) **84**. Call sites name the _quantity_, not a cap attribute,
+because choosing the wrong attribute is a defect that has already shipped twice.
+
+> [!IMPORTANT]
+> **`regenerate_plots.py` re-runs the plot stage only.** Artefacts written by the
+> _summary_ stage cannot be refreshed without a refit. On 2026-08-14 that was the
+> difference between a policy change costing nothing and costing two fits: the
+> univariate and bivariate engines emit their monthly summaries inside the plot
+> stage, so twelve models were brought into line by regeneration alone, but VG14's
+> `posterior_summary_p_any` / `posterior_summary_sign` and VG15's
+> `posterior_summary_monthly_*` / `expected_counts_by_month_*` are summary-stage
+> and stayed stale. They are listed in `KNOWN_STALE` in
+> `tests/test_reporting_age_policy.py`; clear that list when those two are refit.
+
+Check the policy against **output**, not call sites. `tests/test_reporting_age_caps.py`
+walks the AST against a hand-written list of plot functions and so cannot see an
+artefact nobody thought to cap; `tests/test_reporting_age_policy.py` reads a
+fitted model's directory and checks every table. The second found sixteen
+uncapped artefacts the first had passed for months — including
+`posterior_predictive_pmf`/`_cdf`, which carry age in their **column names**
+(`pmf_90m`) rather than in a column, and which a filename audit missed as well.
 
 ### Do not edit tracked files while a fit is launching
 

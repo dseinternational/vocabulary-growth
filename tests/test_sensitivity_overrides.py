@@ -118,8 +118,18 @@ def test_registry_counts_and_models():
     # added, weakly identified parameter, the same condition that created
     # Target 8), and the `psi-drop-*` pair (psi's source composition, which both
     # inclusion flags advertise but nothing ran).
-    assert len(VARIANTS) == 49
-    assert len(variants_for("vg10")) == 12
+    #
+    # +1 on 2026-08-14: `clamp-q-only`. `clamp_mean_above_hi_anchor` levels BOTH
+    # the understood mean and `q` off above the 84 mo anchor, and spoken is
+    # p_U * q, so the spoken trajectory inherits both — the corner at 84 months
+    # is the sharpest feature of its whole trajectory. Measurement says the
+    # saturation the flag was added for is `q`'s alone: extrapolating VG10's own
+    # fitted anchors gives q = 0.996 at 115 mo with P(mean > 0.99) = 0.999,
+    # while understood reaches 0.962 and never crosses 0.99 in any draw. This
+    # variant makes that a fit rather than an argument. See
+    # notes/202608141200-clamp-q-only.md.
+    assert len(VARIANTS) == 50
+    assert len(variants_for("vg10")) == 13
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 1
