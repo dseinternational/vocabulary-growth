@@ -248,8 +248,14 @@ def report(population: str, outcome: str, n_boot: int, max_age: float | None = N
     lo, hi = icc_ci(d, max(100, n_boot // 3))
     print(f"  ICC (between-child share of adjusted variance) = {i:.3f}  [{lo:.3f}, {hi:.3f}]")
 
-    rel = reliability_bound(d)
-    print(f"  reliability (binomial upper bound)            = {rel:.3f}")
+    # Reliability must be measured on the SAME rows the pairs come from -- the
+    # repeated-measures children -- or rho/rel mixes two populations. Using the
+    # full set (singletons included) gave 0.865 against 0.853 here; small, but
+    # the decomposition below is only coherent on one of them.
+    rel = reliability_bound(rep_only)
+    print(f"  reliability (binomial upper bound, repeats)    = {rel:.3f}")
+    print(f"  variance: between-child {i:5.1%}  within {1 - i:5.1%} "
+          f"(measurement {1 - rel:5.1%}, occasion {(1 - i) - (1 - rel):+5.1%})")
 
     print(f"\n  {'lag (mo)':>10s} {'pairs':>7s} {'children':>9s} {'rho':>7s} "
           f"{'89% CI':>18s} {'rho/rel':>8s}")

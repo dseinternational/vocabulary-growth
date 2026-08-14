@@ -28,7 +28,7 @@ Three summaries, all with **cluster bootstrap** intervals over children, since c
 - **Lag-binned Spearman correlation** over all within-child pairs. A stable trait gives a flat curve; a drifting one decays.
 - **Quartile transitions**, the same thing in a readable form.
 
-`rho/rel` disattenuates for measurement error using a **binomial lower bound** on the error variance. Because that bound ignores the extra-binomial dispersion the models fit (`kappa`), it understates error and so under-corrects: treat it as a floor on true stability, not an estimate.
+`rho/rel` disattenuates for measurement error using a **binomial lower bound** on the error variance, computed on the **repeated-measures children only** — the rows the pairs come from. (An earlier version used the full set including singletons, giving 0.865 rather than 0.853 on DS spoken; small, but only one of the two makes the variance decomposition in §5 coherent.) Because the bound ignores the extra-binomial dispersion the models fit (`kappa`), it understates error and so under-corrects: treat it as a floor on true stability, not an estimate.
 
 ## 3. Result: tracking is substantial across the full Down syndrome age range
 
@@ -39,7 +39,7 @@ Three summaries, all with **cluster bootstrap** intervals over children, since c
 
 334 children contribute repeated spoken measures and 253 repeated comprehension measures.
 
-In readable terms, over a median gap of ~12 months: **half stay in the same quartile, 86–87% stay within one quartile**, and movement from bottom to top is rare — 5 of 334 on spoken, 4 of 253 on comprehension.
+In readable terms, comparing each child's **first and last** observation — a median span of 12 months on spoken and 11 on comprehension — **half stay in the same quartile, 86–87% stay within one quartile**, and movement from bottom to top is rare: 5 of 334 on spoken, 4 of 253 on comprehension. (The lag-binned correlations below are over _all_ within-child pairs, whose median gap is 7 months.)
 
 Correlations hold at roughly 0.65–0.72 out to two years and then **fall sharply beyond two years** (0.238 on spoken, n = 59 children). Whether that is genuine divergence or accumulated noise cannot be separated here.
 
@@ -66,9 +66,22 @@ Age-matched, **DS spoken tracking decays faster than TD spoken**, and by 12–24
 
 ## 5. Why young DS spoken tracking collapses: it is a floor effect
 
-The reliability bound explains it. For DS spoken at ≤30 months it is **0.588**, against 0.87–0.97 everywhere else — by far the lowest in the analysis. At those ages DS spoken counts are tiny (VG10 puts the expected count at 24 months at about 6 words), so a difference of two or three words moves a child several quartiles. The disattenuated 1–6 month correlation hits the 1.0 cap, which is the signature of noise rather than instability.
+The reliability bound explains it. For DS spoken at ≤30 months it is **0.571**, against 0.85–0.98 everywhere else — by far the lowest in the analysis. At those ages DS spoken counts are tiny — the observed median at 22–26 months is **9 words, IQR 4–21** — so a difference of two or three words moves a child across quartiles. (An observed figure is quoted rather than VG10's fitted mean because VG10 was being refit as this was written.) The disattenuated 1–6 month correlation hits the 1.0 cap, which is the signature of noise rather than instability.
 
 So the finding is **not** that young children with Down syndrome have unstable expressive ability. It is that **spoken-word counts are too small at those ages to measure standing reliably**. Comprehension in the same window tracks well (ICC 0.858, correlations 0.79/0.77), because the counts are large enough to carry information.
+
+Splitting the adjusted variance three ways makes it explicit. "Occasion" is the remainder after between-child variation and the binomial measurement bound, i.e. genuine occasion-to-occasion movement:
+
+| pool              | between-child (`tau_subj`) | within-child | of which measurement |   occasion |
+| ----------------- | -------------------------: | -----------: | -------------------: | ---------: |
+| DS spoken         |                      80.6% |        19.4% |                14.7% |      +4.7% |
+| DS understood     |                      78.6% |        21.4% |                 3.4% |     +18.0% |
+| **DS spoken ≤30** |                      71.0% |        29.0% |            **42.9%** | **−13.9%** |
+| DS understood ≤30 |                      85.8% |        14.2% |                 5.3% |      +8.9% |
+| TD spoken         |                      74.8% |        25.2% |                 5.0% |     +20.2% |
+| TD understood     |                      87.1% |        12.9% |                 2.0% |     +11.0% |
+
+The `DS spoken ≤30` row is **incoherent, and that is the result**: the measurement bound (42.9%) exceeds the entire within-child variance (29.0%), so the occasion share goes negative. A negative share is impossible, so at those ages either the ICC or the error bound is overstated — most likely both, since with a median of 9 spoken words the logit approximation underlying each is straining. The honest conclusion is that the between-child signal and the sampling noise **cannot be separated at all** in that regime.
 
 That has a direct practical reading: **before about 30 months, an expressive-vocabulary count is a poor basis for judging a child's relative position; a comprehension measure is far better.**
 
@@ -88,6 +101,32 @@ Two figures quoted from an ad-hoc version of this analysis earlier on 2026-08-14
 - **ρ ≈ 0.65 is a population tendency, not a prediction for an individual.** Roughly half of children change quartile over a year.
 - The 24–60 month DS bin rests on 59 children, and the ≤30-month 12–24 bin on 23. Both are thin.
 
-## 8. What would strengthen it
+## 8. What this says about Proposal A1
 
-A within-child model with an age-varying random effect — a random slope, or a latent AR(1) — would estimate drift directly rather than inferring it from binned correlations, and would handle the unbalanced designs properly. Note that this analysis also bears on **A1** in [202607261540](202607261540-item-difficulty-and-the-aggregate-likelihood.md): the constant `tau_subj` the models assume is a good approximation out to about two years and demonstrably poor for young DS spoken counts, where the reliability floor dominates.
+[202607261540](202607261540-item-difficulty-and-the-aggregate-likelihood.md) §9 proposes **A1**: make `tau_subj_*` age-varying and hold `kappa` constant, so "does the spread between children widen with age?" is asked of the parameter that can answer it. Its stated structural caveat is that scaling a single per-child offset by `tau(age)` "imposes perfect rank correlation of children across age — children never cross".
+
+**That caveat was a logical property; this note makes it a measured quantity.** Perfect rank correlation is exactly what the lag-binned Spearman estimates:
+
+| interval | observed ρ | disattenuated | A1 assumes |
+| -------- | ---------: | ------------: | ---------: |
+| 1–6 mo   |      0.704 |         0.825 |       1.00 |
+| 6–12 mo  |      0.656 |         0.770 |       1.00 |
+| 12–24 mo |      0.643 |         0.753 |       1.00 |
+| 24–60 mo |  **0.238** |     **0.279** |       1.00 |
+
+Three consequences.
+
+**The assumption is workable to about two years and fails beyond.** Roughly 0.75–0.83 disattenuated against an assumed 1.0 up to 24 months; 0.28 beyond. Since the median within-child gap is 7 months, A1's fan shape is a fair approximation over the span children are actually observed, and a poor one over the 8–115 month range the models report on.
+
+**It applies to the models of record too, not only to A1.** A constant `tau_subj` is A1 with `tau(age)` flat, so it imposes the _same_ perfect rank correlation. What changes is that the assumption now has a number against it.
+
+**A1's identification warning can be located.** The note warns that `tau_subj` and `kappa` are "two names for the same deviation" for a singleton child. §5's decomposition shows where that becomes fatal rather than merely awkward: on DS spoken at ≤30 months the measurement bound exceeds the whole within-child variance. So A1's required parameter-recovery run should be designed at **young ages on production specifically** — a recovery whose truth sits where counts are large will succeed and prove nothing — and comprehension and production should be scored separately, since their measurement shares differ by an order of magnitude (3.4% against 14.7% overall; 5.3% against 42.9% at ≤30 months).
+
+Finally, the relaxations the note names as future work — random slopes, or a child-level longitudinal function — are what the 24–60 month decay calls for. A1 cannot represent crossing at all, so if the widening it finds is real, some of it may be drift the model has nowhere else to put.
+
+> [!NOTE]
+> **Frames do not match, deliberately.** The item-difficulty note's fitted frame has 832 children, 460 singletons and 372 with repeats. This note's tracking sets are per outcome and differently masked: 767 children with 334 repeats on spoken, 610 with 253 on comprehension. Do not equate 372 with 334 or 253.
+
+## 9. What would strengthen it
+
+A within-child model with an age-varying random effect — a random slope, or a latent AR(1) — would estimate drift directly rather than inferring it from binned correlations, and would handle the unbalanced designs properly.
