@@ -178,20 +178,31 @@ def check_fitted_dispersion(output_root: Path) -> None:
 
     summary = pd.read_csv(vg10 / "posterior_summary_u.csv")
     p_fit = np.array([summary.loc[(summary["age_months"] - a).abs().idxmin(), "p_median"] for a in ages])
-    check("fitted p at 12/24/30/48/66", p_fit, [0.028, 0.146, 0.227, 0.379, 0.526], tol=0.0005)
+    check("fitted p at 12/24/30/48/66", p_fit, [0.0201, 0.1391, 0.2156, 0.3814, 0.5392], tol=0.0005)
 
     kappa_tab = pd.read_csv(vg10 / "posterior_kappa_u.csv")
     kappa = np.array([kappa_tab.loc[(kappa_tab["age_months"] - a).abs().idxmin(), "kappa_median"] for a in ages])
-    check("fitted kappa (posterior_kappa_u medians)", kappa, [39.77, 29.64, 25.66, 16.97, 11.68], tol=0.02)
+    check("fitted kappa (posterior_kappa_u medians)", kappa, [109.66, 65.20, 50.55, 24.65, 13.38], tol=0.02)
 
     diagnostics = pd.read_csv(vg10 / "diagnostics.csv", index_col=0)
     tau_subj = float(diagnostics.loc["tau_subj_u", "mean"])
-    check("tau_subj_u posterior mean", tau_subj, 0.754, tol=0.0005)
+    check("tau_subj_u posterior mean", tau_subj, 0.796, tol=0.0005)
 
     residual_sd = 1 / np.sqrt(p_fit * (1 - p_fit) * (kappa + 1))
-    check("implied residual latent SD", residual_sd, [0.956, 0.512, 0.462, 0.486, 0.562], tol=0.002)
-    check("total latent SD with tau_subj_u", np.sqrt(tau_subj**2 + residual_sd**2), [1.218, 0.911, 0.884, 0.897, 0.941], tol=0.002)
+    check("implied residual latent SD", residual_sd, [0.678, 0.355, 0.339, 0.407, 0.529], tol=0.002)
+    check("total latent SD with tau_subj_u", np.sqrt(tau_subj**2 + residual_sd**2), [1.046, 0.872, 0.865, 0.894, 0.956], tol=0.002)
 
+    # DELIBERATELY NOT RE-PINNED (2026-08-14). These four, and the §3.3 kernel
+    # shares below, are not measurements the note reports -- they *are* its
+    # argument, and the refit moved them far enough to change how strongly it
+    # reads. The ratio goes 0.52 -> 0.80, so the decline in kappa now tracks the
+    # constant-spread prediction much more closely than the note's reading of it
+    # allows. Re-pinning these to the new values would silently convert a
+    # weakened conclusion into a passing check, which is the failure mode this
+    # whole script exists to prevent. They stay failing until the study owner has
+    # ruled on the prose in §§3.3 and 4. The frame counts and the fitted p/kappa
+    # /tau they derive from were re-pinned in the same pass, because those are
+    # measurements and their movement is just the larger pool.
     decline_kp1 = np.log((kappa[0] + 1) / (kappa[-1] + 1))
     predicted = np.log((p_fit[-1] * (1 - p_fit[-1])) / (p_fit[0] * (1 - p_fit[0])))
     check("log decline in kappa+1", decline_kp1, 1.168, tol=0.005)
@@ -280,7 +291,7 @@ def check_frame_counts(merged: pd.DataFrame) -> None:
     print("§9 and §10 — frame counts and the Edgin anchor")
     with_age = merged.dropna(subset=["age"])
     raw_pairs = with_age.groupby(["study", "subject_id"]).size()
-    check("raw view: observations / children / singletons / repeated", [len(with_age), len(raw_pairs), (raw_pairs == 1).sum(), (raw_pairs > 1).sum()], [1219, 626, 235, 391])
+    check("raw view: observations / children / singletons / repeated", [len(with_age), len(raw_pairs), (raw_pairs == 1).sum(), (raw_pairs > 1).sum()], [1636, 845, 413, 432])
 
     fitted = with_age.copy()
     outcome_cols = ["understood", "spoken", "signed", "produced"]
@@ -288,7 +299,7 @@ def check_frame_counts(merged: pd.DataFrame) -> None:
     fitted.loc[masked, outcome_cols] = np.nan
     fitted = fitted[~fitted[outcome_cols].isna().all(axis=1)]
     fit_pairs = fitted.groupby(["study", "subject_id"]).size()
-    check("fitted frame: children / singletons / repeated", [len(fit_pairs), (fit_pairs == 1).sum(), (fit_pairs > 1).sum()], [613, 282, 331])
+    check("fitted frame: children / singletons / repeated", [len(fit_pairs), (fit_pairs == 1).sum(), (fit_pairs > 1).sum()], [832, 460, 372])
 
     # The note's understood-pool figures (§8 item 3, §12 item 6) are counted
     # through the loader itself: two earlier hand-derived versions of these
@@ -302,7 +313,7 @@ def check_frame_counts(merged: pd.DataFrame) -> None:
     else:
         understood = pool[pool["understood"].notna()]
         native = understood[understood["survey_vocab_max"] == 810]
-        check("understood observations after all masking", len(understood), 671)
+        check("understood observations after all masking", len(understood), 987)
         check(
             "dse-native understood observations / children / sources",
             [len(native), native["subject_id"].nunique(), native["study"].nunique()],
@@ -310,7 +321,7 @@ def check_frame_counts(merged: pd.DataFrame) -> None:
         )
 
     us_01 = merged[merged["study"] == "us_01"]
-    check("us_01 rows / children / rows with comprehension", [len(us_01), us_01["subject_id"].nunique(), int(us_01["understood"].notna().sum())], [196, 119, 87])
+    check("us_01 rows / children / rows with comprehension", [len(us_01), us_01["subject_id"].nunique(), int(us_01["understood"].notna().sum())], [345, 122, 174])
 
 
 def check_imitation_decomposition(ie: pd.DataFrame) -> None:
