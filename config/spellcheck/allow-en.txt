@@ -90,6 +90,9 @@ dataclass
 datatree
 deterministics
 dexp
+disattenuated
+disattenuates
+disattenuation
 disclosable
 docstrings
 dseresearch
@@ -149,6 +152,7 @@ reparameterised
 reparameterising
 rescore
 rescoring
+residualised
 resumable
 reweighting
 rhat
