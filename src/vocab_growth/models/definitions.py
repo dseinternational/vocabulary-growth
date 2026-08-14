@@ -1189,9 +1189,12 @@ class JointModelDefinition:
     expressive vocabulary (30-300 words) it is 1.05 against 4.80 and 9.68. On the
     conditioning-free share-also-spoken measure it is the low end of a continuous
     gradient rather than categorically apart. Either way the spread across sources
-    is large, plausibly reflecting whether signing was taught alongside speech —
-    both UK sources come from contexts where it is, and uk_07 is an intervention
-    trial — though four studies cannot test that.
+    is large and its cause is not identified. Signing instruction is the obvious
+    candidate, but no source records whether its children were taught to sign, so
+    that contrast is background assumption rather than measurement; and uk_07, the
+    one source with experimental variation in instruction, carries the *higher*
+    association in its control arm (17.93 against 11.65), which cuts against the
+    mechanism rather than for it. Treat the spread as unexplained.
 
     That heterogeneity was disqualifying only because **``psi`` was the only latent
     in this model with no study-level term.** ``delta_u``, ``delta_q`` and ``delta_sign``

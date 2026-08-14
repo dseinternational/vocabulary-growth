@@ -62,7 +62,7 @@ By the study's own matching stratum, both groups start in strong substitution an
 | 6        | 0.88 | 3.53 |
 | 7        | 0.80 | 1.48 |
 
-TD climbs to 2.6–3.5; DS plateaus near 1 and never converges. (Sparse 2×2 tables bias odds ratios toward 0, so the lowest levels overstate the floor.) The substantive reading is that TD children gesture words they are also learning to say, while DS children — who have a specific expressive-speech deficit relative to comprehension — gesture what they _cannot_ say. Where signing is **taught** as sign-and-say pairs, as it is in the UK and New Zealand, both modalities land on the same words by construction.
+TD climbs to 2.6–3.5; DS plateaus near 1 and never converges. (Sparse 2×2 tables bias odds ratios toward 0, so the lowest levels overstate the floor.) One reading is that TD children gesture words they are also learning to say, while DS children — who have a specific expressive-speech deficit relative to comprehension — gesture what they cannot yet say; another is that where signing is taught as sign-and-say pairs both modalities land on the same words by construction. **Neither is evidenced here.** No source in this pool records whether its children were taught to sign, so the teaching contrast is background assumption rather than measurement, and the pooled es_01 figure (0.90, with 45% of children individually below 1) is independence rather than the substitution the first reading implies. What is measured is that es_01's DS and TD groups differ on the identical instrument — which excludes instrument, language and country, but does not identify what differs.
 
 ### It is not uk_07's intervention
 
@@ -138,7 +138,7 @@ Against expressive vocabulary the study-specific slopes are large, individually 
 | DS          | −0.096                         | −0.80 |
 | TD          | −0.109                         | −0.94 |
 
-So `es_01`'s apparent fall was the circularity. The taught-sign side cannot be tested this way — neither `uk_02` nor `uk_07` carries an external developmental measure in its CSV.
+So `es_01`'s apparent fall was the circularity. The high-association sources cannot be tested this way — neither `uk_02` nor `uk_07` carries an external developmental measure in its CSV.
 
 **This is the open question, and it is cheap to close.** `uk_07`'s UK Data Service deposit holds Mullen Scales visual-reception and fine-motor age equivalents at all three assessment points (`T{1,2,3}MullenCombinedAE`); they were simply not extracted, since only the CDI, age, sex and arm were carried across. Extracting them and re-running §5 would establish whether uk_07's +0.731 survives a covariate external to the cells. If it does, a level-varying $\psi$ with **study-specific slopes** is worth building — not age, and not a shared trend. If it does not, the study-varying scalar is the right stopping point.
 
@@ -169,4 +169,4 @@ With four groups `tau_psi` is weakly identified and the prior does real work. **
 - [ ] Extract `uk_07`'s Mullen age equivalents upstream and re-run §5 (the deciding evidence for a level-varying $\psi$).
 - [ ] Refit VG15 at `rep` — the graph changed; no other model reads this engine.
 - [ ] `docs/models/vg15/index.qmd` still says $\psi$ is identified by "~60 uk_02 rows" and calls it a single scalar. Both are now wrong.
-- [ ] Consider whether the substantive reading — that $\psi$ marks whether the non-vocal lexicon was _taught alongside_ speech or arose _as compensation for its absence_ — belongs in the report's discussion. It is the most interpretable thing this parameter has produced, and it is a claim about practice that the data support but cannot prove.
+- [ ] Decide how the between-source spread is described in the report's discussion. The tempting reading — that $\psi$ marks whether the non-vocal lexicon was _taught alongside_ speech or arose _as compensation for its absence_ — is **not supported by anything measured here** and should not be stated as a finding. No source records its children's signing instruction, so the teaching contrast rests on assumed background practice; and `uk_07`, the one source with experimental variation in instruction, has the **higher** association in its _control_ arm (17.93 against 11.65, §3), which cuts against the mechanism rather than for it. If the reading appears at all it must be labelled a hypothesis, with the arm contrast disclosed beside it. Closing §5's Mullen extraction is the cheapest route to evidence that would bear on it.
