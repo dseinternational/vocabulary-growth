@@ -151,20 +151,17 @@ sudo sysctl -w vm.swappiness=10   # backstop only, not a working store
 Put it on the scratch NVMe, not the 29 GB root. Deliberately **not** added to
 `/etc/fstab`: it is a per-run measure, and a run does not survive a reboot anyway.
 
-**2. Size the models by their peak, not their steady state.** This is the trap.
-`vg13` sampled for seven hours at a steady ~120 GB and then took **+100 GB in 90
-seconds** in the post-sampling assembly step (InferenceData construction, stored
-`log_likelihood`, the observation-sized deterministics), peaking at **232 GB anon-RSS**:
+**2. Peaks are not predictable from plateaus, and plateaus are not stable between runs.** This is the trap, and the 2026-08-14 rerun sharpened it.
 
-```
-22:50:29 used_GB=143   22:51:29 used_GB=192   22:52:29 used_GB=244  → killed
-22:50:59 used_GB=164   22:51:59 used_GB=220
-```
+`vg13` was killed at **232 GB** on 2026-08-13 after seven hours. Re-run on 2026-08-14 with an identical configuration, it plateaued at **178 GB** rather than the previous ~120 GB and peaked at **243 GB** — higher than the figure that had killed it — before completing in 337 minutes. Same commit, same data, same tune/draws/chains.
 
-A fit that has looked comfortable all night can still die at the last step, and
-there is no resume — the whole fit is lost. Budget headroom of roughly **2× the
-observed sampling plateau**. The historical "`vg11` peaks at 157 GB" figure is a
-plateau measurement and should not be read as a peak.
+So do **not** budget from a remembered plateau, and do not trust a "peak ≈ 2× plateau" rule; both numbers moved by ~50% between two runs of the same fit. What actually kept it alive was structural, and all three parts were needed:
+
+- **Swap existed.** The 2026-08-13 kill happened with `Total swap = 0kB`.
+- **Scopes were separate and capped**, so the co-tenants could be shed as one unit.
+- **Someone was watching per-process RSS and shed load.** At 13:31 the box had 39 GB available with `vg13` at 178 GB and a capped DS batch holding 29 GB; stopping that batch immediately preceded `vg13` reaching 243 GB with room to spare.
+
+The practical rule is therefore about _headroom and reversibility_, not about a target number: keep a memory-heavy TD fit as the only significant tenant, keep everything else in a scope you can stop in one command, and watch it. Anything co-scheduled with `vg11`/`vg12`/`vg13` should be work you are willing to throw away.
 
 **3. Give every job its own systemd scope.** This is what turned one lost fit into
 four. All jobs were launched inside one tmux window, so they shared a single systemd
