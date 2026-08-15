@@ -91,6 +91,23 @@ The artefacts were produced by [`scripts/resume_from_trace.py`](../scripts/resum
 
 **What would retire the exception:** `g_unit_hsgp_coeffs[4]` needs roughly double its 1,139 ESS to land under 1.01, so a refit at about twice the draws. More _chains_ would buy the same ESS at the same wall-clock, but twelve will not fit in 251 GB — §3.1's peak was 246 GB with six.
 
+### 5b. `vg11 / anchor-broad` fails the gate, and is accepted as an informative negative
+
+The #147 Target 8 variant `vg11 / anchor-broad` widens both `q`-anchor priors — `p_slope_low` from `Beta(1, 30)` to `Beta(1, 15)` and `p_slope_hi` from `Beta(1.3, 1.3)` to `Beta(1.5, 1.1)`. At `rep` on 2026-08-15 it **failed the convergence gate**:
+
+|                |         model of record |               `anchor-broad` |
+| -------------- | ----------------------: | ---------------------------: |
+| divergences    |                      16 |                       **60** |
+| max R-hat      |                  1.0125 |                   **1.0136** |
+| min ESS        |                   1,139 |                          853 |
+| R-hat failures | `g_unit_hsgp_coeffs[4]` | **`ell_unit`, `eta`, `ell`** |
+
+**The failure is interpretable, and it is the answer the variant was asking for.** The failing parameters are the GP length-scale and amplitude, and the divergence count nearly quadruples. That is the TD hierarchical geometry of [202608050900](202608050900-td-hierarchical-geometry.md) — the ridge between the GP and the explicit logit-linear trend — made worse. The anchor priors are what hold the trajectory against that trend, so loosening them loosens the constraint that keeps the ridge tractable. Note the contrast with the model of record's own failure, which is a single HSGP basis coefficient (a nuisance direction, §5a); here it is the GP's own scale parameters.
+
+**Decision, 2026-08-15: accepted as an informative negative, not refitted at `rep-hightune`.** A robustness variant that cannot be sampled is not evidence that the model of record is fragile — it is evidence that this prior widening is not a viable specification for this model. Refitting at a higher tuning budget could well make it sample, but [202608020829](202608020829-kappa-and-eta-q-prior-recalibration.md) §16 already records that more tuning **masks** this geometry rather than removing it, so a `hightune` pass would buy a number whose meaning is worse, not better. The robustness matrix should therefore carry it as a **non-converged variant with its reason**, and never as a blank.
+
+The retained trace was compacted from 43.6 to 4.5 GiB after the fit, to keep disk headroom for the two variants behind it (§3.2 is why that mattered). Every free parameter and all of `sample_stats` survive, so the post-mortem above is unaffected — but note that failed fits are pinned to `full` by design (`common.py`, "a post-mortem should not have to work around a storage policy"), and `scripts/compact_traces.py` scans only `output/models/`, so the project's own ENOSPC recovery path cannot currently reach the largest traces it keeps.
+
 ## 6. State at the time of writing
 
 **Complete:** VG01–VG05, VG07 (13 Aug); VG03, VG04, VG13, VG12 (TD); VG08, VG09, VG15 under `CLAMP_Q_ONLY`; the `us01-implausible-reinstated`, `dse-native-only`, `tau-psi-*` and `psi-drop-*` sensitivity variants; VG10's `a1-tau-age-varying`.
