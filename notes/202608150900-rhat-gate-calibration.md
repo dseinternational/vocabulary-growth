@@ -14,7 +14,7 @@ The convergence gate fails closed when **any** sampled parameter exceeds R-hat 1
 2. **Inconsistency with the project's own ESS floor.** R-hat's sampling error shrinks with effective sample size, so a fixed R-hat threshold implies a minimum ESS. If that implied minimum is far above the explicit `ESS >= 400` gate, the two halves of the same gate disagree.
 3. **Reparameterisation.** R-hat on internal parameters is not invariant — the same posterior written centred or non-centred has different parameters with different R-hat — whereas the reported estimands are invariant.
 
-Worth stating at the outset: **the threshold itself is not unusual.** 1.01 is the Vehtari et al. (2021) recommendation, adopted across the field precisely because the older 1.1 convention was lax enough to pass visibly unconverged chains. Nothing here argues for a looser number. The question is only whether the *rule built on it* — a maximum over every sampled parameter — behaves.
+Worth stating at the outset: **the threshold itself is not unusual.** 1.01 is the Vehtari et al. (2021) recommendation, adopted across the field precisely because the older 1.1 convention was lax enough to pass visibly unconverged chains. Nothing here argues for a looser number. The question is only whether the _rule built on it_ — a maximum over every sampled parameter — behaves.
 
 ## 2. Method
 
@@ -37,15 +37,15 @@ And the quantity the study actually reports never fails at all:
 
 R-hat against ESS, pooled over every parameter and fit:
 
-| ESS bin       |      n | median R-hat | 99th pct |    max | fraction > 1.01 |
-| ------------- | -----: | -----------: | -------: | -----: | --------------: |
-| ≤ 400         |      2 |       1.0051 |   1.0056 | 1.0056 |               0 |
-| 400–800       |     33 |       1.0039 |   1.0106 | 1.0115 |            3.0% |
-| 800–1,600     |    242 |       1.0030 |   1.0089 | 1.0133 |            0.8% |
-| 1,600–3,200   |    710 |       1.0013 |   1.0047 | 1.0058 |           **0** |
-| 3,200–6,400   |  1,949 |       1.0007 |   1.0025 | 1.0046 |           **0** |
-| 6,400–12,800  |  3,985 |       1.0004 |   1.0019 | 1.0035 |           **0** |
-| > 12,800      | 60,407 |       1.0002 |   1.0006 | 1.0013 |           **0** |
+| ESS bin      |      n | median R-hat | 99th pct |    max | fraction > 1.01 |
+| ------------ | -----: | -----------: | -------: | -----: | --------------: |
+| ≤ 400        |      2 |       1.0051 |   1.0056 | 1.0056 |               0 |
+| 400–800      |     33 |       1.0039 |   1.0106 | 1.0115 |            3.0% |
+| 800–1,600    |    242 |       1.0030 |   1.0089 | 1.0133 |            0.8% |
+| 1,600–3,200  |    710 |       1.0013 |   1.0047 | 1.0058 |           **0** |
+| 3,200–6,400  |  1,949 |       1.0007 |   1.0025 | 1.0046 |           **0** |
+| 6,400–12,800 |  3,985 |       1.0004 |   1.0019 | 1.0035 |           **0** |
+| > 12,800     | 60,407 |       1.0002 |   1.0006 | 1.0013 |           **0** |
 
 The relationship is orderly and exactly as theory predicts: R-hat's excess over 1 shrinks with effective sample size. **Above ESS 1,600 there is not a single exceedance in more than 67,000 parameters.**
 
@@ -92,7 +92,7 @@ The obvious follow-up is whether VG11's failure signals a misspecification that 
 
 **No chain is stuck and there is no multimodality**: per-chain SDs are 0.76–0.84 and per-chain means span 0.19. The sampler is otherwise healthier than two models already published with caveats — 16 divergences in 48,000 draws (0.033%, spread 5/1/4/1/4/1) and BFMI 0.359–0.395 on every chain, against VG12's 0.215 and VG13's 0.242.
 
-So VG11 is a correctly-specified model whose dominant GP direction mixes slowly. The only honest remedy is **more draws** — roughly double, to lift that coefficient's ESS from 1,139 past about 2,300. More *chains* would buy the same ESS at the same wall-clock, but twelve will not fit in 251 GB.
+So VG11 is a correctly-specified model whose dominant GP direction mixes slowly. The only honest remedy is **more draws** — roughly double, to lift that coefficient's ESS from 1,139 past about 2,300. More _chains_ would buy the same ESS at the same wall-clock, but twelve will not fit in 251 GB.
 
 ## 7. Consequences
 
