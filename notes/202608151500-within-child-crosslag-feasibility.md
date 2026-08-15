@@ -1,10 +1,10 @@
-# Can the within-child comprehension-to-production lead be estimated at all? A feasibility scope
+# Can the within-child comprehension-to-production lead be estimated? Scope, and the Stage 1 result
 
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!IMPORTANT]
-> **Scoping note, not an analysis and not a plan to execute as written.** Its conclusion is that the analysis it scopes is very likely underpowered, and that the cheap decisive test should be run before any of the rest. Feasibility figures computed from VG16's analysis frame (`scripts/experiments/vg16_crosslag_quantification.py` shares the wave-reconstruction logic). Companion notes: [202608151120](202608151120-vg16-cross-lag-quantified.md), [202608151140](202608151140-cross-lag-not-for-models-of-record.md).
+> **This note's original conclusion was wrong, and §7 is the retraction.** It was written as a scope and concluded the analysis was very likely underpowered. Stage 1 was then run, and it refutes both the note's own power arithmetic and the mechanism the VG16 report attributes the problem to. The scoping sections are kept as written so the correction is legible. Reproduced by `scripts/experiments/vg16_within_lag_bias.py`; figures are the 2026-08-15 run at 150 replicates.
 
 ## 1. Why this question came up
 
@@ -12,17 +12,17 @@ VG16 finds that children further ahead in comprehension convert a higher fractio
 
 It does not, for a reason that is structural rather than a matter of caution. The association is **between children**; an intervention acts **within** a child. The between-child pattern is equally consistent with a stable child-level characteristic — cognitive profile, hearing, oral-motor capacity — driving both comprehension and conversion, under which moving one child's comprehension would change conversion not at all. Distinguishing those requires a _within-child_ estimate: does a child who gains comprehension faster than expected subsequently convert more?
 
-There is a second, subtler obstacle worth recording because it survives any amount of extra data. `q` is spoken ÷ understood, so teaching words raises the **denominator** immediately. VG16's association describes children who reached their comprehension level developmentally, with production having had time to follow — an equilibrium relationship among children. An intervention is a perturbation of one input, and nothing guarantees it lands on the same curve. **Even a clean within-child estimate would not by itself answer the intervention question.**
+There is a second obstacle worth recording because it survives any amount of extra data, and **nothing below softens it**. `q` is spoken ÷ understood, so teaching words raises the **denominator** immediately. VG16's association describes children who reached their comprehension level developmentally, with production having had time to follow — an equilibrium relationship among children. An intervention is a perturbation of one input, and nothing guarantees it lands on the same curve. **Even a perfectly estimated within-child lead would not answer the intervention question.**
 
-## 2. What is already known, and why the current estimate is unusable
+## 2. What was already known, and what was only assumed
 
-VG16 fits the population-relative baseline as its headline precisely because it is bias-robust. The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's _own_ understood intercept — was fitted as a diagnostic and is **strongly and spuriously negative**: `beta` ≈ −0.60, 89% interval [−0.85, −0.35] at `dev` tier, recorded in [`docs/models/vg16/index.qmd`](../docs/models/vg16/index.qmd) and attributed there to a short-T (Nickell-type) / errors-in-variables artefact of regressing on a lag tied to the child's own random intercept.
+VG16 reports the population-relative baseline. Its within-child (RI-CLPM) alternative — which additionally subtracts the child's _own_ understood intercept — was fitted as a diagnostic and came out **strongly negative**: `beta` ≈ −0.60, 89% interval [−0.85, −0.35] at `dev` tier, recorded in [`docs/models/vg16/index.qmd`](../docs/models/vg16/index.qmd) and attributed there to a short-T (Nickell-type) / errors-in-variables artefact of regressing on a lag tied to the child's own random intercept.
 
-**The attributed mechanism has not been demonstrated, only reasoned.** That matters, because the remedy depends on it, and §4 makes reproducing it the first stop-gate rather than assuming it.
+**That attribution had been reasoned, never demonstrated.** Making it the first thing to test, rather than the premise to build on, is the one methodological choice in this note that survived contact with the results.
 
-## 3. The feasibility census, and it is thin
+## 3. The feasibility census
 
-The within-child estimator needs children with **three or more comprehension waves**: two waves give one lagged observation, which vanishes entirely under within-child demeaning.
+The census below counts children by distinct comprehension waves, on the reasoning that a within-child estimator needs three or more because two waves give one lagged observation, which vanishes under within-child demeaning. **That reasoning is wrong for the estimator VG16 actually uses** — see §6.3 — but the census is still the right description of the data.
 
 | comprehension waves | children |
 | ------------------: | -------: |
@@ -33,72 +33,72 @@ The within-child estimator needs children with **three or more comprehension wav
 |                   5 |        6 |
 |       **total ≥ 3** |  **100** |
 
-So **100 children**, not the 182 quoted in conversation on 2026-08-15 — that figure was children with three or more observations of _any_ kind, from [202608141600](202608141600-rank-stability-tracking.md) §10.6, and is the wrong census for this question. Of the 100, **83 have exactly three waves**, which matters because short-T bias falls as O(1/T): three waves reduce it by roughly a third against two, not to zero.
+**100 children** have three or more comprehension waves, not the 182 quoted in conversation on 2026-08-15 — that figure was children with three or more observations of _any_ kind, from [202608141600](202608141600-rank-stability-tracking.md) §10.6, and is the wrong census for this question. Of the 100, 83 have exactly three. They contribute 240 of the frame's 412 lagged observations, span 11–90 months, come from six of the fourteen sources with two dominating, and carry a median within-child comprehension window of 13 months (IQR 12–15).
 
-What those children contribute:
+## 4. The original power sketch — superseded, and wrong
 
-|                                     |                                               |
-| ----------------------------------- | --------------------------------------------: |
-| observations                        |              384 (324 understood, 382 spoken) |
-| lagged observations                 |          **240** of the 412 in the full frame |
-| lagged observations per child       |          2 for 77 children, 3 for 6, 4 for 17 |
-| **within-child degrees of freedom** |                                       **140** |
-| age range                           |                    11–90 months (median 30.5) |
-| comprehension span per child        |       median **13 months**, IQR 12–15, max 28 |
-| studies represented                 | 6 (113 / 97 / 75 / 45 / 30 / 24 observations) |
+This section argued the analysis was underpowered. Within-child demeaning of the ≥3-wave subset leaves an `x_lag` SD of 0.353 — 19% of that subset's variance — and 140 degrees of freedom, from which a normal-approximation sketch gave SE(`beta`) between 0.106 and 0.183 and power of 31–62% at the fitted effect size.
 
-Two features to note. The subset spans only six of the fourteen sources and is dominated by two of them, so anything estimated here is **partly a statement about those studies**. And the median within-child comprehension window is about a year — short relative to the developmental change the question is about.
+**Every number there is defensible; the sketch is nonetheless the wrong calculation**, because it prices a fixed-effects demeaning estimator that no one proposes to use. §6 measures the realised SE directly and gets 0.10 — at the optimistic end of the sketch's range, and achieved on more data than the sketch assumed available.
 
-## 4. The decisive number: within-child variation is 19% of the total
+## 5. Stage 1 as designed
 
-Power for a within estimator comes from variation in the predictor _after removing each child's own mean_, and that is where this collapses:
+Simulate outcomes from VG16's own posterior on the **real observed wave structure** at a known `beta_lag`, including `beta_lag = 0`, and apply both baselines to the same simulated data. The two estimators differ only in whether the child's own intercept is subtracted, so any divergence between them is the mechanism under test rather than a simulation artefact.
 
-| quantity                                         |     value |
-| ------------------------------------------------ | --------: |
-| SD of `x_lag`, all 412 lagged observations       |     1.096 |
-| SD of `x_lag`, the 240 from ≥3-wave children     |     0.810 |
-| **SD after within-child demeaning**              | **0.353** |
-| within variance as a share of the subset's total |   **19%** |
-| Σ squared within-child deviations                |     29.96 |
+A bespoke simulator was needed because VG16 is deliberately excluded from `scripts/fit_recovery.py` — its cross-lag predictor is a function of the outcome — so simulation must walk each child's waves in age order, deriving `x_lag` at wave t from the _already simulated_ understood count at wave t−1. Estimation is by marginal likelihood with the child effects integrated out by Gauss-Hermite quadrature, holding the population trajectory, study effects and dispersion at their fitted values.
 
-At the fitted effect size (`beta` = 0.203) the within-child signal is 0.203 × 0.353 ≈ **0.07 logits**, against a residual on the `q` logit whose occasion component alone is about 0.58 ([202608141600](202608141600-rank-stability-tracking.md) §10.3) before observation-level sampling noise. The implied precision:
+A third estimator was added after the first results: **within-oracle**, identical to the within estimator but given each child's _true_ simulated intercept. If the plug-in and oracle variants agree, estimation error in that intercept — the errors-in-variables half of the attributed mechanism — is not producing the bias.
 
-| assumed residual SD on the `q` logit | SE(`beta`) | 89% half-width | power at `beta` = 0.203 |
-| ------------------------------------ | ---------: | -------------: | ----------------------: |
-| 0.58 — occasion term only            |      0.106 |          0.169 |                 **62%** |
-| 0.80 — plus some sampling noise      |      0.146 |          0.234 |                 **42%** |
-| 1.00 — realistic observation level   |      0.183 |          0.292 |                 **31%** |
+## 6. Stage 1 results
 
-**Every row ignores the short-T bias entirely, so each is an upper bound.** The realistic reading is that a clean within-child estimate would have somewhere between a third and two-thirds chance of excluding zero even if VG16's effect is exactly right and the bias were fully solved — and a wide interval either way. A null result would be uninformative, which is the specific failure mode worth avoiding: it would be read as evidence against the effect when it is evidence of nothing.
+150 replicates per cell. Columns are the estimator applied; rows are the baseline the data were generated under.
 
-This corrects the "a day's analysis" framing offered in conversation. The _work_ is about that size; what it would deliver is not.
+| truth | generated under | population: mean (bias) | within: mean (bias) | within-oracle: mean (bias) |
+| ----: | --------------- | ----------------------: | ------------------: | -------------------------: |
+| 0.000 | population      |     −0.004 (**−0.004**) |     −0.014 (−0.014) |            −0.013 (−0.013) |
+| 0.203 | population      |      0.202 (**−0.001**) |      0.222 (+0.019) |             0.204 (+0.001) |
+| 0.400 | population      |      0.402 (**+0.002**) |      0.454 (+0.054) |             0.416 (+0.016) |
+| 0.000 | within          |         −0.001 (−0.001) | −0.001 (**−0.001**) |            −0.001 (−0.001) |
+| 0.203 | within          |          0.120 (−0.083) |  0.197 (**−0.006**) |             0.199 (−0.004) |
+| 0.400 | within          |          0.224 (−0.176) |  0.392 (**−0.008**) |             0.395 (−0.005) |
 
-## 5. Proposed design, with the cheap test first
+Estimator SD is 0.07–0.08 (population) and 0.10–0.11 (within and oracle) throughout.
 
-**Stage 1 — reproduce the bias by simulation. This is the stop-gate.** Simulate outcomes from VG16's own posterior on the _actual observed wave structure_, at known `beta_lag`, including `beta_lag = 0`. Fit the within-child estimator to the simulated data. Three things are then established at once, and none needs new data:
+### 6.1 The −0.60 does not reproduce, and the attributed mechanism is refuted
 
-- whether the −0.60 is reproduced when the truth is zero, confirming or refuting the attributed mechanism;
-- how much of it survives restriction to the ≥3-wave children, which is the entire premise of this exercise;
-- the realised SE, replacing §4's assumed-`sigma` bracket with a measured one.
+**At `beta_lag = 0` every estimator returns zero** — the largest deviation anywhere is −0.014, against the −0.60 to be explained. The short-T / errors-in-variables mechanism as attributed does not produce a large negative bias in this design, at this wave structure, at any truth tested.
 
-The project's parameter-recovery machinery does exactly this shape of job (`scripts/fit_recovery.py`, `docs/runbooks/parameter-recovery.md`), and simulating at `beta_lag = 0` is the honest null.
+The oracle column closes off the remaining escape. Plug-in and oracle agree to within 0.02 in every row, and to within 0.005 wherever the estimator matches the generating baseline. **Estimation error in the child's understood intercept contributes essentially nothing.** That is precisely the quantity the errors-in-variables story blames.
 
-**Gate: proceed only if the bias at T ≥ 3 is small relative to the effect, and the realised SE gives better than ~60% power.** On §4's arithmetic the expected outcome is that it does not, and the correct action is then to stop and record the negative feasibility result — which is a publishable limitation, not a wasted day.
+So the −0.60 needs a different explanation. Three candidates remain, and this note cannot separate them:
 
-**Stage 2 — if and only if Stage 1 passes.** Estimate on the subset. Options, cheapest first: the within baseline VG16 already implements, restricted to ≥3-wave children; a bias-corrected variant if Stage 1 identifies the mechanism precisely; or joint estimation of the child's understood trajectory with the lag, so the intercept is not a plug-in. Registered as a VG16 sensitivity variant, never a model of record.
+- **The joint-estimation ridge**, which is the leading candidate. In the real model `delta_subj_u` is estimated _jointly_ with `beta_lag`, so the spoken likelihood feeds back onto the understood intercept through `x_lag`. The two-step estimator here deliberately severs that feedback — it estimates the intercept from the understood data alone — so this simulation is blind to it by construction.
+- **Non-convergence.** The −0.60 is a `dev`-tier figure, and the project's own documentation holds that `dev` under-converges the hierarchical models.
+- **Misspecification.** Simulating from the model cannot reveal a way the model is wrong about the real data.
 
-**Stage 3 — interpretation limits, fixed in advance.** Write the caveats before seeing the estimate: six studies dominated by two; a one-year median window; and §1's equilibrium-versus-perturbation point, which no within-child estimate resolves.
+### 6.2 Each baseline is unbiased for its own generating process, and mixing them costs
 
-## 6. Recommendation
+Where estimator and generating baseline agree, bias is ≤ 0.008. Where they differ it is orderly: **the population estimator applied to within-generated data attenuates by about 45%** (0.120 for a truth of 0.203; 0.224 for 0.400), while the within estimator applied to population-generated data inflates mildly (+0.019, +0.054). The asymmetry is worth carrying: if the truth were genuinely within-child, VG16's reported +0.203 would be an underestimate of it by roughly a factor of two.
 
-**Run Stage 1. Expect it to fail, and treat the failure as the deliverable.** It is a day at most, it needs no new data and no VM time, and it converts "the within-child estimate is biased, we think we know why" into a demonstrated and quantified statement — which is what the report's limitations section should say either way.
+### 6.3 Two-wave children are not excluded, which is where §4 went wrong
 
-**Do not schedule Stage 2 in advance.** On present arithmetic it is unlikely to be reached, and committing to it invites reporting an underpowered estimate because the work was budgeted.
+The within estimator uses **361 observations from 240 children — 141 of those observations from 2-wave children.** They contribute because VG16's construction subtracts a _partially pooled, shrunk_ intercept, not a within-child mean: a 2-wave child's lagged observation retains its deviation from that shrunk average instead of being annihilated. §3's premise and §4's degrees-of-freedom count both assumed a fixed-effects wipe, and both are therefore too pessimistic about the data available.
 
-Two things are better uses of the same effort. **[#224](https://github.com/dseinternational/vocabulary-growth/issues/224) (VG20, correlated subject random effects)** answers the _between_-child question properly, on all 767 children rather than 100, and is the estimate VG16's cross-lag is a noisy proxy for. And the intervention question itself is answerable only by an intervention study; this cohort cannot reach it, and §1's second obstacle means it could not even in principle with more waves.
+## 7. Revised recommendation
 
-## 7. Caveats on this note
+**The original recommendation — run Stage 1, expect it to fail, treat the failure as the deliverable — is withdrawn.** Stage 1 ran and did not fail; it refuted the reason for expecting failure.
 
-- **The power arithmetic is a normal-approximation sketch**, not a simulation: a fixed-effects within estimator with a plug-in residual SD, ignoring the beta-binomial likelihood, the hierarchical shrinkage that would partially pool the 100 children, and the bias. Stage 1 replaces it with a measured figure; treat the 31–62% bracket as an order of magnitude.
-- **Partial pooling could do better than the fixed-effects sketch**, since a Bayesian hierarchical fit borrows strength from the 2-wave and singleton children for the nuisance parameters. That is a reason to measure the SE in Stage 1 rather than to assume §4 is the last word — but it does not create within-child variation where there is none.
-- **The wave census counts distinct ages with an understood measure** in VG16's analysis frame, after the DS pool's default masking. Reinstating any masked defect class would change it.
+1. **Correct the VG16 report.** The `dev`-tier within-child figure is described there as a short-T / errors-in-variables artefact. That attribution is not supported: a simulation reproducing exactly that structure, on exactly this wave design, shows no such bias, and an oracle-intercept variant rules out the errors-in-variables half specifically. The honest statement is that the within-child estimate is anomalous and its cause is not yet established.
+2. **Stage 2 is now worth doing, on the evidence rather than despite it.** A two-step or partially decoupled estimator of the within-child lead is unbiased in simulation with SE ≈ 0.10 against an effect of about 0.20. That is a usable estimate, not a foregone null, and it needs no restriction to ≥3-wave children.
+3. **Test the joint-estimation ridge directly**, since it is now the leading explanation and the cheapest decisive check: refit VG16 with `lag_baseline="within"` at `test` rather than `dev`, on simulated data with a known `beta_lag`. If the −0.60 reappears where the two-step estimator is unbiased, the ridge is confirmed and the two-step estimator is the remedy.
+4. **§1's second obstacle still stands.** None of this makes the within-child lead an answer to the intervention question, and the report should not present it as one.
+
+[#224](https://github.com/dseinternational/vocabulary-growth/issues/224) (VG20, correlated subject random effects) remains the better instrument for the _between_-child question, on all 767 children. It is unaffected by any of this.
+
+## 8. Caveats, and corrections to this note
+
+- **An earlier version of the simulator got the sign wrong.** Regressing `logit(y_s / y_u)` on the lag returned _positive_ bias under every truth including zero. 159 of 973 conditional rows (16%) have zero spoken words, and `logit(0)` clips to −9.21 — a large negative outlier arising for exactly the small-vocabulary children who also have a low lag value, manufacturing positive correlation. Any estimator that reduces the outcome to a ratio inherits this; the beta-binomial likelihood does not. Had that version been reported it would have been confidently wrong in the opposite direction to the finding it was testing.
+- **The estimators are not VG16's estimator.** They are two-step marginal likelihood with the trajectory, study effects and dispersion held at fitted values. This is deliberate — it is what isolates the mechanism — but it means the realised SE of 0.10 is optimistic for a real analysis that must estimate those too, and that §6.1's leading candidate is untestable here.
+- **Simulating from the model cannot detect misspecification**, so "unbiased" throughout means "unbiased if VG16's structure is right".
+- **The wave census counts distinct ages with an understood measure** in VG16's analysis frame after the DS pool's default masking; reinstating any masked defect class would change it.
+- The power sketch in §4 is retained as written and superseded by §6; the child count in §3 corrects a figure quoted in conversation.
