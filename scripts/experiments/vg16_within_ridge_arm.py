@@ -49,13 +49,24 @@ from multiprocessing import freeze_support
 import numpy as np
 import pandas as pd
 
-#: Truth values the arms simulate at.
-ARMS = {"truth-zero": 0.0, "truth-plus": 0.203}
+#: Truth values the simulated arms use. ``real`` fits the actual data instead,
+#: which is the only arm that can show whether the -0.60 belongs to the data
+#: rather than to the estimator.
+ARMS = {"truth-zero": 0.0, "truth-plus": 0.203, "real": None}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("arm", choices=sorted(ARMS))
+    ap.add_argument(
+        "--fit-baseline",
+        default="within",
+        choices=["within", "population"],
+        help=(
+            "Baseline the FITTED model uses (default: within). Use 'population' with "
+            "truth-zero to null-calibrate the headline estimator on the real machinery."
+        ),
+    )
     ap.add_argument("--output-dir", required=True)
     ap.add_argument("--config", default="test")
     ap.add_argument("--seed", type=int, default=20260815)
@@ -83,18 +94,20 @@ def main() -> int:
     spec.loader.exec_module(sim_mod)
 
     beta_true = ARMS[args.arm]
+    real_data = args.arm == "real"
 
-    # --- simulate on the real design, from the fitted posterior --------------
-    # The truth is read from the *model of record's* output root, not the arm's.
-    truth, design = sim_mod.load_truth(env.output_root())
-    rng = np.random.default_rng(args.seed)
-    sim = sim_mod.simulate(rng, truth, design, beta_true, args.generate_under)
+    if not real_data:
+        # --- simulate on the real design, from the fitted posterior ----------
+        # The truth is read from the *model of record's* output root, not the arm's.
+        truth, design = sim_mod.load_truth(env.output_root())
+        rng = np.random.default_rng(args.seed)
+        sim = sim_mod.simulate(rng, truth, design, beta_true, args.generate_under)
 
     # --- assemble the analysis frame the engine expects ----------------------
     # Only the outcome columns are simulated; age, child, study and the observed
     # /missing pattern are the real ones, so the wave structure under test is the
     # actual one.
-    frame = pd.DataFrame(
+    frame = None if real_data else pd.DataFrame(
         {
             "age": design["age"],
             "subject_code": design["subj"],
@@ -103,15 +116,16 @@ def main() -> int:
             "spoken": np.where(design["smask"], sim["y_s"], np.nan),
         }
     )
-    frame["subject_id"] = frame["subject_code"].astype(str)
-    frame["study"] = frame["study_code"].astype(str)
-    frame["subject_key"] = frame["subject_id"]
+    if frame is not None:
+        frame["subject_id"] = frame["subject_code"].astype(str)
+        frame["study"] = frame["study_code"].astype(str)
+        frame["subject_key"] = frame["subject_id"]
 
     # --- VG16 with the within-child baseline ---------------------------------
     defn = dataclasses.replace(
         D.VG16,
-        lag_baseline="within",
-        config_name=f"vg16-within-ridge-{args.arm}",
+        lag_baseline=args.fit_baseline,
+        config_name=f"vg16-{args.fit_baseline}-ridge-{args.arm}",
         model_id="VG16",
     )
 
@@ -119,8 +133,9 @@ def main() -> int:
     setup.init_script()
     print(
         f"[ridge_arm] arm={args.arm} beta_true={beta_true} "
-        f"generated_under={args.generate_under} lag_baseline={defn.lag_baseline} "
-        f"config={args.config} rows={len(frame)}"
+        f"generated_under={'real data' if real_data else args.generate_under} "
+        f"fit_baseline={defn.lag_baseline} config={args.config} "
+        f"rows={'real' if real_data else len(frame)}"
     )
 
     stages = bivariate_re_stages(defn)
@@ -134,7 +149,9 @@ def main() -> int:
             f"beta_true={beta_true}"
         )
 
-    stages[0] = ("Prepare data", inject)
+    # The real arm keeps the engine's own data-preparation stage.
+    if not real_data:
+        stages[0] = ("Prepare data", inject)
     run_fit_pipeline(args.config, defn, stages=stages)
     print(f"[ridge_arm] done. beta_true was {beta_true}; read beta_lag from diagnostics.csv")
     return 0
