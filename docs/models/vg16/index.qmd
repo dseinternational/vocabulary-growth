@@ -102,13 +102,15 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 diagnostics.loc[diagnostics.index.str.contains("beta_lag", case=False)]
 ```
 
-::: {.callout-important title="The within-child contrast is anomalous, and its cause is not established"}
+::: {.callout-important title="The within-child contrast, and what its earlier negative value was"}
 
-The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's *own* understood intercept — was fit as a diagnostic and is **strongly negative** (dev-tier $\beta \approx -0.60$, 89% interval $[-0.85, -0.35]$). It should **not** be read as evidence that comprehension suppresses later production.
+The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's *own* understood intercept — was previously reported here as **strongly and spuriously negative** (dev-tier $\beta \approx -0.60$), and attributed to a short-T (Nickell-type) / errors-in-variables artefact. **Both the figure and its attribution are withdrawn.**
 
-This was previously attributed here to a short-T (Nickell-type) / errors-in-variables artefact. **That attribution is withdrawn.** Simulating from this model's own posterior on the real observed wave structure, at known values of $\beta$ including zero, reproduces no such bias: at $\beta = 0$ every estimator returns zero to within 0.014, and a variant given each child's *true* intercept agrees with the estimated-intercept variant throughout — which rules out errors-in-variables in that intercept specifically. The leading remaining explanation is the ridge between $\beta$ and the child understood intercept under *joint* estimation, which that simulation severs by construction and so cannot test; dev-tier non-convergence is a second candidate. See [`202608151500`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608151500-within-child-crosslag-feasibility.md) §6.
+Fitting the same within-child baseline to the same data at the `test` sampling tier instead of `dev` gives $\beta = +0.103$, 89% interval $[-0.085, 0.294]$, with **zero divergent transitions**. The $-0.60$ was under-convergence, not a structural artefact. Simulation from this model's own posterior on the real observed wave structure independently rules out the attributed mechanism: at known $\beta = 0$ every estimator returns zero, and a variant given each child's *true* intercept agrees with the estimated-intercept variant throughout, so errors-in-variables in that intercept is not the cause. See [`202608151500`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608151500-within-child-crosslag-feasibility.md) §§6–7.
 
-Two consequences for reading the headline above. The population-relative baseline is unbiased in that simulation when the truth is population-relative, so it remains the sound choice. But applied to *within*-generated truth it attenuates by roughly 45% — so if the underlying association were genuinely within-child, the reported $\beta$ would understate it by about a factor of two.
+**The two baselines therefore agree in sign, and their difference is informative.** The population-relative headline mixes between-child and within-child association; the within-child baseline strips the persistent part and returns roughly half as much, without excluding zero. That supports reading the headline as **predominantly a between-child association** — children who understand more for their age convert more of it — rather than as a child's own earlier standing predicting their later conversion.
+
+Two cautions on the within-child figure itself. Joint estimation inflates it: on simulated data with a known within-child truth of 0.203 the same fit returns 0.380. And it is a `test`-tier diagnostic, not a reporting-quality fit. It should be read as "small, positive, not distinguishable from zero", not quoted as an estimate.
 
 :::
 
