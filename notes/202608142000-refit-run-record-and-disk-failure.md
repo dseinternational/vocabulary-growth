@@ -66,7 +66,30 @@ Against the model of record over the same anchors, where `kappa` carries all of 
 
 ## 5. Convergence
 
-VG12 clears the hard tier (R-hat, ESS) but carries the documented soft-tier caveats — 4 divergent transitions and energy BFMI 0.215. That is the intrinsic geometry of the TD hierarchical models, established in [202608050900](202608050900-td-hierarchical-geometry.md) §9, and it needs `--allow-caveats` and `convergence_caveats.csv` carried into Appendix B, not a refit. A1's own fit is the cleanest of the day: 0 divergences, max R-hat 1.0028, minimum ESS 2,278.
+VG12 clears the hard tier (R-hat, ESS) but carries the documented soft-tier caveats — 4 divergent transitions and energy BFMI 0.215 — and VG13 the same on BFMI (0.242). That is the intrinsic geometry of the TD hierarchical models, established in [202608050900](202608050900-td-hierarchical-geometry.md) §9, and it needs `--allow-caveats` and `convergence_caveats.csv` carried into Appendix B, not a refit. A1's own fit is the cleanest of the day: 0 divergences, max R-hat 1.0028, minimum ESS 2,278. VG10's refit carries 1 divergence.
+
+### 5a. VG11 failed the hard gate, and is published under a recorded exception
+
+VG11 sampled for 4h 48m and then **failed the convergence gate**: one parameter of the whole model, `g_unit_hsgp_coeffs[4]`, at R-hat **1.0125** against the 1.01 threshold. No ESS failures. The gate stopped the pipeline at diagnostics, so no summaries, plots or report were produced — but the trace _was_ retained, complete, in `output/failed/`.
+
+Inspecting it settles what kind of failure this is:
+
+| quantity                         |  max R-hat | min ESS | grid points above 1.01 |
+| -------------------------------- | ---------: | ------: | ---------------------- |
+| `f_plot` / `p_plot` (trajectory) | **1.0032** |   3,407 | **0 of 500**           |
+| `f_query` / `p_query`            | **1.0028** |   3,409 | **0 of 8**             |
+| `kappa_plot` / `kappa_query`     | **1.0019** |   4,364 | **0 of 500**           |
+| `g_unit_hsgp_coeffs[4]`          |     1.0125 |   1,139 | —                      |
+
+**Every reported quantity converges with margin.** The failing parameter is one of sixteen HSGP basis coefficients, and it is the slowest-mixing one — lowest ESS of the sixteen, largest signal (mean 1.428). The coefficients near zero have ESS of 13,000–40,000 because they are prior-dominated. No chain is stuck and there is no multimodality: per-chain SDs are 0.76–0.84 and per-chain means span 0.19. Individual basis coefficients trade off against one another and are weakly identified; **the function they sum to is not**, which is exactly what the table shows. The basis coefficients are not reported — the GP reaches the report through `eta` (R-hat 1.006) and `ell` (1.003).
+
+The sampler is otherwise healthier than two models already being published with caveats: 16 divergences in 48,000 draws (0.033%, spread 5/1/4/1/4/1 across chains) and BFMI 0.359–0.395 on every chain, against VG12's 0.215 and VG13's 0.242.
+
+**Decision, 2026-08-15 (study owner): publish under a documented exception, provisionally, pending a longer refit.** The mechanism is deliberately narrow. `ConvergenceException` in [`fit_artifacts.py`](../src/vocab_growth/fit_artifacts.py) names the exact parameters and a ceiling R-hat; the gate closes again on an additional or different failing parameter, a worse R-hat, any ESS failure, or an incomplete scan, and it never applies to another model. It is recorded into `diagnostics_summary.json` rather than a marker file, because `convergence_caveats` recomputes from the payload on disk — so the exception reaches `check_fit`, the figure sync and Appendix B by the same route as a divergence, and **VG11 is publishable only through the `-with-caveats` purposes**. `tests/test_convergence_exception.py` pins all five ways it must refuse to widen.
+
+The artefacts were produced by [`scripts/resume_from_trace.py`](../scripts/resume_from_trace.py), which re-runs the pipeline with the sampling stage replaced by a loader for the retained trace, rather than re-sampling a posterior already on disk. It verifies the definition, the raw-data fingerprint, the sampling configuration and the trace's variables and dimensions against the rebuilt model before proceeding, and records `artefacts.resumed_from` in the manifest so a reader can tell the trace predates the summaries. It cannot bypass the gate: the gate runs as normal and closes unless an exception covers the failure.
+
+**What would retire the exception:** `g_unit_hsgp_coeffs[4]` needs roughly double its 1,139 ESS to land under 1.01, so a refit at about twice the draws. More _chains_ would buy the same ESS at the same wall-clock, but twelve will not fit in 251 GB — §3.1's peak was 246 GB with six.
 
 ## 6. State at the time of writing
 

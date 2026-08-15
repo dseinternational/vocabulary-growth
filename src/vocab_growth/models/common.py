@@ -49,10 +49,13 @@ import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import (
+    ACCEPTED_EXCEPTION_KEY,
     CONVERGENCE_CAVEATS_FILENAME,
     CONVERGENCE_FAILURE_FILENAME,
+    DIAGNOSTICS_SUMMARY_FILENAME,
     FIT_MANIFEST_FILENAME,
     TracePersistence,
+    accepted_rhat_exception,
     convergence_caveats,
     create_staging_root,
     git_metadata,
@@ -1219,6 +1222,7 @@ def diagnostics(
             gate_summary,
             sampling_config_name=context.sampling_config_name,
             output_dir=context.reporting.output_dir,
+            model_id=context.reporting.model_name,
         )
     except ConvergenceGateError:
         # A failed reporting fit never reaches posterior-predictive sampling,
@@ -1626,6 +1630,7 @@ def enforce_convergence_gate(
     *,
     sampling_config_name: str,
     output_dir: str,
+    model_id: str | None = None,
 ) -> list[str]:
     """Stop reporting pipelines whose reporting-quality posterior did not converge.
 
@@ -1644,6 +1649,31 @@ def enforce_convergence_gate(
     )
     rhat_failing = gate_summary.get("rhat_failing") or []
     ess_failing = gate_summary.get("ess_failing") or []
+
+    # A registered, narrowly-scoped exception can accept an R-hat-only failure
+    # where the reported quantities converge and the failing parameter is a
+    # nuisance direction. It is recorded into the diagnostics payload rather
+    # than a marker file, because `convergence_caveats` recomputes from the
+    # payload on disk -- so the exception reaches `check_fit`, the figure sync
+    # and Appendix B by the same route as a divergence, and a fit carrying one
+    # is publishable only through the `-with-caveats` purposes.
+    accepted = accepted_rhat_exception(model_id, gate_summary)
+    if accepted is not None:
+        gate_summary[ACCEPTED_EXCEPTION_KEY] = {
+            "parameters": list(accepted.parameters),
+            "observed_max_rhat": gate_summary.get("max_rhat"),
+            "ceiling_max_rhat": accepted.max_rhat,
+            "reason": accepted.reason,
+            "decided": accepted.decided,
+        }
+        summary_path = os.path.join(output_dir, DIAGNOSTICS_SUMMARY_FILENAME)
+        if os.path.isfile(summary_path):
+            with open(summary_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            payload[ACCEPTED_EXCEPTION_KEY] = gate_summary[ACCEPTED_EXCEPTION_KEY]
+            write_json_atomic(summary_path, payload)
+        rhat_failing = []
+        scan_failed = False
 
     if scan_failed or rhat_failing or ess_failing:
         if scan_failed:

@@ -17,7 +17,7 @@ import os
 import shutil
 import subprocess
 import uuid
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from pathlib import Path
@@ -342,6 +342,88 @@ def fit_validation_kwargs(
 DIAGNOSTICS_SUMMARY_FILENAME = "diagnostics_summary.json"
 
 
+@dataclass(frozen=True)
+class ConvergenceException:
+    """A recorded acceptance of a specific hard-tier R-hat failure.
+
+    The R-hat/ESS scan is fail-closed for a reason: a fit that has not mixed
+    cannot be summarised. This is the narrow escape hatch for the case where
+    that reasoning demonstrably does not apply — a *nuisance* parameter misses
+    the threshold while every reported quantity converges with margin — and it
+    is built so it cannot broaden without someone editing this file:
+
+    * ``parameters`` names the exact failing parameters. One extra failure
+      elsewhere and the gate closes again.
+    * ``max_rhat`` is a ceiling, not a waiver. A worse value closes the gate.
+    * ESS failures are **never** covered. Low ESS means the estimate itself is
+      unreliable; a marginal R-hat on a well-sampled nuisance direction does not.
+
+    An accepted exception is not silent: it is written into the diagnostics
+    payload, surfaces through :func:`convergence_caveats` like any soft-tier
+    problem, and therefore reaches ``convergence_caveats.csv`` and Appendix B.
+    A fit carrying one can only be published through the ``-with-caveats``
+    purposes, exactly as a divergent or low-BFMI fit can.
+    """
+
+    parameters: tuple[str, ...]
+    max_rhat: float
+    reason: str
+    decided: str
+
+
+#: Accepted hard-tier exceptions, keyed by ``model_id``. Adding an entry is a
+#: study-owner decision and belongs in a note, not in a commit message alone.
+CONVERGENCE_EXCEPTIONS: dict[str, ConvergenceException] = {
+    "VG11": ConvergenceException(
+        parameters=("g_unit_hsgp_coeffs[4]",),
+        max_rhat=1.015,
+        reason=(
+            "One HSGP basis coefficient of sixteen reached R-hat 1.0125 against "
+            "the 1.01 gate, with the lowest ESS of the sixteen (1,139). Every "
+            "reported quantity converged with margin -- the trajectory and "
+            "dispersion grids peak at R-hat 1.0032 with zero of 500 plot points "
+            "and zero of 8 query points above 1.01 -- and the sampler is healthy "
+            "(16 divergences in 48,000 draws, BFMI 0.359-0.395 on all six "
+            "chains, better than VG12 and VG13, which are published with "
+            "caveats). Individual basis coefficients trade off against one "
+            "another and are weakly identified; the function they sum to is not. "
+            "The basis coefficients are not reported: the GP reaches the report "
+            "through eta (R-hat 1.006) and ell (1.003)."
+        ),
+        decided="2026-08-15, study owner; provisional, pending a longer refit",
+    ),
+}
+
+
+def accepted_rhat_exception(
+    model_id: str | None, gate_summary: dict | None
+) -> ConvergenceException | None:
+    """The registered exception covering this gate result, or ``None``.
+
+    Covers only an R-hat-only failure whose failing set is a subset of the
+    registered parameters and whose observed maximum is within the recorded
+    ceiling. Anything else -- an ESS failure, an unlisted parameter, a worse
+    R-hat, a scan that did not complete -- returns ``None`` and the gate closes.
+    """
+    if not model_id or not gate_summary:
+        return None
+    exception = CONVERGENCE_EXCEPTIONS.get(model_id)
+    if exception is None:
+        return None
+    if gate_summary.get("ess_failing"):
+        return None
+    max_rhat = gate_summary.get("max_rhat")
+    if max_rhat is None or float(max_rhat) > exception.max_rhat:
+        return None
+    failing = set(gate_summary.get("rhat_failing") or [])
+    if not failing or not failing <= set(exception.parameters):
+        return None
+    return exception
+
+
+ACCEPTED_EXCEPTION_KEY = "accepted_rhat_exception"
+
+
 def convergence_caveats(gate_summary: dict | None) -> list[str]:
     """Soft-tier convergence problems recorded in a diagnostics-gate payload.
 
@@ -386,6 +468,16 @@ def convergence_caveats(gate_summary: dict | None) -> list[str]:
             f"energy BFMI{limit}{detail}: the energy chain explored the "
             "posterior's tails poorly, so the interval bounds are less reliable "
             "than the point estimates."
+        )
+    accepted = gate_summary.get(ACCEPTED_EXCEPTION_KEY)
+    if accepted:
+        names = ", ".join(accepted.get("parameters") or [])
+        observed = accepted.get("observed_max_rhat")
+        seen = "" if observed is None else f" (observed {float(observed):.4f})"
+        caveats.append(
+            f"accepted R-hat exception for {names}{seen}: this fit did not clear "
+            "the hard convergence gate and is published under a recorded "
+            f"exception -- {accepted.get('decided', 'undated')}."
         )
     return caveats
 
