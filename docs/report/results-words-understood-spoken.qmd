@@ -9,6 +9,8 @@ abstract: "In children with Down syndrome, words understood consistently exceed 
 Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 :::
 
+{{< include _caveats-ds.qmd >}}
+
 Every joint model in this report writes spoken vocabulary as a fraction of understood vocabulary, $p_S(a) = p_U(a)\,q(a)$, where $q(a) = P(\text{speak} \mid \text{understand})$ is the **production ratio** — the share of understood words a child also says. The comprehension–production gap is exactly $q(a) < 1$: the smaller $q$, the more a child understands relative to what they say.
 
 ## Comprehension leads production in Down syndrome
