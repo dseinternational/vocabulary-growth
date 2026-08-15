@@ -49,6 +49,7 @@ elementwise
 elif
 elpd
 empiricalmodelling
+ENOSPC
 EOWPVT
 ESRC
 estimand
