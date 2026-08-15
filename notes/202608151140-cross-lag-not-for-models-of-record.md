@@ -14,27 +14,27 @@ VG16's cross-lag is reliably positive (`beta_lag` = +0.203, 89% ETI [0.093, 0.31
 
 ## 2. The isolating comparison
 
-The two `rep` fits differ in exactly one live field. Diffing the recorded `model.definition` blocks of the two manifests yields five differences: `model_id`, `config_name`, `banner` (naming), `use_cross_lag` (False vs True), and `lag_baseline` — which is inert when `use_cross_lag=False`, since nothing else reads it. So VG16 minus VG10 *is* the cross-lag's effect on the reported model, with data, priors, anchoring, sampler and sampling budget all held fixed.
+The two `rep` fits differ in exactly one live field. Diffing the recorded `model.definition` blocks of the two manifests yields five differences: `model_id`, `config_name`, `banner` (naming), `use_cross_lag` (False vs True), and `lag_baseline` — which is inert when `use_cross_lag=False`, since nothing else reads it. So VG16 minus VG10 _is_ the cross-lag's effect on the reported model, with data, priors, anchoring, sampler and sampling budget all held fixed.
 
 That effect, at the population level across the reporting ages (12–84 months):
 
 | age (mo) | Δ understood (words) | Δ `q` (pp) | Δ spoken (words) |
 | -------: | -------------------: | ---------: | ---------------: |
-| 12 | −0.20 | +0.10 | +0.01 |
-| 18 | −0.19 | +0.14 | +0.06 |
-| 24 | −1.14 | +0.13 | +0.08 |
-| 30 | −2.09 | +0.02 | −0.15 |
-| 36 | −2.13 | −0.19 | −0.77 |
-| 42 | −1.91 | −0.37 | −1.56 |
-| 48 | −2.23 | −0.33 | −2.00 |
-| 54 | −2.55 | −0.08 | −1.94 |
-| 60 | −2.45 | +0.25 | −0.66 |
-| 66 | −1.80 | +0.30 | +0.21 |
-| 72 | −0.60 | +0.17 | +0.32 |
-| 78 | −0.29 | +0.12 | +0.86 |
-| 84 | −0.23 | +0.35 | +2.03 |
+|       12 |                −0.20 |      +0.10 |            +0.01 |
+|       18 |                −0.19 |      +0.14 |            +0.06 |
+|       24 |                −1.14 |      +0.13 |            +0.08 |
+|       30 |                −2.09 |      +0.02 |            −0.15 |
+|       36 |                −2.13 |      −0.19 |            −0.77 |
+|       42 |                −1.91 |      −0.37 |            −1.56 |
+|       48 |                −2.23 |      −0.33 |            −2.00 |
+|       54 |                −2.55 |      −0.08 |            −1.94 |
+|       60 |                −2.45 |      +0.25 |            −0.66 |
+|       66 |                −1.80 |      +0.30 |            +0.21 |
+|       72 |                −0.60 |      +0.17 |            +0.32 |
+|       78 |                −0.29 |      +0.12 |            +0.86 |
+|       84 |                −0.23 |      +0.35 |            +2.03 |
 
-The largest movements anywhere: **2.6 words understood (≤ 1.2%), 0.4 percentage points of `q`, 2.0 words spoken (≤ 2.0%, peaking in percentage terms only where the counts are fractions of a word)**. The random-effect scales are equally unmoved: `tau_subj_u` 0.7970 → 0.7966, `tau_subj_q` 1.2855 → 1.2826. Adding the cross-lag to VG10 would reproduce every figure, table and downstream comparison to within rounding. There is nothing to adopt *for*.
+The largest movements anywhere: **2.6 words understood (≤ 1.2%), 0.4 percentage points of `q`, 2.0 words spoken (≤ 2.0%, peaking in percentage terms only where the counts are fractions of a word)**. The random-effect scales are equally unmoved: `tau_subj_u` 0.7970 → 0.7966, `tau_subj_q` 1.2855 → 1.2826. Adding the cross-lag to VG10 would reproduce every figure, table and downstream comparison to within rounding. There is nothing to adopt _for_.
 
 ## 3. Why that is structural, not an accident of this fit
 
