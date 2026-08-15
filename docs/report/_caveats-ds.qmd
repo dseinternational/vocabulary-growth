@@ -1,9 +1,19 @@
 <!--
 Transcluded scope-and-caveats note for the Down syndrome findings.
 Included via {{< include _caveats-ds.qmd >}} so the shared caveats are stated
-once and reused. Edit here only.
+once and reused. Edit here only. The long-form treatment is the Limitations
+section of the Discussion (@sec-limitations); keep the two consistent.
+Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 -->
 
 ::: {.callout-warning title="Scope and caveats"}
-**TODO**: the shared DS findings caveats, stated once — parent-report measures; cross-study harmonisation onto the 810-item reference (@sec-data); the sample is not a random sample of all children with Down syndrome (representativeness); estimates describe the modelled population and are conditional on the model. Numbers are drawn from the model of record (VG10) at the canonical 6-monthly ages; see Appendix C for the complete tables.
+The Down syndrome estimates in this chapter describe a **pooled research sample, not a population**: children with Down syndrome from studies in six countries, recruited through research projects (including an intervention trial), charities and family organisations, and assessed between the 1990s and the 2020s. Families who enrol in such studies are not a random draw of all families of children with Down syndrome, so the reported trajectories and percentiles are expectations for the modelled pool and are **not norms**, cut-offs or a screening instrument.
+
+All outcomes are **parent-report checklist counts**, harmonised from several instruments onto a common 810-item reference inventory (@sec-data). Comprehension is the least direct of the three measures, and everything derived from it — the production ratio $q(a)$, the signing ratio $r(a)$ and total expressive vocabulary — inherits that. A checklist word count says nothing about intelligibility, grammar or use in context.
+
+Coverage is **uneven across age**: dense between about 18 and 54 months and thin above 72 months for spoken words and above about 60 for words understood, where the study mix also changes. Estimates at older ages are smoothed by the model from few children and carry correspondingly wide intervals; monthly rows with `n_obs = 0` are extrapolation, not evidence.
+
+The study is **descriptive and exploratory**, not preregistered or confirmatory. Estimates are conditional on the model (@sec-mean, @sec-betabinomial, @sec-randomeffects), sex, health, cognitive level, socio-economic status and intervention exposure are not modelled, and no causal reading is licensed. When setting expectations for an individual child, quote the **posterior predictive** count ($Y$, $P(Y \le k)$), which carries between-child variability and stays wide, not the expected trajectory ($E[Y]$), which carries parameter uncertainty only (@sec-interval-convention).
+
+Numbers are drawn from the model of record (VG10) at the canonical 6-monthly ages; see Appendix C for the complete tables and the Discussion (@sec-limitations) for the full statement of limitations.
 :::
