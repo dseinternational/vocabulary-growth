@@ -9,20 +9,29 @@ if (!["--check", "--write"].includes(mode)) {
   process.exit(2);
 }
 
-const trackedMarkdown = spawnSync("git", ["ls-files", "--", "*.md", ":(exclude)data/**/*.md"], {
-  encoding: "utf8",
-});
+// `--others --exclude-standard` adds untracked-but-not-ignored files to the
+// tracked set. Without them a NEW Markdown file is invisible here until it is
+// staged, so `npm run format` and `npm run format:check` both pass locally and
+// CI then fails on the same file once the commit makes it tracked — which
+// happened twice while writing the 2026-08 notes. Ignored files stay excluded.
+const listedMarkdown = spawnSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard", "--", "*.md", ":(exclude)data/**/*.md"],
+  { encoding: "utf8" },
+);
 
-if (trackedMarkdown.status !== 0) {
-  if (trackedMarkdown.stderr) {
-    process.stderr.write(trackedMarkdown.stderr);
-  } else if (trackedMarkdown.error) {
-    console.error(trackedMarkdown.error.message);
+if (listedMarkdown.status !== 0) {
+  if (listedMarkdown.stderr) {
+    process.stderr.write(listedMarkdown.stderr);
+  } else if (listedMarkdown.error) {
+    console.error(listedMarkdown.error.message);
   }
-  process.exit(trackedMarkdown.status ?? 1);
+  process.exit(listedMarkdown.status ?? 1);
 }
 
-const files = trackedMarkdown.stdout.split(/\r?\n/u).filter(Boolean);
+// A path can appear in both lists (staged edits to a tracked file), and passing
+// a duplicate to Prettier makes it format the file twice.
+const files = [...new Set(listedMarkdown.stdout.split(/\r?\n/u).filter(Boolean))];
 
 if (files.length === 0) {
   process.exit(0);
