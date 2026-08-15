@@ -1,11 +1,19 @@
 <!--
 Transcluded scope-and-caveats note for the signing findings.
 Included via {{< include _caveats-signing.qmd >}} in both the signing findings
-chapter and the signing lineage chapter. Edit here only.
+chapter and the signing lineage chapter. Edit here only. The long-form
+treatment is the Limitations section of the Discussion (@sec-limitations);
+keep the two consistent. Redrafted by an LLM-based AI tool (Claude Code/Fable 5)
+after the uk_07 integration and the psi heterogeneity investigation
+(notes/202608120030, notes/202608121030).
 -->
 
 ::: {.callout-important title="The association is descriptive and exploratory"}
-The within-understood association $\psi$ (and therefore the data-identified $p_{\text{any}}$) rests on the ~60 uk\_02 four-cell rows (~34 children, ≈19–56 months). It is a single scalar — the data do not support an age-varying association at this sample size — and is **descriptive / exploratory**. The four-cell composition and $p_{\text{any}}$ outside that age window lean on the marginal trajectories plus scalar-$\psi$ extrapolation. Signing data exist only for the Down syndrome datasets, so there is no typically-developing comparison.
+The within-understood sign–speech association $\psi$ — and therefore the data-identified total expressive vocabulary $p_{\text{any}}$ — is identified from the four sources that record, per word, whether a child signs it, says it, or both: `uk_02`, `uk_07`, `es_01` and `nz_01` (@sec-association). It is **descriptive / exploratory**, not a test of a hypothesis, and no causal reading is licensed: $\psi > 1$ says that a word a child understands is more often both signed and spoken than independence predicts, not that signing causes, accelerates or delays speech.
 
-At this sample size a point estimate that clears the independence reference $\psi = 1$ is, on average, inflated in magnitude — the Type-M ("winner's-curse") consequence of selecting on a noisy quantity — so the credible interval and the strength of evidence, not the point value of $\psi$, should carry the interpretation.
+**The sources disagree, and the model says so.** $\psi$ carries a study-level term; the per-study values are the primary read, and the population value is a shrunk centre, not a consensus. The Spanish source sits close to independence where the UK and New Zealand sources do not. No source records how its children were taught to sign, so the difference should not be read as evidence about teaching or compensation. An age-varying association was investigated and rejected — the between-source spread is not an age effect — but with four informing sources the spread itself is weakly identified and the prior does real work.
+
+**Signing coverage thins with age.** Signed observations are dense from about 12 to 60 months and sparse beyond: two small sources above 72 months and one above 84, so $r(a)$ and $p_{\text{any}}$ at older ages lean on the model's smoothness rather than on many children. The peak age of $r(a)$ is fixed by construction rather than estimated, and its length-scale is not identified, so the signed trajectory is parametric in practice. Signing data exist only for the Down syndrome sources; there is no typically-developing comparison.
+
+At these sample sizes a point estimate that clears the independence reference $\psi = 1$ is, on average, inflated in magnitude — the Type-M ("winner's-curse") consequence of selecting on a noisy quantity — so the credible intervals and the strength of evidence, not the point values, should carry the interpretation. See the Discussion (@sec-limitations) for the full statement of limitations.
 :::
