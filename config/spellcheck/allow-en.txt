@@ -103,11 +103,14 @@ dseresearch
 dtype
 dtypes
 duckdb
+elementwise
 elif
 elpd
 empiricalmodelling
 estimand
 estimands
+exceedance
+exceedances
 fallocate
 hightune
 hyperparameters
