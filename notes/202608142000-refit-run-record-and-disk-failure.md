@@ -108,6 +108,25 @@ The #147 Target 8 variant `vg11 / anchor-broad` widens both `q`-anchor priors �
 
 The retained trace was compacted from 43.6 to 4.5 GiB after the fit, to keep disk headroom for the two variants behind it (§3.2 is why that mattered). Every free parameter and all of `sample_stats` survive, so the post-mortem above is unaffected — but note that failed fits are pinned to `full` by design (`common.py`, "a post-mortem should not have to work around a storage policy"), and `scripts/compact_traces.py` scans only `output/models/`, so the project's own ENOSPC recovery path cannot currently reach the largest traces it keeps.
 
+### 5c. `vg11 / eta-narrow` passes the gate the model of record fails, and reports the same trajectory
+
+The second Target 8 variant narrows the GP amplitude prior alone — `eta_sigma` from 0.5 to 0.4 — and changes nothing else. At `rep` on 2026-08-15 it **passed the hard gate**:
+
+|                            |    model of record |        `eta-narrow` |
+| -------------------------- | -----------------: | ------------------: |
+| divergences                |                 16 |               **3** |
+| max R-hat (all parameters) | **1.0125 — fails** | **1.0075 — passes** |
+| min ESS                    |              1,139 |                 863 |
+| fitted `eta`               |              1.027 |               0.901 |
+
+**And the estimates do not move.** Across all eight reporting ages the expected spoken count agrees to within **0.22%**, and every point lies inside the model of record's own 89% interval. The largest absolute difference is 0.44 words at 30 months, on a count of 430.
+
+**This confirms §5a's diagnosis and qualifies [202608150900](202608150900-rhat-gate-calibration.md) §6.** That note concluded VG11 is "a correctly-specified model whose dominant GP direction mixes slowly", and that "the only honest remedy is more draws". The diagnosis is now corroborated from a second direction: narrowing precisely the GP amplitude prior is what clears the failure, which is what one would predict if that direction were the culprit. **The remedy claim is too strong as written.** It holds within a fixed specification; it is not true that no other remedy exists. A 20% prior narrowing resolves the failure at no cost to the reported estimates, and is cheaper than the double-draw refit §5a anticipates.
+
+**This is a finding, not yet a decision.** Two things must be checked before `eta_sigma = 0.4` could be adopted on the model of record. It is a **model-definition change**, so it invalidates VG11's fingerprint and forces the TD comparison figures to be regenerated. And "the same trajectory" has been verified here only on the reported spoken grid — VG11 also supplies the typically-developing arm of the DS-versus-TD between-child spread contrast in [`comparison.py`](../src/vocab_growth/comparison.py), and that quantity depends on `tau_subject`, which is unchanged in the posterior (1.039 in both) but has not been checked through the contrast itself. The decision belongs with the exception in §5a and with [#190](https://github.com/dseinternational/vocabulary-growth/issues/190), not inside this run.
+
+Taken with §5b, the two Target 8 anchor variants that have reported so far tell a consistent story about where VG11's difficulty lives: **widening the anchor priors makes the GP/linear ridge worse (60 divergences, the GP scale parameters failing), and narrowing the GP amplitude makes it better (3 divergences, a clean gate).** Both act on the same geometry from opposite directions.
+
 ## 6. State at the time of writing
 
 **Complete:** VG01–VG05, VG07 (13 Aug); VG03, VG04, VG13, VG12 (TD); VG08, VG09, VG15 under `CLAMP_Q_ONLY`; the `us01-implausible-reinstated`, `dse-native-only`, `tau-psi-*` and `psi-drop-*` sensitivity variants; VG10's `a1-tau-age-varying`.

@@ -92,7 +92,10 @@ The obvious follow-up is whether VG11's failure signals a misspecification that 
 
 **No chain is stuck and there is no multimodality**: per-chain SDs are 0.76–0.84 and per-chain means span 0.19. The sampler is otherwise healthier than two models already published with caveats — 16 divergences in 48,000 draws (0.033%, spread 5/1/4/1/4/1) and BFMI 0.359–0.395 on every chain, against VG12's 0.215 and VG13's 0.242.
 
-So VG11 is a correctly-specified model whose dominant GP direction mixes slowly. The only honest remedy is **more draws** — roughly double, to lift that coefficient's ESS from 1,139 past about 2,300. More _chains_ would buy the same ESS at the same wall-clock, but twelve will not fit in 251 GB.
+So VG11 is a correctly-specified model whose dominant GP direction mixes slowly. Within that specification the remedy is **more draws** — roughly double, to lift that coefficient's ESS from 1,139 past about 2,300. More _chains_ would buy the same ESS at the same wall-clock, but twelve will not fit in 251 GB.
+
+> [!NOTE]
+> **Corrected 2026-08-15.** This paragraph originally read "the only honest remedy is more draws". That is too strong, and the same day's `vg11 / eta-narrow` variant disproves it: narrowing the GP amplitude prior from `eta_sigma` 0.5 to 0.4 — and changing nothing else — **passes the hard gate** (max R-hat 1.0075, 3 divergences against 16) while reproducing every reported age to within 0.22%, all inside the model of record's own 89% interval. It also **corroborates the diagnosis above**: narrowing precisely the amplitude direction identified here is what clears the failure. More draws is the remedy at a fixed specification, not the only one. See [202608142000](202608142000-refit-run-record-and-disk-failure.md) §5c, which records why adoption is a separate decision.
 
 ## 7. Consequences
 
