@@ -102,9 +102,13 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 diagnostics.loc[diagnostics.index.str.contains("beta_lag", case=False)]
 ```
 
-::: {.callout-important title="Within-child contrast and the short-T bias"}
+::: {.callout-important title="The within-child contrast is anomalous, and its cause is not established"}
 
-The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's *own* understood intercept — was fit as a diagnostic. With the two-wave-dominated data it is **strongly and spuriously negative** (dev-tier $\beta \approx -0.60$, 89% interval $[-0.85, -0.35]$): a **short-T (Nickell-type) / errors-in-variables artifact** of regressing on a lag tied to the child's own random intercept, *not* evidence that comprehension suppresses later production. The bias-robust population-relative headline above avoids that circularity and is essentially null at dev-tier ($\beta \approx +0.05$, interval spanning 0). Sharpening the within-child estimate (latent-AR understood; restricting to the ≥3-wave children) is deferred to v2. See the scoping note (§5).
+The pure within-child (RI-CLPM) baseline — which additionally subtracts the child's *own* understood intercept — was fit as a diagnostic and is **strongly negative** (dev-tier $\beta \approx -0.60$, 89% interval $[-0.85, -0.35]$). It should **not** be read as evidence that comprehension suppresses later production.
+
+This was previously attributed here to a short-T (Nickell-type) / errors-in-variables artefact. **That attribution is withdrawn.** Simulating from this model's own posterior on the real observed wave structure, at known values of $\beta$ including zero, reproduces no such bias: at $\beta = 0$ every estimator returns zero to within 0.014, and a variant given each child's *true* intercept agrees with the estimated-intercept variant throughout — which rules out errors-in-variables in that intercept specifically. The leading remaining explanation is the ridge between $\beta$ and the child understood intercept under *joint* estimation, which that simulation severs by construction and so cannot test; dev-tier non-convergence is a second candidate. See [`202608151500`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608151500-within-child-crosslag-feasibility.md) §6.
+
+Two consequences for reading the headline above. The population-relative baseline is unbiased in that simulation when the truth is population-relative, so it remains the sound choice. But applied to *within*-generated truth it attenuates by roughly 45% — so if the underlying association were genuinely within-child, the reported $\beta$ would understate it by about a factor of two.
 
 :::
 
