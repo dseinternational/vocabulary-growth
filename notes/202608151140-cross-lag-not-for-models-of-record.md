@@ -50,7 +50,7 @@ The largest movements anywhere: **2.6 words understood (≤ 1.2%), 0.4 percentag
 
 ## 4. What to do instead
 
-The association the cross-lag detects is real and worth estimating properly. The right instrument is a **correlated subject random-effect block**: replace the independent priors on `(delta_subj_u, delta_subj_q)` with a joint prior through an `LKJCholeskyCov`, and read the correlation `rho_uq` directly. Against the cross-lag, it:
+The association the cross-lag detects is real and worth estimating properly. The right instrument is a **correlated subject random-effect block**: replace the independent priors on `(delta_subj_u, delta_subj_q)` with a joint prior carrying a free correlation `rho_uq`, written as the child-slope plan's explicit 2×2 Cholesky — for n = 2, `(rho_uq + 1)/2 ~ Beta(2, 2)` is exactly LKJ(2), and the explicit form keeps `rho_uq` a named variable the summaries and the recovery scorer read directly. Against the cross-lag, it:
 
 - applies to **all 767 children**, not the 250 with longitudinal repeats, and does not depend on study design;
 - estimates the between-child association on the correct footing, rather than through a noisy lagged proxy — no attenuation to argue about;

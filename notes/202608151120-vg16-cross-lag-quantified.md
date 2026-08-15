@@ -10,7 +10,7 @@
 
 VG16 exists to report one estimand: does a child's earlier receptive standing predict how much of what they understand they later _say_? Its single addition to the VG09/VG10 structure is `beta_lag`, which shifts the logit of the current production ratio `q` by the child's prior-wave understood count relative to the population + study expectation at that age (`lag_baseline="population"`; the child's stable production level is separately controlled by their `q` subject intercept).
 
-The fit is the cleanest-sampling model in the family: 0 divergences, max R-hat 1.0048, min ESS 1,599, BFMI 0.46–0.50 on every chain, and `beta_lag` itself at ESS 13,270, R-hat 1.000.
+The fit is clean: 0 divergences, max R-hat 1.0048, min ESS 1,599, BFMI 0.46–0.50 on every chain, and `beta_lag` itself at ESS 13,270, R-hat 1.000. That is on par with its subject random-effect siblings VG08–VG10 (min ESS 938–1,669, min BFMI 0.43–0.47), and no better: the models without subject effects sample far more comfortably (BFMI 0.76–0.95).
 
 **Headline: `beta_lag` = +0.203, 89% ETI [0.093, 0.316], P(>0) = 0.999.** Positive, reliably so, and modest. The rest of this note converts that logit-scale number into units a reader can weigh, and measures what the term does and does not do.
 
@@ -68,7 +68,7 @@ Two illustration choices follow. **Q3-vs-Q1 is the best paired illustration**: i
 
 ## 5. What the term does not do
 
-Three measurements bound its importance.
+Four measurements bound its importance.
 
 **It carries ~2.9% of the variance.** `var(beta_lag · x_lag)` = 0.050 against `tau_subj_q²` = 1.65: **2.9%** [0.6, 6.9] of the combined lag-plus-between-child variance in the `q` logit.
 
@@ -82,7 +82,7 @@ Three measurements bound its importance.
 
 Four connections to [202608141600](202608141600-rank-stability-tracking.md), each strengthening the other's reading.
 
-**The lag gaps sit exactly in the well-tracked window.** The median lag is 6 months, IQR 5–7.2. DS comprehension correlates 0.701 (1–6 months) and 0.780 (6–12), disattenuating to roughly 0.83/0.90. Essentially all of `beta_lag`'s information comes from the interval where receptive standing is most stable — which is why the coefficient is estimable, and why the collapse to ρ = 0.238 beyond two years does not contaminate it.
+**The lag gaps sit exactly in the well-tracked window.** The median lag is 6 months, IQR 5–7.2. DS comprehension correlates 0.701 (1–6 months) and 0.780 (6–12) over those gaps; with comprehension's measurement share of just 3.4%, the disattenuated values are about 0.73 and 0.81 (the same reliability-bound arithmetic that gives the tracking note's spoken 0.704 → 0.825). Essentially all of `beta_lag`'s information comes from the interval where receptive standing is most stable — which is why the coefficient is estimable, and why the sharp decay beyond two years, measured on production (ρ = 0.238; comprehension's 24–60 month bin has no estimate), does not contaminate it.
 
 **The AR(1) rejection and the attenuation are the same fact seen twice.** §10.4 of the tracking note rejected the latent AR(1) on both outcomes (`ell → 0`): the within-child deviation has no memory beyond the occasion. If the non-persistent part of `x_lag` has no memory, it is pure noise for predicting current `q`, and only the persistent component carries signal — precisely the errors-in-variables structure of §5, whose predicted attenuation factor `var(persistent)/var(x_lag)` is the 0.526 measured there. The two analyses were done independently and agree on the mechanism.
 
@@ -101,7 +101,7 @@ Four connections to [202608141600](202608141600-rank-stability-tracking.md), eac
 | `test`, post-Edgin linkage rebuild |      0.167 | [0.053, 0.283]     | [202608031341](202608031341-test-refit-after-data-and-prior-changes.md) §4.7: re-linking 46 children across CDI forms roughly halved it |
 | **`rep`, model of record**         |  **0.203** | **[0.093, 0.316]** | this note                                                                                                                               |
 
-Two published statements still carry the `dev`-tier reading and are wrong against the model of record: the VG16 row of `docs/models/README.md` ("Population-relative headline (≈ null)") and the callout in `docs/models/vg16/index.qmd` ("essentially null at dev-tier (β ≈ +0.05, interval spanning 0)") — the latter's within-child-contrast caution remains accurate; it is the headline figure that is stale. [202608020829](202608020829-kappa-and-eta-q-prior-recalibration.md) §23 already flagged the discrepancy for checking before either figure was quoted. Both corrections are pending as of this note.
+Two published statements still carry the `dev`-tier reading and are wrong against the model of record: the VG16 row of `docs/models/README.md` ("Population-relative headline (≈ null)") and the callout in `docs/models/vg16/index.qmd` ("essentially null at dev-tier (β ≈ +0.05, interval spanning 0)") — the latter's within-child-contrast caution remains accurate; it is the headline figure that is stale. [202608020829](202608020829-kappa-and-eta-q-prior-recalibration.md) §16 already flagged the discrepancy for checking before either figure was quoted. Both corrections are pending as of this note.
 
 ## 8. Caveats
 
