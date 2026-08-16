@@ -322,6 +322,29 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     fig.suptitle("Posterior predictive distributions at query ages", y=1.02)
 
     if filename is not None and output_dir is not None:
+        # Clear the previous run's per-age figures before writing this run's.
+        # Without this a tightened reporting cap leaves the old, wider set on
+        # disk, and `ppc_count_distribution_gallery` globs whatever it finds:
+        # VG02 kept publishing a 90-month comprehension figure against an
+        # 84-month cap, and it propagated into docs/report/figures/. The
+        # capped `{filename}.csv` written below has no matching row, so the
+        # orphan was invisible to `tests/test_reporting_age_policy.py`, which
+        # reads tables.
+        import glob as _glob
+        import re as _re
+
+        # Anchored on the full basename: an unanchored `{filename}_*m.png` glob
+        # also matches another outcome's files, so the understood writer would
+        # delete the spoken figures when the prefixes share a stem.
+        stale_pattern = _re.compile(
+            rf"^{_re.escape(filename)}_\d+(?:\.\d+)?m\.(?:png|svg)$"
+        )
+        for stale in _glob.glob(os.path.join(output_dir, f"{filename}_*m.png")) + _glob.glob(
+            os.path.join(output_dir, f"{filename}_*m.svg")
+        ):
+            if stale_pattern.match(os.path.basename(stale)):
+                os.remove(stale)
+
         # The combined grid is no longer written — reports embed the per-age
         # figures below (via ppc_count_distribution_gallery). The grid is still
         # returned for callers/tests.
@@ -364,16 +387,39 @@ def ppc_count_distribution_gallery(
     when no per-age files are present (e.g. before a model is re-fit with the
     individual plots), so the report section is never empty. Prints nothing if
     neither is present.
+
+    Ages absent from the companion table ``{prefix}.csv`` are skipped. That
+    table is written under the outcome's reporting cap, so this keeps the
+    gallery inside the cap even when a figure from an earlier, looser run is
+    still on disk -- which is how VG02 came to publish a 90-month comprehension
+    figure against an 84-month cap. The fit-time writer now clears stale
+    figures, but this guard also protects fits produced before it did.
     """
     import glob
     import re
 
+    # Anchored on the prefix so that a gallery for one outcome cannot pick up
+    # another's files when the prefixes share a stem.
+    age_pattern = re.compile(rf"^{re.escape(prefix)}_(\d+(?:\.\d+)?)m\.png$")
+
     def _age(path: str) -> float:
-        m = re.search(r"_(\d+(?:\.\d+)?)m\.png$", os.path.basename(path))
+        m = age_pattern.match(os.path.basename(path))
         return float(m.group(1)) if m else float("inf")
+
+    permitted: set[float] | None = None
+    table_path = os.path.join(directory, f"{prefix}.csv")
+    if os.path.exists(table_path):
+        try:
+            table = pd.read_csv(table_path)
+            if "age_months" in table:
+                permitted = {float(age) for age in table["age_months"]}
+        except (OSError, ValueError):
+            permitted = None
 
     candidates = glob.glob(os.path.join(directory, f"{prefix}_*m.png"))
     files = [path for path in candidates if _age(path) != float("inf")]
+    if permitted is not None:
+        files = [path for path in files if _age(path) in permitted]
     files.sort(key=_age)
     if not files:
         combined = os.path.join(directory, f"{prefix}.png")
