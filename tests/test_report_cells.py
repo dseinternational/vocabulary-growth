@@ -1,0 +1,209 @@
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+"""The shared report blocks must describe the fit they are rendered against.
+
+Every one of these tests exists because the hand-written block it replaces got
+the answer wrong on a published report. The sampling banner told five models of
+record they were not fitted at reporting quality when they were fitted at more
+than the default reporting effort; the convergence callout told VG11 it had
+cleared a gate it is published under an exception to; and the priors prose in
+VG10 and VG15 described amplitudes that had been changed months earlier.
+"""
+
+import json
+
+import pandas as pd
+import pytest
+
+from vocab_growth import glossary, report_cells
+from vocab_growth.models.diagnostics_utils import render_convergence_caveats
+
+
+def _fit(tmp_path, *, definition=None, config="rep", parameters=("eta_u",), gate=None):
+    """A minimal fitted-output directory: manifest, diagnostics, gate payload."""
+    manifest = {
+        "model": {"model_id": "VGXX", "definition": definition or {}},
+        "sampling": {"configuration_name": config},
+        "data": {"rows": 1431},
+    }
+    (tmp_path / "fit_manifest.json").write_text(json.dumps(manifest))
+    pd.DataFrame(index=list(parameters), data={"r_hat": [1.0] * len(parameters)}).to_csv(
+        tmp_path / "diagnostics.csv"
+    )
+    if gate is not None:
+        (tmp_path / "diagnostics_summary.json").write_text(json.dumps(gate))
+    return tmp_path
+
+
+# --------------------------------------------------------------------------
+# Sampling banner
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("config", ["rep", "rep-hightune", "rep-lite"])
+def test_reporting_configs_are_not_called_approximate(tmp_path, capsys, config):
+    """The defect this replaces: rep-hightune fits published a disclaimer.
+
+    VG08, VG09, VG11, VG12 and VG13 were each fitted at 6 chains x 8,000-10,000
+    draws -- more sampling effort than the 6 x 6,000 the old lookup table called
+    "reporting" -- fell through it, and printed "It was not fitted in reporting
+    mode" on a reporting-quality fit.
+    """
+    report_cells.render_sampling_banner(str(_fit(tmp_path, config=config)))
+    out = capsys.readouterr().out
+    assert "not** fitted at reporting quality" not in out
+    assert config in out or report_cells.CONFIG_LABELS[config] in out
+
+
+@pytest.mark.parametrize("config", ["dev", "test"])
+def test_non_reporting_configs_are_flagged(tmp_path, capsys, config):
+    report_cells.render_sampling_banner(str(_fit(tmp_path, config=config)))
+    assert "not** fitted at reporting quality" in capsys.readouterr().out
+
+
+def test_unrecorded_config_is_flagged_rather_than_assumed(tmp_path, capsys):
+    (tmp_path / "fit_manifest.json").write_text(json.dumps({"sampling": {}}))
+    report_cells.render_sampling_banner(str(tmp_path))
+    assert "not** fitted at reporting quality" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------
+# Priors table
+# --------------------------------------------------------------------------
+
+
+def test_priors_table_reads_values_from_the_manifest(tmp_path, capsys):
+    """A prior's value must come from the fit, never from prose in the template."""
+    fit = _fit(
+        tmp_path,
+        definition={"eta_u_sigma": 0.8, "n_trials": 810},
+        parameters=("eta_u",),
+    )
+    report_cells.render_priors_table(str(fit))
+    assert "HalfNormal(0.8)" in capsys.readouterr().out
+
+
+def test_priors_table_omits_parameters_the_fit_did_not_sample(tmp_path, capsys):
+    """The gating that stops a report describing machinery its model lacks.
+
+    The definition dataclass carries defaults for every field, so VG05's
+    manifest records `tau_u_sigma` although VG05 has no study effects, and every
+    bivariate manifest records `beta_lag_sigma` although only VG16 fits one.
+    """
+    fit = _fit(
+        tmp_path,
+        definition={"eta_u_sigma": 0.6, "tau_u_sigma": 0.5, "beta_lag_sigma": 0.5},
+        parameters=("eta_u",),  # no tau_u, no beta_lag
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "GP amplitude, understood" in out
+    assert "Between-study SD" not in out
+    assert "Cross-lag" not in out
+
+
+def test_signed_anchors_use_the_signed_anchor_ages(tmp_path, capsys):
+    """Signing has its own anchor ages; labelling them with slope_anchors lies."""
+    fit = _fit(
+        tmp_path,
+        definition={
+            "p_slope_low_sign_alpha": 2.0,
+            "p_slope_low_sign_beta": 20.0,
+            "slope_anchors": [24, 84],
+            "sign_anchor_ages": [15.0, 36.0, 96.0],
+        },
+        parameters=("p_slope_low_sign",),
+    )
+    report_cells.render_priors_table(str(fit))
+    assert "(15 months)" in capsys.readouterr().out
+
+
+def test_signed_peak_is_reported_as_estimated(tmp_path, capsys):
+    """VG15's report claimed the signed peak was fixed by construction; it is not."""
+    fit = _fit(
+        tmp_path,
+        definition={"sign_peak_prior": [2.0, 4.0]},
+        parameters=("peak_unit_sign",),
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "estimated, not fixed" in out
+    assert "24–48 months" in out
+
+
+def test_priors_table_says_so_when_there_is_no_manifest(tmp_path, capsys):
+    report_cells.render_priors_table(str(tmp_path))
+    assert "No fit manifest" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------
+# Convergence caveats
+# --------------------------------------------------------------------------
+
+
+def test_accepted_rhat_exception_is_disclosed(tmp_path, capsys):
+    """VG11 is published under a recorded exception and said it had cleared the gate.
+
+    The old per-template block read only `divergences` and `bfmi`, then printed
+    a hard-coded sentence claiming the hard tier had been cleared.
+    """
+    gate = {
+        "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.0125,
+        "accepted_rhat_exception": {
+            "parameters": ["g_unit_hsgp_coeffs[4]"],
+            "observed_max_rhat": 1.0125,
+            "reason": "One HSGP basis coefficient of sixteen.",
+            "decided": "2026-08-15, study owner",
+        },
+    }
+    fit = _fit(tmp_path, gate=gate)
+    render_convergence_caveats(str(fit))
+    out = capsys.readouterr().out
+    assert "did not clear" in out
+    assert "g_unit_hsgp_coeffs[4]" in out
+    assert "cleared the hard convergence tier" not in out
+
+
+def test_soft_tier_only_keeps_the_cleared_framing(tmp_path, capsys):
+    gate = {
+        "checks": {"rhat": True, "ess": True, "divergences": False, "bfmi": True},
+        "divergences": 16,
+    }
+    render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
+    out = capsys.readouterr().out
+    assert "cleared the hard convergence tier" in out
+    assert "16 divergent" in out
+
+
+def test_clean_fit_prints_nothing(tmp_path, capsys):
+    gate = {"checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True}}
+    render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
+    assert capsys.readouterr().out == ""
+
+
+# --------------------------------------------------------------------------
+# Glossary
+# --------------------------------------------------------------------------
+
+
+def test_unknown_glossary_term_raises(capsys):
+    """A typo in a template must fail the render, not drop the definition."""
+    with pytest.raises(KeyError):
+        glossary.render_glossary(["Logit", "Not A Real Term"])
+
+
+def test_glossary_renders_in_definition_order(capsys):
+    glossary.render_glossary(["Concentration ($\\kappa$)", "Logit"])
+    out = capsys.readouterr().out
+    assert out.index("Logit") < out.index("Concentration")
+
+
+def test_kappa_definition_states_the_counter_intuitive_direction():
+    """Ten reviews each flagged that kappa is used without saying which way it runs."""
+    assert "less" in glossary.GLOSSARY["Concentration ($\\kappa$)"]
+
+
+def test_default_interval_convention_is_stated_somewhere():
+    assert "89%" in glossary.GLOSSARY["Equal-tailed interval (ETI)"]
