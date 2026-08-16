@@ -156,6 +156,8 @@ parameterisation
 parameterisations
 parameterising
 pathlib
+pgrep
+ppid
 preliz
 pyplot
 pytest

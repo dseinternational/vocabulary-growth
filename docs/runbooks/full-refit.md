@@ -248,6 +248,17 @@ end of their logs, which reads convincingly as the cause and is not.
 > terminal line — indistinguishable from "still running" until you check `pgrep`.
 > Never infer success or liveness from the status file alone.
 
+**6. Detach the driver from whatever supervises it.** A fit inherits the lifetime of its parent process group, so anything that stops the supervisor kills the fit — no kernel log entry, no OOM, nothing to diagnose after the fact. On 2026-08-16 `vg11 anchor-broad` was killed three hours in, past its prior predictive checks and well into sampling, because the agent-harness background task running the driver was stopped; `sudo dmesg -T` for that day was empty, which is what distinguishes this case from item 5. Launch the driver so it outlives its launcher:
+
+```bash
+setsid nohup bash scripts/driver.sh >/dev/null 2>&1 < /dev/null &
+ps -o ppid= -p "$(pgrep -f driver.sh)"   # must be 1
+```
+
+Check the reparenting rather than assuming it: `nohup … &` alone leaves the process in the launcher's group and does not survive a group kill.
+
+**7. Order the queue cheapest-first unless something specific argues otherwise.** Putting the heaviest fit first to fail fast on disk or memory is only worth it while that resource is actually in doubt. Once headroom has been stable for hours, heaviest-first just maximises what a single interruption destroys — which is exactly what item 6 cost. Reordering after the loss got three of the four Target 8 variants moving while the multi-hour one waited.
+
 ### Reporting age caps, and what `regenerate_plots.py` can and cannot fix
 
 Every figure and table stops where its own outcome's evidence stops. The policy
