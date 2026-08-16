@@ -1,19 +1,146 @@
 ---
 title: "Words understood and spoken"
-abstract: "In children with Down syndrome, words understood consistently exceed words spoken throughout development — comprehension leads production. Matching on the number of words understood, typically-developing children say a larger fraction of what they understand than children with Down syndrome over the upper part of the comprehension range the data cover; at the lowest comprehension levels the two populations are indistinguishable. Typically-developing comprehension data stop at about 200 understood words, so the contrast is not estimated beyond that."
+abstract: "Vocabulary in children with Down syndrome grows steadily across the age range these data cover, with words understood ahead of words spoken at every age. Children differ from one another far more than the average trajectory suggests, so the expectation for an individual child is a wide range rather than a number. Against a typically-developing reference the distance is not a fixed delay: the months behind grow with the vocabulary level reached, and they grow faster for words spoken than for words understood. Matching on the number of words understood, typically-developing children say a larger fraction of what they understand, over the upper part of the comprehension range the data cover; at the lowest comprehension levels the two populations are not distinguishable."
 ---
 
 {{< include _report_data.qmd >}}
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8, extended with Claude Code/Opus 5).
 :::
 
 {{< include _caveats-ds.qmd >}}
 
+This chapter reports what the models say about the two spoken-language outcomes: how many words a child with Down syndrome understands and says at a given age, how much children differ, how the two relate to one another, and how both compare with typically-developing children.
+
 Every joint model in this report writes spoken vocabulary as a fraction of understood vocabulary, $p_S(a) = p_U(a)\,q(a)$, where $q(a) = P(\text{speak} \mid \text{understand})$ is the **production ratio** — the share of understood words a child also says. The comprehension–production gap is exactly $q(a) < 1$: the smaller $q$, the more a child understands relative to what they say.
 
-## Comprehension leads production in Down syndrome
+Down syndrome numbers come from the model of record, VG10 (study and child random effects, the production ratio anchored at two reference ages). The typically-developing comparators are VG11 (spoken) and VG12 (words understood) for the age-indexed contrasts, and the joint young-window model VG13 where a contrast needs both outcomes coupled within a draw.
+
+## How vocabulary grows with age {#sec-ds-trajectories}
+
+Two quantities are reported at each age and they answer different questions. The **expected count** $E[Y]$ is the average for the pool: its interval carries uncertainty about the trajectory itself, and it narrows as more children are observed. The **predictive count** $Y$ is what a single child might score: its interval also carries between-child and occasion-to-occasion variability, and it stays wide however much data are collected. For setting an expectation about one child, the predictive interval is the one to quote.
+
+### Words understood
+
+```{python}
+#| label: tbl-ds-understood
+#| echo: false
+show_or_pending(
+    counts_at("VG10", "posterior_summary_u", [12, 18, 24, 30, 36, 48, 60, 72, 84]),
+    "the words-understood trajectory",
+)
+```
+
+![Words understood by age in children with Down syndrome (VG10), against the observed data.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/posterior_predictive_median_trend_u.png){#fig-ds-understood}
+
+### Words spoken
+
+```{python}
+#| label: tbl-ds-spoken
+#| echo: false
+show_or_pending(
+    counts_at("VG10", "posterior_summary_s", [12, 18, 24, 30, 36, 48, 60, 72, 84]),
+    "the words-spoken trajectory",
+)
+```
+
+![Words spoken by age in children with Down syndrome (VG10), against the observed data.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/posterior_predictive_median_trend_s.png){#fig-ds-spoken}
+
+### The two together
+
+![Words understood and words spoken on the same axes, with the gap between them.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/joint_trajectory.png){#fig-ds-joint}
+
+```{python}
+#| label: tbl-ds-gap
+#| echo: false
+_gap = load_summary("VG10", "comprehension_production_gap")
+if _gap is not None:
+    _rows = sorted({int((_gap["age_months"] - a).abs().argmin())
+                    for a in [12, 18, 24, 30, 36, 48, 60, 72, 84]})
+    _gap = _gap.iloc[_rows][["age_months", "gap_median", "ci_lo", "ci_hi"]].round(1)
+    _gap.columns = ["Age (mo)", "Understood − spoken", "89% lo", "89% hi"]
+show_or_pending(_gap, "the comprehension–production gap in words")
+```
+
+The gap above is in words, and it widens with age for most of the range even as the *ratio* $q(a)$ rises: a child who understands many more words can be behind on a larger absolute number of them while saying a larger share of them. The two views are reported separately for that reason.
+
+::: {.callout-important title="Where these numbers stop resting on data"}
+Comprehension observations thin out above about 60 months and spoken observations above about 72. The tables above are capped at the reporting ages the project applies to each quantity — 84 months for words understood and quantities derived from it, 90 for words spoken — and the monthly reference tables in Appendix C carry an `n_obs` column showing how many observations sit near each age. Rows with no nearby observations are the model's smoothness assumption, not evidence.
+:::
+
+## How fast vocabulary grows {#sec-ds-growth-rate}
+
+The age derivative of the expected trajectory — words per month — describes how expected vocabulary differs between children of different ages. It is **not** a within-child learning rate: most of these data are cross-sectional, and a cross-sectional slope answers "how much more does a slightly older child know?", not "how fast does this child learn?".
+
+![Rate of change of expected words understood with age (VG10).](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/expected_learning_rate_u.png){#fig-ds-rate-u}
+
+![Rate of change of expected words spoken with age (VG10).](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/expected_learning_rate_s.png){#fig-ds-rate-s}
+
+A natural summary is the age at which that rate peaks — the steepest part of the curve. It is reported here with a warning attached, because in the Down syndrome pool it is barely identified:
+
+```{python}
+#| label: tbl-peak-growth
+#| echo: false
+_peak = comp_load("ds_td_peak_growth_age")
+show_or_pending(None if _peak is None else _peak.round(1), "the peak-growth-age comparison")
+```
+
+```{python}
+#| label: peak-growth-note
+#| echo: false
+#| output: asis
+# The boundary fraction is the share of draws whose peak lands on the edge of
+# the age grid: a large value means the data do not locate a peak inside the
+# window at all. Reading it out of the file keeps this caveat honest if a refit
+# sharpens or worsens the identification.
+_p = comp_load("ds_td_peak_growth_age")
+if _p is None:
+    print("_The peak-growth-age comparison is pending: run "
+          "`scripts/compare_ds_td_expressive.py` and `scripts/sync_report_figures.py`._")
+else:
+    _p = _p.set_index("outcome")
+    _bits = []
+    for _o in _p.index:
+        _r = _p.loc[_o]
+        _bits.append(
+            f"For **{_o}** vocabulary the typically-developing peak is located sharply "
+            f"({_r['peak_age_TD_median']:.1f} months, 89% interval "
+            f"{_r['peak_age_TD_ci_lo']:.1f} to {_r['peak_age_TD_ci_hi']:.1f}), while the Down "
+            f"syndrome peak is not: {_r['peak_age_DS_median']:.0f} months with an 89% interval "
+            f"of {_r['peak_age_DS_ci_lo']:.0f} to {_r['peak_age_DS_ci_hi']:.0f} months, and "
+            f"{_r['peak_age_DS_boundary_frac']:.0%} of posterior draws placing the peak at the "
+            f"edge of the age window rather than inside it."
+        )
+    print("\n\n".join(_bits))
+    print("""
+
+The honest reading is that growth in the Down syndrome pool has **not decelerated within the observed age range** in the way the typically-developing curves do: the data are consistent with a peak late in the window or beyond it. That is a statement about where the data run out, not a claim that growth continues indefinitely.
+""")
+```
+
+## How much children differ {#sec-ds-variation}
+
+The width of the predictive interval in @tbl-ds-understood and @tbl-ds-spoken is a finding in its own right, not a nuisance. Two children of the same age with Down syndrome can differ by hundreds of words. The models separate three sources of that spread: differences between the studies children were recruited from, stable differences between children, and variability within a child from one occasion to the next.
+
+```{python}
+#| label: tbl-ds-thresholds
+#| echo: false
+_th = load_summary("VG10", "posterior_summary_s")
+_cols = ["age_months", "P(Y=0)", "P(Y<=10)", "P(Y<=25)", "P(Y<=50)", "P(Y<=100)", "P(Y<=200)"]
+if _th is not None:
+    _rows = sorted({int((_th["age_months"] - a).abs().argmin())
+                    for a in [12, 18, 24, 30, 36, 48, 60, 72, 84]})
+    _th = _th.iloc[_rows][[c for c in _cols if c in _th.columns]].round(3)
+    _th = _th.rename(columns={"age_months": "Age (mo)"})
+show_or_pending(_th, "the spoken-vocabulary threshold probabilities")
+```
+
+Each column is the probability that a single child of that age says that many words **or fewer**. These are the numbers to use when asking how common a given score is, and they make the spread concrete: at ages where the expected count is already in the tens of words, a substantial share of children are still at or near zero.
+
+![How the dispersion parameter for words spoken changes with age. Lower values mean greater spread between children relative to the mean.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/posterior_kappa_s.png){#fig-ds-kappa-s}
+
+## Comprehension leads production {#sec-ds-q}
 
 Across the Down syndrome age range the production ratio stays well below 1 and rises with age (@fig-ds-q): children understand many more words than they say, and the gap narrows only gradually as they get older. The posterior median and 89% interval of $q(a)$ by age:
 
@@ -28,7 +155,149 @@ _qds
 
 This reproduces, in a large pooled sample, the long-standing observation that expressive vocabulary lags behind receptive vocabulary in Down syndrome.
 
-## Down syndrome vs typically developing: the gap is larger in Down syndrome
+The same ratio can be plotted against comprehension level rather than age, which removes the timescale from the picture and asks what a child who understands $N$ words typically says:
+
+![The production ratio against words understood rather than age (VG10).](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/production_rate_by_understood.png){#fig-ds-q-by-u}
+
+## Comparison with typically developing children {#sec-ds-td}
+
+The Down syndrome and typically-developing pools are disjoint — no shared studies and no shared children — so their posteriors are independent and a contrast can be formed draw by draw from the two separate fits. Every difference below is computed that way, which gives exact credible intervals without a joint model. What it does *not* give is a model in which the gap is itself a parameter with its own hierarchy; that model is not built, and is noted in the Limitations.
+
+Each contrast is reported only where both populations' draws actually reach the age or level in question. Coverage columns in the underlying tables record this, and points below the coverage threshold are dropped rather than shown as confident estimates of something the data do not support.
+
+### Expected words at the same age {#sec-ds-td-by-age}
+
+```{python}
+#| label: tbl-ds-td-by-age
+#| echo: false
+_by_age = []
+for _out, _name in (("understood", "Words understood"), ("spoken", "Words spoken")):
+    _df = comp_load(f"ds_td_{_out}_re_expected_words")
+    if _df is None:
+        continue
+    _rows = sorted({int((_df["age_months"] - a).abs().argmin()) for a in [12, 15, 18, 21, 24, 30]})
+    _sub = _df.iloc[_rows][
+        ["age_months", "TD_median", "DS_median", "delta_median", "delta_ci_lo",
+         "delta_ci_hi", "ratio_median"]
+    ].copy()
+    _sub.insert(0, "Outcome", _name)
+    _by_age.append(_sub)
+_tab = None
+if _by_age:
+    _tab = pd.concat(_by_age, ignore_index=True).round(1)
+    _tab.columns = ["Outcome", "Age (mo)", "TD", "DS", "TD − DS", "89% lo", "89% hi", "TD / DS"]
+show_or_pending(_tab, "the age-matched expected-word contrast")
+```
+
+![Expected words understood by age, typically developing versus Down syndrome.](figures/comparisons/ds_td_understood_re_expected_words.png){#fig-td-ds-understood}
+
+![Expected words spoken by age, typically developing versus Down syndrome.](figures/comparisons/ds_td_spoken_re_expected_words.png){#fig-td-ds-spoken}
+
+The age-matched view is the least informative of the comparisons in this chapter, because the two populations are on such different timescales that the difference at a fixed age says more about which part of each curve is being sampled than about the populations. The comparisons that follow remove that problem by matching on attainment rather than age.
+
+### Months behind at the same vocabulary level {#sec-ds-td-delay}
+
+A more interpretable contrast asks: for a given number of words, how many months later does the Down syndrome population reach it? A **flat** delay across levels would mean a pure shift — the same trajectory, started later. A **rising** delay means a developmental stretch, where the distance keeps growing as vocabulary grows.
+
+```{python}
+#| label: tbl-attainment-delay
+#| echo: false
+_delays = []
+for _out, _name in (("understood", "Words understood"), ("spoken", "Words spoken")):
+    _f = comp_facts(f"ds_td_{_out}_re_attainment_delay", grid_col="words", prefix="d", bare=True)
+    if _f is None:
+        continue
+    _sub = _f["table"][["words", "d_median", "d_ci_lo", "d_ci_hi"]].copy()
+    _sub.insert(0, "Outcome", _name)
+    _delays.append(_sub)
+_tab = None
+if _delays:
+    _tab = pd.concat(_delays, ignore_index=True).round(1)
+    _tab.columns = ["Outcome", "Words", "Months behind", "89% lo", "89% hi"]
+show_or_pending(_tab, "the attainment-delay contrast")
+```
+
+```{python}
+#| label: attainment-delay-finding
+#| echo: false
+#| output: asis
+# Direction words and every number come from the coverage-filtered tables above,
+# via the same helper the Δq paragraph uses.
+_fu = comp_facts("ds_td_understood_re_attainment_delay", grid_col="words", prefix="d", bare=True)
+_fs = comp_facts("ds_td_spoken_re_attainment_delay", grid_col="words", prefix="d", bare=True)
+if _fu is None or _fs is None:
+    print("_The attainment-delay contrast is pending: run `scripts/compare_ds_td_re.py` "
+          "and `scripts/sync_report_figures.py`._")
+else:
+    _shape = ("**grows** with the vocabulary level reached" if _fs["rises"]
+              else "**does not grow** with the vocabulary level reached")
+    print(f"""
+The delay is not a constant. For words spoken it {_shape}: the Down syndrome population reaches 10 spoken words about {comp_band("ds_td_spoken_re_attainment_delay", "words", 10, bare=True, unit="months")} after the typically-developing population, 100 spoken words about {comp_band("ds_td_spoken_re_attainment_delay", "words", 100, bare=True, unit="months")} after, and {_fs["covered"][1]:.0f} spoken words about {comp_band("ds_td_spoken_re_attainment_delay", "words", _fs["covered"][1], bare=True, unit="months")} after. Words understood show the same pattern over the range the typically-developing comprehension data support ({_fu["covered"][0]:.0f} to {_fu["covered"][1]:.0f} words): about {comp_band("ds_td_understood_re_attainment_delay", "words", 50, bare=True, unit="months")} behind at 50 words and about {comp_band("ds_td_understood_re_attainment_delay", "words", _fu["covered"][1], bare=True, unit="months")} behind at {_fu["covered"][1]:.0f}.
+
+This is the central quantitative finding of the age comparison, and it argues against the simplest picture of Down syndrome vocabulary as a typically-developing trajectory running late by a fixed amount. The distance in months keeps opening as vocabulary grows, and it opens faster for words spoken than for words understood.
+""")
+```
+
+![Months behind typically-developing children at each level of words understood.](figures/comparisons/ds_td_understood_re_attainment_delay.png){#fig-delay-understood}
+
+![Months behind typically-developing children at each level of words spoken.](figures/comparisons/ds_td_spoken_re_attainment_delay.png){#fig-delay-spoken}
+
+### The extra delay specific to production {#sec-ds-td-extra}
+
+Comparing the two delays directly asks whether production is behind by *more* than comprehension is — a difference of differences, $\Delta_\text{exp}(N) = D_S(N) - D_U(N)$. A value above zero means the production delay is not simply a consequence of the comprehension delay.
+
+```{python}
+#| label: tbl-expressive-delta
+#| echo: false
+_fe = comp_facts("ds_td_expressive_delay", grid_col="words", prefix="dexp")
+_tab = None
+if _fe is not None:
+    _tab = _fe["table"][["words", "DU_median", "DS_median", "dexp_median",
+                         "dexp_ci_lo", "dexp_ci_hi", "dexp_p_gt0"]].round(2)
+    _tab.columns = ["Words", "Delay to understand (mo)", "Delay to say (mo)",
+                    "Extra (mo)", "89% lo", "89% hi", "P(extra > 0)"]
+    _tab = _tab.reset_index(drop=True)
+show_or_pending(_tab, "the extra-production-delay contrast")
+```
+
+```{python}
+#| label: expressive-delta-finding
+#| echo: false
+#| output: asis
+_fe = comp_facts("ds_td_expressive_delay", grid_col="words", prefix="dexp")
+if _fe is None:
+    print("_The extra-production-delay contrast is pending: run "
+          "`scripts/compare_ds_td_expressive.py` and `scripts/sync_report_figures.py`._")
+else:
+    _lo, _hi = _fe["covered"]
+    _dir = direction(
+        _fe["peak"], "dexp",
+        positive="**larger** than the comprehension delay",
+        negative="**smaller** than the comprehension delay",
+        unclear="not distinguishable from the comprehension delay",
+    )
+    print(f"""
+Over the vocabulary range where both delays are supported — {_lo:.0f} to {_hi:.0f} words — the delay to *say* a given number of words is {_dir}, by about {comp_band("ds_td_expressive_delay", "words", _hi, "dexp", unit="months")}.
+
+That range is narrow, and the reason matters. This contrast needs both outcomes from the same typically-developing model, so it uses the joint young-window model VG13, whose window ends at 18 months; a typically-developing child says only a few tens of words by then. The comparison is therefore well supported at low vocabulary levels and unavailable above them. It is consistent with the wider-support attainment delays in @sec-ds-td-delay, where the spoken delay exceeds the comprehension delay at every level both cover, but on its own it establishes the difference only at the bottom of the range.
+""")
+```
+
+![Delay to understand and delay to say a given number of words.](figures/comparisons/ds_td_expressive_attainment_delay.png){#fig-expressive-attainment}
+
+![The extra production delay beyond the comprehension delay.](figures/comparisons/ds_td_expressive_delta.png){#fig-expressive-delta}
+
+### Comprehension-equivalent developmental age {#sec-ds-td-equivalent}
+
+The same information read the other way round: at a given age, a child with Down syndrome understands (or says) as many words as a typically-developing child of what age?
+
+![Comprehension- and production-equivalent typically-developing age, against the identity line.](figures/comparisons/ds_td_expressive_equivalent_age.png){#fig-equivalent-age}
+
+![The same, expressed as months of delay.](figures/comparisons/ds_td_expressive_delay_by_age.png){#fig-delay-by-age}
+
+This framing is intuitive and for that reason easy to over-read. An equivalent age is a statement about a **count on a checklist** and nothing else. It does not say that a child with Down syndrome resembles a younger typically-developing child in how they learn, what they know, or what they need; the composition of the vocabulary, and everything about grammar, intelligibility and use, is outside what these counts measure.
+
+### Matched on comprehension: the production ratio {#sec-ds-td-q}
 
 Down syndrome and typically-developing children grow vocabulary on very different timescales, so contrasting the gap **by age** would conflate that timescale difference. Instead we match on **comprehension level**: for a child who understands $N$ words, what fraction $q(U = N)$ do they say, in each population? Because words understood and words spoken are coupled per posterior draw within each joint model (Down syndrome from VG10; typically-developing from the young-window model VG13), this is a within-draw contrast at matched comprehension.
 
@@ -65,16 +334,190 @@ if dq_facts() is None:
         "`scripts/compare_ds_td_re.py` and `scripts/sync_report_figures.py`._"
     )
 else:
+    _lowest = dq_facts()["covered"][0]
+    _at_low = direction(
+        comp_row("ds_td_comprehension_q_at_U", "words", _lowest), "dq",
+        positive="still favours typically-developing children",
+        negative="favours children with Down syndrome",
+        unclear="does not separate the two populations",
+    )
     print(f"""
-At matched comprehension, typically-developing children say a **larger fraction** of the words they understand than children with Down syndrome — but only over the upper part of the comprehension range the data cover ({dq_covered()} understood words). The difference $\\Delta q = q_{{\\text{{TD}}}} - q_{{\\text{{DS}}}}$ is credibly positive, in the sense of an 89% interval excluding zero, from {dq_words("positive")} understood words, and is largest at {dq_peak()} (@fig-dq). Below that the interval includes zero, and at the bottom of the covered range the point estimate is slightly *negative* ($\\Delta q$ = {dq_at(30)} at 30 understood words), so the two populations are not distinguishable there.
+At matched comprehension, typically-developing children say a **larger fraction** of the words they understand than children with Down syndrome — but only over the upper part of the comprehension range the data cover ({dq_covered()} understood words). The difference $\\Delta q = q_{{\\text{{TD}}}} - q_{{\\text{{DS}}}}$ is credibly positive, in the sense of an 89% interval excluding zero, from {dq_words("positive")} understood words, and is largest at {dq_peak()} (@fig-dq). At the bottom of the covered range the interval {_at_low}: $\\Delta q$ = {dq_at(int(_lowest))} at {_lowest:.0f} understood words.
 
 The typically-developing advantage therefore **{dq_trend()}** across the covered comprehension range rather than narrowing: it is absent at low comprehension and largest at the top of the range the typically-developing data support. Because typically-developing comprehension coverage ends at about 200 understood words, the contrast is not estimated beyond that, and these data support no claim either way about whether the gap converges at higher vocabulary levels.
 """)
 ```
 
-## Limitations
+A related view is the **latency**: how many months pass between understanding $N$ words and saying $N$ words, in each population.
 
-- **Sampling-energy caveat on the typically-developing side.** Both fits are reporting quality and clear the R-hat and effective-sample-size gate, but the typically-developing model (VG13) carries an energy-BFMI caveat below 0.3 (see its convergence banner). Low BFMI indicates the sampler explored the posterior's tails poorly, which bears on the interval bounds quoted here more than on the point estimates.
-- **Comprehension coverage.** Typically-developing comprehension+production data span only ~8–18 months (words understood up to ~200); above ~200 understood words the typically-developing estimate is coverage-limited, so the contrast is shown only where both populations reach that comprehension level (coverage ≥ 80%). The upper end of the reported range is therefore the edge of the typically-developing data, not a point at which the contrast was found to stop.
-- **Composition, not only propensity.** Matching on the *number* of words understood does not match *which* words. Vocabulary items differ sharply in difficulty, so part of any $q$ difference at matched $N$ reflects the difficulty composition of the words each population knows at that level rather than production propensity alone.
-- **Across-model contrast.** Down syndrome (VG10) and typically-developing (VG13) are separate fits on the common 810-item scale. A single joint Down syndrome–typically-developing model would give a formal within-model contrast, but only over this same comprehension range; it is noted as a natural refinement rather than built here.
+![Months from understanding $N$ words to saying $N$ words, in each population.](figures/comparisons/ds_td_comprehension_latency.png){#fig-latency}
+
+### How atypical, not just how far behind {#sec-ds-td-distribution}
+
+Comparing averages understates the practical question, which is about individual children. This contrast asks what share of children with Down syndrome fall at or below the typically-developing 10th centile — a level that in the typically-developing population would place a child among the lowest-scoring one in ten.
+
+```{python}
+#| label: tbl-below-p10
+#| echo: false
+_p10 = comp_load("ds_td_below_td_p10")
+_tab = None
+if _p10 is not None:
+    _rows = sorted({int((_p10["age_months"] - a).abs().argmin())
+                    for a in [12, 15, 18, 21, 24, 27, 30]})
+    _cols = {"age_months": "Age (mo)",
+             "understood_median": "Understood", "understood_ci_lo": "Understood 89% lo",
+             "understood_ci_hi": "Understood 89% hi",
+             "spoken_median": "Spoken", "spoken_ci_lo": "Spoken 89% lo",
+             "spoken_ci_hi": "Spoken 89% hi"}
+    _keep = [c for c in _cols if c in _p10.columns]
+    _tab = _p10.iloc[_rows][_keep].round(3).rename(columns=_cols)
+show_or_pending(_tab, "the below-10th-centile contrast")
+```
+
+![Fraction of children with Down syndrome at or below the typically-developing 10th centile for words understood.](figures/comparisons/ds_td_below_td_p10_understood.png){#fig-p10-understood}
+
+![The same, for words spoken.](figures/comparisons/ds_td_below_td_p10_spoken.png){#fig-p10-spoken}
+
+Almost the whole Down syndrome distribution sits below the typically-developing 10th centile across the overlapping ages. This is the same information as the delay, expressed in a form that matters for services: a comparison against typically-developing norms will place nearly every child with Down syndrome in its lowest band, which is why norms of this kind carry little information about an individual child with Down syndrome and why the within-population expectations in @sec-ds-trajectories are the more useful reference.
+
+### How much children differ, in each population {#sec-ds-td-variation}
+
+Between-child variation is itself a contrast worth making. The quantity here is $\tau$, the standard deviation across children of the child's own position on the logit scale, once study differences have been taken out. It is not the observation-level dispersion, and it is not the spread in words, which depends on where on the curve each population sits.
+
+```{python}
+#| label: tbl-subject-tau
+#| echo: false
+_taus = []
+for _out, _name in (("understood", "Words understood"), ("spoken", "Words spoken")):
+    _row = comp_row(f"ds_td_{_out}_re_subject_heterogeneity", "age_months", 24)
+    if _row is None:
+        continue
+    _taus.append({
+        "Outcome": _name,
+        "τ TD": _row.get("tau_TD_median"),
+        "TD 89% lo": _row.get("tau_TD_ci_lo"),
+        "TD 89% hi": _row.get("tau_TD_ci_hi"),
+        "τ DS": _row.get("tau_DS_median"),
+        "DS 89% lo": _row.get("tau_DS_ci_lo"),
+        "DS 89% hi": _row.get("tau_DS_ci_hi"),
+        "Ratio TD/DS": _row.get("tau_ratio_median"),
+    })
+show_or_pending(pd.DataFrame(_taus).round(2) if _taus else None,
+                "the between-child variation contrast")
+```
+
+![Between-child variation $\tau$ for words spoken, in each population.](figures/comparisons/ds_td_spoken_re_subject_tau.png){#fig-tau-spoken}
+
+![Between-child variation $\tau$ for words understood, in each population.](figures/comparisons/ds_td_understood_re_subject_tau.png){#fig-tau-understood}
+
+```{python}
+#| label: subject-tau-finding
+#| echo: false
+#| output: asis
+_bits = []
+for _out, _name in (("understood", "words understood"), ("spoken", "words spoken")):
+    _row = comp_row(f"ds_td_{_out}_re_subject_heterogeneity", "age_months", 24)
+    if _row is None:
+        continue
+    _dir = direction(
+        _row, "dtau",
+        positive="**less** varied",
+        negative="**more** varied",
+        unclear="no more or less varied",
+    )
+    _bits.append(f"for {_name}, children with Down syndrome are {_dir} than typically-developing "
+                 f"children, the ratio of the two being "
+                 f"{band(_row, 'tau_ratio', '{:.2f}')}")
+if _bits:
+    print("Read at 24 months: " + "; ".join(_bits) + ".")
+    print("""
+
+The practical consequence is that a single expected trajectory describes an individual child with Down syndrome *less* well than the corresponding typically-developing trajectory describes an individual typically-developing child — which is the statistical form of a point clinicians and teachers make from experience. The word-scale spread is reported alongside in the underlying table; it is not a like-for-like contrast, because two populations at different points on a bounded curve have different room to vary in words even when their variation on the underlying scale is the same.
+""")
+else:
+    print("_The between-child variation contrast is pending: run "
+          "`scripts/compare_ds_td_re.py` and `scripts/sync_report_figures.py`._")
+```
+
+## How well these models predict {#sec-us-loo}
+
+Model choice in this report is predictive: a model is preferred when it predicts held-out observations better, judged by the expected log pointwise predictive density (ELPD) estimated by leave-one-out cross-validation. Higher (less negative) is better, and a difference should be read against its standard error.
+
+The table lists the development lineage that ends in the model of record, plus VG16, the within-child cross-lag variant. VG16 is not a step in that lineage and supplies no reported number: it exists to ask whether a child's earlier comprehension predicts their later production beyond what age already explains, and its two-wave design cannot separate within-child change from stable between-child differences.
+
+```{python}
+#| label: tbl-loo-us
+#| echo: false
+show_or_pending(loo_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG16"]),
+                "the leave-one-out summaries")
+```
+
+These models are fitted to the same observations — the `Observations` column is identical down each outcome — which is what makes their ELPDs comparable at all.
+
+```{python}
+#| label: loo-lineage-finding
+#| echo: false
+#| output: asis
+# The lineage narrative is derived, not typed. An earlier hand-written version of
+# this paragraph asserted that every step improved prediction; VG08 is worse than
+# VG07 on words spoken, and the assertion would have survived the refit that made
+# it false.
+_LINEAGE = [("VG05", "no random effects"), ("VG07", "study effects"),
+            ("VG08", "child effects"), ("VG09", "a child effect on $q$"),
+            ("VG10", "the anchored $q$")]
+_loo = loo_table([m for m, _ in _LINEAGE])
+if _loo is None:
+    print("_The leave-one-out summaries are pending: refit, or run "
+          "`scripts/emit_loo_summaries.py`, then `scripts/sync_report_figures.py`._")
+else:
+    _lines = []
+    for _outcome in sorted(_loo["Outcome"].unique()):
+        _seq = (_loo[_loo["Outcome"] == _outcome]
+                .set_index("Model")["ELPD"].reindex([m for m, _ in _LINEAGE]).dropna())
+        if len(_seq) < 2:
+            continue
+        _net = _seq.iloc[-1] - _seq.iloc[0]
+        _worse = [m for m, d in _seq.diff().dropna().items() if d < 0]
+        _tail = ("every step improving it" if not _worse
+                 else "though not at every step — " +
+                      ", ".join(f"{m} predicts it less well than the model before it"
+                                for m in _worse))
+        _lines.append(f"- **{_outcome.capitalize()}**: {_net:+,.0f} in ELPD from "
+                      f"{_seq.index[0]} to {_seq.index[-1]}, {_tail}.")
+    print("Read down the lineage, from no random effects (VG05) through study effects "
+          "(VG07), child effects (VG08), a child effect on the production ratio (VG09) "
+          "and the anchored ratio (VG10):\n\n" + "\n".join(_lines))
+    print("""
+
+Added structure earns its place on the outcome it is about, and is not guaranteed to pay for itself on the other. That is a normal feature of a joint model: a parameter that lets one outcome fit better spends degrees of freedom the whole likelihood shares.
+""")
+```
+
+The table below is the formal version of the first of those steps, for words understood: the joint Down syndrome model without study random effects (VG05) against the same model with them (VG07). Adding the hierarchy improves held-out prediction by well more than its standard error.
+
+```{python}
+#| label: tbl-loo-compare
+#| echo: false
+show_or_pending(comp_load("loo_compare_ds_bivariate_re_vs_no_re_understood"),
+                "the random-effects model comparison")
+```
+
+::: {.callout-warning title="Leave-one-out is the wrong unit for a hierarchical fit"}
+For the models with child random effects, leaving out a single *observation* still leaves the other observations of the same child in the training set, so the held-out point is easier to predict than a genuinely new child would be. The Pareto $k$ diagnostics in each model's own report flag a substantial share of observations for exactly this reason. The honest out-of-sample question for these models is leave-one-*subject*-out, which the project runs separately (`scripts/kfold_loso.py`, `scripts/loso_compare.py`). Treat the table above as a within-lineage ranking, not as an estimate of how well the model would predict an unseen child.
+:::
+
+## What this chapter does not establish {#sec-us-limits}
+
+- **The comparison is between separate models, not within one.** The Down syndrome and typically-developing posteriors are independent, which makes the per-draw contrasts exact, but no model here treats the gap itself as a parameter that could borrow strength across populations or be given its own structure. That model is not built and holds no reserved model number.
+- **Coverage sets the range, not the finding.** Every contrast stops where one population's draws stop reaching the age or level in question — most sharply for anything needing coupled typically-developing comprehension and production, which the source data limit to about 18 months and about 200 understood words. Where a contrast ends, it ends because the data end.
+- **Matching on a count is not matching on content.** Two children who understand 100 words do not understand the same 100 words. Vocabulary items differ sharply in difficulty, so part of any difference at matched $N$ reflects which words each population knows at that level rather than a difference in production propensity.
+- **Age is not a mechanism.** Everything here is an association with age, not an effect of it, and nothing in this chapter licenses a causal or an intervention claim.
+- **Some of these fits carry recorded sampling caveats.** They are listed below, from the fits' own diagnostics; the full statement is in @sec-limitations.
+
+```{python}
+#| label: tbl-us-caveats
+#| echo: false
+show_or_pending(caveats_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG11", "VG12", "VG13",
+                               "VG16"]),
+                "the convergence caveats for the fits used here")
+```

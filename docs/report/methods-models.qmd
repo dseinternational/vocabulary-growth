@@ -223,7 +223,7 @@ $$
 which sits below an independence-based upper bound whenever $\psi > 1$.
 
 ::: {.callout-important}
-$\psi$ is a **single scalar**, identified from a small four-cell cross-tab, and is treated as **descriptive / exploratory** throughout this report. See @sec-findings-signing <!-- findings-signing --> for its scope and caveats.
+$\psi$ is a **single scalar**, identified from a small four-cell cross-tab, and is treated as **descriptive / exploratory** throughout this report. See @sec-sign-speech-association for the estimate, @sec-psi-by-study for how far the contributing sources disagree about it, and @sec-signing-limits for its scope and caveats.
 :::
 
 ### Validation and publication gate {#sec-validation-gate}

@@ -105,6 +105,7 @@ disclosable
 docstrings
 dropna
 dseresearch
+dtau
 dtype
 dtypes
 duckdb
@@ -117,6 +118,7 @@ estimands
 exceedance
 exceedances
 fallocate
+fillna
 groupby
 hightune
 hyperparameters
