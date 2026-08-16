@@ -30,13 +30,15 @@ from __future__ import annotations
 
 import math
 
-from vocab_growth.models.definitions import (
-    _DS_JOINT_Q_KAPPA_RE,
-    _DS_JOINT_UNDERSTOOD_KAPPA_RE,
-    MODEL_REGISTRY,
-    AgeVaryingSubjectScale,
-)
+from vocab_growth.models.definitions import MODEL_REGISTRY, AgeVaryingSubjectScale
 from vocab_growth.sensitivity.overrides import make_variant
+
+# A1's subject-scale anchors must be the paired kappa block's own anchors, or the
+# two parameters contest different spans and the variant stops being one-factor.
+# Read them off the model the variant is registered on rather than off the shared
+# prior constants, so the coupling survives VG10 being given its own kappa block.
+_VG10_KAPPA_U_ANCHORS = MODEL_REGISTRY["vg10"].kappa_u.anchor_ages
+_VG10_KAPPA_S_ANCHORS = MODEL_REGISTRY["vg10"].kappa_s.anchor_ages
 
 # (model_key, variant_name) -> {"suffix": str, "scalar"?: dict, "kappa"?: dict}
 VARIANTS: dict[tuple[str, str], dict] = {
@@ -262,7 +264,7 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # variant that can no longer vary anything reads as robustness it has not
     # demonstrated -- the principle the retired ceiling and uk_06 variants went
     # out under.) See notes/202608141200-clamp-q-only.md.
-("vg10", "clamp-both"): {"suffix": "clamp-both", "scalar": {
+    ("vg10", "clamp-both"): {"suffix": "clamp-both", "scalar": {
         "clamp_mean_above_hi_anchor": True}},
 
     # VG10 Proposal A1 -- the age variation moved off `kappa` and onto the
@@ -287,12 +289,12 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # beyond two years. See notes/202607261540 §9 and notes/202608141600 §8.
     ("vg10", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
         "tau_subj_u_sigma": AgeVaryingSubjectScale(
-            anchor_ages=_DS_JOINT_UNDERSTOOD_KAPPA_RE.anchor_ages,
+            anchor_ages=_VG10_KAPPA_U_ANCHORS,
             young_sigma=1.5,
             log_ratio_sigma=0.5,
         ),
         "tau_subj_q_sigma": AgeVaryingSubjectScale(
-            anchor_ages=_DS_JOINT_Q_KAPPA_RE.anchor_ages,
+            anchor_ages=_VG10_KAPPA_S_ANCHORS,
             young_sigma=1.5,
             log_ratio_sigma=0.5,
         )}},

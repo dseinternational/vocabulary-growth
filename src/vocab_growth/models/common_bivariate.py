@@ -1003,8 +1003,12 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             else:
                 # Proposal A1: one standard deviate per draw, scaled by tau(age),
                 # so the unseen child stays the *same* child across the grid while
-                # the spread it is drawn from widens or narrows with age.
-                z_child_u = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=1.0)
+                # the spread it is drawn from widens or narrows with age. It gets
+                # its own name: `_delta_subj_u_marg` holds a deviate already on
+                # the logit scale, and reusing that name for a standardised one
+                # would put two different quantities under it depending on the
+                # branch taken.
+                z_child_u = pm.Normal("_z_subj_u_marg", mu=0.0, sigma=1.0)
                 delta_u_plot = z_child_u * plot_scale
                 delta_u_query = z_child_u * query_scale
             p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_plot)
@@ -1019,7 +1023,7 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
                 delta_q_marg = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q)
                 delta_q_plot = delta_q_query = delta_q_marg
             else:
-                z_child_q = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=1.0)
+                z_child_q = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
                 delta_q_plot = z_child_q * plot_scale
                 delta_q_query = z_child_q * query_scale
             q_plot = pm.math.sigmoid(h_plot_var + delta_q_plot)
