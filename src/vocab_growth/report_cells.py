@@ -168,6 +168,13 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ("tau_q", "Between-study SD, production ratio $q$", "tau_q_sigma", "odds"),
     ("tau_sign", "Between-study SD, signing", "tau_sign_sigma", "odds"),
     ("tau_subject", "Between-child SD", "tau_subject_sigma", "odds"),
+    ("v_total", "Total logit-scale scatter at the young dispersion anchor", "", "vp_total"),
+    (
+        "subject_variance_share",
+        "Share of that scatter attributable to persistent child differences",
+        "",
+        "vp_share",
+    ),
     ("tau_subj_u", "Between-child SD, understood", "tau_subj_u_sigma", "odds"),
     ("tau_subj_q", "Between-child SD, production ratio $q$", "tau_subj_q_sigma", "odds"),
     ("tau_subj_sign", "Between-child SD, signing", "tau_subj_sign_sigma", "odds"),
@@ -200,6 +207,36 @@ def _prior_row(
     """One table row, or None when the definition does not carry this prior."""
     n_trials = definition.get("n_trials")
     anchors = definition.get("slope_anchors") or []
+
+    if kind in {"vp_total", "vp_share"}:
+        # VG11 and VG12 reparameterise the child scale and the young dispersion
+        # anchor into one shared budget, so `tau_subject` becomes a deterministic
+        # function of these two and its HalfNormal prior is never used. Reporting
+        # that HalfNormal as though it governed the fit -- which this table did --
+        # describes a prior with no effect on the posterior.
+        partition = definition.get("subject_variance_partition")
+        if not partition:
+            return None
+        if kind == "vp_total":
+            mu = partition.get("total_mu", 0.0)
+            sigma = partition.get("total_sigma")
+            if sigma is None:
+                return None
+            return (
+                description,
+                f"LogNormal({mu:g}, {sigma:g})",
+                f"median {math.exp(mu):.2f} on the logit variance scale",
+            )
+        alpha = partition.get("share_alpha")
+        beta = partition.get("share_beta")
+        if alpha is None or beta is None:
+            return None
+        median = float(stats.beta.ppf(0.5, alpha, beta))
+        return (
+            description,
+            f"Beta({alpha:g}, {beta:g})",
+            f"median {median:.2f}; the remainder is within-child noise ($\\kappa$)",
+        )
 
     if kind == "peak":
         # The signed peak has no Beta hyper-parameters in the definition: it is a
@@ -309,8 +346,13 @@ def render_priors_table(directory: str = ".") -> None:
         return
 
     present = fitted_parameters(directory)
+    # Under a variance partition the child scale is a deterministic function of
+    # the budget, so its own prior never enters the model.
+    inert = {"tau_subject"} if definition.get("subject_variance_partition") else set()
     rows: list[tuple[str, str, str]] = []
     for parameter, description, stem, kind in _PRIOR_SPECS:
+        if parameter in inert:
+            continue
         if present and parameter not in present:
             continue
         row = _prior_row(parameter, description, stem, kind, definition)

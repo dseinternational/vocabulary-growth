@@ -278,3 +278,41 @@ def test_glance_reports_both_caps_for_a_joint_model(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "understood and ratios to 84 months" in out
     assert "spoken to 90 months" in out
+
+
+def test_variance_partition_replaces_the_inert_child_scale_prior(tmp_path, capsys):
+    """VG11 and VG12 reparameterise the child scale into a shared budget.
+
+    `tau_subject` is then a deterministic function of `v_total` and
+    `subject_variance_share`, so its HalfNormal prior never enters the model.
+    Reporting that HalfNormal described a prior with no effect on the fit.
+    """
+    fit = _fit(
+        tmp_path,
+        definition={
+            "tau_subject_sigma": 1.5,
+            "subject_variance_partition": {
+                "total_mu": 0.0,
+                "total_sigma": 0.8,
+                "share_alpha": 3.9,
+                "share_beta": 2.1,
+                "reference_proportion": 0.0118,
+            },
+        },
+        parameters=("tau_subject", "v_total", "subject_variance_share"),
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "HalfNormal(1.5)" not in out
+    assert "LogNormal(0, 0.8)" in out
+    assert "Beta(3.9, 2.1)" in out
+
+
+def test_plain_child_scale_prior_survives_without_a_partition(tmp_path, capsys):
+    fit = _fit(
+        tmp_path,
+        definition={"tau_subject_sigma": 1.5},
+        parameters=("tau_subject",),
+    )
+    report_cells.render_priors_table(str(fit))
+    assert "HalfNormal(1.5)" in capsys.readouterr().out
