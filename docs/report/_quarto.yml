@@ -11,7 +11,9 @@ project:
 jupyter: python3
 
 execute:
-  freeze: true
+  # `auto` re-executes a chapter when its source changes; `true` never does, and
+  # silently served a stale results chapter after its cells had been rewritten.
+  freeze: auto
 
 date: now
 
