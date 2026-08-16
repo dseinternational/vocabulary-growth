@@ -147,15 +147,15 @@ A full review of the branch and this record on 2026-08-16 confirmed every data-d
 
 `CLAMP_Q_ONLY` and the 72 → 84 comprehension cap were adopted **during** the run, so the models of record were refitted mid-flight. Seven registered variants had been fitted before that and were never refitted:
 
-| variant                              | fitted            | its baseline refitted |
-| ------------------------------------ | ----------------- | --------------------- |
-| `vg10 / us01-implausible-reinstated`  | 14 Aug 09:31      | 14 Aug 16:58          |
-| `vg15 / dse-native-only`              | 13 Aug 22:14      | 14 Aug 13:54          |
-| `vg15 / us01-implausible-reinstated`  | 14 Aug 08:17      | 14 Aug 13:54          |
-| `vg15 / psi-drop-es01`                | 14 Aug 08:17      | 14 Aug 13:54          |
-| `vg15 / psi-drop-uk07`                | 14 Aug 08:54      | 14 Aug 13:54          |
-| `vg15 / tau-psi-narrow`               | 14 Aug 08:54      | 14 Aug 13:54          |
-| `vg15 / tau-psi-wide`                 | 14 Aug 09:31      | 14 Aug 13:54          |
+| variant                              | fitted       | its baseline refitted |
+| ------------------------------------ | ------------ | --------------------- |
+| `vg10 / us01-implausible-reinstated` | 14 Aug 09:31 | 14 Aug 16:58          |
+| `vg15 / dse-native-only`             | 13 Aug 22:14 | 14 Aug 13:54          |
+| `vg15 / us01-implausible-reinstated` | 14 Aug 08:17 | 14 Aug 13:54          |
+| `vg15 / psi-drop-es01`               | 14 Aug 08:17 | 14 Aug 13:54          |
+| `vg15 / psi-drop-uk07`               | 14 Aug 08:54 | 14 Aug 13:54          |
+| `vg15 / tau-psi-narrow`              | 14 Aug 08:54 | 14 Aug 13:54          |
+| `vg15 / tau-psi-wide`                | 14 Aug 09:31 | 14 Aug 13:54          |
 
 Each still differed from its baseline in `clamp_mean_above_hi_anchor`, so the reported delta mixed the variant's effect with the clamp change. **Nothing detected this**: `compare_sensitivity.py` read whatever summaries were on disk and produced a perfectly well-formed matrix. The verdicts it wrote were "robust" and "sensitive" — the two most confident things the matrix can say, and neither warranted.
 
