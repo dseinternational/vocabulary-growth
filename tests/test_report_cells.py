@@ -207,3 +207,74 @@ def test_kappa_definition_states_the_counter_intuitive_direction():
 
 def test_default_interval_convention_is_stated_somewhere():
     assert "89%" in glossary.GLOSSARY["Equal-tailed interval (ETI)"]
+
+
+# --------------------------------------------------------------------------
+# Model at a glance
+# --------------------------------------------------------------------------
+
+
+def test_glance_reports_no_hierarchy_when_the_fit_has_none(tmp_path, capsys):
+    """VG05 announced study random intercepts it does not have.
+
+    The definition dataclass carries a non-None default for every scale, so a
+    definition-field test says "study random intercepts" for a model that never
+    instantiates one -- contradicting the report's own prose two sections later.
+    """
+    fit = _fit(
+        tmp_path,
+        definition={"tau_u_sigma": 0.5, "tau_subj_u_sigma": 1.5},
+        parameters=("eta_u",),  # no tau_u, no tau_subj_u
+    )
+    report_cells.render_model_at_a_glance(str(fit))
+    assert "none — study and repeated-child effects are not modelled here" in capsys.readouterr().out
+
+
+def test_glance_finds_hierarchy_under_the_univariate_parameter_names(tmp_path, capsys):
+    """The error in the other direction: VG11 and VG12 have both levels.
+
+    The univariate engine names them `tau` and `tau_subject`, not `tau_u` and
+    `tau_subj_u`, so a test written against the joint names reported "none" for
+    two models of record whose whole purpose is the study effect.
+    """
+    fit = _fit(
+        tmp_path,
+        definition={"tau_study_sigma": 0.5, "tau_subject_sigma": 1.5},
+        parameters=("tau", "tau_subject"),
+    )
+    report_cells.render_model_at_a_glance(str(fit))
+    out = capsys.readouterr().out
+    assert "study" in out
+    assert "child" in out
+    assert "not modelled here" not in out
+
+
+def test_glance_does_not_claim_spoken_ages_for_a_comprehension_model(tmp_path, capsys):
+    """VG02 and VG04 both reported the query grid's maximum as a spoken cap."""
+    manifest = {
+        "model": {"definition": {"ages_query": [12, 84], "report_max_age_understood": 84}},
+        "sampling": {"configuration_name": "rep"},
+        "data": {"observed_outcome_counts": {"understood": 987}},
+    }
+    (tmp_path / "fit_manifest.json").write_text(json.dumps(manifest))
+    pd.DataFrame(index=["eta"], data={"r_hat": [1.0]}).to_csv(tmp_path / "diagnostics.csv")
+
+    report_cells.render_model_at_a_glance(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "understood and ratios to 84 months" in out
+    assert "spoken" not in out
+
+
+def test_glance_reports_both_caps_for_a_joint_model(tmp_path, capsys):
+    manifest = {
+        "model": {"definition": {"ages_query": [12, 90], "report_max_age_understood": 84}},
+        "sampling": {"configuration_name": "rep"},
+        "data": {"observed_outcome_counts": {"understood": 987, "spoken": 1428}},
+    }
+    (tmp_path / "fit_manifest.json").write_text(json.dumps(manifest))
+    pd.DataFrame(index=["eta_u"], data={"r_hat": [1.0]}).to_csv(tmp_path / "diagnostics.csv")
+
+    report_cells.render_model_at_a_glance(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "understood and ratios to 84 months" in out
+    assert "spoken to 90 months" in out

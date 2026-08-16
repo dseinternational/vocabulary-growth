@@ -382,16 +382,35 @@ def render_model_at_a_glance(directory: str = ".") -> None:
     if domain:
         items.append(("Modelled age range", f"{domain[0]:g}–{domain[1]:g} months"))
 
+    # Gated on the fitted parameter set, not the definition, for the same reason
+    # the priors table is: the dataclass carries a non-None default for every
+    # scale, so VG05 -- which instantiates no study effect at all -- records
+    # `tau_u_sigma` and was announcing study random intercepts it does not have,
+    # contradicting its own prose two sections later. The univariate and joint
+    # engines also name these parameters differently (`tau` / `tau_subject`
+    # against `tau_u` / `tau_subj_u`), so a definition-field test missed the
+    # hierarchy VG11 and VG12 genuinely do have.
+    present = fitted_parameters(directory)
     hierarchy = []
-    if definition.get("tau_u_sigma") is not None or definition.get("tau_sigma") is not None:
-        hierarchy.append("study random intercepts")
-    if definition.get("use_subject_re_u"):
-        hierarchy.append("child random intercept on understood")
-    if definition.get("use_subject_re_q"):
-        hierarchy.append("child random intercept on $q$")
+    study_effects = {
+        "tau": "study",
+        "tau_u": "study, on understood",
+        "tau_q": "study, on the production ratio $q$",
+        "tau_sign": "study, on signing",
+    }
+    child_effects = {
+        "tau_subject": "child",
+        "tau_subj_u": "child, on understood",
+        "tau_subj_q": "child, on the production ratio $q$",
+        "tau_subj_sign": "child, on signing",
+    }
+    for group in (study_effects, child_effects):
+        found = [label for name, label in group.items() if name in present]
+        if found:
+            hierarchy.extend(found)
     items.append(
         (
-            "Hierarchy",
+            "Random intercepts",
             "; ".join(hierarchy)
             if hierarchy
             else "none — study and repeated-child effects are not modelled here",
@@ -410,14 +429,24 @@ def render_model_at_a_glance(directory: str = ".") -> None:
         }.get(clamp, str(clamp))
         items.append(("Mean held level above the high anchor", clamp_text))
 
+    # Which outcomes this fit actually has, so a comprehension-only model is not
+    # told it reports spoken vocabulary. VG02 and VG04 both were: the query
+    # grid's maximum was labelled "spoken to N months" unconditionally.
+    outcomes = set(data.get("observed_outcome_counts") or {})
     caps = []
-    if definition.get("report_max_age_understood"):
-        caps.append(f"understood and ratios to {definition['report_max_age_understood']:g} months")
-    if definition.get("report_max_age_signed"):
-        caps.append(f"signed to {definition['report_max_age_signed']:g} months")
+    understood_cap = definition.get("report_max_age_understood")
+    signed_cap = definition.get("report_max_age_signed")
+    if understood_cap and "understood" in outcomes:
+        caps.append(f"understood and ratios to {understood_cap:g} months")
+    if signed_cap and "signed" in outcomes:
+        caps.append(f"signed to {signed_cap:g} months")
     ages_query = definition.get("ages_query")
     if ages_query:
-        caps.append(f"spoken to {max(ages_query):g} months")
+        furthest = max(ages_query)
+        if caps and "spoken" in outcomes:
+            caps.append(f"spoken to {furthest:g} months")
+        elif not caps:
+            caps.append(f"to {furthest:g} months")
     if caps:
         items.append(("Reported ages", "; ".join(caps)))
 
