@@ -413,11 +413,67 @@ pd.DataFrame(rows).set_index("Age (mo)")
 ![Between-child spread in expected words σ_child — understood](ds_td_understood_re_subject_spread.png){#fig-sdc-u .lightbox fig-align="left"}
 
 **The two scales disagree, and the relative one reverses the absolute reading.**
-Children with Down syndrome differ from one another _more_ than typically developing children do, on both outcomes and at every age in the overlap, with posterior probability ≈ 1.00. For spoken words τ_DS runs 1.44 at 8 months to 1.27 at 30, against a constant τ_TD of 1.04 (ratio 0.72 rising to 0.82); for comprehension τ_DS is 0.79 against τ_TD 0.69 (ratio 0.87). Yet σ_child in words runs the other way by a wide margin — 173 words TD against 36 DS for spoken at 30 months — because the typically developing group sits at a far higher level, and the same relative spread around a larger mean is a larger absolute spread.
+Children with Down syndrome differ from one another _more_ than typically developing children do, on both outcomes and at every age in the overlap, with posterior probability ≈ 1.00.
+
+```{python}
+#| echo: false
+#| output: asis
+# Computed, not typed: an earlier hand-written version of this paragraph quoted
+# spoken τ_DS as "1.44 at 8 months to 1.27 at 30" and the ratio as "0.72 rising
+# to 0.82"; the current fits give 1.47 → 1.31 and 0.70 → 0.80. The numbers moved
+# under a refit and the prose did not.
+_lo, _hi = float(he_s["age_months"].min()), float(he_s["age_months"].max())
+_a, _b = _nearest(he_s, "age_months", _lo), _nearest(he_s, "age_months", _hi)
+_u = _nearest(he_u, "age_months", he_u["age_months"].max())
+_ulo, _uhi = float(he_u["age_months"].min()), float(he_u["age_months"].max())
+_sd = _nearest(he_s, "age_months", _hi)
+print(
+    f"For spoken words τ_DS runs {_a['tau_DS_median']:.2f} at {_lo:.0f} months to "
+    f"{_b['tau_DS_median']:.2f} at {_hi:.0f}, against a constant τ_TD of "
+    f"{_a['tau_TD_median']:.2f} (ratio {_a['tau_ratio_median']:.2f} rising to "
+    f"{_b['tau_ratio_median']:.2f}); for comprehension, over its own narrower "
+    f"overlap of {_ulo:.0f}–{_uhi:.0f} months, τ_DS is {_u['tau_DS_median']:.2f} "
+    f"against τ_TD {_u['tau_TD_median']:.2f} (ratio {_u['tau_ratio_median']:.2f}). "
+    f"Because only the DS side varies with age, a single ratio has to be quoted "
+    f"with the age it is read at. Yet σ_child in words runs the other way by a "
+    f"wide margin — {_sd['sdchild_TD_median']:.0f} words TD against "
+    f"{_sd['sdchild_DS_median']:.0f} DS for spoken at {_hi:.0f} months — because "
+    f"the typically developing group sits at a far higher level, and the same "
+    f"relative spread around a larger mean is a larger absolute spread."
+)
+```
 
 Both statements describe the same posterior. Which one answers "are these children more alike?" depends on what is being asked: on the population-relative scale Down syndrome vocabulary is the _more_ variable of the two, while in absolute word counts it is much the less variable. Neither is the reading a glance at the overdispersion panel above would suggest, which is the point of separating the two sections.
 
 The age profiles differ by construction, and are worth reading as a check on the derivation. τ_TD is flat because the univariate models place a single intercept on the outcome's logit; τ_DS for comprehension is flat for the same reason. τ_DS for _spoken_ declines with age even though both of VG10's subject scales are constants, because the spoken logit is reached through $p_U$ and $q$ — that decline is a property of the product form, not a finding about children becoming more alike.
+
+::: {.callout-important title="The spoken contrast carries an assumption the comprehension contrast does not"}
+The comprehension contrast is like-for-like in a strong sense: a single Gaussian intercept on the understood logit on both sides. The spoken contrast is not, in three ways, and only the third biases the number.
+
+**Induced versus primitive.** τ_TD is a free parameter; τ_DS is derived by integrating $\text{sigmoid}(f_u + \tau_u Z_1)\cdot\text{sigmoid}(h + \tau_q Z_2)$. Targeting the SD of the child's *spoken logit* is what makes the two the same estimand — the alternative, contrasting `tau_subj_q` against `tau_subject`, would set the spread of a conversion ratio against the spread of a level. But the induced child-logit distribution is skewed where the TD one is exactly Gaussian, so equal τ matches the first two moments of differently shaped distributions and does not imply equal spread in the tails.
+
+**Age.** Only the DS side varies with age, so the ratio is a curve read at a point, not a single contrast.
+
+**An independence constraint on one side only.** VG10 draws each child's comprehension deviation and production-ratio deviation as two independent standard Normals; no correlation between them is estimated, and the derivation above assumes that independence. VG11's single spoken intercept places no such restriction — it absorbs the whole between-child spoken variance, correlation included.
+
+```{python}
+#| echo: false
+#| output: asis
+_c = pd.read_csv("ds_subject_effect_correlation.csv").iloc[0]
+_dir = "understates" if _c["corr_median"] > 0 else "overstates"
+print(
+    f"Measured in VG10's own fitted deviations, that correlation is "
+    f"{_c['corr_median']:+.3f} (89% interval {_c['corr_ci_lo']:+.3f} to "
+    f"{_c['corr_ci_hi']:+.3f}, P(>0) = {_c['corr_p_gt0']:.3f}) across "
+    f"{_c['n_children']:.0f} children — and it is shrunk toward zero by the "
+    f"independence prior, so treat the magnitude as a lower bound. Since "
+    f"$\\log p_S = \\log p_U + \\log q$ gains $2\\,\\mathrm{{Cov}}$, the "
+    f"independent-draw derivation therefore **{_dir}** the DS spoken spread."
+)
+```
+
+The direction matters for how far this can be pushed. DS is already the more variable side, so correcting for the correlation would move the spoken ratio further below 1: the finding is conservative and would strengthen, not reverse. What it does undercut is reading the spoken and comprehension ratios against each other, since only the spoken one carries this bias, and it biases toward the comprehension value. The fix is a correlated subject block — proposed as VG20 in issue #224, where the same gap was reached independently from VG16's leftover intercept correlation.
+:::
 
 Two caveats bound how far this contrast can be pushed. First, the priors are not
 symmetric: on the TD side $\tau_{subject}$ and $\kappa$ are sampled through the

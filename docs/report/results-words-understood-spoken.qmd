@@ -384,6 +384,8 @@ Almost the whole Down syndrome distribution sits below the typically-developing 
 
 Between-child variation is itself a contrast worth making. The quantity here is $\tau$, the standard deviation across children of the child's own position on the logit scale, once study differences have been taken out. It is not the observation-level dispersion, and it is not the spread in words, which depends on where on the curve each population sits.
 
+The two outcomes are on different footings, and the table below should be read with that in mind. For **words understood** the contrast is like-for-like: a single Gaussian intercept on the understood logit on both sides. For **words spoken** the Down syndrome model has no spoken child scale — spoken is built as $p_U \times q$ — so its $\tau$ is derived from the two underlying child effects, while the typically-developing model estimates one directly. The derivation targets the same estimand, but it inherits an assumption the comparator does not make, set out below the table. Only the Down syndrome side varies with age, so the values are read at a stated age rather than quoted as one number.
+
 ```{python}
 #| label: tbl-subject-tau
 #| echo: false
@@ -405,6 +407,31 @@ for _out, _name in (("understood", "Words understood"), ("spoken", "Words spoken
 show_or_pending(pd.DataFrame(_taus).round(2) if _taus else None,
                 "the between-child variation contrast")
 ```
+
+::: {.callout-important title="The spoken comparison assumes something the comprehension one does not"}
+The Down syndrome model gives each child two deviations — one on comprehension, one on the production ratio — and draws them **independently**. The spoken $\tau$ above is derived on that independence. The typically-developing model's single spoken intercept makes no such assumption: it absorbs the whole between-child spoken variance, any correlation included.
+
+```{python}
+#| label: subject-independence-finding
+#| echo: false
+#| output: asis
+_c = comp_load("ds_subject_effect_correlation")
+if _c is None:
+    print("_The measured correlation is pending: run "
+          "`scripts/subject_effect_correlation.py` and "
+          "`scripts/sync_report_figures.py`._")
+else:
+    _c = _c.iloc[0]
+    _dir = "understates" if _c["corr_median"] > 0 else "overstates"
+    print(f"""
+Measured in the model's own fitted deviations, the two are correlated at {_c['corr_median']:+.3f} (89% interval {_c['corr_ci_lo']:+.3f} to {_c['corr_ci_hi']:+.3f}, P above zero = {_c['corr_p_gt0']:.3f}) across {_c['n_children']:.0f} children. The estimate is shrunk toward zero by the independence prior, so its magnitude is a lower bound rather than an estimate.
+
+Because a child's spoken vocabulary is the product of what they understand and the share they say, a positive correlation means the independence assumption **{_dir}** how much children with Down syndrome differ from one another in speech. The direction is what saves the finding here: Down syndrome is already the more variable side, so correcting for it would widen the gap rather than close it. What it does undercut is reading the spoken and comprehension rows against each other — only the spoken row carries the bias, and it biases toward the comprehension value.
+""")
+```
+
+The fix is a model that estimates the correlation instead of assuming it away, proposed as VG20 in issue #224 — where the same structural gap was reached independently, from a leftover correlation in the cross-lag model's fitted child effects.
+:::
 
 ![Between-child variation $\tau$ for words spoken, in each population.](figures/comparisons/ds_td_spoken_re_subject_tau.png){#fig-tau-spoken}
 

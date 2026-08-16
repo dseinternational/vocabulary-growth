@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import numpy as np
+import pytest
 
 from vocab_growth import comparison
 
@@ -397,3 +398,71 @@ def test_sign_speech_r_stays_a_fraction(tmp_path):
     _, s = comparison.load_sign_speech_trajectory(path, 810)
     np.testing.assert_allclose(s["r"][0], r)
     assert s["r"].max() <= 1.0
+
+
+# ------------------------------------------- subject-effect correlation
+
+
+def _subject_effect_trace(tmp_path, u, q):
+    """A trace carrying only the two per-child deviation vectors.
+
+    ``u`` and ``q`` are ``(n_draw, n_child)``; one chain keeps the fixture small.
+    """
+    import xarray as xr
+
+    dims = ("chain", "draw", "subject_id")
+
+    def da(v):
+        return xr.DataArray(np.asarray(v, dtype=float)[None, ...], dims=dims)
+
+    post = xr.Dataset({"delta_subj_u": da(u), "delta_subj_q": da(q)})
+    path = tmp_path / "trace.nc"
+    xr.DataTree.from_dict({"posterior": post}).to_netcdf(str(path))
+    return str(path)
+
+
+def _patch_trace(monkeypatch, path):
+    monkeypatch.setattr(comparison, "trace_path", lambda key: path)
+
+
+def test_subject_effect_correlation_matches_numpy(tmp_path, monkeypatch):
+    """The vectorised per-draw correlation is the ordinary one, draw by draw."""
+    rng = np.random.default_rng(0)
+    u = rng.normal(size=(4, 50))
+    q = 0.6 * u + rng.normal(size=(4, 50))
+    _patch_trace(monkeypatch, _subject_effect_trace(tmp_path, u, q))
+
+    got, n_children = comparison.subject_effect_correlation("vg10", thin=1)
+
+    assert n_children == 50
+    expected = [np.corrcoef(u[i], q[i])[0, 1] for i in range(4)]
+    np.testing.assert_allclose(got, expected, atol=1e-12)
+
+
+def test_subject_effect_correlation_recovers_independence(tmp_path, monkeypatch):
+    """Independent deviations give a correlation centred on zero, not a bias."""
+    rng = np.random.default_rng(1)
+    u = rng.normal(size=(200, 400))
+    q = rng.normal(size=(200, 400))
+    _patch_trace(monkeypatch, _subject_effect_trace(tmp_path, u, q))
+
+    got, _ = comparison.subject_effect_correlation("vg10", thin=1)
+
+    assert abs(float(np.median(got))) < 0.02
+
+
+def test_subject_effect_correlation_needs_both_vectors(tmp_path, monkeypatch):
+    """A trace missing a deviation vector must say so, not return something."""
+    import xarray as xr
+
+    post = xr.Dataset({
+        "delta_subj_u": xr.DataArray(
+            np.zeros((1, 2, 3)), dims=("chain", "draw", "subject_id")
+        )
+    })
+    path = tmp_path / "trace.nc"
+    xr.DataTree.from_dict({"posterior": post}).to_netcdf(str(path))
+    _patch_trace(monkeypatch, str(path))
+
+    with pytest.raises(ValueError, match="delta_subj_q"):
+        comparison.subject_effect_correlation("vg10")

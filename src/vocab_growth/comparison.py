@@ -807,6 +807,65 @@ def subject_heterogeneity(
     )
 
 
+def subject_effect_correlation(
+    key: str,
+    *,
+    names: tuple[str, str] = ("delta_subj_u", "delta_subj_q"),
+    thin: int = 20,
+) -> tuple[np.ndarray, int]:
+    """Per-draw correlation *across children* between two subject random effects.
+
+    The joint DS models give each child two deviations — one on comprehension
+    (``delta_subj_u``) and one on the production ratio (``delta_subj_q``) — drawn
+    as two independent standard Normal vectors. Nothing in the model estimates a
+    correlation between them, and :func:`child_spread_product` derives the spoken
+    between-child scale on exactly that independence assumption. The univariate
+    TD comparator places a single intercept on the spoken logit and so carries no
+    such constraint, which makes the assumption a live asymmetry in the DS-vs-TD
+    ``tau`` contrast rather than an internal detail.
+
+    Measuring it in the fitted deviations is the only check available without a
+    refit. Returns ``(correlations, n_children)``: one correlation per retained
+    draw — computed across children within the draw — so the result carries
+    posterior uncertainty, unlike a single correlation of the posterior *means*,
+    which is inflated by the shrinkage the two effects share.
+
+    Two cautions on reading the result. The estimate is shrunk toward zero by the
+    independence prior, so its magnitude is a lower bound. And because
+    ``log p_S = log p_U + log q``, a positive correlation means the independent-
+    draw derivation **understates** the spoken between-child spread; a negative
+    one means it overstates it.
+
+    ``thin`` keeps every ``thin``-th draw: the correlation is over hundreds of
+    children per draw, so a few thousand draws already resolve the interval.
+    """
+    d = az.from_netcdf(trace_path(key))
+    post = _dataset(d, "posterior")
+    for name in names:
+        if name not in post:
+            raise ValueError(
+                f"{key}: {name!r} is not in the posterior. This check needs both "
+                "per-child deviation vectors; a trace saved under a reduced "
+                "persistence tier may not carry them."
+            )
+    a, b = (
+        np.asarray(post[n].values, dtype=float).reshape(-1, post[n].values.shape[-1])[
+            ::thin
+        ]
+        for n in names
+    )
+    a = a - a.mean(axis=1, keepdims=True)
+    b = b - b.mean(axis=1, keepdims=True)
+    denominator = np.sqrt((a * a).sum(axis=1) * (b * b).sum(axis=1))
+    correlations = np.divide(
+        (a * b).sum(axis=1),
+        denominator,
+        out=np.full(a.shape[0], np.nan),
+        where=denominator > 0,
+    )
+    return correlations, int(a.shape[1])
+
+
 def align_draws(
     n_a: int, n_b: int, *, seed: int = 0
 ) -> tuple[np.ndarray, np.ndarray]:
