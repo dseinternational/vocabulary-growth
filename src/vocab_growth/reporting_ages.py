@@ -22,9 +22,25 @@ ratio of understood          84  ``q`` (spoken given understood), ``r``
                                  (fraction of understood signed) and
                                  ``p_any`` are all conditioned on
                                  understood, so they inherit its cap.
+                                 ``p_any`` has a second, independent reason
+                                 to stop there — see below.
 signed                       84  Its own field since #212; see below.
 spoken                       90  The top of the query grid.
 ==========================  ===  =========================================
+
+Why ``p_any`` stops at the tighter of its components
+-----------------------------------------------------
+``p_any`` is a union over speaking and signing, whose caps differ (90 and 84).
+It takes the **tighter** of the two: past the signing cap one of its two
+components is no longer reported, and a union of a reported and an unreported
+quantity is not a quantity this project publishes. Study owner, 2026-08-16.
+
+That happens to agree with the conditioning rule above — both give 84 — but the
+two arguments are independent, and this one is the binding constraint if the
+comprehension cap ever moves without the signing cap moving with it. Stated
+here because it is a reporting decision, not an arithmetic consequence: it was
+what let VG14's modality figure run to 115 months above a ``p_any`` table
+trimmed to 84 without anything objecting.
 
 Why ``spoken`` is derived rather than declared
 ----------------------------------------------

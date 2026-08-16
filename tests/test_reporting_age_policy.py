@@ -84,12 +84,16 @@ BY_STEM = {
 # so ``regenerate_plots.py`` would normally refresh it -- but VG14's trace was
 # written under the ``compact`` persistence tier, and regeneration refuses a
 # compacted trace rather than producing silently wrong output. Clearing it
-# therefore needs a full refit of VG14, which is deliberately not being done:
-# VG14 is superseded by VG15 for every quantity this figure shows, and the
-# figure is the ``p_any`` union its own report now warns readers not to use.
-# Spending a reporting-quality refit and several gigabytes on a retired model's
-# retired figure is the wrong trade; the code is fixed, so the first time VG14
-# is refitted for any other reason this entry will fail as unnecessary and
+# therefore needs a full refit of VG14, which is **deferred to the next full
+# replication run** (study owner, 2026-08-16). VG14 is superseded by VG15 for
+# every quantity this figure shows, and the figure is the ``p_any`` union its
+# own report now warns readers not to use, so a reporting-quality refit and
+# several gigabytes spent on a retired model's retired figure is the wrong
+# trade. Do not clear it by writing the artefact by hand either: producing a
+# figure outside the fit pipeline would break the provenance the publication
+# gate checks, which is the same reason ``regenerate_plots.py`` refuses in the
+# first place. The code is fixed, so the first time VG14 is refitted this entry
+# will fail as unnecessary and
 # should be deleted then.
 KNOWN_STALE: dict[str, set[str]] = {
     "vg14": {"modality_trajectories"},
