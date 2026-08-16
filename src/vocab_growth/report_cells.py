@@ -439,3 +439,195 @@ def render_model_at_a_glance(directory: str = ".") -> None:
         print(f"- **{label}:** {value}")
     print()
     print(":::")
+
+
+# ---------------------------------------------------------------------------
+# Headline quantities
+# ---------------------------------------------------------------------------
+
+# Ten independent reviews of the fifteen model reports each reached the same
+# conclusion: the reports display their figures and state no results. VG10's
+# comprehension-production gap has its own section and its peak is never given;
+# VG16 never prints the cross-lag coefficient it exists to estimate.
+#
+# The remedy has to survive a refit, so these numbers are computed from the
+# summary tables the fit already writes rather than typed into the template.
+# Ages are read off the median curve and are therefore point readings, not
+# posterior medians of the crossing -- the caption says so, because the median
+# of a set of crossings is not the crossing of the median and the difference is
+# large enough to matter (see notes on the signing milestones, where the two
+# differ by months).
+
+_OUTCOME_LABELS = {
+    "u": "words understood",
+    "s": "words spoken",
+    "sign": "words signed",
+    None: "words",
+}
+
+
+def _read(directory: str, name: str):
+    """A summary CSV, or None when this engine does not write it."""
+    import pandas as pd
+
+    path = os.path.join(directory, f"{name}.csv")
+    if not os.path.isfile(path):
+        return None
+    try:
+        frame = pd.read_csv(path)
+    except (OSError, ValueError):
+        return None
+    return frame if not frame.empty else None
+
+
+def _peak_row(frame, column: str):
+    """The row where `column` is largest, or None."""
+    if frame is None or column not in frame:
+        return None
+    return frame.loc[frame[column].idxmax()]
+
+
+def _first_crossing(frame, column: str, threshold: float):
+    """First age at which `column` reaches `threshold`, by linear interpolation."""
+    if frame is None or column not in frame or "age_months" not in frame:
+        return None
+    values = frame[column].to_numpy()
+    ages = frame["age_months"].to_numpy()
+    above = values >= threshold
+    if not above.any() or above[0]:
+        return None
+    i = int(above.argmax())
+    v0, v1 = values[i - 1], values[i]
+    if v1 == v0:
+        return float(ages[i])
+    return float(ages[i - 1] + (threshold - v0) * (ages[i] - ages[i - 1]) / (v1 - v0))
+
+
+def render_headline_quantities(directory: str = ".") -> None:
+    """Print the model's headline quantities as a table computed from its own tables.
+
+    Silent about anything this engine did not write, so a univariate model does
+    not advertise a production ratio and a model without random effects does not
+    report a between-study scale.
+    """
+    rows: list[tuple[str, str, str]] = []
+
+    for suffix in (None, "u", "s", "sign"):
+        stem = "expected_learning_rate" if suffix is None else f"expected_learning_rate_{suffix}"
+        peak = _peak_row(_read(directory, stem), "median_rate")
+        if peak is None:
+            continue
+        label = _OUTCOME_LABELS[suffix]
+        rows.append(
+            (
+                f"Fastest growth in {label}",
+                f"{peak['median_rate']:.1f} words/month at {peak['age_months']:.0f} months",
+                f"{peak['ci_lo']:.1f} – {peak['ci_hi']:.1f}",
+            )
+        )
+
+    gap = _read(directory, "comprehension_production_gap")
+    peak = _peak_row(gap, "gap_median")
+    if peak is not None:
+        rows.append(
+            (
+                "Largest gap between words understood and spoken",
+                f"{peak['gap_median']:.0f} words at {peak['age_months']:.0f} months",
+                f"{peak['ci_lo']:.0f} – {peak['ci_hi']:.0f}",
+            )
+        )
+
+    q = _read(directory, "posterior_summary_q")
+    crossing = _first_crossing(q, "q_median", 0.5)
+    if crossing is not None:
+        rows.append(
+            (
+                "Age at which half the understood words are also spoken",
+                f"{crossing:.0f} months",
+                "read off the median curve",
+            )
+        )
+
+    for suffix in (None, "u", "s", "sign"):
+        stem = "posterior_kappa" if suffix is None else f"posterior_kappa_{suffix}"
+        kappa = _read(directory, stem)
+        if kappa is None or "vif_median" not in kappa:
+            continue
+        first, last = kappa.iloc[0], kappa.iloc[-1]
+        direction = "widens" if last["vif_median"] > first["vif_median"] else "narrows"
+        rows.append(
+            (
+                f"Spread between children in {_OUTCOME_LABELS[suffix]}",
+                f"{direction} with age "
+                f"({first['vif_median']:.0f}× the Binomial variance at "
+                f"{first['age_months']:.0f} months, "
+                f"{last['vif_median']:.0f}× at {last['age_months']:.0f})",
+                "",
+            )
+        )
+
+    if not rows:
+        print("_This fit writes none of the summary tables this block reads._")
+        return
+
+    print("| Quantity | Estimate | 89% interval |")
+    print("| --- | --- | --- |")
+    for label, estimate, interval in rows:
+        print(f"| {label} | {estimate} | {interval} |")
+    print()
+    print(
+        ": Computed at render time from this fit's own summary tables, so these "
+        "figures cannot drift from the model they describe. Ages are read off the "
+        "median curve rather than being posterior medians of the crossing, and "
+        "the interval is on the quantity at that age."
+    )
+
+
+def render_variation_table(directory: str = ".") -> None:
+    """Print the fitted random-effect scales, with an odds reading.
+
+    Answers the question the hierarchical models exist to answer -- how much do
+    children differ, and how much do studies -- which no report currently states.
+    """
+    import pandas as pd
+
+    path = os.path.join(directory, "diagnostics.csv")
+    if not os.path.isfile(path):
+        return
+    try:
+        frame = pd.read_csv(path, index_col=0)
+    except (OSError, ValueError):
+        return
+
+    labels = {
+        "tau": "Between studies",
+        "tau_u": "Between studies, understood",
+        "tau_q": "Between studies, production ratio $q$",
+        "tau_sign": "Between studies, signing",
+        "tau_subject": "Between children",
+        "tau_subj_u": "Between children, understood",
+        "tau_subj_q": "Between children, production ratio $q$",
+        "tau_subj_sign": "Between children, signing",
+        "tau_psi": "Between studies, sign–speech association",
+    }
+    column = next((c for c in ("mean", "Mean", "median") if c in frame.columns), None)
+    if column is None:
+        return
+
+    rows = [
+        (label, float(frame.loc[name, column]))
+        for name, label in labels.items()
+        if name in frame.index
+    ]
+    if not rows:
+        return
+
+    print("| Source of variation | SD (logits) | A child or study 1 SD above average |")
+    print("| --- | --- | --- |")
+    for label, value in sorted(rows, key=lambda r: -r[1]):
+        print(f"| {label} | {value:.2f} | ×{math.exp(value):.1f} the odds |")
+    print()
+    print(
+        ": Posterior means of the random-effect scales, read from `diagnostics.csv`. "
+        "Larger means that group differs more from the population average."
+    )
