@@ -265,6 +265,57 @@ def run_sign_inclusive() -> None:
                       title="DS expressive credit from non-speech modalities"), cred)
 
 
+def _first_age(grid: np.ndarray, condition: np.ndarray, *, skip: int = 10) -> np.ndarray:
+    """Per-draw earliest grid age at which ``condition`` holds, else NaN.
+
+    ``skip`` ignores the first few grid points, where every cell is a fraction of
+    a word and the three curves start indistinguishable from each other and from
+    zero — a "crossing" there is arithmetic noise, not a milestone.
+    """
+    out = np.full(condition.shape[0], np.nan)
+    for d in range(condition.shape[0]):
+        idx = np.flatnonzero(condition[d])
+        idx = idx[idx > skip]
+        if idx.size:
+            out[d] = grid[idx[0]]
+    return out
+
+
+def _signing_milestones(grid: np.ndarray, g: dict[str, np.ndarray]) -> pd.DataFrame:
+    """Per-draw ages for the sign-to-speech hand-over.
+
+    Computed **per draw and then summarised**, never by reading a milestone off
+    the median curve — the median of crossings is not the crossing of the median,
+    and the project's own helper docstrings say so
+    (:func:`vocab_growth.comparison.first_crossing`).
+    """
+    total = np.clip(g["sign_only"] + g["both"] + g["speak_only"], 1e-9, None)
+    peak_idx = np.argmax(g["sign_only"], axis=1)
+    rows = [
+        ("sign_only_peak_age", grid[peak_idx]),
+        ("sign_only_peak_words", np.max(g["sign_only"], axis=1)),
+        ("sign_only_share_below_half_age",
+         _first_age(grid, (g["sign_only"] / total) < 0.5)),
+        ("speech_only_overtakes_sign_only_age",
+         _first_age(grid, g["speak_only"] >= g["sign_only"])),
+    ]
+    out = []
+    for name, draws in rows:
+        ok = np.isfinite(draws)
+        vals = draws[ok]
+        out.append({
+            "quantity": name,
+            "median": float(np.median(vals)) if vals.size else np.nan,
+            "ci_lo": float(np.percentile(vals, 5.5)) if vals.size else np.nan,
+            "ci_hi": float(np.percentile(vals, 94.5)) if vals.size else np.nan,
+            # A milestone reached in only part of the posterior is weakly
+            # identified; the fraction is the reader's warning, as it is for the
+            # boundary-censored peak-growth ages.
+            "draws_reaching": float(ok.mean()),
+        })
+    return pd.DataFrame(out)
+
+
 # ----------------------------------------------------------------------------
 # 3b. DS-internal signing profile (no TD comparator, so not TD-bounded)
 # ----------------------------------------------------------------------------
@@ -294,7 +345,9 @@ def run_ds_signing_profile() -> None:
           f"(DS-internal, to {DS_SIGNING_MAX_AGE:.0f} mo) ===", flush=True)
     ages_ds, ds = C.load_sign_speech_trajectory(
         C.trace_path(DS_SIGN_KEY), C.n_trials(DS_SIGN_KEY))
-    grid = np.arange(np.ceil(ages_ds.min()), DS_SIGNING_MAX_AGE + 1e-9, 1.0)
+    # A quarter-month step, finer than the reporting grid: the milestones below
+    # are read off it, and a 1-month step would quantise them to the month.
+    grid = np.arange(np.ceil(ages_ds.min()), DS_SIGNING_MAX_AGE + 1e-9, 0.25)
     g = {k: C.interp_draws(ages_ds, v, grid) for k, v in ds.items()}
 
     eps = 1e-9
@@ -314,6 +367,8 @@ def run_ds_signing_profile() -> None:
     }
     _merge_named(grid, **frames).to_csv(
         os.path.join(OUT_DIR, "ds_signing_profile.csv"), index=False)
+    _signing_milestones(grid, g).to_csv(
+        os.path.join(OUT_DIR, "ds_signing_milestones.csv"), index=False)
 
     for a in (18, 24, 36, 48, 72):
         i = int(np.argmin(np.abs(grid - a)))
@@ -321,6 +376,11 @@ def run_ds_signing_profile() -> None:
               f"{np.median(g['any'][:, i]):6.1f}  "
               f"(x{np.median(uplift[:, i]):.2f}); sign-only share "
               f"{np.median(sign_only_share[:, i]):.0%}", flush=True)
+    print("  hand-over milestones:", flush=True)
+    for _, m in _signing_milestones(grid, g).iterrows():
+        print(f"    {m['quantity']:<38} {m['median']:6.1f} "
+              f"[{m['ci_lo']:.1f}, {m['ci_hi']:.1f}]  "
+              f"(reached in {m['draws_reaching']:.0%} of draws)", flush=True)
 
     def composition(ax):
         _band(ax, frames["speak_only"], "age_months", "Speech only", COL_TD)

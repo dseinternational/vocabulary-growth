@@ -523,13 +523,37 @@ at that age is not measuring a slightly smaller vocabulary — it is missing mos
 of it.
 
 The uplift then falls away steadily: ×2.2 at 36 months, ×1.3 at 48, ×1.06 by 72.
-The absolute sign-only count peaks near 36 months at about 49 words and declines
-from there, and the signed fraction of comprehension $r(a)$ peaks around 30 months
-at 0.33 and falls to 0.15 by 84. **This is signing as a bridge**: it carries the
-most weight exactly where speech is least available, and hands over as speech
-arrives. Nothing here says the bridge causes the crossing — see the caveat below —
-but the shape of the hand-over is now measurable, which it was not before `uk_07`
-and the reinstated `uk_06` signing rows extended the signed tail.
+**This is signing as a bridge** — it carries the most weight exactly where speech
+is least available, and hands over as speech arrives — and the hand-over has
+identifiable milestones:
+
+```{python}
+ms = pd.read_csv("ds_signing_milestones.csv").set_index("quantity")
+labels = {
+    "sign_only_peak_age": "Sign-only vocabulary peaks (mo)",
+    "sign_only_peak_words": "…at how many words",
+    "sign_only_share_below_half_age": "Sign-only falls below half of expressive vocabulary (mo)",
+    "speech_only_overtakes_sign_only_age": "Speech-only overtakes sign-only (mo)",
+}
+pd.DataFrame([
+    {"Milestone": lab,
+     "Estimate": _hdi(ms.loc[k, "median"], ms.loc[k, "ci_lo"], ms.loc[k, "ci_hi"], 1),
+     "Draws reaching it": f"{ms.loc[k, 'draws_reaching']:.0%}"}
+    for k, lab in labels.items()
+]).set_index("Milestone")
+```
+
+Every one is reached in 100% of posterior draws, so unlike the peak-growth ages
+above these are not boundary-censored. Note that the peak in *absolute* sign-only
+words (≈34 months) comes before the point where sign stops being the majority of
+expressive vocabulary (≈37.5 months) and well before speech-only overtakes it
+(≈42 months): signing keeps growing in absolute terms for a while after speech
+starts catching up. The signed fraction of comprehension $r(a)$ tells the same
+story on its own scale, peaking near 30 months at 0.33 and falling to 0.15 by 84.
+
+Nothing here says the bridge *causes* the crossing — see the caveat below — but
+the shape of the hand-over is now measurable, which it was not before `uk_07` and
+the reinstated `uk_06` signing rows extended the signed tail past 30 months.
 
 ![How DS expressive vocabulary is expressed](ds_signing_composition.png){#fig-ds-sign-comp .lightbox fig-align="left"}
 
