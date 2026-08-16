@@ -1,6 +1,6 @@
 ---
 title: "Introduction"
-abstract: "*All children with Down syndrome experience delays in language development. By quantifying typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 8 years. Here, we discuss the rationale for the study, our goals, and our empirical and statistical modelling approaches.*"
+abstract: "*All children with Down syndrome experience delays in language development. By quantifying typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 7 years. Here, we discuss the rationale for the study, our goals, and our empirical and statistical modelling approaches.*"
 ---
 
 Children with Down syndrome experience difficulties learning language [@naessLanguageVerbalShortterm2011; @abbedutoLanguageDevelopmentSyndrome2020] and this adversely impacts many aspect of their lives. They learn the meanings of words and learn to say words more slowly than most other children [@naessDifferencesSimilaritiesPredictors2021]. Learning vocabulary is a foundational skill: it is important for learning broader language skills, including grammar, and for learning to read [@naessReadingSkillsChildren2012; @hulmeGrowthReadingSkills2012].
@@ -11,90 +11,8 @@ In our experience, families and educators are interested in information about vo
 
 This study therefore aims to describe the development of vocabulary knowledge in children with Down syndrome with a focus on interpretable statistics that can inform teaching and support.
 
-## Vocabulary learning for children with Down syndrome
 
-Children with Down syndrome generally learn vocabulary more slowly than typically developing children [@abbedutoLanguageDevelopmentSyndrome2020]. They generally say fewer words than they understand and there are considerable differences between individuals that increase over time [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @galeoteAcquisitionProductiveVocabulary2008; @kaat-vandenosExpressiveVocabularyDevelopment2017; @zampiniVocabularyDevelopmentChildren2013; @deckersPredictorsReceptiveExpressive2019].
-
-Many children with Down syndrome produce their first spoken word later than typically developing infants, with some not saying their first words until after 24 months of age, though there is wide variability and some begin at around the same time. In comparison, 80% of typically developing children say 2 or more words by around 12 months and 90% say 7 or more words by around 18 months [@frankWordbankOpenRepository2017]. While some children with Down syndrome learn the first 10 spoken words between the ages of 19 and 38 months [@oliverLanguageDevelopmentChildren1994], over 80% of typically developing children reach this stage by 17 months [@frankWordbankOpenRepository2017].
-
-At a basic level, general cognitive delays may imply that children with Down syndrome need more exposures to a word to link it reliably to its meaning. Additionally, many children with Down syndrome experience recurrent or persistent hearing loss, especially in early childhood, which affects discrimination of speech sounds and makes it harder to distinguish similar‑sounding words (for example, "cat/hat/mat"). Even mild hearing loss may impede building accurate sound–meaning links. Anatomical differences (including a smaller oral cavity and larger tongue) may make articulation more difficult. Delays in babbling and moving from babble to clear word production may lead children with Down syndrome to rely on gestures for longer before attempting spoken words. Difficulties storing accurate sound patterns may affect both word learning and clear pronunciation. Verbal short-term memory is typically impaired relative to visuospatial short-term memory in Down syndrome. This may make it more difficult to hold new word forms in mind, repeat unfamiliar words or nonwords, and process longer utterances.
-
-### Relative disadvantage in expressive vocabulary development
-
-The extent to which expressive vocabulary lags behind receptive vocabulary disproportionately compared to typically developing children is not clear, and may depend on how vocabulary is measured, whether gestures are included, the age of the children and how groups are compared [@martingklusekjestigarribiabjLanguageCharacteristicsIndividuals2009; @abbedutoLanguageDevelopmentSyndrome2020]. One recent study involving 27 children with Down syndrome aged 12 to 39 months observed a pattern of spoken words relative to words understood that was similar to typically developing children, but dissimilar to children with Williams syndrome and children with fragile X syndrome [@dsouzaExplainingComprehensionProduction2026]. However, it remains unclear whether this similarity is observed across larger samples, nor if it persists as more vocabulary is learned.
-
-[**TODO**: complete]
-
-### Rates of word learning
-
-Word learning accelerates rapidly for many typically developing children between the ages of 18 and 24 months. It is unclear whether children with Down syndrome experience a similar acceleration, with some studies observing an acceleration among some children and not others, and any acceleration occurring later than for typically developing children though maybe at a similar mental age [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @zampiniVocabularyDevelopmentChildren2013; @abbedutoLanguageDevelopmentSyndrome2020].
-
-[**TODO**: complete]
-
-### Use of gestures and signs
-
-[**TODO**: complete]
-
-## Study aims and approach
+## Study aims
 
 [**TODO**]
 
-## Statistical modelling and inference
-
-Statistical modelling and inference provide methods for defining mathematical models and evaluating them against data to obtain evidence-based estimates of the parameters of interest [@coxPrinciplesStatisticalInference2006; @gelmanBayesianDataAnalysis2013; @wakefieldBayesianFrequentistRegression2013; @farrellComputationalModelingCognition2018; @spanosProbabilityTheoryStatistical2019; @mcelreathStatisticalRethinkingBayesian2020; @gelmanRegressionOtherStories2020; @chanStatisticalModelingComputation2025]. They are central to evaluating scientific theories and interpreting data, and can express what a theory means more precisely than words alone [@farrellComputationalModelingCognition2018, chapter 1].
-
-A statistical model is a set of assumptions describing a process that could generate the data, relating the parameters of interest to what we observe. Because a model can also generate synthetic datasets consistent with those assumptions, we can simulate from it to check that it behaves as intended [@farrellComputationalModelingCognition2018; @mcelreathStatisticalRethinkingBayesian2020]. Statistical inference then uses the model and the observed data to estimate its unknown parameters, test specific claims, predict future observations, and quantify how uncertain those conclusions are.
-
-### Statistical models
-
-Statistical models do not by themselves explain how the world works, though they can evaluate the predictions of models that do. A regression model reveals statistical relationships between predictors and outcomes, but those relationships acquire their real-world relevance only within an *empirical model* — an account of the real-world phenomenon that informs which statistical and process models can test it.[@spanosProbabilityTheoryStatistical2019, @vanoijenBayesianCompendium2024,@farrellComputationalModelingCognition2018].
-
-For example, we might explain word learning by proposing that children learn word meanings by hearing words spoken and recognising what they refer to. That explanation predicts that, as children have more opportunities to hear words, they will understand more of them over time — and we can build statistical models to test whether the observed data match that prediction (rising counts of words understood with age).
-
-The mapping between the two runs both ways: one empirical model admits many statistical models, and one statistical model is consistent with many empirical models. So even when a statistical model fits the observed data well, we cannot be certain its motivating explanation is ‘the right one’ — another, equally credible, explanation may fit just as well:
-
-> "Many models correspond to the same hypothesis, and many hypotheses correspond to a single model. This makes strict falsification impossible." [@mcelreathStatisticalRethinkingBayesian2020, page 4]
-
-Developing and evaluating models is therefore continual and iterative: a competing model may explain the data better, and new observations refine existing models, revise theories and motivate new ones [@gelmanStatisticalWorkflow2026].
-
-### Inference
-
-There are different approaches to statistical inference, differing in their philosophical and mathematical foundations and in the conclusions they license [@gelmanBayesianDataAnalysis2013; @wakefieldBayesianFrequentistRegression2013; @spanosProbabilityTheoryStatistical2019; @mcelreathStatisticalRethinkingBayesian2020]. Bayesian methods remain uncommon in developmental Down syndrome research, but for the questions this study addresses they offer four concrete advantages: probability statements that mean what families take them to mean; uncertainty expressed as full distributions; a principled way to bring existing knowledge to bear; and direct predictions about individual children.
-
-#### Probability as uncertainty
-
-Bayesian inference treats probability as a measure of uncertainty about unknown quantities -- "relative, in part to this ignorance, in part to our knowledge" [@laplaceEssaiPhilosophiqueProbabilites1814] -- so that a number near one marks an event we consider very likely and one near zero an event we consider very unlikely [@gillBayesianSocialScience2024]. On a partly cloudy day, "a 50% chance of rain this afternoon" means that, given what we currently know, rain and no rain seem about equally plausible.
-
-A different approach -- frequentist inference, long dominant in science and still standard in this field -- defines probability as the long-run relative frequency of an event under repeated, comparable trials [@wakefieldBayesianFrequentistRegression2013; @spanosProbabilityTheoryStatistical2019]. The same forecast becomes a calibration claim about a *method*: across many past occasions when it said "50%", it rained about half the time, so estimates are judged by long-run properties such as unbiasedness and interval coverage [@gelmanRegressionOtherStories2020]. That framing suits settings such as industrial quality control, where repetition under fixed conditions is real and controlling error rates is the goal. Much developmental research is not like that: small samples, many interacting influences on several outcomes, and wide variation between children [@wagenmakersBayesianInferencePsychology2018]. For this study, the Bayesian reading of probability lets us make statements about our estimates that a broad readership will interpret correctly.
-
-#### Estimates as distributions
-
-Bayesian inference begins with a prior distribution -- what we consider plausible before seeing the data -- and uses Bayes' theorem to update it into a posterior distribution that combines prior and data, with uncertainty built in and shown by how peaked or flat the posterior is [@gillBayesianSocialScience2024].
-
-@fig-bayes-update-20 illustrates this. For a yes/no outcome we begin with a weakly informative prior centred on $p = 0.5$ (blue), expecting all-yes or all-no to be less likely than intermediate values. We then observe 20 simulated outcomes, 11 of them "yes" (green), and apply Bayes' theorem to obtain the posterior (orange). With only 20 observations the sample is not centred on the true mean ($p_\text{obs} = 0.55$, $p_\text{true} = 0.65$); this weak prior shifts and narrows the posterior only slightly, leaving it primarily data-driven ($p_\text{post} = 0.54$).
-
-![**Bayesian updating** ($n = 20$). Given a prior distribution (blue) and the observed data (green), we use Bayes theorem to obtain the posterior distribution (orange).](figures/bayes_update.png){#fig-bayes-update-20}
-
-@fig-bayes-update-100 repeats this with the same prior and true mean but 100 observations: the observed mean is closer to the truth ($p_\text{obs} = 0.61$) and the posterior is more concentrated around it ($p_\text{post} = 0.61$).
-
-![**Bayesian updating** ($n = 100$). As @fig-bayes-update-20, but with 100 observations: the posterior distribution is now more concentrated around the observed mean.](figures/bayes_update_2.png){#fig-bayes-update-100}
-
-Frequentist uncertainty is instead grounded in how an estimation procedure behaves across repeated samples; a confidence interval is not a probability statement about where the true value lies and does not rank some values as more plausible than others [@moreyFallacyPlacingConfidence2016] -- a distinction that is, unfortunately, often misinterpreted in practice [@hoekstraRobustMisinterpretationConfidence2014]. A Bayesian posterior instead supports direct statements such as: "given our model and the data, the typical 36-month-old child with Down syndrome learns about 5 new words per month, with an 89% probability that the typical rate lies between 2 and 7." These are the statements families, practitioners and researchers tend to find useful -- and, as McElreath observes, the ones "scientists tend to project onto statistical results" in any case [@mcelreathStatisticalRethinkingBayesian2020]. Bayesian inference is also logically coherent and well suited to complex models [@bernardoBayesianStatistics2025; @wagenmakersBayesianInferencePsychology2018; @wagenmakersBayesianFrequentistInference2008].
-
-#### Using existing knowledge
-
-A prior encodes what is plausible about each parameter before the current data are analysed. Priors can draw on previous research and the experience of people with relevant expertise, or be weakly informative -- ruling out implausible values while letting the data lead. A well-grounded prior combined with the data yields estimates that are more stable, and often more precise, than the data alone -- especially valuable when datasets are small or noisy and a substantial evidence base already exists.
-
-The need to specify a prior is sometimes criticised as "subjective". But every analysis rests on assumptions; the Bayesian ones are simply explicit and open to scrutiny. A prior "should be chosen, evaluated, and revised just like all of the other components of the model" [@mcelreathStatisticalRethinkingBayesian2020], and we can test directly how sensitive our estimates are to it [@gelmanBayesianWorkflow2020]. For this study, priors let us bring existing knowledge of vocabulary development in children with Down syndrome to bear and improve the accuracy of our estimates.
-
-#### Predictions for individual children
-
-From the posterior we can also predict unobserved outcomes. Drawing parameter values from the posterior and simulating a new observation for each draw yields a *posterior predictive distribution* that carries both the randomness in the data and our uncertainty about the parameters. This supports statements such as: "given our model and the data, there is an 89% probability that a 36-month-old child with Down syndrome understands between 0 and 142 words" -- directly useful for setting expectations about individual children.
-
-#### Computation
-
-Bayesian inference is centuries old [@bayesLIIEssaySolving1763; @LaplaceMemoireProbabilite; @laplaceTheorieAnalytiqueProbabilites1820] but became practical for all but the simplest models only with modern sampling algorithms [@metropolisEquationStateCalculations1953; @hastingsMonteCarloSampling1970; @hoffmanNoUTurnSamplerAdaptively2014], now packaged in accessible open-source tools such as Stan and PyMC with interfaces to R and Python [@standevelopmentteamStanLanguageReference2026; @abril-plaPyMCModernComprehensive2023]. It is consequently now used across economics, political science, ecology, biology, neuroscience, medicine, psychology and education research [@gillBayesianModelingInference2020; @mcelreathStatisticalRethinkingBayesian2020; @bonBeingBayesian2020s2023; @pfadtMethodologicalMetamorphosisRapid2025].
-
-#### Conclusions
-
-A goal of this study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice. Empirical and statistical modelling with Bayesian inference let us estimate word-learning trajectories with intuitive uncertainty statements, and simulate predicted outcomes for children with Down syndrome at different ages, to offer relevant and practical insights for families and educators.

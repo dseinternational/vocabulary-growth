@@ -1,6 +1,6 @@
 ---
-title: "Bayesian workflow and model validation"
-abstract: "*This chapter describes the iterative Bayesian workflow used to develop, fit and validate the models: the fitting pipeline and sampling configurations, the validation checks every model is held to (prior predictive, convergence diagnostics, posterior predictive), and the formal basis on which one model is said to supersede another — tabulated out-of-sample model comparison together with identified structural issues.*"
+title: "Workflow and model validation"
+abstract: "*We develop models following an iterative worflow, building increasingly refined models from simpler predecessors. We use a variety of validation checks to assess model fit and reliability.*"
 ---
 
 {{< include _report_data.qmd >}}
