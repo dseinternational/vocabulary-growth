@@ -316,3 +316,84 @@ def test_child_spread_product_is_stable_in_the_far_lower_tail():
     assert np.all(np.isfinite(tau_logit))
     assert np.all(np.isfinite(sd_words))
     assert np.all(sd_words >= 0.0)
+
+
+# ---------------------------------------------------------------- signing
+
+
+def _sign_speech_trace(tmp_path, ages, p_u, q, r, pi):
+    """A minimal VG15-shaped trace: one chain, two draws, three ages."""
+    import xarray as xr
+
+    n_draw = 2
+    dims = ("chain", "draw", "plot_id")
+
+    def da(v):
+        return xr.DataArray(
+            np.broadcast_to(np.asarray(v, dtype=float), (1, n_draw, len(ages))).copy(),
+            dims=dims,
+        )
+
+    sign_only, both, speak_only = pi
+    post = xr.Dataset({
+        "p_u_plot": da(p_u), "q_plot": da(q), "r_plot": da(r),
+        "p_any_plot": da(np.asarray(sign_only) + np.asarray(both) + np.asarray(speak_only)),
+        "p_any_indep_plot": da(np.asarray(sign_only) + np.asarray(both) + np.asarray(speak_only)),
+        "pi_sign_only_plot": da(sign_only), "pi_both_plot": da(both),
+        "pi_speak_only_plot": da(speak_only),
+    })
+    # p_any_plot / p_any_indep_plot are unconditional in VG15; scale them here so
+    # the fixture matches the engine rather than the cells.
+    post["p_any_plot"] = post["p_any_plot"] * da(p_u)
+    post["p_any_indep_plot"] = post["p_any_indep_plot"] * da(p_u)
+    const = xr.Dataset({"X_plot": xr.DataArray(np.asarray(ages, dtype=float), dims=("plot_id",))})
+    path = tmp_path / "trace.nc"
+    xr.DataTree.from_dict({"posterior": post, "constant_data": const}).to_netcdf(str(path))
+    return str(path)
+
+
+def test_sign_speech_cells_are_scaled_by_comprehension(tmp_path):
+    """The pi_* cells are conditional on understood, so they scale by p_u.
+
+    Treating them as unconditional inflates every cell by 1/p_u, which at the
+    youngest modelled ages is a factor of fifty — the difference between "a
+    2-year-old has 28 sign-only words" and "197".
+    """
+    ages = [12.0, 24.0, 36.0]
+    p_u = [0.02, 0.10, 0.30]
+    cells = ([0.5, 0.4, 0.2], [0.1, 0.2, 0.3], [0.1, 0.2, 0.4])  # sign, both, speak
+    path = _sign_speech_trace(tmp_path, ages, p_u, [0.3, 0.4, 0.5], [0.6, 0.6, 0.5], cells)
+
+    got_ages, s = comparison.load_sign_speech_trajectory(path, 810)
+    np.testing.assert_allclose(got_ages, ages)
+    # sign_only words = p_u * pi_sign_only * n_trials
+    np.testing.assert_allclose(s["sign_only"][0], np.array(p_u) * np.array(cells[0]) * 810)
+    # and the three cells sum to total expressive vocabulary
+    np.testing.assert_allclose(
+        s["sign_only"] + s["both"] + s["speak_only"], s["any"], rtol=1e-9
+    )
+
+
+def test_sign_speech_spoken_is_reconstructed_from_p_u_and_q(tmp_path):
+    """VG15 emits no p_s_plot — spoken is a ratio of understood in that engine."""
+    ages = [12.0, 24.0, 36.0]
+    p_u, q = [0.02, 0.10, 0.30], [0.3, 0.4, 0.5]
+    path = _sign_speech_trace(
+        tmp_path, ages, p_u, q, [0.6, 0.6, 0.5],
+        ([0.5, 0.4, 0.2], [0.1, 0.2, 0.3], [0.1, 0.2, 0.4]),
+    )
+    _, s = comparison.load_sign_speech_trajectory(path, 810)
+    np.testing.assert_allclose(s["spoken"][0], np.array(p_u) * np.array(q) * 810)
+    np.testing.assert_allclose(s["understood"][0], np.array(p_u) * 810)
+
+
+def test_sign_speech_r_stays_a_fraction(tmp_path):
+    """r is a ratio by construction; a word count of it would be meaningless."""
+    r = [0.6, 0.6, 0.5]
+    path = _sign_speech_trace(
+        tmp_path, [12.0, 24.0, 36.0], [0.02, 0.10, 0.30], [0.3, 0.4, 0.5], r,
+        ([0.5, 0.4, 0.2], [0.1, 0.2, 0.3], [0.1, 0.2, 0.4]),
+    )
+    _, s = comparison.load_sign_speech_trajectory(path, 810)
+    np.testing.assert_allclose(s["r"][0], r)
+    assert s["r"].max() <= 1.0
