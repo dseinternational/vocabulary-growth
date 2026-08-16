@@ -544,12 +544,17 @@ pd.DataFrame([
 ```
 
 Every one is reached in 100% of posterior draws, so unlike the peak-growth ages
-above these are not boundary-censored. Note that the peak in *absolute* sign-only
-words (≈34 months) comes before the point where sign stops being the majority of
-expressive vocabulary (≈37.5 months) and well before speech-only overtakes it
-(≈42 months): signing keeps growing in absolute terms for a while after speech
-starts catching up. The signed fraction of comprehension $r(a)$ tells the same
-story on its own scale, peaking near 30 months at 0.33 and falling to 0.15 by 84.
+above these are not boundary-censored.
+
+The three arrive in that order, and the spacing is the substantive part.
+Sign-only vocabulary stops *growing* at ≈34 months, but it is still the majority
+of everything the child can express for another ≈4 months, and still larger than
+speech-only for ≈5 months beyond that. So the two crossings are not signing
+falling away — they happen on a slow decline from about 50 words to about 44,
+while speech-only nearly triples over the same span (17 → 45). **Signing is overtaken
+because speech grows, not because signing stops.** The signed fraction of
+comprehension $r(a)$ tells the same story on its own scale, peaking near 30
+months at 0.33 and falling to 0.15 by 84.
 
 Nothing here says the bridge *causes* the crossing — see the caveat below — but
 the shape of the hand-over is now measurable, which it was not before `uk_07` and
