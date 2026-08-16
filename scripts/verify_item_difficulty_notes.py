@@ -192,38 +192,35 @@ def check_fitted_dispersion(output_root: Path) -> None:
     check("implied residual latent SD", residual_sd, [0.678, 0.355, 0.339, 0.407, 0.529], tol=0.002)
     check("total latent SD with tau_subj_u", np.sqrt(tau_subj**2 + residual_sd**2), [1.046, 0.872, 0.865, 0.894, 0.956], tol=0.002)
 
-    # DELIBERATELY NOT RE-PINNED (2026-08-14, still open 2026-08-16). These four,
-    # and the §3.3 kernel shares below, are not measurements the note reports --
-    # they *are* its argument, and the refit moved them far enough to change how
-    # strongly it reads. The ratio goes 0.52 -> 0.80, so the decline in kappa now
-    # tracks the constant-spread prediction much more closely than the note's
-    # reading of it allows. Re-pinning these to the new values would silently
-    # convert a weakened conclusion into a passing check, which is the failure
-    # mode this whole script exists to prevent. They stay failing until the study
-    # owner has ruled on the prose in §§3.3 and 4. The frame counts and the
-    # fitted p/kappa/tau they derive from are re-pinned each pass, because those
-    # are measurements and their movement is just the larger pool.
+    # RE-PINNED 2026-08-16 on the study owner's ruling, closing the hold placed
+    # on 2026-08-14. These four and the §3.3 kernel shares below are the note's
+    # *argument* rather than measurements it reports, so they were held failing
+    # until the prose behind them had been ruled on rather than re-pinned by
+    # reflex. Both sections have since been brought into line with the current
+    # fit -- §4 on 08-15, §3.3 on 08-16 -- and the values below are what that
+    # prose now states.
     #
-    # 2026-08-16 status, for whoever rules on it. Both sections' prose has since
-    # been brought into line with the current fit (§4 on 08-15, §3.3 on 08-16),
-    # and the cause of the movement is now understood: it is mostly the
-    # comprehension reporting cap rising 72 -> 84 months on 08-13, which extends
-    # `posterior_kappa_u.csv` at both ends. The fixed-age checks above still
-    # reproduce, so the posterior is stable where it is compared; only the
-    # quantities computed *across* the range moved. Current values, for the
-    # ruling: decline_kp1 2.038 (was 1.168), predicted 2.534 (2.230), ratio 0.805
-    # (0.52), decline_kappa 2.101 (1.225); §3.3 understood share 1.13%-14.05%
-    # (0.77%-5.27%) and worst-case SD shift 2.85% (1.06%). What still needs a
-    # human call is not the arithmetic but whether §3.3's conclusion survives at
-    # the larger exposure -- the note now withdraws its "order of magnitude below
-    # what 613 children can resolve" claim rather than restating it, because that
-    # power calculation was never actually done.
+    # What moved and why: mostly the comprehension reporting cap rising 72 -> 84
+    # months on 08-13, which extends `posterior_kappa_u.csv` at both ends. The
+    # fixed-age checks above still reproduce, so the posterior is stable where it
+    # is compared; only the quantities computed *across* the range moved.
+    #
+    # The two sections moved in opposite directions, which is why they were worth
+    # separating before re-pinning. §4's ratio rising 0.52 -> 0.805 *strengthens*
+    # its conclusion: the argument is that kappa's decline must not be read as
+    # children fanning out on the latent scale, because constant latent spread on
+    # a bounded inventory already produces a declining kappa, and 0.805 says
+    # constant spread now accounts for four-fifths of the observed decline rather
+    # than half. §3.3's exposure roughly tripling *weakens* its reassurance, and
+    # the note responds by withdrawing its "order of magnitude below what 613
+    # children can resolve" claim rather than restating it -- that power
+    # calculation was never done, and at a 2.85% shift it is not established.
     decline_kp1 = np.log((kappa[0] + 1) / (kappa[-1] + 1))
     predicted = np.log((p_fit[-1] * (1 - p_fit[-1])) / (p_fit[0] * (1 - p_fit[0])))
-    check("log decline in kappa+1", decline_kp1, 1.168, tol=0.005)
-    check("constant-spread prediction", predicted, 2.230, tol=0.005)
-    check("ratio", decline_kp1 / predicted, 0.52, tol=0.005)
-    check("log decline in kappa", np.log(kappa[0] / kappa[-1]), 1.225, tol=0.005)
+    check("log decline in kappa+1", decline_kp1, 2.038, tol=0.005)
+    check("constant-spread prediction", predicted, 2.533, tol=0.005)
+    check("ratio", decline_kp1 / predicted, 0.805, tol=0.005)
+    check("log decline in kappa", np.log(kappa[0] / kappa[-1]), 2.101, tol=0.005)
 
     check_kernel_share(vg10)
 
@@ -239,7 +236,7 @@ def check_kernel_share(vg10: Path) -> None:
     threefold — hence checking against VG10's own output here.
     """
     print("§3.3 — kernel share of total variance (VG10)")
-    for outcome, share_claim, sd_claim in (("u", [0.77, 5.27], 1.06), ("s", [0.83, 0.86], 0.17)):
+    for outcome, share_claim, sd_claim in (("u", [1.13, 14.05], 2.85), ("s", [1.60, 5.80], 1.17)):
         table = vg10 / f"posterior_kappa_{outcome}.csv"
         if not table.exists():
             print(f"  [skip] {table.name} not present")
