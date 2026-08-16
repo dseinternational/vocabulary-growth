@@ -798,6 +798,22 @@ def _sql_literal(path: str) -> str:
     return f"'{escaped}'"
 
 
+def _dtype_class(dtype) -> str:
+    """The dtype identity the round-trip guard should hold fixed.
+
+    Compared instead of the raw dtype string because pandas 3 hands back a
+    ``str`` dtype for a column of Python strings that went in as ``object``.
+    The values are unchanged -- including the case the guard exists for, where a
+    numeric-looking id like ``"001"`` must not return as the integer 1 -- so
+    failing on that pair rejects a faithful round trip. Every other dtype is
+    still compared exactly, and the value check below is unchanged, so an
+    id silently becoming numeric is still caught here: it changes the class.
+    """
+    if pd.api.types.is_object_dtype(dtype) or pd.api.types.is_string_dtype(dtype):
+        return "string"
+    return str(dtype)
+
+
 def _write_frame(frame: pd.DataFrame, path: str) -> dict[str, str]:
     """Write the synthetic frame as Parquet via DuckDB, verifying the round trip.
 
@@ -825,7 +841,7 @@ def _write_frame(frame: pd.DataFrame, path: str) -> dict[str, str]:
         raise RuntimeError("Synthetic frame columns changed on the Parquet round trip.")
     for column in frame.columns:
         original, restored = frame[column], reloaded[column]
-        if str(original.dtype) != str(restored.dtype):
+        if _dtype_class(original.dtype) != _dtype_class(restored.dtype):
             raise RuntimeError(
                 f"Column {column!r} changed dtype on the Parquet round trip "
                 f"({original.dtype} -> {restored.dtype})."
