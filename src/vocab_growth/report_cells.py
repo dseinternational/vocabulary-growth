@@ -239,19 +239,32 @@ def _prior_row(
         )
 
     if kind == "peak":
-        # The signed peak has no Beta hyper-parameters in the definition: it is a
-        # unit-interval parameter mapped onto a stated window of years, and the
-        # window is the whole of the prior. Reported here because VG15's report
-        # asserted the peak was "fixed at the middle anchor by construction",
-        # which was true of an earlier definition and is not true of this fit --
-        # `peak_unit_sign` is in the sampled parameter set.
-        window = definition.get("sign_peak_prior")
-        if not window:
+        # `sign_peak_prior` is (alpha, beta) of a Beta on the peak's POSITION
+        # between the OUTER signed anchors -- not a window of ages. Reading the
+        # pair as a year range gave "uniform over 2-4 years"; it is Beta(2, 4)
+        # over 15-96 months, whose median sits above 40 months.
+        #
+        # Reported at all because VG15's report asserted the peak was "fixed at
+        # the middle anchor by construction". That was true of an earlier
+        # definition; this fit samples `peak_unit_sign`, and the fixed knot was
+        # abandoned because it made the peak's age an assertion rather than an
+        # estimate (see the field's docstring in definitions.py).
+        params = definition.get("sign_peak_prior")
+        anchors = definition.get("sign_anchor_ages")
+        if not params or not anchors:
             return None
+        alpha, beta = params[0], params[1]
+        low, high = float(anchors[0]), float(anchors[-1])
+        span = high - low
+        median = low + float(stats.beta.ppf(0.5, alpha, beta)) * span
+        lo = low + float(stats.beta.ppf(0.05, alpha, beta)) * span
+        hi = low + float(stats.beta.ppf(0.95, alpha, beta)) * span
         return (
             description,
-            f"uniform over {window[0]:g}–{window[1]:g} years",
-            f"{window[0] * 12:.0f}–{window[1] * 12:.0f} months — **estimated, not fixed**",
+            f"Beta({alpha:g}, {beta:g}) on its position between "
+            f"{low:g} and {high:g} months",
+            f"prior median {median:.0f} months, 5–95% {lo:.0f}–{hi:.0f} — "
+            "**estimated, not fixed**",
         )
 
     if kind in {"words", "ratio", "lengthscale"}:

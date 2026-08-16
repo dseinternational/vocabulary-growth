@@ -123,13 +123,13 @@ def test_signed_peak_is_reported_as_estimated(tmp_path, capsys):
     """VG15's report claimed the signed peak was fixed by construction; it is not."""
     fit = _fit(
         tmp_path,
-        definition={"sign_peak_prior": [2.0, 4.0]},
+        definition={"sign_peak_prior": [2.0, 4.0], "sign_anchor_ages": [15.0, 36.0, 96.0]},
         parameters=("peak_unit_sign",),
     )
     report_cells.render_priors_table(str(fit))
     out = capsys.readouterr().out
     assert "estimated, not fixed" in out
-    assert "24–48 months" in out
+    assert "prior median 40 months" in out
 
 
 def test_priors_table_says_so_when_there_is_no_manifest(tmp_path, capsys):
