@@ -484,6 +484,35 @@ beyond that. Over that whole span it declines only gently — about 50 words to 
 not because signing stops**, which is a different picture from children dropping
 signs as they learn to talk.
 
+::: {.callout-note title="Why the composition figure peaks earlier than this one"}
+
+The sign-only curve in the composition figure above peaks at **27.9 months**
+[24.1, 32.7], while the sign-only *word count* here peaks at **33.7** [31.2,
+38.4]. Both are right: the first is a **share of comprehension**, the second a
+**count of words**, and comprehension is still growing quickly in between.
+
+Because sign-only words are understood words × the sign-only share, their growth
+rates add:
+
+$$\frac{d}{da}\log(\text{sign-only words}) = \frac{d}{da}\log(\text{understood}) + \frac{d}{da}\log(\text{sign-only share}).$$
+
+At 28 months comprehension is still growing at ~6% a month while the share is
+flat, so the count keeps climbing. Only at ~34 months does the share's decline
+(−3.1%/month) become steep enough to cancel comprehension's growth
+(+3.3%/month). Between the two peaks a child signs a *shrinking fraction* of what
+they understand while the *number* of words they can express only in sign is
+still rising. The gap is therefore a statement about comprehension, not about
+signing: if comprehension plateaued at 28 months the two peaks would coincide.
+
+The signed fraction of comprehension $r(a)$ — sign-only *plus* sign-and-speech —
+peaks at 29.2 months, between the two, as it must.
+
+**Four reasonable ways to ask "when does signing stop mattering?" give four
+answers spanning fourteen months** (27.9, 33.7, 37.4, 42.1). Quote the one that
+matches the question being asked, and say which it is.
+
+:::
+
 ::: {.callout-important title="This is a population trajectory, not an intervention effect"}
 
 Nothing here says signing *causes* the speech that follows it. These are

@@ -552,9 +552,18 @@ of everything the child can express for another ≈4 months, and still larger th
 speech-only for ≈5 months beyond that. So the two crossings are not signing
 falling away — they happen on a slow decline from about 50 words to about 44,
 while speech-only nearly triples over the same span (17 → 45). **Signing is overtaken
-because speech grows, not because signing stops.** The signed fraction of
-comprehension $r(a)$ tells the same story on its own scale, peaking near 30
-months at 0.33 and falling to 0.15 by 84.
+because speech grows, not because signing stops.**
+
+The signed fraction of comprehension $r(a)$ tells the same story on its own
+scale, peaking near 29 months at 0.33 and falling to 0.15 by 84. Note that it
+peaks *earlier* than the sign-only word count above, and so does the sign-only
+share of comprehension (≈28 months) — no contradiction, because those are
+**shares** and this is a **count**. Sign-only words are understood words × the
+sign-only share, so their growth rates add; at 28 months comprehension is still
+growing at ~6% a month while the share is flat, so the count keeps rising until
+the share's decline is steep enough to cancel it at ~34 months. The gap is a
+statement about comprehension still growing, not about signing. VG15's report
+works this through.
 
 Nothing here says the bridge *causes* the crossing — see the caveat below — but
 the shape of the hand-over is now measurable, which it was not before `uk_07` and
