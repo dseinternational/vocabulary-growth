@@ -136,6 +136,65 @@ def load_population_trajectory(
     return ages, p_u * n_trials_, p_s * n_trials_
 
 
+#: Series the joint sign/speech engine (VG15) reports on the plot grid, as
+#: fractions. ``pi_*`` are the four-cell composition **conditional on the word
+#: being understood**, so they are scaled by ``p_u`` — not by ``n_trials`` alone —
+#: to become word counts. Getting that wrong silently inflates every cell by
+#: ``1 / p_u``, which at 12 months is a factor of fifty.
+SIGN_SPEECH_SERIES = (
+    "p_u_plot",
+    "q_plot",
+    "p_any_plot",
+    "p_any_indep_plot",
+    "r_plot",
+    "pi_sign_only_plot",
+    "pi_both_plot",
+    "pi_speak_only_plot",
+)
+
+
+def load_sign_speech_trajectory(
+    path: str, n_trials_: int
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Return ``(ages, series)`` for the joint sign/speech engine's trajectory.
+
+    ``series`` maps each name below to ``(n_draw, n_age)`` **word counts**, all
+    from one posterior so they are draw-aligned with each other:
+
+    ``understood``
+        Expected words understood.
+    ``spoken``
+        ``p_u * q``. VG15 emits no ``p_s_plot`` — spoken is a ratio of
+        understood in this engine, so it is reconstructed here rather than read.
+    ``any``
+        Total expressive vocabulary, in any modality, with the sign–speech
+        association ``psi`` estimated from the data.
+    ``any_indep``
+        The same total computed **as if** sign and speech were independent given
+        age — the assumption VG14 has no choice but to make. Shipping both makes
+        the cost of that assumption a visible contrast rather than an argument.
+    ``sign_only`` / ``both`` / ``speak_only``
+        The composition of expressive vocabulary. ``sign_only`` is the count a
+        speech-only assessment would miss entirely.
+
+    ``r`` is returned separately as a **fraction** (of understood words signed),
+    because it is a ratio by construction and a word count of it is meaningless.
+    """
+    ages, arrays, _ = _load_reshaped_draws(path, SIGN_SPEECH_SERIES)
+    p_u, q, p_any, p_any_indep, r, sign_only, both, speak_only = arrays
+    understood = p_u * n_trials_
+    return ages, {
+        "understood": understood,
+        "spoken": p_u * q * n_trials_,
+        "any": p_any * n_trials_,
+        "any_indep": p_any_indep * n_trials_,
+        "sign_only": p_u * sign_only * n_trials_,
+        "both": p_u * both * n_trials_,
+        "speak_only": p_u * speak_only * n_trials_,
+        "r": r,
+    }
+
+
 def load_univariate_trajectory(
     path: str, n_trials_: int
 ) -> tuple[np.ndarray, np.ndarray]:

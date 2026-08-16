@@ -72,6 +72,7 @@ Hutchins
 hyperparameters
 hyperpriors
 incl
+indep
 isna
 judgments
 Jupytext

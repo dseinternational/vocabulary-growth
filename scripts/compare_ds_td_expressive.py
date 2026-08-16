@@ -3,11 +3,11 @@
 """
 Expressive-delay & distributional DS-vs-TD contrasts (per-draw, separate-model).
 
-This is the non-VG16 realisation of the "expressive delay" question: every
-estimand here is a deterministic functional of the already-fitted, *disjoint*
-DS and TD posteriors, so per-draw pairing gives exact credible intervals with
-**no joint/stacked model**. (The generative joint model that would make the gap
-itself a parameter is the reserved VG16; see ``compare_ds_td_re.py``.)
+Every estimand here is a deterministic functional of the already-fitted,
+*disjoint* DS and TD posteriors, so per-draw pairing gives exact credible
+intervals with **no joint/stacked model**. (The generative joint model that would
+make the gap itself a parameter is not built and holds no reserved model number;
+see ``compare_ds_td_re.py``.)
 
 Outputs (individual, linear-axis figures + CSVs) to the configured comparisons
 dir (default ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
@@ -27,7 +27,7 @@ Comprehension-equivalent developmental age (age-indexed — "as a function of ag
     Δ_exp_age(a) = cea_U - cea_S (months).
   * ``ds_td_expressive_equivalent_age.csv``
 
-Sign-inclusive expressive gap (uses the new ie_02 signing data via VG14)
+Sign-inclusive expressive gap (DS total expressive p_any via VG15)
   * ``ds_td_sign_inclusive_gap.{png,svg}`` — TD spoken minus DS spoken vs TD
     spoken minus DS *p_any* (sign included): how much counting sign narrows it.
   * ``ds_td_sign_inclusive_credit.{png,svg}`` — p_any - spoken (DS expressive
@@ -69,9 +69,28 @@ TD_JOINT_KEY = "vg13"          # TD joint, study REs, 8-18 mo
 DS_DISP_KEY = "vg07"
 TD_SPOKEN_KEY = "vg11"
 TD_UNDERSTOOD_KEY = "vg12"
-# Sign-inclusive total expressive p_any comes from the trivariate VG14 (its own
-# spoken curve is used too, so spoken and p_any share one DS posterior).
-DS_SIGN_KEY = "vg14"
+# Sign-inclusive total expressive p_any comes from the joint sign/speech VG15
+# (its own understood and spoken curves are used too, so every DS series in the
+# signing sections shares one posterior and is draw-aligned).
+#
+# This was VG14 until 2026-08-16, and the switch is not cosmetic. VG14 derives
+# p_any by *assuming* sign and speech are independent given age, which is the
+# assumption VG15 exists to test -- and VG15 measures psi = 2.34 [1.89, 2.81],
+# P(psi > 1) = 1.00. VG14 also carries no study or subject random effects, while
+# every other DS quantity in this report comes from a model that does (VG10 or
+# VG07) and the TD comparator (VG11) does too, so the old pairing broke the
+# like-for-like rule the method table sets out. Between them the two problems put
+# DS total expressive vocabulary at 52.1 words at 24 months against VG15's 36.6,
+# and the independence assumption is the smaller half: VG15's own independence
+# counterfactual is 38.2. Both are now reported, so the cost of the assumption is
+# a visible contrast rather than an argument.
+DS_SIGN_KEY = "vg15"
+
+# Highest age for the DS-internal signing profile. That section has no TD
+# comparator, so it is not bounded by TD support at 30 months -- it stops at the
+# comprehension reporting cap instead, since every quantity in it is conditioned
+# on understood. See vocab_growth.reporting_ages.
+DS_SIGNING_MAX_AGE = 84.0
 
 OUT_DIR = env.comparisons_output_dir()
 SEED = 20260626
@@ -198,29 +217,36 @@ def run_expressive_delay() -> None:
 def run_sign_inclusive() -> None:
     print(f"\n=== SIGN-INCLUSIVE GAP: DS={C.model_label(DS_SIGN_KEY)} (spoken & p_any) "
           f"vs TD={C.model_label(TD_SPOKEN_KEY)} spoken ===", flush=True)
-    # DS spoken and p_any from the *same* trivariate posterior (draw-aligned).
-    ages_sgn, _U, S_ds = C.load_population_trajectory(
+    # Every DS series from the *same* joint sign/speech posterior (draw-aligned).
+    ages_ds, ds = C.load_sign_speech_trajectory(
         C.trace_path(DS_SIGN_KEY), C.n_trials(DS_SIGN_KEY))
-    ages_any, A_ds = C.load_p_any_trajectory(
-        C.trace_path(DS_SIGN_KEY), C.n_trials(DS_SIGN_KEY))
+    S_ds, A_ds, I_ds = ds["spoken"], ds["any"], ds["any_indep"]
     # TD spoken (disjoint) — pair by permutation.
     ages_td, p_td, _k, n_td = C.load_outcome_trajectory(TD_SPOKEN_KEY, "spoken")
     W_td = p_td * n_td
     ia, ib = C.align_draws(S_ds.shape[0], W_td.shape[0], seed=SEED)
-    S_ds, A_ds, W_td = S_ds[ia], A_ds[ia], W_td[ib]
+    S_ds, A_ds, I_ds, W_td = S_ds[ia], A_ds[ia], I_ds[ia], W_td[ib]
 
-    lo = max(ages_sgn.min(), ages_td.min())
-    hi = min(ages_sgn.max(), ages_td.max())
+    lo = max(ages_ds.min(), ages_td.min())
+    hi = min(ages_ds.max(), ages_td.max())
     grid = np.arange(np.ceil(lo), hi + 1e-9, 1.0)
     print(f"  overlap {lo:.0f}-{hi:.0f} mo (TD support limits this window)", flush=True)
-    Sg = C.interp_draws(ages_sgn, S_ds, grid)
-    Ag = C.interp_draws(ages_any, A_ds, grid)
+    Sg = C.interp_draws(ages_ds, S_ds, grid)
+    Ag = C.interp_draws(ages_ds, A_ds, grid)
+    Ig = C.interp_draws(ages_ds, I_ds, grid)
     Tg = C.interp_draws(ages_td, W_td, grid)
 
     gap_spoken = C.summarise_draws(Tg - Sg, grid, with_p_gt0=True)
     gap_any = C.summarise_draws(Tg - Ag, grid, with_p_gt0=True)
+    gap_any_indep = C.summarise_draws(Tg - Ig, grid, with_p_gt0=True)
     credit = C.summarise_draws(Ag - Sg, grid, with_p_gt0=True)
-    _merge3(grid, gap_spoken, gap_any, credit).to_csv(
+    # What assuming independence would have added, on this same posterior. It is
+    # the honest measure of VG14's structural assumption, because everything else
+    # is held fixed.
+    indep_excess = C.summarise_draws(Ig - Ag, grid, with_p_gt0=True)
+    _merge_named(grid, gap_spoken=gap_spoken, gap_any=gap_any,
+                 gap_any_indep=gap_any_indep, credit=credit,
+                 indep_excess=indep_excess).to_csv(
         os.path.join(OUT_DIR, "ds_td_sign_inclusive.csv"), index=False)
 
     def gap(ax):
@@ -237,6 +263,89 @@ def run_sign_inclusive() -> None:
     C.save_panel(OUT_DIR, "ds_td_sign_inclusive_credit",
                  dict(xlabel="Age (months)", ylabel="Extra expressive words from sign",
                       title="DS expressive credit from non-speech modalities"), cred)
+
+
+# ----------------------------------------------------------------------------
+# 3b. DS-internal signing profile (no TD comparator, so not TD-bounded)
+# ----------------------------------------------------------------------------
+def run_ds_signing_profile() -> None:
+    """How much signing contributes to a DS child's own expressive vocabulary.
+
+    The sign-inclusive gap above answers "how much does counting sign close the
+    distance to typically developing children?", and stops at 30 months because
+    that is where TD support stops. It is the wrong question for a practitioner
+    and the wrong bound for the data: signing is now observed on 904
+    administrations from 549 children across nine studies, out to 115 months, and
+    the interesting part of the trajectory — signing handing over to speech —
+    happens entirely above the TD window.
+
+    This section drops the comparator and asks the DS-internal question instead:
+    of everything a child can express, how much is available only in sign, and
+    for how long? Three quantities, all conditioned on understood and therefore
+    capped at the comprehension reporting age:
+
+    * ``uplift`` — total expressive vocabulary as a multiple of spoken alone.
+    * ``sign_only_share`` — the fraction of expressive vocabulary a speech-only
+      assessment would miss.
+    * ``r`` — the signed fraction of comprehension, whose rise and fall is the
+      "signing as a bridge" trajectory itself.
+    """
+    print(f"\n=== DS SIGNING PROFILE: {C.model_label(DS_SIGN_KEY)} "
+          f"(DS-internal, to {DS_SIGNING_MAX_AGE:.0f} mo) ===", flush=True)
+    ages_ds, ds = C.load_sign_speech_trajectory(
+        C.trace_path(DS_SIGN_KEY), C.n_trials(DS_SIGN_KEY))
+    grid = np.arange(np.ceil(ages_ds.min()), DS_SIGNING_MAX_AGE + 1e-9, 1.0)
+    g = {k: C.interp_draws(ages_ds, v, grid) for k, v in ds.items()}
+
+    eps = 1e-9
+    uplift = g["any"] / np.clip(g["spoken"], eps, None)
+    sign_only_share = g["sign_only"] / np.clip(g["any"], eps, None)
+
+    frames = {
+        "spoken": C.summarise_draws(g["spoken"], grid),
+        "any": C.summarise_draws(g["any"], grid),
+        "credit": C.summarise_draws(g["any"] - g["spoken"], grid),
+        "uplift": C.summarise_draws(uplift, grid),
+        "sign_only": C.summarise_draws(g["sign_only"], grid),
+        "both": C.summarise_draws(g["both"], grid),
+        "speak_only": C.summarise_draws(g["speak_only"], grid),
+        "sign_only_share": C.summarise_draws(sign_only_share, grid),
+        "r": C.summarise_draws(g["r"], grid),
+    }
+    _merge_named(grid, **frames).to_csv(
+        os.path.join(OUT_DIR, "ds_signing_profile.csv"), index=False)
+
+    for a in (18, 24, 36, 48, 72):
+        i = int(np.argmin(np.abs(grid - a)))
+        print(f"  {a:>3} mo: spoken {np.median(g['spoken'][:, i]):6.1f} -> any "
+              f"{np.median(g['any'][:, i]):6.1f}  "
+              f"(x{np.median(uplift[:, i]):.2f}); sign-only share "
+              f"{np.median(sign_only_share[:, i]):.0%}", flush=True)
+
+    def composition(ax):
+        _band(ax, frames["speak_only"], "age_months", "Speech only", COL_TD)
+        _band(ax, frames["both"], "age_months", "Both sign and speech", COL_D)
+        _band(ax, frames["sign_only"], "age_months", "Sign only", COL_ALT)
+    C.save_panel(OUT_DIR, "ds_signing_composition",
+                 dict(xlabel="Age (months)", ylabel="Words",
+                      title="How DS expressive vocabulary is expressed"), composition)
+
+    def share(ax):
+        _band(ax, frames["sign_only_share"], "age_months",
+              "Share of expressive vocabulary available only in sign", COL_ALT)
+        _band(ax, frames["r"], "age_months",
+              "Signed fraction of comprehension r(a)", COL_DS)
+    C.save_panel(OUT_DIR, "ds_signing_share",
+                 dict(xlabel="Age (months)", ylabel="Fraction",
+                      title="Signing as a bridge: its share falls as speech arrives"), share)
+
+    def upl(ax):
+        _band(ax, frames["uplift"], "age_months",
+              "Expressive vocabulary as a multiple of spoken", COL_D)
+        ax.axhline(1.0, color=plot_styles.LINE_COLOUR, lw=0.6)
+    C.save_panel(OUT_DIR, "ds_signing_uplift",
+                 dict(xlabel="Age (months)", ylabel="p_any / spoken",
+                      title="What counting sign adds to a child's own expressive vocabulary"), upl)
 
 
 # ----------------------------------------------------------------------------
@@ -306,9 +415,10 @@ def run_peak_growth() -> None:
         os.path.join(OUT_DIR, "ds_td_peak_growth_age.csv"), index=False)
 
 
-def _merge3(grid, gap_spoken, gap_any, credit):
+def _merge_named(grid, **frames):
+    """Merge any number of summary frames onto one age grid, each name-prefixed."""
     base = pd.DataFrame({"age_months": grid})
-    for name, fr in (("gap_spoken", gap_spoken), ("gap_any", gap_any), ("credit", credit)):
+    for name, fr in frames.items():
         base = base.merge(fr.add_prefix(f"{name}_").rename(
             columns={f"{name}_age_months": "age_months"}), on="age_months", how="left")
     return base
@@ -357,6 +467,7 @@ def main() -> None:
         _verify()
     run_expressive_delay()
     run_sign_inclusive()
+    run_ds_signing_profile()
     run_below_percentile()
     run_peak_growth()
     print(f"\nWrote CSVs + figures to {OUT_DIR}/", flush=True)

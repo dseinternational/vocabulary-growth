@@ -18,8 +18,11 @@ on a **common age grid restricted to the empirical overlap**, using the
 **population-level (RE-excluded) outcome-scale** curve on both sides so the
 estimand is identical. A joint/stacked model that makes the TD-DS gap itself a
 generative object (partial pooling, a directly-estimated delay, difference-in-
-differences, the "delayed/scaled TD trajectory" hypothesis) is the reserved
-future **VG16** and is intentionally NOT built here.
+differences, the "delayed/scaled TD trajectory" hypothesis) is intentionally NOT
+built here, and **is not currently registered against any model number**. It was
+reserved as VG16 until that number was taken by the DS within-child cross-lag;
+nothing has replaced the reservation, so a reader should not expect this gap to
+be closed by an existing model.
 
 Estimands, per outcome, written to the configured comparisons dir (default
 ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
