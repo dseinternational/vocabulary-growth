@@ -1802,25 +1802,53 @@ def plot_modality_trajectories(
     interval_kind: intervals.IntervalKind = "eti",
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months_understood: float | None = None,
+    max_age_months_spoken: float | None = None,
+    max_age_months_signed: float | None = None,
 ):
-    """Plot expected p_U, p_S, p_Sign and p_any trajectories (in word counts)."""
+    """Plot expected p_U, p_S, p_Sign and p_any trajectories (in word counts).
+
+    Each curve stops at its own outcome's reporting cap, as the joint-trajectory
+    figure beside it already did. Without the caps this figure ran the full plot
+    grid -- for VG14 that is 115 months, thirty past the comprehension and
+    signing caps -- directly above a ``posterior_summary_p_any`` table trimmed
+    to 84. The policy test could not see it: ``modality_trajectories`` has no
+    outcome suffix, so it matched no entry in the test's stem map.
+
+    ``p_any`` is a union over speaking and signing, so it takes the tighter of
+    those two caps: past the signing cap one of its two components is no longer
+    reported, and a union of a reported and an unreported quantity is not a
+    quantity this project publishes.
+    """
     X_plot = samples.X_plot
 
-    E_u = np.median(samples.p_u_plot, axis=1) * n_trials
-    E_s = np.median(samples.p_s_plot, axis=1) * n_trials
-    E_sign = np.median(samples.p_sign_plot, axis=1) * n_trials
-    E_any = np.median(samples.p_any_plot, axis=1) * n_trials
-    any_hdi = intervals.bands(
-        samples.p_any_plot * n_trials, ci_prob, interval_kind, sample_axis=1
+    def _trim(values: np.ndarray, cap: float | None) -> tuple[np.ndarray, np.ndarray]:
+        if cap is None:
+            return X_plot, values
+        keep = X_plot <= cap
+        return X_plot[keep], values[keep]
+
+    any_cap = None
+    caps = [c for c in (max_age_months_spoken, max_age_months_signed) if c is not None]
+    if caps:
+        any_cap = min(caps)
+
+    x_u, E_u = _trim(np.median(samples.p_u_plot, axis=1) * n_trials, max_age_months_understood)
+    x_s, E_s = _trim(np.median(samples.p_s_plot, axis=1) * n_trials, max_age_months_spoken)
+    x_sign, E_sign = _trim(np.median(samples.p_sign_plot, axis=1) * n_trials, max_age_months_signed)
+    x_any, E_any = _trim(np.median(samples.p_any_plot, axis=1) * n_trials, any_cap)
+    _, any_hdi = _trim(
+        intervals.bands(samples.p_any_plot * n_trials, ci_prob, interval_kind, sample_axis=1),
+        any_cap,
     )
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    ax.fill_between(X_plot, any_hdi[:, 0], any_hdi[:, 1], alpha=0.12, color="C3")
-    ax.plot(X_plot, E_any, lw=3, color="C3", label="Total expressive p_any")
-    ax.plot(X_plot, E_u, lw=2.5, color="C0", label="Understood p_U")
-    ax.plot(X_plot, E_s, lw=2.5, color="C1", label="Spoken p_S")
-    ax.plot(X_plot, E_sign, lw=2.5, color="C2", label="Signed p_Sign")
+    ax.fill_between(x_any, any_hdi[:, 0], any_hdi[:, 1], alpha=0.12, color="C3")
+    ax.plot(x_any, E_any, lw=3, color="C3", label="Total expressive p_any")
+    ax.plot(x_u, E_u, lw=2.5, color="C0", label="Understood p_U")
+    ax.plot(x_s, E_s, lw=2.5, color="C1", label="Spoken p_S")
+    ax.plot(x_sign, E_sign, lw=2.5, color="C2", label="Signed p_Sign")
 
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Expected word count")
@@ -2164,6 +2192,15 @@ def _run_trivariate_plots(context: TrivariateContext):
         ci_prob=ci_prob,
         output_dir=output_dir,
         filename="modality_trajectories",
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
+        max_age_months_signed=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SIGNED
+        ),
     )
     context.plots["modality_trajectories"] = fig
     plt.close(fig)

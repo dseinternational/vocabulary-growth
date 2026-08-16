@@ -59,6 +59,11 @@ BY_STEM = {
     "sign_speech_crossover": ReportedQuantity.SIGNED,
     "posterior_summary_r": ReportedQuantity.SIGNED,
     "posterior_summary_p_any": ReportedQuantity.SIGNED,
+    # No outcome suffix, so it matched no rule and was silently skipped -- which
+    # is how VG14's modality figure came to run to 115 months directly above a
+    # p_any table trimmed to 84. p_any is a union over speaking and signing, so
+    # the signing cap is the binding one.
+    "modality_trajectories": ReportedQuantity.SIGNED,
 }
 
 # Artefacts written by the *summary* stage rather than the plot stage, which
@@ -68,14 +73,27 @@ BY_STEM = {
 # until their models were refitted; everything else in the family was fixed by
 # regeneration alone.
 #
-# **Now empty, and that is the intended end state.** VG15's six entries cleared
-# when its clamp-q-only refit landed at 14:32 on 2026-08-14 and VG14's two when
-# its refit landed at 17:11, each caught by
+# VG15's six entries cleared when its clamp-q-only refit landed at 14:32 on
+# 2026-08-14 and VG14's two when its refit landed at 17:11, each caught by
 # ``test_known_stale_entries_are_still_needed`` within the hour. Keep the
 # mechanism: it is the only thing that distinguishes "this artefact is stale and
-# we know it" from "this artefact violates the policy", and the next time a
-# summary-stage format changes there will be a window that needs it again.
-KNOWN_STALE: dict[str, set[str]] = {}
+# we know it" from "this artefact violates the policy".
+#
+# The VG14 entry below has a different cause from the summary-stage ones above,
+# and it is worth naming. ``modality_trajectories`` *is* a plot-stage artefact,
+# so ``regenerate_plots.py`` would normally refresh it -- but VG14's trace was
+# written under the ``compact`` persistence tier, and regeneration refuses a
+# compacted trace rather than producing silently wrong output. Clearing it
+# therefore needs a full refit of VG14, which is deliberately not being done:
+# VG14 is superseded by VG15 for every quantity this figure shows, and the
+# figure is the ``p_any`` union its own report now warns readers not to use.
+# Spending a reporting-quality refit and several gigabytes on a retired model's
+# retired figure is the wrong trade; the code is fixed, so the first time VG14
+# is refitted for any other reason this entry will fail as unnecessary and
+# should be deleted then.
+KNOWN_STALE: dict[str, set[str]] = {
+    "vg14": {"modality_trajectories"},
+}
 
 # Not age-indexed reports: descriptive frames, diagnostics, provenance.
 IGNORE_STEMS = {
