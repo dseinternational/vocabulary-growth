@@ -343,7 +343,22 @@ summary_r
 
 ## Association psi
 
-The posterior of the sign-speech odds ratio $\psi$, with the independence reference $\psi = 1$.
+$\psi$ is the **sign–speech odds ratio**, and it answers one question: take a word
+a child understands — does being able to sign it tell you anything about whether
+they can say it?
+
+- $\psi = 1$ means no: signing and saying would be unrelated, which is the
+  assumption VG14 has to make.
+- $\psi > 1$ means a word a child signs is **more** likely to be one they also
+  say.
+- $\psi < 1$ would mean signing substitutes for speech word by word.
+
+The estimate is firmly above 1, so signing and speaking travel together at the
+level of individual words. That matters for any total-expressive figure: a
+positive association means the two sets **overlap more** than independence
+implies, so the union — the number of distinct words a child can express — is
+**smaller** than the independence formula gives. This is why VG14's `p_any` is an
+upper bound and this model's is not.
 
 ![Association psi posterior](psi_posterior.png){#fig-psi .lightbox fig-align="left"}
 
@@ -354,11 +369,27 @@ summary_psi
 
 ## Within-understood composition
 
-The four mutually-exclusive states of an understood word (sign-only, sign+speech, speak-only, neither) as fractions of understood vocabulary over age — words migrating from sign into speech.
+Every word a child understands sits in exactly one of four states: they can
+**sign it only**, **both sign and say it**, **say it only**, or **neither**. This
+section shows those four as fractions of comprehension over age — words migrating
+from sign into speech.
 
-::: {.callout-warning title="Four-cell extrapolation"}
+::: {.callout-note title="What identifies psi, and over what ages"}
 
-The scalar association parameter is identified mainly by `uk_02` four-cell rows from about 19-56 months. Composition curves outside that support combine marginal trajectories with the scalar-$\psi$ assumption and should be treated as exploratory.
+$\psi$ is a single number shared across ages, and it is identified by the sources
+that report the four cells separately rather than only the modality totals. That
+is now **three studies, 323 administrations from 243 children, spanning 11–95
+months**: `es_01` (185 rows, 11–71 mo), `uk_07` (82 rows, 34–95 mo) and `uk_02`
+(56 rows, 20–56 mo).
+
+Earlier versions of this page warned that the composition was an extrapolation
+outside about 19–56 months, because `uk_02` was then the only four-cell source.
+That is no longer the case: `es_01` and `uk_07` bracket it on both sides, and the
+four-cell support now covers essentially the whole reporting range. The remaining
+assumption is not one of age coverage but of **constancy** — a single $\psi$ for
+all ages. Whether the association itself varies with age is examined in
+[`notes/202608121030`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608121030-psi-heterogeneity-and-age-invariance.md),
+which finds the between-study heterogeneity is not explained by age.
 
 :::
 
@@ -374,6 +405,99 @@ The data-identified $p_\text{any}$ against VG14's independence upper bound. With
 summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
 summary_p_any
 ```
+
+## What signing is worth to the child
+
+The composition above is expressed as fractions **of comprehension**, which
+answers "what proportion of the words this child knows can they sign?" This
+section asks the question a parent, teacher or therapist actually has — *how much
+does signing add to what this child can express?* — which needs word counts and a
+denominator of the child's own expressive vocabulary. The two give
+very different-looking answers from the same posterior, and both are true.
+
+```{python}
+sp = pd.read_csv("signing_profile.csv")
+
+
+def _at(df, age, prefix, dec=1):
+    r = df.iloc[(df["age_months"] - age).abs().argmin()]
+    if f"{prefix}_ci_lo" in df.columns:
+        return f"{r[f'{prefix}_median']:.{dec}f} [{r[f'{prefix}_ci_lo']:.{dec}f}, {r[f'{prefix}_ci_hi']:.{dec}f}]"
+    return f"{r[f'{prefix}_median']:.{dec}f}"
+
+
+pd.DataFrame([
+    {
+        "Age (mo)": a,
+        "Spoken": _at(sp, a, "spoken", 0),
+        "Any modality": _at(sp, a, "any", 0),
+        "× spoken alone": _at(sp, a, "uplift", 2),
+        "Sign-only words": _at(sp, a, "sign_only", 0),
+        "Share sign-only": _at(sp, a, "sign_only_share", 2),
+    }
+    for a in [18, 24, 30, 36, 48, 60, 72, 84]
+]).set_index("Age (mo)")
+```
+
+At two years a child expresses roughly **four times** the vocabulary a
+speech-only count records, and about **three-quarters of it is available only in
+sign**. A speech-only assessment at that age is not measuring a slightly smaller
+vocabulary — it is missing most of it. The uplift then falls away as speech
+arrives: ×2.2 at 36 months, ×1.3 at 48, ×1.06 by 72.
+
+![How expressive vocabulary is expressed](signing_composition_words.png){#fig-signing-words .lightbox fig-align="left"}
+
+![What counting sign adds to a child's own expressive vocabulary](signing_uplift.png){#fig-signing-uplift .lightbox fig-align="left"}
+
+### The sign-to-speech hand-over
+
+```{python}
+ms = pd.read_csv("signing_milestones.csv").set_index("quantity")
+labels = {
+    "sign_only_peak_age": "Sign-only vocabulary stops growing (mo)",
+    "sign_only_peak_words": "…at how many words",
+    "sign_only_share_below_half_age": "Sign-only falls below half of expressive vocabulary (mo)",
+    "speech_only_overtakes_sign_only_age": "Speech-only overtakes sign-only (mo)",
+}
+pd.DataFrame([
+    {
+        "Milestone": lab,
+        "Estimate": f"{ms.loc[k, 'median']:.1f} [{ms.loc[k, 'ci_lo']:.1f}, {ms.loc[k, 'ci_hi']:.1f}]",
+        "Draws reaching it": f"{ms.loc[k, 'draws_reaching']:.0%}",
+    }
+    for k, lab in labels.items()
+]).set_index("Milestone")
+```
+
+Each milestone is found **in every posterior draw and then summarised**, not read
+off the median curve — the median of crossings is not the crossing of the median,
+and for a peak the difference is not subtle, since averaging curves whose peaks
+sit at different ages flattens the peak and drags it toward the middle of the
+grid. The `Draws reaching it` column is the identification warning: a milestone
+reached in only part of the posterior is a bound, not an estimate.
+
+**The spacing is the substantive result.** Sign-only vocabulary stops *growing*
+at about 34 months, but it remains the majority of everything the child can
+express for another ~4 months, and stays larger than speech-only for ~5 months
+beyond that. Over that whole span it declines only gently — about 50 words to 44
+— while speech-only nearly triples. **Signing is overtaken because speech grows,
+not because signing stops**, which is a different picture from children dropping
+signs as they learn to talk.
+
+::: {.callout-important title="This is a population trajectory, not an intervention effect"}
+
+Nothing here says signing *causes* the speech that follows it. These are
+population-level curves for a cohort in which signing was taught — often
+precisely because a child was not yet talking. The closest this project comes to
+the follow-up question is
+[`notes/202608160930`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608160930-early-signing-and-later-speech.md),
+which finds that *how much* a child signs relative to their comprehension does
+predict later spoken vocabulary (+0.19 SD per SD, 89% ETI [0.03, 0.36]), while
+*whether* they sign at all cannot be identified in these data — signing is very
+nearly a study-level property here. That is an association, under a selection
+bias that runs downwards, not evidence that teaching signs raises speech.
+
+:::
 
 ## Signed vs spoken ratio
 

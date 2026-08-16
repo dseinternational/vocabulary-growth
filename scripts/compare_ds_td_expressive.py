@@ -59,6 +59,7 @@ import pandas as pd
 
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
+from vocab_growth.models.common_joint_modality import MIN_WORDS_FOR_MILESTONE
 
 # -- Comparators (joint U+S models so U and S are coupled per draw) --
 DS_JOINT_KEY = "vg10"          # DS joint, study+subject REs
@@ -265,17 +266,21 @@ def run_sign_inclusive() -> None:
                       title="DS expressive credit from non-speech modalities"), cred)
 
 
-def _first_age(grid: np.ndarray, condition: np.ndarray, *, skip: int = 10) -> np.ndarray:
+def _first_age(
+    grid: np.ndarray, condition: np.ndarray, established: np.ndarray
+) -> np.ndarray:
     """Per-draw earliest grid age at which ``condition`` holds, else NaN.
 
-    ``skip`` ignores the first few grid points, where every cell is a fraction of
-    a word and the three curves start indistinguishable from each other and from
-    zero — a "crossing" there is arithmetic noise, not a milestone.
+    ``established`` gates on the child having a vocabulary to divide up at all.
+    At the youngest modelled ages the three cells are fractions of a word, so
+    which is larger is arithmetic noise and every condition is satisfied by
+    accident. Gating on a word count rather than on a fixed number of grid points
+    keeps the answer independent of the grid step — the same rule the fit
+    pipeline applies in ``common_joint_modality._signing_milestones``.
     """
     out = np.full(condition.shape[0], np.nan)
     for d in range(condition.shape[0]):
-        idx = np.flatnonzero(condition[d])
-        idx = idx[idx > skip]
+        idx = np.flatnonzero(condition[d] & established[d])
         if idx.size:
             out[d] = grid[idx[0]]
     return out
@@ -290,14 +295,15 @@ def _signing_milestones(grid: np.ndarray, g: dict[str, np.ndarray]) -> pd.DataFr
     (:func:`vocab_growth.comparison.first_crossing`).
     """
     total = np.clip(g["sign_only"] + g["both"] + g["speak_only"], 1e-9, None)
+    established = total >= MIN_WORDS_FOR_MILESTONE
     peak_idx = np.argmax(g["sign_only"], axis=1)
     rows = [
         ("sign_only_peak_age", grid[peak_idx]),
         ("sign_only_peak_words", np.max(g["sign_only"], axis=1)),
         ("sign_only_share_below_half_age",
-         _first_age(grid, (g["sign_only"] / total) < 0.5)),
+         _first_age(grid, (g["sign_only"] / total) < 0.5, established)),
         ("speech_only_overtakes_sign_only_age",
-         _first_age(grid, g["speak_only"] >= g["sign_only"])),
+         _first_age(grid, g["speak_only"] >= g["sign_only"], established)),
     ]
     out = []
     for name, draws in rows:

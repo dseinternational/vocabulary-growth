@@ -100,9 +100,15 @@ $$
 p_\text{any}(a) = p_U(a) \cdot \bigl(1 - (1 - r(a))(1 - q(a))\bigr).
 $$
 
-::: {.callout-important title="p_any is an independence-based upper bound"}
+::: {.callout-important title="Read VG15 instead for any total-expressive number"}
 
-This formula assumes signing and speaking are **conditionally independent given age** (the Option 1 limitation of issue #49). The signed and spoken blocks share the understood trajectory $p_U(a)$ but are otherwise modelled independently. In reality a word is often signed _before_ it is spoken, so the two are **positively associated**: in the only source with the four-cell breakdown (`uk_02`), words produced in both modalities are observed more often than independence predicts (0.18 vs $r \cdot q$ 0.14 over 20-56 months). Because positive association reduces the union, $p_\text{any}$ as computed here **over-states** the true total expressive vocabulary. It is an **upper bound** (about 4 percentage points high against the `uk_02` observed union; see the validation below). VG14 therefore gives a first, lightweight read on the sign-to-speech hand-off; VG15 relaxes the independence assumption using the `uk_02` four-cell (sign-only / sign+speech / speech-only / neither) breakdown to identify the within-understood signed-spoken association directly.
+**VG14 is a development step, not a source for reported numbers.** The study owner confirmed on 2026-08-06 that it is wholly replaced by VG15 for reporting; see the role table in [the model inventory](../README.md). VG15 supplies everything VG14 does — including this independence-based total, which it emits as `p_any_indep` — on a better-specified model. This page is retained to show how the signing structure was built, and its numbers should be read as history.
+
+**Why this formula overstates the total.** It assumes signing and speaking are **conditionally independent given age** (the Option 1 limitation of issue #49): the signed and spoken blocks share the understood trajectory $p_U(a)$ but are otherwise modelled separately. In reality a word is often signed _before_ it is spoken, so the two are **positively associated** — a word a child signs is more likely to be one they also say. Because a positive association means more overlap between the two sets, and overlap is counted once, the union is **smaller** than independence implies. So $p_\text{any}$ here is an **upper bound** on total expressive vocabulary.
+
+VG15 measures that association directly, as an odds ratio $\psi$, and finds it strongly positive: $\psi$ = 2.34, 89% HDI [1.89, 2.81], with P($\psi$>1) = 1.000 — independence ($\psi$ = 1) is excluded.
+
+**But the independence assumption is the smaller of VG14's two problems.** On VG15's own posterior, dropping to the independence formula adds at most **14.3 words** on the 810-item scale (at 55 months). What separates the two models far more is that VG15 carries study and subject random effects and VG14 carries none: VG14 puts total expressive vocabulary **45.9 words higher at 36 months**, peaking at **68.6 words higher at 46 months**. A reader comparing the two curves is mostly looking at that, not at $\psi$.
 
 :::
 

@@ -1,5 +1,6 @@
 approximator
 apraxia
+argmin
 arrowsize
 ArviZ
 asis
@@ -71,6 +72,7 @@ HSGP
 Hutchins
 hyperparameters
 hyperpriors
+iloc
 incl
 indep
 isna
@@ -140,8 +142,8 @@ reflow
 reparam
 reparameterisation
 reparameterisations
-reparameterise
 Reparameterise
+reparameterise
 reparameterised
 reparameterising
 rescore
