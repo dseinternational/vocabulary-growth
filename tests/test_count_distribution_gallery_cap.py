@@ -78,3 +78,32 @@ def test_writer_does_not_remove_unrelated_figures(tmp_path):
 
     assert keep.exists()
     assert other.exists()
+
+
+def test_smoothed_sidecars_carry_the_smoothed_series(tmp_path):
+    """A table labelled "smoothed" must not contain the unsmoothed numbers.
+
+    Both writers saved the pre-smoothing arrays, so every `*_smoothed.csv` was
+    byte-identical to its unsmoothed original. The figures differed; a reader
+    who downloaded the table to check the figure was silently given the other
+    series.
+    """
+    from vocab_growth.plotting import plot_expected_learning_rate
+
+    rng = np.random.default_rng(7)
+    X = np.linspace(8.0, 90.0, 120)
+    # A noisy mean so smoothing has something to do.
+    f = (1.0 / (1.0 + np.exp(-(X - 45.0) / 12.0)))[:, None] + rng.normal(0, 0.02, (120, 48))
+
+    plot_expected_learning_rate(
+        X, np.clip(f, 1e-4, 1 - 1e-4), n_trials=810,
+        output_dir=str(tmp_path), filename="rate",
+    )
+    plot_expected_learning_rate(
+        X, np.clip(f, 1e-4, 1 - 1e-4), n_trials=810, smooth=True,
+        output_dir=str(tmp_path), filename="rate_smoothed",
+    )
+
+    plain = pd.read_csv(tmp_path / "rate.csv")
+    smoothed = pd.read_csv(tmp_path / "rate_smoothed.csv")
+    assert not np.allclose(plain["median_rate"], smoothed["median_rate"])

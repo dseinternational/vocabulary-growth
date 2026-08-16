@@ -781,13 +781,16 @@ def plot_posterior_predictive_median_trend(
 
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
+        # The *plotted* arrays, so the table is the figure's own numbers -- see
+        # the note in plot_expected_learning_rate. Without this the "smoothed"
+        # sidecar is byte-identical to the unsmoothed one.
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
-            "median": y_plot_samples_median,
-            "ci50_lo": predictive_interval_inner[:, 0],
-            "ci50_hi": predictive_interval_inner[:, 1],
-            "ci_lo": predictive_interval_outer[:, 0],
-            "ci_hi": predictive_interval_outer[:, 1],
+            "median": y_plot_samples_median_plot,
+            "ci50_lo": predictive_interval_inner_plot[:, 0],
+            "ci50_hi": predictive_interval_inner_plot[:, 1],
+            "ci_lo": predictive_interval_outer_plot[:, 0],
+            "ci_hi": predictive_interval_outer_plot[:, 1],
         }), output_dir, filename)
 
     return plt.gcf()
@@ -951,13 +954,18 @@ def plot_expected_learning_rate(
 
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
+        # The *plotted* arrays, so the table is the figure's own numbers. Saving
+        # the pre-smoothing arrays made `expected_learning_rate_smoothed.csv`
+        # byte-identical to `expected_learning_rate.csv`, so a reader who
+        # downloaded the smoothed table to check the smoothed figure got the
+        # unsmoothed series without being told.
         _save_csv(pd.DataFrame({
             "age_months": x_plot_values,
-            "median_rate": median_rate,
-            "ci50_lo": ci50_rate[:, 0],
-            "ci50_hi": ci50_rate[:, 1],
-            "ci_lo": ci_rate[:, 0],
-            "ci_hi": ci_rate[:, 1],
+            "median_rate": median_rate_plot,
+            "ci50_lo": ci50_rate_plot[:, 0],
+            "ci50_hi": ci50_rate_plot[:, 1],
+            "ci_lo": ci_rate_plot[:, 0],
+            "ci_hi": ci_rate_plot[:, 1],
         }), output_dir, filename)
 
     return plt.gcf()
