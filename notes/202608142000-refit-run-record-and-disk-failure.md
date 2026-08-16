@@ -1,10 +1,10 @@
-# Reporting refit, 13–14 August 2026: working record
+# Reporting refit, 13–16 August 2026: run record
 
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!IMPORTANT]
-> **In progress.** The run of [#215](https://github.com/dseinternational/vocabulary-growth/issues/215) is not finished, and this is a working record rather than its completion record. It exists now because two infrastructure failures and one model decision happened inside it that should not have to be reconstructed from logs later. §6 is the honest state of what is and is not done.
+> **The fitting and publication phases are complete; §6 records what is done, what is outstanding, and one class of defect the run itself introduced.** This began as a working record written mid-run — because two infrastructure failures and one model decision happened inside it that should not have to be reconstructed from logs later — and was closed out on 2026-08-16. §7 is the review that closed it, including seven sensitivity variants that had to be refitted because their baselines moved underneath them.
 
 ## 1. What this run was for
 
@@ -127,12 +127,50 @@ The second Target 8 variant narrows the GP amplitude prior alone — `eta_sigma`
 
 Taken with §5b, the two Target 8 anchor variants that have reported so far tell a consistent story about where VG11's difficulty lives: **widening the anchor priors makes the GP/linear ridge worse (60 divergences, the GP scale parameters failing), and narrowing the GP amplitude makes it better (3 divergences, a clean gate).** Both act on the same geometry from opposite directions.
 
-## 6. State at the time of writing
+## 6. State
 
-**Complete:** VG01–VG05, VG07 (13 Aug); VG03, VG04, VG13, VG12 (TD); VG08, VG09, VG15 under `CLAMP_Q_ONLY`; the `us01-implausible-reinstated`, `dse-native-only`, `tau-psi-*` and `psi-drop-*` sensitivity variants; VG10's `a1-tau-age-varying`.
+**All fifteen models of record are fitted at `rep`** and published. Fourteen clear the hard convergence gate; VG11 is published under the §5a exception. VG12 and VG13 carry the documented soft-tier caveats, and VG10 one divergence — all four disclosures reach the report through `convergence_caveats.csv` and Appendix B.
 
-**Running:** VG11 (the last TD model); VG16, VG14 refitting under `CLAMP_Q_ONLY`, with VG10, VG07, VG05 queued behind them and A1's recovery after that.
+**Downstream, complete:** the comparison suite; `sync_report_figures.py` (2,124 files, `--allow-caveats`); both book renders; the public upload of the fifteen model reports and the comparison book; the durable archive of the whole output root, traces included, to the private container. The item-difficulty note's fit-derived figures were re-pinned against VG10's refit, moving the §4 dispersion ratio from 0.52 to 0.805.
 
-**Not started:** the three remaining #147 Target 8 anchor variants; the comparison suite; `sync_report_figures.py` and `prepare_report_figures.py`; both book renders; the upload. The item-difficulty note's fit-derived figures (§3.3 kernel-share, §4 dispersion) still need re-pinning against VG10's refit, and parameter recovery needs re-baselining.
+**Publication boundary, stated once because it is easy to get wrong.** `trace.nc` carries per-observation ages, subject codes, study codes and counts — individual-level data. `upload.py` excludes traces by default and that default is load-bearing: the public container holds reports and aggregate tables only, and the traces went to the **private** archive.
 
-**Known debt.** VG14 carries `KNOWN_STALE` reporting-age entries until its refit lands. VG10's fit on disk predates `CLAMP_Q_ONLY` and fails `check_fit --purpose publish` on definition mismatch — which is correct, and clears when its refit completes.
+**Outstanding:** parameter recovery still needs re-baselining against the refitted headline set (VG10, VG12 and VG15 are at `full`, so nothing blocks it). The `eta_sigma = 0.4` adoption decision for VG11 (§5c) is deliberately held out of this run. Twenty of VG15's twenty-seven registered sensitivity variants, and ten of VG10's fourteen, have never been fitted at all — visible as `not-fitted` rows in the robustness matrices since 2026-08-16, rather than as absence.
+
+**Known debt cleared during the run.** VG14's `KNOWN_STALE` reporting-age entries cleared when its refit landed, and the guard that fails when an entry stops being needed fired within the hour — which is what it is for. VG10's pre-`CLAMP_Q_ONLY` fit no longer fails `check_fit --purpose publish`.
+
+## 7. The closing review, and the defect it found
+
+A full review of the branch and this record on 2026-08-16 confirmed every data-derived and convergence figure quoted here against the artefacts, and found one substantive class of defect plus a set of stale documents.
+
+### 7.1 Seven sensitivity variants were compared against a baseline that had moved
+
+`CLAMP_Q_ONLY` and the 72 → 84 comprehension cap were adopted **during** the run, so the models of record were refitted mid-flight. Seven registered variants had been fitted before that and were never refitted:
+
+| variant                              | fitted            | its baseline refitted |
+| ------------------------------------ | ----------------- | --------------------- |
+| `vg10 / us01-implausible-reinstated`  | 14 Aug 09:31      | 14 Aug 16:58          |
+| `vg15 / dse-native-only`              | 13 Aug 22:14      | 14 Aug 13:54          |
+| `vg15 / us01-implausible-reinstated`  | 14 Aug 08:17      | 14 Aug 13:54          |
+| `vg15 / psi-drop-es01`                | 14 Aug 08:17      | 14 Aug 13:54          |
+| `vg15 / psi-drop-uk07`                | 14 Aug 08:54      | 14 Aug 13:54          |
+| `vg15 / tau-psi-narrow`               | 14 Aug 08:54      | 14 Aug 13:54          |
+| `vg15 / tau-psi-wide`                 | 14 Aug 09:31      | 14 Aug 13:54          |
+
+Each still differed from its baseline in `clamp_mean_above_hi_anchor`, so the reported delta mixed the variant's effect with the clamp change. **Nothing detected this**: `compare_sensitivity.py` read whatever summaries were on disk and produced a perfectly well-formed matrix. The verdicts it wrote were "robust" and "sensitive" — the two most confident things the matrix can say, and neither warranted.
+
+The whole VG15 robustness matrix was therefore evidence about the superseded definition. All seven have been refitted at `rep`, and the tool now diffs the two recorded definitions and refuses to assess a pairing that differs outside the variant's own override keys (`status = stale-pairing`).
+
+### 7.2 Three more ways that matrix could mislead, now closed
+
+- **A failed variant vanished.** `vg11 / anchor-broad` failed the gate (§5b), so its output went to `output/failed/` and `compare_sensitivity.py` skipped it with a console note — leaving the matrix silent about it, which is exactly what §5b says must not happen. It now appears with its status, its R-hat and ESS, and a pointer to the retained fit.
+- **A targeted rerun clobbered the matrix.** `--variant <name>` rewrote the whole file from that one row. That is how `robustness_matrix_vg11.csv` came to hold a single variant. Targeted runs now merge, and every row carries `computed_at_utc`.
+- **Coverage collapsed silently.** The series are paired on exact `age_months`, which is safe for the query grid (integer months) and not for the plot-grid `gap` series: that is `linspace(min_age, max_age, n_plot)`, so two fits share its ages only if they share an age range. `vg10 / dse-native-only` restricts the pool, so its `gap` grid differs and the intersection collapsed to **3 of 355 points** — reported as an ordinary "sensitive: gap" verdict on 43 of 395 rows. Coverage is now measured with the same rule the comparison uses, and a pairing below 90% is reported as `partial-coverage` rather than assessed.
+
+The common thread is worth stating plainly: **every one of these produced numbers.** None of them produced an error, a blank or a missing file. A comparison harness that reads two directories of CSVs will compare whatever it finds, and the failure mode is a confident verdict about the wrong thing.
+
+### 7.3 Documentation found stale
+
+`docs/models/README.md` and `docs/models/PRIORS.md` still described the **72-month** comprehension cap, the pre-`uk_07` row counts, and "signed keeps the full grid" — the policy this very run replaced, in the two documents `CLAUDE.md` names as the inventory and prior reference. The VG16 inventory row still said the within-child anomaly's cause was unestablished, one commit after §7.1 of [202608151500](202608151500-within-child-crosslag-feasibility.md) established it. Two notes carried "correction pending" statements for corrections already made, one of which had since been overtaken outright. All corrected 2026-08-16.
+
+The pattern: **a change that lands in code and in a note does not thereby land in the reference documents**, and the reference documents are what a reader consults. Nothing tests them.

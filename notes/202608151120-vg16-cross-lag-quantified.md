@@ -101,7 +101,10 @@ Four connections to [202608141600](202608141600-rank-stability-tracking.md), eac
 | `test`, post-Edgin linkage rebuild |      0.167 | [0.053, 0.283]     | [202608031341](202608031341-test-refit-after-data-and-prior-changes.md) §4.7: re-linking 46 children across CDI forms roughly halved it |
 | **`rep`, model of record**         |  **0.203** | **[0.093, 0.316]** | this note                                                                                                                               |
 
-Two published statements still carry the `dev`-tier reading and are wrong against the model of record: the VG16 row of `docs/models/README.md` ("Population-relative headline (≈ null)") and the callout in `docs/models/vg16/index.qmd` ("essentially null at dev-tier (β ≈ +0.05, interval spanning 0)") — the latter's within-child-contrast caution remains accurate; it is the headline figure that is stale. [202608020829](202608020829-kappa-and-eta-q-prior-recalibration.md) §16 already flagged the discrepancy for checking before either figure was quoted. Both corrections are pending as of this note.
+Two published statements carried the `dev`-tier reading and were wrong against the model of record: the VG16 row of `docs/models/README.md` ("Population-relative headline (≈ null)") and the callout in `docs/models/vg16/index.qmd` ("essentially null at dev-tier (β ≈ +0.05, interval spanning 0)"). [202608020829](202608020829-kappa-and-eta-q-prior-recalibration.md) §16 already flagged the discrepancy for checking before either figure was quoted.
+
+> [!NOTE]
+> **Both were corrected on 2026-08-15**, and one of this section's own judgements did not survive. It said the qmd callout's "within-child-contrast caution remains accurate; it is the headline figure that is stale". That was wrong: the caution attributed a `dev`-tier `beta` ≈ −0.60 to a short-T / errors-in-variables artefact, and [202608151500](202608151500-within-child-crosslag-feasibility.md) §§6–7 refuted the mechanism by simulation and identified the actual cause as `dev`-tier non-convergence. The within-child baseline refitted at `test` gives **+0.103** [−0.085, 0.294] with zero divergences. So both halves of the callout were stale, not one, and the withdrawal is recorded there.
 
 ## 8. Caveats
 

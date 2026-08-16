@@ -66,4 +66,4 @@ This is proposed as **VG20**, fitted alongside VG10 for comparison — VG17/VG18
 2. **The cross-lag is not propagated** to VG10 or any other model of record.
 3. **The correlated-RE model (VG20) is the proposed follow-up** for the association the cross-lag detects.
 
-The stale "≈ null" description of VG16's headline in `docs/models/README.md` and the `dev`-tier figure in `docs/models/vg16/index.qmd` remain to be corrected separately ([202608151120](202608151120-vg16-cross-lag-quantified.md) §7).
+The stale "≈ null" description of VG16's headline in `docs/models/README.md` and the `dev`-tier figure in `docs/models/vg16/index.qmd` were corrected on 2026-08-15, together with the within-child caution beside them, which [202608151500](202608151500-within-child-crosslag-feasibility.md) §7 withdrew ([202608151120](202608151120-vg16-cross-lag-quantified.md) §7).
