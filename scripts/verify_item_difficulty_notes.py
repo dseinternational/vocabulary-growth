@@ -178,31 +178,46 @@ def check_fitted_dispersion(output_root: Path) -> None:
 
     summary = pd.read_csv(vg10 / "posterior_summary_u.csv")
     p_fit = np.array([summary.loc[(summary["age_months"] - a).abs().idxmin(), "p_median"] for a in ages])
-    check("fitted p at 12/24/30/48/66", p_fit, [0.0201, 0.1391, 0.2156, 0.3814, 0.5392], tol=0.0005)
+    check("fitted p at 12/24/30/48/66", p_fit, [0.0201, 0.1393, 0.2156, 0.3813, 0.5368], tol=0.0005)
 
     kappa_tab = pd.read_csv(vg10 / "posterior_kappa_u.csv")
     kappa = np.array([kappa_tab.loc[(kappa_tab["age_months"] - a).abs().idxmin(), "kappa_median"] for a in ages])
-    check("fitted kappa (posterior_kappa_u medians)", kappa, [109.66, 65.20, 50.55, 24.65, 13.38], tol=0.02)
+    check("fitted kappa (posterior_kappa_u medians)", kappa, [109.64, 65.19, 50.57, 24.69, 13.41], tol=0.02)
 
     diagnostics = pd.read_csv(vg10 / "diagnostics.csv", index_col=0)
     tau_subj = float(diagnostics.loc["tau_subj_u", "mean"])
-    check("tau_subj_u posterior mean", tau_subj, 0.796, tol=0.0005)
+    check("tau_subj_u posterior mean", tau_subj, 0.797, tol=0.0005)
 
     residual_sd = 1 / np.sqrt(p_fit * (1 - p_fit) * (kappa + 1))
     check("implied residual latent SD", residual_sd, [0.678, 0.355, 0.339, 0.407, 0.529], tol=0.002)
     check("total latent SD with tau_subj_u", np.sqrt(tau_subj**2 + residual_sd**2), [1.046, 0.872, 0.865, 0.894, 0.956], tol=0.002)
 
-    # DELIBERATELY NOT RE-PINNED (2026-08-14). These four, and the §3.3 kernel
-    # shares below, are not measurements the note reports -- they *are* its
-    # argument, and the refit moved them far enough to change how strongly it
-    # reads. The ratio goes 0.52 -> 0.80, so the decline in kappa now tracks the
-    # constant-spread prediction much more closely than the note's reading of it
-    # allows. Re-pinning these to the new values would silently convert a
-    # weakened conclusion into a passing check, which is the failure mode this
-    # whole script exists to prevent. They stay failing until the study owner has
-    # ruled on the prose in §§3.3 and 4. The frame counts and the fitted p/kappa
-    # /tau they derive from were re-pinned in the same pass, because those are
-    # measurements and their movement is just the larger pool.
+    # DELIBERATELY NOT RE-PINNED (2026-08-14, still open 2026-08-16). These four,
+    # and the §3.3 kernel shares below, are not measurements the note reports --
+    # they *are* its argument, and the refit moved them far enough to change how
+    # strongly it reads. The ratio goes 0.52 -> 0.80, so the decline in kappa now
+    # tracks the constant-spread prediction much more closely than the note's
+    # reading of it allows. Re-pinning these to the new values would silently
+    # convert a weakened conclusion into a passing check, which is the failure
+    # mode this whole script exists to prevent. They stay failing until the study
+    # owner has ruled on the prose in §§3.3 and 4. The frame counts and the
+    # fitted p/kappa/tau they derive from are re-pinned each pass, because those
+    # are measurements and their movement is just the larger pool.
+    #
+    # 2026-08-16 status, for whoever rules on it. Both sections' prose has since
+    # been brought into line with the current fit (§4 on 08-15, §3.3 on 08-16),
+    # and the cause of the movement is now understood: it is mostly the
+    # comprehension reporting cap rising 72 -> 84 months on 08-13, which extends
+    # `posterior_kappa_u.csv` at both ends. The fixed-age checks above still
+    # reproduce, so the posterior is stable where it is compared; only the
+    # quantities computed *across* the range moved. Current values, for the
+    # ruling: decline_kp1 2.038 (was 1.168), predicted 2.534 (2.230), ratio 0.805
+    # (0.52), decline_kappa 2.101 (1.225); §3.3 understood share 1.13%-14.05%
+    # (0.77%-5.27%) and worst-case SD shift 2.85% (1.06%). What still needs a
+    # human call is not the arithmetic but whether §3.3's conclusion survives at
+    # the larger exposure -- the note now withdraws its "order of magnitude below
+    # what 613 children can resolve" claim rather than restating it, because that
+    # power calculation was never actually done.
     decline_kp1 = np.log((kappa[0] + 1) / (kappa[-1] + 1))
     predicted = np.log((p_fit[-1] * (1 - p_fit[-1])) / (p_fit[0] * (1 - p_fit[0])))
     check("log decline in kappa+1", decline_kp1, 1.168, tol=0.005)
