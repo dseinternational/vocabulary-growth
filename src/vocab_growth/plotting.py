@@ -1372,6 +1372,12 @@ def plot_expected_counts_by_month(
 
     if output_dir is not None and filename is not None:
         _save_png_svg(fig, output_dir, filename)
-        _save_csv(monthly, output_dir, filename)
+        # No sidecar CSV. Unlike every other figure here, this one is handed a
+        # frame the caller has *already* written under its own canonical name,
+        # `posterior_summary_monthly[_<outcome>].csv` -- the name the reports
+        # read, the model inventory documents and the figure sync ships. A
+        # sidecar would be a byte-identical second copy under a second name,
+        # which is how a reader ends up unsure which of two files is current.
+        # See `emit_monthly_summary` in models/common.py.
 
     return fig
