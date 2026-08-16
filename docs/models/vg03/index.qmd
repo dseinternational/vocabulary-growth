@@ -301,6 +301,17 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+
 ## Limits
 
 - **A reference, not a target.** This curve describes a different population. It is not a norm any individual child is expected to meet, and it is not an intervention goal.

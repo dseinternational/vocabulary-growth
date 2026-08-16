@@ -715,3 +715,115 @@ def render_variation_table(directory: str = ".") -> None:
         ": Posterior means of the random-effect scales, read from `diagnostics.csv`. "
         "Larger means that group differs more from the population average."
     )
+
+
+def render_loo_section(directory: str = ".") -> None:
+    """Print the leave-one-out cross-validation result for a report cell.
+
+    Every fit computed this and printed it to the console only, while the
+    predictive-calibration section of every report told the reader that
+    leave-one-out is the out-of-sample counterpart to its in-sample checks. The
+    number they were sent to find was not in the output directory at all.
+
+    Prints an explanatory line rather than failing when the fit predates the
+    table, so the section is never silently empty -- the same contract
+    :func:`vocab_growth.models.calibration.render_calibration_section` keeps.
+    """
+    import pandas as pd
+
+    path = os.path.join(directory, "loo_summary.csv")
+    if not os.path.isfile(path):
+        print(
+            "_No leave-one-out summary for this fit (`loo_summary.csv` absent — "
+            "it was added on 2026-08-16, so fits made before then need a refit "
+            "to produce it)._"
+        )
+        return
+    try:
+        table = pd.read_csv(path)
+    except (OSError, ValueError):
+        print("_The leave-one-out summary for this fit could not be read._")
+        return
+    if table.empty:
+        print("_The leave-one-out summary for this fit is empty._")
+        return
+
+    print(
+        "Leave-one-out cross-validation estimates how well this model would "
+        "predict an observation it had not seen. `elpd_loo` is that estimate on "
+        "the log scale: **higher is better**, and it is only meaningful when "
+        "compared with another model fitted to the same observations — it has no "
+        "absolute interpretation on its own. `p_loo` is the effective number of "
+        "parameters, a measure of how much flexibility the fit is using.\n"
+    )
+
+    display = table.copy()
+    for column in ("elpd_loo", "se", "p_loo", "good_k_threshold"):
+        if column in display:
+            display[column] = display[column].astype(float).round(2)
+    print(display.to_markdown(index=False))
+    print()
+
+    # The estimate is not usable without its reliability diagnostic, so the
+    # verdict is printed rather than left for the reader to derive.
+    bad = int(table.get("pareto_k_bad", pd.Series(dtype=int)).fillna(0).sum())
+    very_bad = int(table.get("pareto_k_very_bad", pd.Series(dtype=int)).fillna(0).sum())
+    total = int(table.get("n_data_points", pd.Series(dtype=int)).fillna(0).sum())
+    print(
+        "The Pareto $k$ counts say whether that estimate can be trusted. "
+        "Leave-one-out here is approximated by importance sampling rather than "
+        "by refitting the model without each observation in turn, and the "
+        "approximation degrades for observations the model finds surprising. "
+        "Counts are against the threshold in the table, which ArviZ sets from "
+        "the sample size.\n"
+    )
+    if bad == 0 and very_bad == 0:
+        print(
+            f"For this fit **every one of the {total:,} observations is within "
+            "the threshold**, so the estimate above is reliable."
+        )
+    else:
+        share = (bad + very_bad) / total if total else 0.0
+        print(
+            f"For this fit **{bad + very_bad} of {total:,} observations "
+            f"({share:.0%}) exceed the threshold** ({very_bad} of them above 1), "
+            "so the estimate above should be treated as indicative rather than "
+            "as a precise quantity."
+        )
+        # Why, rather than only that. A high share here is the expected
+        # signature of leaving out one *observation* from a model carrying
+        # per-child effects, not evidence that the model fits badly -- and the
+        # distinction decides what the reader should do about it.
+        if fitted_parameters(directory) & {
+            "tau_subject",
+            "tau_subj_u",
+            "tau_subj_q",
+            "tau_subj_sign",
+        }:
+            print()
+            print(
+                "A large share is expected here and is not by itself evidence "
+                "of misfit. This model gives each child their own random "
+                "intercept, and a child's intercept is informed mostly by that "
+                "child's own observations — so removing one observation can move "
+                "the posterior substantially, which is precisely the situation "
+                "importance sampling approximates poorly. Leave-one-observation-out "
+                "is the wrong unit of prediction for a model with per-child "
+                "parameters. The question it half-answers — how well does this "
+                "generalise beyond the data it saw — is better put to the "
+                "project's leave-one-study-out and k-fold checks "
+                "(`scripts/kfold_loso.py`, `scripts/loso_compare.py`), which hold "
+                "out whole studies or whole children rather than single rows."
+            )
+
+    dropped = int(
+        table.get("n_dropped_degenerate", pd.Series(dtype=int)).fillna(0).sum()
+    )
+    if dropped:
+        print()
+        print(
+            f"{dropped} observation(s) were excluded as degenerate — their "
+            "pointwise log-likelihood is constant across draws, contributing "
+            "nothing to the estimate. The exclusion is deterministic, so the "
+            "per-outcome values stay comparable across models."
+        )

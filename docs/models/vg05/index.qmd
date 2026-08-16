@@ -416,6 +416,17 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+
 ## Limits
 
 - **This is a development step, not a result.** VG05 exists to establish that the production-ratio structure fits and samples. Its numbers should not be quoted as findings about children with Down syndrome; use VG10 for that.

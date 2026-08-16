@@ -626,6 +626,17 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+
 ## Limits
 
 - **Superseded for reporting.** VG15 replaces this model for every total-expressive number, for the signed peak age, and for the sign-to-speech hand-over. This page is a record of how the signing structure was built.

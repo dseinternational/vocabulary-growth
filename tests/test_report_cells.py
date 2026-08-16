@@ -316,3 +316,81 @@ def test_plain_child_scale_prior_survives_without_a_partition(tmp_path, capsys):
     )
     report_cells.render_priors_table(str(fit))
     assert "HalfNormal(1.5)" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------
+# Leave-one-out
+# --------------------------------------------------------------------------
+
+
+def _loo_fit(tmp_path, rows, parameters=("eta",)):
+    pd.DataFrame(rows).to_csv(tmp_path / "loo_summary.csv", index=False)
+    pd.DataFrame(index=list(parameters), data={"r_hat": [1.0] * len(parameters)}).to_csv(
+        tmp_path / "diagnostics.csv"
+    )
+    return tmp_path
+
+
+_CLEAN_ROW = {
+    "outcome": "all",
+    "elpd_loo": -6985.6,
+    "se": 76.8,
+    "p_loo": 120.4,
+    "n_data_points": 1521,
+    "n_samples": 36000,
+    "n_dropped_degenerate": 0,
+    "pareto_k_good": 1521,
+    "pareto_k_bad": 0,
+    "pareto_k_very_bad": 0,
+    "good_k_threshold": 0.7,
+    "scale": "log",
+}
+
+
+def test_loo_section_says_so_when_the_table_is_absent(tmp_path, capsys):
+    """The section must never render silently empty."""
+    report_cells.render_loo_section(str(tmp_path))
+    assert "No leave-one-out summary" in capsys.readouterr().out
+
+
+def test_loo_section_reports_a_clean_fit_as_reliable(tmp_path, capsys):
+    report_cells.render_loo_section(str(_loo_fit(tmp_path, [_CLEAN_ROW])))
+    out = capsys.readouterr().out
+    assert "every one of the 1,521 observations is within the threshold" in out
+    assert "-6985.6" in out or "-6985.60" in out
+
+
+def test_loo_section_flags_unreliable_importance_sampling(tmp_path, capsys):
+    row = {**_CLEAN_ROW, "pareto_k_good": 1128, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
+    report_cells.render_loo_section(str(_loo_fit(tmp_path, [row])))
+    out = capsys.readouterr().out
+    assert "288 of 1,521 observations (19%) exceed the threshold" in out
+    assert "30 of them above 1" in out
+
+
+def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
+    """A high k share under subject effects is expected, not evidence of misfit.
+
+    VG10 has 20% of spoken and 31% of understood observations over the
+    threshold. Reporting that as unreliability without saying why would send a
+    reader looking for a modelling fault that is not there.
+    """
+    row = {**_CLEAN_ROW, "pareto_k_good": 1128, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
+    fit = _loo_fit(tmp_path, [row], parameters=("eta_u", "tau_subj_u"))
+    report_cells.render_loo_section(str(fit))
+    out = capsys.readouterr().out
+    assert "wrong unit of prediction" in out
+    assert "kfold_loso.py" in out
+
+
+def test_non_hierarchical_fits_do_not_get_that_explanation(tmp_path, capsys):
+    row = {**_CLEAN_ROW, "pareto_k_good": 1128, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
+    fit = _loo_fit(tmp_path, [row], parameters=("eta",))
+    report_cells.render_loo_section(str(fit))
+    assert "wrong unit of prediction" not in capsys.readouterr().out
+
+
+def test_dropped_degenerate_observations_are_disclosed(tmp_path, capsys):
+    row = {**_CLEAN_ROW, "n_dropped_degenerate": 12}
+    report_cells.render_loo_section(str(_loo_fit(tmp_path, [row])))
+    assert "12 observation(s) were excluded as degenerate" in capsys.readouterr().out

@@ -497,6 +497,17 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+
 ## Limits
 
 - **A development step, not a source of numbers.** VG10 is the model of record for these estimands, and it adds a Gaussian process anchor this model does not have. Nothing in this report should be quoted as a finding about vocabulary in Down syndrome — and the point is not academic, since VG09 and VG08 disagree materially about the production ratio at older ages.

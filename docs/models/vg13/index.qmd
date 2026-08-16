@@ -499,6 +499,17 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+
 Read any over-coverage here alongside the between-child scales in the Findings section rather than as a separate finding. The predictive distribution integrates over a **new** child's offset, so it is necessarily wider than the scatter of the observed rows, which come from children the model has already seen. The larger the between-child scale, the larger that difference — so a hierarchical model of this kind is expected to over-cover in-sample, and the calibration section's own caveat says so.
 
 ## Limits
