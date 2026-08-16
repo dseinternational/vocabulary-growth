@@ -384,7 +384,7 @@ Almost the whole Down syndrome distribution sits below the typically-developing 
 
 Between-child variation is itself a contrast worth making. The quantity here is $\tau$, the standard deviation across children of the child's own position on the logit scale, once study differences have been taken out. It is not the observation-level dispersion, and it is not the spread in words, which depends on where on the curve each population sits.
 
-The two outcomes are on different footings, and the table below should be read with that in mind. For **words understood** the contrast is like-for-like: a single Gaussian intercept on the understood logit on both sides. For **words spoken** the Down syndrome model has no spoken child scale — spoken is built as $p_U \times q$ — so its $\tau$ is derived from the two underlying child effects, while the typically-developing model estimates one directly. The derivation targets the same estimand, but it inherits an assumption the comparator does not make, set out below the table. Only the Down syndrome side varies with age, so the values are read at a stated age rather than quoted as one number.
+The two outcomes are on different footings, and the table below should be read with that in mind. For **words understood** the contrast is like-for-like in structure: a single Gaussian intercept on the understood logit on both sides — though it is the structurally clean row that carries a measured bias, in the second callout below. For **words spoken** the Down syndrome model has no spoken child scale — spoken is built as $p_U \times q$ — so its $\tau$ is derived from the two underlying child effects, while the typically-developing model estimates one directly. The derivation targets the same estimand, but it inherits an assumption the comparator does not make, set out below the table. Only the Down syndrome side varies with age, so the values are read at a stated age rather than quoted as one number.
 
 ```{python}
 #| label: tbl-subject-tau
@@ -431,6 +431,49 @@ Because a child's spoken vocabulary is the product of what they understand and t
 ```
 
 The fix is a model that estimates the correlation instead of assuming it away, proposed as VG20 in issue #224 — where the same structural gap was reached independently, from a leftover correlation in the cross-lag model's fitted child effects.
+:::
+
+::: {.callout-important title="And the comprehension comparison carries a measured bias"}
+The comprehension row is the structurally clean one, but structural symmetry is not the same as an accurate number, and the bias that has actually been measured is on this side.
+
+```{python}
+#| label: subject-tau-recovery-finding
+#| echo: false
+#| output: asis
+_rec = recovery_rows("vg12", "tau_subject")
+_share = recovery_rows("vg12", "subject_variance_share")
+_row_u = comp_row("ds_td_understood_re_subject_heterogeneity", "age_months", 30)
+if _rec is None or _share is None:
+    print("_The recovery scores are pending: run `scripts/fit_recovery.py vg12` "
+          "and `scripts/sync_report_figures.py`._")
+else:
+    _bias = float((_rec["posterior_mean"] / _rec["truth"] - 1.0).mean())
+    _miss = int((~_rec["within_ci89"]).sum())
+    _ratio = _row_u.get("tau_ratio_median") if _row_u is not None else None
+    _print = (
+        f"Refitting the typically-developing comprehension model to data "
+        f"simulated from its own posterior returns its between-child scale "
+        f"below the value that generated it in all {len(_rec)} replicates "
+        f"(z = {zlist(_rec)}), a bias of {_bias:+.1%}, with the truth outside "
+        f"the 89% interval {_miss} of {len(_rec)} times. What is mis-estimated "
+        f"is not how much total scatter there is but how it splits between "
+        f"persistent child differences and occasion-to-occasion noise "
+        f"(z = {zlist(_share)}), a split identified only by children measured "
+        f"more than once — and this pool averages barely more than one visit "
+        f"per child."
+    )
+    if _ratio is not None:
+        _print += (
+            f" Because that scale is the typically-developing side of the "
+            f"ratio, a low bias there **overstates** the difference: the "
+            f"reported ratio of {_ratio:.2f} would sit nearer "
+            f"{(_ratio / (1.0 + _bias)):.2f} if the bias carried over at this "
+            f"size."
+        )
+    print(_print)
+```
+
+The direction is the opposite of the spoken bias above, so the two rows are pulled toward one another and the contrast *between* the outcomes is the reading that suffers most. Three replicates at a development sampling tier, scored against the model's own posterior, establish a direction and a mechanism rather than a magnitude; the equivalent check has not been run on the model behind the spoken row. Tracked as issue #225.
 :::
 
 ![Between-child variation $\tau$ for words spoken, in each population.](figures/comparisons/ds_td_spoken_re_subject_tau.png){#fig-tau-spoken}

@@ -300,6 +300,20 @@ def main() -> None:
             )
             total += n
             print(f"  comparisons: {n} files")
+
+            # ``_sync_dir`` is deliberately flat, so the nested sub-directories
+            # under ``comparisons/`` have to be named. Recovery scores are cited
+            # by the report's bias caveats and were invisible to it until this
+            # was added; sensitivity is listed for the same reason.
+            for sub in ("recovery", "sensitivity"):
+                nested = os.path.join(comparisons_dir, sub)
+                if not os.path.isdir(nested):
+                    continue
+                n = _sync_dir(
+                    nested, os.path.join(env.REPORT_FIGS_DIR, "comparisons", sub)
+                )
+                total += n
+                print(f"  comparisons/{sub}: {n} files")
         else:
             print(f"[skip] no comparisons dir: {comparisons_dir}")
 

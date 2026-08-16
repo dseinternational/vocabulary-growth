@@ -76,6 +76,32 @@ def comp_load(name):
     return pd.read_csv(p) if p.exists() else None
 
 
+def recovery_rows(model_id, quantity):
+    """One row per recovery replicate for `quantity`, or None if unavailable.
+
+    Replicate files are `comparisons/recovery/recovery_<model>_rNN.csv`; each
+    scores one simulate-and-refit against the draw it was simulated from. The
+    caveats that cite these want the replicates side by side, not aggregated,
+    because a bias claim rests on the direction repeating.
+    """
+    root = COMP_ROOT / "recovery"
+    if not root.is_dir():
+        return None
+    paths = sorted(root.glob(f"recovery_{model_id.lower()}_r[0-9][0-9].csv"))
+    rows = []
+    for p in paths:
+        df = pd.read_csv(p)
+        hit = df[df["quantity"] == quantity]
+        if not hit.empty:
+            rows.append(hit.iloc[0])
+    return pd.DataFrame(rows).reset_index(drop=True) if rows else None
+
+
+def zlist(df, fmt="{:+.2f}"):
+    """The z column of a recovery frame as a prose list."""
+    return ", ".join(fmt.format(z) for z in df["z"])
+
+
 def comp_at(name, match_col, match_val, col):
     """Value of `col` in comparison CSV `name` at the row whose `match_col` is
     nearest `match_val`, or None."""

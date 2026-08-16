@@ -446,8 +446,13 @@ quarto render docs/report
 # the comparison book reads its CSV/PNG artefacts by BARE filename from its own dir,
 # and sync_report_figures only populates docs/report/figures/ — so stage them first:
 cp <scratch>/comparisons/* docs/comparison/                    # (gitignored)
+cp <scratch>/comparisons/recovery/*.csv docs/comparison/       # only if a chapter cites recovery
 quarto render docs/comparison/index.qmd
 ```
+
+**Nothing enforces that staging step, and it fails quietly in both directions.** `docs/comparison/` is gitignored, so a stale copy survives indefinitely and renders without complaint against artefacts from a previous run — on 2026-08-16 the comparison book was published against figures 20 hours older than the report beside it, and the only reason it was noticed is that a _newly cited_ file was absent, which fails loudly with a `KeyError` where an _outdated_ one does not. Treat a comparison-book render as invalid unless the copy immediately precedes it in the same shell.
+
+Note also that `sync_report_figures._sync_dir` is flat: it copies files, not sub-directories. `comparisons/recovery/` and `comparisons/sensitivity/` are synced by an explicit loop, and anything else nested under `comparisons/` will silently not reach the report unless it is added there too.
 
 Per-model reports render after successful fits during `fit_model.py --render`; if a render fails, retry it without resampling using `python scripts/fit_model.py <model> --config rep --render-only --output-dir <scratch>`. **Gotcha:**
 rendering a model report whose output dir is **outside the git checkout** (e.g. a
@@ -461,6 +466,23 @@ in-repo `output/`.
 Quarto resolves the Jupyter kernel for a report's python cells from `PATH`, independently of the interpreter running the fit. Driving the scripts by absolute interpreter path (`~/miniconda3/envs/dse-vocab-growth/bin/python scripts/fit_model.py …`) without also putting that `bin/` on `PATH` therefore renders against whichever `python` `PATH` finds — on macOS the system framework python, which has no `h5netcdf` and cannot open `trace.nc`. The tell-tale is a fit that samples, gates, and promotes normally, followed by `ModuleNotFoundError: No module named 'h5netcdf'` from the render (2026-08-03 `test`-config refit: fifteen clean fits, fifteen failed renders, all recovered with `--render-only`).
 
 `fit_model.py` pins `QUARTO_PYTHON` to its own `sys.executable`, so per-model reports are immune. The two `quarto render` calls above are bare shell invocations and are not: either activate the env, or `export QUARTO_PYTHON=/Users/…/envs/dse-vocab-growth/bin/python` before rendering the books. `run_replication.sh` activates the env itself and needs neither.
+
+On Linux the failure looks different and is worth recognising, because it does **not** stop the render: quarto reports `ModuleNotFoundError: No module named 'dse_research_utils'` for the affected chapters, prints `WARN: Error encountered when rendering files`, and still **exits 0** having produced a book with those chapters missing. Checking the exit status is not enough — confirm the chapter HTML you expected actually exists.
+
+### `freeze: auto` does not track `{{< include >}}`
+
+`execute.freeze` is `auto`, which re-executes a chapter when its own source changes. It does not notice a change to a file that chapter transcludes, and the frozen result stores the document with includes already resolved — so an edit to `_caveats-signing.qmd`, `_caveats-ds.qmd` or `_report_data.qmd` renders as its **pre-edit** self, with no warning and a successful exit.
+
+Hit on 2026-08-16: a caveat rewritten to state a second bias rendered as the old single-bias paragraph, while a sibling chapter edited directly picked its change up normally — which is what makes this hard to spot, since some of the edits in a batch do appear.
+
+After editing any `_*.qmd`, delete the frozen results for every chapter that includes it and re-render:
+
+```bash
+grep -l "_report_data" docs/report/*.qmd            # find the dependents
+rm -rf docs/report/_freeze/<chapter>                # one per dependent
+```
+
+`_report_data.qmd` is included by nearly every chapter, so an edit there means clearing all of them.
 
 ## 4. Completion checklist
 

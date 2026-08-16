@@ -258,10 +258,27 @@ def build_variance_partition(
     kappa_min + excess_young`` is positive by construction.
 
     Both original parameters are returned to the graph under their usual names, so
-    this changes what the sampler explores and not what the model reports; the
-    DS/TD heterogeneity contrast that ``tau_subject`` feeds is unaffected. The
-    prior does move, necessarily and by design — it now sits on the budget and the
-    split, which is where a prior on this pair can actually be reasoned about.
+    this changes what the sampler explores and not which quantities the model
+    reports. The prior does move, necessarily and by design — it now sits on the
+    budget and the split, which is where a prior on this pair can actually be
+    reasoned about.
+
+    **It does not follow that the reported values are unaffected, and this
+    docstring used to claim they were.** Parameter recovery on VG12 returns
+    ``tau_subject`` below its truth in three replicates of three, by about 5.8%,
+    with the truth outside the 89% interval every time. ``v_total`` recovers
+    cleanly and ``subject_variance_share`` is biased low, so it is the split that
+    is mis-estimated rather than the budget, and ``tau_subject`` inherits the bias
+    amplified because the square root concentrates its posterior. VG10, which
+    carries two free scales and no partition, shows no such consistent direction.
+    Since ``tau_subject`` is the typically-developing side of the DS/TD
+    between-child contrast, a low bias there **overstates** the reported
+    difference. A leading suspect is the fixed ``p0``: if a dataset's actual
+    proportion near the young anchor sits away from it, ``c`` is wrong for that
+    dataset and the budget mis-splits even when its total is right — which would
+    expose VG11 (``p0`` = 0.0118) and VG12 (0.1041) very differently. VG11 has not
+    been through recovery. See ``notes/202608161700-recovery-baseline-215.md`` and
+    issue #225; treat the contrast as carrying this caveat until that reports.
 
     See ``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4 and 7.1.
     """

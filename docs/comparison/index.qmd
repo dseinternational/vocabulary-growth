@@ -475,13 +475,65 @@ print(
 The direction matters for how far this can be pushed. DS is already the more variable side, so correcting for the correlation would move the spoken ratio further below 1: the finding is conservative and would strengthen, not reverse. What it does undercut is reading the spoken and comprehension ratios against each other, since only the spoken one carries this bias, and it biases toward the comprehension value. The fix is a correlated subject block — proposed as VG20 in issue #224, where the same gap was reached independently from VG16's leftover intercept correlation.
 :::
 
-Two caveats bound how far this contrast can be pushed. First, the priors are not
-symmetric: on the TD side $\tau_{subject}$ and $\kappa$ are sampled through the
-shared-budget reparameterisation, with an informative prior on how the budget
-splits, while on the DS side they are two free scales — so part of any $\tau$
-difference is a difference in prior structure, and the TD pool averages 1.21
-observations per child, which is what made that reparameterisation necessary in
-the first place. Second, $\tau$ is matched on *age*. At matched age the DS group
+::: {.callout-important title="And the comprehension contrast carries a measured bias the spoken one does not"}
+The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate, and parameter recovery finds the bias on this side rather than the other.
+
+```{python}
+#| echo: false
+#| output: asis
+import glob
+_rr = [
+    pd.read_csv(f)
+    for f in sorted(glob.glob("recovery_vg12_r*.csv"))
+    if "aggregates" not in f
+]
+_ts = pd.concat([d[d["quantity"] == "tau_subject"] for d in _rr])
+_sh = pd.concat([d[d["quantity"] == "subject_variance_share"] for d in _rr])
+_vt = pd.concat([d[d["quantity"] == "v_total"] for d in _rr])
+_miss = int((~_ts["within_ci89"]).sum())
+_bias = float((_ts["posterior_mean"] / _ts["truth"] - 1.0).mean())
+_zs = ", ".join(f"{z:+.2f}" for z in _ts["z"])
+print(
+    f"Refitting VG12 to data simulated from its own posterior returns "
+    f"`tau_subject` below the truth in {len(_ts)} replicates of {len(_ts)} "
+    f"(z = {_zs}), a bias of {_bias:+.1%}, with the truth outside the 89% "
+    f"interval {_miss} of {len(_ts)} times. The budget is not what is "
+    f"mis-estimated — `v_total` recovers with z = "
+    f"{', '.join(f'{z:+.2f}' for z in _vt['z'])} — but the split is, with "
+    f"`subject_variance_share` low at z = "
+    f"{', '.join(f'{z:+.2f}' for z in _sh['z'])}. "
+    f"$\\tau_{{subject}} = \\sqrt{{share \\cdot v_{{total}}}}$ inherits that "
+    f"amplified, because the transformation concentrates its posterior."
+)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+_r0 = he_u.iloc[0]
+_corr = (_r0["tau_TD_median"] / (1.0 + _bias)) / _r0["tau_DS_median"]
+_word = "overstates" if _corr > _r0["tau_ratio_median"] else "understates"
+print(
+    f"$\\tau_{{subject}}$ is the typically-developing side of this contrast, so "
+    f"a low bias there **{_word}** the reported difference: the ratio TD/DS of "
+    f"{_r0['tau_ratio_median']:.3f} would sit near {_corr:.2f} if the bias "
+    f"carried over at the size these replicates suggest. The direction is "
+    f"opposite to the independence bias on the spoken side above, so the two "
+    f"outcomes are biased *toward each other* — which inflates any reading of "
+    f"the comprehension and spoken ratios against one another at both ends."
+)
+```
+
+Three `test`-tier replicates, truths drawn from the model's own posterior, so this is a self-consistency check and the magnitude should not be quoted. The direction is consistent and has a mechanism. VG11 carries the same reparameterisation at a very different reference proportion and has not been through recovery. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md`.
+:::
+
+Two further caveats bound how far this contrast can be pushed. First, the priors
+are not symmetric: on the TD side $\tau_{subject}$ and $\kappa$ are sampled
+through the shared-budget reparameterisation, with an informative prior on how
+the budget splits, while on the DS side they are two free scales — so part of any
+$\tau$ difference is a difference in prior structure, and the TD pool averages
+1.21 observations per child, which is what made that reparameterisation necessary
+in the first place. Second, $\tau$ is matched on *age*. At matched age the DS group
 sits near a floor where any spread measure is mechanically small, so a like-for-like
 reading of "are these children more alike" also wants the comparison at matched
 vocabulary level — which is what the attainment-delay and matched-comprehension

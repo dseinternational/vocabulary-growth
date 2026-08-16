@@ -23,7 +23,7 @@ Read the aggregate coverage cautiously: the recovery matrix labels it "indicativ
 
 ## VG12: the variance partition biases `tau_subject` low
 
-`tau_subject` truths 0.676 / 0.687 / 0.694 return posterior means 0.631 / 0.651 / 0.655 — z = −3.66 / −3.02 / −3.37, truth outside the 89% interval **all three times**, a bias of about −5.6%. Not a convergence artefact: r02 and r03 both cleared the hard gate and show it as strongly as the replicate that did not.
+`tau_subject` truths 0.676 / 0.687 / 0.694 return posterior means 0.631 / 0.651 / 0.655 — z = −3.66 / −3.02 / −3.37, truth outside the 89% interval **all three times**, a bias of −5.8% (relative misses of −6.6% / −5.3% / −5.6%; an earlier draft of this note and of #225 quoted the last of those three as though it were the average). Not a convergence artefact: r02 and r03 both cleared the hard gate and show it as strongly as the replicate that did not.
 
 The bias enters through the split, not the budget:
 
@@ -39,7 +39,7 @@ The bias enters through the split, not the budget:
 
 VG10, which has two free scales and no partition, does not behave this way: `tau_subj_u` gives z = −1.39 / −2.28 / −0.87 and `tau_subj_q` shows no consistent direction. The reparameterisation is the distinguishing feature, and it is carried only by VG11 and VG12.
 
-Consequence: `tau_subject` is what the DS-vs-TD between-child contrast reads on the typically-developing side. If τ_TD is biased low by ~5.6%, the comprehension ratio TD/DS moves from 0.862 to about 0.91 — **the reported comprehension difference is overstated**. `build_variance_partition`'s docstring currently asserts that "the DS/TD heterogeneity contrast that `tau_subject` feeds is unaffected"; this is evidence against that.
+Consequence: `tau_subject` is what the DS-vs-TD between-child contrast reads on the typically-developing side. If τ_TD is biased low by ~5.8%, the comprehension ratio TD/DS moves from 0.862 to about 0.92 — **the reported comprehension difference is overstated**. `build_variance_partition`'s docstring currently asserts that "the DS/TD heterogeneity contrast that `tau_subject` feeds is unaffected"; this is evidence against that.
 
 ## VG15: `psi` and especially `psi_study` are shrunk low
 
@@ -65,6 +65,19 @@ The report already names the condition — `_caveats-signing.qmd` calls the popu
 Three replicates per model at `test`, with 1 of 3 (VG10, VG15) and 2 of 3 (VG12) clearing the convergence gate. Truths drawn from each model's own posterior, so these are self-consistency checks: a bias means the pipeline does not recover its own generative parameter, which is the right question, but it says nothing about misspecification against reality. Magnitudes should not be quoted from this run — both issues ask for confirmation at `rep` with more replicates before acting.
 
 The aggregate coverage figures in particular should not be read as calibrated, for the reason the matrix itself gives.
+
+## What changed in the published material
+
+Both findings are now visible to a reader of the report rather than only to whoever opens the issue tracker.
+
+- **The comparison report** carries a callout in the between-child heterogeneity section, beside the existing one about the spoken side's independence assumption. The pairing is the point: that section previously offered comprehension as the clean contrast and spoken as the compromised one, and the measured bias is on comprehension.
+- **The report's `How much children differ, in each population` section** carries the same caveat, and the sentence introducing it no longer calls the comprehension contrast "like-for-like" without qualification — it says like-for-like _in structure_, because structural symmetry was exactly what was being mistaken for an unbiased estimate.
+- **`_caveats-signing.qmd` and the Discussion's limitations** now state the ψ shrinkage alongside the Type-M warning. Only the Type-M direction was stated before, which left a reader with one of two known biases and no way to know the other existed or that it ran the other way.
+- **`build_variance_partition`'s docstring** no longer asserts the contrast is unaffected. It separates what the reparameterisation guarantees (the same quantities are reported) from what it does not (that their values are unbiased), and records the recovery result.
+
+Every number in those caveats is computed from the scored replicate tables at render time, per the house style. That needed a fix to `sync_report_figures.py`: `_sync_dir` copies files and not sub-directories, so `output/comparisons/recovery/` had never reached `docs/report/figures/` and no chapter could have cited a recovery score at all. `recovery/` and `sensitivity/` are now synced explicitly.
+
+Correcting the −5.6% figure was itself a consequence of computing rather than quoting: the wrong value only surfaced when the render produced −5.8% beside it.
 
 ## Housekeeping
 

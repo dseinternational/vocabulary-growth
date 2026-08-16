@@ -1,11 +1,22 @@
 <!--
 Transcluded scope-and-caveats note for the signing findings.
-Included via {{< include _caveats-signing.qmd >}} in both the signing findings
-chapter and the signing lineage chapter. Edit here only. The long-form
+Included via {{< include _caveats-signing.qmd >}} in the signing findings
+chapter. (It once served a separate signing lineage chapter too; that chapter no
+longer exists and this note claimed two call sites until 2026-08-16.) Edit here
+only, and see below on freeze. The long-form
 treatment is the Limitations section of the Discussion (@sec-limitations);
 keep the two consistent. Redrafted by an LLM-based AI tool (Claude Code/Fable 5)
 after the uk_07 integration and the psi heterogeneity investigation
-(notes/202608120030, notes/202608121030).
+(notes/202608120030, notes/202608121030). The Type-M paragraph was extended by
+Claude Code/Opus 5 to state the recovery shrinkage alongside it
+(notes/202608161700, issue #226) — the two biases run in opposite directions and
+only one of them was stated.
+
+FREEZE: `execute.freeze` is `auto`, which invalidates a chapter when its OWN
+source changes and NOT when an included file like this one does. Editing this
+file and re-rendering therefore leaves the old text in place, silently. Delete
+`_freeze/<chapter>/` for every chapter that includes this file before rendering.
+Same applies to `_report_data.qmd`, which nearly every chapter includes.
 -->
 
 ::: {.callout-important title="The association is descriptive and exploratory"}
@@ -15,5 +26,5 @@ The within-understood sign–speech association $\psi$ — and therefore the dat
 
 **Signing coverage thins with age.** Signed observations are dense from about 12 to 60 months and sparse beyond: two small sources above 72 months and one above 84, so $r(a)$ and $p_{\text{any}}$ at older ages lean on the model's smoothness rather than on many children. The peak age of $r(a)$ is fixed by construction rather than estimated, and its length-scale is not identified, so the signed trajectory is parametric in practice. Signing data exist only for the Down syndrome sources; there is no typically-developing comparison.
 
-At these sample sizes a point estimate that clears the independence reference $\psi = 1$ is, on average, inflated in magnitude — the Type-M ("winner's-curse") consequence of selecting on a noisy quantity — so the credible intervals and the strength of evidence, not the point values, should carry the interpretation. See the Discussion (@sec-limitations) for the full statement of limitations.
+**Two known biases act on $\psi$, in opposite directions.** At these sample sizes a point estimate that clears the independence reference $\psi = 1$ is, on average, inflated in magnitude — the Type-M ("winner's-curse") consequence of selecting on a noisy quantity. Pulling the other way, refitting this model to data simulated from its own posterior returns $\psi$ *below* the value it was simulated from, and the per-study values further below still — most severely for the sources with the fewest children, which are not the sources with the fewest administrations. The mechanism is the one named above: the between-study scale is itself underestimated, and too small a spread over-shrinks the group estimates toward the centre. So the per-study spread reported here is, if anything, narrower than the true one, which strengthens rather than weakens the insistence that the per-study values are the primary read; and the population value is more likely conservative than inflated, leaving $\psi > 1$ untouched. Which of the two biases dominates at any one source is not established. Either way the credible intervals and the strength of evidence, not the point values, should carry the interpretation. See the Discussion (@sec-limitations) for the full statement of limitations, and issue #226 for the recovery evidence.
 :::
