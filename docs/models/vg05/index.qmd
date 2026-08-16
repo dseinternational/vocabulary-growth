@@ -16,72 +16,26 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
 
 ```{python}
 #| echo: false
 #| output: asis
-# Report the sampling configuration this model was actually fitted at, read
-# from the trace header (chains x draws). rep / rep-lite are reporting-grade;
-# dev / test are flagged as approximate.
-import h5netcdf as _h5
+from vocab_growth.report_cells import render_sampling_banner
 
-with _h5.File("trace.nc", "r") as _f:
-    _post = _f["posterior"]
-    _n_chains = _post.dimensions["chain"].size
-    _n_draws = _post.dimensions["draw"].size
-
-_CONFIGS = {
-    (6, 6000): ("reporting", False),
-    (4, 4000): ("reporting-lite", False),
-    (4, 2000): ("test", True),
-    (2, 500): ("development", True),
-}
-_cfg_name, _approximate = _CONFIGS.get(
-    (_n_chains, _n_draws), (f"{_n_chains} chains × {_n_draws} draws", True)
-)
-
-print('::: {.callout-warning title="Warning: Preliminary model output"}')
-print()
-print(
-    "This model output is preliminary and likely to change as the model "
-    "evolves and further data are received."
-)
-print()
-print(
-    f"This model was fitted in **{_cfg_name}** configuration "
-    f"({_n_chains} chains × {_n_draws:,} draws per chain)."
-)
-if _approximate:
-    print()
-    print(
-        "It was **not** fitted in reporting mode, so these results are more "
-        "approximate than a full reporting-quality fit."
-    )
-print(":::")
+render_sampling_banner()
 ```
 
-This model jointly examines how age influences words understood and words spoken ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$), using a production-ratio reparameterization that enforces $p_S \leq p_U$ by construction.
+This model asks two questions at once: how does the number of words a child with Down syndrome understands change with age, and what fraction of those understood words does the same child also say? Age here is a proxy for everything that happens over time ($A \rightarrow U$, $A \rightarrow S$), not a cause in itself, and the link from comprehension to production ($U \rightarrow S$) is a structural one inside the model rather than a causal claim about children.
 
 ```{python}
-import matplotlib.pyplot as plt
-import pandas as pd
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
 ```
-
-## Statistical model
-
-We jointly model words understood on the 810-word reference inventory and words spoken conditionally on the observed understood count when the two measurements are logically nested. The expected proportion of words understood, $p_U(a)$, is modelled as a smooth function of age using a linear trend plus a Gaussian process on the logit scale. The proportion of words spoken is derived as $p_S(a) = p_U(a) \cdot q(a)$, where $q(a) = \text{sigmoid}(h(a))$ is the production ratio -- the fraction of understood words that are spoken at age $a$. Since $q(a) \in (0, 1)$, this enforces $p_S \leq p_U$ by construction. Both $f_U(a)$ and $h(a)$ have their own linear trend and Gaussian process components, with HSGP approximations for scalability. When both counts are available and $S\le U$, the likelihood factorises as $P(U)P(S\mid U)$: understood uses a Beta-Binomial over 810 words and spoken uses a Beta-Binomial over the observed $U$ words with mean $q(a)$. Spoken-only records and source-data violations retain a marginal Beta-Binomial over 810 words with mean $p_U(a)q(a)$.
-
-::: {.callout-note title="Model at a glance"}
-
-- **Population:** children with Down syndrome.
-- **Outcomes:** words understood and words spoken.
-- **Decomposition:** $p_S(a)=p_U(a)q(a)$, so spoken vocabulary is bounded by comprehension.
-- **Age anchors:** 24 and 84 months for both the understood trajectory and `q`.
-- **Hierarchy:** none; study and repeated-child effects are introduced in later DS joint models.
-
-:::
 
 ::: {.callout-note}
 
@@ -89,70 +43,149 @@ For full details and discussion, please refer to the technical report.
 
 :::
 
-![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Estimand",
+    "Reference inventory",
+    "Logit",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Overdispersion and variance inflation",
+    "Conditional probability",
+    "Production ratio ($q$)",
+    "Age anchor",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "GP length-scale ($\\ell$)",
+    "GP amplitude ($\\eta$)",
+    "Mean clamp",
+    "Credible interval",
+    "Equal-tailed interval (ETI)",
+    "Cross-sectional age derivative",
+    "Prior predictive check",
+    "Posterior predictive check",
+    "PMF and CDF",
+    "PIT (probability integral transform)",
+    "MCMC (Markov chain Monte Carlo)",
+    "Chain",
+    "R-hat ($\\hat{R}$)",
+    "Effective sample size (ESS)",
+    "Divergent transition",
+    "BFMI (Bayesian fraction of missing information)",
+])
+```
+
+## Statistical model
+
+Words understood are modelled as a bounded count out of the reference inventory. The expected proportion understood, $p_U(a)$, is a smooth function of age: on the logit scale, a straight-line developmental trend plus a Gaussian process term, which lets the curve bend away from the line by as much as the data support and no more.
+
+Words spoken are **not** given a trajectory of their own. Instead the model estimates the production ratio $q(a)$ — the fraction of understood words a child of that age also says — and derives the spoken proportion as
+
+$$p_S(a) = p_U(a) \cdot q(a).$$
+
+This is the reparameterisation that shapes everything else in the report. Because $q(a)$ is itself a proportion, it can never exceed one, so $p_S \leq p_U$ holds by construction rather than by luck: the model cannot predict a child who says more words than they understand. $q(a)$ gets the same treatment as $p_U(a)$ — a straight-line trend plus a Gaussian process on the logit scale — so the two curves bend independently. Both use HSGP approximations, which is what makes the model cheap enough to sample.
+
+The likelihood splits in two according to what each record supports. Where both counts are present and the spoken count does not exceed the understood one, the two outcomes factorise as $P(U)\,P(S \mid U)$: the understood count is Beta-Binomial over the reference inventory, and the spoken count is Beta-Binomial over the _observed_ understood count with mean $q(a)$. Records with no usable understood count, and records where the reported spoken count exceeds the reported understood count, fall back to a Beta-Binomial over the reference inventory with mean $p_U(a)\,q(a)$. Both branches use a Beta-Binomial rather than a Binomial because children of the same age differ from one another far more than a Binomial count would allow, and each outcome's dispersion is itself free to change with age.
+
+Neither trajectory is given a prior on its intercept and slope directly. Priors go instead on the expected proportion at two reference ages — the age anchors — which is a far more interpretable thing to have an opinion about than a value at age zero.
+
+::: {.callout-important title="What this model does not do"}
+
+VG05 has no study effects and no repeated-child effects: the fitted parameters are the two trajectories and the two dispersion curves, and nothing else. The pool contains children observed more than once, and children drawn from studies that differ in recruitment and measurement, and **this model treats every observation as independent**. It is a development step, not a finding: VG07 adds study effects to exactly this structure, and VG10 is the preferred account of comprehension and production in Down syndrome. **The numbers on this page should not be quoted as results.**
+
+:::
 
 ## Priors
 
-The understood trajectory uses the DS comprehension anchors. The production-ratio anchors are broad baseline priors: they regularise $q(a)=P(\text{speak}\mid\text{understood})$ without treating the fraction as a direct word count. The two dispersion blocks let extra-binomial heterogeneity differ between comprehension and spoken production.
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
+
+render_priors_table()
+```
+
+The understood trajectory's low anchor encodes a floor expectation — few words understood at the younger anchor age — while its high anchor is deliberately broad, ruling out neither a low nor a high later comprehension vocabulary before the data are seen. The production-ratio anchors are not simply broad regularisation: the low anchor keeps early production well below comprehension, and the high anchor was recalibrated against directly observed spoken/understood pairs, so it carries real information about the conversion rate and is a named sensitivity target in `docs/models/PRIORS.md`. Because $q$ is a fraction of understood words rather than a fraction of the inventory, its anchors are stated on their own scale and not as word counts.
+
+The length-scale and amplitude priors control the flexible part of each trend: how far apart in age two points must be before the curve is allowed to move independently, and how far the curve may depart from the anchor-defined straight line on the logit scale. The two dispersion blocks are separate, so comprehension and production may differ in how much children vary around the same mean.
+
+Dispersion follows `kappa(age) = kappa_min + exp(a_kappa - b_kappa_mag * z)`, one curve per outcome. The age term is given priors at two reference ages rather than as an intercept at the pool's mean age plus a slope, so each prior is directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. See `docs/models/PRIORS.md`.
+
+Above the high age anchor the straight-line part of the production ratio's trend is held level rather than allowed to keep climbing — the glance block above records which means are clamped this way. The Gaussian process term is still free to move there, so the fitted $q$ curve is not flat at the oldest ages, but it is not being carried upward by a line extrapolating past the last anchor either. The understood trajectory is not clamped, so the two are treated differently above the high anchor.
 
 ### Understood trajectory
 
-![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
-![Amplitude prior `eta_u_dist`](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
+![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
-![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+![Prior on the proportion of the reference inventory understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
 
-![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+![Prior on the proportion of the reference inventory understood at the high age anchor.](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
 
-### Production ratio
+### Production-ratio trajectory
 
-![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
-![Amplitude prior `eta_q_dist`](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
+![How far the flexible term may depart from the straight-line trend in the production ratio, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
-![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+![Prior on the fraction of understood words that are also spoken, at the low age anchor.](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
 
-![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
+![Prior on the fraction of understood words that are also spoken, at the high age anchor.](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
 
-### Dispersion / overdispersion -- understood
+### Dispersion -- words understood
 
-![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+![Prior on the floor of the dispersion parameter for words understood.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
-![`a_kappa_u_dist`](a_kappa_u_dist.png){#fig-a-kappa-u .lightbox fig-align="left"}
+![Prior on the level of the dispersion curve for words understood.](a_kappa_u_dist.png){#fig-a-kappa-u .lightbox fig-align="left"}
 
-![`b_kappa_mag_u_dist`](b_kappa_mag_u_dist.png){#fig-b-kappa-mag-u .lightbox fig-align="left"}
+![Prior on how fast dispersion changes with age for words understood.](b_kappa_mag_u_dist.png){#fig-b-kappa-mag-u .lightbox fig-align="left"}
 
-### Dispersion / overdispersion -- spoken
+### Dispersion -- words spoken
 
-![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
+![Prior on the floor of the dispersion parameter for words spoken.](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
 
-![`a_kappa_s_dist`](a_kappa_s_dist.png){#fig-a-kappa-s .lightbox fig-align="left"}
+![Prior on the level of the dispersion curve for words spoken.](a_kappa_s_dist.png){#fig-a-kappa-s .lightbox fig-align="left"}
 
-![`b_kappa_mag_s_dist`](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
+![Prior on how fast dispersion changes with age for words spoken.](b_kappa_mag_s_dist.png){#fig-b-kappa-mag-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
 
-For this joint baseline, inspect whether the prior induces plausible understood counts, plausible spoken counts, and a credible comprehension-production gap over the full 12-90 month query range.
+These simulate vocabularies from the priors alone, before the data are seen. They are drawn across the whole modelled age range recorded in the glance block above — which is wider than the ages the model reports on, so the ends of these figures are the part where the priors, and not the data, do all the work. Read them as a plausibility test with three criteria: young children should usually sit near the floor on both outcomes, older trajectories should not be forced towards the ceiling, and the production ratio should be free to rise across development without being pinned near zero or near one. A prior that fails any of these would be shaping the answer rather than permitting it.
 
-### Prior samples -- words understood
+![Understood-vocabulary trajectories drawn from the priors.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
 
-![Prior sample trajectories (understood)](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
+![Spoken-vocabulary trajectories implied by those same prior draws, through $p_S = p_U q$.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
 
-### Prior samples -- words spoken
-
-![Prior sample trajectories (spoken)](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
-
-### Prior samples -- production rate q(a)
-
-![Prior sample trajectories for production ratio q(a)](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
+![Production-ratio trajectories drawn from the priors: the fraction of understood words that are also spoken.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
 
 ## Data
 
 ```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+
 descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
 descriptive_stats
 ```
+
+::: {.callout-note}
+
+The normality tests in this table are reported for completeness. They are not a check on the model: both outcomes are bounded counts, which are not expected to be normally distributed, and the model does not assume that they are. Note also that the two outcomes are not observed on the same rows — the glance block above gives the count for each — so the understood and spoken columns are not summaries of one common set of children.
+
+:::
 
 ## Diagnostics
 
@@ -160,44 +193,9 @@ descriptive_stats
 #| label: convergence-caveats
 #| echo: false
 #| output: asis
-# Soft-tier caveats, read from this fit's own gate payload. Silent when the fit
-# is clean, so a clean report gains nothing and a caveated one cannot hide it.
-import json
-from pathlib import Path
+from vocab_growth.report_cells import render_convergence_caveats
 
-_gate_path = Path("diagnostics_summary.json")
-_marks = []
-if _gate_path.exists():
-    _gate = json.loads(_gate_path.read_text())
-    _checks = _gate.get("checks") or {}
-    _bfmi = [b for b in (_gate.get("bfmi_per_chain") or []) if b is not None]
-    if _checks.get("divergences") is False:
-        _marks.append(
-            f"**{_gate.get('divergences')} divergent transition(s)** — the sampler "
-            "failed to traverse part of the posterior, so reported expectations "
-            "may be biased."
-        )
-    if _checks.get("bfmi") is False:
-        _lo = f" (min {min(_bfmi):.3f})" if _bfmi else ""
-        _marks.append(
-            f"**Energy BFMI below 0.3**{_lo} — the energy chain explored the "
-            "posterior's tails poorly, so the interval bounds are less reliable "
-            "than the point estimates."
-        )
-
-if _marks:
-    print('::: {.callout-warning title="Soft-tier convergence caveats"}')
-    print()
-    print("This fit cleared the hard convergence tier (R-hat and effective sample")
-    print("size) but not the soft tier:")
-    print()
-    for _mark in _marks:
-        print(f"- {_mark}")
-    print()
-    print("It remains reportable and is published carrying this mark; see")
-    print("Appendix B of the technical report.")
-    print()
-    print(":::")
+render_convergence_caveats()
 ```
 
 ```{python}
@@ -207,80 +205,107 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
 
-![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
-![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-::: {.callout-note title="Diagnostic focus"}
+![Pairwise joint posteriors for the first few parameters. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-The bivariate geometry depends on the understood anchors, `q` anchors, GP hyperparameters, and both `kappa` curves. Weak diagnostics for `q` should be treated as directly relevant to the spoken trajectory.
+![Marginal posterior distributions for the fitted parameters, each with its median and interval.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+::: {.callout-note title="What to watch in this model"}
+
+The pair plot is capped so that the grid stays legible, and shows only the first few parameters — the understood anchors and the understood GP length-scale and amplitude, together with the leading production-ratio anchors. It is the anchor-versus-GP trade-off in comprehension that it is there to reveal: a strong diagonal ridge between an anchor and the GP amplitude would mean the data cannot say whether the curve's level comes from the line or from the bend. The remaining parameters, including both dispersion curves, appear in the trace plot and in the marginal posteriors above, which is where to look for them.
+
+Compare those marginal posteriors with the prior figures earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. That comparison matters most for the production ratio at the high anchor, whose prior is the informative one in this model.
 
 :::
 
-## Joint trajectory
+## Findings
 
-![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
 
-![Joint posterior predictive trajectory with 50% and 89% intervals](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+render_headline_quantities()
+```
 
-## Production ratio
+Read these alongside the caveat above. With no study or child effects in the model, the spread reported here mixes genuine differences between children with differences between the studies they came from, and repeated observations of the same child are counted as though they were different children. VG07 separates the study part; VG10 separates both. This model cannot.
 
-The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
-The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood counts, so it should be interpreted separately from $q(a)$.
+## Posterior predictions
 
-![Production rate q(a)](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+### Joint trajectory
 
-![Production ratio by words understood](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+The two curves stop at different ages, and that is deliberate rather than an artefact. Comprehension and every ratio derived from it are reported only up to the comprehension reporting cap, while production runs on to the top of the query grid; the glance block at the top of this report records both caps. The reason is that the evidence for comprehension thins out earlier than the evidence for production, so the model declines to publish an understood curve where it would be carried almost entirely by the trend's smoothness.
 
-![Posterior predictive spoken/understood count ratio](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
+![Median expected words understood and words spoken against age, with the observed data.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the trajectory, not on where a single child would fall.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+
+### Production ratio
+
+The production ratio $q(a) = p_S(a) / p_U(a)$ is the fraction of understood words expected to be spoken at each age. It is the quantity that separates _knowing more words_ from _saying more of the words you know_, and it is the one part of this model that has no counterpart in a single-outcome vocabulary model.
+
+Above the high age anchor, $q$'s mean is held level rather than extrapolated (see Priors), so the rise at the oldest reported ages is carried by the Gaussian process and by the anchor, not by a line running past the last age the prior speaks to.
+
+![The fitted production ratio against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+
+![The same ratio plotted against expected words understood rather than against age. The horizontal axis is age re-expressed as comprehension, so it is stretched where vocabulary grows fast and compressed where it does not; it is not an independent variable the model conditions on.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+The figure below is a different quantity from the two above, and the difference is easy to miss. $q(a)$ is a ratio of expectations — one smooth curve divided by another. The predictive figure is a distribution of ratios of _drawn counts_, and the spoken count is drawn from a Beta-Binomial whose denominator is itself a drawn understood count. At young ages, where a draw may produce very few understood words, that makes the ratio of counts far more variable than $q(a)$ and gives it a floor at zero that the smooth ratio does not have. Read it as "what ratio might one child show", not as an estimate of $q$.
+
+![The ratio of posterior predictive spoken counts to posterior predictive understood counts, by age.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
 
 ```{python}
 summary_q = pd.read_csv("posterior_summary_q.csv")
 summary_q
 ```
 
-## Comprehension-production gap
+### Comprehension-production gap
 
-The expected difference in word counts between understanding and production.
+The expected difference, in words, between what a child of a given age understands and what they say. It is not a constant fraction of vocabulary: it widens while comprehension outpaces production and narrows again once the production ratio catches up, so it has a peak at an intermediate age. The findings table above reports where that peak falls and how large it is.
 
-![Comprehension-production gap](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
+![The expected number of words understood but not spoken, against age, with uncertainty intervals.](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
-## Words understood vs words spoken
+### Words understood versus words spoken
 
-![Expected words understood vs spoken](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
+These two figures show the same relationship at two different levels, and the distinction is the one the glossary calls the estimand. The first draws expected spoken vocabulary against expected understood vocabulary — a set of draws of the _mean_ curve, so its spread is uncertainty about the average. The second draws simulated counts for individual observations, so its spread also contains how much children differ from one another, and is much the wider of the two.
 
-![Posterior predictive words understood vs spoken](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+![Expected words spoken against expected words understood, as draws of the mean relationship.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
 
-## Receptive → expressive (cross-sectional)
+![Simulated spoken counts against simulated understood counts, alongside the observed data.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
-**How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child *says* is the number they *understand* scaled by $q(a)$,
+### Receptive to expressive vocabulary
+
+**How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child _says_ is the number they _understand_ scaled by $q(a)$,
 
 $$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
 
-Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — not evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. The figure below reads the fitted association directly: for children with Down syndrome at several ages, it maps words understood (x-axis) to expected words spoken (y-axis), with the shaded band the 89% interval on $q(a)$ and the dashed line the ceiling. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
+Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — not evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. The figure below reads the fitted association directly: for children with Down syndrome at several ages, it maps words understood (x-axis) to expected words spoken (y-axis), with the shaded band the 89% interval on $q(a)$ and the dashed line the ceiling at which every understood word is also spoken.
 
-![Predicted words spoken given words understood, by age](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
+Each line's slope is $q(a)$ at that age, so the fan of lines is the same information as the production-ratio figure above, expressed in the units a practitioner actually works in: given a child who understands this many words, how many would the model expect them to say? The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
+
+![Expected words spoken as a function of words understood, at several ages.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
 
 ## Posterior predictions -- words understood
 
-### Posterior summary table
+### Summary at selected ages
+
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** how much children of the same age differ. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall. Columns labelled `ci` are the 89% outer interval and those labelled `ci50` the 50% inner interval, both equal-tailed.
 
 ```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
 posterior_summary_u
 ```
 
-### Posterior predictive PMF
+### Distribution of word counts by age
 
-![posterior_predictive_pmf_u](posterior_predictive_pmf_u.png){#fig-pmf-u .lightbox fig-align="left"}
+![The probability of each exact understood-word count, at selected ages.](posterior_predictive_pmf_u.png){#fig-pmf-u .lightbox fig-align="left"}
 
-### Posterior predictive CDF
-
-![posterior_predictive_cdf_u](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
-
-### Count distributions by age
+![The probability of a given understood-word count or fewer, at selected ages. Read this one for questions of the form "what fraction of children understand 50 words or fewer?"](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
 
 ```{python}
 #| echo: false
@@ -292,38 +317,40 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_u")
 
 ### Median trend
 
-![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+![Median predicted understood vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
-Smoothed:
+![The same trend, smoothed for presentation. The underlying numbers are unchanged.](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
-![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
+### Age derivative
 
-### Cross-sectional age derivative
+![Rate of change of expected understood vocabulary with age, in words per month.](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
 
-![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
+![The same rate, smoothed for presentation. The raw curve is differentiated numerically from a Gaussian process and is visibly noisy; the smoothing changes only the display.](expected_learning_rate_u_smoothed.png){#fig-rate-u-smooth .lightbox fig-align="left"}
 
-### Dispersion $\kappa$ -- understood
+This is the slope of the fitted age trajectory: it describes how expected vocabulary differs between children of different ages. It is **not** a within-child learning rate, and should not be read as one — most of these data are cross-sectional, so the model has little to say about any individual child's trajectory over time. Where the interval spans zero, the data do not establish the direction of change at that age.
 
-![posterior_kappa_u](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
+### Dispersion
+
+![How the dispersion parameter for words understood changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
+
+Lower $\kappa$ means **greater** variability between children relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. In this model $\kappa$ is doing double duty: with no study or child effects, it absorbs differences between studies and repeated measurements of the same child as well as genuine differences between children, so it should not be quoted as a statement about how much children differ.
 
 ## Posterior predictions -- words spoken
 
-### Posterior summary table
+### Summary at selected ages
+
+The columns mean the same as in the understood table above, with two differences worth knowing. This table runs to a later age, because production is reported past the comprehension cap. And the predictive draws behind $Y$ are nested: for the paired records each spoken count is drawn out of a _drawn_ understood count, not out of the full reference inventory, so at young ages a large share of the probability at zero comes from small drawn comprehension rather than from the production ratio alone.
 
 ```{python}
 posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
 posterior_summary_s
 ```
 
-### Posterior predictive PMF
+### Distribution of word counts by age
 
-![posterior_predictive_pmf_s](posterior_predictive_pmf_s.png){#fig-pmf-s .lightbox fig-align="left"}
+![The probability of each exact spoken-word count, at selected ages.](posterior_predictive_pmf_s.png){#fig-pmf-s .lightbox fig-align="left"}
 
-### Posterior predictive CDF
-
-![posterior_predictive_cdf_s](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
-
-### Count distributions by age
+![The probability of a given spoken-word count or fewer, at selected ages.](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
 
 ```{python}
 #| echo: false
@@ -335,19 +362,47 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ### Median trend
 
-![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+![Median predicted spoken vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
-Smoothed:
+![The same trend, smoothed for presentation. The underlying numbers are unchanged.](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
-![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
+### Age derivative
 
-### Cross-sectional age derivative
+![Rate of change of expected spoken vocabulary with age, in words per month.](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 
-![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
+![The same rate, smoothed for presentation.](expected_learning_rate_s_smoothed.png){#fig-rate-s-smooth .lightbox fig-align="left"}
 
-### Dispersion $\kappa$ -- spoken
+Comparing this figure with its comprehension counterpart is the clearest statement the model makes about the shape of development: the two outcomes do not grow fastest at the same age, and the findings table above gives both peaks and their intervals. The same cross-sectional caveat applies here as there.
 
-![posterior_kappa_s](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+### Dispersion
+
+![How the dispersion parameter for words spoken changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+
+Read this against the understood dispersion figure above: lower $\kappa$ at the same age means children are more spread out around the mean for that outcome.
+
+## Expected vocabulary by month
+
+A finer companion to the tables above: one row per whole month, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
+
+The figures below are the only place in this report where both bands appear together. The shaded bands are intervals on the _average_ — where the population mean lies — while the dashed interval is where a _single child_ of that age might fall. The second is several times wider than the first, and confusing them is the single easiest way to misread this model.
+
+### Words understood
+
+![Expected understood vocabulary by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_u.png){#fig-expected-counts-by-month-u .lightbox fig-align="left"}
+
+```{python}
+monthly_u = pd.read_csv("posterior_summary_monthly_u.csv")
+monthly_u
+```
+
+### Words spoken
+
+![Expected spoken vocabulary by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_s.png){#fig-expected-counts-by-month-s .lightbox fig-align="left"}
+
+```{python}
+monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
+monthly_s
+```
 
 ## Predictive calibration
 
@@ -360,3 +415,12 @@ from vocab_growth.models.calibration import render_calibration_section
 
 render_calibration_section()
 ```
+
+## Limits
+
+- **This is a development step, not a result.** VG05 exists to establish that the production-ratio structure fits and samples. Its numbers should not be quoted as findings about children with Down syndrome; use VG10 for that.
+- **No hierarchy.** Study and repeated-child structure are absent, so uncertainty here is not a fair estimate of uncertainty about a new child, and the dispersion curves absorb between-study and within-child structure that belongs elsewhere.
+- **Age is not a mechanism.** Everything reported is an association with age, not an effect of it, and the link from comprehension to production is a modelling structure rather than a causal pathway.
+- **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat.
+- **Not every spoken record is modelled as nested.** Records lacking a usable understood count, and records whose reported spoken count exceeds the reported understood count, use the marginal fallback described under Statistical model, and are therefore informed by the production ratio less directly than the paired records are.
+- **Beyond the high anchor the trends extrapolate.** Where the data thin out, the curves are carried by the model's smoothness assumptions rather than by observations, which is why comprehension and the ratios derived from it stop earlier than production and why the production ratio's mean is held level. The monthly tables' `n_obs` column shows where that begins.

@@ -103,6 +103,7 @@ disattenuating
 disattenuation
 disclosable
 docstrings
+dropna
 dseresearch
 dtype
 dtypes
@@ -116,13 +117,17 @@ estimands
 exceedance
 exceedances
 fallocate
+groupby
 hightune
 hyperparameters
 hyperpriors
+idxmax
+idxmin
 iloc
 incl
 indep
 isna
+iterrows
 judgments
 lengthscale
 logind
@@ -140,6 +145,7 @@ nonparametric
 nonparametrics
 nonwords
 nonzero
+nunique
 nutpie
 orcid
 overclaiming
