@@ -219,21 +219,42 @@ range:
 
 | Outcome    | Rows | 95th percentile |      Rows ≥ 72 mo |     Rows ≥ 84 mo |
 | ---------- | ---: | --------------: | ----------------: | ---------------: |
-| Understood |  905 |       64 months |  15 (15 children) |   5 (5 children) |
-| Spoken     | 1346 |       78 months | 104 (80 children) | 51 (44 children) |
+| Understood |  987 |       69 months |  38 (25 children) | 13 (11 children) |
+| Spoken     | 1428 |       81 months | 127 (90 children) | 59 (50 children) |
+| Signed     |  904 |       85 months | 113 (78 children) | 56 (48 children) |
 
-Comprehension effectively stops around 72 months. Reporting it — and `q`, which is a
+Comprehension effectively stops around 84 months. Reporting it — and `q`, which is a
 ratio _of_ comprehension and so inherits the narrower range — on the same grid as spoken
-quotes a median and an 89% interval at 78, 84 and 90 months from at most eight
-administrations, two of those ages at or past the high anchor where the mean is now a
-levelled-off extrapolation rather than an estimate.
+would quote a median and an 89% interval at 90 months from a handful of administrations,
+past the high anchor where the mean is now a levelled-off extrapolation rather than an
+estimate.
 
-**Implemented 2026-08-04:** `report_max_age_understood = 72` on VG02, VG05, VG07-VG10
-and VG14-VG16. It trims the understood and `q` summary tables and the production-ratio
-figure; spoken keeps the full grid. This is post-processing of a fitted trace — the
-query grid, the model graph and the `query_id` dimension are unchanged, so it cannot
-move a number that is still reported, and refitting VG10 across the change at a fixed
-seed reproduced its diagnostics bit-for-bit. The dropped ages remain in the trace.
+**Implemented 2026-08-04, raised 72 → 84 on 2026-08-13:** `report_max_age_understood = 84`
+on VG02, VG05, VG07-VG10 and VG14-VG16. The original 72 was set against the pre-`uk_07`
+pool (905 understood rows, 95th percentile 64, only 15 at or above 72). Rebuilding
+`us_01` from the Edgin item-level files and integrating `uk_07` — together with the
+reinstated `uk_06` signing rows — rebuilt the older tail, and the 72-84 band now carries
+25 rows from 20 children across five studies (`ie_01`, `uk_01`, `uk_06`, `uk_07`,
+`us_02`), so reporting it is no longer extrapolation. 84 and no further, for two reasons
+that coincide: above it only 13 rows from 11 children remain, and 84 is the high trend
+anchor. That is the same test, and the same threshold, applied when
+`report_max_age_signed` was raised from 60 to 84 in #212.
+
+It trims the understood and `q` summary tables and the production-ratio figure; spoken
+keeps the full grid at 90. **Signed is not covered by this field** — it has its own
+`report_max_age_signed`, added to the trivariate definition on 2026-08-13 so that VG14's
+sign-derived figures stop borrowing the comprehension cap. Note the two caps rest on
+different arguments: comprehension stops at 84 because the data do, whereas signed is
+observed on 56 rows from 48 children at or above 84 and stops there only because 84 is
+the trend anchor.
+
+Both caps are post-processing of a fitted trace — the query grid, the model graph and the
+`query_id` dimension are unchanged, so they cannot move a number that is still reported,
+and refitting VG10 across the change at a fixed seed reproduced its diagnostics
+bit-for-bit. The dropped ages remain in the trace. The policy itself lives in
+[`vocab_growth.reporting_ages`](../../src/vocab_growth/reporting_ages.py), which resolves
+a cap per reported _quantity_ rather than per figure, and `tests/test_reporting_age_policy.py`
+walks the fitted artefacts and fails on any that reports past its cap.
 
 Changing the cap is nonetheless **not** free. The summary tables are written during the
 fit pipeline, and `--render-only` re-renders Quarto against the CSVs already on disk
@@ -248,8 +269,8 @@ too.
 VG01 is left alone: it is production-only, and its data run to 115 months. The
 whole-month companion tables also keep the full observed span, where the `n_obs` column
 already records how thin the tail is — the trim is aimed at the curated 6-monthly table,
-which carries no such guard. The typically-developing grids stop at 30 months, well
-inside their data, so this asymmetry is specific to the Down syndrome pool. See
+which carries no such guard. The typically-developing grids stop at 30 months (18 for
+VG13), well inside their data, so this asymmetry is specific to the Down syndrome pool. See
 [`notes/202608042030-q-mean-extrapolation.md`](../../notes/202608042030-q-mean-extrapolation.md).
 
 ### Signed ratio prior
