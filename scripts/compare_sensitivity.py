@@ -7,27 +7,78 @@ Usage:
 
 Resolves the baseline fit (``output/models/<id>-<config_name>/``) and each
 variant fit (``…-<suffix>/``) from the registry, compares headline quantities
-(are they inside the baseline's 89% interval?), writes a per-variant detail CSV plus a
-``robustness_matrix_<model>.csv`` under ``output/comparisons/sensitivity/``, and
-prints the matrix. Variant fits that are missing are skipped with a note.
+(are they inside the baseline's 89% interval?), writes a per-variant detail CSV
+plus a ``robustness_matrix_<model>.csv`` under ``output/comparisons/sensitivity/``,
+and prints the matrix.
+
+**Every registered variant gets a row.** A variant that was never fitted, or
+whose fit was stopped by the convergence gate and retained under
+``output/failed/``, appears with a status and a reason rather than being skipped
+with a console note. A matrix that silently omits what it could not assess reads
+as coverage it has not got — the requirement recorded in
+``notes/202608142000-refit-run-record-and-disk-failure.md`` §5b, after
+``vg11 / anchor-broad`` failed the gate and vanished from its own matrix.
+
+**A targeted rerun merges rather than replaces.** ``--variant <name>`` used to
+rewrite the whole matrix from that one row, silently dropping every other
+variant's verdict. Carried-over rows keep the ``computed_at_utc`` of the run that
+produced them, so a stale row is visible as one.
 """
 
 import argparse
 import os
+from datetime import UTC, datetime
 
 import pandas as pd
 
 from vocab_growth import environment as env
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting import console, dataframe_table, heading
-from vocab_growth.sensitivity.compare import compare_dirs, summarise
+from vocab_growth.sensitivity.compare import (
+    compare_dirs,
+    coverage_report,
+    definition_mismatch,
+    failed_fit_dir,
+    fit_created_at,
+    summarise,
+    summarise_absent,
+)
 from vocab_growth.sensitivity.registry import VARIANTS, variants_for
+
+MATRIX_COLUMNS = [
+    "variant",
+    "status",
+    "converged",
+    "max_rhat",
+    "min_ess",
+    "n_within_ci",
+    "n_checked",
+    "coverage",
+    "quantities_outside_ci",
+    "max_abs_delta",
+    "verdict",
+    "baseline_fit_utc",
+    "variant_fit_utc",
+    "computed_at_utc",
+]
 
 
 def _model_dir(model_key: str, suffix: str | None = None) -> str:
     d = MODEL_REGISTRY[model_key]
     name = f"{d.model_id}-{d.config_name}" + (f"-{suffix}" if suffix else "")
     return os.path.join(env.models_output_dir(), name)
+
+
+def _override_keys(spec: dict) -> set[str]:
+    """Definition fields this variant is allowed to change.
+
+    ``scalar`` overrides name definition fields directly. ``kappa`` overrides
+    rebuild a nested prior block, so the field that changes is the block itself
+    (``kappa``, ``kappa_u``, ``kappa_q``, …) rather than the inner names.
+    """
+    keys = set(spec.get("scalar") or {})
+    keys |= set(spec.get("kappa") or {})
+    return keys
 
 
 if __name__ == "__main__":
@@ -41,6 +92,7 @@ if __name__ == "__main__":
         console.print(f"[bold red]Unknown model: {args.model}[/bold red]")
         raise SystemExit(1)
 
+    definition = MODEL_REGISTRY[args.model]
     baseline = _model_dir(args.model)
     if not os.path.isdir(baseline):
         console.print(
@@ -49,9 +101,13 @@ if __name__ == "__main__":
         )
         raise SystemExit(1)
 
+    baseline_fit_utc = fit_created_at(baseline)
+    now = datetime.now(UTC).isoformat()
+
     names = variants_for(args.model) if args.variant == "all" else [args.variant]
     detail_dir = os.path.join(env.comparisons_output_dir(), "sensitivity")
     os.makedirs(detail_dir, exist_ok=True)
+    failed_root = os.path.join(env.output_root(), "failed")
 
     rows: list[dict] = []
     for name in names:
@@ -60,27 +116,78 @@ if __name__ == "__main__":
             console.print(f"[yellow]Unknown variant {name!r}; skipping.[/yellow]")
             continue
         vdir = _model_dir(args.model, spec["suffix"])
+        variant_config = f"{definition.config_name}-{spec['suffix']}"
+
         if not os.path.isdir(vdir):
-            console.print(f"[yellow]Variant fit not found (skip): {os.path.basename(vdir)}[/yellow]")
+            # Not in models/ — but it may have been fitted and stopped by the
+            # convergence gate, in which case the trace and diagnostics were
+            # retained under failed/ and the failure is the finding.
+            fdir = failed_fit_dir(failed_root, definition.model_id, variant_config)
+            if fdir is not None:
+                row = summarise_absent(
+                    name,
+                    "failed",
+                    "FAILED THE CONVERGENCE GATE (not assessed) — retained at "
+                    f"failed/{os.path.basename(fdir)}",
+                    variant_dir=fdir,
+                )
+                row["variant_fit_utc"] = fit_created_at(fdir)
+            else:
+                row = summarise_absent(
+                    name, "not-fitted", "NOT FITTED (no comparison available)"
+                )
+                row["variant_fit_utc"] = None
+            row["baseline_fit_utc"] = baseline_fit_utc
+            row["computed_at_utc"] = now
+            rows.append(row)
             continue
+
+        mismatch = definition_mismatch(baseline, vdir, _override_keys(spec))
+        coverage = coverage_report(baseline, vdir)
         comparison = compare_dirs(baseline, vdir)
         comparison.to_csv(os.path.join(detail_dir, f"{args.model}-{name}.csv"), index=False)
-        rows.append(summarise(comparison, vdir, label=name))
+        row = summarise(comparison, vdir, label=name, mismatch=mismatch, coverage=coverage)
+        row["baseline_fit_utc"] = baseline_fit_utc
+        row["variant_fit_utc"] = fit_created_at(vdir)
+        row["computed_at_utc"] = now
+        rows.append(row)
 
     if not rows:
-        console.print("[bold red]No variant fits found to compare.[/bold red]")
+        console.print("[bold red]No registered variants to compare.[/bold red]")
         raise SystemExit(1)
 
     matrix = pd.DataFrame(rows)
     out = args.out or os.path.join(detail_dir, f"robustness_matrix_{args.model}.csv")
+
+    # A targeted rerun updates its own rows and leaves the rest standing, rather
+    # than rewriting the matrix down to the single variant just recomputed.
+    if args.variant != "all" and os.path.exists(out):
+        previous = pd.read_csv(out)
+        if "variant" in previous.columns:
+            kept = previous[~previous["variant"].isin(matrix["variant"])]
+            matrix = pd.concat([kept, matrix], ignore_index=True)
+        order = {name: i for i, name in enumerate(variants_for(args.model))}
+        matrix = matrix.sort_values(
+            "variant", key=lambda s: s.map(lambda v: order.get(v, len(order)))
+        ).reset_index(drop=True)
+
+    for column in MATRIX_COLUMNS:
+        if column not in matrix.columns:
+            matrix[column] = None
+    matrix = matrix[MATRIX_COLUMNS]
     matrix.to_csv(out, index=False)
 
     heading(f"Sensitivity robustness — {args.model}")
     dataframe_table(
         matrix[
-            ["variant", "verdict", "max_abs_delta", "n_within_ci", "n_checked", "max_rhat", "min_ess"]
+            ["variant", "status", "verdict", "max_abs_delta", "n_within_ci", "n_checked", "max_rhat", "min_ess"]
         ],
         title="Robustness matrix",
         show_index=False,
+    )
+    assessed = matrix[matrix["status"] == "compared"]
+    console.print(
+        f"[dim]{len(assessed)} of {len(matrix)} registered variants assessed; "
+        f"baseline fitted {baseline_fit_utc}[/dim]"
     )
     console.print(f"[dim]Wrote {out}[/dim]")
