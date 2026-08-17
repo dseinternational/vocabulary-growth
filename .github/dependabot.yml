@@ -12,7 +12,7 @@ updates:
         patterns:
           - "*"
     ignore:
-      # numpy 2.5 is unreachable for anything depending on pymc: pytensor 3.2.x
+      # numpy 2.5 is unreachable for anything depending on pymc: pytensor 3.3.0
       # pins numba <=0.66.0, and numba 0.66.0 still pins numpy <2.5. The ceiling
       # in pyproject.toml mirrors the shared conda core; raising it only declares
       # a range no resolver can use. Remove once numba supports numpy 2.5.
