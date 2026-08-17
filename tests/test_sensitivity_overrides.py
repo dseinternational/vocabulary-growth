@@ -138,11 +138,22 @@ def test_registry_counts_and_models():
     # of record: scaling one per-child deviate by tau(age) imposes perfect rank
     # correlation across age, which is measured at 0.28 beyond two years. See
     # notes/202607261540 §9 and notes/202608141600 §§8-10.
-    assert len(VARIANTS) == 51
+    #
+    # +2 on 2026-08-17: the VG13 `window-*` pair (#227). Every variant above
+    # varies a prior; these two vary the observation *window*, and they are the
+    # first to do so. VG13's 18-month cap was justified in code by avoiding the
+    # WS production-proxy bias — work the form filter in `load_data` already does
+    # unconditionally — and in review by there being only one study above 18
+    # months, which the Romance extension of 2026-08-03 retired by admitting
+    # Italian Words & Gestures (registered 7-24). 694 admissible administrations
+    # sit above the cap. A window change drags its co-identified anchors, GP
+    # domain and query grid with it, so each is registered as one unit; see the
+    # registry comment for the measurements.
+    assert len(VARIANTS) == 53
     assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
-    assert len(variants_for("vg13")) == 1
+    assert len(variants_for("vg13")) == 3
     assert len(variants_for("vg15")) == 27
 
 
@@ -287,3 +298,103 @@ def test_variants_that_disable_subject_effects_also_clear_the_partition():
             f"{model_key} single-admin leaves the variance partition set while "
             "disabling subject effects; the engine rejects that combination."
         )
+
+
+def test_window_variants_stay_inside_their_own_gp_domain_and_anchors():
+    """A window variant must carry its GP domain, anchors and grid with it.
+
+    Pure checks, so they run without the database. The window is the only
+    variant factor here that the *rest* of the definition has to agree with:
+    the GP domain must contain the data (``build_utils`` refuses otherwise),
+    the high slope anchor must sit inside the window or the logit-linear trend
+    is extrapolated past its own anchor, and the query grid must not report
+    ages the window excludes.
+    """
+    for name, cap in (("window-25", 25), ("window-22", 22)):
+        (v,) = build_variant("vg13", name)
+        lo_domain, hi_domain = v.gp_domain_months
+        assert v.max_age_months == cap, name
+        assert hi_domain == cap, f"{name}: GP domain stops at {hi_domain}, window at {cap}"
+        assert lo_domain == 8, name
+        lo_anchor, hi_anchor = v.slope_anchors
+        assert lo_anchor >= lo_domain and hi_anchor <= cap, (
+            f"{name}: slope anchors {v.slope_anchors} are not inside the window"
+        )
+        assert hi_anchor > VG13.slope_anchors[1], (
+            f"{name}: the high anchor did not move into the new window, so the "
+            "trend extrapolates past it"
+        )
+        assert v.gp_anchor_age_months == (lo_anchor + hi_anchor) / 2, name
+        assert max(v.ages_query) <= cap, name
+        assert max(v.ages_query) > max(VG13.ages_query), name
+        # eta_q was 0.20 because only the bottom limb of q's S was in view.
+        assert v.eta_q_sigma > VG13.eta_q_sigma, name
+        # The kappa anchor ages must sit inside the window too, or the "old"
+        # anchor describes dispersion somewhere the model no longer stops.
+        for block in (v.kappa_u, v.kappa_s):
+            assert max(block.anchor_ages) <= cap, name
+            assert max(block.anchor_ages) > max(VG13.kappa_u.anchor_ages), name
+
+
+def test_window_variants_admit_the_rows_the_cap_discards():
+    """The point of the pair: more data, the same six studies, no WS.
+
+    Builds the real graphs, because the failure mode this guards against —
+    a variant whose definition is valid but whose engine rejects it — only
+    appears at build time. That gap is what let the ``single-admin`` variants
+    sit broken for two days.
+    """
+    import contextlib
+    import io
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def prepared(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            cbr.prepare_bivariate_re_data(ctx, definition)
+            cb.configure_bivariate_priors(ctx, definition)
+            cbr.build_model_re(ctx, definition)
+        frame = next(v for v in vars(ctx).values() if hasattr(v, "columns"))
+        return ctx, frame
+
+    with tempfile.TemporaryDirectory() as root:
+        base_ctx, base = prepared(VG13, root)
+        rows = {"base": len(base)}
+        studies = {"base": set(base["study"].unique())}
+        free_rvs = {"base": len(base_ctx.model.free_RVs)}
+        for name in ("window-22", "window-25"):
+            (variant,) = build_variant("vg13", name)
+            ctx, frame = prepared(variant, root)
+            rows[name] = len(frame)
+            studies[name] = set(frame["study"].unique())
+            free_rvs[name] = len(ctx.model.free_RVs)
+            assert frame["age"].max() == variant.max_age_months, name
+
+    # Strictly more data, and monotone in the window.
+    assert rows["base"] < rows["window-22"] < rows["window-25"], rows
+    # The window is the only factor: no study enters or leaves, and the graph
+    # keeps exactly the structure of the model of record.
+    assert studies["base"] == studies["window-22"] == studies["window-25"], studies
+    assert len(set(free_rvs.values())) == 1, free_rvs

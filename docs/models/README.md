@@ -234,9 +234,15 @@ model:
   from the model family rather than re-validated; **VG13** is now the joint TD
   model used for DS-versus-TD comparison.
 - **VG13** — a TD joint model restricted to **ages 8–18 months**, where the
-  Wordbank Words & Gestures and Oxford CDI data are dense and the WS production
-  proxy bias is avoided entirely (WS is excluded, not merely down-weighted).
-  Uses dataset-level study random intercepts and a GP anchor at 13 months.
+  Wordbank Words & Gestures and Oxford CDI data are dense. Uses dataset-level
+  study random intercepts and a GP anchor at 13 months. Note that the WS
+  production-proxy bias is **not** what the age restriction avoids: `load_data`
+  admits only `WORDBANK_BIVARIATE_FORMS` whenever `understood` is requested, so
+  WS is excluded from every comprehension model at every age, and the cap adds
+  nothing to that. The restriction's own justification is density — thin above
+  18 months, and increasingly exposed to the Oxford CDI's 418-item ceiling. The
+  `window-25` and `window-22` sensitivity variants measure what it costs; see
+  `notes/202608171500-reporting-scope-audit.md` and issue #227.
 
 ### Typically developing single-outcome, with hierarchy (VG11, VG12)
 

@@ -314,6 +314,87 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg12", "hi-anchor-broad"): {"suffix": "hi-anchor-broad", "scalar": {
         "p_slope_hi_alpha": 1.1, "p_slope_hi_beta": 1.1}},
     ("vg12", "eta-narrow"): {"suffix": "eta-narrow", "scalar": {"eta_sigma": 0.4}},
+
+    # -- VG13 observation window (#227) --
+    #
+    # These two are the widest-scoped variants registered on VG13, and the only
+    # ones here that change the *data* rather than a prior. They exist because
+    # VG13's 18-month cap turned out to rest on two reasons that no longer hold.
+    #
+    # The cap's code comment says it "avoids the WS bias (production proxy
+    # comprehension) entirely". It does not do that work: `load_data` selects
+    # `WORDBANK_BIVARIATE_FORMS` whenever `understood` is requested, so WS is
+    # never loaded for a comprehension model at ANY age. The July review gave the
+    # real reason -- above 18 months only Oxford CDI supplied bivariate rows, a
+    # single study. The Romance extension of 2026-08-03 retired that objection
+    # without anyone revisiting the cap: Italian Words & Gestures is registered
+    # 7-24 months, so Caselli now sits alongside Floccia above 18.
+    #
+    # What the cap currently discards, measured on the loader's own code path in
+    # VG13's language scope: 694 administrations from 323 children, all on forms
+    # the pipeline already treats as genuinely bivariate. Raising the cap to 25
+    # takes the pool from 6,358 rows to 7,052 -- which is VG12's pool exactly,
+    # same six studies, same rows. VG12 already fits and reports these
+    # observations; VG13 is the only model that drops them, and VG13 is the one
+    # carrying the Down-syndrome-versus-typically-developing comparison.
+    #
+    # Why this costs more than a `max_age_months` override. Over 8-18 months the
+    # production ratio `q` runs from a median of 0.04 to 0.22 -- the bottom limb
+    # of its S, which is what justifies `eta_q_sigma = 0.20` and a logit-linear
+    # trend between anchors at 10 and 16 months. Over 8-25 it runs to 0.83.
+    # Extending the window alone would extrapolate that trend nine months past
+    # its high anchor into the part of the curve that decelerates: on understood
+    # it reaches p = 0.85 (687 words) at 25 months against an observed median of
+    # 0.42. So each variant moves its high anchor into the new window, recentres
+    # both high-anchor Betas on the in-sample median there, widens `eta_q` to
+    # give the GP the curvature the longer window needs, and moves the GP domain,
+    # GP anchor and query grid to match. Co-identified, therefore one unit --
+    # the same discipline the Beta anchors are varied under above.
+    #
+    # The high-anchor Betas are recentred on IN-SAMPLE medians, not on published
+    # norms, because no CDI comprehension norm exists above 18 months (this is
+    # the same gap that makes VG12's 26-month anchor a named sensitivity target).
+    # They sit just below the in-sample median, per the house convention that an
+    # anchor is recentred toward the empirical level and not tightened onto it.
+    #
+    # `kappa_u`'s anchor ages move from (12, 17) to (12, 20) -- VG12's, since
+    # VG12 is calibrated on exactly this comprehension pool over exactly this
+    # window. `kappa_s` follows so the two blocks contest one span. The
+    # magnitudes are inherited rather than recalibrated, and that is a named
+    # limitation rather than a claim.
+    #
+    # Two windows rather than one, because the Oxford CDI's 418-item ceiling
+    # bites unevenly. Below 19 months 1-5% of administrations sit above 90% of
+    # their form's ceiling; at 19-22 it is 7-8%, and at 23-25 it jumps to 20-36%.
+    # Ceiling compression biases the comprehension trend down where it bites, so
+    # `window-22` is the ceiling-safe half of the pair and the difference between
+    # the two measures the exposure rather than arguing about it. `window-25` is
+    # the one to fit first: it is the one that answers the question, reaching a
+    # median of 340 understood words against VG13's ~220.
+    ("vg13", "window-25"): {"suffix": "window-25", "scalar": {
+        "max_age_months": 25,
+        "slope_anchors": (10, 24),
+        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22, 24],
+        "gp_domain_months": (8, 25),
+        "gp_anchor_age_months": 17.0,
+        # 24 mo in-sample medians: understood 0.415 of 810, q 0.675.
+        "p_slope_hi_u_alpha": 2.0, "p_slope_hi_u_beta": 2.8,   # median 0.404
+        "p_slope_hi_q_alpha": 2.0, "p_slope_hi_q_beta": 1.3,   # median 0.630
+        "eta_q_sigma": 0.5},
+     "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
+               "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
+    ("vg13", "window-22"): {"suffix": "window-22", "scalar": {
+        "max_age_months": 22,
+        "slope_anchors": (10, 21),
+        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22],
+        "gp_domain_months": (8, 22),
+        "gp_anchor_age_months": 15.5,
+        # 21 mo in-sample medians: understood 0.359 of 810, q 0.417.
+        "p_slope_hi_u_alpha": 2.0, "p_slope_hi_u_beta": 3.2,   # median 0.369
+        "p_slope_hi_q_alpha": 2.0, "p_slope_hi_q_beta": 2.6,   # median 0.425
+        "eta_q_sigma": 0.5},
+     "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
+               "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
 }
 
 

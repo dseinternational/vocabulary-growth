@@ -176,6 +176,7 @@ reparameterising
 rescore
 rescoring
 residualised
+respecification
 resumable
 reweighting
 rhat

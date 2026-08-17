@@ -67,8 +67,34 @@ understood cap is gate-protected and independently settable, the spoken cap is
 neither. If spoken ever needs a cap that is *not* the top of the query grid, it
 needs a real definition field and the refit that implies.
 
-Typically-developing models are unaffected either way: ``TD_POOL_AGE_MONTHS`` is
-``(8, 30)`` and their GP domains stop at 30 or 18, so no cap here can bind.
+Why the typically-developing models are not exempt
+--------------------------------------------------
+This section used to read: "Typically-developing models are unaffected either
+way: ``TD_POOL_AGE_MONTHS`` is ``(8, 30)`` and their GP domains stop at 30 or 18,
+so no cap here can bind." That is the mistake this whole module exists to
+prevent, made about itself. ``TD_POOL_AGE_MONTHS`` is a property of the **pool**,
+and the policy above is deliberately per **quantity** — because a pool's outcomes
+do not share a support.
+
+They do not share one here. Comprehension rides only on
+``WORDBANK_BIVARIATE_FORMS``: on the other forms it is a production proxy, so
+``load_data`` restricts to those forms whenever ``understood`` is requested. Those
+forms stop at **25** months. Production keeps WS and does reach 30. So the pool
+window is honest for spoken and five months too generous for understood, and
+VG04 and VG12 published 27- and 30-month comprehension medians on zero
+observations for as long as the exemption stood — while their own figures, which
+are drawn over the observed support rather than the query grid, already stopped
+at 25. Both now declare ``report_max_age_understood = 25`` (#227).
+
+The general form, worth keeping in view whenever a scope rule is written: a
+restriction justified by a property of the pool is only sound if that property
+holds for every outcome the pool carries.
+
+``TD_POOL_AGE_MONTHS``'s own upper bound was checked at the same time and left
+alone. Extending it to 36 would admit 150 further spoken rows of 18,987 (0.8%,
+from two datasets) and would require widening ``_TD_GP_DOMAIN_MONTHS``, which
+VG03 and VG04 share — the same trade, and the same answer, as the five 7-month
+Italian rows that gave the pool its lower bound.
 """
 
 from __future__ import annotations

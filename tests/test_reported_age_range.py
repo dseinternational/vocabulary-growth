@@ -151,12 +151,102 @@ def test_spoken_only_models_are_left_alone():
     assert D.VG01.report_max_age_understood is None
 
 
-def test_typically_developing_models_are_left_alone():
-    """The typically-developing query grids stop at 30 months, well inside their
-    data; the asymmetry being corrected here is specific to the Down syndrome
-    pool."""
-    for model_id in ("VG03", "VG04", "VG11", "VG12", "VG13"):
+def test_typically_developing_comprehension_models_carry_a_cap_too():
+    """The typically-developing models are NOT exempt, and used not to be tested.
+
+    This test asserted the opposite until 2026-08-17 (#227), on the reasoning
+    that "the typically-developing query grids stop at 30 months, well inside
+    their data". That is true of *spoken*, which keeps Words & Sentences and does
+    reach 30, and false of *understood* by five months: comprehension rides only
+    on ``WORDBANK_BIVARIATE_FORMS``, which stop at 25. VG04 and VG12 published a
+    27- and a 30-month comprehension median on zero observations for as long as
+    the exemption stood.
+
+    Pinning the two current values would only re-pin a premise; the invariant is
+    tested against the data in
+    ``test_no_model_reports_an_outcome_past_its_last_observation``.
+    """
+    # Spoken models have no comprehension quantity to trim, and the guard makes
+    # setting one an error rather than a silent no-op.
+    for model_id in ("VG03", "VG11"):
         assert getattr(D, model_id).report_max_age_understood is None
+
+    # Comprehension models declare one.
+    for model_id in ("VG04", "VG12"):
+        assert getattr(D, model_id).report_max_age_understood == 25
+
+    # VG13 needs none: its whole observation window stops at 18, so the query
+    # grid cannot outrun the evidence in the first place.
+    assert D.VG13.report_max_age_understood is None
+    assert max(D.VG13.ages_query) == D.VG13.max_age_months == 18
+
+
+def test_no_model_reports_an_outcome_past_its_last_observation():
+    """The policy itself, measured — for every model and every outcome it carries.
+
+    The three defects behind #227 were each a scope rule justified by a property
+    of the *pool* that did not hold for one of the outcomes the pool carries.
+    Pinned values cannot catch the next one; this sweeps the whole registry and
+    compares each outcome's top reported age against the last age at which that
+    outcome is actually observed, on the loader's own code path.
+    """
+    import os
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.reporting_ages import ReportedQuantity, max_age_for
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    ds_pool = vocab_data_utils.load_combined_data()
+    quantities = {
+        "understood": ReportedQuantity.UNDERSTOOD,
+        "spoken": ReportedQuantity.SPOKEN,
+        "signed": ReportedQuantity.SIGNED,
+    }
+
+    def outcomes_of(definition):
+        outcome = getattr(definition, "outcome", None)
+        if outcome is not None:
+            return [outcome.value]
+        if "sign_anchor_ages" in definition.__dataclass_fields__:
+            return ["understood", "spoken", "signed"]
+        return ["understood", "spoken"]
+
+    offenders = []
+    for key, definition in D.MODEL_REGISTRY.items():
+        outcomes = outcomes_of(definition)
+        if definition.population is D.Population.DOWN_SYNDROME:
+            pool = ds_pool
+        else:
+            pool = vocab_data_utils.load_data(
+                D.Population.TYPICALLY_DEVELOPING,
+                ["study", "age", *(o for o in outcomes if o != "signed")],
+                languages=getattr(definition, "td_languages", D.ENGLISH_LANGUAGES),
+                max_age_months=getattr(definition, "max_age_months", None),
+            )
+            minimum = getattr(definition, "min_study_observations", None)
+            if minimum:
+                sizes = pool.groupby("study").size()
+                pool = pool[pool.study.isin(sizes[sizes >= minimum].index)]
+        for outcome in outcomes:
+            if outcome not in pool.columns:
+                continue
+            observed = pool[pool[outcome].notna()]
+            if observed.empty:
+                continue
+            cap = max_age_for(definition, quantities[outcome])
+            reported = [
+                age for age in definition.ages_query if cap is None or age <= cap
+            ]
+            beyond = [age for age in reported if age > observed.age.max()]
+            if beyond:
+                offenders.append(
+                    f"{key.upper()} reports {outcome} at {beyond} months, but the "
+                    f"last {outcome} observation is at {observed.age.max()}"
+                )
+
+    assert not offenders, "\n".join(offenders)
 
 
 # ------------------------------------------------------------- the guards

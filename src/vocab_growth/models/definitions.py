@@ -1908,9 +1908,23 @@ VG04 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    # Comprehension observations end at 25 months, but the declared reporting
-    # range reaches 30. This preserves the existing 8-30 month HSGP domain.
+    # The 8-30 month HSGP domain is shared with VG03 and stays as it is.
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
+    # Comprehension reporting stops at 25 months, 2026-08-17 (#227). Comprehension
+    # rides only on the bivariate forms, and those stop at 25: on this model's
+    # English-only pool the last 591 comprehension rows are Floccia's Oxford CDI
+    # at 19-25 months, and NOTHING is observed at 26 or beyond. The query grid
+    # nonetheless ran to 30, so `posterior_summary.csv` -- and the rendered report
+    # table built from it -- published a 27- and a 30-month comprehension median
+    # on zero observations, while this model's own figures already stopped at 25.
+    # The gap between the HSGP domain and the reporting grid is exactly what this
+    # field is for; the note this replaced treated keeping the domain at 30 and
+    # reporting to 30 as the same decision, and they are not. Reporting only --
+    # it cannot move the posterior. Separately, and not changed here: the 26 mo
+    # high slope anchor VG04 shares with VG12 sits one month past the last
+    # comprehension observation. That is a prior question rather than a reporting
+    # one, and it is already registered as VG12's `hi-anchor-broad` sensitivity.
+    report_max_age_understood=25,
     # 12 mo understood low anchor — independent Wordbank TD norm: comprehension
     # median ~84 words/810 at 12 mo. Beta(1.2, 8) matches at median ~84 (the
     # in-sample mean ~82 corroborates); the old Beta(1,20) centred it at ~28, well
@@ -2481,6 +2495,15 @@ VG12 = UnivariateREModelDefinition(
     # away -- so this model is still expected to need the caveated publication path.
     centred_study_re=True,
     subject_variance_partition=_TD_UNDERSTOOD_VARIANCE_PARTITION,
+    # Comprehension reporting stops at 25 months, 2026-08-17 (#227), for the same
+    # reason as VG04 and with more data behind it: comprehension rides only on the
+    # bivariate forms, and in this model's widened language scope they stop at 25
+    # (Floccia's Oxford CDI to 25, Caselli's Italian Words & Gestures to 24 --
+    # 694 rows above 18 months and none at all above 25). The query grid ran to
+    # 30, so the published report table carried a 27- and a 30-month median on no
+    # observations while this model's own figures already stopped at 25.
+    # Reporting only -- it cannot move the posterior.
+    report_max_age_understood=25,
     kappa=_TD_UNDERSTOOD_KAPPA_RE,
 )
 
@@ -2496,8 +2519,22 @@ VG13 = BivariateModelDefinition(
     # Oxford CDI (ceiling 418) are interpreted on this shared reference scale;
     # source-form ceilings remain an interpretation caveat.
     n_trials=810,
-    # Restrict to 8–18 months where WG/Oxford CDI data are dense and the WS
-    # bias (production proxy comprehension) is avoided entirely.
+    # Restrict to 8–18 months, where WG/Oxford CDI data are dense.
+    #
+    # This cap does NOT do the Words & Sentences work an earlier version of this
+    # comment claimed for it. `load_data` selects `WORDBANK_BIVARIATE_FORMS`
+    # whenever `understood` is requested, so WS is never loaded for a
+    # comprehension model at any age — the form filter avoids the production-proxy
+    # bias unconditionally, and the cap adds nothing to it. The cap's real
+    # justification, from the July review, was that above 18 months only Oxford
+    # CDI supplied bivariate rows: a single study. The Romance extension of
+    # 2026-08-03 retired that by admitting Italian Words & Gestures (registered
+    # 7-24), and 694 admissible administrations from two studies now sit above the
+    # cap — VG12 already fits every one of them. Density above 18 months is real
+    # but thin (36-163 rows a month against 499 at 18), and the Oxford CDI's
+    # 418-item ceiling binds hard at 23-25 months, so the cap is defensible; it is
+    # no longer self-evident. The `window-25` / `window-22` variants measure what
+    # it costs. See notes/202608171500-reporting-scope-audit.md and #227.
     max_age_months=18,
     slope_anchors=(10, 16),
     ages_query=[8, 10, 12, 14, 16, 18],
