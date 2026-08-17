@@ -139,7 +139,7 @@ def test_registry_counts_and_models():
     # correlation across age, which is measured at 0.28 beyond two years. See
     # notes/202607261540 §9 and notes/202608141600 §§8-10.
     #
-    # +2 on 2026-08-17: the VG13 `window-*` pair (#227). Every variant above
+    # +2 on 2026-08-17: the VG13 `window-*` pair (#228). Every variant above
     # varies a prior; these two vary the observation *window*, and they are the
     # first to do so. VG13's 18-month cap was justified in code by avoiding the
     # WS production-proxy bias — work the form filter in `load_data` already does

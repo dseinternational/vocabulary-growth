@@ -1910,7 +1910,7 @@ VG04 = UnivariateModelDefinition(
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
     # The 8-30 month HSGP domain is shared with VG03 and stays as it is.
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
-    # Comprehension reporting stops at 25 months, 2026-08-17 (#227). Comprehension
+    # Comprehension reporting stops at 25 months, 2026-08-17 (#228). Comprehension
     # rides only on the bivariate forms, and those stop at 25: on this model's
     # English-only pool the last 591 comprehension rows are Floccia's Oxford CDI
     # at 19-25 months, and NOTHING is observed at 26 or beyond. The query grid
@@ -2495,7 +2495,7 @@ VG12 = UnivariateREModelDefinition(
     # away -- so this model is still expected to need the caveated publication path.
     centred_study_re=True,
     subject_variance_partition=_TD_UNDERSTOOD_VARIANCE_PARTITION,
-    # Comprehension reporting stops at 25 months, 2026-08-17 (#227), for the same
+    # Comprehension reporting stops at 25 months, 2026-08-17 (#228), for the same
     # reason as VG04 and with more data behind it: comprehension rides only on the
     # bivariate forms, and in this model's widened language scope they stop at 25
     # (Floccia's Oxford CDI to 25, Caselli's Italian Words & Gestures to 24 --
@@ -2534,7 +2534,7 @@ VG13 = BivariateModelDefinition(
     # but thin (36-163 rows a month against 499 at 18), and the Oxford CDI's
     # 418-item ceiling binds hard at 23-25 months, so the cap is defensible; it is
     # no longer self-evident. The `window-25` / `window-22` variants measure what
-    # it costs. See notes/202608171500-reporting-scope-audit.md and #227.
+    # it costs. See notes/202608171500-reporting-scope-audit.md and #228.
     max_age_months=18,
     slope_anchors=(10, 16),
     ages_query=[8, 10, 12, 14, 16, 18],

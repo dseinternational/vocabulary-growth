@@ -154,7 +154,7 @@ def test_spoken_only_models_are_left_alone():
 def test_typically_developing_comprehension_models_carry_a_cap_too():
     """The typically-developing models are NOT exempt, and used not to be tested.
 
-    This test asserted the opposite until 2026-08-17 (#227), on the reasoning
+    This test asserted the opposite until 2026-08-17 (#228), on the reasoning
     that "the typically-developing query grids stop at 30 months, well inside
     their data". That is true of *spoken*, which keeps Words & Sentences and does
     reach 30, and false of *understood* by five months: comprehension rides only
@@ -184,7 +184,7 @@ def test_typically_developing_comprehension_models_carry_a_cap_too():
 def test_no_model_reports_an_outcome_past_its_last_observation():
     """The policy itself, measured — for every model and every outcome it carries.
 
-    The three defects behind #227 were each a scope rule justified by a property
+    The three defects behind #228 were each a scope rule justified by a property
     of the *pool* that did not hold for one of the outcomes the pool carries.
     Pinned values cannot catch the next one; this sweeps the whole registry and
     compares each outcome's top reported age against the last age at which that

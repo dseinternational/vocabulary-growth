@@ -315,7 +315,7 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_hi_alpha": 1.1, "p_slope_hi_beta": 1.1}},
     ("vg12", "eta-narrow"): {"suffix": "eta-narrow", "scalar": {"eta_sigma": 0.4}},
 
-    # -- VG13 observation window (#227) --
+    # -- VG13 observation window (#228) --
     #
     # These two are the widest-scoped variants registered on VG13, and the only
     # ones here that change the *data* rather than a prior. They exist because

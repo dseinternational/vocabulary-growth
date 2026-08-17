@@ -242,7 +242,7 @@ model:
   nothing to that. The restriction's own justification is density — thin above
   18 months, and increasingly exposed to the Oxford CDI's 418-item ceiling. The
   `window-25` and `window-22` sensitivity variants measure what it costs; see
-  `notes/202608171500-reporting-scope-audit.md` and issue #227.
+  `notes/202608171500-reporting-scope-audit.md` and issue #228.
 
 ### Typically developing single-outcome, with hierarchy (VG11, VG12)
 

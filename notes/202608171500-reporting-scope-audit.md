@@ -3,7 +3,7 @@
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
-**Date:** 2026-08-17. **Issue:** #227. **Trigger:** a question about the typically-developing curve in the Down-syndrome-versus-typically-developing comparison plot — why it ends at about 220 understood words when the Down syndrome curve runs to 528.
+**Date:** 2026-08-17. **Issue:** #228. **Trigger:** a question about the typically-developing curve in the Down-syndrome-versus-typically-developing comparison plot — why it ends at about 220 understood words when the Down syndrome curve runs to 528.
 
 The answer was VG13's 18-month age cap rather than any shortage of data, and the cap's stated justification turned out not to hold. That prompted an audit of every scope restriction in the model family against the evidence each **outcome** actually has, which found the same mistake in two more places.
 

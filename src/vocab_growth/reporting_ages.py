@@ -84,7 +84,7 @@ window is honest for spoken and five months too generous for understood, and
 VG04 and VG12 published 27- and 30-month comprehension medians on zero
 observations for as long as the exemption stood — while their own figures, which
 are drawn over the observed support rather than the query grid, already stopped
-at 25. Both now declare ``report_max_age_understood = 25`` (#227).
+at 25. Both now declare ``report_max_age_understood = 25`` (#228).
 
 The general form, worth keeping in view whenever a scope rule is written: a
 restriction justified by a property of the pool is only sound if that property
