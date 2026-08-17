@@ -78,7 +78,7 @@ def _build(model_id, tmp_path, monkeypatch):
         cb.prepare_bivariate_data(ctx, d)
         cb.configure_bivariate_priors(ctx, d)
         cb.build_model(ctx, d)
-    elif model_id in {"VG07", "VG08", "VG09", "VG10", "VG13", "VG16"}:
+    elif model_id in {"VG07", "VG08", "VG09", "VG10", "VG13", "VG16", "VG20"}:
         cbr.prepare_bivariate_re_data(ctx, d)
         cb.configure_bivariate_priors(ctx, d)
         cbr.build_model_re(ctx, d)
@@ -90,6 +90,15 @@ def _build(model_id, tmp_path, monkeypatch):
         cj.prepare_joint_data(ctx, d)
         cj.configure_joint_priors(ctx, d)
         cj.build_model(ctx, d)
+    else:
+        # Without this, a newly registered model falls through with no model
+        # built and fails on "Model has not been set in the context" — which
+        # reads as a defect in the model rather than an omission here. VG20 hit
+        # exactly that.
+        raise AssertionError(
+            f"{model_id} is registered but this test does not know how to build "
+            "it; add it to the matching engine branch above."
+        )
     return ctx.model
 
 

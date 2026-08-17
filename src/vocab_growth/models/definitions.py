@@ -742,6 +742,36 @@ class BivariateModelDefinition:
         return ModelType.BIVARIATE
 
 
+@dataclass
+class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
+    """Bivariate definition that also correlates the two subject random effects.
+
+    VG20 (issue #224). The field lives on a **subclass**, not on
+    ``BivariateModelDefinition``, for the reason ``UnivariateREModelDefinition``
+    exists: a fit is validated by comparing the serialised definition field for
+    field, so adding a field to a definition class invalidates every existing fit
+    of that class — here VG05, VG07-VG10 and VG16, six models of record.
+
+    ``None`` means "behave exactly as the parent class", so the subclass is inert
+    until a definition sets the field; the engine reads it through ``getattr``.
+    """
+
+    subject_re_correlation_eta: float | None = None
+    """LKJ concentration for the correlation between the two subject intercepts.
+
+    ``None`` disables the correlation, leaving the two blocks independent as in
+    VG10. When set, ``(rho_uq + 1) / 2 ~ Beta(eta, eta)``, which for a 2x2 matrix
+    is exactly LKJ(eta) — so this is the standard prior, written in the one form
+    that keeps ``rho_uq`` a named free variable the summaries and the recovery
+    scorer can read, rather than an element of a packed Cholesky vector.
+
+    ``eta = 1`` is uniform on (-1, 1); ``eta = 2`` puts a gentle bias toward zero
+    (SD 0.45) so that a correlation has to be evidenced rather than assumed,
+    which is the point of the model. The nesting is exact: at ``rho_uq = 0`` the
+    graph emits what VG10's does.
+    """
+
+
 # ============================================================
 # Trivariate model definition
 # ============================================================
@@ -2841,6 +2871,49 @@ VG16 = BivariateModelDefinition(
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
+# ============================================================
+# VG20 — correlated subject random effects (issue #224): VG10 + rho_uq
+# ============================================================
+
+
+def _as_definition_subclass(base, cls, **overrides):
+    """Rebuild ``base`` as an instance of ``cls``, overriding named fields.
+
+    Shallow by design: nested prior dataclasses are shared with ``base`` rather
+    than copied, so the derived definition serialises identically to its parent
+    except for what is overridden here. ``dataclasses.replace`` cannot do this —
+    it returns the base's own class — and ``asdict`` cannot either, because it
+    recursively converts the nested prior blocks to plain dicts.
+    """
+    values = {item.name: getattr(base, item.name) for item in fields(base)}
+    values.update(overrides)
+    return cls(**values)
+
+
+# Derived from VG10 so the two differ in exactly one thing, which is what makes
+# the comparison in #224 readable: VG10 is nested at rho_uq = 0, and any movement
+# in the reported trajectories is a red flag rather than a benefit. Deriving
+# rather than restating the priors also means VG10's anchor recalibrations cannot
+# drift away from VG20's.
+VG20 = _as_definition_subclass(
+    VG10,
+    BivariateCorrelatedSubjectREModelDefinition,
+    model_id="VG20",
+    config_name="age-understood-spoken-ds-re-subj-uq-anchored-corr",
+    banner=(
+        "Fitting Model VG20: VG10 + correlated subject random effects on U and q"
+        " (rho_uq) - Down syndrome"
+    ),
+    # eta = 2: a gentle pull toward independence, so a correlation has to be
+    # evidenced. The quantity this model exists to estimate is already known to be
+    # positive and small from two independent directions -- VG16's realised
+    # intercepts still correlate at +0.135 [0.087, 0.180] with its cross-lag
+    # fitted, and VG10's own fitted deviations at +0.152 [0.105, 0.195] with no
+    # cross-lag at all -- so a prior that made a large correlation cheap would be
+    # assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
+    subject_re_correlation_eta=2.0,
+)
+
 MODEL_REGISTRY: dict[
     str,
     UnivariateModelDefinition
@@ -2863,6 +2936,7 @@ MODEL_REGISTRY: dict[
     "vg14": VG14,
     "vg15": VG15,
     "vg16": VG16,
+    "vg20": VG20,
 }
 
 

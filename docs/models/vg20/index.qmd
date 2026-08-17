@@ -1,0 +1,359 @@
+---
+title: "Model VG20: Correlated child effects on comprehension and conversion - children with Down syndrome"
+
+date: now
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      - repo
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sampling_banner
+
+render_sampling_banner()
+```
+
+This model asks one question, and adds one parameter to ask it: among children with Down syndrome, do the children who understand **more words than expected for their age** also say a **larger share** of what they understand? Every model from VG05 to VG16 gives each child two separate deviations — one on comprehension, one on the production ratio $q$ — and draws them independently, which fixes the answer at "no relationship" before any data are seen. VG20 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer (issue [#224](https://github.com/dseinternational/vocabulary-growth/issues/224)).
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
+```
+
+![The model graph. VG20 differs from VG10 by one node.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Estimand",
+    "Reference inventory",
+    "Logit",
+    "Odds and odds ratio",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Overdispersion and variance inflation",
+    "Conditional probability",
+    "Production ratio ($q$)",
+    "Age anchor",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "GP length-scale ($\\ell$)",
+    "GP amplitude ($\\eta$)",
+    "GP anchor",
+    "Mean clamp",
+    "Random intercept",
+    "Partial pooling",
+    "Between-child heterogeneity ($\\tau$)",
+    "Non-centred parameterisation",
+    "Sum-to-zero study effects",
+    "Population-level and subject-marginal",
+    "Credible interval",
+    "Equal-tailed interval (ETI)",
+    "Cross-sectional age derivative",
+    "Prior predictive check",
+    "Posterior predictive check",
+    "PMF and CDF",
+    "PIT (probability integral transform)",
+    "LOO and ELPD",
+    "MCMC (Markov chain Monte Carlo)",
+    "NUTS (No-U-Turn Sampler)",
+    "Chain",
+    "R-hat ($\\hat{R}$)",
+    "Effective sample size (ESS)",
+    "Divergent transition",
+    "BFMI (Bayesian fraction of missing information)",
+    "Sensitivity analysis",
+])
+```
+
+::: {.callout-note collapse="true" title="Terms specific to this model"}
+
+**Correlation between random effects ($\rho_{uq}$)**
+
+: Each child carries two persistent offsets: how far their comprehension sits from the population-and-study expectation for their age, and how far their conversion rate sits from the expectation for their age. $\rho_{uq}$ is the correlation between those two offsets **across children**. Positive means the children who are ahead on comprehension also tend to convert more of it; negative means the two run in opposite directions; zero is the assumption every earlier model makes.
+
+**Independence assumption**
+
+: Drawing the two offsets from separate distributions with no correlation between them. It is an assumption, not a finding — no earlier model estimated the correlation and found it small, they all set it to zero by construction.
+
+**Nested model**
+
+: A model that is a special case of a larger one at particular parameter values. VG10 is VG20 at $\rho_{uq} = 0$: the two model graphs are otherwise identical, node for node, which is what makes the comparison between them readable.
+
+**Cholesky parameterisation**
+
+: The arithmetic used to give two draws a chosen correlation while leaving each one's spread unchanged. The child's comprehension offset is drawn first; their conversion offset is then built as $\rho_{uq}$ times that draw plus $\sqrt{1 - \rho_{uq}^2}$ times an independent second draw. The second term is what keeps the conversion offsets' spread equal to $\tau_{subj,q}$ whatever the correlation, so a change in $\rho_{uq}$ does not silently rescale anything else.
+
+:::
+
+## Statistical model
+
+The mean structure, the priors, the anchors, the dispersion blocks and the data are **VG10's**, unchanged. Words understood are a bounded count out of the reference inventory with a Beta-Binomial likelihood; on the logit scale the expected proportion understood is a straight-line trend in age plus an anchored Gaussian process, plus a study offset and a child offset. Words spoken are modelled as a fraction $q$ of words understood, with its own trend, GP, study offset and child offset.
+
+The single difference is in how the two **child** offsets are drawn.
+
+### The correlated child block {#sec-rho-def}
+
+Every model from VG05 to VG16 draws the two offsets independently:
+
+$$
+\delta^{u}_{i} \sim \mathrm{Normal}(0, \tau_{subj,u}), \qquad
+\delta^{q}_{i} \sim \mathrm{Normal}(0, \tau_{subj,q})
+$$
+
+VG20 draws them jointly, with one free correlation:
+
+$$
+\begin{pmatrix} \delta^{u}_{i} \\ \delta^{q}_{i} \end{pmatrix}
+\sim \mathrm{Normal}\left(
+\begin{pmatrix} 0 \\ 0 \end{pmatrix},
+\begin{pmatrix}
+\tau_{subj,u}^{2} & \rho_{uq}\,\tau_{subj,u}\tau_{subj,q} \\
+\rho_{uq}\,\tau_{subj,u}\tau_{subj,q} & \tau_{subj,q}^{2}
+\end{pmatrix}
+\right)
+$$
+
+Both marginal spreads keep their meaning and their priors. **At $\rho_{uq} = 0$ this is the pair of independent draws above**, which is the sense in which VG10 is nested inside VG20 exactly rather than approximately: the two model graphs differ by $\rho_{uq}$ and by nothing else, a property pinned by a test that builds both models and differences their variables.
+
+### Why the assumption was worth replacing
+
+Two things make this more than a tidy generalisation.
+
+**It is a correction, not only an addition.** A child's spoken vocabulary is the product of what they understand and the share they say, so on the log scale $\log p_S = \log p_U + \log q$, and the variance of a sum of two correlated quantities gains twice their covariance. If the correlation is positive and the model assumes it away, the model understates how much children with Down syndrome differ from one another in speech. That is not a hypothetical: it is the one asymmetry in the report's Down-syndrome-versus-typically-developing between-child comparison that biases the number rather than merely complicating it, because the typically-developing comparator places a single intercept on the spoken logit and absorbs the covariance whether or not anyone names it.
+
+**Two earlier models already left evidence of it.** VG16 fits a cross-lag from earlier comprehension to later conversion, and *after* fitting it, the child offsets it realises still correlate with one another — the model has nowhere to put the association, because its two blocks are independent by construction. VG10's own fitted offsets show the same thing without any cross-lag at all. Both of those measurements are made under a prior that pulls them toward zero, so both are lower bounds rather than estimates. This model estimates the quantity instead of reading it off a residual.
+
+### What this model can do that VG16 cannot
+
+VG16 answers a related question through a lagged predictor, which restricts it to the children who have an earlier wave to lag from, and attenuates the coefficient because that predictor is an observed count carrying sampling noise. VG20 uses **every child in the frame**, is indifferent to whether a study happened to be longitudinal, and has no attenuation to correct for. The two are complements: VG16 asks whether earlier comprehension predicts later conversion, VG20 asks whether persistent comprehension standing and persistent conversion standing go together.
+
+## Priors
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
+
+render_priors_table()
+```
+
+The only prior that is new here is the one on the correlation. It is placed as $(\rho_{uq} + 1)/2 \sim \mathrm{Beta}(\eta, \eta)$, which for a two-by-two correlation matrix is exactly the LKJ($\eta$) prior, written in the form that keeps $\rho_{uq}$ a named parameter the summaries and the recovery scorer can read directly.
+
+$\eta = 1$ would be uniform across every correlation from $-1$ to $+1$. The value used here is larger, which places more mass near zero — a deliberate choice, because the two independent measurements motivating the model both put the correlation small and positive, and a prior that made a large correlation cheap would be assuming the answer the model exists to test. The prior is symmetric about zero, so it favours no direction.
+
+### Understood trajectory
+
+![Prior on the proportion of words understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+
+![Prior on the proportion of words understood at the high age anchor.](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
+
+### Production ratio
+
+![Prior on the production ratio at the low age anchor.](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+
+![Prior on the production ratio at the high age anchor.](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line production-ratio trend.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
+
+## Prior predictive checks
+
+![Words understood drawn from the prior alone, before any data.](prior_samples_u.png){#fig-prior-u .lightbox fig-align="left"}
+
+![Words spoken drawn from the prior alone.](prior_samples_s.png){#fig-prior-s .lightbox fig-align="left"}
+
+![The production ratio drawn from the prior alone.](prior_samples_q.png){#fig-prior-q .lightbox fig-align="left"}
+
+The check to make here is the usual one — that the prior admits the range of vocabularies real children have without concentrating on any part of it — and one specific to this model: because the correlation prior is symmetric about zero and the marginal spreads are unchanged from VG10, the prior predictive distribution of counts should be close to VG10's. A visible difference at this stage would mean the correlated block had changed something it was not meant to change.
+
+## Data
+
+```{python}
+import pandas as pd
+
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+::: {.callout-note}
+
+The normality tests in this table are reported for completeness. They are not a check on the model: the outcome is a bounded count, which is not expected to be normally distributed, and the model does not assume that it is.
+
+:::
+
+The frame is VG10's, unchanged. The quantity this model adds is estimated from children with more than one observation *and* from the joint pattern across children, so the number of children and the number of administrations both matter to how sharply $\rho_{uq}$ can be resolved.
+
+## Diagnostics {#sec-diagnostics}
+
+```{python}
+#| label: convergence-caveats
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_convergence_caveats
+
+render_convergence_caveats()
+```
+
+```{python}
+#| label: diagnostics-table
+from dse_research_utils.statistics.diagnostics import style_diagnostics_table
+
+diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
+style_diagnostics_table(diagnostics)
+```
+
+The table reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit reaching this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
+
+![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![Pairwise joint posteriors. Strong ridges indicate parameters the data cannot separate — and this is where a trade-off between the correlation and the two child scales would show.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+![Marginal posterior distributions for the fitted parameters, including the correlation. Compare each with its prior figure above: a posterior indistinguishable from its prior has not been informed by the data.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+Adding a correlation to a pair of random-effect blocks is a change to the posterior geometry, not only to its dimension, so the diagnostics deserve reading against VG10's rather than only against the thresholds. A correlation parameter that is poorly identified typically shows itself as a low effective sample size on $\rho_{uq}$ specifically while the rest of the model looks healthy.
+
+## Findings
+
+### The correlation between child effects
+
+```{python}
+#| echo: false
+#| output: asis
+import pandas as _pd
+
+_diagnostics = _pd.read_csv("diagnostics.csv", index_col=0)
+if "rho_uq" in _diagnostics.index:
+    _row = _diagnostics.loc["rho_uq"]
+    print("| Quantity | Posterior mean | SD | 89% ETI | ESS (bulk) | R-hat |")
+    print("| --- | --- | --- | --- | --- | --- |")
+    print(
+        f"| Correlation between child effects $\\rho_{{uq}}$ (`rho_uq`) | "
+        f"{_row['mean']:.3f} | {_row['sd']:.3f} | {_row['eti89_lb']:.3f} to "
+        f"{_row['eti89_ub']:.3f} | {_row['ess_bulk']:,.0f} | {_row['r_hat']:.3f} |"
+    )
+    print()
+    if _row["eti89_lb"] > 0:
+        _verdict = (
+            "lies entirely **above** zero, so the data establish the direction: "
+            "the children who understand more than expected for their age also "
+            "tend to say a larger share of what they understand"
+        )
+    elif _row["eti89_ub"] < 0:
+        _verdict = (
+            "lies entirely **below** zero, so the data establish the opposite "
+            "direction to the one the earlier evidence pointed at — which would "
+            "be a result worth investigating before reporting"
+        )
+    else:
+        _verdict = (
+            "**spans** zero, so this fit does not distinguish the correlation "
+            "from the independence every earlier model assumes"
+        )
+    print(
+        f": Read at render time from this fit's own `diagnostics.csv`, so it "
+        f"cannot drift from the model it describes. The 89% equal-tailed "
+        f"interval {_verdict}."
+    )
+else:
+    print("_This fit's `diagnostics.csv` carries no `rho_uq` row._")
+```
+
+**This is the number the model exists to produce.** Under every earlier model in the family it is exactly zero by construction.
+
+Three qualifications belong with it.
+
+**It is an association, not an effect.** A positive correlation does not say that understanding more words causes a child to say a larger share of them. Expressive-language ability, articulation, hearing, teaching and reporting tendency can each move both offsets together, and nothing in this design separates them.
+
+**It describes children, not occasions.** Both offsets are persistent, per-child quantities. The correlation says something about how children differ from one another, and nothing about what happens within a child over time — a distinction VG16 was built to probe from the other side.
+
+**A correlation is not a mechanism, and the marginal spreads carry more of the story.** The variation table below is the comparison to make: how far children differ from one another on each dimension separately is a larger fact about this population than how those differences line up.
+
+### Between-child variation
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_variation_table
+
+render_variation_table()
+```
+
+The two $\tau$ values should be close to VG10's. They are the marginal spreads, and the Cholesky construction is designed to leave them alone while the correlation changes — so a shift here would indicate the correlation is absorbing spread rather than describing its alignment.
+
+### Did anything else move?
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
+
+render_headline_quantities()
+```
+
+The reported trajectories should match VG10's. In a model whose only structural difference is one correlation between child-level offsets, **movement in a population-level trajectory is a red flag rather than a benefit** — it would mean the added parameter is doing something other than what it was added for. The comparison against VG10 is the check, and it is made in the comparison report rather than here.
+
+## Posterior predictions
+
+![Words understood and words spoken by age, on one set of axes.](joint_trajectory.png){#fig-joint .lightbox fig-align="left"}
+
+![The same trajectories with their credible intervals.](joint_trajectory_intervals.png){#fig-joint-intervals .lightbox fig-align="left"}
+
+![The production ratio $q$ by age: the share of understood words a child says.](production_rate.png){#fig-q .lightbox fig-align="left"}
+
+![Words spoken against words understood, the relationship $q$ describes.](understood_vs_spoken.png){#fig-uvs .lightbox fig-align="left"}
+
+Each of these should be read as VG10's answer, because it is. They are reproduced here so that this report stands on its own and so that the match can be seen rather than asserted.
+
+## Expected vocabulary by month
+
+The monthly tables and figures carry the same content as VG10's, at the same reporting age caps: comprehension is reported to 84 months and production to 90, each stopping where its own evidence stops.
+
+## Predictive calibration
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```
+
+## Limits
+
+- **This is not a causal claim.** The correlation describes how two persistent child-level quantities line up in this pool. It licenses no statement about what would happen if a child's comprehension were raised.
+- **It is one number for the whole age range.** The correlation is constant in age. If the alignment between comprehension standing and conversion standing changes as children get older, this model reports an average over that change and gives no warning that it has done so.
+- **It is one number for the whole pool.** No study-level or subgroup variation in the correlation is estimated, and the pool spans several countries and languages.
+- **The reported trajectories are VG10's.** Nothing in this model is intended to supersede them, and if they differ from VG10's that is a defect to investigate, not a new estimate to prefer.
+- **Role not yet assigned.** Whether VG20 replaces VG10 as the model of record for the joint Down syndrome estimands, or stands beside it as the reporting home for the correlation alone, is a scope decision that has not been taken.
+- **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
+- **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common 810-word scale; it is a unit of measurement, not an instrument any child sat.

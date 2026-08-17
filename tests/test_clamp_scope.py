@@ -57,7 +57,18 @@ def test_true_and_false_still_serialise_as_booleans():
 # Every DS joint model adopted CLAMP_Q_ONLY on 2026-08-14. Pinning the set makes
 # a model silently joining or leaving it visible, because either way it is a
 # definition change that invalidates that model and demands a refit.
-CLAMP_Q_ONLY_MODELS = {"vg05", "vg07", "vg08", "vg09", "vg10", "vg14", "vg15", "vg16"}
+# vg20 is derived from vg10 and inherits it (2026-08-17, issue #224).
+CLAMP_Q_ONLY_MODELS = {
+    "vg05",
+    "vg07",
+    "vg08",
+    "vg09",
+    "vg10",
+    "vg14",
+    "vg15",
+    "vg16",
+    "vg20",
+}
 
 
 @pytest.mark.parametrize("model_id", sorted(MODEL_REGISTRY))

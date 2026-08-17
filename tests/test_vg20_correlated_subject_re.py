@@ -1,0 +1,256 @@
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+"""VG20's correlated subject random effects (issue #224).
+
+VG20 is VG10 with one added parameter, ``rho_uq``, correlating each child's
+understood deviation with their production-ratio deviation. Two properties carry
+the whole design and are pinned here:
+
+- **VG10 is nested exactly at ``rho_uq = 0``.** The comparison in #224 reads
+  "did anything else move?" as a red flag, which is only meaningful if the graphs
+  coincide at zero. Checked numerically on the deterministic itself, not by
+  inspection of the source.
+- **The correlation cannot be switched on in a configuration that would fit
+  something other than what was asked for.** Each rejected combination would
+  otherwise fail silently.
+
+The definition-subclass check matters just as much and is cheap: putting the
+field on ``BivariateModelDefinition`` would change the serialised definition of
+six models of record and invalidate every one of their fitted outputs.
+"""
+
+import numpy as np
+import pytest
+
+from vocab_growth.models.common_bivariate_re import (
+    _resolve_subject_re_correlation,
+)
+from vocab_growth.models.definitions import (
+    VG05,
+    VG07,
+    VG08,
+    VG09,
+    VG10,
+    VG16,
+    VG20,
+    BivariateCorrelatedSubjectREModelDefinition,
+    BivariateModelDefinition,
+    _as_definition_subclass,
+)
+
+
+def test_vg20_differs_from_vg10_only_in_naming_and_the_correlation():
+    """The two models must differ in one substantive field and nothing else."""
+    from dataclasses import fields
+
+    v10 = {f.name: getattr(VG10, f.name) for f in fields(VG10)}
+    v20 = {f.name: getattr(VG20, f.name) for f in fields(VG20)}
+    changed = {
+        k for k in set(v10) | set(v20) if v10.get(k, "<absent>") != v20.get(k, "<absent>")
+    }
+    assert changed == {
+        "model_id",
+        "config_name",
+        "banner",
+        "subject_re_correlation_eta",
+    }
+
+
+def test_bivariate_models_of_record_do_not_gain_the_field():
+    """The subclass must not leak onto the parent class.
+
+    A fit is validated by comparing the serialised definition field for field, so
+    if this ever fails, every fitted VG05/VG07-VG10/VG16 output on disk becomes
+    invalid at the same moment.
+    """
+    from dataclasses import fields
+
+    for definition in (VG05, VG07, VG08, VG09, VG10, VG16):
+        names = {f.name for f in fields(definition)}
+        assert "subject_re_correlation_eta" not in names, definition.model_id
+        assert type(definition) is BivariateModelDefinition, definition.model_id
+
+
+def test_vg20_is_the_subclass():
+    assert isinstance(VG20, BivariateCorrelatedSubjectREModelDefinition)
+    assert VG20.subject_re_correlation_eta == 2.0
+
+
+@pytest.mark.parametrize("rho", [-0.9, -0.3, 0.0, 0.15, 0.62, 0.95])
+def test_cholesky_reduction_gives_the_stated_correlation_and_scale(rho):
+    """The two-coordinate construction must deliver rho and leave the SD at tau_q.
+
+    ``delta_q = tau_q * (rho * z1 + sqrt(1 - rho^2) * z2)`` is the whole model;
+    if the whitening term were wrong the marginal spread of the q effects would
+    change with rho, which would silently rescale a reported quantity.
+    """
+    rng = np.random.default_rng(20)
+    n = 400_000
+    tau_u, tau_q = 0.85, 1.15
+    z1 = rng.standard_normal(n)
+    z2 = rng.standard_normal(n)
+
+    delta_u = tau_u * z1
+    delta_q = tau_q * (rho * z1 + np.sqrt(1.0 - rho**2) * z2)
+
+    assert np.corrcoef(delta_u, delta_q)[0, 1] == pytest.approx(rho, abs=0.01)
+    assert delta_q.std() == pytest.approx(tau_q, rel=0.01)
+    assert delta_u.std() == pytest.approx(tau_u, rel=0.01)
+
+
+def test_zero_correlation_reduces_to_the_independent_expression():
+    """At rho = 0 the q effect is exactly VG10's ``tau_subj_q * delta_subj_q_raw``."""
+    rng = np.random.default_rng(21)
+    tau_q = 1.15
+    z1 = rng.standard_normal(1000)
+    z2 = rng.standard_normal(1000)
+    rho = 0.0
+    correlated = tau_q * (rho * z1 + np.sqrt(1.0 - rho**2) * z2)
+    independent = tau_q * z2
+    np.testing.assert_allclose(correlated, independent, rtol=0, atol=0)
+
+
+def test_beta_transform_spans_the_valid_correlation_range():
+    """``rho = 2 * Beta(eta, eta) - 1`` must cover (-1, 1) and centre on zero.
+
+    For a 2x2 matrix this is exactly LKJ(eta); the test guards the transform, not
+    the identity.
+    """
+    rng = np.random.default_rng(22)
+    for eta in (1.0, 2.0, 4.0):
+        rho = 2.0 * rng.beta(eta, eta, size=200_000) - 1.0
+        assert rho.min() > -1.0 and rho.max() < 1.0
+        assert rho.mean() == pytest.approx(0.0, abs=0.01)
+    # eta = 1 is uniform; larger eta concentrates toward independence.
+    sd = [
+        (2.0 * rng.beta(e, e, size=200_000) - 1.0).std() for e in (1.0, 2.0, 4.0)
+    ]
+    assert sd[0] > sd[1] > sd[2]
+    assert sd[1] == pytest.approx(0.447, abs=0.01)
+
+
+def test_resolver_returns_none_when_unset():
+    """A plain bivariate definition must be entirely unaffected."""
+    assert (
+        _resolve_subject_re_correlation(
+            VG10, use_subject_re_u=True, use_subject_re_q=True, spec_u=None, spec_q=None
+        )
+        is None
+    )
+
+
+def test_resolver_accepts_vg20():
+    assert (
+        _resolve_subject_re_correlation(
+            VG20, use_subject_re_u=True, use_subject_re_q=True, spec_u=None, spec_q=None
+        )
+        == 2.0
+    )
+
+
+@pytest.mark.parametrize("drop", ["u", "q"])
+def test_resolver_rejects_a_missing_subject_block(drop):
+    with pytest.raises(ValueError, match="requires use_subject_re_u"):
+        _resolve_subject_re_correlation(
+            VG20,
+            use_subject_re_u=(drop != "u"),
+            use_subject_re_q=(drop != "q"),
+            spec_u=None,
+            spec_q=None,
+        )
+
+
+@pytest.mark.parametrize("side", ["u", "q"])
+def test_resolver_rejects_an_age_varying_scale(side):
+    """Proposal A1's age-varying scale and a constant correlation do not compose."""
+    sentinel = object()
+    with pytest.raises(ValueError, match="age-varying"):
+        _resolve_subject_re_correlation(
+            VG20,
+            use_subject_re_u=True,
+            use_subject_re_q=True,
+            spec_u=sentinel if side == "u" else None,
+            spec_q=sentinel if side == "q" else None,
+        )
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0, float("nan"), float("inf"), "2"])
+def test_resolver_rejects_a_non_positive_eta(bad):
+    definition = _as_definition_subclass(
+        VG10,
+        BivariateCorrelatedSubjectREModelDefinition,
+        model_id="VGXX",
+        subject_re_correlation_eta=bad,
+    )
+    with pytest.raises(ValueError, match="positive finite"):
+        _resolve_subject_re_correlation(
+            definition,
+            use_subject_re_u=True,
+            use_subject_re_q=True,
+            spec_u=None,
+            spec_q=None,
+        )
+
+
+def test_built_graph_adds_exactly_one_parameter_and_nothing_else():
+    """VG20's graph must be VG10's plus ``rho_uq`` — the claim #224 rests on.
+
+    Anything else appearing here means the two models differ in more than the
+    correlation, and the comparison stops being readable: #224 treats movement in
+    any reported trajectory as a red flag, which assumes the graphs are otherwise
+    identical.
+
+    Builds both real models (no sampling), so it needs the prepared DuckDB.
+    """
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def build(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        cbr.prepare_bivariate_re_data(ctx, definition)
+        cb.configure_bivariate_priors(ctx, definition)
+        cbr.build_model_re(ctx, definition)
+        return ctx.model
+
+    with tempfile.TemporaryDirectory() as root:
+        m10 = build(VG10, root)
+        m20 = build(VG20, root)
+
+    def names(model):
+        return {v.name for v in model.free_RVs} | {v.name for v in model.deterministics}
+
+    assert names(m20) - names(m10) == {"rho_uq", "rho_uq_raw"}
+    assert names(m10) - names(m20) == set()
+    assert len(m20.free_RVs) == len(m10.free_RVs) + 1
+
+
+def test_as_definition_subclass_shares_nested_prior_blocks():
+    """The helper must be shallow: nested prior dataclasses stay the same objects.
+
+    A deep copy would serialise identically today but drift the moment one side's
+    priors were edited, which is the failure this derivation exists to prevent.
+    """
+    assert VG20.kappa_u is VG10.kappa_u
+    assert VG20.kappa_s is VG10.kappa_s

@@ -21,6 +21,7 @@ above (see issue #65).
 Plot and query predictions use the population-level trajectory (delta=0).
 """
 
+import math
 import os
 from collections.abc import Callable
 
@@ -262,6 +263,53 @@ def _validate_cross_lag(lag_baseline: str, use_subject_re_u: bool) -> None:
             "population-relative and within-child baselines are defined relative to "
             "the child's understood subject intercept."
         )
+
+
+def _resolve_subject_re_correlation(
+    definition,
+    *,
+    use_subject_re_u: bool,
+    use_subject_re_q: bool,
+    spec_u,
+    spec_q,
+) -> float | None:
+    """LKJ concentration for the subject-effect correlation, or None (issue #224).
+
+    Read through ``getattr`` because the field lives on a definition subclass, as
+    the variance partition and child slopes do: putting it on
+    ``BivariateModelDefinition`` would change the serialised definition of the six
+    bivariate models of record and invalidate every one of their fits.
+
+    Each rejection below is a configuration that would otherwise fit something
+    other than what was asked for, silently:
+
+    * one block missing — there is nothing to correlate, and the graph would
+      quietly emit an unused ``rho_uq`` that reads as an estimate;
+    * an age-varying scale (Proposal A1) — the deviate is scaled by tau(age) per
+      observation there, so a single constant correlation between the two blocks
+      is not the model anyone means; supporting the combination needs its own
+      design rather than an implicit reading of this one.
+    """
+    eta = getattr(definition, "subject_re_correlation_eta", None)
+    if eta is None:
+        return None
+    if not (use_subject_re_u and use_subject_re_q):
+        raise ValueError(
+            "subject_re_correlation_eta requires use_subject_re_u=True and "
+            "use_subject_re_q=True: a correlation needs both subject blocks."
+        )
+    if spec_u is not None or spec_q is not None:
+        raise ValueError(
+            "subject_re_correlation_eta cannot be combined with an age-varying "
+            "subject scale (Proposal A1): the age-varying path scales each "
+            "child's deviate per observation, so a single constant correlation "
+            "between the blocks is not well defined."
+        )
+    if not isinstance(eta, (int, float)) or not math.isfinite(eta) or eta <= 0:
+        raise ValueError(
+            f"subject_re_correlation_eta must be a positive finite number; got {eta!r}."
+        )
+    return float(eta)
 
 
 def _compute_prev_wave_lag(analysis_df, n_trials: int):
@@ -614,6 +662,13 @@ def build_model_re(
         # once the standardised grids exist.
         spec_u = subject_scale_spec(definition.tau_subj_u_sigma)
         spec_q = subject_scale_spec(definition.tau_subj_q_sigma)
+        corr_eta = _resolve_subject_re_correlation(
+            definition,
+            use_subject_re_u=use_subject_re_u,
+            use_subject_re_q=use_subject_re_q,
+            spec_u=spec_u,
+            spec_q=spec_q,
+        )
         tau_u_of_z = tau_q_of_z = None
         # Built here rather than reusing the named `z_obs` Deterministic, which is
         # created further down: reordering that would change every model's graph.
@@ -668,8 +723,30 @@ def build_model_re(
                 delta_subj_q_raw = pm.Normal(
                     "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
                 )
+                if corr_eta is None:
+                    delta_subj_q_value = tau_subj_q * delta_subj_q_raw
+                else:
+                    # VG20 (issue #224). A child's two deviations are drawn from a
+                    # joint Normal rather than independently, in Cholesky form so
+                    # the nesting is exact: at rho_uq = 0 this is the expression
+                    # above, op for op.
+                    #
+                    # `delta_subj_u_raw` is reused as the shared first coordinate
+                    # and `delta_subj_q_raw` becomes the whitened second one, so
+                    # both keep their names, their standard-Normal priors and
+                    # their dims. Every downstream reader of `delta_subj_u` and
+                    # `delta_subj_q` — the summaries, the comparison suite, the
+                    # recovery scorer — sees what it always saw.
+                    rho_raw = pm.Beta(
+                        "rho_uq_raw", alpha=corr_eta, beta=corr_eta
+                    )
+                    rho_uq = pm.Deterministic("rho_uq", 2.0 * rho_raw - 1.0)
+                    delta_subj_q_value = tau_subj_q * (
+                        rho_uq * delta_subj_u_raw
+                        + pm.math.sqrt(1.0 - rho_uq**2) * delta_subj_q_raw
+                    )
                 delta_subj_q = pm.Deterministic(
-                    "delta_subj_q", tau_subj_q * delta_subj_q_raw, dims="subject_id"
+                    "delta_subj_q", delta_subj_q_value, dims="subject_id"
                 )
                 subject_shift_q = delta_subj_q[subject_obs]
             else:
