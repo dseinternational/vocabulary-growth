@@ -216,6 +216,16 @@ _TARGETS: dict[str, tuple[str, EngineRecoverySpec]] = {
     "vg12": _UNIVARIATE_RE,
     "vg13": _BIVARIATE_RE,
     "vg15": _JOINT,
+    # VG20 runs the same engine and the same data-generating process as VG10 --
+    # the correlation changes the PRIOR on the pair of subject deviates, not how
+    # counts are simulated -- so the VG10 spec is correct here unchanged. It is
+    # registered because #224's second gate is recovery of `rho_uq` itself, and
+    # without an entry `fit_recovery.py vg20` fails with the generic "no recovery
+    # specification registered" rather than running. `rho_uq` needs no scoring
+    # entry of its own: it is a scalar Deterministic, so the target selection in
+    # recovery/compare.py picks it up, while `rho_uq_raw` is excluded by the
+    # existing `*_raw` rule as a non-centred offset with no interpretation.
+    "vg20": _BIVARIATE_RE,
 }
 
 UNSUPPORTED_REASONS: dict[str, str] = {
