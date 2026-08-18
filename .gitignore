@@ -2,7 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 outputs/
-output/
+# No trailing slash: `output` is a SYMLINK to a scratch volume on the fitting
+# VM (2026-08-17), and `output/` matches only a real directory. Left as it was,
+# the link showed as untracked, which made the checkout dirty and stamped
+# `dirty: true` into the provenance block of every fit started from it --
+# the defect that made the vg11 anchor-broad manifest unclean. Matches both
+# a directory and a link.
+output
 figures/
 
 # Standalone comparison-doc render artifacts. The comparison suite writes its
