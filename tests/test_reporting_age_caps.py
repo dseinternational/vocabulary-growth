@@ -225,3 +225,72 @@ def test_the_age_fan_drops_ages_past_the_cap(tmp_path):
     fan = pd.read_csv(tmp_path / "fan.csv")
     assert fan["age_months"].max() <= 72
     assert 90 not in set(fan["age_months"].unique())
+
+
+def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
+    """The per-outcome caps must not give the CSV columns of different lengths.
+
+    A third instance of the same defect class, found the hard way: VG14's first
+    refit after per-outcome caps arrived sampled for 40 minutes and then died in
+    the plot stage with ``ValueError: All arrays must be of the same length``.
+    The CSV paired the full ``X_plot`` age column with median arrays trimmed at
+    three different caps (understood 84, signed 84, spoken 90).
+
+    Two things hid it. The figure is written *before* the CSV and draws each
+    curve against its own trimmed x, so the plot was always correct. And
+    ``modality_trajectories`` carries no outcome suffix, so it matches no stem in
+    the reporting-age policy test's map -- the same blind spot that let the
+    figure run to 115 months in the first place.
+
+    The fix keeps one shared age column and masks past each cap with NaN, so the
+    CSV says "not reported here" rather than silently realigning rows.
+    """
+    import types
+
+    import numpy as np
+    import pandas as pd
+
+    from vocab_growth.models import common_trivariate as ct
+
+    ages = np.arange(8.0, 116.0, 1.0)
+    n_draws = 40
+    rng = np.random.default_rng(0)
+
+    def grid():
+        return rng.uniform(0.05, 0.5, size=(ages.size, n_draws))
+
+    samples = types.SimpleNamespace(
+        X_plot=ages,
+        p_u_plot=grid(),
+        p_s_plot=grid(),
+        p_sign_plot=grid(),
+        p_any_plot=grid(),
+    )
+
+    ct.plot_modality_trajectories(
+        samples,
+        n_trials=810,
+        output_dir=str(tmp_path),
+        filename="modality_trajectories",
+        max_age_months_understood=84,
+        max_age_months_spoken=90,
+        max_age_months_signed=84,
+    )
+
+    frame = pd.read_csv(tmp_path / "modality_trajectories.csv")
+    assert len(frame) == ages.size, "the CSV must keep one row per plot-grid age"
+
+    caps = {
+        "understood_median": 84,
+        "spoken_median": 90,
+        "signed_median": 84,
+        # p_any is a union over speaking and signing and takes the tighter cap.
+        "any_median": 84,
+        "any_ci_lo": 84,
+        "any_ci_hi": 84,
+    }
+    for column, cap in caps.items():
+        inside = frame.loc[frame.age_months <= cap, column]
+        outside = frame.loc[frame.age_months > cap, column]
+        assert inside.notna().all(), f"{column} is missing values inside its cap"
+        assert outside.isna().all(), f"{column} reports past its {cap}-month cap"

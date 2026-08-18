@@ -1828,19 +1828,41 @@ def plot_modality_trajectories(
         keep = X_plot <= cap
         return X_plot[keep], values[keep]
 
+    def _masked(values: np.ndarray, cap: float | None) -> np.ndarray:
+        """The same trim, kept on the full grid with NaN past the cap.
+
+        The figure wants each curve against its own shortened x; the CSV wants
+        one age column shared by every series. Trimming for both is what broke
+        this function: the CSV paired the FULL ``X_plot`` with arrays cut at
+        three different caps, so ``pd.DataFrame`` raised "All arrays must be of
+        the same length" the first time a trivariate model was refitted after
+        per-outcome caps arrived. Nothing caught it earlier because the figure
+        is written before the CSV -- the plot was always correct -- and because
+        ``modality_trajectories`` carries no outcome suffix, so the reporting-age
+        policy test matches no entry for it (see this function's docstring).
+        """
+        if cap is None:
+            return values
+        return np.where(X_plot <= cap, values, np.nan)
+
     any_cap = None
     caps = [c for c in (max_age_months_spoken, max_age_months_signed) if c is not None]
     if caps:
         any_cap = min(caps)
 
-    x_u, E_u = _trim(np.median(samples.p_u_plot, axis=1) * n_trials, max_age_months_understood)
-    x_s, E_s = _trim(np.median(samples.p_s_plot, axis=1) * n_trials, max_age_months_spoken)
-    x_sign, E_sign = _trim(np.median(samples.p_sign_plot, axis=1) * n_trials, max_age_months_signed)
-    x_any, E_any = _trim(np.median(samples.p_any_plot, axis=1) * n_trials, any_cap)
-    _, any_hdi = _trim(
-        intervals.bands(samples.p_any_plot * n_trials, ci_prob, interval_kind, sample_axis=1),
-        any_cap,
+    E_u_full = np.median(samples.p_u_plot, axis=1) * n_trials
+    E_s_full = np.median(samples.p_s_plot, axis=1) * n_trials
+    E_sign_full = np.median(samples.p_sign_plot, axis=1) * n_trials
+    E_any_full = np.median(samples.p_any_plot, axis=1) * n_trials
+    any_hdi_full = intervals.bands(
+        samples.p_any_plot * n_trials, ci_prob, interval_kind, sample_axis=1
     )
+
+    x_u, E_u = _trim(E_u_full, max_age_months_understood)
+    x_s, E_s = _trim(E_s_full, max_age_months_spoken)
+    x_sign, E_sign = _trim(E_sign_full, max_age_months_signed)
+    x_any, E_any = _trim(E_any_full, any_cap)
+    _, any_hdi = _trim(any_hdi_full, any_cap)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -1863,12 +1885,12 @@ def plot_modality_trajectories(
             pd.DataFrame(
                 {
                     "age_months": X_plot,
-                    "understood_median": E_u,
-                    "spoken_median": E_s,
-                    "signed_median": E_sign,
-                    "any_median": E_any,
-                    "any_ci_lo": any_hdi[:, 0],
-                    "any_ci_hi": any_hdi[:, 1],
+                    "understood_median": _masked(E_u_full, max_age_months_understood),
+                    "spoken_median": _masked(E_s_full, max_age_months_spoken),
+                    "signed_median": _masked(E_sign_full, max_age_months_signed),
+                    "any_median": _masked(E_any_full, any_cap),
+                    "any_ci_lo": _masked(any_hdi_full[:, 0], any_cap),
+                    "any_ci_hi": _masked(any_hdi_full[:, 1], any_cap),
                 }
             ),
             output_dir,
