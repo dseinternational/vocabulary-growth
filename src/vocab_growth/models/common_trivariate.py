@@ -1795,6 +1795,34 @@ def plot_sign_speech_crossover(
     return fig
 
 
+def _multi_outcome_frame(
+    ages: np.ndarray,
+    series: dict[str, tuple[np.ndarray, float | None]],
+) -> pd.DataFrame:
+    """One age column shared by several series that stop at different ages.
+
+    The convention is ``joint_trajectory``'s, which had it first: the age column
+    runs to the **widest** of the caps, and every series is NaN past its own. So
+    the file never carries a row no series reports on, and never implies a series
+    was reported where it was not.
+
+    Trimming each series to its own length instead is what broke
+    ``plot_modality_trajectories``: the frame then has columns of three different
+    lengths and pandas refuses to build it at all. That surfaced only when VG14
+    was first refitted after per-outcome caps arrived, because the figure is
+    written before the CSV and was always correct.
+    """
+    caps = [cap for _, cap in series.values() if cap is not None]
+    keep = np.ones_like(ages, dtype=bool) if len(caps) < len(series) else ages <= max(caps)
+    data: dict[str, np.ndarray] = {"age_months": ages[keep]}
+    for name, (values, cap) in series.items():
+        trimmed = np.asarray(values, dtype=float)[keep]
+        data[name] = (
+            trimmed if cap is None else np.where(ages[keep] <= cap, trimmed, np.nan)
+        )
+    return pd.DataFrame(data)
+
+
 def plot_modality_trajectories(
     samples: TrivariateModelSamples,
     n_trials: int,
@@ -1882,16 +1910,16 @@ def plot_modality_trajectories(
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
         _save_csv(
-            pd.DataFrame(
+            _multi_outcome_frame(
+                X_plot,
                 {
-                    "age_months": X_plot,
-                    "understood_median": _masked(E_u_full, max_age_months_understood),
-                    "spoken_median": _masked(E_s_full, max_age_months_spoken),
-                    "signed_median": _masked(E_sign_full, max_age_months_signed),
-                    "any_median": _masked(E_any_full, any_cap),
-                    "any_ci_lo": _masked(any_hdi_full[:, 0], any_cap),
-                    "any_ci_hi": _masked(any_hdi_full[:, 1], any_cap),
-                }
+                    "understood_median": (E_u_full, max_age_months_understood),
+                    "spoken_median": (E_s_full, max_age_months_spoken),
+                    "signed_median": (E_sign_full, max_age_months_signed),
+                    "any_median": (E_any_full, any_cap),
+                    "any_ci_lo": (any_hdi_full[:, 0], any_cap),
+                    "any_ci_hi": (any_hdi_full[:, 1], any_cap),
+                },
             ),
             output_dir,
             filename,

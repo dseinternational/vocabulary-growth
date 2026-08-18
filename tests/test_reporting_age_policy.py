@@ -59,11 +59,6 @@ BY_STEM = {
     "sign_speech_crossover": ReportedQuantity.SIGNED,
     "posterior_summary_r": ReportedQuantity.SIGNED,
     "posterior_summary_p_any": ReportedQuantity.SIGNED,
-    # No outcome suffix, so it matched no rule and was silently skipped -- which
-    # is how VG14's modality figure came to run to 115 months directly above a
-    # p_any table trimmed to 84. p_any is a union over speaking and signing, so
-    # the signing cap is the binding one.
-    "modality_trajectories": ReportedQuantity.SIGNED,
 }
 
 # Artefacts written by the *summary* stage rather than the plot stage, which
@@ -95,9 +90,10 @@ BY_STEM = {
 # first place. The code is fixed, so the first time VG14 is refitted this entry
 # will fail as unnecessary and
 # should be deleted then.
-KNOWN_STALE: dict[str, set[str]] = {
-    "vg14": {"modality_trajectories"},
-}
+# Emptied on 2026-08-18 when VG14 was refitted, exactly as the note above said it
+# should be. Keep the mechanism: it is what distinguishes "this artefact is stale
+# and we know it" from "this artefact violates the policy".
+KNOWN_STALE: dict[str, set[str]] = {}
 
 # Not age-indexed reports: descriptive frames, diagnostics, provenance.
 IGNORE_STEMS = {
@@ -107,6 +103,12 @@ IGNORE_STEMS = {
     "p_any_validation",
     "p_any_validation_gap",
     "joint_trajectory",           # two outcomes; checked separately below
+    # Four outcomes with three different caps, so a single-quantity rule cannot
+    # describe it. It was mapped to SIGNED until 2026-08-18, which read the file
+    # as violating its cap whenever spoken (90) legitimately outran signing (84)
+    # -- and, worse, kept VG14's stale-artefact exemption alive after the refit
+    # that should have cleared it. Checked by its own test below instead.
+    "modality_trajectories",
     "joint_trajectory_intervals",
 }
 
@@ -301,3 +303,50 @@ def test_known_stale_entries_are_still_needed(model_id, output_dir):
         f"{model_id}: remove these from KNOWN_STALE — they no longer need it:\n  "
         + "\n  ".join(unnecessary)
     )
+
+
+@needs_fit
+@pytest.mark.parametrize(("model_id", "output_dir"), FITTED, ids=[m for m, _ in FITTED])
+def test_modality_trajectories_trims_each_series_independently(model_id, output_dir):
+    """Four outcomes, three caps — the file a single-quantity rule cannot describe.
+
+    This is the artefact the stem map could not see, and the blind spot cost twice:
+    the figure ran to 115 months above a ``p_any`` table trimmed to 84, and then
+    the fix for that shipped a CSV whose columns had three different lengths,
+    which killed VG14's first refit in the plot stage after 42 minutes of
+    sampling.
+
+    Same convention as ``joint_trajectory``: the age column runs to the widest
+    cap, and each series is NaN past its own.
+    """
+    path = os.path.join(output_dir, "modality_trajectories.csv")
+    if not os.path.isfile(path):
+        pytest.skip("not a trivariate model")
+    config = MODEL_REGISTRY[model_id]
+    u_cap = max_age_for(config, ReportedQuantity.UNDERSTOOD)
+    s_cap = max_age_for(config, ReportedQuantity.SPOKEN)
+    sign_cap = max_age_for(config, ReportedQuantity.SIGNED)
+    if None in (u_cap, s_cap, sign_cap):
+        pytest.skip("model does not cap every modality")
+
+    table = pd.read_csv(path)
+    ages = pd.to_numeric(table["age_months"], errors="coerce")
+    widest = max(u_cap, s_cap, sign_cap)
+    assert ages.max() <= widest + 1e-6, (
+        f"modality_trajectories runs to {ages.max():g}, past the widest cap {widest:g}"
+    )
+
+    # p_any is a union over speaking and signing and takes the tighter of the two.
+    for column, cap in (
+        ("understood_median", u_cap),
+        ("spoken_median", s_cap),
+        ("signed_median", sign_cap),
+        ("any_median", min(s_cap, sign_cap)),
+    ):
+        values = pd.to_numeric(table[column], errors="coerce")
+        assert values[ages > cap + 1e-6].isna().all(), (
+            f"modality_trajectories reports {column} past {cap:g}"
+        )
+        assert values[ages <= cap + 1e-6].notna().any(), (
+            f"modality_trajectories has no {column} values inside its cap"
+        )

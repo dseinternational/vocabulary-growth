@@ -278,7 +278,12 @@ def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
     )
 
     frame = pd.read_csv(tmp_path / "modality_trajectories.csv")
-    assert len(frame) == ages.size, "the CSV must keep one row per plot-grid age"
+    # One shared age column, trimmed to the WIDEST cap -- ``joint_trajectory``'s
+    # convention. The file then carries no row that no series reports on, and no
+    # column implying a series was reported where it was not.
+    widest = 90
+    assert frame.age_months.max() == widest
+    assert len(frame) == int((ages <= widest).sum()), "one row per in-range grid age"
 
     caps = {
         "understood_median": 84,
