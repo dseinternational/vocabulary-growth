@@ -157,6 +157,30 @@ N_TRIALS_SMALL_MEDIAN = 40.0
 N_TRIALS_SMALL_LOG_SD = 0.8
 N_TRIALS_SMALL_LO, N_TRIALS_SMALL_HI = 3, 810
 
+#: The fitted models do not give kappa a value at each anchor directly. They
+#: give it an asymptote plus an exponential age term whose two *excesses* carry
+#: the priors: kappa(z) = kappa_min + exp(a + b z), with a and b solved so the
+#: totals hit kappa_min + excess at each anchor. `age-varying-kappa` used a
+#: linear interpolation between two freely-estimated anchor values, which is a
+#: two-parameter identified form. The real one is three parameters, and the
+#: recovery matrices show the third behaving as a prior rather than an estimate:
+#: kappa_min's posterior median lands at 3.8, 4.1 and 4.2 against truths of
+#: 2.84, 10.37 and 1.09 -- the LogNormal(log 3, 0.8) prior's own mean is 4.13.
+#: Where the truth sits above that, kappa_young inherits the shortfall, which is
+#: the only identified explanation so far for kappa_young being low in 9 of 9.
+#:
+#: Values from `_DS_SPOKEN_KAPPA` in models/definitions.py.
+KAPPA_ANCHOR_AGES = (18.0, 36.0)
+KAPPA_MIN_PRIOR_MU, KAPPA_MIN_PRIOR_SIGMA = np.log(3.0), 0.8
+EXCESS_YOUNG_PRIOR_MU, EXCESS_YOUNG_PRIOR_SIGMA = np.log(45.0), 0.7
+EXCESS_OLD_PRIOR_MU, EXCESS_OLD_PRIOR_SIGMA = np.log(4.0), 0.7
+
+#: Two truths for the asymptote: one at the prior's centre, one above it, as in
+#: VG10 r01's truth draw. If the subject scale is biased only in the second, the
+#: mechanism is the unidentified asymptote dragging the dispersion level and the
+#: child scale absorbing the difference.
+KAPPA_MIN_TRUE, KAPPA_MIN_TRUE_HIGH = 3.0, 10.0
+
 #: Conditions in the order they were added. The last three came after the first
 #: seven all returned null, when re-reading the recovery matrices showed the
 #: bias is selective -- it hits the comprehension child scale and VG12's
@@ -173,6 +197,8 @@ ALL_CONDITIONS = (
     "floor-p0",
     "ceiling-p0",
     "floor-small-n",
+    "anchored-kappa",
+    "anchored-kappa-high-min",
 )
 
 #: Conditions that keep `observed-mix`'s visit structure and vary something else.
@@ -185,6 +211,8 @@ DERIVED_CONDITIONS = frozenset(
         "floor-p0",
         "ceiling-p0",
         "floor-small-n",
+        "anchored-kappa",
+        "anchored-kappa-high-min",
     }
 )
 
@@ -322,6 +350,40 @@ def simulate_clustered_ages(counts: np.ndarray, rng):
     return y, child, z, age
 
 
+def _anchor_z() -> tuple[float, float]:
+    lo, hi = KAPPA_ANCHOR_AGES
+    span = AGE_HI - AGE_LO
+    return (lo - AGE_LO) / span, (hi - AGE_LO) / span
+
+
+def _kappa_of_u(u, kappa_min, excess_young, excess_old):
+    """kappa_min + exp(a + b z), with a and b solved from the two anchors."""
+    z_young, z_old = _anchor_z()
+    log_y, log_o = np.log(excess_young), np.log(excess_old)
+    b = (log_o - log_y) / (z_old - z_young)
+    a = log_y - b * z_young
+    return kappa_min + np.exp(a + b * u)
+
+
+def simulate_anchored_kappa(counts: np.ndarray, rng, kappa_min_true: float):
+    """The fitted models' three-parameter dispersion, not a two-anchor interpolation."""
+    z = rng.standard_normal(counts.size)
+    child = np.repeat(np.arange(counts.size), counts)
+    age = rng.uniform(AGE_LO, AGE_HI, size=child.size)
+    u = (age - AGE_LO) / (AGE_HI - AGE_LO)
+    kappa_row = _kappa_of_u(
+        u,
+        kappa_min_true,
+        KAPPA_YOUNG - kappa_min_true,
+        KAPPA_OLD - kappa_min_true,
+    )
+    logit_p = np.log(P0 / (1 - P0)) + TAU_TRUE * z[child]
+    p = 1.0 / (1.0 + np.exp(-logit_p))
+    theta = rng.beta(p * kappa_row, (1 - p) * kappa_row)
+    y = rng.binomial(N_TRIALS, theta)
+    return y, child, z, age
+
+
 def fit(
     y: np.ndarray,
     child: np.ndarray,
@@ -330,6 +392,7 @@ def fit(
     age: np.ndarray | None = None,
     study: np.ndarray | None = None,
     kappa_age: np.ndarray | None = None,
+    anchored_kappa_age: np.ndarray | None = None,
     p0: float = P0,
     n_trials: np.ndarray | int = N_TRIALS,
     tune: int = 2000,
@@ -360,7 +423,26 @@ def fit(
             s_raw = pm.Normal("s_raw", mu=0.0, sigma=1.0, shape=N_STUDIES)
             mean_term = mean_term + tau_study * s_raw[study]
         p = pm.Deterministic("p", pm.math.sigmoid(mean_term + tau * z[child]))
-        if kappa_age is None:
+        if anchored_kappa_age is not None:
+            # The models' own form: an unidentified asymptote plus an
+            # exponential age term carrying the priors at two anchors.
+            k_min = pm.LogNormal(
+                "k_min", mu=KAPPA_MIN_PRIOR_MU, sigma=KAPPA_MIN_PRIOR_SIGMA
+            )
+            e_young = pm.LogNormal(
+                "e_young", mu=EXCESS_YOUNG_PRIOR_MU, sigma=EXCESS_YOUNG_PRIOR_SIGMA
+            )
+            e_old = pm.LogNormal(
+                "e_old", mu=EXCESS_OLD_PRIOR_MU, sigma=EXCESS_OLD_PRIOR_SIGMA
+            )
+            z_young, z_old = _anchor_z()
+            b_k = (pm.math.log(e_old) - pm.math.log(e_young)) / (z_old - z_young)
+            a_k = pm.math.log(e_young) - b_k * z_young
+            uk = (anchored_kappa_age - AGE_LO) / (AGE_HI - AGE_LO)
+            kappa_row = k_min + pm.math.exp(a_k + b_k * uk)
+            pm.Deterministic("kappa_young_sim", k_min + e_young)
+            pm.Deterministic("kappa_old_sim", k_min + e_old)
+        elif kappa_age is None:
             kappa_row = kappa
         else:
             # Two-anchor form, as the models use: a value at each end of the
@@ -390,7 +472,10 @@ def fit(
     import arviz as az
 
     # arviz >= 1.2 returns a DataTree; take the max over the scalar parameters.
-    names = ["tau", "mu"] + ([] if kappa_age is not None else ["kappa"])
+    flat_kappa = kappa_age is None and anchored_kappa_age is None
+    names = ["tau", "mu"] + (["kappa"] if flat_kappa else [])
+    if anchored_kappa_age is not None:
+        names = names + ["k_min", "e_young", "e_old"]
     rhat_tree = az.rhat(idata, var_names=names)
     rhat_ds = rhat_tree["posterior"] if "posterior" in rhat_tree else rhat_tree
     rhat = float(max(float(np.asarray(rhat_ds[v].values).max()) for v in names))
@@ -400,6 +485,21 @@ def fit(
         "tau_sd": float(draws.std(ddof=1)),
         "kappa_median": float(np.median(np.asarray(post["kappa"].values).ravel())),
         "max_rhat": rhat,
+        **(
+            {
+                "k_min_median": float(
+                    np.median(np.asarray(post["k_min"].values).ravel())
+                ),
+                "kappa_young_median": float(
+                    np.median(np.asarray(post["kappa_young_sim"].values).ravel())
+                ),
+                "kappa_old_median": float(
+                    np.median(np.asarray(post["kappa_old_sim"].values).ravel())
+                ),
+            }
+            if anchored_kappa_age is not None
+            else {}
+        ),
     }
 
 
@@ -438,7 +538,7 @@ def main() -> None:
             rng = np.random.default_rng(args.seed + 1000 * r)
             structure = "observed-mix" if condition in DERIVED_CONDITIONS else condition
             counts = visit_counts(structure, args.children, rng)
-            age = study = kappa_age = None
+            age = study = kappa_age = anchored_kappa_age = None
             p0 = P0
             n_trials = N_TRIALS
             if condition == "age-varying":
@@ -455,6 +555,15 @@ def main() -> None:
             elif condition == "ceiling-p0":
                 p0 = P0_CEILING
                 y, child, z, n_trials = simulate(counts, rng, p0=p0)
+            elif condition in ("anchored-kappa", "anchored-kappa-high-min"):
+                k_min_true = (
+                    KAPPA_MIN_TRUE_HIGH
+                    if condition.endswith("high-min")
+                    else KAPPA_MIN_TRUE
+                )
+                y, child, z, anchored_kappa_age = simulate_anchored_kappa(
+                    counts, rng, k_min_true
+                )
             elif condition == "floor-small-n":
                 p0 = P0_FLOOR
                 y, child, z, n_trials = simulate(counts, rng, p0=p0, small_n=True)
@@ -469,6 +578,7 @@ def main() -> None:
                 age=age,
                 study=study,
                 kappa_age=kappa_age,
+                anchored_kappa_age=anchored_kappa_age,
                 p0=p0,
                 n_trials=n_trials,
                 tune=args.tune,
