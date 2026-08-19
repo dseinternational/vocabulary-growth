@@ -181,6 +181,37 @@ EXCESS_OLD_PRIOR_MU, EXCESS_OLD_PRIOR_SIGMA = np.log(4.0), 0.7
 #: child scale absorbing the difference.
 KAPPA_MIN_TRUE, KAPPA_MIN_TRUE_HIGH = 3.0, 10.0
 
+#: Every condition to here drew ages uniformly over 8-115 months. The real pool
+#: is nothing like uniform: 570 of 987 administrations fall between 18 and 48
+#: months and only 13 sit above 84, so the old tail that would pin a decaying
+#: dispersion curve, or hold a flexible mean still, barely exists. That is the
+#: leading explanation for why `anchored-kappa` came back null -- under uniform
+#: ages the asymptote recovers cleanly (truth 3.0 -> medians 2.29-3.79, truth
+#: 10.0 -> 8.31-12.91), which is exactly what it fails to do on the real frame.
+#: Drawing the first visit from the empirical distribution is the one structural
+#: difference left between this simulation and the fitted models that is cheap
+#: to remove.
+_EMPIRICAL_AGES: np.ndarray | None = None
+
+
+def empirical_first_visit_ages(n: int, rng) -> np.ndarray:
+    """Draw first-visit ages from the Down syndrome pool's own age distribution.
+
+    Sampled with replacement from the observed ages rather than fitted to a
+    parametric family: the shape that matters here is the thin old tail, and a
+    smooth fit would fill it in.
+    """
+    global _EMPIRICAL_AGES
+    if _EMPIRICAL_AGES is None:
+        from vocab_growth.data_utils import load_combined_data
+
+        d = load_combined_data().dropna(subset=["understood", "survey_vocab_max"])
+        d = d[d.study.str.contains("uk_|us_|nz_|au_|ie_|it_|es_", na=False)]
+        _EMPIRICAL_AGES = np.asarray(d["age"], dtype=float)
+    # Leave room for the repeat visits to land inside the range.
+    pool = _EMPIRICAL_AGES[_EMPIRICAL_AGES <= AGE_HI - REPEAT_GAP_MONTHS * 2]
+    return rng.choice(pool, size=n, replace=True)
+
 #: Conditions in the order they were added. The last three came after the first
 #: seven all returned null, when re-reading the recovery matrices showed the
 #: bias is selective -- it hits the comprehension child scale and VG12's
@@ -199,6 +230,8 @@ ALL_CONDITIONS = (
     "floor-small-n",
     "anchored-kappa",
     "anchored-kappa-high-min",
+    "empirical-ages",
+    "empirical-ages-anchored-kappa",
 )
 
 #: Conditions that keep `observed-mix`'s visit structure and vary something else.
@@ -213,6 +246,8 @@ DERIVED_CONDITIONS = frozenset(
         "floor-small-n",
         "anchored-kappa",
         "anchored-kappa-high-min",
+        "empirical-ages",
+        "empirical-ages-anchored-kappa",
     }
 )
 
@@ -379,6 +414,40 @@ def simulate_anchored_kappa(counts: np.ndarray, rng, kappa_min_true: float):
     )
     logit_p = np.log(P0 / (1 - P0)) + TAU_TRUE * z[child]
     p = 1.0 / (1.0 + np.exp(-logit_p))
+    theta = rng.beta(p * kappa_row, (1 - p) * kappa_row)
+    y = rng.binomial(N_TRIALS, theta)
+    return y, child, z, age
+
+
+def _clustered_ages_from(base: np.ndarray, counts: np.ndarray, rng) -> np.ndarray:
+    """Place each child's repeats a few months after their first visit."""
+    offsets = np.concatenate(
+        [np.arange(c) * rng.normal(REPEAT_GAP_MONTHS, 1.5) for c in counts]
+    )
+    child = np.repeat(np.arange(counts.size), counts)
+    return np.clip(base[child] + offsets, AGE_LO, AGE_HI)
+
+
+def simulate_empirical_ages(counts: np.ndarray, rng, anchored_kappa: bool = False):
+    """`clustered-ages`, but first visits drawn from the real age distribution.
+
+    With `anchored_kappa`, dispersion additionally takes the fitted models' own
+    three-parameter form, so the two differences that survived every other
+    condition are tested together and separately.
+    """
+    z = rng.standard_normal(counts.size)
+    base = empirical_first_visit_ages(counts.size, rng)
+    age = _clustered_ages_from(base, counts, rng)
+    child = np.repeat(np.arange(counts.size), counts)
+    logit_p = _true_mean_logit(age) + TAU_TRUE * z[child]
+    p = 1.0 / (1.0 + np.exp(-logit_p))
+    if anchored_kappa:
+        u = (age - AGE_LO) / (AGE_HI - AGE_LO)
+        kappa_row = _kappa_of_u(
+            u, KAPPA_MIN_TRUE, KAPPA_YOUNG - KAPPA_MIN_TRUE, KAPPA_OLD - KAPPA_MIN_TRUE
+        )
+    else:
+        kappa_row = KAPPA_TRUE
     theta = rng.beta(p * kappa_row, (1 - p) * kappa_row)
     y = rng.binomial(N_TRIALS, theta)
     return y, child, z, age
@@ -563,6 +632,13 @@ def main() -> None:
             elif condition == "ceiling-p0":
                 p0 = P0_CEILING
                 y, child, z, n_trials = simulate(counts, rng, p0=p0)
+            elif condition == "empirical-ages":
+                y, child, z, age = simulate_empirical_ages(counts, rng)
+            elif condition == "empirical-ages-anchored-kappa":
+                y, child, z, anchored_kappa_age = simulate_empirical_ages(
+                    counts, rng, anchored_kappa=True
+                )
+                age = anchored_kappa_age
             elif condition in ("anchored-kappa", "anchored-kappa-high-min"):
                 k_min_true = (
                     KAPPA_MIN_TRUE_HIGH
