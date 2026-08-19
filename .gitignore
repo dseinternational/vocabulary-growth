@@ -23,8 +23,13 @@ docs/comparison/*.svg
 docs/comparison/index.html
 docs/comparison/index_files/
 
-# Quarto/LaTeX render byproducts staged next to docs/report/index.qmd.
+# Quarto/LaTeX render byproducts staged next to docs/report/index.qmd. The book
+# renders to the output root (see _quarto.yml's output-dir), so an index.html
+# here is a leftover from an older render, not a deliverable -- but it is
+# untracked and in the working tree, so a `git add -A` picks it up. That
+# happened on 2026-08-19 and it took a later render deleting the file to notice.
 docs/report/index.aux
+docs/report/index.html
 docs/report/index.tex
 docs/report/index.toc
 docs/report/index.pdf

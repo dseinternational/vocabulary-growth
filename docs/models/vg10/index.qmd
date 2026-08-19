@@ -548,7 +548,7 @@ Read the `verdict` column rather than the deltas. Variants marked robust moved n
 Parameter recovery simulates a dataset from the model at a known parameter draw, refits the model to it through the same pipeline, and asks whether the posterior covers the truth it was generated from.
 
 ```{python}
-recovery_path = comparison_path("recovery/recovery_matrix_vg10-a1-tau-age-varying.csv")
+recovery_path = comparison_path("recovery/recovery_matrix_vg10.csv")
 if recovery_path is None:
     display(Markdown(
         "_No parameter-recovery comparison is available in this output root._"
@@ -572,7 +572,11 @@ The rows are the individual replicates and a pooled summary, read from the compa
 
 Three caveats, all of which limit what this table can support.
 
-**These replicates were run against a variant, not against the model of record.** The `a1-tau-age-varying` variant in the sensitivity table above is the model that was simulated from and refitted — the one variant the harness marks as sensitive. No parameter-recovery check has been run on VG10 as registered, so this table is evidence about a near neighbour of the model of record and not about the model of record itself.
+**Coverage is below nominal, and it is not specific to this model.** Across three replicates VG10 covers 0.72 of its targets at the 89% level and 0.31 at the 50%, and two of the three replicates were not assessable because their own fits did not converge. The correlated successor VG20 was run at the same tier and replicate count and does better on every one of those figures (0.78 and 0.41), so this is a property of the engine and the `test` sampling tier rather than of either model's structure. It is a real limitation on what this table can certify, and it is the same limitation for both.
+
+**`tau_subj_u` comes back below its truth in every replicate** — z = −1.39, −2.28, −0.87 here, and −1.94, −1.24, −1.58 on VG20: six of six across the two models, none of which carries `subject_variance_partition`. That matters beyond this page, because the same downward bias in the between-child scale was found on VG12, which *does* carry the partition, and attributed to it ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)). Six replicates on two unpartitioned models say the partition cannot be the whole cause. Six replicates cannot say what is.
+
+**An earlier version of this section reported the `a1-tau-age-varying` variant instead**, on the stated grounds that no recovery had been run on VG10 as registered. One had, from 2026-08-16; the page went on disclaiming a near-neighbour for three days while the model's own matrix sat unread beside it. Corrected 2026-08-19.
 
 **Not every replicate is assessable.** A replicate is scored only if its own fit's convergence is confirmed; the `converged` column shows which were, and the pooled row names how many of the replicates it covers. A non-converged replicate is excluded rather than counted as a failure.
 
