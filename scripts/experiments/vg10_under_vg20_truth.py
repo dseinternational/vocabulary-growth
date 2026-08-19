@@ -282,17 +282,42 @@ def _truth_values(replicate: int, source_def) -> dict[str, float]:
 
 
 def _posterior_summary(directory: str, names) -> dict[str, tuple[float, float]]:
+    """``{parameter: (centre, sd)}`` for a completed fit.
+
+    Prefers the trace, which gives the posterior *median*. Falls back to the
+    fit's own ``diagnostics.csv``, which carries the *mean* -- a difference that
+    is negligible for these near-symmetric scalar posteriors and is reported so
+    the substitution is visible rather than silent.
+
+    The fallback is not a convenience. Recovery traces are pruned once scored,
+    and on 2026-08-19 a prune glob written for one experiment deleted another's
+    control traces mid-run; every summary a comparison needs was still on disk,
+    but the scorer insisted on the trace and the run failed. Reading a
+    multi-gigabyte trace to recover a scalar that is already tabulated beside it
+    was never the right dependency.
+    """
     path = os.path.join(directory, "trace.nc")
-    if not os.path.isfile(path):
-        raise SystemExit(f"No trace at {path}; fit the replicate first.")
     out: dict[str, tuple[float, float]] = {}
-    with xr.open_datatree(path) as tree:
-        posterior = tree["posterior"].to_dataset()
-        for name in names:
-            if name not in posterior.data_vars:
-                continue
-            draws = np.asarray(posterior[name].values, dtype=float).ravel()
-            out[name] = (float(np.median(draws)), float(np.std(draws, ddof=1)))
+    if os.path.isfile(path):
+        with xr.open_datatree(path) as tree:
+            posterior = tree["posterior"].to_dataset()
+            for name in names:
+                if name not in posterior.data_vars:
+                    continue
+                draws = np.asarray(posterior[name].values, dtype=float).ravel()
+                out[name] = (float(np.median(draws)), float(np.std(draws, ddof=1)))
+        return out
+
+    fallback = os.path.join(directory, "diagnostics.csv")
+    if not os.path.isfile(fallback):
+        raise SystemExit(
+            f"Neither trace.nc nor diagnostics.csv in {directory}; fit it first."
+        )
+    print(f"    [no trace] reading posterior means from {os.path.basename(fallback)}")
+    frame = pd.read_csv(fallback, index_col=0)
+    for name in names:
+        if name in frame.index:
+            out[name] = (float(frame.loc[name, "mean"]), float(frame.loc[name, "sd"]))
     return out
 
 
