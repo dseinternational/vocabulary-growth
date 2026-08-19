@@ -267,18 +267,27 @@ def build_variance_partition(
     docstring used to claim they were.** Parameter recovery on VG12 returns
     ``tau_subject`` below its truth in three replicates of three, by about 5.8%,
     with the truth outside the 89% interval every time. ``v_total`` recovers
-    cleanly and ``subject_variance_share`` is biased low, so it is the split that
-    is mis-estimated rather than the budget, and ``tau_subject`` inherits the bias
-    amplified because the square root concentrates its posterior. VG10, which
-    carries two free scales and no partition, shows no such consistent direction.
+    cleanly (z = +1.05, +0.63, −0.10) and ``subject_variance_share`` is biased low
+    (−20.6%, −12.7%, −8.7%), so on VG12 it is the split that is mis-estimated
+    rather than the budget, and ``tau_subject`` inherits the bias amplified
+    because the square root concentrates its posterior.
+
+    **This docstring used to add that VG10, carrying two free scales and no
+    partition, showed no such consistent direction. That is false.** VG10 returns
+    −5.28%, −8.23%, −3.20% and VG20 −7.08%, −4.42%, −5.95%, against VG12's
+    −6.59%, −5.32%, −5.66%: the same size and the same sign in 9 replicates of
+    9, with the partition and without it. So the partition is not the cause — but
+    the two families fail differently. VG12 keeps its budget and mis-splits it,
+    whereas in VG10 and VG20 the dispersion concentration at the young anchor
+    comes back low alongside the subject scale (9 of 9), so there the budget
+    itself is under-recovered rather than merely misallocated.
+
     Since ``tau_subject`` is the typically-developing side of the DS/TD
     between-child contrast, a low bias there **overstates** the reported
-    difference. A leading suspect is the fixed ``p0``: if a dataset's actual
-    proportion near the young anchor sits away from it, ``c`` is wrong for that
-    dataset and the budget mis-splits even when its total is right — which would
-    expose VG11 (``p0`` = 0.0118) and VG12 (0.1041) very differently. VG11 has not
-    been through recovery. See ``notes/202608161700-recovery-baseline-215.md`` and
-    issue #225; treat the contrast as carrying this caveat until that reports.
+    difference — but the Down syndrome side now carries a bias of the same sign
+    and similar size, so the contrast is far less affected than either side
+    alone. See ``notes/202608161700-recovery-baseline-215.md`` and issues #225
+    and #229; treat the contrast as carrying this caveat until one reports.
 
     See ``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4 and 7.1.
     """
