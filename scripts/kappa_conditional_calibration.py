@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import jax
 import jax.numpy as jnp
@@ -620,8 +620,10 @@ POOLS = {
 # --------------------------------------------------------------------------
 
 
-def run_pool(key, *, nodes=DEFAULT_NODES, basis=None):
+def run_pool(key, *, nodes=DEFAULT_NODES, basis=None, anchors=None):
     pool = POOLS[key]
+    if anchors is not None:
+        pool = replace(pool, anchors=tuple(float(a) for a in anchors))
     design = pool.design(**(basis or {}))
     print(f"\n{'=' * 78}\n{pool.label}   anchors={pool.anchors}")
     print(" ", design.describe(), flush=True)
@@ -720,12 +722,14 @@ def run_loading(key, *, nodes=DEFAULT_NODES, basis=None):
     return const, varying
 
 
-def run_mean_sweep(key, *, nodes=DEFAULT_NODES):
+def run_mean_sweep(key, *, nodes=DEFAULT_NODES, anchors=None):
     """How much does the answer depend on how flexible the mean is?
 
     A pool whose kappa moves with the mean model cannot be calibrated from.
     """
     pool = POOLS[key]
+    if anchors is not None:
+        pool = replace(pool, anchors=tuple(float(a) for a in anchors))
     ya, oa = int(pool.anchors[0]), int(pool.anchors[1])
     print(f"\n{'=' * 78}\nmean sweep -- {pool.label}   anchors={pool.anchors}")
     print(f"  {'mean':>16} {'tau':>7} {'kappa_min':>10} "
@@ -763,6 +767,11 @@ def main(argv=None):
                         help="mean model for --recover and the default fit "
                              "(default %(default)s; the DS joint frame needs spline, "
                              "since the cell rule drops half its rows)")
+    parser.add_argument("--anchors", default=None,
+                        help="override the pool's anchor ages, as YOUNG,OLD "
+                             "(e.g. 18,72). The prior is placed at whatever "
+                             "ages the model anchors at, so a proposed change "
+                             "of anchor needs its own calibration.")
     parser.add_argument("--knots", type=int, default=8,
                         help="spline knots when --mean spline (default %(default)s)")
     args = parser.parse_args(argv)
@@ -774,16 +783,24 @@ def main(argv=None):
 
     basis = ({"mean": "spline", "min_cell": 1, "n_knots": args.knots}
              if args.mean == "spline" else {})
+    anchors = None
+    if args.anchors:
+        parts = [p.strip() for p in args.anchors.split(",")]
+        if len(parts) != 2:
+            parser.error("--anchors takes exactly two ages, as YOUNG,OLD")
+        anchors = (float(parts[0]), float(parts[1]))
+        if not anchors[1] > anchors[0]:
+            parser.error("--anchors must be ordered (young, old)")
 
     for key in keys:
         if args.recover:
             run_recovery(key, nodes=args.nodes, basis=basis)
         elif args.mean_sweep:
-            run_mean_sweep(key, nodes=args.nodes)
+            run_mean_sweep(key, nodes=args.nodes, anchors=anchors)
         elif args.loading:
             run_loading(key, nodes=args.nodes, basis=basis)
         else:
-            run_pool(key, nodes=args.nodes, basis=basis)
+            run_pool(key, nodes=args.nodes, basis=basis, anchors=anchors)
     return 0
 
 
