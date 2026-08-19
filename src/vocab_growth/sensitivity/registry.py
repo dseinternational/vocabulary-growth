@@ -417,8 +417,11 @@ VARIANTS: dict[tuple[str, str], dict] = {
     #                        comprehension at every age above 24 months.
     #   kappa-floor-generic  the old generic log(3.0) floor prior, keeping the
     #                        new anchors. This is the factor that does move the
-    #                        old-age numbers -- 14.2% at 84 months -- and the one
-    #                        the conditional calibration argues against.
+    #                        old-age numbers -- 14.2% at 84 months -- though only
+    #                        by about a fifth of that quantity's own 89%
+    #                        interval, and notes/202608020829 §22 had already
+    #                        judged the uncentred floor immaterial because only
+    #                        the sum at the anchors is identified.
     #   kappa-pre-promotion  both, which is the dispersion block every DS joint
     #                        fit carried before 2026-08-19. Keeps the previous
     #                        model of record reachable as a registered variant

@@ -1780,14 +1780,28 @@ _DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
     # calibration puts it (`scripts/kappa_conditional_calibration.py --anchors
     # 18,72 --mean spline`, stable at 7.5-8.0 across 6, 8, 10 and 14 knots;
     # only the saturated per-cell mean collapses it, which is what that pool's
-    # "frame too thin" note is about). These blocks kept the generic log(3.0)
-    # that VG11 was moved off when it gained a conditional calibration.
+    # "frame too thin" note is about). These blocks had kept the generic
+    # log(3.0) that VG11 was moved off. That was a considered position rather
+    # than an oversight -- notes/202608020829 §22 measured `kappa_min_s`'s
+    # posterior at 9.23 against the same prior median with contraction -0.05
+    # and left it, on the ground that only the sum at the anchors is
+    # identified, which remains true. Re-centring it is worth doing for the
+    # geometry and for saying what the data say, not because the old value
+    # biased anything.
     #
     # Excess medians are the calibrated TOTAL at each anchor minus the floor
-    # prior's median, as the values they replace were set: totals 92.6 at 18
-    # months and 14.0 at 72. The superseded comment cited totals of 110 @ 24
-    # and 33 @ 48 against this calibration's 71.2 and 27.7 on the same frame;
-    # that discrepancy is unexplained and predates this change.
+    # prior's median: totals 92.6 at 18 months and 14.0 at 72.
+    #
+    # NOTE: these are the *uncorrected* calibration. The values they replace
+    # were each estimate divided by the recovery bias measured at its level
+    # (81.6/0.74 = 110 at 24 months, 20.3/0.62 = 33 at 48), because recovered
+    # `kappa` on this frame is one-directionally low -- -2% at a truth of 12
+    # rising to -67% at 100. Dropping that a priori correction was noticed only
+    # after the promotion. §22 reports it "was not needed" on understood and
+    # under-corrected the ratio, and the measured consequence here is under 1%
+    # on reported kappa below 48 months, so it is left dropped -- but as a
+    # stated position, not an accident. See
+    # notes/202608191800-kappa-components-not-estimands.md §9.
     #
     # Expect little movement in what is reported. On a like-for-like `test`
     # pairing all 395 checks fall inside the baseline's 89% interval (max
