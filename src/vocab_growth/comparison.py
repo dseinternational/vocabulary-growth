@@ -671,15 +671,29 @@ def child_spread_product(
     tau_q: np.ndarray,
     n: int,
     *,
+    rho: np.ndarray | None = None,
     n_nodes: int = 21,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Between-child spread of spoken in a joint ``p_s = p_u * q`` model.
 
     A child's spoken proportion is ``sigmoid(f_u + tau_u*Z1) * sigmoid(h + tau_q*Z2)``
-    with independent standard Normal ``Z1``, ``Z2``, so the SD of the child's
-    *spoken* logit is neither ``tau_u`` nor ``tau_q`` and is age-varying even though
-    both scales are constants. Returns the same ``(tau_logit, sd_child_words)`` pair
-    as :func:`child_spread_single`, evaluated on a tensor Gauss-Hermite grid.
+    with standard Normal ``Z1``, ``Z2``, so the SD of the child's *spoken* logit is
+    neither ``tau_u`` nor ``tau_q`` and is age-varying even though both scales are
+    constants. Returns the same ``(tau_logit, sd_child_words)`` pair as
+    :func:`child_spread_single`, evaluated on a tensor Gauss-Hermite grid.
+
+    ``rho`` is the correlation between the child's two deviations, one value per
+    draw. ``None`` means independent ``Z1``, ``Z2`` — the VG05–VG16 assumption and
+    this function's historical behaviour. Where a model estimates the correlation
+    (VG20's ``rho_uq``), passing it applies to the quadrature nodes the same
+    Cholesky the model samples under, ``Z2 = rho*Z1 + sqrt(1 - rho^2)*Z2'``.
+
+    The correction has a known direction: ``log p_S = log p_U + log q`` gains
+    ``2 Cov``, so assuming independence when the correlation is positive
+    **understates** the spoken between-child spread. That asymmetry was a
+    disclosed limitation of the DS-versus-TD contrast for as long as no DS model
+    estimated the correlation — the TD comparator's single spoken intercept
+    absorbs it whether or not anyone models it.
 
     This is the quantity that is like-for-like with a univariate model's
     ``tau_subject``; contrasting ``tau_subj_q`` against it instead would compare the
@@ -688,6 +702,13 @@ def child_spread_product(
     x, w = _gauss_hermite_standard_normal(n_nodes)
     tu = np.asarray(tau_u, dtype=float)[:, None]
     tq = np.asarray(tau_q, dtype=float)[:, None]
+    if rho is None:
+        r = s = None
+    else:
+        r = np.asarray(rho, dtype=float)[:, None]
+        # Clipped rather than trusted: rho lives on (-1, 1) by construction, but
+        # a floating-point 1 - rho^2 can go very slightly negative at the edge.
+        s = np.sqrt(np.maximum(1.0 - r * r, 0.0))
     p1 = np.zeros_like(f_u)
     p2 = np.zeros_like(f_u)
     l1 = np.zeros_like(f_u)
@@ -695,7 +716,7 @@ def child_spread_product(
     for xi, wi in zip(x, w, strict=True):
         a = f_u + tu * xi
         for xj, wj in zip(x, w, strict=True):
-            b = h + tq * xj
+            b = h + (tq * xj if r is None else tq * (r * xi + s * xj))
             weight = wi * wj
             p = _sigmoid(a) * _sigmoid(b)
             lg = _logit_sigmoid_product(a, b)
@@ -791,13 +812,29 @@ def subject_heterogeneity(
                     "understood *and* ratio subject effects; both use_subject_re_u "
                     "and use_subject_re_q must be set."
                 )
+            # A model that estimates the correlation between the two child
+            # deviations must have it carried into the derived spoken scale;
+            # otherwise the parameter is fitted and then thrown away here, which
+            # is exactly the defect #224 found in the subject-marginal
+            # predictive. Keyed off the definition field rather than off the
+            # variable's presence in the trace, so a model that should carry a
+            # correlation and does not fails loudly in _load_reshaped_draws.
+            scalar_names = ("tau_subj_u", "tau_subj_q")
+            correlated = getattr(d, "subject_re_correlation_eta", None) is not None
+            if correlated:
+                scalar_names += ("rho_uq",)
             native, (f_u, h), scal = _load_reshaped_draws(
-                path, ("f_u_plot", "h_plot"), ("tau_subj_u", "tau_subj_q")
+                path, ("f_u_plot", "h_plot"), scalar_names
             )
             grid, f_u, tau_u = _prepare(native, f_u, scal["tau_subj_u"])
             _, h, tau_q = _prepare(native, h, scal["tau_subj_q"])
+            rho = None
+            if correlated:
+                rho = scal["rho_uq"]
+                if draws is not None:
+                    rho = rho[draws]
             tau_logit, sd_words = child_spread_product(
-                f_u, h, tau_u, tau_q, n, n_nodes=n_nodes
+                f_u, h, tau_u, tau_q, n, rho=rho, n_nodes=n_nodes
             )
             return grid, tau_logit, sd_words, n
         raise ValueError(f"outcome must be 'spoken' or 'understood', got {outcome!r}.")
@@ -816,25 +853,31 @@ def subject_effect_correlation(
     """Per-draw correlation *across children* between two subject random effects.
 
     The joint DS models give each child two deviations — one on comprehension
-    (``delta_subj_u``) and one on the production ratio (``delta_subj_q``) — drawn
-    as two independent standard Normal vectors. Nothing in the model estimates a
-    correlation between them, and :func:`child_spread_product` derives the spoken
-    between-child scale on exactly that independence assumption. The univariate
-    TD comparator places a single intercept on the spoken logit and so carries no
-    such constraint, which makes the assumption a live asymmetry in the DS-vs-TD
-    ``tau`` contrast rather than an internal detail.
+    (``delta_subj_u``) and one on the production ratio (``delta_subj_q``). In
+    VG05–VG16 they are drawn as two *independent* standard Normal vectors, and
+    :func:`child_spread_product` derives the spoken between-child scale on
+    exactly that assumption; the univariate TD comparator places a single
+    intercept on the spoken logit and so carries no such constraint, which made
+    the assumption a live asymmetry in the DS-vs-TD ``tau`` contrast rather than
+    an internal detail. VG20 estimates the correlation as a free parameter
+    (``rho_uq``), which is the fix rather than the measurement.
 
-    Measuring it in the fitted deviations is the only check available without a
-    refit. Returns ``(correlations, n_children)``: one correlation per retained
-    draw — computed across children within the draw — so the result carries
-    posterior uncertainty, unlike a single correlation of the posterior *means*,
-    which is inflated by the shrinkage the two effects share.
+    This function keeps both roles. On a model that does not estimate the
+    correlation it is the only check available without a refit; on one that does,
+    it is an *internal consistency check* — the realised deviations should
+    reproduce the fitted ``rho_uq``, and on VG20 they do (0.371 against 0.369).
 
-    Two cautions on reading the result. The estimate is shrunk toward zero by the
-    independence prior, so its magnitude is a lower bound. And because
-    ``log p_S = log p_U + log q``, a positive correlation means the independent-
-    draw derivation **understates** the spoken between-child spread; a negative
-    one means it overstates it.
+    Returns ``(correlations, n_children)``: one correlation per retained draw —
+    computed across children within the draw — so the result carries posterior
+    uncertainty, unlike a single correlation of the posterior *means*, which is
+    inflated by the shrinkage the two effects share.
+
+    Two cautions, and they apply only to the uncorrelated models. The estimate is
+    shrunk toward zero by the independence prior, so its magnitude is a lower
+    bound — VG10's realised +0.151 against VG20's fitted +0.369 measures how much
+    that prior suppresses. And because ``log p_S = log p_U + log q``, a positive
+    correlation means the independent-draw derivation **understates** the spoken
+    between-child spread; a negative one means it overstates it.
 
     ``thin`` keeps every ``thin``-th draw: the correlation is over hundreds of
     children per draw, so a few thousand draws already resolve the interval.

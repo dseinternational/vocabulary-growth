@@ -279,6 +279,78 @@ def test_child_spread_product_matches_monte_carlo():
     assert np.allclose(sd_words[0], n * p.std(axis=0), rtol=0.02)
 
 
+def test_child_spread_product_correlated_matches_monte_carlo():
+    # Same brute-force check as above, but with the two child deviations drawn
+    # from the joint distribution VG20 actually fits. If the Cholesky applied to
+    # the quadrature nodes is wrong, this is where it shows: the independent case
+    # would still pass every other test in this file.
+    rng = np.random.default_rng(20260819)
+    f_u = np.array([[-2.0, 0.0, 1.0]])
+    h = np.array([[-1.5, 0.0, 0.5]])
+    tau_u, tau_q, rho, n = 0.8, 1.4, 0.368, 810
+    tau_logit, sd_words = comparison.child_spread_product(
+        f_u, h, np.array([tau_u]), np.array([tau_q]), n, rho=np.array([rho])
+    )
+    z1 = rng.standard_normal((400_000, 1))
+    z2 = rho * z1 + np.sqrt(1.0 - rho**2) * rng.standard_normal((400_000, 1))
+    p = (1.0 / (1.0 + np.exp(-(f_u + tau_u * z1)))) * (
+        1.0 / (1.0 + np.exp(-(h + tau_q * z2)))
+    )
+    logit_p = np.log(p) - np.log1p(-p)
+    assert np.allclose(tau_logit[0], logit_p.std(axis=0), rtol=0.02)
+    assert np.allclose(sd_words[0], n * p.std(axis=0), rtol=0.02)
+
+
+def test_child_spread_product_rho_zero_is_the_independent_case_exactly():
+    # `rho=None` is not a separate approximation, it is the rho = 0 branch. Every
+    # model before VG20 goes down the None path, so this equality is what lets the
+    # correlation be added without restating any published uncorrelated number.
+    f_u = np.array([[-3.0, -1.0, 0.5], [-2.5, -0.5, 1.0]])
+    h = np.array([[-2.0, -0.5, 0.5], [-1.5, 0.0, 0.8]])
+    tau_u, tau_q = np.array([0.8, 0.9]), np.array([1.3, 1.2])
+    base = comparison.child_spread_product(f_u, h, tau_u, tau_q, 810)
+    zero = comparison.child_spread_product(
+        f_u, h, tau_u, tau_q, 810, rho=np.zeros(2)
+    )
+    assert np.array_equal(base[0], zero[0])
+    assert np.array_equal(base[1], zero[1])
+
+
+def test_child_spread_product_positive_rho_widens_and_negative_narrows():
+    # The direction is the whole reason the parameter has to be carried:
+    # log p_S = log p_U + log q gains 2 Cov, so the independent-draw derivation
+    # understates the spoken spread whenever the correlation is positive. VG20
+    # puts it at +0.368, so the published DS spoken tau was biased low.
+    f_u = np.array([[-3.0, -1.0, 0.5]])
+    h = np.array([[-2.0, -0.5, 0.5]])
+    tau_u, tau_q = np.array([0.79]), np.array([1.28])
+    base_tau, base_sd = comparison.child_spread_product(f_u, h, tau_u, tau_q, 810)
+    up_tau, up_sd = comparison.child_spread_product(
+        f_u, h, tau_u, tau_q, 810, rho=np.array([0.368])
+    )
+    down_tau, down_sd = comparison.child_spread_product(
+        f_u, h, tau_u, tau_q, 810, rho=np.array([-0.368])
+    )
+    assert np.all(up_tau > base_tau) and np.all(up_sd > base_sd)
+    assert np.all(down_tau < base_tau) and np.all(down_sd < base_sd)
+
+
+def test_child_spread_product_stays_finite_at_the_correlation_bounds():
+    # 1 - rho^2 is clipped at zero rather than trusted: a rho arriving as exactly
+    # +/-1 from a summary, or a hair outside it from floating point, must not put
+    # a NaN into a published between-child table.
+    f_u = np.array([[-3.0, -1.0, 0.5]])
+    h = np.array([[-2.0, -0.5, 0.5]])
+    tau_u, tau_q = np.array([0.79]), np.array([1.28])
+    for rho in (-1.0, 1.0):
+        tau_logit, sd_words = comparison.child_spread_product(
+            f_u, h, tau_u, tau_q, 810, rho=np.array([rho])
+        )
+        assert np.all(np.isfinite(tau_logit))
+        assert np.all(np.isfinite(sd_words))
+        assert np.all(sd_words >= 0.0)
+
+
 def test_child_spread_product_tau_varies_with_age_at_constant_scales():
     # Both subject scales are constants, yet the induced spoken tau is age-varying
     # because the product passes through two nonlinearities. This is why the joint
