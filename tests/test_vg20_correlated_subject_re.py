@@ -254,3 +254,108 @@ def test_as_definition_subclass_shares_nested_prior_blocks():
     """
     assert VG20.kappa_u is VG10.kappa_u
     assert VG20.kappa_s is VG10.kappa_s
+
+
+def test_subject_marginal_predictive_uses_the_correlation():
+    """The unseen child must be drawn from the joint the model fitted.
+
+    Until 2026-08-19 the subject-marginal predictive drew the two deviates as
+    two independent ``pm.Normal``s, so VG20 estimated ``rho_uq`` and then threw
+    it away when building the one quantity the correlation exists to change.
+    VG20's gate 3 read as "a correlation of +0.368 leaves the spoken intervals
+    unchanged" — which was this code path asserting rho = 0, not a result.
+
+    This checks the *precondition* the patched branch keys on -- that ``rho_uq``
+    is reachable from the predictive path for VG20 and absent for VG10 -- which
+    is what silently failed before. It does not by itself prove the branch is
+    taken; that is established end-to-end by regenerating VG20's plots from its
+    trace and re-running gate 3, and by VG10's regenerated artefacts being
+    unchanged. Kept because the precondition is the cheap half and would catch a
+    refactor that stopped exposing ``rho_uq`` here.
+    """
+    import contextlib
+    import io
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def marginal_rv_names(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            cbr.prepare_bivariate_re_data(ctx, definition)
+            cb.configure_bivariate_priors(ctx, definition)
+            cbr.build_model_re(ctx, definition)
+        # The predictive block adds its auxiliary RVs to the same model.
+        before = {v.name for v in ctx.model.free_RVs}
+        with contextlib.redirect_stdout(io.StringIO()):
+            with ctx.model:
+                pass
+        return ctx, before
+
+    with tempfile.TemporaryDirectory() as root:
+        ctx20, _ = marginal_rv_names(VG20, root)
+        ctx10, _ = marginal_rv_names(VG10, root)
+
+    # The correlation is available to the predictive path for VG20 and absent
+    # for VG10 — which is exactly what the patched branch keys on.
+    assert "rho_uq" in ctx20.model_variables, (
+        "VG20's predictive cannot see rho_uq, so the unseen child is drawn "
+        "independently and the correlation is silently discarded"
+    )
+    assert "rho_uq" not in ctx10.model_variables
+
+    # Both carry the two subject scales the construction needs.
+    for ctx, label in ((ctx20, "VG20"), (ctx10, "VG10")):
+        assert "tau_subj_u" in ctx.model_variables, label
+        assert "tau_subj_q" in ctx.model_variables, label
+
+
+def test_the_correlated_marginal_draw_preserves_each_marginal_sd():
+    """rho changes the joint, never either marginal — the same property the
+    in-model construction is tested for, now required of the predictive too.
+
+    Pure arithmetic on the construction, so it runs without the database. A
+    wrong whitening term here would rescale the unseen child's production
+    deviate and quietly change a reported interval, which is the failure the
+    in-model version of this test was written to catch.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(20260819)
+    tau_u, tau_q, rho = 0.786, 1.285, 0.368
+    z_u = rng.standard_normal(400_000)
+    z_q = rng.standard_normal(400_000)
+
+    delta_u = tau_u * z_u
+    delta_q = tau_q * (rho * z_u + np.sqrt(1.0 - rho**2) * z_q)
+
+    assert delta_u.std() == pytest.approx(tau_u, rel=0.01)
+    assert delta_q.std() == pytest.approx(tau_q, rel=0.01)
+    assert np.corrcoef(delta_u, delta_q)[0, 1] == pytest.approx(rho, abs=0.01)
+
+    # And the point of the whole exercise: on the logit scale the two deviates
+    # compound, so an unseen child's spoken vocabulary is more variable than
+    # independent draws imply.
+    independent = (tau_u * z_u + tau_q * z_q).std()
+    correlated = (delta_u + delta_q).std()
+    assert correlated > independent

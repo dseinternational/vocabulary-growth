@@ -1019,8 +1019,42 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             h_plot_var = context.model_variables["h_plot"]
             h_query_var = context.model_variables["h_query"]
             plot_scale, query_scale = _subject_scales(context, "tau_subj_q")
+            # The unseen child's two deviates must come from the SAME joint
+            # distribution the model fitted. Until 2026-08-19 they were two
+            # independent `pm.Normal` draws, so a model carrying `rho_uq`
+            # estimated the correlation and then discarded it when building the
+            # subject-marginal predictive -- the one quantity the correlation was
+            # added to change. VG20's gate 3 read as "a correlation of +0.368
+            # leaves the spoken intervals unchanged", which was this code path
+            # asserting rho = 0 rather than a result. See #224.
+            #
+            # Same Cholesky construction as `common_bivariate_re.build_model_re`:
+            # each deviate keeps its marginal SD and only their joint behaviour
+            # changes. `rho_uq` is absent from every model without a
+            # `subject_re_correlation_eta`, so the other six draw exactly as
+            # before -- checked by test rather than asserted.
+            #
+            # `z_u` is recovered by dividing the existing logit-scale deviate by
+            # its own scale instead of introducing a standardised RV, so no
+            # variable is renamed and no model's graph gains or loses a node.
+            # The age-varying branch below cannot carry a correlation at all:
+            # `_resolve_subject_re_correlation` rejects that combination,
+            # because a constant correlation between per-observation-scaled
+            # deviates is not a model anyone means.
+            rho_marg = context.model_variables.get("rho_uq")
+            correlated = rho_marg is not None and use_subject_re_u
             if plot_scale is None:
-                delta_q_marg = pm.Normal("_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q)
+                if correlated:
+                    z_u_marg = delta_u_query / context.model_variables["tau_subj_u"]
+                    z_q_marg = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
+                    delta_q_marg = tau_subj_q * (
+                        rho_marg * z_u_marg
+                        + pm.math.sqrt(1.0 - rho_marg**2) * z_q_marg
+                    )
+                else:
+                    delta_q_marg = pm.Normal(
+                        "_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q
+                    )
                 delta_q_plot = delta_q_query = delta_q_marg
             else:
                 z_child_q = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
