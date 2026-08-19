@@ -13,7 +13,7 @@ import dataclasses
 
 import pytest
 
-from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15
+from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15, VG20
 from vocab_growth.sensitivity.overrides import make_variant, replace_kappa
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
@@ -149,12 +149,24 @@ def test_registry_counts_and_models():
     # sit above the cap. A window change drags its co-identified anchors, GP
     # domain and query grid with it, so each is registered as one unit; see the
     # registry comment for the measurements.
-    assert len(VARIANTS) == 53
+    #
+    # +3 on 2026-08-19: VG20's kappa placement trio (#229), and the first
+    # variants registered against the model of record rather than against a
+    # development step. Two of them vary where the dispersion prior is placed
+    # rather than how wide it is -- `kappa-anchor-18-72` moves the anchors
+    # inside the reporting range, `kappa-floor-recentred` moves the floor's
+    # prior median from 3.0 to the conditionally calibrated 7.8 -- and the
+    # third combines them. `anchor_ages` was already an overridable field; what
+    # is new is treating anchor *placement* as a registered question, on the
+    # measurement that kappa_min carries 46% of reported kappa_u at 84 months
+    # and 83% of kappa_s at 90 while recovery scores it at -40% to -60%.
+    assert len(VARIANTS) == 56
     assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
     assert len(variants_for("vg13")) == 3
     assert len(variants_for("vg15")) == 27
+    assert len(variants_for("vg20")) == 3
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -276,6 +288,7 @@ def test_variants_are_single_factor_or_documented_pairs():
             "vg12": VG12,
             "vg13": VG13,
             "vg15": VG15,
+            "vg20": VG20,
         }[model_key]
         assert v.model_type == base.model_type
         assert dataclasses.asdict(v) != dataclasses.asdict(base)

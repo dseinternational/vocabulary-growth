@@ -48,7 +48,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "model",
-        help="Model key with sensitivity variants (vg10, vg11, vg12, vg13, vg15).",
+        help="Model key with sensitivity variants (vg10, vg11, vg12, vg13, vg15, vg20).",
     )
     parser.add_argument("variant", help="Variant name, or 'all' for every variant of the model.")
     parser.add_argument(

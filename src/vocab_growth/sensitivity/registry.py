@@ -395,6 +395,80 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "eta_q_sigma": 0.5},
      "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
                "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
+
+    # -- Target 9: where the dispersion prior is placed (#229) --
+    #
+    # VG20's kappa is `kappa_min + exp(a + b z)`, anchored at 24 and 48 months
+    # while the model reports to 84/90. Everything above 48 is extrapolation
+    # onto the asymptote, and the asymptote is where the reported number ends
+    # up living: `kappa_min` is 16% of fitted kappa_u at 48 months and 46% at
+    # 84, and 68% of kappa_s at 48 rising to 83% at 90. Recovery scores it at
+    # -40% to -60% while the anchor totals it sits inside recover to within a
+    # few percent -- a sum identified, its parts not.
+    #
+    # Two things are wrong and they are separable, so each gets its own variant
+    # and the third combines them.
+    #
+    #   kappa-anchor-18-72   Move the anchors inside the reporting range, so
+    #                        the reported curve is interpolation between two
+    #                        priored points rather than extrapolation onto a
+    #                        floor. 84 was considered and rejected: only 18
+    #                        administrations on 12 children sit within +-6
+    #                        months of it, against 51 on 46 children at 72.
+    #   kappa-floor-recentred  The floor's prior median is 3.0. The conditional
+    #                        calibration puts it at 7.81 (understood) and 7.80
+    #                        (q) -- a factor of 2.6 -- and VG20 fits kappa_min_u
+    #                        at 4.06, between the two, which is what a prior
+    #                        pulling against the data looks like.
+    #   kappa-anchor-18-72-floor  Both. This is the candidate for the record if
+    #                        the two land in the same direction.
+    #
+    # Excess medians are the calibrated TOTAL at each anchor minus the floor
+    # prior's own median, which is how the base blocks were set. Totals from
+    # `scripts/kappa_conditional_calibration.py --anchors ... --mean spline`,
+    # conditional (study and subject effects present, as the models carry):
+    #
+    #     anchors (24, 48)   u 71.2 / 27.7     q 15.4 / 10.0
+    #     anchors (18, 72)   u 92.6 / 14.0     q 18.2 /  8.4     floor 7.81 / 7.80
+    #
+    # `--mean-sweep` at (18, 72) holds these across 6, 8, 10 and 14 spline
+    # knots (floor 7.5-8.0 on both outcomes); only the saturated per-cell mean
+    # collapses the floor to zero, which is what the pool's "frame too thin"
+    # note is about. The saturated fit is not what these are calibrated from.
+    #
+    # q's old excess at 72 months carries sigma 1.5 rather than 1.0: the
+    # calibration's own log-scale SE there is 1.429, and a prior narrower than
+    # the estimate it is drawn from would assert more than the estimate
+    # supports. At 72 months q's excess is 0.6 against a floor of 7.8, so that
+    # anchor is very nearly the floor restated -- the honest reading is that
+    # the anchor move helps comprehension more than it helps q, and the
+    # variants are what settle whether it helps q at all.
+    ("vg20", "kappa-anchor-18-72"): {"suffix": "kappa-anchor-18-72", "kappa": {
+        "kappa_u": {"anchor_ages": (18.0, 72.0),
+                    "excess_young_mu": math.log(89.6),
+                    "excess_old_mu": math.log(11.0)},
+        "kappa_s": {"anchor_ages": (18.0, 72.0),
+                    "excess_young_mu": math.log(15.2),
+                    "excess_old_mu": math.log(5.4),
+                    "excess_old_sigma": 1.5}}},
+    ("vg20", "kappa-floor-recentred"): {"suffix": "kappa-floor-recentred", "kappa": {
+        "kappa_u": {"kappa_min_mu": math.log(7.8),
+                    "excess_young_mu": math.log(63.4),
+                    "excess_old_mu": math.log(19.9)},
+        "kappa_s": {"kappa_min_mu": math.log(7.8),
+                    "excess_young_mu": math.log(7.6),
+                    "excess_old_mu": math.log(2.2)}}},
+    ("vg20", "kappa-anchor-18-72-floor"): {
+        "suffix": "kappa-anchor-18-72-floor", "kappa": {
+            "kappa_u": {"anchor_ages": (18.0, 72.0),
+                        "kappa_min_mu": math.log(7.8),
+                        "excess_young_mu": math.log(84.8),
+                        "excess_old_mu": math.log(6.2)},
+            "kappa_s": {"anchor_ages": (18.0, 72.0),
+                        "kappa_min_mu": math.log(7.8),
+                        "excess_young_mu": math.log(10.4),
+                        "excess_old_mu": math.log(0.6),
+                        "excess_old_sigma": 1.5}}},
 }
 
 
