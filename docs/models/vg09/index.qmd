@@ -38,7 +38,7 @@ This model asks whether children differ from one another not only in how many wo
 
 ::: {.callout-important title="A development step — do not quote these numbers"}
 
-VG09 exists to complete a structural argument, not to supply an estimate. The model of record for the Down syndrome understood-and-spoken estimands is **VG10**, which takes VG09's structure and adds a per-draw Gaussian process anchor for stability; VG09 was once the recommended model and has since been superseded by it.
+VG09 exists to complete a structural argument, not to supply an estimate. The model of record for the Down syndrome understood-and-spoken estimands is **VG20**, which takes VG10's structure — VG09's, plus a per-draw Gaussian process anchor for stability — and adds a correlation between the child's two random intercepts; VG09 was once the recommended model and has since been superseded twice over.
 
 That is a statement about model structure, not about how this fit sampled — the diagnostics section below is explicit that the fit reaching this page is a clean one. It nevertheless matters that the caution be taken seriously: VG09 and its predecessor VG08 differ only in whether the production ratio carries a child effect, and they disagree substantially about how much of a child's comprehension is spoken at older ages, and about whether the gap between understanding and speaking stays open or closes. A reader who quotes either report is quoting a superseded number, and the two reports do not agree on what it should be.
 
@@ -283,7 +283,7 @@ Earlier VG09 fits genuinely did sample badly. Adding a second child effect gave 
 
 Two registered changes since removed it: the Gaussian process amplitude prior on the production ratio was widened, having earlier been tightened on a mis-scoped rationale, and this model's dispersion block was migrated to the two-anchor form, which lifted the sign constraint its posterior had been pinned against. Both are visible in the priors table above, and the fit reported on this page is the result.
 
-The conclusion to draw is narrow. **VG09 remains a development step because VG10 is the model of record and adds structure this model lacks, not because VG09 samples badly** — on the evidence above it does not. Read the diagnostics table for what this fit did, and read this note as history.
+The conclusion to draw is narrow. **VG09 remains a development step because the model of record adds structure this model lacks, not because VG09 samples badly** — on the evidence above it does not. Read the diagnostics table for what this fit did, and read this note as history.
 
 :::
 
@@ -517,7 +517,7 @@ render_loo_section()
 
 ## Limits
 
-- **A development step, not a source of numbers.** VG10 is the model of record for these estimands, and it adds a Gaussian process anchor this model does not have. Nothing in this report should be quoted as a finding about vocabulary in Down syndrome — and the point is not academic, since VG09 and VG08 disagree materially about the production ratio at older ages.
+- **A development step, not a source of numbers.** VG20 is the model of record for these estimands, and the lineage between here and there adds a Gaussian process anchor and a correlation between the child's two random intercepts, neither of which this model has. Nothing in this report should be quoted as a finding about vocabulary in Down syndrome — and the point is not academic, since VG09 and VG08 disagree materially about the production ratio at older ages.
 - **The population curves are not averages of children.** With a child effect on the production ratio and a nonlinear link, the zero-effect curve is a particular child-level trajectory rather than the mean of the cohort's, and it is not comparable with the identically-labelled curve in a model without that effect.
 - **Above the high age anchor the production ratio is clamped**, and the reported comprehension range stops before the spoken range does. Both are stated in the _Model at a glance_ block. Rows beyond those points are carried by the model's smoothness assumptions rather than by observations; the monthly tables' `n_obs` column shows where that begins.
 - **The dispersion priors are lower bounds.** The calibration for this frame recovers a known $\kappa$ with a one-directional downward bias, corrected for in the prior medians but not eliminated, and the priors are correspondingly wide.

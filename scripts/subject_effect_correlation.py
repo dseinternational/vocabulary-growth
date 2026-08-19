@@ -2,20 +2,27 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Measure the correlation the joint DS models assume away.
+"""Measure, in the fitted per-child deviations, the correlation between a
+child's comprehension effect and their production-ratio effect.
 
-VG10 gives each child a comprehension deviation and a production-ratio
-deviation, drawn independently, and the DS spoken between-child scale reported
-in the DS-vs-TD ``tau`` contrast is derived on that independence. The TD
-comparator (VG11) places one intercept on the spoken logit and assumes nothing
-of the kind, so the assumption is an asymmetry in the contrast itself, not an
-internal modelling detail.
+VG05-VG16 give each child those two deviations and draw them **independently**,
+and the DS spoken between-child scale reported in the DS-vs-TD ``tau`` contrast
+was derived on that independence. The TD comparator (VG11) places one intercept
+on the spoken logit and assumes nothing of the kind, so the assumption was an
+asymmetry in the contrast itself, not an internal modelling detail. That is what
+this script was written to measure, before any model estimated it.
 
-Nothing in the model estimates the correlation, so this measures it in the
-fitted per-child deviations and writes it where the reports can read it. The
-number is not a free parameter recovered from the data — it is shrunk toward
-zero by the independence prior — so it bounds the magnitude rather than
-estimating it, which is what the reports say when they quote it.
+Since 2026-08-19 the model of record does estimate it: VG20's ``rho_uq``, +0.368
+[0.287, 0.447]. The script therefore now serves two different purposes depending
+on the model it is pointed at.
+
+* On an **uncorrelated** model (vg09, vg10, vg16) it bounds the magnitude rather
+  than estimating it — the fitted deviations are shrunk toward zero by the
+  independence prior, and VG10's +0.151 against VG20's fitted +0.368 measures how
+  much shrinkage that prior imposes.
+* On a **correlated** model (vg20) it is an internal consistency check: the
+  realised deviations should reproduce the fitted parameter, and they do
+  (+0.371 against +0.369).
 
 Writes ``<comparisons>/ds_subject_effect_correlation.csv``::
 
@@ -24,8 +31,8 @@ Writes ``<comparisons>/ds_subject_effect_correlation.csv``::
 
 Usage::
 
-    python scripts/subject_effect_correlation.py            # vg10
-    python scripts/subject_effect_correlation.py vg10 vg09
+    python scripts/subject_effect_correlation.py            # vg20
+    python scripts/subject_effect_correlation.py vg20 vg10
 """
 
 import argparse
@@ -67,7 +74,7 @@ def summarise(key: str, thin: int) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("models", nargs="*", default=["vg10"], help="model keys")
+    parser.add_argument("models", nargs="*", default=["vg20"], help="model keys")
     parser.add_argument("--thin", type=int, default=20)
     parser.add_argument("--output-dir", default=None)
     args = parser.parse_args()
@@ -77,7 +84,7 @@ def main() -> None:
     os.makedirs(out_dir, exist_ok=True)
 
     heading("Subject-effect correlation", style="bold cyan")
-    rows = [summarise(key, args.thin) for key in (args.models or ["vg10"])]
+    rows = [summarise(key, args.thin) for key in (args.models or ["vg20"])]
     frame = pd.DataFrame(rows)
     path = os.path.join(out_dir, FILENAME)
     frame.to_csv(path, index=False)

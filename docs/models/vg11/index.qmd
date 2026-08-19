@@ -46,7 +46,7 @@ render_model_at_a_glance()
 
 ::: {.callout-important title="What this model is for"}
 
-VG11 is a **reference model**. It exists to give the Down syndrome spoken-vocabulary models — VG01 without hierarchy, VG10 with it — a typically-developing curve to be read against, and it is consumed by the Down-syndrome-versus-typically-developing comparison outputs rather than being an end in itself.
+VG11 is a **reference model**. It exists to give the Down syndrome spoken-vocabulary models — VG01 without hierarchy, VG20 with it — a typically-developing curve to be read against, and it is consumed by the Down-syndrome-versus-typically-developing comparison outputs rather than being an end in itself.
 
 It succeeds **VG03**, which asked the same question of the same population but on a subsample, with no study or child effects, and on an English-only pool. VG11 uses the full pool, adds both kinds of random effect, and widens the language scope, so a difference between the two is not attributable to hierarchy alone.
 

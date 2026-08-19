@@ -38,7 +38,7 @@ This model asks what happens to the joint picture of comprehension and productio
 
 ::: {.callout-important title="A development step — do not quote these numbers"}
 
-VG08 exists to show what one particular piece of structure does, not to supply an estimate. The model of record for the Down syndrome understood-and-spoken estimands is **VG10**; VG08 is a step on the way to it and is not expected to supply any reported number.
+VG08 exists to show what one particular piece of structure does, not to supply an estimate. The model of record for the Down syndrome understood-and-spoken estimands is **VG20**; VG08 is a step on the way to it and is not expected to supply any reported number.
 
 This matters more than a general caution usually would. VG08 and the model that follows it, VG09, differ only in whether the production ratio carries a child effect, and they nevertheless disagree substantially about how much of a child's comprehension is spoken at older ages — because a curve with every random effect set to zero is not the average of children's curves once a nonlinear link is involved. A reader who quotes either report is quoting a superseded number, and the two reports do not agree on what it should be.
 
@@ -494,7 +494,7 @@ render_loo_section()
 
 ## Limits
 
-- **A development step, not a source of numbers.** VG10 is the model of record for these estimands. Nothing in this report should be quoted as a finding about vocabulary in Down syndrome.
+- **A development step, not a source of numbers.** VG20 is the model of record for these estimands. Nothing in this report should be quoted as a finding about vocabulary in Down syndrome.
 - **The hierarchy is asymmetric.** A child effect is fitted on comprehension only. Between-child differences in the production ratio have nowhere to go but the spoken dispersion parameter, so the spoken predictions rest on a structure this model itself demonstrates to be inadequate for comprehension.
 - **The dispersion parameterisation cannot represent a rising $\kappa$.** It is retained deliberately, for lineage comparability; where the data want dispersion to rise with age, this model cannot follow them.
 - **Above the high age anchor the production ratio is clamped**, and the reported comprehension range stops before the spoken range does. Both are stated in the _Model at a glance_ block. Rows beyond those points are carried by the model's smoothness assumptions rather than by observations.

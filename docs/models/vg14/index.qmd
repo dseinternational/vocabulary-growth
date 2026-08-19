@@ -389,7 +389,7 @@ from vocab_growth.report_cells import render_variation_table
 render_variation_table()
 ```
 
-This model carries no random effects, so there are no between-study or between-child scales to report and the block above prints nothing. That absence is the point: the spread reported in the tables on this page mixes genuine differences between children with differences between the studies they came from, and repeated observations of the same child are counted as though they were different children. VG10 separates those sources for understood and spoken vocabulary; VG15 does it for signing as well.
+This model carries no random effects, so there are no between-study or between-child scales to report and the block above prints nothing. That absence is the point: the spread reported in the tables on this page mixes genuine differences between children with differences between the studies they came from, and repeated observations of the same child are counted as though they were different children. VG20 separates those sources for understood and spoken vocabulary; VG15 does it for signing as well.
 
 Of the quantities below, the signed trajectory, the signed ratio's rise and fall, and the comprehension-production gap are properties this model can speak to subject to that caveat. Anything built from the **union** of signing and speech is not, and is marked where it appears.
 
@@ -482,7 +482,7 @@ The expected difference, in words, between what a child understands and what the
 
 ![The gap between expected words understood and expected words spoken, with uncertainty intervals.](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
-The gap widens and then narrows: comprehension pulls ahead first, and speech closes on it later. The age and size of the widest point are in the findings table above. This quantity is not part of the supersession — it involves no union — but it comes from a model with no random effects, and VG10 and VG15 both estimate it with that structure in place.
+The gap widens and then narrows: comprehension pulls ahead first, and speech closes on it later. The age and size of the widest point are in the findings table above. This quantity is not part of the supersession — it involves no union — but it comes from a model with no random effects, and VG20 and VG15 both estimate it with that structure in place.
 
 ## Posterior predictions -- words understood
 

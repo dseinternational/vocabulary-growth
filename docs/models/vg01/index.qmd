@@ -100,7 +100,7 @@ The straight-line trend is not given a prior directly. Instead priors are placed
 
 ::: {.callout-important title="What this model does not do"}
 
-This model has no study effects and no repeated-child effects. The pool contains children observed more than once, and children drawn from studies that differ in recruitment and measurement, and **this model treats every observation as independent**. It is therefore a baseline for comparison, not the preferred account of spoken vocabulary in Down syndrome. For that, see VG10, which carries both kinds of structure.
+This model has no study effects and no repeated-child effects. The pool contains children observed more than once, and children drawn from studies that differ in recruitment and measurement, and **this model treats every observation as independent**. It is therefore a baseline for comparison, not the preferred account of spoken vocabulary in Down syndrome. For that, see VG20, which carries both kinds of structure.
 
 :::
 
@@ -210,7 +210,7 @@ from vocab_growth.report_cells import render_headline_quantities
 render_headline_quantities()
 ```
 
-Read these alongside the caveat above: with no study or child effects in the model, the spread reported here mixes genuine differences between children with differences between the studies they came from, and repeated observations of the same child are counted as though they were different children. VG10 separates those sources; this model cannot.
+Read these alongside the caveat above: with no study or child effects in the model, the spread reported here mixes genuine differences between children with differences between the studies they came from, and repeated observations of the same child are counted as though they were different children. VG20 separates those sources; this model cannot.
 
 ## Posterior predictions
 
@@ -291,7 +291,7 @@ render_loo_section()
 
 ## Limits
 
-- **No hierarchy.** Study and repeated-child structure are absent, so uncertainty here is not a fair estimate of uncertainty about a new child. Use VG10 for that.
+- **No hierarchy.** Study and repeated-child structure are absent, so uncertainty here is not a fair estimate of uncertainty about a new child. Use VG20 for that.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat.
 - **Beyond the high anchor the trend extrapolates.** Where the data thin out, the curve is carried by the model's smoothness assumptions rather than by observations. The monthly table's `n_obs` column shows where that begins.

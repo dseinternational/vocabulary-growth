@@ -4,7 +4,8 @@
 DS-vs-TD population contrasts between RE-based models (separate-model, per-draw).
 
 Honest comparators only: the DS side is the spoken / understood **sub-curve of a
-random-effects DS model** (VG10 by default — study + subject REs), not the
+random-effects DS model** (VG20 by default — study + subject REs, with the
+correlation between the child's two deviations estimated), not the
 no-RE VG01/VG02. The TD side is the univariate study-RE models VG11 (spoken) /
 VG12 (understood).
 
@@ -43,7 +44,7 @@ Estimands, per outcome, written to the configured comparisons dir (default
   proper: τ, the SD across children of the child's own logit for this outcome,
   and the spread in expected words σ_child it induces, per population, with
   Δτ, τ_TD/τ_DS and Δσ_child. See ``comparison.subject_heterogeneity`` for why
-  this is not simply VG10's ``tau_subj_q`` read against VG11's ``tau_subject``.
+  this is not simply VG20's ``tau_subj_q`` read against VG11's ``tau_subject``.
 
 Each panel is emitted as its own standalone figure (linear axes, no subplot
 grids) so the figures are usable individually:
@@ -71,9 +72,13 @@ import pandas as pd
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
 
-# DS comparator: VG10 spoken/understood sub-curve (study+subject REs). One-line
-# swap to vg07/vg08/vg09 for a sensitivity check (all carry random effects).
-DS_KEY = "vg10"
+# DS comparator: the model of record's spoken/understood sub-curve (study+subject
+# REs). One-line swap to vg07/vg08/vg09/vg10 for a sensitivity check (all carry
+# random effects). Moved vg10 -> vg20 on 2026-08-19 with the role (#224): VG20 is
+# VG10 plus the correlation between the child's two deviations, so the population
+# curves here are unchanged, but the between-child panel below is not — see the
+# note on the subject-heterogeneity estimand.
+DS_KEY = "vg20"
 # Dispersion must contrast a kappa that means the same thing on both sides. What
 # kappa means depends on whether a subject random effect is present to absorb
 # between-child variance: without one, kappa carries that variance; with one, it
@@ -93,9 +98,18 @@ DS_KEY = "vg10"
 # of spoken counts marginally. That joint-vs-univariate difference predates this
 # correction and has not been audited — see the comparison book's caveat.
 #
-# (Mean/rate/delay keep VG10 — subject REs are mean-zero, so the population
-# trajectory is unaffected.)
-DISP_DS_KEY = "vg10"
+# (Mean/rate/delay keep the same model — subject REs are mean-zero, so the
+# population trajectory is unaffected.)
+#
+# Second correction, 2026-08-19 (#224): the between-child panel this key also
+# drives was derived on the assumption that a child's comprehension and
+# production-ratio deviations are independent, because no DS model estimated a
+# correlation between them. VG20 does, at +0.368, and since
+# log p_S = log p_U + log q gains 2 Cov, the old derivation understated the DS
+# spoken between-child scale by about 15% on the logit scale at every age. The
+# comprehension scale is unaffected, as it must be. The July-2026 and 13-16
+# August published spoken between-child contrasts are superseded by this.
+DISP_DS_KEY = "vg20"
 # TD comparator per outcome: the univariate models, which since #164 carry both
 # study and subject random effects.
 TD_KEYS = {"spoken": "vg11", "understood": "vg12"}
@@ -113,10 +127,10 @@ MIN_COVERAGE = 0.80
 KEY_AGES = [12, 18, 24, 30]
 
 # Comprehension-matched lens needs JOINT models (U and S coupled per draw): the
-# DS joint VG10 vs the TD joint VG13 (RE-based, 8-18 mo). VG13 is the only valid
+# DS joint VG20 vs the TD joint VG13 (RE-based, 8-18 mo). VG13 is the only valid
 # TD joint model (wide-age TD comprehension is not validly measured; VG06 was
 # excluded as invalid).
-JOINT_DS_KEY = "vg10"
+JOINT_DS_KEY = "vg20"
 JOINT_TD_KEY = "vg13"
 # Comprehension levels N (words understood) for the q(U=N) view. Small-N tail is
 # noisy (S/U unstable when U barely exceeds N); high-N tail is coverage-limited.
@@ -235,7 +249,7 @@ def run_outcome(outcome: str) -> None:
     # TD children do" — the subject scale answers that, and the two are two halves
     # of one scatter budget in the TD models. tau is the SD of the child's own
     # logit for this outcome, which is defined identically in both
-    # parameterisations even though VG10 reaches it through p_u and q rather than
+    # parameterisations even though VG20 reaches it through p_u and q rather than
     # through a single spoken intercept (comparison.subject_heterogeneity).
     _, TAU_ds, SDC_ds, _ = C.subject_heterogeneity(
         DISP_DS_KEY, outcome, ages=grid, draws=i_disp)
@@ -356,7 +370,7 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
     _save_single(
         pre + "overdispersion",
         # Both halves of the old title were wrong once DISP_DS_KEY moved to VG10.
-        # "study-RE only" described VG07; VG10 carries subject random effects too,
+        # "study-RE only" described VG07; VG10 and VG20 carry subject random effects too,
         # which is the whole point of the repointing. "mean-independent" overclaims:
         # the factor removes the explicit p(1-p) term, but kappa is itself
         # level-driven in this family, so a cross-population contrast still carries
@@ -488,7 +502,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     Matching on comprehension N (rather than age) strips out the TD/DS timescale
     difference: it asks "when a child understands N words, what fraction does
     she speak, and how much sooner does TD say them?". Requires JOINT models so
-    U and S are coupled per draw (VG10 DS vs VG13 TD).
+    U and S are coupled per draw (VG20 DS vs VG13 TD).
     """
     print(f"\n=== COMPREHENSION-MATCHED: DS={C.model_label(ds_key)} vs "
           f"TD={C.model_label(td_key)} ===", flush=True)

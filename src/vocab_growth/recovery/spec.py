@@ -242,8 +242,12 @@ UNSUPPORTED_REASONS: dict[str, str] = {
     "vg14": "signing baseline on the trivariate engine (superseded by VG15)",
 }
 
-# The three models #163 names as preferred/headline, in reporting order.
-HEADLINE_MODELS: tuple[str, ...] = ("vg10", "vg12", "vg15")
+# The three models #163 names as preferred/headline, in reporting order. VG20
+# replaced VG10 here on 2026-08-19 when it took over as the model of record for
+# the Down syndrome joint understood + spoken estimands (#224); this list tracks
+# the models that carry reporting weight, so it follows the role, not the
+# lineage. VG10 stays a recovery target, it is simply no longer a headline one.
+HEADLINE_MODELS: tuple[str, ...] = ("vg20", "vg12", "vg15")
 
 
 def supported_models() -> list[str]:

@@ -283,7 +283,7 @@ VG05 pools every contributing study into a single curve. That pooled curve is we
 
 Two further consequences follow, and both can be read off the tables in the two reports side by side. First, some of the spread VG05 had to express through its dispersion curves is here attributed to differences between studies instead, so the dispersion rows of the findings tables are not directly comparable between the two models. Second, adding an offset per contributing study on each trajectory, together with the constraint that links them, makes the posterior harder to sample, so the price of the extra structure is paid in effective sample size — compare the diagnostics tables of the two reports, remembering that either fit reaching its page has already cleared the reporting threshold.
 
-Neither model carries repeated-child effects, so neither answers the question of how much _children_ differ. That requires VG10.
+Neither model carries repeated-child effects, so neither answers the question of how much _children_ differ. That requires VG20.
 
 ## Posterior predictions
 
@@ -487,7 +487,7 @@ render_loo_section()
 
 ## Limits
 
-- **This is a development step, not a result.** VG07 exists to establish how much of the pooled spread is between studies rather than within them. Its numbers should not be quoted as findings about children with Down syndrome; use VG10 for that.
+- **This is a development step, not a result.** VG07 exists to establish how much of the pooled spread is between studies rather than within them. Its numbers should not be quoted as findings about children with Down syndrome; use VG20 for that.
 - **No repeated-child effects.** Children observed more than once are counted as though they were different children, so uncertainty here is not a fair estimate of uncertainty about a new child.
 - **Every reported curve is the average study.** No curve in this report describes any particular study, and none of them is a prediction for a new study either — that would require adding a study offset drawn from its estimated scale.
 - **The per-study offsets are not published here.** Only their scales are summarised, so this report cannot be used to say which contributing study sits above or below the average.

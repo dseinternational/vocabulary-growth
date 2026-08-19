@@ -23,7 +23,7 @@ One consequence is worth stating plainly. In the real data a handful of rows rec
 python scripts/fit_recovery.py headline --config test
 ```
 
-`headline` is VG10, VG12 and VG15 — the three models #163 gates. Use a single model key for one model, or `all` for every supported model. Each replicate simulates, refits and scores.
+`headline` is VG20, VG12 and VG15 — the three models #163 gates, tracking the model-of-record roles rather than the lineage (it was VG10 until VG20 took the Down syndrome joint role on 2026-08-19). Use a single model key for one model, or `all` for every supported model. Each replicate simulates, refits and scores.
 
 Useful options:
 
@@ -108,7 +108,7 @@ What a small number of replicates _does_ support:
 
 ## Coverage and known gaps
 
-Supported: VG07–VG13 and VG15 (the study-random-effect bivariate engine, the univariate engine, and the joint sign/speech engine). This covers all three headline models.
+Supported: VG07–VG13, VG15 and VG20 (the study-random-effect bivariate engine, the univariate engine, the joint sign/speech engine, and the correlated-subject bivariate engine). This covers all three headline models.
 
 Not supported, deliberately:
 

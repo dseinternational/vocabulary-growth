@@ -11,9 +11,9 @@ Produces figures under ``output/comparisons/``:
 - ``ds_td_q_vs_understood.{png,svg}`` (+ ``ds_td_q_crossings.csv``) — headline
   matched-comprehension q overlay (DS VG09 / TD VG13, VG07 dashed reference)
 - ``vg07_vg09_vg10_q_by_age.{png,svg}`` — q(age) three-way overlay
-- ``ds_td_q_by_age_vg10.{png,svg}`` — q(age) DS (VG10) vs TD (VG13)
-- ``ds_td_q_vs_understood_vg10.{png,svg}`` — matched-comprehension q with VG10
-- ``ds_td_spoken_vs_understood_vg10.{png,svg}`` (+ ``.csv``) — the same
+- ``ds_td_q_by_age_vg20.{png,svg}`` — q(age) DS (VG20) vs TD (VG13)
+- ``ds_td_q_vs_understood_vg20.{png,svg}`` — matched-comprehension q with VG20
+- ``ds_td_spoken_vs_understood_vg20.{png,svg}`` (+ ``.csv``) — the same
   matched-comprehension comparison in words spoken rather than the ratio
 
 Shared helpers (``first_crossing``, ``overlay_age_curves``) and model-path
@@ -163,9 +163,9 @@ def vg07_vg09_vg10_q_by_age() -> None:
         os.path.join(OUT_DIR, "vg07_vg09_vg10_q_by_age.csv"), index=False)
 
 
-def ds_td_q_by_age_vg10() -> None:
-    """DS (VG10) vs TD (VG13) production-ratio overlay against age."""
-    ds = _read("vg10", "posterior_summary_q.csv")
+def ds_td_q_by_age_vg20() -> None:
+    """DS (VG20) vs TD (VG13) production-ratio overlay against age."""
+    ds = _read("vg20", "posterior_summary_q.csv")
     td = _read("vg13", "posterior_summary_q.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(td["age_months"], td["q_ci_lo"], td["q_ci_hi"],
@@ -173,7 +173,7 @@ def ds_td_q_by_age_vg10() -> None:
     ax.fill_between(ds["age_months"], ds["q_ci_lo"], ds["q_ci_hi"],
                     color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 89% interval")
     ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG13)")
-    ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG10)")
+    ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG20)")
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
     ax.set_xlim(min(ds["age_months"].min(), td["age_months"].min()),
@@ -181,19 +181,19 @@ def ds_td_q_by_age_vg10() -> None:
     ax.set_ylim(0, 1)
     ax.set_xlabel("Age (months)")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio by age — DS (VG10) vs TD (VG13)")
+    ax.set_title("Production ratio by age — DS (VG20) vs TD (VG13)")
     ax.legend(loc="lower right", frameon=True)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.png"))
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.svg"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg20.png"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg20.svg"))
     plt.close(fig)
 
     _merge_q_by_age([("td", td), ("ds", ds)]).to_csv(
-        os.path.join(OUT_DIR, "ds_td_q_by_age_vg10.csv"), index=False)
+        os.path.join(OUT_DIR, "ds_td_q_by_age_vg20.csv"), index=False)
 
 
-def ds_td_q_vs_understood_vg10() -> None:
-    """DS (VG10) vs TD (VG13) production-ratio against words understood."""
-    ds = _read("vg10", "production_rate_by_understood.csv")
+def ds_td_q_vs_understood_vg20() -> None:
+    """DS (VG20) vs TD (VG13) production-ratio against words understood."""
+    ds = _read("vg20", "production_rate_by_understood.csv")
     td = _read("vg13", "production_rate_by_understood.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
@@ -204,10 +204,10 @@ def ds_td_q_vs_understood_vg10() -> None:
     ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD (VG13) median")
 
     ax.fill_between(ds["words_understood"], ds["ci_lo"], ds["ci_hi"],
-                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG10) 89% interval")
+                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG20) 89% interval")
     ax.fill_between(ds["words_understood"], ds["ci50_lo"], ds["ci50_hi"],
-                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG10) 50% interval")
-    ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS (VG10) median")
+                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG20) 50% interval")
+    ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS (VG20) median")
 
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
@@ -215,17 +215,17 @@ def ds_td_q_vs_understood_vg10() -> None:
     ax.set_ylim(0, 1.05)
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel(r"Production ratio  q = $E[S] / E[U]$")
-    ax.set_title("Production ratio against words understood — DS (VG10) vs TD (VG13)")
+    ax.set_title("Production ratio against words understood — DS (VG20) vs TD (VG13)")
     ax.legend(loc="lower right", frameon=True, fontsize=10)
     ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.png"), dpi=300)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg10.svg"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg20.png"), dpi=300)
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg20.svg"))
     plt.close(fig)
 
     print(
-        f"DS (VG10) U range covered: {ds['words_understood'].min():.0f} – "
+        f"DS (VG20) U range covered: {ds['words_understood'].min():.0f} – "
         f"{ds['words_understood'].max():.0f}"
     )
     print(
@@ -234,7 +234,7 @@ def ds_td_q_vs_understood_vg10() -> None:
     )
 
 
-def ds_td_spoken_vs_understood_vg10() -> None:
+def ds_td_spoken_vs_understood_vg20() -> None:
     """The same matched-comprehension comparison in words rather than a ratio.
 
     ``E[S] = q(U) * U``, and at each grid point ``U`` is a constant — so every
@@ -251,7 +251,7 @@ def ds_td_spoken_vs_understood_vg10() -> None:
     want. Because both curves are multiplied by the same ``U``, their ratio at
     any point is unchanged — the vertical scale changes, the finding does not.
     """
-    ds = _read("vg10", "production_rate_by_understood.csv")
+    ds = _read("vg20", "production_rate_by_understood.csv")
     td = _read("vg13", "production_rate_by_understood.csv")
 
     for frame in (ds, td):
@@ -269,11 +269,11 @@ def ds_td_spoken_vs_understood_vg10() -> None:
             label="TD (VG13) median")
 
     ax.fill_between(ds["words_understood"], ds["s_ci_lo"], ds["s_ci_hi"],
-                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG10) 89% interval")
+                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG20) 89% interval")
     ax.fill_between(ds["words_understood"], ds["s_ci50_lo"], ds["s_ci50_hi"],
-                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG10) 50% interval")
+                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG20) 50% interval")
     ax.plot(ds["words_understood"], ds["s_q_median"], color=DS_COLOUR, lw=2.5,
-            label="DS (VG10) median")
+            label="DS (VG20) median")
 
     # The 1:1 line is the ceiling: a child cannot say more words than they
     # understand, so every curve must lie on or below it. Drawing it stops the
@@ -287,13 +287,13 @@ def ds_td_spoken_vs_understood_vg10() -> None:
     ax.set_ylim(0, None)
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel("Expected words spoken")
-    ax.set_title("Words spoken against words understood — DS (VG10) vs TD (VG13)")
+    ax.set_title("Words spoken against words understood — DS (VG20) vs TD (VG13)")
     ax.legend(loc="upper left", frameon=True, fontsize=10)
     ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_spoken_vs_understood_vg10.png"), dpi=300)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_spoken_vs_understood_vg10.svg"))
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_spoken_vs_understood_vg20.png"), dpi=300)
+    fig.savefig(os.path.join(OUT_DIR, "ds_td_spoken_vs_understood_vg20.svg"))
     plt.close(fig)
 
     # The two models are summarised on different `words_understood` grids, so an
@@ -313,7 +313,7 @@ def ds_td_spoken_vs_understood_vg10() -> None:
     both = merged["DS_s_q_median"].notna() & merged["TD_s_q_median"].notna()
     merged["TD_minus_DS_median"] = np.where(
         both, merged["TD_s_q_median"] - merged["DS_s_q_median"], np.nan)
-    merged.to_csv(os.path.join(OUT_DIR, "ds_td_spoken_vs_understood_vg10.csv"), index=False)
+    merged.to_csv(os.path.join(OUT_DIR, "ds_td_spoken_vs_understood_vg20.csv"), index=False)
 
 
 def main() -> None:
@@ -324,9 +324,9 @@ def main() -> None:
     vg05_vs_vg07()
     ds_td_q_vs_understood()
     vg07_vg09_vg10_q_by_age()
-    ds_td_q_by_age_vg10()
-    ds_td_q_vs_understood_vg10()
-    ds_td_spoken_vs_understood_vg10()
+    ds_td_q_by_age_vg20()
+    ds_td_q_vs_understood_vg20()
+    ds_td_spoken_vs_understood_vg20()
     print(f"Comparisons written to: {OUT_DIR}")
 
 

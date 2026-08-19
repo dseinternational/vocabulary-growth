@@ -80,18 +80,28 @@ def plain_at(df, idxcol, idxval, dec=0, cov_min=0.80):
 
 | Role                                   | Model(s)                          |
 | -------------------------------------- | --------------------------------- |
-| DS expected words / ratio / delay      | **VG10** (joint U+S, study+subject REs) |
-| DS dispersion / distribution           | **VG07** (joint U+S, study RE only)     |
+| DS expected words / ratio / delay      | **VG20** (joint U+S, study+subject REs, correlated) |
+| DS dispersion / distribution           | **VG20** (as above)                     |
+| DS between-child heterogeneity         | **VG20** (as above)                     |
 | DS sign-inclusive total expressive     | **VG15** (joint sign/speech, `p_any`)   |
 | TD spoken / understood (univariate)    | **VG11 / VG12** (study RE)              |
 | TD joint (comprehension-matched)       | **VG13** (joint, 8–18 mo)               |
 
 All contrasts are at the **population level** (random effects excluded, so the
 estimand is identical on both sides) and restricted to the **empirical age/level
-overlap**. Dispersion and distributional contrasts deliberately use the
-**study-RE-only** DS model (VG07) so the Beta-Binomial concentration κ is the
-like-for-like between-child quantity — VG10's subject random effects would absorb
-child variance that the TD models keep in κ.
+overlap**.
+
+Every DS row now comes from the same model. It did not always: dispersion and
+distributional contrasts used the **study-RE-only** VG07, because κ only means the
+same thing on both sides when the two sides agree on whether a subject random
+effect is present to absorb between-child variance, and VG11/VG12 were study-RE
+only. Adding child random effects to the TD models (#164) inverted that — VG07's κ
+now carries child variance the TD models' κ does not — so the dispersion key moved
+to the DS model of record on **2026-08-05**. This table went on naming VG07 until
+**2026-08-19**, when the same edit that moved the model of record to VG20 caught
+it; readers of the earlier editions were told the dispersion contrast came from a
+model it had not come from for two weeks. The numbers in those editions were
+computed from VG10 and are unaffected.
 
 ::: {.callout-important}
 **The TD models only span ~8–30 months.** Several estimands are therefore
@@ -383,7 +393,7 @@ counts only persistent between-child differences: unlike $\sigma_Y$ it excludes
 the Beta-Binomial noise.
 
 $\tau$ is a parameter on the TD side (`tau_subject`, constant in age) but a
-*derived* quantity on the DS side. VG10 places its child effects on understood
+*derived* quantity on the DS side. VG20 places its child effects on understood
 (`tau_subj_u`) and on the production ratio (`tau_subj_q`), with spoken built as
 $p_S = p_U \cdot q$, so it has no spoken child scale to read off, and the induced
 spoken $\tau$ varies with age even though both underlying scales are constants.
@@ -427,8 +437,10 @@ Children with Down syndrome differ from one another _more_ than typically develo
 #| output: asis
 # Computed, not typed: an earlier hand-written version of this paragraph quoted
 # spoken τ_DS as "1.44 at 8 months to 1.27 at 30" and the ratio as "0.72 rising
-# to 0.82"; the current fits give 1.47 → 1.31 and 0.70 → 0.80. The numbers moved
-# under a refit and the prose did not.
+# to 0.82". Under the 13-16 August refits that became 1.47 → 1.31 and 0.70 →
+# 0.80; under VG20's correlated between-child derivation (2026-08-19) it is
+# 1.69 → 1.50 and 0.61 → 0.69. Three sets of numbers, one paragraph, and the
+# prose only survived because it is generated.
 _lo, _hi = float(he_s["age_months"].min()), float(he_s["age_months"].max())
 _a, _b = _nearest(he_s, "age_months", _lo), _nearest(he_s, "age_months", _hi)
 _u = _nearest(he_u, "age_months", he_u["age_months"].max())
@@ -452,7 +464,7 @@ print(
 
 Both statements describe the same posterior. Which one answers "are these children more alike?" depends on what is being asked: on the population-relative scale Down syndrome vocabulary is the _more_ variable of the two, while in absolute word counts it is much the less variable. Neither is the reading a glance at the overdispersion panel above would suggest, which is the point of separating the two sections.
 
-The age profiles differ by construction, and are worth reading as a check on the derivation. τ_TD is flat because the univariate models place a single intercept on the outcome's logit; τ_DS for comprehension is flat for the same reason. τ_DS for _spoken_ declines with age even though both of VG10's subject scales are constants, because the spoken logit is reached through $p_U$ and $q$ — that decline is a property of the product form, not a finding about children becoming more alike.
+The age profiles differ by construction, and are worth reading as a check on the derivation. τ_TD is flat because the univariate models place a single intercept on the outcome's logit; τ_DS for comprehension is flat for the same reason. τ_DS for _spoken_ declines with age even though both of VG20's subject scales are constants, because the spoken logit is reached through $p_U$ and $q$ — that decline is a property of the product form, not a finding about children becoming more alike.
 
 ::: {.callout-important title="The spoken contrast carries an assumption the comprehension contrast does not"}
 The comprehension contrast is like-for-like in a strong sense: a single Gaussian intercept on the understood logit on both sides. The spoken contrast is not, in three ways, and only the third biases the number.
@@ -461,25 +473,42 @@ The comprehension contrast is like-for-like in a strong sense: a single Gaussian
 
 **Age.** Only the DS side varies with age, so the ratio is a curve read at a point, not a single contrast.
 
-**An independence constraint on one side only.** VG10 draws each child's comprehension deviation and production-ratio deviation as two independent standard Normals; no correlation between them is estimated, and the derivation above assumes that independence. VG11's single spoken intercept places no such restriction — it absorbs the whole between-child spoken variance, correlation included.
+**An independence constraint that used to sit on one side only — now removed.** VG10 drew each child's comprehension deviation and production-ratio deviation as two independent standard Normals, estimated no correlation between them, and the derivation above assumed that independence; VG11's single spoken intercept never placed such a restriction, absorbing the whole between-child spoken variance, correlation included. So the asymmetry was in the contrast, not in one model's internals. **VG20 estimates the correlation**, and since 2026-08-19 the derivation above integrates $Z_2 = \rho Z_1 + \sqrt{1-\rho^2}\,Z_2'$ rather than an independent $Z_2$.
 
 ```{python}
 #| echo: false
 #| output: asis
-_c = pd.read_csv("ds_subject_effect_correlation.csv").iloc[0]
-_dir = "understates" if _c["corr_median"] > 0 else "overstates"
-print(
-    f"Measured in VG10's own fitted deviations, that correlation is "
-    f"{_c['corr_median']:+.3f} (89% interval {_c['corr_ci_lo']:+.3f} to "
-    f"{_c['corr_ci_hi']:+.3f}, P(>0) = {_c['corr_p_gt0']:.3f}) across "
-    f"{_c['n_children']:.0f} children — and it is shrunk toward zero by the "
-    f"independence prior, so treat the magnitude as a lower bound. Since "
-    f"$\\log p_S = \\log p_U + \\log q$ gains $2\\,\\mathrm{{Cov}}$, the "
-    f"independent-draw derivation therefore **{_dir}** the DS spoken spread."
+_c = pd.read_csv("ds_subject_effect_correlation.csv")
+_c = _c.assign(_k=_c["model"].str.lower()).set_index("_k")
+_now = _c.loc["vg20"] if "vg20" in _c.index else _c.iloc[0]
+_then = _c.loc["vg10"] if "vg10" in _c.index else None
+_txt = (
+    f"The fitted correlation is **+0.368** (89% interval +0.287 to +0.447); read "
+    f"back out of the model's own per-child deviations it is "
+    f"{_now['corr_median']:+.3f} ({_now['corr_ci_lo']:+.3f} to "
+    f"{_now['corr_ci_hi']:+.3f}) across {_now['n_children']:.0f} children, which is "
+    f"the check that the parameter does what it claims to."
 )
+if _then is not None:
+    _txt += (
+        f" The superseded model's deviations correlated at only "
+        f"{_then['corr_median']:+.3f} ({_then['corr_ci_lo']:+.3f} to "
+        f"{_then['corr_ci_hi']:+.3f}) — the difference is the pull of a prior that "
+        f"asserted independence, not a difference between the children."
+    )
+_txt += (
+    " Since $\\log p_S = \\log p_U + \\log q$ gains $2\\,\\mathrm{Cov}$, the "
+    "independent-draw derivation **understated** the DS spoken between-child scale "
+    "by about 15% on the logit scale at every age. τ_DS for comprehension is "
+    "unaffected, as it must be: the correlation changes how the two deviations "
+    "co-vary, not either one's marginal spread."
+)
+print(_txt)
 ```
 
-The direction matters for how far this can be pushed. DS is already the more variable side, so correcting for the correlation would move the spoken ratio further below 1: the finding is conservative and would strengthen, not reverse. What it does undercut is reading the spoken and comprehension ratios against each other, since only the spoken one carries this bias, and it biases toward the comprehension value. The fix is a correlated subject block — proposed as VG20 in issue #224, where the same gap was reached independently from VG16's leftover intercept correlation.
+The direction is what saved the earlier finding. DS was already the more variable side, so the correction moves the spoken ratio further below 1 — it strengthens rather than reverses, and the tables above now carry the corrected value. Every spoken between-child contrast published before 2026-08-19 is superseded by this and was biased toward the comprehension value; the comprehension contrast is unchanged, and the two rows can now be read against each other, which the bias did not previously permit.
+
+One caveat survives, pointing the other way. 432 of the 767 children are seen once, and 342 of those inform the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where shared reporter bias is not separable from shared child ability. So **+0.368 leans high**. VG16's cross-lag, which reads the child's comprehension from a *different* administration and is therefore immune to that artefact, implies about **+0.24** (89% interval +0.11 to +0.38) once corrected for the unreliability of its predictor. The two overlap; the truth is more likely in the lower half of VG20's interval, which would put the correction at somewhat less than the 15% quoted above.
 :::
 
 ::: {.callout-important title="And the comprehension contrast carries a measured bias the spoken one does not"}

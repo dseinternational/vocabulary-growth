@@ -46,7 +46,7 @@ render_model_at_a_glance()
 
 ::: {.callout-important title="What this model is for"}
 
-VG13 is a **reference model**. It exists to give the Down syndrome joint models — VG05 without hierarchy, VG10 with it — a typically-developing comprehension-and-production picture to be read against, and it supersedes the retired VG06.
+VG13 is a **reference model**. It exists to give the Down syndrome joint models — VG05 without hierarchy, VG20 with it — a typically-developing comprehension-and-production picture to be read against, and it supersedes the retired VG06.
 
 Its relatives are worth knowing before reading any figure here. **VG04** asks the comprehension question of the same population with no study or child effects, on a subsample and an English-only pool; **VG03** is its spoken-vocabulary counterpart. **VG12** asks the comprehension question with both kinds of random effect, on the full pool, over a much wider age range. VG12 is the direct comparison for this model: where the two windows overlap, they should agree, and because they use different engines, different age ranges and different likelihoods, agreement between them is a genuine external check rather than a restatement. Disagreement with VG04 in the same region is expected and informative in the other direction — VG04 carries no hierarchy, so between-study differences reach its curve as though they were between-child differences.
 

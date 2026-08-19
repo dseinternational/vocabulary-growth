@@ -15,5 +15,5 @@ Coverage is **uneven across age**: dense between about 18 and 54 months and thin
 
 The study is **descriptive and exploratory**, not preregistered or confirmatory. Estimates are conditional on the model (@sec-mean, @sec-betabinomial, @sec-randomeffects), sex, health, cognitive level, socio-economic status and intervention exposure are not modelled, and no causal reading is licensed. When setting expectations for an individual child, quote the **posterior predictive** count ($Y$, $P(Y \le k)$), which carries between-child variability and stays wide, not the expected trajectory ($E[Y]$), which carries parameter uncertainty only (@sec-interval-convention).
 
-Numbers are drawn from the model of record (VG10) at the canonical 6-monthly ages; see Appendix C for the complete tables and the Discussion (@sec-limitations) for the full statement of limitations.
+Numbers are drawn from the model of record (VG20, which replaced VG10 on 2026-08-19 and differs from it by one parameter) at the canonical 6-monthly ages; see Appendix C for the complete tables and the Discussion (@sec-limitations) for the full statement of limitations.
 :::

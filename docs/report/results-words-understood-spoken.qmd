@@ -15,7 +15,7 @@ This chapter reports what the models say about the two spoken-language outcomes:
 
 Every joint model in this report writes spoken vocabulary as a fraction of understood vocabulary, $p_S(a) = p_U(a)\,q(a)$, where $q(a) = P(\text{speak} \mid \text{understand})$ is the **production ratio** — the share of understood words a child also says. The comprehension–production gap is exactly $q(a) < 1$: the smaller $q$, the more a child understands relative to what they say.
 
-Down syndrome numbers come from the model of record, VG10 (study and child random effects, the production ratio anchored at two reference ages). The typically-developing comparators are VG11 (spoken) and VG12 (words understood) for the age-indexed contrasts, and the joint young-window model VG13 where a contrast needs both outcomes coupled within a draw.
+Down syndrome numbers come from the model of record, VG20 (study and child random effects, the production ratio anchored at two reference ages, and one free correlation between a child's comprehension and production-ratio effects). It replaced VG10 on 2026-08-19 and is VG10 plus that one parameter: the population trajectories below are VG10's, unchanged at every reported age, while the intervals for an individual child's spoken vocabulary are wider — by 9% at 90 months rising to 33% at 12 — because VG10 drew the two child effects independently when the data say they correlate at +0.37. The typically-developing comparators are VG11 (spoken) and VG12 (words understood) for the age-indexed contrasts, and the joint young-window model VG13 where a contrast needs both outcomes coupled within a draw.
 
 ## How vocabulary grows with age {#sec-ds-trajectories}
 
@@ -27,12 +27,12 @@ Two quantities are reported at each age and they answer different questions. The
 #| label: tbl-ds-understood
 #| echo: false
 show_or_pending(
-    counts_at("VG10", "posterior_summary_u", [12, 18, 24, 30, 36, 48, 60, 72, 84]),
+    counts_at("VG20", "posterior_summary_u", [12, 18, 24, 30, 36, 48, 60, 72, 84]),
     "the words-understood trajectory",
 )
 ```
 
-![Words understood by age in children with Down syndrome (VG10), against the observed data.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/posterior_predictive_median_trend_u.png){#fig-ds-understood}
+![Words understood by age in children with Down syndrome (VG20), against the observed data.](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/posterior_predictive_median_trend_u.png){#fig-ds-understood}
 
 ### Words spoken
 
@@ -40,21 +40,21 @@ show_or_pending(
 #| label: tbl-ds-spoken
 #| echo: false
 show_or_pending(
-    counts_at("VG10", "posterior_summary_s", [12, 18, 24, 30, 36, 48, 60, 72, 84]),
+    counts_at("VG20", "posterior_summary_s", [12, 18, 24, 30, 36, 48, 60, 72, 84]),
     "the words-spoken trajectory",
 )
 ```
 
-![Words spoken by age in children with Down syndrome (VG10), against the observed data.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/posterior_predictive_median_trend_s.png){#fig-ds-spoken}
+![Words spoken by age in children with Down syndrome (VG20), against the observed data.](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/posterior_predictive_median_trend_s.png){#fig-ds-spoken}
 
 ### The two together
 
-![Words understood and words spoken on the same axes, with the gap between them.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/joint_trajectory.png){#fig-ds-joint}
+![Words understood and words spoken on the same axes, with the gap between them.](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/joint_trajectory.png){#fig-ds-joint}
 
 ```{python}
 #| label: tbl-ds-gap
 #| echo: false
-_gap = load_summary("VG10", "comprehension_production_gap")
+_gap = load_summary("VG20", "comprehension_production_gap")
 if _gap is not None:
     _rows = sorted({int((_gap["age_months"] - a).abs().argmin())
                     for a in [12, 18, 24, 30, 36, 48, 60, 72, 84]})
@@ -73,9 +73,9 @@ Comprehension observations thin out above about 60 months and spoken observation
 
 The age derivative of the expected trajectory — words per month — describes how expected vocabulary differs between children of different ages. It is **not** a within-child learning rate: most of these data are cross-sectional, and a cross-sectional slope answers "how much more does a slightly older child know?", not "how fast does this child learn?".
 
-![Rate of change of expected words understood with age (VG10).](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/expected_learning_rate_u.png){#fig-ds-rate-u}
+![Rate of change of expected words understood with age (VG20).](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/expected_learning_rate_u.png){#fig-ds-rate-u}
 
-![Rate of change of expected words spoken with age (VG10).](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/expected_learning_rate_s.png){#fig-ds-rate-s}
+![Rate of change of expected words spoken with age (VG20).](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/expected_learning_rate_s.png){#fig-ds-rate-s}
 
 A natural summary is the age at which that rate peaks — the steepest part of the curve. It is reported here with a warning attached, because in the Down syndrome pool it is barely identified:
 
@@ -126,7 +126,7 @@ The width of the predictive interval in @tbl-ds-understood and @tbl-ds-spoken is
 ```{python}
 #| label: tbl-ds-thresholds
 #| echo: false
-_th = load_summary("VG10", "posterior_summary_s")
+_th = load_summary("VG20", "posterior_summary_s")
 _cols = ["age_months", "P(Y=0)", "P(Y<=10)", "P(Y<=25)", "P(Y<=50)", "P(Y<=100)", "P(Y<=200)"]
 if _th is not None:
     _rows = sorted({int((_th["age_months"] - a).abs().argmin())
@@ -138,7 +138,7 @@ show_or_pending(_th, "the spoken-vocabulary threshold probabilities")
 
 Each column is the probability that a single child of that age says that many words **or fewer**. These are the numbers to use when asking how common a given score is, and they make the spread concrete: at ages where the expected count is already in the tens of words, a substantial share of children are still at or near zero.
 
-![How the dispersion parameter for words spoken changes with age. Lower values mean greater spread between children relative to the mean.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/posterior_kappa_s.png){#fig-ds-kappa-s}
+![How the dispersion parameter for words spoken changes with age. Lower values mean greater spread between children relative to the mean.](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/posterior_kappa_s.png){#fig-ds-kappa-s}
 
 ## Comprehension leads production {#sec-ds-q}
 
@@ -147,17 +147,17 @@ Across the Down syndrome age range the production ratio stays well below 1 and r
 ```{python}
 #| label: tbl-ds-q
 #| echo: false
-_qds = load_summary("VG10", "posterior_summary_q")
+_qds = load_summary("VG20", "posterior_summary_q")
 _qds
 ```
 
-![Production ratio $q(a) = P(\text{speak}\mid\text{understand})$ for children with Down syndrome (VG10). $q(a) < 1$ throughout — comprehension leads production — rising with age.](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/production_rate.png){#fig-ds-q}
+![Production ratio $q(a) = P(\text{speak}\mid\text{understand})$ for children with Down syndrome (VG20). $q(a) < 1$ throughout — comprehension leads production — rising with age.](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/production_rate.png){#fig-ds-q}
 
 This reproduces, in a large pooled sample, the long-standing observation that expressive vocabulary lags behind receptive vocabulary in Down syndrome.
 
 The same ratio can be plotted against comprehension level rather than age, which removes the timescale from the picture and asks what a child who understands $N$ words typically says:
 
-![The production ratio against words understood rather than age (VG10).](figures/VG10-age-understood-spoken-ds-re-subj-uq-anchored/production_rate_by_understood.png){#fig-ds-q-by-u}
+![The production ratio against words understood rather than age (VG20).](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/production_rate_by_understood.png){#fig-ds-q-by-u}
 
 ## Comparison with typically developing children {#sec-ds-td}
 
@@ -299,7 +299,7 @@ This framing is intuitive and for that reason easy to over-read. An equivalent a
 
 ### Matched on comprehension: the production ratio {#sec-ds-td-q}
 
-Down syndrome and typically-developing children grow vocabulary on very different timescales, so contrasting the gap **by age** would conflate that timescale difference. Instead we match on **comprehension level**: for a child who understands $N$ words, what fraction $q(U = N)$ do they say, in each population? Because words understood and words spoken are coupled per posterior draw within each joint model (Down syndrome from VG10; typically-developing from the young-window model VG13), this is a within-draw contrast at matched comprehension.
+Down syndrome and typically-developing children grow vocabulary on very different timescales, so contrasting the gap **by age** would conflate that timescale difference. Instead we match on **comprehension level**: for a child who understands $N$ words, what fraction $q(U = N)$ do they say, in each population? Because words understood and words spoken are coupled per posterior draw within each joint model (Down syndrome from VG20; typically-developing from the young-window model VG13), this is a within-draw contrast at matched comprehension.
 
 ```{python}
 #| label: tbl-ds-td-q
@@ -408,8 +408,10 @@ show_or_pending(pd.DataFrame(_taus).round(2) if _taus else None,
                 "the between-child variation contrast")
 ```
 
-::: {.callout-important title="The spoken comparison assumes something the comprehension one does not"}
-The Down syndrome model gives each child two deviations — one on comprehension, one on the production ratio — and draws them **independently**. The spoken $\tau$ above is derived on that independence. The typically-developing model's single spoken intercept makes no such assumption: it absorbs the whole between-child spoken variance, any correlation included.
+::: {.callout-note title="The spoken comparison used to assume something the comprehension one does not"}
+Until 2026-08-19 the Down syndrome model gave each child two deviations — one on comprehension, one on the production ratio — and drew them **independently**, and the spoken $\tau$ above was derived on that independence. The typically-developing model's single spoken intercept never made that assumption: it absorbs the whole between-child spoken variance, any correlation included. The asymmetry was therefore in the contrast itself, not in one model's internals.
+
+The model of record now estimates the correlation rather than assuming it away, which is what VG20 was built for.
 
 ```{python}
 #| label: subject-independence-finding
@@ -417,20 +419,34 @@ The Down syndrome model gives each child two deviations — one on comprehension
 #| output: asis
 _c = comp_load("ds_subject_effect_correlation")
 if _c is None:
-    print("_The measured correlation is pending: run "
-          "`scripts/subject_effect_correlation.py` and "
+    print("_The correlation check is pending: run "
+          "`scripts/subject_effect_correlation.py vg20 vg10` and "
           "`scripts/sync_report_figures.py`._")
 else:
-    _c = _c.iloc[0]
-    _dir = "understates" if _c["corr_median"] > 0 else "overstates"
-    print(f"""
-Measured in the model's own fitted deviations, the two are correlated at {_c['corr_median']:+.3f} (89% interval {_c['corr_ci_lo']:+.3f} to {_c['corr_ci_hi']:+.3f}, P above zero = {_c['corr_p_gt0']:.3f}) across {_c['n_children']:.0f} children. The estimate is shrunk toward zero by the independence prior, so its magnitude is a lower bound rather than an estimate.
-
-Because a child's spoken vocabulary is the product of what they understand and the share they say, a positive correlation means the independence assumption **{_dir}** how much children with Down syndrome differ from one another in speech. The direction is what saves the finding here: Down syndrome is already the more variable side, so correcting for it would widen the gap rather than close it. What it does undercut is reading the spoken and comprehension rows against each other — only the spoken row carries the bias, and it biases toward the comprehension value.
-""")
+    _c = _c.assign(_k=_c["model"].str.lower()).set_index("_k")
+    _now = _c.loc["vg20"] if "vg20" in _c.index else _c.iloc[0]
+    _then = _c.loc["vg10"] if "vg10" in _c.index else None
+    _lines = [
+        f"The fitted correlation is **+0.368** (89% interval +0.287 to +0.447). "
+        f"Read back out of the model's own per-child deviations it is "
+        f"{_now['corr_median']:+.3f} ({_now['corr_ci_lo']:+.3f} to {_now['corr_ci_hi']:+.3f}) "
+        f"across {_now['n_children']:.0f} children — the same number, which is the "
+        f"check that the parameter is doing what it claims to."
+    ]
+    if _then is not None:
+        _lines.append(
+            f"The superseded model's deviations correlated at only "
+            f"{_then['corr_median']:+.3f} ({_then['corr_ci_lo']:+.3f} to "
+            f"{_then['corr_ci_hi']:+.3f}) — not because the children were different, "
+            f"but because a prior asserting independence pulls the realised effects "
+            f"toward it. The gap between the two is the size of that pull."
+        )
+    print("\n\n".join(_lines))
 ```
 
-The fix is a model that estimates the correlation instead of assuming it away, proposed as VG20 in issue #224 — where the same structural gap was reached independently, from a leftover correlation in the cross-lag model's fitted child effects.
+Because a child's spoken vocabulary is the product of what they understand and the share they say, a positive correlation means the old independence assumption **understated** how much children with Down syndrome differ from one another in speech — by about 15% on the logit scale, at every age. Correcting it widens the Down syndrome side of an already-wider-than-typical contrast, so the earlier finding was conservative and is strengthened rather than reversed. The spoken and comprehension rows can now be read against each other, which the old bias did not permit.
+
+One caveat survives the fix, and it points the other way. Of the 767 children, 432 are seen once, and 342 of those contribute to the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where a parent who over-reports over-reports both. Shared reporter bias is not separable from shared child ability in that design, so **+0.368 should be read as leaning high**. The independent check that does not share an administration, VG16's cross-lag between an earlier comprehension record and a later production ratio, implies a smaller correlation of about +0.24 (89% interval +0.11 to +0.38) once corrected for the unreliability of its predictor. The two overlap, and the truth is more likely in the lower half of VG20's interval than the upper.
 :::
 
 ::: {.callout-important title="And the comprehension comparison carries a measured bias"}
@@ -518,7 +534,7 @@ The table lists the development lineage that ends in the model of record, plus V
 ```{python}
 #| label: tbl-loo-us
 #| echo: false
-show_or_pending(loo_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG16"]),
+show_or_pending(loo_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG20", "VG16"]),
                 "the leave-one-out summaries")
 ```
 
@@ -534,7 +550,8 @@ These models are fitted to the same observations — the `Observations` column i
 # it false.
 _LINEAGE = [("VG05", "no random effects"), ("VG07", "study effects"),
             ("VG08", "child effects"), ("VG09", "a child effect on $q$"),
-            ("VG10", "the anchored $q$")]
+            ("VG10", "the anchored $q$"),
+            ("VG20", "correlated child effects")]
 _loo = loo_table([m for m, _ in _LINEAGE])
 if _loo is None:
     print("_The leave-one-out summaries are pending: refit, or run "
@@ -556,7 +573,7 @@ else:
                       f"{_seq.index[0]} to {_seq.index[-1]}, {_tail}.")
     print("Read down the lineage, from no random effects (VG05) through study effects "
           "(VG07), child effects (VG08), a child effect on the production ratio (VG09) "
-          "and the anchored ratio (VG10):\n\n" + "\n".join(_lines))
+          "the anchored ratio (VG10) and correlated child effects (VG20):\n\n" + "\n".join(_lines))
     print("""
 
 Added structure earns its place on the outcome it is about, and is not guaranteed to pay for itself on the other. That is a normal feature of a joint model: a parameter that lets one outcome fit better spends degrees of freedom the whole likelihood shares.
@@ -587,7 +604,7 @@ For the models with child random effects, leaving out a single *observation* sti
 ```{python}
 #| label: tbl-us-caveats
 #| echo: false
-show_or_pending(caveats_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG11", "VG12", "VG13",
-                               "VG16"]),
+show_or_pending(caveats_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG20", "VG11", "VG12",
+                               "VG13", "VG16"]),
                 "the convergence caveats for the fits used here")
 ```

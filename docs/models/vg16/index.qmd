@@ -398,7 +398,7 @@ from vocab_growth.report_cells import render_headline_quantities
 render_headline_quantities()
 ```
 
-The trajectories themselves are the family's, and are reported here so the coefficient above has a scale to be read against. Comprehension's fastest growth arrives well before production's; the gap between the two opens, peaks and then closes; and residual spread between children widens with age on both outcomes. For the fuller interpretive account of these quantities see VG10, which is the model of record for the Down syndrome joint trajectories.
+The trajectories themselves are the family's, and are reported here so the coefficient above has a scale to be read against. Comprehension's fastest growth arrives well before production's; the gap between the two opens, peaks and then closes; and residual spread between children widens with age on both outcomes. For the fuller interpretive account of these quantities see VG20, which is the model of record for the Down syndrome joint trajectories.
 
 ## The within-child alternative {#sec-within-child}
 

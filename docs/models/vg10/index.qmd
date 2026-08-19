@@ -36,7 +36,15 @@ render_sampling_banner()
 
 This model asks two questions at once, about the same children: how many words does a child with Down syndrome understand at a given age, and what fraction of those words do they also say? The second question is what the joint structure exists for. Spoken vocabulary is modelled as understood vocabulary multiplied by a production ratio $q$, so _knowing more words_ and _saying more of the words you know_ are separated rather than confounded. Age here is a proxy for everything that happens over time ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$), not a cause in itself.
 
-VG10 is the headline Down syndrome joint model and the interpretive template the rest of the Down syndrome family follows.
+VG10 is the interpretive template the rest of the Down syndrome family follows, and was the headline Down syndrome joint model until 2026-08-19.
+
+::: {.callout-important title="Superseded as the model of record on 2026-08-19"}
+[VG20](../vg20/index.qmd) — this model plus one free correlation `rho_uq` between a child's comprehension and production-ratio random intercepts — replaced VG10 as the model of record for the Down syndrome joint understood + spoken estimands, after the four gates of [#224](https://github.com/dseinternational/vocabulary-growth/issues/224). VG10 is now a **development step** and supplies no reported number.
+
+The **population-level** results below are not withdrawn: expected words on both outcomes and the production ratio are reproduced by VG20 inside VG10's own 89% interval at every reported age, which is what a correlation between two mean-zero deviations must do. What is superseded is everything **child-level**. VG10 draws each child's two deviations independently, which its own fitted deviations contradict — they correlate at +0.151 [0.106, 0.195] against a prior asserting zero, and VG20 puts the free parameter at +0.368 [0.287, 0.447]. The consequence is that VG10's subject-marginal intervals for words spoken are **too narrow**, by 9% at 90 months rising to 33% at 12, and every between-child DS-versus-TD spoken contrast derived from this model understated the Down syndrome side by about 15% on the logit scale.
+
+Read this report for the lineage and for the trajectory results; read VG20's for anything about how much children differ from one another.
+:::
 
 ```{python}
 #| echo: false
