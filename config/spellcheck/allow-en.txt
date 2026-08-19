@@ -154,6 +154,7 @@ overclaiming
 overfitting
 parameterisation
 parameterisations
+parameterises
 parameterising
 pathlib
 pgrep

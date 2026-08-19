@@ -147,6 +147,23 @@ def build_kappa_of_z_anchored(
     :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams` for why the
     reparameterisation is worth making.
 
+    **Only the anchor totals are estimands.** The split of each total into
+    ``kappa_min`` plus an excess is not identified: parameter recovery scores
+    ``kappa_min`` at -60.1%, -55.7%, -53.9% (VG10) and ``kappa_excess_old_s`` at
+    +263%, +155%, +112% (VG20), while ``kappa_old_u`` and ``kappa_old_s`` --
+    the sums containing them -- come back within a few percent on the same
+    fits. The floor's *share* of reported kappa carries an 89% interval of
+    [13.2%, 78.3%] on comprehension at 84 months and [21.0%, 99.8%] on the
+    nested spoken scale. So ``kappa_min``, ``kappa_excess_young`` and
+    ``kappa_excess_old`` are sampling coordinates; report and interpret
+    ``kappa`` at an age, never a component, and never a trend in one.
+
+    The totals themselves are data-driven. Re-centring the ``kappa_min`` prior
+    from a median of 3.0 to the conditionally calibrated 7.8 -- a 160% move --
+    shifts reported kappa by 14.2% at 84 months and 6.6% at 72 on
+    comprehension, an elasticity of 0.09 and 0.04, and the 89% intervals
+    overlap throughout. See ``notes/202608191800-kappa-components-not-estimands.md``.
+
     ``a_kappa{suffix}`` and ``b_kappa{suffix}`` are still stored as named
     ``Deterministic``\\ s, under the same names the legacy form gives them, so a
     migrated model's dispersion posterior stays directly comparable with the
