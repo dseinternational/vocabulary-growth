@@ -748,12 +748,18 @@ def main() -> None:
     print(f"\ntau_true = {TAU_TRUE}, kappa_true = {KAPPA_TRUE}")
     print(f"written: {path}")
     print(
-        "\nReading the result: `all-singleton` came back clean in the first pass, so\n"
-        "the between-child/dispersion split is identified through the mean-variance\n"
-        "shape rather than through replication, and thin replication is not the\n"
-        "explanation. What remains untested by a well-specified simulation is\n"
-        "whether the boundary regime the fitted models work in is what costs the\n"
-        "scale -- that is what the three p0 conditions ask."
+        "\nReading the result: `all-singleton` is NOT assessable -- `tau`'s own R-hat\n"
+        "reaches 1.13 even at tune=6000, so it says nothing either way about thin\n"
+        "replication. Of the well-specified conditions only\n"
+        "`empirical-ages-anchored-kappa` reproduces the bias: -3.4% over 6 of 6\n"
+        "negative replicates (t=-8.1), against +0.4% for empirical ages with a\n"
+        "constant kappa and +0.7% for the anchored kappa under uniform ages.\n"
+        "Neither ingredient alone does anything; the real age distribution and the\n"
+        "age-varying dispersion curve together cost about a full posterior SD of\n"
+        "`tau`. Under empirical ages the kappa components also come back low\n"
+        "(kappa_old -4.5%), which is the direction dispersion-absorbs-scale would\n"
+        "predict, but the across-replicate correlation between the two biases is\n"
+        "weak and wrong-signed, so the causal chain is not established."
     )
 
 
