@@ -117,29 +117,47 @@ def raw_for(rho: float) -> float:
 def pinned_suffix(rho: float) -> str:
     return f"-rho{round(rho * 1000):03d}"
 
-#: Parameters both models carry, so the truth is meaningful for each. `rho_uq`
-#: is deliberately absent: VG10 has no such parameter, and the point of the
-#: experiment is where its value goes instead.
-SHARED = (
+#: Parameters both models carry, split by whether a difference between the arms
+#: is readable. `rho_uq` is in neither: VG10 has no such parameter, and the point
+#: of the experiment is where its value goes instead.
+#:
+#: REPORTED are the quantities the models actually report and that recover well
+#: enough for a between-arm difference to mean something. The dispersion ones are
+#: stated at two reference ages precisely because that is the identified
+#: parameterisation (see PRIORS.md).
+REPORTED = (
     "tau_subj_u",
     "tau_subj_q",
+    "kappa_young_u",
+    "kappa_old_u",
+    "kappa_young_s",
+    "kappa_old_s",
     "tau_u",
     "tau_q",
+)
+
+#: COMPONENTS are the floor-plus-excess terms the reference-age values are built
+#: from. They trade off against one another and are individually unidentified at
+#: recovery tiers: on VG20's own gate-2 replicate the *correctly specified* model
+#: missed `kappa_excess_old_s` by +265%, `kappa_min_s` by -60% and `a_kappa_s` by
+#: +75%, while the derived `kappa_old_s` was within 1%. Differences between the
+#: arms on these are noise on top of noise, so they are reported separately and
+#: must not be read as the answer -- ranking everything together by magnitude
+#: puts precisely the unidentified terms at the top.
+COMPONENTS = (
     "kappa_min_u",
     "kappa_excess_young_u",
     "kappa_excess_old_u",
     "kappa_min_s",
     "kappa_excess_young_s",
     "kappa_excess_old_s",
-    "kappa_young_u",
-    "kappa_old_u",
-    "kappa_young_s",
-    "kappa_old_s",
     "a_kappa_u",
     "b_kappa_u",
     "a_kappa_s",
     "b_kappa_s",
 )
+
+SHARED = REPORTED + COMPONENTS
 
 
 def source_definition(rho: float | None):
@@ -304,6 +322,56 @@ def _control(replicate: int, rho: float | None):
     }
 
 
+def interval_widths(replicates, rho: float | None) -> pd.DataFrame:
+    """Subject-marginal interval widths, mis-specified arm against control.
+
+    The parameter table can only show where forcing ``rho = 0`` moves an
+    *estimate*. It cannot show the cost that matters, because the correlation
+    enters the child-level predictive directly: the subject-marginal draw takes
+    the two deviates from the joint distribution, so a model without ``rho``
+    cannot express the compounding of ``p_U`` and ``q`` however well its other
+    parameters are recovered.
+
+    On the real data that gap is 9-33% (gate 3 of #224). Here the data are
+    simulated at a known ``rho``, so the same comparison says whether that width
+    difference is the whole of the mis-specification cost.
+    """
+    rows = []
+    for replicate in replicates:
+        arms = {
+            "VG20": recovery_label(source_definition(rho), replicate),
+            "VG10": recovery_label(target_definition(rho), replicate),
+        }
+        frames = {}
+        for arm, label in arms.items():
+            path = os.path.join(
+                env.output_root(), "models", label, "posterior_summary_s.csv"
+            )
+            if not os.path.isfile(path):
+                break
+            frames[arm] = pd.read_csv(path)
+        if len(frames) != 2:
+            continue
+        merged = frames["VG10"].merge(
+            frames["VG20"], on="age_months", suffixes=("_t", "_c")
+        )
+        for _, r in merged.iterrows():
+            w_t = r["Ey_subject_marginal_ci_hi_t"] - r["Ey_subject_marginal_ci_lo_t"]
+            w_c = r["Ey_subject_marginal_ci_hi_c"] - r["Ey_subject_marginal_ci_lo_c"]
+            if w_c <= 0:
+                continue
+            rows.append(
+                {
+                    "replicate": f"r{replicate:02d}",
+                    "age_months": r["age_months"],
+                    "width_VG10": w_t,
+                    "width_VG20": w_c,
+                    "ratio_VG10_over_VG20": w_t / w_c,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def score(replicates, rho: float | None) -> pd.DataFrame:
     source_def = source_definition(rho)
     rows = []
@@ -387,18 +455,56 @@ def main() -> None:
     print(f"\nwritten: {path}")
 
     if "VG10_minus_VG20_pct" in table.columns:
-        print("\n=== mean over replicates: mis-specification effect ===")
-        summary = (
-            table.groupby("parameter")[["VG10_pct", "VG20_pct", "VG10_minus_VG20_pct"]]
-            .mean()
-            .sort_values("VG10_minus_VG20_pct", key=abs, ascending=False)
+        cols = ["VG10_pct", "VG20_pct", "VG10_minus_VG20_pct"]
+        for names, heading, gloss in (
+            (
+                REPORTED,
+                "REPORTED quantities — this is the answer",
+                "VG10_minus_VG20_pct: on identical data against an identical "
+                "truth, where does\nforcing rho = 0 push each one? A bias common "
+                "to both arms cancels.",
+            ),
+            (
+                COMPONENTS,
+                "COMPONENT terms — not the answer, kept for completeness",
+                "Individually unidentified at recovery tiers: check VG20_pct, "
+                "the correctly\nspecified arm, before reading any difference "
+                "here. Where that column is large,\nthe difference beside it is "
+                "noise on top of noise.",
+            ),
+        ):
+            subset = table[table["parameter"].isin(names)]
+            if subset.empty:
+                continue
+            print(f"\n=== mean over replicates: {heading} ===")
+            print(
+                subset.groupby("parameter")[cols]
+                .mean()
+                .sort_values("VG10_minus_VG20_pct", key=abs, ascending=False)
+                .round(2)
+                .to_string()
+            )
+            print(gloss)
+
+    widths = interval_widths(args.replicates, rho)
+    if not widths.empty:
+        wpath = os.path.join(out_dir, f"{stem}-subject-marginal-widths.csv")
+        widths.to_csv(wpath, index=False)
+        print("\n=== spoken subject-marginal interval width, VG10 / VG20 ===")
+        pivot = widths.pivot_table(
+            index="age_months", columns="replicate", values="ratio_VG10_over_VG20"
         )
-        print(summary.round(2).to_string())
+        print(pivot.round(3).to_string())
         print(
-            "\nVG10_minus_VG20_pct is the answer: on identical data against an "
-            "identical truth,\nwhere does forcing rho = 0 push each parameter? "
-            "A shared bias cancels."
+            f"\nmedian across all ages and replicates: "
+            f"{widths['ratio_VG10_over_VG20'].median():.4f}"
         )
+        print(
+            "Below 1 means the mis-specified model reports intervals that are too "
+            "narrow for a\nchild, which is the cost the parameter table cannot "
+            "show. Real data gave 1/1.137 = 0.880."
+        )
+        print(f"written: {wpath}")
 
 
 if __name__ == "__main__":
