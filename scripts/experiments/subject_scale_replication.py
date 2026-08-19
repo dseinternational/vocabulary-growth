@@ -44,6 +44,24 @@ Truth is fixed across conditions; only the replication structure moves.
     clustered-ages  age-varying, but a child's repeat visits sit a few months
                     apart as they do in the real pools, instead of being spread
                     independently across the whole age range
+    floor-p0        observed-mix at p = 0.05 instead of 0.30
+    ceiling-p0      observed-mix at p = 0.90
+    floor-small-n   observed-mix at p = 0.05 with the real pools' small
+                    denominators, so exact zeros actually occur
+
+First pass (6 replicates, 2026-08-19): all seven of the original conditions
+returned within +-1.4% of the realised spread, none of them the -3 to -6% the
+fitted models show. Three -- `age-varying` (1.066), `with-study` (1.019) and
+`clustered-ages` (1.117) -- missed the project's R-hat 1.01 gate, so they are
+not evidence either way and are re-run here at a longer tune.
+
+The last three conditions exist because the first seven shared a blind spot:
+every one held the mean proportion at 0.30, the most informative part of the
+logit curve, while the fitted models estimate the comprehension scale where the
+median proportion is 0.046 and the conditional spoken share is 0.000 outright.
+The recovery matrices point the same way -- the bias is on the comprehension
+scale and on `kappa_young`, not on `tau_subj_q` -- so the boundary is the first
+thing to test, not the eighth.
 
 The fourth condition is the one that matters once the first three come back
 clean. Every fitted model in this project puts a linear trend plus a
@@ -62,6 +80,8 @@ Usage::
 
     python scripts/experiments/subject_scale_replication.py
     python scripts/experiments/subject_scale_replication.py --replicates 5 --children 767
+    python scripts/experiments/subject_scale_replication.py \
+        --conditions floor-p0,ceiling-p0,floor-small-n --replicates 6 --suffix _p0
 """
 
 from __future__ import annotations
@@ -116,6 +136,58 @@ TAU_STUDY = 0.37
 #: between-child variation age-selectively, which a constant kappa cannot.
 KAPPA_YOUNG, KAPPA_OLD = 60.0, 25.0
 
+#: Every condition above holds the mean proportion at `P0` = 0.30 -- the most
+#: informative part of the logit curve, and nowhere near where the real pools
+#: sit. Measured on the Down syndrome analysis frame: median p_U is 0.046 at
+#: 8-18 months with 53% of administrations below 0.05, and the conditional
+#: spoken share `q` has a median of 0.000 there with 71% below 0.05. At the
+#: other end 9% of comprehension administrations are above 0.95 after 48
+#: months. A scale estimated where the link is flat is a different estimation
+#: problem from one estimated at p = 0.3, and it is the problem the fitted
+#: models actually face.
+P0_FLOOR = 0.05
+P0_CEILING = 0.90
+
+#: The floor in the real data is not low `p` alone -- it is low `p` on few
+#: trials. `q` is conditioned on the child's comprehension count, so at young
+#: ages its denominator is a couple of dozen words rather than the form's full
+#: length, and exact zeros follow. 810 trials at p = 0.05 never produces one.
+#: Drawn lognormal about a median of 40 to span roughly 8-200.
+N_TRIALS_SMALL_MEDIAN = 40.0
+N_TRIALS_SMALL_LOG_SD = 0.8
+N_TRIALS_SMALL_LO, N_TRIALS_SMALL_HI = 3, 810
+
+#: Conditions in the order they were added. The last three came after the first
+#: seven all returned null, when re-reading the recovery matrices showed the
+#: bias is selective -- it hits the comprehension child scale and VG12's
+#: `tau_subject` in 9 of 9 replicates but not `tau_subj_q`, and `kappa_young`
+#: goes with it -- and that every condition to date had been run at p = 0.3.
+ALL_CONDITIONS = (
+    "all-singleton",
+    "observed-mix",
+    "all-triplicate",
+    "age-varying",
+    "with-study",
+    "age-varying-kappa",
+    "clustered-ages",
+    "floor-p0",
+    "ceiling-p0",
+    "floor-small-n",
+)
+
+#: Conditions that keep `observed-mix`'s visit structure and vary something else.
+DERIVED_CONDITIONS = frozenset(
+    {
+        "age-varying",
+        "with-study",
+        "age-varying-kappa",
+        "clustered-ages",
+        "floor-p0",
+        "ceiling-p0",
+        "floor-small-n",
+    }
+)
+
 
 def visit_counts(condition: str, n_children: int, rng) -> np.ndarray:
     if condition == "all-singleton":
@@ -147,23 +219,36 @@ def _true_mean_logit(age: np.ndarray) -> np.ndarray:
     return -2.2 + 3.4 * u - 1.1 * u**2
 
 
-def simulate(counts: np.ndarray, rng) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def small_trial_counts(n_rows: int, rng) -> np.ndarray:
+    """Per-observation trial counts spanning the real pools' small denominators."""
+    draws = rng.lognormal(np.log(N_TRIALS_SMALL_MEDIAN), N_TRIALS_SMALL_LOG_SD, n_rows)
+    return np.clip(np.rint(draws), N_TRIALS_SMALL_LO, N_TRIALS_SMALL_HI).astype(int)
+
+
+def simulate(
+    counts: np.ndarray, rng, p0: float = P0, small_n: bool = False
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Beta-Binomial counts with a child random effect on the logit.
 
-    Returns ``(y, child, z)``. ``z`` matters: the spread a refit can recover is
-    ``TAU_TRUE * sd(z)``, and for 767 draws that realised SD carries a 2.55%
-    sampling error, so scoring against the nominal ``TAU_TRUE`` alone would
-    charge the model for the simulation's own noise.
+    Returns ``(y, child, z, n_trials)``. ``z`` matters: the spread a refit can
+    recover is ``TAU_TRUE * sd(z)``, and for 767 draws that realised SD carries
+    a 2.55% sampling error, so scoring against the nominal ``TAU_TRUE`` alone
+    would charge the model for the simulation's own noise.
     """
     z = rng.standard_normal(counts.size)
-    logit_p = np.log(P0 / (1 - P0)) + TAU_TRUE * z
+    logit_p = np.log(p0 / (1 - p0)) + TAU_TRUE * z
     p = 1.0 / (1.0 + np.exp(-logit_p))
     child = np.repeat(np.arange(counts.size), counts)
     p_row = p[child]
+    n_trials = (
+        small_trial_counts(child.size, rng)
+        if small_n
+        else np.full(child.size, N_TRIALS, dtype=int)
+    )
     # Beta-Binomial: a per-observation probability drawn around the child's own.
     theta = rng.beta(p_row * KAPPA_TRUE, (1 - p_row) * KAPPA_TRUE)
-    y = rng.binomial(N_TRIALS, theta)
-    return y, child, z
+    y = rng.binomial(n_trials, theta)
+    return y, child, z, n_trials
 
 
 def simulate_age_varying(counts: np.ndarray, rng):
@@ -245,13 +330,22 @@ def fit(
     age: np.ndarray | None = None,
     study: np.ndarray | None = None,
     kappa_age: np.ndarray | None = None,
+    p0: float = P0,
+    n_trials: np.ndarray | int = N_TRIALS,
+    tune: int = 2000,
+    draws: int = 1500,
+    chains: int = 2,
+    target_accept: float = 0.9,
 ) -> dict:
     with pm.Model():
         tau = pm.HalfNormal("tau", sigma=1.5)
         z = pm.Normal("z", mu=0.0, sigma=1.0, shape=n_children)
         kappa = pm.HalfNormal("kappa", sigma=50.0)
         if age is None:
-            mu = pm.Normal("mu", mu=np.log(P0 / (1 - P0)), sigma=1.0)
+            # Centred on the truth, as in every condition: the question is the
+            # scale's recovery, not the mean's, and a mean prior that missed by
+            # two SDs at the floor would confound the two.
+            mu = pm.Normal("mu", mu=np.log(p0 / (1 - p0)), sigma=1.0)
             mean_term = mu
         else:
             # Linear trend plus a flexible basis: the models' own mean structure,
@@ -276,14 +370,14 @@ def fit(
             uk = (kappa_age - AGE_LO) / (AGE_HI - AGE_LO)
             kappa_row = k_young + (k_old - k_young) * uk
         pm.BetaBinomial(
-            "y", alpha=p * kappa_row, beta=(1 - p) * kappa_row, n=N_TRIALS, observed=y
+            "y", alpha=p * kappa_row, beta=(1 - p) * kappa_row, n=n_trials, observed=y
         )
         idata = pm.sample(
-            draws=1500,
-            tune=2000,
-            chains=2,
-            cores=2,
-            target_accept=0.9,
+            draws=draws,
+            tune=tune,
+            chains=chains,
+            cores=min(chains, 4),
+            target_accept=target_accept,
             random_seed=seed,
             progressbar=False,
             compute_convergence_checks=False,
@@ -315,25 +409,38 @@ def main() -> None:
     parser.add_argument("--children", type=int, default=N_CHILDREN)
     parser.add_argument("--seed", type=int, default=20260819)
     parser.add_argument("--output-dir", default=None)
+    parser.add_argument(
+        "--conditions",
+        default=",".join(ALL_CONDITIONS),
+        help="comma-separated subset of: " + ", ".join(ALL_CONDITIONS),
+    )
+    parser.add_argument("--tune", type=int, default=2000)
+    parser.add_argument("--draws", type=int, default=1500)
+    parser.add_argument("--chains", type=int, default=2)
+    parser.add_argument("--target-accept", type=float, default=0.9)
+    parser.add_argument(
+        "--suffix",
+        default="",
+        help="appended to the output filename, so a re-run at a different "
+        "sampler setting does not overwrite the first pass",
+    )
     args = parser.parse_args()
     env.set_output_root(args.output_dir)
 
+    conditions = [c.strip() for c in args.conditions.split(",") if c.strip()]
+    unknown = [c for c in conditions if c not in ALL_CONDITIONS]
+    if unknown:
+        parser.error(f"unknown condition(s): {', '.join(unknown)}")
+
     rows = []
-    for condition in (
-        "all-singleton",
-        "observed-mix",
-        "all-triplicate",
-        "age-varying",
-        "with-study",
-        "age-varying-kappa",
-        "clustered-ages",
-    ):
+    for condition in conditions:
         for r in range(1, args.replicates + 1):
             rng = np.random.default_rng(args.seed + 1000 * r)
-            derived = {"age-varying", "with-study", "age-varying-kappa", "clustered-ages"}
-            structure = "observed-mix" if condition in derived else condition
+            structure = "observed-mix" if condition in DERIVED_CONDITIONS else condition
             counts = visit_counts(structure, args.children, rng)
             age = study = kappa_age = None
+            p0 = P0
+            n_trials = N_TRIALS
             if condition == "age-varying":
                 y, child, z, age = simulate_age_varying(counts, rng)
             elif condition == "clustered-ages":
@@ -342,8 +449,17 @@ def main() -> None:
                 y, child, z, study = simulate_with_study(counts, rng)
             elif condition == "age-varying-kappa":
                 y, child, z, kappa_age = simulate_age_varying_kappa(counts, rng)
+            elif condition == "floor-p0":
+                p0 = P0_FLOOR
+                y, child, z, n_trials = simulate(counts, rng, p0=p0)
+            elif condition == "ceiling-p0":
+                p0 = P0_CEILING
+                y, child, z, n_trials = simulate(counts, rng, p0=p0)
+            elif condition == "floor-small-n":
+                p0 = P0_FLOOR
+                y, child, z, n_trials = simulate(counts, rng, p0=p0, small_n=True)
             else:
-                y, child, z = simulate(counts, rng)
+                y, child, z, n_trials = simulate(counts, rng)
             realised = TAU_TRUE * float(np.std(z, ddof=1))
             out = fit(
                 y,
@@ -353,6 +469,12 @@ def main() -> None:
                 age=age,
                 study=study,
                 kappa_age=kappa_age,
+                p0=p0,
+                n_trials=n_trials,
+                tune=args.tune,
+                draws=args.draws,
+                chains=args.chains,
+                target_accept=args.target_accept,
             )
             rows.append(
                 {
@@ -361,6 +483,11 @@ def main() -> None:
                     "n_children": args.children,
                     "n_rows": int(counts.sum()),
                     "mean_visits": round(float(counts.mean()), 3),
+                    "p0": p0,
+                    "mean_trials": round(float(np.mean(n_trials)), 1),
+                    "frac_zero": round(float(np.mean(np.asarray(y) == 0)), 4),
+                    "tune": args.tune,
+                    "target_accept": args.target_accept,
                     "tau_true": TAU_TRUE,
                     "tau_realised": realised,
                     **out,
@@ -370,16 +497,19 @@ def main() -> None:
                 }
             )
             print(
-                f"{condition:15s} r{r:02d}  rows {counts.sum():5d}  "
+                f"{condition:16s} r{r:02d}  rows {counts.sum():5d}  "
                 f"tau {out['tau_median']:.4f}  "
                 f"({100 * (out['tau_median'] - realised) / realised:+.2f}% vs realised)  "
-                f"kappa {out['kappa_median']:6.1f}  rhat {out['max_rhat']:.4f}"
+                f"kappa {out['kappa_median']:6.1f}  rhat {out['max_rhat']:.4f}",
+                flush=True,
             )
 
     table = pd.DataFrame(rows)
     out_dir = os.path.join(env.output_root(), "comparisons", "recovery")
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "subject_scale_replication.csv")
+    path = os.path.join(
+        out_dir, f"subject_scale_replication{args.suffix}.csv"
+    )
     table.to_csv(path, index=False)
 
     pd.set_option("display.width", 200)
@@ -388,23 +518,41 @@ def main() -> None:
         table.groupby("condition")[
             [
                 "mean_visits",
+                "p0",
+                "mean_trials",
+                "frac_zero",
                 "tau_median",
                 "pct_vs_true",
                 "pct_vs_realised",
                 "z_vs_realised",
                 "kappa_median",
+                "max_rhat",
             ]
         ]
-        .mean()
+        .agg({"max_rhat": "max", **{c: "mean" for c in (
+            "mean_visits", "p0", "mean_trials", "frac_zero", "tau_median",
+            "pct_vs_true", "pct_vs_realised", "z_vs_realised", "kappa_median")}})
         .round(3)
         .to_string()
     )
+    # The project's hard convergence gate. A condition that misses it is not
+    # evidence either way, and the first pass reported three that did.
+    bad = table.groupby("condition")["max_rhat"].max()
+    failed = bad[bad > 1.01]
+    if len(failed):
+        print("\nNOT ASSESSABLE -- max R-hat above the 1.01 gate:")
+        print(failed.round(4).to_string())
+    else:
+        print("\nAll conditions clear the 1.01 R-hat gate.")
     print(f"\ntau_true = {TAU_TRUE}, kappa_true = {KAPPA_TRUE}")
     print(f"written: {path}")
     print(
-        "\nIf the bias is present at observed-mix and shrinks at all-triplicate, it is\n"
-        "about information per child, and no reparameterisation in #229 removes it.\n"
-        "If it is absent everywhere, something in the full models is responsible."
+        "\nReading the result: `all-singleton` came back clean in the first pass, so\n"
+        "the between-child/dispersion split is identified through the mean-variance\n"
+        "shape rather than through replication, and thin replication is not the\n"
+        "explanation. What remains untested by a well-specified simulation is\n"
+        "whether the boundary regime the fitted models work in is what costs the\n"
+        "scale -- that is what the three p0 conditions ask."
     )
 
 
