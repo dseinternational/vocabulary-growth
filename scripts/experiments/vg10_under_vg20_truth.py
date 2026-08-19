@@ -51,10 +51,23 @@ this script must not write there. The VG10 definition it fits carries a
 ``-under-vg20-truth`` suffix in its ``config_name``, which sends the output to
 ``VG10-...-under-vg20-truth-recovery-rNN/`` and leaves the baseline untouched.
 
+Two modes
+---------
+**Pinned** (``--rho 0.368``) is the headline experiment: the truth is a VG20
+posterior draw with ``rho_uq`` overwritten to a stated value, so every replicate
+is generated at the same, named correlation and the replicates differ only in
+the remaining parameters and the simulation noise. This mode simulates and fits
+*both* arms itself, because the recovery harness's own runs are at its own draws.
+
+**Harness draws** (no ``--rho``) reuses whatever ``fit_recovery.py vg20`` already
+simulated and scored. Its truths span the posterior (0.311-0.478 on the current
+run), which makes it the dose-response companion: if the absorption scales with
+the true ``rho``, that is mechanism confirmation the pinned run cannot give.
+
 Usage::
 
+    python scripts/experiments/vg10_under_vg20_truth.py --rho 0.368 --config test
     python scripts/experiments/vg10_under_vg20_truth.py --config rep
-    python scripts/experiments/vg10_under_vg20_truth.py --replicates 1 2
     python scripts/experiments/vg10_under_vg20_truth.py --score-only
 """
 
@@ -90,6 +103,20 @@ SOURCE_KEY = "vg20"
 TARGET_KEY = "vg10"
 SUFFIX = "-under-vg20-truth"
 
+#: ``rho_uq = 2 * rho_uq_raw - 1`` with ``rho_uq_raw ~ Beta(eta, eta)``, and
+#: ``rho_uq_raw`` is the free random variable the truth draw carries. Pinning the
+#: correlation therefore means pinning the raw value.
+RAW_NAME = "rho_uq_raw"
+
+
+def raw_for(rho: float) -> float:
+    """The free parameter's value for a stated correlation."""
+    return (rho + 1.0) / 2.0
+
+
+def pinned_suffix(rho: float) -> str:
+    return f"-rho{round(rho * 1000):03d}"
+
 #: Parameters both models carry, so the truth is meaningful for each. `rho_uq`
 #: is deliberately absent: VG10 has no such parameter, and the point of the
 #: experiment is where its value goes instead.
@@ -115,40 +142,115 @@ SHARED = (
 )
 
 
-def target_definition():
+def source_definition(rho: float | None):
+    """VG20, suffixed when the correlation is pinned.
+
+    A distinct ``config_name`` gives the pinned run its own simulation directory,
+    which matters while ``fit_recovery.py vg20`` may be running against the
+    unsuffixed ones.
+    """
+    base = MODEL_REGISTRY[SOURCE_KEY]
+    if rho is None:
+        return base
+    return dataclasses.replace(
+        base, config_name=f"{base.config_name}{pinned_suffix(rho)}"
+    )
+
+
+def target_definition(rho: float | None = None):
     """VG10, redirected so it cannot overwrite its own recovery baseline."""
     base = MODEL_REGISTRY[TARGET_KEY]
-    return dataclasses.replace(base, config_name=f"{base.config_name}{SUFFIX}")
+    tail = SUFFIX if rho is None else f"{SUFFIX}{pinned_suffix(rho)}"
+    return dataclasses.replace(base, config_name=f"{base.config_name}{tail}")
 
 
-def fit_one(replicate: int, config: str) -> None:
-    """Fit VG10 to the frame VG20 simulated for ``replicate``."""
-    root = env.output_root()
-    source_dir = simulation_dir(MODEL_REGISTRY[SOURCE_KEY], replicate, root)
-    if not os.path.isdir(source_dir):
-        raise SystemExit(
-            f"No VG20 simulation for replicate {replicate} at {source_dir}. "
-            f"Run `fit_recovery.py vg20 --config {config}` first."
+def simulate_pinned(replicate: int, rho: float, config: str) -> None:
+    """Simulate one dataset from VG20 with ``rho_uq`` pinned to ``rho``.
+
+    ``simulate_replicate`` reads its truth from the *passed* definition's own
+    trace, which a suffixed definition does not have, and takes whatever
+    ``rho_uq_raw`` the draw carries. Both are handled by wrapping
+    ``truth_from_trace``: it is redirected to the real VG20 model-of-record
+    trace, and the returned draw's ``rho_uq_raw`` is overwritten with the value
+    corresponding to ``rho``. Everything else in the draw is left alone, so the
+    replicates still span the posterior in every parameter but this one.
+
+    Patching rather than reimplementing keeps the simulation path identical to
+    the harness's -- same build, same forward draw, same provenance record.
+    """
+    from vocab_growth.recovery import simulate as sim
+
+    record_trace = os.path.join(
+        env.output_root(),
+        "models",
+        f"{MODEL_REGISTRY[SOURCE_KEY].model_id}-"
+        f"{MODEL_REGISTRY[SOURCE_KEY].config_name}",
+        "trace.nc",
+    )
+    if not os.path.isfile(record_trace):
+        raise SystemExit(f"No VG20 model-of-record trace at {record_trace}.")
+
+    raw = raw_for(rho)
+    original = sim.truth_from_trace
+
+    def patched(trace_path, free_rv_names, *, replicate):  # noqa: ARG001
+        truth = original(record_trace, free_rv_names, replicate=replicate)
+        posterior = truth.tree["posterior"].to_dataset()
+        if RAW_NAME not in posterior.data_vars:
+            raise SystemExit(f"Truth draw has no {RAW_NAME!r}.")
+        was = float(np.asarray(posterior[RAW_NAME].values).ravel()[0])
+        posterior[RAW_NAME] = xr.zeros_like(posterior[RAW_NAME]) + raw
+        truth.tree["posterior"] = xr.DataTree(posterior)
+        truth.provenance["rho_uq_pinned_to"] = rho
+        truth.provenance["rho_uq_raw_was"] = was
+        truth.provenance["rho_uq_was"] = 2.0 * was - 1.0
+        print(
+            f"    pinned rho_uq {2.0 * was - 1.0:+.4f} -> {rho:+.4f} "
+            f"(raw {was:.4f} -> {raw:.4f})"
         )
+        return truth
+
+    sim.truth_from_trace = patched
+    try:
+        print(f"\n=== replicate {replicate:02d}: simulating from VG20 at rho={rho} ===")
+        sim.simulate_replicate(
+            SOURCE_KEY,
+            config,
+            replicate=replicate,
+            truth_source="posterior",
+            definition=source_definition(rho),
+        )
+    finally:
+        sim.truth_from_trace = original
+
+
+def fit_arm(replicate: int, config: str, model_key: str, definition, source_def) -> None:
+    """Fit one arm to the frame ``source_def`` simulated for ``replicate``."""
+    source_dir = simulation_dir(source_def, replicate, env.output_root())
+    if not os.path.isdir(source_dir):
+        raise SystemExit(f"No simulation at {source_dir}; simulate first.")
     frame, _truth, record = load_simulation(source_dir)
 
-    definition = make_recovery_definition(target_definition(), replicate)
-    target = recovery_target(TARGET_KEY)
-    stages = target.resolve_stages(definition)
+    fit_definition = make_recovery_definition(definition, replicate)
+    stages = recovery_target(model_key).resolve_stages(fit_definition)
     if stages[0][0] != PREPARE_STAGE_NAME:
         raise RuntimeError(f"Unexpected first stage {stages[0][0]!r}.")
     # Same substitution the recovery harness makes: the engine's own pipeline,
-    # with data preparation replaced by a loader for the synthetic frame. The
-    # frame came from VG20, which is the whole point.
-    stages[0] = ("Load VG20-simulated data", _loader_stage(frame, definition, record))
-    print(f"\n=== replicate {replicate:02d}: fitting VG10 to VG20's data ===")
-    run_fit_pipeline(config, definition, stages=stages)
+    # with data preparation replaced by a loader for the synthetic frame.
+    stages[0] = (
+        "Load VG20-simulated data",
+        _loader_stage(frame, fit_definition, record),
+    )
+    print(
+        f"\n=== replicate {replicate:02d}: fitting "
+        f"{fit_definition.model_id} to VG20's data ==="
+    )
+    run_fit_pipeline(config, fit_definition, stages=stages)
 
 
-def _truth_values(replicate: int) -> dict[str, float]:
-    root = env.output_root()
+def _truth_values(replicate: int, source_def) -> dict[str, float]:
     path = os.path.join(
-        simulation_dir(MODEL_REGISTRY[SOURCE_KEY], replicate, root), "truth.nc"
+        simulation_dir(source_def, replicate, env.output_root()), "truth.nc"
     )
     with xr.open_datatree(path) as tree:
         posterior = tree["posterior"].to_dataset()
@@ -176,8 +278,13 @@ def _posterior_summary(directory: str, names) -> dict[str, tuple[float, float]]:
     return out
 
 
-def _control_scores(replicate: int) -> pd.DataFrame | None:
-    """VG20's own scores for this replicate, written by the recovery harness."""
+def _control(replicate: int, rho: float | None):
+    """Correctly-specified arm: this run's own VG20 fit, or the harness's scores."""
+    if rho is not None:
+        label = recovery_label(source_definition(rho), replicate)
+        return _posterior_summary(
+            os.path.join(env.output_root(), "models", label), SHARED
+        )
     path = os.path.join(
         env.output_root(),
         "comparisons",
@@ -186,18 +293,27 @@ def _control_scores(replicate: int) -> pd.DataFrame | None:
     )
     if not os.path.isfile(path):
         return None
-    return pd.read_csv(path).set_index("quantity")
+    scores = pd.read_csv(path).set_index("quantity")
+    return {
+        name: (
+            float(scores.loc[name, "posterior_median"]),
+            float(scores.loc[name, "posterior_sd"]),
+        )
+        for name in SHARED
+        if name in scores.index
+    }
 
 
-def score(replicates) -> pd.DataFrame:
+def score(replicates, rho: float | None) -> pd.DataFrame:
+    source_def = source_definition(rho)
     rows = []
     for replicate in replicates:
-        truth = _truth_values(replicate)
-        label = recovery_label(target_definition(), replicate)
+        truth = _truth_values(replicate, source_def)
+        label = recovery_label(target_definition(rho), replicate)
         treated = _posterior_summary(
             os.path.join(env.output_root(), "models", label), SHARED
         )
-        control = _control_scores(replicate)
+        control = _control(replicate, rho)
         for name in SHARED:
             if name not in truth or name not in treated:
                 continue
@@ -212,9 +328,8 @@ def score(replicates) -> pd.DataFrame:
                 "VG10_z": (med_b - t) / sd_b if sd_b > 0 else np.nan,
                 "VG10_pct": 100.0 * (med_b - t) / t if t != 0 else np.nan,
             }
-            if control is not None and name in control.index:
-                med_a = float(control.loc[name, "posterior_median"])
-                sd_a = float(control.loc[name, "posterior_sd"])
+            if control is not None and name in control:
+                med_a, sd_a = control[name]
                 row["VG20_median"] = med_a
                 row["VG20_z"] = (med_a - t) / sd_a if sd_a > 0 else np.nan
                 row["VG20_pct"] = 100.0 * (med_a - t) / t if t != 0 else np.nan
@@ -230,21 +345,40 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="rep")
     parser.add_argument("--replicates", type=int, nargs="*", default=[1, 2, 3])
+    parser.add_argument(
+        "--rho",
+        type=float,
+        default=None,
+        help="Pin rho_uq to this value and simulate both arms (e.g. 0.368).",
+    )
     parser.add_argument("--score-only", action="store_true")
     parser.add_argument("--output-dir", default=None)
     args = parser.parse_args()
     env.set_output_root(args.output_dir)
+    rho = args.rho
 
     if not args.score_only:
         for replicate in args.replicates:
-            fit_one(replicate, args.config)
+            if rho is not None:
+                simulate_pinned(replicate, rho, args.config)
+                # Control first: if the correctly specified model cannot recover
+                # its own data, the mis-specified comparison means nothing.
+                fit_arm(
+                    replicate, args.config, SOURCE_KEY, source_definition(rho),
+                    source_definition(rho),
+                )
+            fit_arm(
+                replicate, args.config, TARGET_KEY, target_definition(rho),
+                source_definition(rho),
+            )
 
-    table = score(args.replicates)
+    table = score(args.replicates, rho)
     if table.empty:
         raise SystemExit("Nothing scored.")
     out_dir = os.path.join(env.output_root(), "comparisons", "recovery")
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "vg10_under_vg20_truth.csv")
+    stem = "vg10_under_vg20_truth" + (pinned_suffix(rho) if rho is not None else "")
+    path = os.path.join(out_dir, f"{stem}.csv")
     table.to_csv(path, index=False)
 
     pd.set_option("display.width", 220)
