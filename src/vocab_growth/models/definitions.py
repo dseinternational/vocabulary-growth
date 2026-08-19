@@ -1761,31 +1761,73 @@ _TD_YOUNG_Q_KAPPA_RE = KappaAnchorPriorParams(
 # one and the current posterior alike. The floor keeps the shared weak default.
 
 _DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
-    # Totals 110 @ 24 mo and 33 @ 48 mo. The dev-config posteriors these replace
-    # sat at 66 and 20 under a prior centred near 13, so this moves the prior to
-    # where the data already were rather than moving the fit.
-    anchor_ages=(24.0, 48.0),
-    kappa_min_mu=math.log(3.0),
+    # Recalibrated 2026-08-19 (#229), promoted from VG20's
+    # `kappa-anchor-18-72-floor` variant. Shared by VG09, VG10, VG14, VG15,
+    # VG16 and VG20, and changed here rather than on VG20 alone so those six
+    # keep a common dispersion treatment -- VG20 is defined as VG10 plus a
+    # correlated subject block and nothing else, an invariant two tests
+    # enforce, and a VG20-only change would have made that description false
+    # and `compare_vg10_vg20.py` a two-factor contrast.
+    #
+    # Two changes, made together because only the pair sampled cleanly.
+    #
+    # Anchors move from (24, 48) to (18, 72), so the reporting range is
+    # interpolation between two priored points rather than extrapolation onto
+    # the asymptote. 84 was considered and rejected: 18 administrations on 12
+    # children sit within +-6 months of it, against 51 on 46 children at 72.
+    #
+    # The floor's prior median moves from 3.0 to 7.8, where the conditional
+    # calibration puts it (`scripts/kappa_conditional_calibration.py --anchors
+    # 18,72 --mean spline`, stable at 7.5-8.0 across 6, 8, 10 and 14 knots;
+    # only the saturated per-cell mean collapses it, which is what that pool's
+    # "frame too thin" note is about). These blocks kept the generic log(3.0)
+    # that VG11 was moved off when it gained a conditional calibration.
+    #
+    # Excess medians are the calibrated TOTAL at each anchor minus the floor
+    # prior's median, as the values they replace were set: totals 92.6 at 18
+    # months and 14.0 at 72. The superseded comment cited totals of 110 @ 24
+    # and 33 @ 48 against this calibration's 71.2 and 27.7 on the same frame;
+    # that discrepancy is unexplained and predates this change.
+    #
+    # Expect little movement in what is reported. On a like-for-like `test`
+    # pairing all 395 checks fall inside the baseline's 89% interval (max
+    # |delta| 1.48), and reported kappa moves under 1% below 48 months, +6.5%
+    # at 72 and +13.8% at 84 -- a prior elasticity of 0.04 to 0.09. What the
+    # change buys is sampling geometry and honest prior placement, not a
+    # different answer: it is the only one of baseline, anchor-only, floor-only
+    # and both to sample with zero divergences.
+    # See notes/202608191800-kappa-components-not-estimands.md.
+    anchor_ages=(18.0, 72.0),
+    kappa_min_mu=math.log(7.8),
     kappa_min_sigma=0.8,
-    excess_young_mu=math.log(106.0),
+    excess_young_mu=math.log(84.8),
     excess_young_sigma=1.0,
-    excess_old_mu=math.log(28.7),
+    excess_old_mu=math.log(6.2),
     excess_old_sigma=1.0,
 )
 
 _DS_JOINT_Q_KAPPA_RE = KappaAnchorPriorParams(
-    # The production ratio on the nested scale the engines use: spoken out of that
-    # child's own observed understood count, mean q. Totals 17 @ 24 mo and 11 @ 48.
-    # 469 of 1,114 spoken rows fall back to the marginal out-of-810 likelihood
-    # because the understood count is missing or violated, so this calibration
-    # covers the 58% on the nested scale and kappa_s governs both.
-    anchor_ages=(24.0, 48.0),
-    kappa_min_mu=math.log(3.0),
+    # The production ratio on the nested scale the engines use: spoken out of
+    # that child's own observed understood count, mean q. 469 of 1,114 spoken
+    # rows fall back to the marginal out-of-810 likelihood because the
+    # understood count is missing or violated, so this calibration covers the
+    # 58% on the nested scale and kappa_s governs both.
+    #
+    # Recalibrated 2026-08-19 alongside the understood block above; see there
+    # for the anchor and floor rationale. Calibrated totals 18.2 at 18 months
+    # and 8.4 at 72, against a floor of 7.8 -- so the old excess is 0.6, very
+    # nearly the floor restated, and its calibration log-scale SE is 1.429.
+    # `excess_old_sigma` is 1.5 rather than the family's 1.0 for exactly that
+    # reason: a prior narrower than the estimate it is drawn from would assert
+    # more than the estimate supports. The anchor move helps comprehension more
+    # than it helps q, and that is visible here rather than hidden.
+    anchor_ages=(18.0, 72.0),
+    kappa_min_mu=math.log(7.8),
     kappa_min_sigma=0.8,
-    excess_young_mu=math.log(12.6),
+    excess_young_mu=math.log(10.4),
     excess_young_sigma=1.0,
-    excess_old_mu=math.log(6.7),
-    excess_old_sigma=1.0,
+    excess_old_mu=math.log(0.6),
+    excess_old_sigma=1.5,
 )
 
 VG01 = UnivariateModelDefinition(

@@ -153,13 +153,18 @@ def test_registry_counts_and_models():
     # +3 on 2026-08-19: VG20's kappa placement trio (#229), and the first
     # variants registered against the model of record rather than against a
     # development step. Two of them vary where the dispersion prior is placed
-    # rather than how wide it is -- `kappa-anchor-18-72` moves the anchors
-    # inside the reporting range, `kappa-floor-recentred` moves the floor's
-    # prior median from 3.0 to the conditionally calibrated 7.8 -- and the
-    # third combines them. `anchor_ages` was already an overridable field; what
-    # is new is treating anchor *placement* as a registered question, on the
-    # measurement that kappa_min carries 46% of reported kappa_u at 84 months
-    # and 83% of kappa_s at 90 while recovery scores it at -40% to -60%.
+    # rather than how wide it is; the third combines them. `anchor_ages` was
+    # already an overridable field, but treating anchor *placement* as a
+    # registered question is new, and it followed the measurement that
+    # kappa_min carries 42.5% of reported kappa_u at 84 months and 95.2% of
+    # kappa_s while recovery scores it at -40% to -60%.
+    #
+    # Restated the same day as `kappa-anchor-24-48`, `kappa-floor-generic` and
+    # `kappa-pre-promotion` when the combination was promoted into
+    # `_DS_JOINT_*_KAPPA_RE`: after promotion the originals perturbed toward the
+    # model of record rather than away from it, and one of them had become a
+    # literal no-op. The count is unchanged because each was inverted rather
+    # than dropped.
     assert len(VARIANTS) == 56
     assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
