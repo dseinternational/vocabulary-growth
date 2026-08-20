@@ -161,7 +161,7 @@ The same ratio can be plotted against comprehension level rather than age, which
 
 ## Comparison with typically developing children {#sec-ds-td}
 
-The Down syndrome and typically-developing pools are disjoint — no shared studies and no shared children — so their posteriors are independent and a contrast can be formed draw by draw from the two separate fits. Every difference below is computed that way, which gives exact credible intervals without a joint model. What it does *not* give is a model in which the gap is itself a parameter with its own hierarchy; that model is not built, and is noted in the Limitations.
+The Down syndrome and typically-developing pools are disjoint — no shared studies and no shared children — so their posteriors are independent and a contrast can be formed draw by draw from the two separate fits. Every difference below is computed that way, which gives exact credible intervals without a joint model. What it does *not* give is a model in which the gap is itself a parameter with its own hierarchy; that model is not built, and the reasons are set out in @sec-limitations.
 
 Each contrast is reported only where both populations' draws actually reach the age or level in question. Coverage columns in the underlying tables record this, and points below the coverage threshold are dropped rather than shown as confident estimates of something the data do not support.
 

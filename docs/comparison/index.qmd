@@ -42,7 +42,9 @@ with **no joint model** required. (The generative joint model that would make th
 DS–TD gap itself a parameter is not built and holds no reserved model number —
 it was reserved as VG16 until that number was taken by the Down syndrome
 within-child cross-lag — and this report shows the headline questions are already
-answerable without it.)
+answerable without it. The full reasoning, including what such a model could
+share across the two populations and what would reopen the decision, is in
+`notes/202608200906-joint-ds-td-model-not-built.md`.)
 
 ```{python}
 import numpy as np
