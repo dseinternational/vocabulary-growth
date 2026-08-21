@@ -394,3 +394,58 @@ def test_dropped_degenerate_observations_are_disclosed(tmp_path, capsys):
     row = {**_CLEAN_ROW, "n_dropped_degenerate": 12}
     report_cells.render_loo_section(str(_loo_fit(tmp_path, [row])))
     assert "12 observation(s) were excluded as degenerate" in capsys.readouterr().out
+
+
+def test_priors_table_survives_an_overloaded_subject_scale_field():
+    """A subject-scale field holding a block, not a float, must not break render.
+
+    The subject-scale fields are overloaded: VG19 puts a child intercept-and-rate
+    block there and Proposal A1 an age-varying scale. Once through `asdict` both
+    are mappings, and the scalar path fed one straight to `scipy.stats.halfnorm
+    .ppf(scale=...)`, which raises a bare `TypeError: '>' not supported between
+    instances of 'dict' and 'int'` from inside scipy. Nothing surfaced until
+    `quarto render` failed on the whole page.
+    """
+    import dataclasses as dc
+
+    from vocab_growth.models.definitions import VG19, VG20
+
+    row = report_cells._prior_row(
+        "tau_subj_u", "Between-child scale", "tau_subj_u_sigma", "odds", dc.asdict(VG19)
+    )
+    assert row is not None, "the slope block must produce a row, not be dropped"
+    label, distribution, reading = row
+    # Both scales must be stated: a row naming only tau0 would read as though the
+    # model had no rate at all.
+    assert "HalfNormal(1.5)" in distribution and "HalfNormal(0.5)" in distribution
+    assert "LKJ(2)" in distribution
+    assert "per year" in reading
+
+    # The scalar path is untouched: a model of record renders exactly as before.
+    scalar = report_cells._prior_row(
+        "tau_subj_u", "Between-child scale", "tau_subj_u_sigma", "odds", dc.asdict(VG20)
+    )
+    assert scalar == ("Between-child scale", "HalfNormal(1.5)", scalar[2])
+    assert "odds" in scalar[2]
+
+
+def test_priors_table_describes_an_age_varying_subject_scale():
+    """Proposal A1's block reaches the same path and must also be described."""
+    import dataclasses as dc
+
+    from vocab_growth.models.definitions import AgeVaryingSubjectScale
+
+    spec = dc.asdict(
+        AgeVaryingSubjectScale(
+            anchor_ages=(24.0, 72.0), young_sigma=1.5, log_ratio_sigma=0.4
+        )
+    )
+    row = report_cells._prior_row(
+        "tau_subj_u", "Between-child scale", "tau_subj_u_sigma", "odds",
+        {"tau_subj_u_sigma": spec},
+    )
+    assert row is not None
+    _, distribution, reading = row
+    assert "HalfNormal(1.5)" in distribution
+    assert "24 months" in reading
+

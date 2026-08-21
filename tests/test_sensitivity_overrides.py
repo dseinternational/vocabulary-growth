@@ -13,7 +13,7 @@ import dataclasses
 
 import pytest
 
-from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15, VG20
+from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15, VG19, VG20
 from vocab_growth.sensitivity.overrides import make_variant, replace_kappa
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
@@ -173,7 +173,12 @@ def test_registry_counts_and_models():
     # closing by 300 words understood -- is exactly what a level-pinning prior
     # could manufacture. The variant displaces the q high anchor upward and
     # widens both, so a surviving closure is the data's and not the prior's.
-    assert len(VARIANTS) == 57
+    # 58 with VG19's `max-age-84` (gate G5b): a leverage diagnostic that caps the
+    # data at 84 months and changes nothing else, so any movement in `tau1` is
+    # attributable to the discarded high-age rows rather than to a re-placed
+    # mean function. See notes/202608141900 SS G5b.
+    assert len(VARIANTS) == 58
+    assert len(variants_for("vg19")) == 1
     assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
@@ -301,6 +306,7 @@ def test_variants_are_single_factor_or_documented_pairs():
             "vg12": VG12,
             "vg13": VG13,
             "vg15": VG15,
+            "vg19": VG19,
             "vg20": VG20,
         }[model_key]
         assert v.model_type == base.model_type

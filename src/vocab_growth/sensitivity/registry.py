@@ -474,6 +474,29 @@ VARIANTS: dict[tuple[str, str], dict] = {
     #                        fit carried before 2026-08-19. Keeps the previous
     #                        model of record reachable as a registered variant
     #                        rather than only in git history.
+    # VG19 gate G5b (notes/202608141900 SS G5b). A LEVERAGE diagnostic, not a
+    # reportable narrower model, and the difference dictates the design: this
+    # variant changes `max_age_months` and NOTHING else.
+    #
+    # The `window-22` precedent moves `gp_domain_months`, the anchors and the
+    # slope priors along with the cap, because it exists to report over a narrow
+    # window and the mean function has to be right there. Doing that here would
+    # confound the measurement: `tau1` could then move because the population
+    # curve changed rather than because the high-age observations left, and the
+    # whole point is to attribute its movement to one cause. Holding the GP
+    # domain at (8, 115) leaves the basis and both slope anchors exactly where
+    # the reference fit put them, so the likelihood below 84 months is the same
+    # function of the same parameters. Above 84 the GP is unconstrained, which
+    # costs nothing: no observation is there to be fitted.
+    #
+    # Reading it: `tau1` stable => the rate is carried by the longitudinal
+    # subset and the concentration is harmless. `tau1` materially moved => it is
+    # set by the sparse tail (50 spoken rows above 84 months, 3.5% of the data
+    # carrying 28-35% of the cross-sectional information about it), and the
+    # slope should be reported only over the range that supports it.
+    ("vg19", "max-age-84"): {"suffix": "max-age-84", "scalar": {
+        "max_age_months": 84}},
+
     ("vg20", "kappa-anchor-24-48"): {"suffix": "kappa-anchor-24-48", "kappa": {
         "kappa_u": {"anchor_ages": (24.0, 48.0),
                     "excess_young_mu": math.log(63.4),

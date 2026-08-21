@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections.abc import Mapping
 
 from scipy import stats
 
@@ -315,6 +316,16 @@ def _prior_row(
         sigma = definition.get(stem)
         if sigma is None:
             return None
+        # The subject-scale fields are overloaded. A float is the constant
+        # between-child scale every model of record carries, but VG19 puts a
+        # child intercept-and-rate block there (`SubjectSlopePriorParams`) and
+        # Proposal A1 an age-varying scale (`AgeVaryingSubjectScale`). Once the
+        # definition has been through `asdict` both arrive as mappings, and
+        # scipy then raises a bare `TypeError: '>' not supported between
+        # instances of 'dict' and 'int'` from inside `ppf` -- which surfaces as
+        # an unrenderable report page rather than as anything diagnosable.
+        if isinstance(sigma, Mapping):
+            return _subject_scale_row(description, sigma)
         median = float(stats.halfnorm.ppf(0.5, scale=sigma))
         if kind == "amplitude":
             reading = f"median {median:.2f} logits of departure from the straight-line trend"
@@ -336,6 +347,48 @@ def _prior_row(
             reading = "on the logit scale, per unit of the lag predictor"
         return description, f"Normal({mu:g}, {sigma:g})", reading
 
+    return None
+
+
+
+def _subject_scale_row(description: str, spec: Mapping) -> tuple[str, str, str] | None:
+    """A priors-table row for a subject-scale field holding a block, not a scalar.
+
+    Both overloads describe the same thing -- how far children sit from the
+    population trajectory -- but neither is a single ``HalfNormal``, so the
+    scalar path cannot summarise either. Returning ``None`` would silently drop
+    the row and leave the reader thinking the model has no between-child prior
+    at all, which is worse than a crash; these rows say what was actually put on
+    the block.
+    """
+    if "tau0_sigma" in spec:
+        # VG19: a child intercept and rate, correlated. `(rho + 1) / 2 ~
+        # Beta(eta, eta)` is exactly LKJ(eta) for a 2x2, so it is named as LKJ.
+        t0 = float(spec["tau0_sigma"])
+        t1 = float(spec["tau1_sigma"])
+        eta = float(spec.get("rho_eta", 2.0))
+        m0 = float(stats.halfnorm.ppf(0.5, scale=t0))
+        m1 = float(stats.halfnorm.ppf(0.5, scale=t1))
+        return (
+            f"{description} — intercept and rate",
+            f"HalfNormal({t0:g}) and HalfNormal({t1:g}); "
+            f"$\\rho_{{01}} \\sim$ LKJ({eta:g})",
+            f"median {m0:.2f} logits at the reference age; rate median "
+            f"{m1:.2f} logits per year; correlation centred on zero",
+        )
+    if "log_ratio_sigma" in spec:
+        # Proposal A1: one deviate scaled by a curve through two anchor ages.
+        young = float(spec["young_sigma"])
+        ratio = float(spec["log_ratio_sigma"])
+        ages = spec.get("anchor_ages") or ()
+        m = float(stats.halfnorm.ppf(0.5, scale=young))
+        where = f" at {ages[0]:g} months" if len(ages) else ""
+        return (
+            f"{description} — age-varying",
+            f"HalfNormal({young:g}); $\\log(\\tau_{{old}}/\\tau_{{young}}) "
+            f"\\sim$ Normal(0, {ratio:g})",
+            f"median {m:.2f} logits{where}; zero widening is the prior centre",
+        )
     return None
 
 
