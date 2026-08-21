@@ -41,7 +41,11 @@ import pandas as pd
 
 from vocab_growth import environment as env
 from vocab_growth import intervals
-from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
+from vocab_growth.models.definitions import (
+    MODEL_REGISTRY,
+    ModelType,
+    subject_slope_spec,
+)
 
 DEFAULT_MILESTONES = (25, 50, 100, 200, 400)
 DEFAULT_MIN_COVERAGE = 0.80
@@ -829,6 +833,15 @@ def subject_heterogeneity(
     ``f_u_plot`` + ``tau_subj_u`` for understood, and additionally ``h_plot`` +
     ``tau_subj_q`` for spoken, which needs :func:`child_spread_product`.
 
+    Where a model gives its children a *rate* rather than a constant offset
+    (VG19), the scale it reads is not a number but the curve
+    :func:`child_scale_of_age` builds from ``tau_subj_*_0``, ``tau_subj_*_1`` and
+    ``tau_subj_*_rho``, evaluated on the returned grid. Both quadratures accept a
+    ``(n_draw, n_age)`` scale, so the dispatch is the only thing that changes.
+    ``tau_logit`` is then age-varying for two reasons at once — the population
+    logit moves and the child scale moves — where under a constant offset only
+    the first applies.
+
     ``ages`` evaluates on a caller-supplied grid instead of the model's own plot
     grid. The population logits are interpolated *before* the quadrature (they are
     smooth in age; the derived SD need not be), which for a 0.5-month comparison
@@ -844,15 +857,55 @@ def subject_heterogeneity(
     n = n_trials(key)
     path = trace_path(key)
 
-    def _prepare(
-        native: np.ndarray, Y: np.ndarray, tau: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _prepare(native: np.ndarray, Y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if draws is not None:
-            Y, tau = Y[draws], tau[draws]
+            Y = Y[draws]
         if ages is None:
-            return native, Y, tau
+            return native, Y
         out = np.asarray(ages, dtype=float)
-        return out, interp_draws(native, Y, out), tau
+        return out, interp_draws(native, Y, out)
+
+    def _scale_names(base: str, slope) -> tuple[str, ...]:
+        """Trace variables carrying one outcome's between-child scale."""
+        if slope is None:
+            return (base,)
+        return (f"{base}_0", f"{base}_1", f"{base}_rho")
+
+    def _scale(
+        scal: dict[str, np.ndarray], base: str, slope, grid: np.ndarray
+    ) -> np.ndarray:
+        """One outcome's between-child scale: a per-draw scalar, or a curve in age.
+
+        A model whose child effect carries a *rate* (VG19) has no single
+        between-child scale: the spread is
+        ``sqrt(tau0^2 + 2 rho01 tau0 tau1 D + tau1^2 D^2)`` at ``D`` years from
+        the reference age. Reading its `tau_subj_*` Deterministic and stopping
+        there would report the reference-age spread at every age, discarding
+        `tau1` and `rho01` — the same defect #224 found in the subject-marginal
+        predictive, where a fitted parameter was thrown away by the derived
+        quantity that existed to use it. `tau_subj_*` is *present* in a VG19
+        trace, so nothing would fail; the curve would just be silently flat.
+
+        Keyed off the definition's scale field rather than off which variables
+        the trace happens to contain, so a model that should carry a rate and
+        does not fails loudly in :func:`_load_reshaped_draws`.
+
+        Evaluated on ``grid`` — the caller's age grid once resolved, not the
+        model's native one — because the scale is a function of age and must be
+        computed at the ages actually reported, never interpolated from another
+        grid.
+        """
+        if slope is None:
+            tau = scal[base]
+            return tau if draws is None else tau[draws]
+        t0, t1, r = (scal[f"{base}_0"], scal[f"{base}_1"], scal[f"{base}_rho"])
+        if draws is not None:
+            t0, t1, r = t0[draws], t1[draws], r[draws]
+        # Resolved exactly as `common_bivariate_re.build_model_re` resolves it,
+        # default included: a reference age here that differs from the one the
+        # fit used would silently shift the whole curve.
+        ref = float(getattr(d, "subject_slope_ref_age_months", 36.0) or 36.0)
+        return child_scale_of_age(t0, t1, r, grid, ref_age_months=ref)
 
     if mt is ModelType.UNIVARIATE:
         if d.outcome.value != outcome:
@@ -864,8 +917,17 @@ def subject_heterogeneity(
                 f"{key} carries no subject random effect; it has no between-child "
                 "scale to report. Use a model with use_subject_re=True."
             )
+        # No univariate model carries a child rate; if one is ever added, this
+        # branch must grow the same treatment rather than silently reporting the
+        # reference-age spread at every age.
+        if subject_slope_spec(getattr(d, "tau_subject_sigma", None)) is not None:
+            raise NotImplementedError(
+                f"{key} carries a child slope on a univariate engine; "
+                "subject_heterogeneity has no age-varying path for it."
+            )
         native, (f,), scal = _load_reshaped_draws(path, ("f_plot",), ("tau_subject",))
-        grid, f, tau = _prepare(native, f, scal["tau_subject"])
+        grid, f = _prepare(native, f)
+        tau = _scale(scal, "tau_subject", None, grid)
         tau_logit, sd_words = child_spread_single(f, tau, n, n_nodes=n_nodes)
         return grid, tau_logit, sd_words, n
 
@@ -876,10 +938,12 @@ def subject_heterogeneity(
                     f"{key} carries no understood subject random effect "
                     "(use_subject_re_u=False)."
                 )
+            slope_u = subject_slope_spec(d.tau_subj_u_sigma)
             native, (f_u,), scal = _load_reshaped_draws(
-                path, ("f_u_plot",), ("tau_subj_u",)
+                path, ("f_u_plot",), _scale_names("tau_subj_u", slope_u)
             )
-            grid, f_u, tau_u = _prepare(native, f_u, scal["tau_subj_u"])
+            grid, f_u = _prepare(native, f_u)
+            tau_u = _scale(scal, "tau_subj_u", slope_u, grid)
             tau_logit, sd_words = child_spread_single(f_u, tau_u, n, n_nodes=n_nodes)
             return grid, tau_logit, sd_words, n
         if outcome == "spoken":
@@ -899,15 +963,21 @@ def subject_heterogeneity(
             # predictive. Keyed off the definition field rather than off the
             # variable's presence in the trace, so a model that should carry a
             # correlation and does not fails loudly in _load_reshaped_draws.
-            scalar_names = ("tau_subj_u", "tau_subj_q")
+            slope_u = subject_slope_spec(d.tau_subj_u_sigma)
+            slope_q = subject_slope_spec(d.tau_subj_q_sigma)
+            scalar_names = _scale_names("tau_subj_u", slope_u) + _scale_names(
+                "tau_subj_q", slope_q
+            )
             correlated = getattr(d, "subject_re_correlation_eta", None) is not None
             if correlated:
                 scalar_names += ("rho_uq",)
             native, (f_u, h), scal = _load_reshaped_draws(
                 path, ("f_u_plot", "h_plot"), scalar_names
             )
-            grid, f_u, tau_u = _prepare(native, f_u, scal["tau_subj_u"])
-            _, h, tau_q = _prepare(native, h, scal["tau_subj_q"])
+            grid, f_u = _prepare(native, f_u)
+            _, h = _prepare(native, h)
+            tau_u = _scale(scal, "tau_subj_u", slope_u, grid)
+            tau_q = _scale(scal, "tau_subj_q", slope_q, grid)
             rho = None
             if correlated:
                 rho = scal["rho_uq"]

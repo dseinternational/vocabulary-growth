@@ -626,3 +626,99 @@ def test_tau_to_draw_age_rejects_a_mismatched_grid():
     f = np.zeros((3, 5))
     with pytest.raises(ValueError, match="expected"):
         comparison.child_spread_single(f, np.ones((3, 4)), 810)
+
+
+def _slope_trace(tmp_path, ages, f_u, h, tu, tq):
+    """A VG19-shaped trace: both outcomes carry (tau0, tau1, rho01), not a scalar."""
+    import xarray as xr
+
+    n_draw = f_u.shape[0]
+
+    def grid(v):
+        return xr.DataArray(v.reshape(1, n_draw, len(ages)).copy(), dims=("chain", "draw", "plot_id"))
+
+    def scalar(v):
+        return xr.DataArray(np.asarray(v, dtype=float).reshape(1, n_draw).copy(), dims=("chain", "draw"))
+
+    post = xr.Dataset({
+        "f_u_plot": grid(f_u),
+        "h_plot": grid(h),
+        "tau_subj_u_0": scalar(tu[0]), "tau_subj_u_1": scalar(tu[1]), "tau_subj_u_rho": scalar(tu[2]),
+        "tau_subj_q_0": scalar(tq[0]), "tau_subj_q_1": scalar(tq[1]), "tau_subj_q_rho": scalar(tq[2]),
+    })
+    const = xr.Dataset({"X_plot": xr.DataArray(np.asarray(ages, dtype=float), dims=("plot_id",))})
+    path = tmp_path / "slope_trace.nc"
+    xr.DataTree.from_dict({"posterior": post, "constant_data": const}).to_netcdf(str(path))
+    return str(path)
+
+
+def _slope_fixture(tmp_path, monkeypatch):
+    ages = np.array([12.0, 24.0, 36.0, 48.0, 60.0])
+    rng = np.random.default_rng(21)
+    f_u = rng.normal(-1.0, 0.3, size=(4, len(ages)))
+    h = rng.normal(-1.5, 0.3, size=(4, len(ages)))
+    tu = (np.array([0.8, 0.9, 1.0, 1.1]), np.array([0.20, 0.30, 0.10, 0.25]),
+          np.array([0.4, -0.3, 0.0, 0.6]))
+    tq = (np.array([1.2, 1.3, 1.1, 1.4]), np.array([0.15, 0.05, 0.30, 0.20]),
+          np.array([-0.2, 0.5, 0.3, 0.1]))
+    _patch_trace(monkeypatch, _slope_trace(tmp_path, ages, f_u, h, tu, tq))
+    return ages, f_u, h, tu, tq
+
+
+def test_subject_heterogeneity_reads_the_rate_not_just_the_reference_age_spread(
+    tmp_path, monkeypatch
+):
+    """VG19's between-child spread is a curve; reading `tau_subj_u` gives a line.
+
+    A slope model still emits `tau_subj_u` as a Deterministic equal to `tau0`, so
+    a loader that reads it succeeds and silently reports the 36-month spread at
+    every age -- discarding `tau1` and `rho01`. This is the #224 defect class: a
+    fitted parameter thrown away by the derived quantity that exists to use it.
+    """
+    ages, f_u, _h, tu, _tq = _slope_fixture(tmp_path, monkeypatch)
+    _, tau_logit, _, _ = comparison.subject_heterogeneity("vg19", "understood")
+
+    # `child_spread_single` returns the scale itself, so this is exact.
+    want = comparison.child_scale_of_age(tu[0], tu[1], tu[2], ages, ref_age_months=36.0)
+    np.testing.assert_allclose(tau_logit, want, rtol=1e-12)
+
+    # And it is genuinely age-varying: the flat reading would be wrong everywhere
+    # except at the reference age, where the two must agree exactly.
+    ref = list(ages).index(36.0)
+    np.testing.assert_allclose(tau_logit[:, ref], tu[0], rtol=1e-12)
+    assert not np.allclose(tau_logit, tu[0][:, None]), "scale collapsed to tau0"
+
+
+def test_subject_heterogeneity_slope_scale_follows_the_caller_grid(tmp_path, monkeypatch):
+    """The scale is a function of age, so it is built on the grid actually reported.
+
+    Interpolating it from the model's native grid would be a different quantity:
+    the curve is a square root of a quadratic, not a smooth the interpolator can
+    stand in for.
+    """
+    _ages, _f_u, _h, tu, _tq = _slope_fixture(tmp_path, monkeypatch)
+    want_at = np.array([18.0, 30.0, 42.0])
+    grid, tau_logit, _, _ = comparison.subject_heterogeneity(
+        "vg19", "understood", ages=want_at
+    )
+    np.testing.assert_allclose(grid, want_at)
+    want = comparison.child_scale_of_age(tu[0], tu[1], tu[2], want_at, ref_age_months=36.0)
+    np.testing.assert_allclose(tau_logit, want, rtol=1e-12)
+
+
+def test_subject_heterogeneity_spoken_carries_both_rates(tmp_path, monkeypatch):
+    """The induced spoken scale must differ from the constant-offset reading."""
+    ages, f_u, h, tu, tq = _slope_fixture(tmp_path, monkeypatch)
+    _, tau_logit, sd_words, n = comparison.subject_heterogeneity("vg19", "spoken")
+
+    want, want_sd = comparison.child_spread_product(
+        f_u, h,
+        comparison.child_scale_of_age(tu[0], tu[1], tu[2], ages, ref_age_months=36.0),
+        comparison.child_scale_of_age(tq[0], tq[1], tq[2], ages, ref_age_months=36.0),
+        n,
+    )
+    np.testing.assert_allclose(tau_logit, want, rtol=1e-12)
+    np.testing.assert_allclose(sd_words, want_sd, rtol=1e-12)
+
+    flat, _ = comparison.child_spread_product(f_u, h, tu[0], tq[0], n)
+    assert not np.allclose(tau_logit, flat), "spoken scale ignored the rates"
