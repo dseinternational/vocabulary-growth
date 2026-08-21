@@ -844,7 +844,7 @@ class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
 
 
 @dataclass
-class BivariateChildSlopeModelDefinition(BivariateCorrelatedSubjectREModelDefinition):
+class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
     """Bivariate definition that gives each child a rate as well as an offset.
 
     VG19 (``notes/202608141900-child-slope-implementation-plan.md``). VG08-VG10
@@ -853,12 +853,23 @@ class BivariateChildSlopeModelDefinition(BivariateCorrelatedSubjectREModelDefini
     persistent between-child differences, occasion-to-occasion movement, and
     drift. This separates the third.
 
-    Inherits from the *correlated* subclass rather than
-    ``BivariateModelDefinition`` because VG20, not VG10, is the model of record
-    this refines -- so ``subject_re_correlation_eta`` stays available and VG19 is
-    "VG20 plus a slope" rather than a branch off a development step. The slope
-    field is supplied through the ``tau_subj_*_sigma`` seam, so setting neither
-    reproduces the parent exactly.
+    Inherits from ``BivariateModelDefinition``, **not** from
+    ``BivariateCorrelatedSubjectREModelDefinition``, and that is the decision
+    recorded on 2026-08-21: VG19 is gated against VG10, so VG10 is its parent and
+    ``subject_re_correlation_eta`` is a field it should not be able to set.
+
+    The two structures are not composable as written. VG20 estimates one
+    correlation, between the two outcomes' constant offsets; VG19 estimates two
+    different ones, between each outcome's own intercept and slope. The union is
+    a 4x4 covariance with six correlations, of which the most interesting -- do
+    children who gain comprehension faster also convert faster? -- is estimated
+    by neither. Carrying ``rho_uq`` across while leaving that at zero would
+    repeat, one level up, the assumption VG20 exists to correct. The engine
+    refuses the combination as defence in depth; this base class is why it should
+    never arise. See ``notes/202608211500-vg19-registration.md``.
+
+    The slope field is supplied through the ``tau_subj_*_sigma`` seam, so setting
+    neither reproduces the parent exactly.
 
     ``subject_slope_ref_age_months`` is the age at which ``tau0`` *is* the
     between-child spread. Centring at the design's centre is what keeps the
@@ -3107,6 +3118,46 @@ VG20 = _as_definition_subclass(
     subject_re_correlation_eta=2.0,
 )
 
+VG19 = _as_definition_subclass(
+    VG10,
+    BivariateChildSlopeModelDefinition,
+    model_id="VG19",
+    config_name="age-understood-spoken-ds-re-subj-uq-anchored-slope",
+    banner=(
+        "Fitting Model VG19: VG10 + a child random slope on U and q"
+        " - Down syndrome"
+    ),
+    # Gate 1 chose this structure on the fitted residuals before any of it was
+    # written: a random slope is worth 2 x delta logL = 36.05 on spoken over a
+    # constant intercept and survives restriction to the 334 children with
+    # repeated spoken measures (20.81), while an AR(1) transient collapses to
+    # zero persistence on both outcomes. See
+    # notes/202608141600-rank-stability-tracking.md §10.3.
+    #
+    # `tau0_sigma` is VG10's own `tau_subj_*_sigma` of 1.5 on both outcomes, so
+    # the intercept keeps the model of record's prior exactly and the model is
+    # one-factor against it.
+    #
+    # `tau1_sigma = 0.5` is on the PER YEAR scale. In logit/month the ML values
+    # are 0.02-ish and unreadable as a prior; per year they are 0.12-0.29, and
+    # HalfNormal(0.5) has median 0.34 -- covering both comfortably while keeping
+    # mass near zero, so a slope the data do not support shrinks away. The
+    # nesting is exact at tau1 = 0.
+    #
+    # Both outcomes carry a slope because the evidence cannot say which one owns
+    # the drift: it is measured on the spoken proportion, and spoken is p_u * q,
+    # so the likelihood sees only the product. Expect the two tau1s to be
+    # individually poorly identified and correlated, with the implied drift on
+    # spoken far better determined than either alone.
+    tau_subj_u_sigma=SubjectSlopePriorParams(tau0_sigma=1.5, tau1_sigma=0.5),
+    tau_subj_q_sigma=SubjectSlopePriorParams(tau0_sigma=1.5, tau1_sigma=0.5),
+    # The age at which tau0 IS the between-child spread. 36 months is the Down
+    # syndrome pool's median age; centring at the design's centre is what stops
+    # the intercept and slope trading off in the sampler, and it gives tau0 a
+    # stated age rather than an extrapolated value at age zero.
+    subject_slope_ref_age_months=36.0,
+)
+
 MODEL_REGISTRY: dict[
     str,
     UnivariateModelDefinition
@@ -3129,6 +3180,7 @@ MODEL_REGISTRY: dict[
     "vg14": VG14,
     "vg15": VG15,
     "vg16": VG16,
+    "vg19": VG19,
     "vg20": VG20,
 }
 

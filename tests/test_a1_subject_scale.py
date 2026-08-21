@@ -21,6 +21,7 @@ from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     AgeVaryingSubjectScale,
     subject_scale_spec,
+    subject_slope_spec,
 )
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant
 
@@ -38,10 +39,20 @@ def test_a1_is_registered_on_vg10_alone():
 def test_no_model_of_record_carries_an_age_varying_scale():
     """The guard that keeps A1 out of the published models.
 
-    Every subject-scale field in the registry must still be a plain float. If one
-    of these ever becomes an ``AgeVaryingSubjectScale``, a model of record has
-    silently adopted a structure with a measured-false rank-correlation
-    assumption behind it.
+    If a subject-scale field in the registry ever becomes an
+    ``AgeVaryingSubjectScale``, a model of record has silently adopted a
+    structure with a measured-false rank-correlation assumption behind it: A1
+    scales ONE per-child deviate by ``tau(age)``, which forces children never to
+    cross, and the disattenuated rank correlation is about 0.75-0.83 out to two
+    years and 0.28 beyond.
+
+    A :class:`SubjectSlopePriorParams` is admissible where A1 is not, and the
+    reason is exactly that assumption. A child slope draws ``(b0, b1)`` from a
+    2x2 joint with ``rho01`` **estimated**, so A1 is its special case at
+    ``rho01 = 1`` -- the slope frees the constraint rather than imposing it.
+    Freeing it costs 6.28 on 1 df on the repeats-only production fit, which is
+    the measurement that made VG19 a slope rather than a scaled deviate.
+    Registered 2026-08-21; see notes/202608141900-child-slope-implementation-plan.md.
     """
     offenders = []
     for key, definition in MODEL_REGISTRY.items():
@@ -51,6 +62,8 @@ def test_no_model_of_record_carries_an_age_varying_scale():
                 continue
             if subject_scale_spec(value) is not None:
                 offenders.append(f"{key}.{field}")
+            elif subject_slope_spec(value) is not None:
+                continue
             else:
                 assert isinstance(value, float), f"{key}.{field} is {value!r}"
     assert not offenders, f"models of record carrying A1: {offenders}"

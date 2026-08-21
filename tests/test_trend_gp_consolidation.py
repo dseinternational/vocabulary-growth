@@ -78,7 +78,7 @@ def _build(model_id, tmp_path, monkeypatch):
         cb.prepare_bivariate_data(ctx, d)
         cb.configure_bivariate_priors(ctx, d)
         cb.build_model(ctx, d)
-    elif model_id in {"VG07", "VG08", "VG09", "VG10", "VG13", "VG16", "VG20"}:
+    elif model_id in {"VG07", "VG08", "VG09", "VG10", "VG13", "VG16", "VG19", "VG20"}:
         cbr.prepare_bivariate_re_data(ctx, d)
         cb.configure_bivariate_priors(ctx, d)
         cbr.build_model_re(ctx, d)

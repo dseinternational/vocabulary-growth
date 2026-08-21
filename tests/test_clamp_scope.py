@@ -57,7 +57,8 @@ def test_true_and_false_still_serialise_as_booleans():
 # Every DS joint model adopted CLAMP_Q_ONLY on 2026-08-14. Pinning the set makes
 # a model silently joining or leaving it visible, because either way it is a
 # definition change that invalidates that model and demands a refit.
-# vg20 is derived from vg10 and inherits it (2026-08-17, issue #224).
+# vg20 is derived from vg10 and inherits it (2026-08-17, issue #224); vg19
+# likewise (2026-08-21, the child-slope plan).
 CLAMP_Q_ONLY_MODELS = {
     "vg05",
     "vg07",
@@ -67,6 +68,7 @@ CLAMP_Q_ONLY_MODELS = {
     "vg14",
     "vg15",
     "vg16",
+    "vg19",
     "vg20",
 }
 

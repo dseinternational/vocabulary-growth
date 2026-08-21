@@ -122,7 +122,8 @@ _ANCHORED_OUTCOMES = {
     "vg14": {"kappa_u", "kappa_s"},
     "vg15": {"kappa_u", "kappa_s"},
     "vg16": {"kappa_u", "kappa_s"},
-    # VG20 derives from VG10, so it inherits the two-anchor form with it.
+    # VG19 and VG20 both derive from VG10, so both inherit the two-anchor form.
+    "vg19": {"kappa_u", "kappa_s"},
     "vg20": {"kappa_u", "kappa_s"},
 }
 
