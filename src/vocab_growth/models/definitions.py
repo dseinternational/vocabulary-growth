@@ -289,6 +289,66 @@ class SubjectVariancePartitionParams:
 
 
 @dataclass(frozen=True)
+class SubjectSlopePriorParams:
+    """A child-level random *slope*: each child gets an intercept and a rate.
+
+    VG19 (``notes/202608141900-child-slope-implementation-plan.md``). This is the
+    structure Gate 1 selected on the fitted residuals, against two alternatives:
+    a random slope is worth ``2 x delta logL = 36.05`` on spoken over a constant
+    intercept and survives restriction to the 334 children with repeated spoken
+    measures (20.81), while an AR(1) transient collapses to zero persistence on
+    both outcomes. So the missing structure is drift, not an autocorrelated
+    child process.
+
+    The graph, non-centred, with the Cholesky written out::
+
+        tau0    ~ HalfNormal(tau0_sigma)     # spread at the reference age
+        tau1    ~ HalfNormal(tau1_sigma)     # spread of rates, PER YEAR
+        rho_raw ~ Beta(rho_eta, rho_eta);  rho01 = 2 * rho_raw - 1
+        z       ~ Normal(0, 1), dims (subject_id, 2)
+        L       = [[tau0, 0], [rho01 * tau1, tau1 * sqrt(1 - rho01 ** 2)]]
+        b       = z @ L.T
+        shift(obs) = b[subject, 0] + b[subject, 1] * (age - ref_age) / 12
+
+    Three properties are the point of the design, and none is incidental.
+
+    **The model of record is nested at ``tau1 = 0``**, so the slope has to be
+    evidenced rather than assumed, and Proposal A1 is the *other* special case at
+    ``rho01 = 1`` — one deviate scaled by an age function is a rank-one
+    covariance. Fitting with ``rho01`` free tests both in one model. Freeing it
+    costs 6.28 on 1 df on the repeats-only production fit (p ~ 0.012), which is
+    why it is free here and not pinned.
+
+    **``tau1`` is per year.** In logit/month the fitted values are 0.02-ish and a
+    prior on that scale is unreadable; per year they are 0.12-0.29.
+
+    **For a 2x2 matrix, ``(rho01 + 1) / 2 ~ Beta(eta, eta)`` is exactly
+    LKJ(eta)**, so this is the standard prior written in the one form that keeps
+    ``tau0``, ``tau1`` and ``rho01`` named free variables the posterior
+    summaries, the comparators and the recovery scorer can read — rather than
+    elements of a packed Cholesky vector. Same reasoning as
+    :class:`BivariateCorrelatedSubjectREModelDefinition`.
+
+    Supplied **in place of** a scalar ``tau_subj_*_sigma``, exactly as
+    :class:`AgeVaryingSubjectScale` is, so the field it replaces already selects
+    the subject-effect scale and no new field appears on the parent definition.
+    """
+
+    tau0_sigma: float
+    """HalfNormal scale for the between-child spread AT THE REFERENCE AGE. Set it
+    to the scalar ``tau_subj_*_sigma`` this object replaces, so the model of
+    record's own prior is what the intercept keeps."""
+    tau1_sigma: float
+    """HalfNormal scale for the spread of per-year rates. ``HalfNormal(0.5)`` has
+    median 0.34, covers both ML-fitted values (0.12-0.29) comfortably, and keeps
+    mass near zero so a slope the data do not support shrinks away."""
+    rho_eta: float = 2.0
+    """LKJ concentration for the intercept-slope correlation. ``eta = 1`` is
+    uniform on (-1, 1); ``eta = 2`` biases gently toward zero. The ML estimate to
+    compare against is +0.43."""
+
+
+@dataclass(frozen=True)
 class AgeVaryingSubjectScale:
     """Proposal A1: an age-varying between-child scale, with ``kappa`` held flat.
 
@@ -350,6 +410,17 @@ def subject_scale_spec(value) -> AgeVaryingSubjectScale | None:
     than testing types inline, so "is this model A1?" has a single answer.
     """
     return value if isinstance(value, AgeVaryingSubjectScale) else None
+
+
+def subject_slope_spec(value) -> SubjectSlopePriorParams | None:
+    """Return the VG19 child-slope spec a subject-scale field carries, or ``None``.
+
+    The companion to :func:`subject_scale_spec`, on the same overloaded field.
+    The two are mutually exclusive by construction: a field holds a float, an
+    :class:`AgeVaryingSubjectScale`, or a :class:`SubjectSlopePriorParams`, and
+    each selector recognises exactly one of them.
+    """
+    return value if isinstance(value, SubjectSlopePriorParams) else None
 
 
 # ============================================================
@@ -770,6 +841,35 @@ class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
     which is the point of the model. The nesting is exact: at ``rho_uq = 0`` the
     graph emits what VG10's does.
     """
+
+
+@dataclass
+class BivariateChildSlopeModelDefinition(BivariateCorrelatedSubjectREModelDefinition):
+    """Bivariate definition that gives each child a rate as well as an offset.
+
+    VG19 (``notes/202608141900-child-slope-implementation-plan.md``). VG08-VG10
+    and VG20 give each child a **constant** offset from the population
+    trajectory, so three distinct quantities have to live in two parameters:
+    persistent between-child differences, occasion-to-occasion movement, and
+    drift. This separates the third.
+
+    Inherits from the *correlated* subclass rather than
+    ``BivariateModelDefinition`` because VG20, not VG10, is the model of record
+    this refines -- so ``subject_re_correlation_eta`` stays available and VG19 is
+    "VG20 plus a slope" rather than a branch off a development step. The slope
+    field is supplied through the ``tau_subj_*_sigma`` seam, so setting neither
+    reproduces the parent exactly.
+
+    ``subject_slope_ref_age_months`` is the age at which ``tau0`` *is* the
+    between-child spread. Centring at the design's centre is what keeps the
+    intercept and the slope from trading off in the sampler, and it makes
+    ``tau0`` a spread with a stated age attached rather than an extrapolated
+    intercept at age zero.
+    """
+
+    subject_slope_ref_age_months: float = 36.0
+    """Reference age (months) at which ``tau0`` is the between-child spread.
+    36 months is the Down syndrome pool's median age."""
 
 
 # ============================================================

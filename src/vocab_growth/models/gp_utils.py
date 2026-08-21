@@ -122,6 +122,74 @@ def build_subject_scale_of_z(spec, *, anchor_z, name):
     return tau_of_z, tau_young
 
 
+def build_child_slope(spec, *, age_obs_months, subject_obs, ref_age_months, name):
+    """Create the VG19 child intercept-and-slope block and return its closure.
+
+    ``spec`` is a
+    :class:`~vocab_growth.models.definitions.SubjectSlopePriorParams`;
+    ``age_obs_months`` is the observation ages in **months** (unstandardised —
+    the slope is per year of real age, not per standard deviation, so that
+    ``tau1`` stays readable and comparable across pools); ``subject_obs`` indexes
+    each observation's child; ``ref_age_months`` is the age at which ``tau0`` is
+    the between-child spread; ``name`` is the scalar parameter this replaces
+    (``"tau_subj_u"`` / ``"tau_subj_q"``), which fixes every emitted name.
+
+    The graph, non-centred, with the 2x2 Cholesky written out::
+
+        {name}_0    ~ HalfNormal(spec.tau0_sigma)
+        {name}_1    ~ HalfNormal(spec.tau1_sigma)       # per year
+        {name}_rho_raw ~ Beta(eta, eta)
+        rho01       = 2 * {name}_rho_raw - 1
+        z           ~ Normal(0, 1), dims (subject_id, "child_effect")
+        b0 = tau0 * z[:, 0]
+        b1 = tau1 * (rho01 * z[:, 0] + sqrt(1 - rho01**2) * z[:, 1])
+        shift(obs) = b0[subject] + b1[subject] * (age - ref) / 12
+
+    which is ``z @ L.T`` for ``L = [[tau0, 0], [rho01*tau1, tau1*sqrt(1-rho01^2)]]``
+    written elementwise, so the two columns keep their names in the trace.
+
+    **Name preservation.** ``{name}`` is emitted as a scalar ``Deterministic``
+    equal to ``tau0`` — the spread at the reference age — so every consumer that
+    reads the constant-tau name keeps working and reads a quantity with a stated
+    age attached, exactly as :func:`build_subject_scale_of_z` does.
+    ``delta_{name-without-tau_}`` keeps its per-child meaning as the offset at
+    the reference age. ``{name}_rho`` is emitted so the correlation is a named
+    variable rather than an element of a packed vector.
+
+    Returns ``(shift_obs, tau0)`` — the per-observation shift and the reference-age
+    scale, the latter so the caller can reuse it without going back through the
+    model's variable table.
+    """
+    if not spec.tau0_sigma > 0 or not spec.tau1_sigma > 0:
+        raise ValueError(
+            f"child-slope scales must be positive; got tau0_sigma="
+            f"{spec.tau0_sigma!r}, tau1_sigma={spec.tau1_sigma!r}."
+        )
+    if not spec.rho_eta > 0:
+        raise ValueError(f"child-slope rho_eta must be positive; got {spec.rho_eta!r}.")
+
+    tau0 = pm.HalfNormal(f"{name}_0", sigma=spec.tau0_sigma)
+    tau1 = pm.HalfNormal(f"{name}_1", sigma=spec.tau1_sigma)
+    rho_raw = pm.Beta(f"{name}_rho_raw", alpha=spec.rho_eta, beta=spec.rho_eta)
+    rho01 = pm.Deterministic(f"{name}_rho", 2.0 * rho_raw - 1.0)
+
+    z = pm.Normal(f"{name}_z", mu=0.0, sigma=1.0, dims=("subject_id", "child_effect"))
+    b0 = pm.Deterministic(f"b0_{name}", tau0 * z[:, 0], dims="subject_id")
+    b1 = pm.Deterministic(
+        f"b1_{name}",
+        tau1 * (rho01 * z[:, 0] + pm.math.sqrt(1.0 - rho01**2) * z[:, 1]),
+        dims="subject_id",
+    )
+
+    # The record's own name, and its per-child companion, both read at ref_age.
+    _ = pm.Deterministic(name, tau0)
+    _ = pm.Deterministic(f"delta_{name.replace('tau_', '')}", b0, dims="subject_id")
+
+    years = (age_obs_months - float(ref_age_months)) / 12.0
+    shift_obs = b0[subject_obs] + b1[subject_obs] * years
+    return shift_obs, tau0
+
+
 def build_kappa_of_z_anchored(
     kappa_min_dist,
     excess_young_dist,

@@ -62,8 +62,14 @@ from vocab_growth.models.definitions import (
     BivariateModelDefinition,
     clamp_targets,
     subject_scale_spec,
+    subject_slope_spec,
 )
-from vocab_growth.models.gp_utils import GPGrid, build_subject_scale_of_z, trend_and_gp
+from vocab_growth.models.gp_utils import (
+    GPGrid,
+    build_child_slope,
+    build_subject_scale_of_z,
+    trend_and_gp,
+)
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.reporting import (
     dataframe_table,
@@ -272,6 +278,8 @@ def _resolve_subject_re_correlation(
     use_subject_re_q: bool,
     spec_u,
     spec_q,
+    slope_u=None,
+    slope_q=None,
 ) -> float | None:
     """LKJ concentration for the subject-effect correlation, or None (issue #224).
 
@@ -304,6 +312,15 @@ def _resolve_subject_re_correlation(
             "subject scale (Proposal A1): the age-varying path scales each "
             "child's deviate per observation, so a single constant correlation "
             "between the blocks is not well defined."
+        )
+    if slope_u is not None or slope_q is not None:
+        raise ValueError(
+            "subject_re_correlation_eta cannot be combined with a child slope "
+            "(VG19): each outcome then carries its own 2x2 intercept/slope "
+            "covariance, so correlating the two outcomes is a 4x4 design and "
+            "not this one constant. Supporting it needs its own Gate 1 rather "
+            "than an implicit reading of `rho_uq` as the intercept-intercept "
+            "element."
         )
     if not isinstance(eta, (int, float)) or not math.isfinite(eta) or eta <= 0:
         raise ValueError(
@@ -537,6 +554,11 @@ def build_model_re(
     }
     if use_subject_codes:
         coords["subject_id"] = np.arange(n_subjects)
+    # VG19: the two per-child effects (offset at the reference age, and rate).
+    # Declared unconditionally -- an unused coord adds no variable to the graph,
+    # and making it conditional would put a `subject_slope_spec` call ahead of
+    # the model context for no benefit.
+    coords["child_effect"] = np.array(["intercept", "slope"])
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -662,12 +684,21 @@ def build_model_re(
         # once the standardised grids exist.
         spec_u = subject_scale_spec(definition.tau_subj_u_sigma)
         spec_q = subject_scale_spec(definition.tau_subj_q_sigma)
+        # VG19: the same overloaded field can instead carry a child slope, which
+        # is a different age function through the seam A1 opened.
+        slope_u = subject_slope_spec(definition.tau_subj_u_sigma)
+        slope_q = subject_slope_spec(definition.tau_subj_q_sigma)
+        slope_ref_age = float(
+            getattr(definition, "subject_slope_ref_age_months", 36.0) or 36.0
+        )
         corr_eta = _resolve_subject_re_correlation(
             definition,
             use_subject_re_u=use_subject_re_u,
             use_subject_re_q=use_subject_re_q,
             spec_u=spec_u,
             spec_q=spec_q,
+            slope_u=slope_u,
+            slope_q=slope_q,
         )
         tau_u_of_z = tau_q_of_z = None
         # Built here rather than reusing the named `z_obs` Deterministic, which is
@@ -679,7 +710,15 @@ def build_model_re(
         )
 
         if use_subject_re_u:
-            if spec_u is None:
+            if slope_u is not None:
+                subject_shift_u, tau_subj_u = build_child_slope(
+                    slope_u,
+                    age_obs_months=X_obs.flatten(),
+                    subject_obs=subject_obs,
+                    ref_age_months=slope_ref_age,
+                    name="tau_subj_u",
+                )
+            elif spec_u is None:
                 tau_subj_u = pm.HalfNormal(
                     "tau_subj_u", sigma=definition.tau_subj_u_sigma
                 )
@@ -716,7 +755,17 @@ def build_model_re(
             subject_shift_u = 0.0
 
         if use_subject_re_q:
-            if spec_q is None:
+            if slope_q is not None:
+                # `corr_eta` is guaranteed None here: the resolver refuses the
+                # combination, so no branch on it is needed or wanted.
+                subject_shift_q, tau_subj_q = build_child_slope(
+                    slope_q,
+                    age_obs_months=X_obs.flatten(),
+                    subject_obs=subject_obs,
+                    ref_age_months=slope_ref_age,
+                    name="tau_subj_q",
+                )
+            elif spec_q is None:
                 tau_subj_q = pm.HalfNormal(
                     "tau_subj_q", sigma=definition.tau_subj_q_sigma
                 )
