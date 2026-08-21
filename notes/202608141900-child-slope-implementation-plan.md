@@ -92,6 +92,19 @@ Each is a stop, not a checkpoint.
 
 **G5 — convergence at `rep`,** on the family's usual tier. The risk is a funnel on `tau1`: 433 of 767 children on production contribute one observation and inform the marginal spread but not the drift. Non-centring and the prior's mass near zero are the mitigations; `rep-hightune` is the fallback, as for the TD hierarchical models.
 
+**G5b — `tau1`'s leverage, added 2026-08-21.** A second risk on the same parameter, and a different one: not geometry but _influence_. Because the slope enters the marginal variance as `tau1^2 D^2`, an observation's weight grows with its distance from the reference age, and the pool's ages are heavily left-massed — median 36 months, but a tail to 115. Scoring each observation by its cross-sectional Fisher information for `tau1`, `(dvar/dtau1)^2 / (2 var^2)`, over a plausible range of `(tau0, tau1, rho01)`:
+
+| outcome    | rows > 84 mo | share of rows | share of `tau1` information |
+| ---------- | ------------ | ------------- | --------------------------- |
+| spoken     | 50           | 3.5%          | 28-35%                      |
+| understood | 12           | 1.2%          | 17-21%                      |
+
+Five comprehension observations above 90 months carry 8-11% of it. Two caveats push the same way and are why this is a check rather than a prior change: the calculation covers only the cross-sectional route, and children with repeated measures contribute information distributed by _span_ instead; and it ignores ceiling attenuation, where a high-age Down syndrome child near the spoken ceiling says less about latent spread than the formula credits. The true concentration is therefore lower than the table. It is still worth measuring, because `tau1` is global — it sets the between-child spread at **every** age, so leverage sitting at 115 months propagates back into the reported 8-84 range where the data are dense.
+
+The same asymmetry shows in the prior. Propagating `tau0 ~ HN(1.5)`, `tau1 ~ HN(0.5)`, `rho01 ~ 2Beta(2,2)-1` to the implied between-child SD gives a median of 1.01 logits at 36 months with 0.8% of mass above 4, against a median of 2.71 at 115 months with **27%** above 4 — a spread that spans `p = 0.0003` to `p = 0.9997` and asserts nothing. Reporting is capped at 84/90 months so no figure shows the worst of it, but the likelihood still sees those rows.
+
+**The check:** refit with `max_age_months` capped at 84 and compare `tau1` against the full-range fit on both outcomes. A material move means the rate is being set by the sparse tail rather than by the longitudinal subset, and the honest reading is then to report the slope only over the range that supports it. A stable `tau1` retires the concern. Cheap to run — the capped fit drops 50 of 1428 spoken rows, so it is a shorter fit than the one it is compared against.
+
 ## 6. Sequence and cost
 
 | step | work                                                                         | cost                    |

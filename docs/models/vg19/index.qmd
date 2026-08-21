@@ -162,6 +162,8 @@ style_diagnostics_table(diagnostics)
 
 The specific risk in this model is a **funnel on $\tau_1$**: a large share of the pool contributes one observation each, which informs the marginal spread but says nothing about a rate. Non-centring and a prior with mass near zero are the mitigations. The signature to watch for is low effective sample size on $\tau_1$ specifically while the rest of the model looks healthy.
 
+A second risk sits on the same parameter and is not about geometry. The rate enters the between-child variance as $\tau_1^2 D^2$, so an observation's weight grows with its distance from the reference age — and the pool's ages are heavily left-massed, with a median of 36 months but a tail to 115. The 50 spoken observations above 84 months are 3.5% of the rows and carry roughly a third of the cross-sectional information about $\tau_1$; on comprehension, 12 rows carry about a fifth. Because $\tau_1$ is a single global parameter, it sets the between-child spread at *every* age, so leverage sitting in that sparse tail propagates back into the well-populated range this report actually shows. The gate for it is a refit capped at 84 months, checking whether $\tau_1$ moves materially; see [the implementation plan](../../../notes/202608141900-child-slope-implementation-plan.md) §G5b.
+
 ## Findings
 
 ### Do children differ in their own rate of growth?
