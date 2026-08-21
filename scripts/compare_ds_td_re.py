@@ -132,12 +132,47 @@ KEY_AGES = [12, 18, 24, 30]
 # excluded as invalid).
 JOINT_DS_KEY = "vg20"
 JOINT_TD_KEY = "vg13"
+# Hard ceiling on every comprehension-matched contrast, in words understood.
+#
+# Set by the TD side's support, not by the DS side or by taste. The TD joint
+# model's q-by-understood grid reaches 220.9 words at VG13's 8-18 month window,
+# 328.0 under `window-22` (8-22) and 355.8 under `window-25` (8-25). 320 sits
+# just inside `window-22`, which is the extension adopted on 2026-08-21 --
+# `window-25`'s extra reach comes from the 23-25 month rows where 20-36% of
+# Oxford CDI administrations sit within 10% of the form's 418-item cap, and its
+# q reads visibly high there (0.602 against `window-22`'s 0.504 at 328 words,
+# 89% intervals no longer overlapping). Stopping at 320 keeps every published
+# matched-comprehension number inside ceiling-safe TD support.
+# See notes/202608211100-window-22-adopted.md.
+MAX_MATCHED_U = 320.0
+
 # Comprehension levels N (words understood) for the q(U=N) view. Small-N tail is
-# noisy (S/U unstable when U barely exceeds N); high-N tail is coverage-limited.
+# noisy (S/U unstable when U barely exceeds N); the high-N tail is bounded by
+# MAX_MATCHED_U above and coverage-filtered below it.
 N_GRID_Q = np.array(
-    [10, 15, 20, 25, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400],
+    [n for n in
+     [10, 15, 20, 25, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300, 320]
+     if n <= MAX_MATCHED_U],
     dtype=float,
 )
+
+def resolve_joint(key: str) -> tuple[str, int, str]:
+    """Resolve a joint-model key that may name a registered sensitivity variant.
+
+    Accepts ``vg13`` or ``vg13:window-22``. The suffix selects the variant's own
+    fit directory (``<model_id>-<config_name>-<suffix>``); the trial count and
+    population come from the base registry entry, which a window variant does
+    not change. Returns ``(trace_path, n_trials, label)``.
+    """
+    base, _, suffix = key.partition(":")
+    if not suffix:
+        return C.trace_path(base), C.n_trials(base), C.model_label(base)
+    trace = os.path.join(f"{C.model_dir(base)}-{suffix}", "trace.nc")
+    if not os.path.exists(trace):
+        raise SystemExit(f"no fitted variant trace at {trace}")
+    label = f"{C.model_label(base)[:-1]} {suffix})"
+    return trace, C.n_trials(base), label
+
 
 COL_TD = plot_styles.COLOUR_ORANGE
 COL_DS = plot_styles.COLOUR_BLUE
@@ -407,7 +442,7 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
 def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
                         da_td, da_ds, qa_td, qa_ds) -> None:
     """Emit the four comprehension-matched panels as standalone figures."""
-    td_lab, ds_lab = C.model_label(td_key), C.model_label(ds_key)
+    td_lab, ds_lab = resolve_joint(td_key)[2], resolve_joint(ds_key)[2]
     pre = "ds_td_comprehension_"
 
     def q_at_U(ax):
@@ -504,12 +539,12 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     she speak, and how much sooner does TD say them?". Requires JOINT models so
     U and S are coupled per draw (VG20 DS vs VG13 TD).
     """
-    print(f"\n=== COMPREHENSION-MATCHED: DS={C.model_label(ds_key)} vs "
-          f"TD={C.model_label(td_key)} ===", flush=True)
-    ages_ds, U_ds, S_ds = C.load_population_trajectory(
-        C.trace_path(ds_key), C.n_trials(ds_key))
-    ages_td, U_td, S_td = C.load_population_trajectory(
-        C.trace_path(td_key), C.n_trials(td_key))
+    ds_trace, ds_n, ds_lab = resolve_joint(ds_key)
+    td_trace, td_n, td_lab = resolve_joint(td_key)
+    print(f"\n=== COMPREHENSION-MATCHED: DS={ds_lab} vs TD={td_lab} "
+          f"(capped at U={MAX_MATCHED_U:.0f} words) ===", flush=True)
+    ages_ds, U_ds, S_ds = C.load_population_trajectory(ds_trace, ds_n)
+    ages_td, U_td, S_td = C.load_population_trajectory(td_trace, td_n)
     print(f"  DS draws={U_ds.shape[0]} ages {ages_ds.min():.0f}-{ages_ds.max():.0f} | "
           f"TD draws={U_td.shape[0]} ages {ages_td.min():.0f}-{ages_td.max():.0f}",
           flush=True)

@@ -396,6 +396,54 @@ VARIANTS: dict[tuple[str, str], dict] = {
      "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
                "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
 
+    # `window-22-vague-anchors` is `window-22` with its two HIGH anchors made
+    # much less informative, and nothing else changed. It exists to answer one
+    # objection to promoting `window-22` (notes/202608211100-window-22-adopted.md
+    # §6): its 21-month anchors were recentred on the *in-sample* medians
+    # (understood 0.359, q 0.417) because no CDI comprehension norm exists above
+    # 18 months -- US-English WG stops there. VG13's own 16-month anchor is
+    # norm-validated (prior median 0.228 against a Wordbank median of 0.222,
+    # PRIORS.md "TD anchor priors vs Wordbank norms"), so the extension really
+    # does sit on weaker footing, and this repository has already had to correct
+    # one case of setting a prior from the data it is fitted to (the DS-joint
+    # anchors read off the VG07 posterior; same PRIORS.md section).
+    #
+    # The finding at risk is specific: under `window-22` the DS/TD gap closes,
+    # Delta-q = -0.00 at 300 words and +0.00 at 320 (P(TD>DS) = 0.49, 0.51),
+    # where `window-25` has it reopening to +0.09. That closure needs TD q to
+    # reach ~0.48 at U=320, and the q high anchor is what pins the level q can
+    # reach. So the threatening displacement is UPWARD: if the anchor is holding
+    # TD q down, a higher, wider one should let the gap reopen.
+    #
+    #   p_slope_hi_q  Beta(2, 2.6) -> Beta(1.3, 1.3)   median 0.425 -> 0.500,
+    #       5-95% 0.110-0.795 -> 0.079-0.921. The centre moves off the in-sample
+    #       value and the span roughly doubles. Beta(1.3, 1.3) is not invented
+    #       here: it is the house broad high anchor already used by VG03, VG04,
+    #       VG11 and VG12.
+    #   p_slope_hi_u  Beta(2, 3.2) -> Beta(1.2, 2.0)   median 0.369 -> 0.346,
+    #       5-95% 0.092-0.731 -> 0.044-0.803. Widened rather than displaced, on
+    #       purpose. Beta(1.3, 1.3) would put the understood median at 0.500 =
+    #       405 words, essentially at the Oxford CDI's own 418-item ceiling
+    #       (0.516) -- PRIORS.md warns that a high understood anchor near 0.5
+    #       "would sit against the WG ceiling and implicitly assume near-total
+    #       WG comprehension". That is not a vague prior, it is a wrong one, and
+    #       it would confound the test rather than sharpen it.
+    #
+    # Read it as a gate, not as a candidate for reporting: if the closure
+    # survives, the prior limitation is a disclosure; if it does not, the
+    # closure was prior-held and must not be published.
+    ("vg13", "window-22-vague-anchors"): {"suffix": "window-22-vague-anchors", "scalar": {
+        "max_age_months": 22,
+        "slope_anchors": (10, 21),
+        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22],
+        "gp_domain_months": (8, 22),
+        "gp_anchor_age_months": 15.5,
+        "p_slope_hi_u_alpha": 1.2, "p_slope_hi_u_beta": 2.0,   # median 0.346
+        "p_slope_hi_q_alpha": 1.3, "p_slope_hi_q_beta": 1.3,   # median 0.500
+        "eta_q_sigma": 0.5},
+     "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
+               "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
+
     # -- Target 9: where the dispersion prior is placed (#229) --
     #
     # These three were registered on 2026-08-19 as `kappa-anchor-18-72`,

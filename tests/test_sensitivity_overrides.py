@@ -165,11 +165,19 @@ def test_registry_counts_and_models():
     # model of record rather than away from it, and one of them had become a
     # literal no-op. The count is unchanged because each was inverted rather
     # than dropped.
-    assert len(VARIANTS) == 56
+    #
+    # +1 on 2026-08-21: `window-22-vague-anchors`, gating the promotion of
+    # `window-22` to a registered model. `window-22`'s 21-month anchors were
+    # recentred on in-sample medians because no CDI comprehension norm exists
+    # above 18 months, and the finding that rests on them -- the DS/TD gap
+    # closing by 300 words understood -- is exactly what a level-pinning prior
+    # could manufacture. The variant displaces the q high anchor upward and
+    # widens both, so a surviving closure is the data's and not the prior's.
+    assert len(VARIANTS) == 57
     assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
-    assert len(variants_for("vg13")) == 3
+    assert len(variants_for("vg13")) == 4
     assert len(variants_for("vg15")) == 27
     assert len(variants_for("vg20")) == 3
 
@@ -402,7 +410,7 @@ def test_window_variants_admit_the_rows_the_cap_discards():
         rows = {"base": len(base)}
         studies = {"base": set(base["study"].unique())}
         free_rvs = {"base": len(base_ctx.model.free_RVs)}
-        for name in ("window-22", "window-25"):
+        for name in ("window-22", "window-25", "window-22-vague-anchors"):
             (variant,) = build_variant("vg13", name)
             ctx, frame = prepared(variant, root)
             rows[name] = len(frame)
@@ -416,3 +424,9 @@ def test_window_variants_admit_the_rows_the_cap_discards():
     # keeps exactly the structure of the model of record.
     assert studies["base"] == studies["window-22"] == studies["window-25"], studies
     assert len(set(free_rvs.values())) == 1, free_rvs
+    # `window-22-vague-anchors` changes two prior HYPERparameters and nothing
+    # else, so it must be indistinguishable from `window-22` on every structural
+    # axis this test measures. If it ever differs here, the variant has stopped
+    # being a clean prior-sensitivity check and its result cannot be read as one.
+    assert rows["window-22-vague-anchors"] == rows["window-22"], rows
+    assert studies["window-22-vague-anchors"] == studies["window-22"], studies

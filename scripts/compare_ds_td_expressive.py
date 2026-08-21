@@ -62,12 +62,22 @@ from vocab_growth import environment as env
 from vocab_growth.models.common_joint_modality import MIN_WORDS_FOR_MILESTONE
 
 # -- Comparators (joint U+S models so U and S are coupled per draw) --
-DS_JOINT_KEY = "vg10"          # DS joint, study+subject REs
+DS_JOINT_KEY = "vg20"          # DS joint, study+subject REs, correlated (model of record)
 TD_JOINT_KEY = "vg13"          # TD joint, study REs, 8-18 mo
-# Dispersion / distributional contrasts need study-RE-ONLY models on both sides
-# so the Beta-Binomial kappa is the like-for-like between-child concentration
-# (subject REs in VG10 would absorb child variance the TD models keep in kappa).
-DS_DISP_KEY = "vg07"
+# Dispersion / distributional contrasts need the DS model whose kappa means the
+# same thing as the TD comparators' -- i.e. one that ALSO carries subject REs,
+# so neither side's kappa absorbs between-child variance. This matches
+# `compare_ds_td_re.DISP_DS_KEY`.
+#
+# This was `vg07` until 2026-08-21, under the opposite rationale: that both
+# sides should be study-RE-only because "the TD models keep child variance in
+# kappa". That premise was false by the time it was acted on -- VG11 and VG12
+# both carry `tau_subject` (verified in their fitted diagnostics), so the TD
+# side pulls child variance OUT of kappa while VG07, which has only `tau_u`
+# and `tau_q`, leaves it in. The pairing therefore compared a DS kappa
+# containing between-child variance against a TD kappa with it removed, which
+# inflates the DS side of every dispersion contrast.
+DS_DISP_KEY = "vg20"
 TD_SPOKEN_KEY = "vg11"
 TD_UNDERSTOOD_KEY = "vg12"
 # Sign-inclusive total expressive p_any comes from the joint sign/speech VG15
@@ -418,7 +428,7 @@ def run_ds_signing_profile() -> None:
 # 4. Distributional: fraction of DS children below the TD 10th centile
 # ----------------------------------------------------------------------------
 def run_below_percentile() -> None:
-    print(f"\n=== BELOW TD p{PCT:.0f}: DS={C.model_label(DS_DISP_KEY)} (study-RE only) ===",
+    print(f"\n=== BELOW TD p{PCT:.0f}: DS={C.model_label(DS_DISP_KEY)} (study + subject REs) ===",
           flush=True)
     rows = {}
     for outcome, td_key in (("spoken", TD_SPOKEN_KEY), ("understood", TD_UNDERSTOOD_KEY)):
