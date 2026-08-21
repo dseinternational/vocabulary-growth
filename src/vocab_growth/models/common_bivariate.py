@@ -962,6 +962,61 @@ def _subject_scales(context: BivariateContext, name: str):
     return plot, query
 
 
+def _child_slope_block(context: BivariateContext, name: str):
+    """The VG19 ``(tau0, tau1, rho01)`` scalars for ``name``, or ``None``.
+
+    Detected by the three names :func:`~vocab_growth.models.gp_utils.build_child_slope`
+    emits. This must be checked **before** :func:`_subject_scales`: a slope model
+    also has an age-varying between-child SD, but scaling one deviate by it —
+    the A1 branch — would impose perfect rank correlation across age, which is
+    exactly the constraint the slope exists to relax. Same curve, different
+    children.
+    """
+    mv = context.model_variables
+    tau0, tau1, rho = (
+        mv.get(f"{name}_0"),
+        mv.get(f"{name}_1"),
+        mv.get(f"{name}_rho"),
+    )
+    if tau0 is None or tau1 is None or rho is None:
+        return None
+    return tau0, tau1, rho
+
+
+def _child_slope_offsets(context: BivariateContext, definition):
+    """``(age - ref) / 12`` on the plot and query grids, in years.
+
+    Read from the model's own ``X_plot`` / ``X_query`` data rather than recomputed,
+    so the predictive cannot drift from the grids the fit actually used.
+    """
+    ref = float(getattr(definition, "subject_slope_ref_age_months", 36.0) or 36.0)
+    # From the model's own named vars, not `context.model_variables`:
+    # `get_variables_dict` collects free RVs, deterministics and observed RVs, so
+    # `pm.Data` grids are absent from it.
+    model = context.model
+    return (
+        (model["X_plot"] - ref) / 12.0,
+        (model["X_query"] - ref) / 12.0,
+    )
+
+
+def _unseen_child_slope_deltas(context, definition, name, tag):
+    """One ``(b0, b1)`` pair per posterior draw, as plot/query logit offsets.
+
+    The unseen child is drawn from the *same* 2x2 joint the model fitted, so its
+    trajectory fans with age and can cross another child's — the property that
+    distinguishes a random slope from A1's rank-one scaling. Two standard
+    deviates per draw, pushed through the model's own Cholesky.
+    """
+    tau0, tau1, rho = _child_slope_block(context, name)
+    d_plot, d_query = _child_slope_offsets(context, definition)
+    z0 = pm.Normal(f"_z0_{tag}_marg", mu=0.0, sigma=1.0)
+    z1 = pm.Normal(f"_z1_{tag}_marg", mu=0.0, sigma=1.0)
+    b0 = tau0 * z0
+    b1 = tau1 * (rho * z0 + pm.math.sqrt(1.0 - rho**2) * z1)
+    return b0 + b1 * d_plot, b0 + b1 * d_query
+
+
 def sample_posterior_predictive(context: BivariateContext, definition=None):
     """Sample from the posterior predictive distribution.
 
@@ -997,7 +1052,14 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             f_u_plot_var = context.model_variables["f_u_plot"]
             f_u_query_var = context.model_variables["f_u_query"]
             plot_scale, query_scale = _subject_scales(context, "tau_subj_u")
-            if plot_scale is None:
+            if _child_slope_block(context, "tau_subj_u") is not None:
+                # VG19. Checked first: a slope model has an age-varying spread
+                # too, but its unseen child is a (b0, b1) pair rather than one
+                # deviate scaled by a curve.
+                delta_u_plot, delta_u_query = _unseen_child_slope_deltas(
+                    context, definition, "tau_subj_u", "subj_u"
+                )
+            elif plot_scale is None:
                 delta_u_marg = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_subj_u)
                 delta_u_plot = delta_u_query = delta_u_marg
             else:
@@ -1043,7 +1105,14 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             # deviates is not a model anyone means.
             rho_marg = context.model_variables.get("rho_uq")
             correlated = rho_marg is not None and use_subject_re_u
-            if plot_scale is None:
+            if _child_slope_block(context, "tau_subj_q") is not None:
+                # VG19, and `correlated` is False by construction here: the
+                # engine refuses `rho_uq` alongside a slope, so there is no
+                # cross-outcome coupling to carry.
+                delta_q_plot, delta_q_query = _unseen_child_slope_deltas(
+                    context, definition, "tau_subj_q", "subj_q"
+                )
+            elif plot_scale is None:
                 if correlated:
                     z_u_marg = delta_u_query / context.model_variables["tau_subj_u"]
                     z_q_marg = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)

@@ -640,6 +640,72 @@ def _logit_sigmoid_product(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return log_p - log_1mp
 
 
+def child_scale_of_age(
+    tau0: np.ndarray,
+    tau1: np.ndarray,
+    rho01: np.ndarray,
+    ages: np.ndarray,
+    *,
+    ref_age_months: float = 36.0,
+) -> np.ndarray:
+    """Between-child scale at each age under a child intercept-and-slope block.
+
+    VG19. Where the model of record gives each child one constant offset, the
+    child-slope block gives each child ``b0 + b1 * D`` with
+    ``D = (age - ref) / 12`` in years, so the between-child SD is no longer a
+    number but a curve::
+
+        sd(age) = sqrt(tau0^2 + 2 rho01 tau0 tau1 D + tau1^2 D^2)
+
+    which is just ``Var(b0 + b1 D)`` with ``Cov(b0, b1) = rho01 tau0 tau1``.
+
+    ``tau0``, ``tau1`` and ``rho01`` are per-draw scalars ``(n_draw,)``; ``ages``
+    is the evaluation grid ``(n_age,)``. Returns ``(n_draw, n_age)``, ready to
+    pass straight to :func:`child_spread_single` or :func:`child_spread_product`,
+    both of which accept an age-varying scale in place of a constant one.
+
+    Two properties worth stating because they are what makes the reported number
+    interpretable. At ``age == ref_age_months`` the scale is exactly ``tau0``,
+    which is why the reference age is a definition field rather than a constant
+    — ``tau0`` is a spread with a stated age attached. And the curve is a
+    parabola in age with its minimum at ``D = -rho01 tau0 / tau1``: a negative
+    ``rho01`` puts the tightest point in the future and children fan out on
+    both sides of it, which is a real qualitative claim the constant-offset model
+    cannot make and should be read off the figure rather than assumed.
+    """
+    d_years = (np.asarray(ages, dtype=float) - float(ref_age_months)) / 12.0
+    t0 = np.asarray(tau0, dtype=float)[:, None]
+    t1 = np.asarray(tau1, dtype=float)[:, None]
+    r = np.asarray(rho01, dtype=float)[:, None]
+    var = t0 * t0 + 2.0 * r * t0 * t1 * d_years + (t1 * d_years) ** 2
+    # A variance by construction; the clip guards floating point at the edge
+    # where |rho01| -> 1 and the parabola touches zero.
+    return np.sqrt(np.maximum(var, 0.0))
+
+
+def _tau_to_draw_age(tau: np.ndarray, shape: tuple[int, ...], *, what: str):
+    """Accept a per-draw constant scale or a per-draw, per-age one.
+
+    ``(n_draw,)`` is the constant-offset case every model up to VG20 supplies,
+    and is returned as ``(n_draw, 1)`` to broadcast over ages exactly as before.
+    ``(n_draw, n_age)`` is the VG19 child-slope case from
+    :func:`child_scale_of_age`, and is returned unchanged. Anything else is an
+    error rather than a silent broadcast, because a wrong-shaped scale here
+    produces a plausible curve instead of a failure.
+    """
+    t = np.asarray(tau, dtype=float)
+    if t.ndim == 1:
+        return t[:, None]
+    if t.ndim == 2:
+        if t.shape != shape:
+            raise ValueError(
+                f"age-varying {what} has shape {t.shape}, expected {shape} to match "
+                "the population logit grid."
+            )
+        return t
+    raise ValueError(f"{what} must be 1-D (n_draw) or 2-D (n_draw, n_age); got {t.ndim}-D.")
+
+
 def child_spread_single(
     f: np.ndarray, tau: np.ndarray, n: int, *, n_nodes: int = 21
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -653,7 +719,7 @@ def child_spread_single(
     since this is persistent between-child variation only).
     """
     x, w = _gauss_hermite_standard_normal(n_nodes)
-    tau_col = np.asarray(tau, dtype=float)[:, None]
+    tau_col = _tau_to_draw_age(tau, f.shape, what="tau")
     m1 = np.zeros_like(f)
     m2 = np.zeros_like(f)
     for xi, wi in zip(x, w, strict=True):
@@ -700,8 +766,22 @@ def child_spread_product(
     spread of a conversion ratio with the spread of a level.
     """
     x, w = _gauss_hermite_standard_normal(n_nodes)
-    tu = np.asarray(tau_u, dtype=float)[:, None]
-    tq = np.asarray(tau_q, dtype=float)[:, None]
+    # Decide age-varying from the CALLER's input, not from the adapter's output:
+    # the adapter returns (n_draw, 1) for a constant scale, which is also 2-D.
+    age_varying = np.asarray(tau_u).ndim == 2 or np.asarray(tau_q).ndim == 2
+    if rho is not None and age_varying:
+        # The engine refuses to build this combination (see
+        # `_resolve_subject_re_correlation`), so reaching it means a caller has
+        # paired a child-slope scale with a cross-outcome correlation by hand.
+        # `rho` would then be read as the intercept-intercept element of a 4x4
+        # covariance that was never estimated.
+        raise ValueError(
+            "an age-varying child scale (VG19) cannot be combined with a "
+            "cross-outcome correlation (VG20's rho_uq): that is a 4x4 covariance "
+            "and this quadrature assumes a 2x2."
+        )
+    tu = _tau_to_draw_age(tau_u, f_u.shape, what="tau_u")
+    tq = _tau_to_draw_age(tau_q, h.shape, what="tau_q")
     if rho is None:
         r = s = None
     else:

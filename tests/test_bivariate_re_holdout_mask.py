@@ -16,6 +16,7 @@ No graphviz / ``dot`` binary is required.
 """
 
 import os
+from dataclasses import fields as dc_fields
 from dataclasses import replace
 
 import dse_research_utils.statistics.models.data as model_data
@@ -36,7 +37,11 @@ from vocab_growth.models.common_bivariate import (
     sample_posterior_predictive,
 )
 from vocab_growth.models.common_bivariate_re import build_model_re
-from vocab_growth.models.definitions import VG07
+from vocab_growth.models.definitions import (
+    VG07,
+    BivariateChildSlopeModelDefinition,
+    SubjectSlopePriorParams,
+)
 
 
 class _NoopDigraph:
@@ -167,6 +172,40 @@ def test_subject_marginal_predictive_uses_one_new_subject_per_draw(tmp_path, mon
     assert "_delta_subj_q_query_marg" not in context.model.named_vars
     assert context.model.named_vars["_delta_subj_u_marg"].ndim == 0
     assert context.model.named_vars["_delta_subj_q_marg"].ndim == 0
+
+
+def test_child_slope_predictive_draws_an_intercept_and_a_slope(tmp_path, monkeypatch):
+    """VG19's unseen child is a (b0, b1) pair, not one deviate scaled by a curve.
+
+    The distinction is the whole point of the structure. A1 scales a single
+    deviate by tau(age), which makes children's ranks identical at every age --
+    they never cross. Two deviates per outcome let the trajectory fan and let one
+    child overtake another, which is what a random slope means.
+    """
+    values = {f.name: getattr(VG07, f.name) for f in dc_fields(VG07)}
+    values.update(
+        use_subject_re_u=True,
+        use_subject_re_q=True,
+        subject_slope_ref_age_months=36.0,
+        tau_subj_u_sigma=SubjectSlopePriorParams(tau0_sigma=0.9, tau1_sigma=0.5),
+        tau_subj_q_sigma=SubjectSlopePriorParams(tau0_sigma=1.2, tau1_sigma=0.5),
+    )
+    definition = BivariateChildSlopeModelDefinition(**values)
+    context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
+
+    context.set_trace(_prior_as_posterior_trace(context))
+    sample_posterior_predictive(context, definition)
+
+    named = context.model.named_vars
+    # Two standard deviates per outcome, both scalar: one child per draw.
+    for tag in ("subj_u", "subj_q"):
+        for k in ("0", "1"):
+            assert named[f"_z{k}_{tag}_marg"].ndim == 0
+    # And NOT the constant-offset or A1 nodes, which would be the wrong child.
+    assert "_delta_subj_u_marg" not in named
+    assert "_delta_subj_q_marg" not in named
+    assert "_z_subj_u_marg" not in named
+    assert "_z_subj_q_marg" not in named
 
 
 def test_extract_model_samples_guards_against_misaligned_mask(tmp_path, monkeypatch):

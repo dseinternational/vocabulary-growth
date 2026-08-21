@@ -538,3 +538,91 @@ def test_subject_effect_correlation_needs_both_vectors(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="delta_subj_q"):
         comparison.subject_effect_correlation("vg10")
+
+
+# ============================================================
+# VG19: the age-varying child scale
+# ============================================================
+
+
+def test_child_scale_of_age_is_tau0_at_the_reference_age():
+    """`tau0` is defined as the spread AT the reference age, so D = 0 must return it."""
+    tau0 = np.array([0.9, 1.4, 0.3])
+    tau1 = np.array([0.5, 0.2, 0.8])
+    rho = np.array([0.43, -0.6, 0.0])
+    ages = np.array([24.0, 36.0, 60.0])
+    sd = comparison.child_scale_of_age(tau0, tau1, rho, ages, ref_age_months=36.0)
+    assert sd.shape == (3, 3)
+    np.testing.assert_allclose(sd[:, 1], tau0, rtol=1e-12)
+
+
+def test_child_scale_of_age_reduces_to_the_constant_model_at_tau1_zero():
+    """`tau1 = 0` is the nesting: the model of record's constant offset, at every age."""
+    tau0 = np.array([0.9, 1.4])
+    ages = np.linspace(8.0, 115.0, 25)
+    sd = comparison.child_scale_of_age(
+        tau0, np.zeros(2), np.array([0.43, -0.2]), ages, ref_age_months=36.0
+    )
+    np.testing.assert_allclose(sd, np.broadcast_to(tau0[:, None], sd.shape), rtol=1e-12)
+
+
+def test_child_scale_of_age_matches_monte_carlo():
+    """The closed form is Var(b0 + b1 D); check it against draws from the same block."""
+    rng = np.random.default_rng(20260821)
+    tau0, tau1, rho = 0.9, 0.35, 0.43
+    ages = np.array([12.0, 36.0, 84.0])
+    z = rng.standard_normal((400_000, 2))
+    b0 = tau0 * z[:, 0]
+    b1 = tau1 * (rho * z[:, 0] + np.sqrt(1 - rho**2) * z[:, 1])
+    want = np.array([(b0 + b1 * (a - 36.0) / 12.0).std(ddof=0) for a in ages])
+    got = comparison.child_scale_of_age(
+        np.array([tau0]), np.array([tau1]), np.array([rho]), ages, ref_age_months=36.0
+    )[0]
+    np.testing.assert_allclose(got, want, rtol=3e-3)
+
+
+def test_child_spread_single_accepts_an_age_varying_scale():
+    """A constant scale passed as (n_draw, n_age) must reproduce the (n_draw,) result."""
+    rng = np.random.default_rng(11)
+    f = rng.normal(-1.0, 0.5, size=(7, 5))
+    tau = np.array([0.8, 1.1, 0.5, 0.9, 1.3, 0.7, 1.0])
+    a_logit, a_words = comparison.child_spread_single(f, tau, 810)
+    b_logit, b_words = comparison.child_spread_single(
+        f, np.broadcast_to(tau[:, None], f.shape).copy(), 810
+    )
+    np.testing.assert_allclose(a_logit, b_logit, rtol=1e-12)
+    np.testing.assert_allclose(a_words, b_words, rtol=1e-12)
+
+
+def test_child_spread_product_accepts_an_age_varying_scale():
+    rng = np.random.default_rng(12)
+    f_u = rng.normal(-0.5, 0.4, size=(6, 4))
+    h = rng.normal(-1.5, 0.4, size=(6, 4))
+    tu = np.array([0.9, 1.0, 0.8, 1.2, 0.7, 1.1])
+    tq = np.array([1.2, 1.1, 1.3, 0.9, 1.0, 1.4])
+    a = comparison.child_spread_product(f_u, h, tu, tq, 810)
+    b = comparison.child_spread_product(
+        f_u,
+        h,
+        np.broadcast_to(tu[:, None], f_u.shape).copy(),
+        np.broadcast_to(tq[:, None], h.shape).copy(),
+        810,
+    )
+    for x, y in zip(a, b, strict=True):
+        np.testing.assert_allclose(x, y, rtol=1e-12)
+
+
+def test_child_spread_product_refuses_an_age_varying_scale_with_a_cross_outcome_rho():
+    """VG19 and VG20's rho_uq together are a 4x4 this quadrature does not model."""
+    f_u = np.zeros((3, 4))
+    h = np.zeros((3, 4))
+    with pytest.raises(ValueError, match="4x4"):
+        comparison.child_spread_product(
+            f_u, h, np.ones((3, 4)), np.ones(3), 810, rho=np.full(3, 0.3)
+        )
+
+
+def test_tau_to_draw_age_rejects_a_mismatched_grid():
+    f = np.zeros((3, 5))
+    with pytest.raises(ValueError, match="expected"):
+        comparison.child_spread_single(f, np.ones((3, 4)), 810)
