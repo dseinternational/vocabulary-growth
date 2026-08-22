@@ -1,7 +1,49 @@
 ---
-title: "Language development for children with Down syndrome"
-abstract: "*TODO*"
+title: "Word learning"
+abstract: "*Newborn babies know very little about the world into which they have just been born. By 12 months of age, many are starting to say their first words...*"
 ---
+
+Newborn babies know very little about the world into which they have just been born. Here, they are immersed in sensations: sounds, touch, movement, smells, tastes and (more dimly at first) sights. From this flood of information, they must work out which patterns matter, which recur, and which can be recognised again. This learning begins early, and everything a child later understands and says is built on it.
+
+## Early sensations
+
+Babies actually begin to experience some sensations from before birth. Hearing is functional from around 24 to 28 weeks of gestation, although the fetus only receives muffled sounds - rhythm, stress and intonation rather than discernable consonants and vowels. Nonetheless, this is sufficient for newborns to already prefer their mother's voice over another woman's and discriminate their native language over unfamiliar languages[@gerhardtFetalExposuresSound2000; @gervainSpeechPerceptionLanguage2010].
+
+Vision is less well developed at birth. Acuity (sharpness of perception) at birth is limited, and so a newborn has to be roughly twenty times closer than an adult to make out the same detail. Contrast sensitivity is also poor. Yet, newborns soon orient towards face-like patterns and recognise their mother's face [@simionFacePerceptionProcessing2015].
+
+Touch, taste, smell and the sense of movement and body position are all comparatively mature at birth, as is the sense of hunger, temperature, and internal discomfort. Much of a newborn's earliest learning concerns their own body, its states, and the effects their actions have on the people around them.
+
+## Learning what to ignore
+ 
+From birth, infants can hear sound patterns in speech that their native language does not use. From around 6 months, they begin to lose this ability as speech perception becomes tuned to the language they hear around them [@gervainSpeechPerceptionLanguage2010; @kuhlEarlyLanguageAcquisition2004].
+
+## Putting the senses together
+ 
+Some properties of the world are available to more than one sense at once: rhythm, tempo, duration, intensity, and synchrony. When a sound and a sight change together in time, they are probably coming from the same event. By four months, infants look longer at a face whose mouth movements match a vowel they are hearing. This is the beginning of the machinery that will eventually bind a sound to a thing.
+ 
+Categorisation begins well before naming. By three to four months infants distinguish cats from dogs and sort simple event types such as one object being contained in, or supported by, another. Infants are building a structured world some months before they have any words for it. Some accounts hold that a good deal of this structure is present from the start; others that it is constructed gradually from experience. Several of the classic demonstrations supporting the strong version have replicated poorly, so the honest position is that infants clearly do more than a blank-slate account predicts and probably less than the strongest nativist accounts claim.
+ 
+## Finding the words
+ 
+Written language has spaces. Spoken language does not. Infants must working out where one spoken word stops and where the next word begins in a continuous stream of sound.
+ 
+Familiar word forms — the baby's own name — are recognised by about four and a half months. By seven and a half months infants can extract a repeated form from fluent speech and recognise it later. Several cues contribute: the transitional probability between syllables (within a word, one syllable predicts the next more reliably than across a word boundary), the stress pattern of the language, prosodic boundaries, and which sound sequences are legal in the language at all. Frequently occurring words appear to act as anchors, though they may need to reach a threshold of familiarity before they help.[^anchor]
+ 
+How well an infant does this predicts vocabulary later. In a large longitudinal study, segmentation performance was related to both receptive and expressive vocabulary size concurrently and over time — but *not* to the rate of vocabulary growth.[^frost] That distinction is easy to skate over and worth holding onto: the finding is about where a child is, not how fast they are travelling.
+
+---
+
+**In Down syndrome.** Two things differ from the outset. First, the brain itself: neonatal imaging shows reduced whole-brain, cerebral white matter and cerebellar volumes, with relatively enlarged temporal and parietal lobar volumes, present already at birth.[@fukami-gartnerComprehensiveVolumetricPhenotyping2023] Second, and with clearer practical consequences, hearing. Otitis media with effusion — persistent fluid in the middle ear — is extremely common. In a prospective Glasgow birth cohort followed through an annual surveillance clinic, prevalence was 93% at age 1, falling to 68% by age 5; no child in that cohort had significant sensorineural hearing impairment.[^glasgow] A Belgian cross-sectional series found a similar early peak, and reported that children with fluid in both ears had median hearing thresholds around 37 dB compared with 28 dB for those with at least one normally ventilated ear.[^belgian] A loss of that size is described as mild, and it is easy to miss, but it sits precisely in the range that blurs the quiet, high-frequency parts of speech.
+
+The practical implication is not subtle. During the period when infants are doing their most intensive work on the sound structure of their language, a large proportion of children with Down syndrome are doing it through a degraded signal, and the degradation fluctuates from week to week. Regular hearing surveillance is not a routine formality; it protects the input on which everything downstream depends.
+
+[^glasgow]: Barr, Dungworth, Hunter, McFarlane & Kubba (2011, *Scottish Medical Journal*), 79 preschool children, prospective community surveillance. 37% were listed for surgery at some point. Retrieved via PubMed: [DOI](https://doi.org/10.1258/smj.2011.011036).
+
+[^belgian]: Maris, Wojciechowski, Van de Heyning & Boudewyns (2014, *European Journal of Pediatrics*), 107 children; 52.3% had either effusion or ventilation tubes at the time of evaluation. Retrieved via PubMed: [DOI](https://doi.org/10.1007/s00431-014-2323-5). A larger cross-sectional study in Egypt found conductive hearing loss in 48.8% and sensorineural loss in 4.1% of 170 children, mostly mild and bilateral (Yahia et al., 2025, *Scientific Reports*): [DOI](https://doi.org/10.1038/s41598-025-90500-7).
+
+---
+
+Word learning
 
 Children with Down syndrome generally learn vocabulary more slowly than typically developing children [@abbedutoLanguageDevelopmentSyndrome2020]. They generally say fewer words than they understand and there are considerable differences between individuals that increase over time [@oliverLanguageDevelopmentChildren1994; @berglundParentalReportsSpoken2001; @galeoteAcquisitionProductiveVocabulary2008; @kaat-vandenosExpressiveVocabularyDevelopment2017; @zampiniVocabularyDevelopmentChildren2013; @deckersPredictorsReceptiveExpressive2019].
 
