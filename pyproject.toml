@@ -21,14 +21,18 @@ authors = [{ name = "Frank Buckley" }]
 #   io        orjson / tabulate, used by the shared reporting helpers
 #   jax       jax + numpyro — imported directly (jax.numpy, jax.scipy.special)
 #   notebook  jupyter + jupytext — Jupytext notebooks and Quarto's kernel
-#   storage   h5netcdf / h5py — trace.nc is NetCDF, and the model reports
-#             import h5netcdf directly to inspect a trace before opening it
 #   viz       seaborn
+# `storage` is deliberately absent: since dse-research-utils v0.11.1 h5netcdf
+# and h5py — the netCDF engine trace.nc is written with, and imported directly
+# by the model reports to inspect a trace before opening it — are core
+# dependencies, leaving that extra carrying only zarr, which nothing here
+# imports. Dropping it changes nothing in the resolved environment (nutpie
+# depends on zarr regardless); it stops us declaring a need we do not have.
 # nutpie is deliberately absent: PyMC 6 declares it as `pymc[nutpie]` and
 # auto-selects it as the default NUTS sampler when present, so it is a base
 # dependency of dse-research-utils to keep the sampler identical across repos.
 dependencies = [
-  "dse-research-utils[columnar,graphs,io,jax,notebook,storage,viz]"
+  "dse-research-utils[columnar,graphs,io,jax,notebook,viz]"
 ]
 
 [dependency-groups]
@@ -58,7 +62,7 @@ environments = [
 # dse-research-utils isn't published to PyPI — resolve it from the public git
 # tag. To develop against a sibling checkout instead, comment this out and use:
 #   dse-research-utils = { path = "../research/src/python", editable = true }
-dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.11.0" }
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.11.2" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"

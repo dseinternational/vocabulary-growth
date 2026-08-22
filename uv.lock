@@ -517,8 +517,8 @@ wheels = [
 
 [[package]]
 name = "dse-research-utils"
-version = "0.11.0"
-source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.11.0#fbc022fd6db48917ae57f9ba38b12ccf239523a9" }
+version = "0.11.2"
+source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.11.2#2d19c5ef2d2f3a66c64a92a232760f36ee580a37" }
 dependencies = [
     { name = "arviz" },
     { name = "arviz-base" },
@@ -526,6 +526,8 @@ dependencies = [
     { name = "arviz-stats" },
     { name = "azure-identity" },
     { name = "azure-storage-blob" },
+    { name = "h5netcdf" },
+    { name = "h5py" },
     { name = "matplotlib" },
     { name = "numba" },
     { name = "numpy" },
@@ -566,11 +568,6 @@ notebook = [
     { name = "jupyter" },
     { name = "jupytext" },
 ]
-storage = [
-    { name = "h5netcdf" },
-    { name = "h5py" },
-    { name = "zarr" },
-]
 viz = [
     { name = "seaborn" },
 ]
@@ -579,7 +576,7 @@ viz = [
 name = "dse-vocab-growth"
 source = { editable = "." }
 dependencies = [
-    { name = "dse-research-utils", extra = ["columnar", "graphs", "io", "jax", "notebook", "storage", "viz"] },
+    { name = "dse-research-utils", extra = ["columnar", "graphs", "io", "jax", "notebook", "viz"] },
 ]
 
 [package.dev-dependencies]
@@ -591,7 +588,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "storage", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.11.0" }]
+requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.11.2" }]
 
 [package.metadata.requires-dev]
 dev = [
