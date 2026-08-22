@@ -186,5 +186,70 @@ def main():
             print(f"    vs {name:<40s} {2 * (sub.fun - full.fun):8.2f}  ({df} df)")
 
 
+def rank_analysis():
+    """How many dimensions does the child covariance actually have?
+
+    The tanh-per-entry parameterisation in :func:`sigma_from` rejects
+    non-positive-definite proposals, so the optimiser can and does walk to the
+    boundary of the feasible set. That is not a bug in the search -- it is where
+    the likelihood is maximised -- but it means the correlation matrix at the
+    optimum can be singular, which invalidates the chi-square reference for the
+    tests in :func:`main` and matters far more for the design than any single
+    correlation does.
+
+    Refits Sigma = L L' with L of shape (4, rank), which is unconstrained,
+    always positive semi-definite, and exactly rank ``rank``. A rank-3 fit
+    reaching the same likelihood as rank-4 confirms the deficiency is real
+    rather than an artefact of the other parameterisation, because the two
+    searches share no coordinates. Free covariance parameters are
+    ``4 * rank - rank * (rank - 1) / 2``: 4, 7, 9, 10 for ranks 1 to 4.
+    """
+    d, _ = paired_residuals()
+    for label, min_obs in (("all children", 1), ("repeats only", 2)):
+        blocks = blocks_of(d, 36.0, min_obs)
+        full = fit(blocks, PAIRS)
+        S = sigma_from(full.x, PAIRS)
+        sd = np.sqrt(np.diag(S))
+        ev = np.linalg.eigvalsh(S / np.outer(sd, sd))
+        print(f"\n######## {label}: dimension of the child covariance")
+        print(f"  correlation eigenvalues at the 4x4 optimum: "
+              f"{np.array2string(ev, precision=6)}")
+        for rank in (1, 2, 3, 4):
+            nll, L, occ = _fit_low_rank(blocks, rank)
+            Sr = L @ L.T
+            sdr = np.sqrt(np.diag(Sr))
+            for k in range(rank):
+                if L[np.argmax(np.abs(L[:, k])), k] < 0:
+                    L[:, k] *= -1
+            npar = 4 * rank - rank * (rank - 1) // 2
+            print(f"  rank {rank} ({npar:2d} params)  negll {nll:9.4f}   SDs "
+                  + " ".join(f"{n}={x:.3f}" for n, x in zip(NAMES, sdr, strict=True)))
+            for k in range(rank):
+                print(f"      factor {k + 1} loadings: "
+                      + "  ".join(f"{n}={x:+.3f}"
+                                  for n, x in zip(NAMES, L[:, k] / sdr, strict=True)))
+
+
+def _fit_low_rank(blocks, rank, tries=6, seed=7):
+    rng = np.random.default_rng(seed)
+    n = 4 * rank
+
+    def obj(th):
+        L = th[:n].reshape(4, rank)
+        return negll(blocks, L @ L.T, np.exp(th[n]), np.exp(th[n + 1]))
+
+    best = None
+    for _ in range(tries):
+        s = np.concatenate([rng.normal(0, 0.6, n), np.log([0.5, 0.6])])
+        r = minimize(obj, s, method="Powell",
+                     options={"xtol": 1e-5, "ftol": 1e-7, "maxiter": 90000})
+        r = minimize(obj, r.x, method="Nelder-Mead",
+                     options={"xatol": 1e-5, "fatol": 1e-7, "maxiter": 90000})
+        if best is None or r.fun < best.fun:
+            best = r
+    return best.fun, best.x[:n].reshape(4, rank), np.exp(best.x[n:n + 2])
+
+
 if __name__ == "__main__":
     main()
+    rank_analysis()

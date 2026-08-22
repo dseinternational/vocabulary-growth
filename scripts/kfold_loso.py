@@ -1,7 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-K-fold leave-one-subject-out (LOSO) gold-standard comparison of VG07, VG08, VG09.
+K-fold leave-one-subject-out (LOSO) gold-standard comparison of DS bivariate models.
+
+Defaults to VG07/VG08/VG09, the set it was written for; ``--models`` selects any
+subset of VG07-VG10, VG19 and VG20, and ``--suffix`` keeps a non-default run's
+output from overwriting the default one's.
 
 Splits the 510 unique DS subjects into K folds (stratified by study and
 observation count), then for each (model, fold) pair refits the model with
@@ -57,15 +61,33 @@ from vocab_growth.models.common_bivariate import (
     sample,
 )
 from vocab_growth.models.common_bivariate_re import build_model_re
-from vocab_growth.models.definitions import VG07, VG08, VG09, BivariateModelDefinition
+from vocab_growth.models.definitions import (
+    VG07,
+    VG08,
+    VG09,
+    VG10,
+    VG19,
+    VG20,
+    BivariateModelDefinition,
+)
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 
+# Every model this script can compare. `build_model_re` dispatches on the
+# definition's own fields, so the child-slope (VG19) and correlated-intercept
+# (VG20) structures need no separate builder here — which is the whole reason
+# the comparison is one line of configuration rather than a second script.
+AVAILABLE = {
+    "VG07": VG07, "VG08": VG08, "VG09": VG09,
+    "VG10": VG10, "VG19": VG19, "VG20": VG20,
+}
+DEFAULT_MODELS = ("VG07", "VG08", "VG09")
+
 # Derive the Beta-Binomial trial count from the model definitions rather than a
-# literal (issue #131). All three compared models share the common 810-item
-# reference scale; assert they agree so a future divergence surfaces here.
-_n_trials_set = {VG07.n_trials, VG08.n_trials, VG09.n_trials}
+# literal (issue #131). Every model shares the common 810-item reference scale;
+# assert they agree so a future divergence surfaces here.
+_n_trials_set = {d.n_trials for d in AVAILABLE.values()}
 assert len(_n_trials_set) == 1, (
-    f"VG07/VG08/VG09 disagree on n_trials ({sorted(_n_trials_set)}); "
+    f"compared models disagree on n_trials ({sorted(_n_trials_set)}); "
     "kfold_loso assumes a single common trial count."
 )
 N_TRIALS = _n_trials_set.pop()
@@ -258,11 +280,15 @@ def holdout_subject_elpds(
 # ============================================================
 
 
-SPECS = [("VG07", VG07), ("VG08", VG08), ("VG09", VG09)]
-
-
-def main(K: int = 5, sampling_config_name: str = "test") -> None:
+def main(
+    K: int = 5,
+    sampling_config_name: str = "test",
+    models: tuple[str, ...] = DEFAULT_MODELS,
+    suffix: str = "",
+) -> None:
+    SPECS = [(m, AVAILABLE[m]) for m in models]
     os.makedirs(OUT_DIR, exist_ok=True)
+    print(f"models: {', '.join(models)}   K={K}   config={sampling_config_name}")
 
     print("Reloading DS analysis frame …", flush=True)
     analysis_df = load_analysis_frame()
@@ -333,7 +359,7 @@ def main(K: int = 5, sampling_config_name: str = "test") -> None:
     elpd_df = pd.DataFrame(rows).pivot_table(
         index="subject_code", columns="model", values="elpd"
     )
-    elpd_df.to_csv(os.path.join(OUT_DIR, "kfold_loso_subject_elpds.csv"))
+    elpd_df.to_csv(os.path.join(OUT_DIR, f"kfold_loso_subject_elpds{suffix}.csv"))
 
     # Per-model totals + paired SE.
     print("\n=== K-fold LOSO summary ===")
@@ -354,7 +380,7 @@ def main(K: int = 5, sampling_config_name: str = "test") -> None:
         )
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(
-        os.path.join(OUT_DIR, "kfold_loso_summary.csv"), index=False
+        os.path.join(OUT_DIR, f"kfold_loso_summary{suffix}.csv"), index=False
     )
     print(summary_df.to_string(index=False))
 
@@ -381,12 +407,12 @@ def main(K: int = 5, sampling_config_name: str = "test") -> None:
             )
     pair_df = pd.DataFrame(pair_rows)
     pair_df.to_csv(
-        os.path.join(OUT_DIR, "kfold_loso_compare.csv"), index=False
+        os.path.join(OUT_DIR, f"kfold_loso_compare{suffix}.csv"), index=False
     )
     print(pair_df.to_string(index=False))
 
     fit_df = pd.DataFrame([r.__dict__ for r in fit_records])
-    fit_df.to_csv(os.path.join(OUT_DIR, "kfold_loso_fits.csv"), index=False)
+    fit_df.to_csv(os.path.join(OUT_DIR, f"kfold_loso_fits{suffix}.csv"), index=False)
     print("\n=== Fit timings ===")
     print(fit_df.to_string(index=False))
 
@@ -395,4 +421,25 @@ def main(K: int = 5, sampling_config_name: str = "test") -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--folds", type=int, default=5)
+    ap.add_argument("--config", default="test")
+    ap.add_argument(
+        "--models",
+        default=",".join(DEFAULT_MODELS),
+        help=f"comma-separated subset of {sorted(AVAILABLE)}",
+    )
+    ap.add_argument(
+        "--suffix",
+        default="",
+        help="appended to the output filenames so a non-default model set "
+        "does not overwrite the VG07/VG08/VG09 results",
+    )
+    a = ap.parse_args()
+    chosen = tuple(m.strip().upper() for m in a.models.split(",") if m.strip())
+    unknown = [m for m in chosen if m not in AVAILABLE]
+    if unknown:
+        raise SystemExit(f"unknown model(s): {unknown}; available {sorted(AVAILABLE)}")
+    main(K=a.folds, sampling_config_name=a.config, models=chosen, suffix=a.suffix)

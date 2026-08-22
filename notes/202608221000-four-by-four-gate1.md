@@ -1,10 +1,10 @@
-# Gate 1 for the 4x4: the cross-outcome coupling is level-to-rate, not rate-to-rate
+# Gate 1 for the 4x4: the coupling is level-to-rate, and the covariance is not four-dimensional
 
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!IMPORTANT]
-> Structure selection for the successor to VG19 and VG20, run 2026-08-22 before any model is written, by the method [202608141600](202608141600-rank-stability-tracking.md) §10.3 used for VG19's own Gate 1. **The headline is a negative that changes the design.** The element that motivated the 4x4 — `corr(b1u, b1q)`, do children who gain comprehension faster also convert faster — is **not supported**: 2Δ logL = 2.47 on 1 df across all children and **0.57** on the repeated-measures children. What the data does support is an asymmetric coupling nobody proposed: a child's comprehension **level** strongly predicts their production-ratio **rate**. Reproduced by `scripts/experiments/four_by_four_gate1.py`.
+> Structure selection for the successor to VG19 and VG20, run 2026-08-22 before any model is written, by the method [202608141600](202608141600-rank-stability-tracking.md) §10.3 used for VG19's own Gate 1. **Two negatives, and the second is the bigger one.** The element that motivated the 4x4 — `corr(b1u, b1q)`, do children who gain comprehension faster also convert faster — is **not supported** (§3). And the 4x4 itself is **not identified**: its maximum-likelihood correlation matrix is singular, a rank-3 fit reaches the identical likelihood, and rank 2 costs only 2.60 on 2 df, so the successor should be a low-rank factor form rather than a correlation matrix of any shape (§4-5). What the data does support among the cross terms is an asymmetric coupling nobody proposed: a child's comprehension **level** strongly predicts their production-ratio **rate**. Reproduced by `scripts/experiments/four_by_four_gate1.py`.
 
 ## 1. Why this had to be gated before it was built
 
@@ -56,15 +56,50 @@ Four things follow.
 3. **`rho_uq` is confirmed independently.** VG20's parameter is supported at p = 2.9e-05 on a method that shares nothing with the fitted model but the data. That is worth having on the record given that §4c of [202608212000](202608212000-vg19-gates-g2-g4-g5.md) found it buys almost nothing in held-out prediction.
 4. **VG19 + `rho_uq` is not enough.** Adding only the intercept-intercept term to VG19's block structure leaves 59.64 on 3 df on the table, almost all of it the `b0u` -> `b1q` coupling.
 
-## 4. What to build
+## 4. The 4x4 is not identified by these data
 
-Not the symmetric 4x4. The data supports **four SDs and three correlations** — the two within-outcome terms VG19 already has, plus `b0u`,`b0q` and `b0u`,`b1q` — with `b1u`,`b1q` and `b1u`,`b0q` fixed at zero. Seven covariance parameters rather than ten, and the two dropped are the two the repeats column cannot see.
+Everything in §3 was computed at a maximum-likelihood optimum whose **correlation matrix is singular**. The smallest eigenvalue is 2.1e-08 across all children and 8.5e-07 on the repeats — numerically zero, on both subsets. The MLE sits exactly on the positive-definiteness boundary, and one linear combination of the four child effects has no variance at all.
 
-That structure is not a Cholesky of a free correlation matrix, so it needs its own parameterisation with a positive-definiteness constraint, which is a real implementation cost and should be weighed against simply fitting the full 4x4 and reporting two of its six correlations as null. Given that `b1u` itself is largely cross-sectional (§2), a third option is worth pricing: drop the comprehension rate entirely and fit a 3x3 over `(b0u, b0q, b1q)`, which is exactly the reduced structure above with `b1u` removed and needs no constrained parameterisation at all.
+This is not an artefact of the tanh-per-entry parameterisation walking into its own rejection region. Refitting `Sigma = L L'` with `L` of shape `(4, rank)` — unconstrained, always positive semi-definite, sharing no coordinates with the other search — reaches the identical optimum:
 
-## 5. Caveats
+| rank | free covariance params | negll, all children | negll, repeats only |
+| ---: | ---------------------: | ------------------: | ------------------: |
+|    1 |                      4 |           1437.3791 |            820.3019 |
+|    2 |                      7 |           1326.7271 |            715.3349 |
+|    3 |                      9 |       **1325.4277** |        **714.6210** |
+|    4 |                     10 |       **1325.4277** |        **714.6210** |
+
+**Rank 3 and rank 4 are the same fit to four decimal places.** The tenth covariance parameter buys nothing. Rank 1 is decisively rejected (2Δ logL = 221 on 3 df), but **rank 2 costs only 2.60 on 2 df across all children and 1.43 on the repeats** — so the data cannot distinguish a two-dimensional child covariance from a four-dimensional one.
+
+At rank 2, all children, the standardised loadings are:
+
+| factor | `b0u` | `b1u` | `b0q` | `b1q` | reading                               |
+| ------ | ----: | ----: | ----: | ----: | ------------------------------------- |
+| 1      | +0.83 | +0.97 | +0.74 | +0.99 | a general child language factor       |
+| 2      | −0.56 | −0.26 | +0.67 | +0.10 | comprehension level against `q` level |
+
+Factor rotations are not unique and the second factor's reading should not be leaned on; the **dimension count** is what is invariant and what matters here.
+
+### What this does to §3
+
+The likelihood comparisons in §3 stand as likelihood comparisons — they survived a two-way warm start, in which projecting the full solution down into each restricted space and each restricted solution up into the full space improved the full model by 0.00 in every case, so neither side is under-optimised. **The `p` values do not stand.** A chi-square reference requires the MLE to be interior, and it is not. Read the §3 column as an ordering — `b0u`->`b1q` (29.74) far ahead of `rho_uq` (17.48), `b1u`->`b0q` (4.76) weak and gone on the repeats, rate-to-rate (2.47, 0.57) smallest of the six and smallest of all where drift would have to show — and not as four calibrated tests. The two conclusions that matter are robust to any reference distribution: 29.74 is large under all of them and 0.57 is small under all of them.
+
+## 5. What to build
+
+**Not a 4x4 with a free correlation matrix, and not the constrained correlation matrix an earlier draft of this note recommended.** Both fit ten or seven covariance parameters to data that maximise their likelihood at nine and are indifferent between nine and seven. A constrained correlation matrix also needs a positive-definiteness constraint hand-written into the graph, which is exactly the awkward part.
+
+The structure the evidence points to is a **low-rank factor form**: `b = L z`, with `z ~ Normal(0, 1)` of dimension 1 or 2 and `L` a free `(4, k)` loading matrix. That is unconstrained, positive semi-definite by construction, needs no boundary handling, and at `k = 2` costs seven covariance parameters against the free 4x4's ten while losing 2.60 in log-likelihood. It also expresses the substantive claim directly — that a child's four effects are driven by one or two underlying dimensions rather than by four separately-varying quantities — and a general-factor-plus-contrast reading is a more natural object for the report than six pairwise correlations.
+
+Two caveats before this is treated as a specification.
+
+**Residual ML sits on the boundary; a Bayesian fit will not.** An LKJ or a factor prior regularises away from singularity, so a fitted 4x4 in PyMC would return a proper posterior rather than a rank-3 point. The finding is therefore not "the fourth dimension is exactly zero" but "**the data carry almost no information about it, so the prior would supply nearly all of it**" — which is the more useful warning, and one that a posterior alone would not make obvious.
+
+**`k` is a choice this analysis cannot make.** Rank 2 and rank 3 are 2.60 apart on 2 df and rank 3 and rank 4 are identical, so 2 and 3 are both defensible and 4 is not. Registering the factor model with `k` as a definition field, and fitting `k = 1, 2, 3` as a registered sensitivity family, is the honest way to settle it — and it is cheap, because the three differ by one column of `L`.
+
+## 6. Caveats
 
 1. **Residual ML is not the model.** The residuals are adjusted by a cubic in age plus study fixed effects, not by the fitted HSGP, and the child structure is Gaussian on the logit rather than Beta-Binomial. Gate 1 is a structure-selection instrument, and the standard it has to meet is the one it met for VG19: the fitted model agreed with it.
-2. **The correlation matrix is highly interdependent.** `b0u`,`b1q` = +0.754 sits alongside `b0q`,`b1q` = +0.766, so the level-to-rate term and the within-outcome term are partly competing to explain the same covariance. The likelihood-ratio tests are the right reading of the table and the individual correlations are not.
-3. **`q` is undefined where a child understands nothing**, so 602 of the pool's 767 children enter, and the youngest are the ones most likely to be excluded.
-4. **No multiplicity adjustment.** Six one-df tests are reported; the two that matter are at 1e-8 and 3e-5 and the two nulls are at 0.12 and 0.45, so nothing here is near a threshold where that would change the reading.
+2. **The `p` values in §3 are not calibrated**, because the MLE is on the positive-definiteness boundary (§4). They are retained in the table because the ordering is the point and the two conclusions that matter are far from any threshold in either direction, but they should not be quoted as tests. No multiplicity adjustment is applied either, and for the same reason it would not change the reading.
+3. **The individual correlations are not interpretable.** `b0u`,`b1q` = +0.754 sits alongside `b0q`,`b1q` = +0.766 on a matrix that is singular, so the level-to-rate term and the within-outcome term are partly competing to explain the same covariance and the entries are not separately estimable. The likelihood-ratio ordering and the rank analysis are the readings this fit supports.
+4. **`q` is undefined where a child understands nothing**, so 602 of the pool's 767 children enter, on 970 paired administrations. The 14 rows dropped for `understood = 0` and the excluded children skew young, which is also where `q` is least informative for a second reason: **15.2% of the retained rows have `q` exactly 0** and sit against the half-item clip, where a Gaussian-on-logit approximation is at its weakest. The corresponding ceiling problem is much smaller — 1.2% at `q` exactly 1.
+5. **Nine rows have `spoken > understood`** and are clipped to `q = 1`. That is 0.9% of the paired set, too few to move anything here, but the excesses are not small (median 121 words, up to 353) and six of the nine are `ie_01`. That is a data-integrity question in its own right and does not belong to this note; it is recorded here because this analysis is the first to pair the two outcomes row by row and so the first place it would show.
