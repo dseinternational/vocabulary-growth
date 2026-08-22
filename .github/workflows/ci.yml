@@ -64,6 +64,12 @@ jobs:
         # wheels at all. See `tool.uv.environments` in pyproject.toml.
         os: [ubuntu-26.04, windows-latest]
     runs-on: ${{ matrix.os }}
+    # The console output uses ✓ and · characters. Windows still defaults stdout
+    # to the legacy cp1252 code page, and rich raises UnicodeEncodeError rather
+    # than degrading, so the first completed pipeline section kills the run.
+    # PEP 686 makes UTF-8 mode the default from Python 3.15; until then, ask.
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v7.0.1
 

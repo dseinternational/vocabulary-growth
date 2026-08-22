@@ -93,6 +93,8 @@ uv sync
 
 This creates `.venv/` from `uv.lock`, so every contributor gets the same resolved environment. Linux, macOS (Apple Silicon) and Windows are all supported natively. See [docs/runbooks/environment-locks.md](docs/runbooks/environment-locks.md) for how the lock is created and refreshed.
 
+On Windows, run in UTF-8 mode — `$env:PYTHONUTF8 = "1"` in PowerShell, `set PYTHONUTF8=1` in `cmd`. The progress output uses `✓` and `·`, which the legacy cp1252 code page cannot encode, and the console library raises `UnicodeEncodeError` instead of degrading, so a fit dies at its first completed stage. PEP 686 makes UTF-8 mode the default from Python 3.15.
+
 #### External tools
 
 Four things are not Python packages, so `uv sync` cannot supply them:
