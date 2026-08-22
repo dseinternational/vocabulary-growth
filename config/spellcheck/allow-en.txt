@@ -150,6 +150,7 @@ nonzero
 nunique
 nutpie
 orcid
+orthant
 overclaiming
 overfitting
 parameterisation
@@ -180,6 +181,7 @@ residualised
 respecification
 resumable
 reweighting
+reweights
 rhat
 scratchpad
 sens
