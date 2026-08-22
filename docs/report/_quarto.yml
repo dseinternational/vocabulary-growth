@@ -69,9 +69,11 @@ book:
     - acknowledgements.qmd
     - summary.qmd
     - glossary.qmd
-    - part: "Background and aims"
+    - part: "Background, aims and approach"
       chapters:
         - intro.qmd
+        - intro-language-development.qmd
+        - intro-statistical-modelling.qmd
     - part: "Methods"
       chapters:
         - methods-data.qmd

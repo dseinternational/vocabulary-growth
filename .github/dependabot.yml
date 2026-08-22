@@ -1,7 +1,7 @@
 version: 2
 
 updates:
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /
     schedule:
       interval: daily
@@ -12,10 +12,11 @@ updates:
         patterns:
           - "*"
     ignore:
-      # numpy 2.5 is unreachable for anything depending on pymc: pytensor 3.2.x
+      # numpy 2.5 is unreachable for anything depending on pymc: pytensor 3.3.0
       # pins numba <=0.66.0, and numba 0.66.0 still pins numpy <2.5. The ceiling
-      # in pyproject.toml mirrors the shared conda core; raising it only declares
-      # a range no resolver can use. Remove once numba supports numpy 2.5.
+      # is inherited from dse-research-utils; raising it here only declares a
+      # range no resolver can use. Remove once a PyTensor release admits numba
+      # 0.67, which has relaxed to numpy <2.6.
       - dependency-name: "numpy"
         versions: [">=2.5.0"]
     assignees:

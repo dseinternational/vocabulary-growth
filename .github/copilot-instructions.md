@@ -11,20 +11,19 @@ This project is an exploratory study of vocabulary development in children with 
 
 The Python package `vocab_growth` (in `src/vocab_growth/`) defines a series of PyMC models that are fitted to vocabulary assessment data aggregated from multiple international studies. Reports are authored in Quarto (`.qmd`).
 
-This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.7.1` (see [Environment setup](#environment-setup)); a commented local-dev override in `environment.yml` lets you point at a sibling `../research/src/python` checkout instead.
+This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.11.0` (see [Environment setup](#environment-setup)); a commented local-dev override in `pyproject.toml` lets you point at a sibling `../research/src/python` checkout instead.
 
 ## Environment setup
 
-Hybrid two-layer environment (shared across DSE research repos):
+Single-layer [uv](https://docs.astral.sh/uv/) environment (shared across DSE research repos). Create or refresh it with `uv sync`; run anything in it with `uv run …`, which needs no activation.
 
-- **Compiled core** — the scientific stack (`numpy`/`scipy`/`pandas`/`pymc`/`nutpie`/`jax`/`arviz`, …) comes from **conda-forge** and must match the canonical spec shipped in `dse-research-utils` (`data/environment-core.yml`) so it cannot drift across repos. Verify with `dse-check-env environment.yml`.
-- **Pip layer** — the pure-Python tail and the shared library. `dse-research-utils` installs from the public git tag `v0.7.1` (`dse-research-utils[viz,notebook,io] @ git+https://github.com/dseinternational/research.git@v0.7.1#subdirectory=src/python`); the package itself installs editable (`-e ./`).
-
-- **Python environment**: Conda/mamba (environment name `dse-vocab-growth`), Python 3.14, channel `conda-forge`. Create with `mamba env create -f environment.yml`; update with `conda env update -f environment.yml`.
-- **Exact replication**: `conda-lock.yml` pins the compiled environment for `linux-64` and `osx-arm64`; `requirements-pip.lock` pins the pip layer. See `docs/runbooks/environment-locks.md`. Refresh both with `scripts/lock_environment.py` only after an intentional dependency change.
-- **Windows**: there is no conda-forge `jax`/`jaxlib` win-64 build, so the stack cannot solve natively — use **WSL** (Ubuntu, linux-64).
-- **Local dev against research**: comment the `dse-research-utils[...] @ git+…` line in `environment.yml`'s pip block and uncomment the `-e ../research/src/python[...]` override.
-- **GPU**: opt-in overlay (`jax[cuda]`); the base env is CPU-only and cross-platform.
+- **Dependencies**: `pyproject.toml` declares only `dse-research-utils[columnar,graphs,io,jax,notebook,storage,viz]` plus a `dev` dependency group. The scientific stack (`numpy`/`scipy`/`pandas`/`pymc`/`pytensor`/`nutpie`/`arviz`/`preliz`/`xarray`, …) is inherited transitively from the library's own `pyproject.toml`, which is the canonical set of floors — do not restate it here, or the two copies will drift. `nutpie` is deliberately not declared: PyMC auto-selects it as the default NUTS sampler when present.
+- **Python**: provisioned by uv from `.python-version` (3.14). No separate Python installation is needed.
+- **Exact replication**: `uv.lock` pins every package for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable commit of `dse-research-utils`. `uv sync --locked` installs it and fails rather than re-resolving if it is stale. Refresh with `uv lock` only after an intentional dependency change. See `docs/runbooks/environment-locks.md`.
+- **Platforms**: Linux, Apple Silicon macOS and **native Windows** (no WSL — `jaxlib` ships win-amd64 wheels on PyPI). Intel macOS is unsupported upstream: numba publishes no macOS x86_64 wheels. On Windows set `PYTHONUTF8=1`: the progress output uses `✓`/`·`, cp1252 cannot encode them, and rich raises rather than degrading, so a fit dies at its first completed stage. CI sets it for the fit job.
+- **Local dev against research**: comment the `dse-research-utils` git entry in `[tool.uv.sources]` and uncomment the `path = "../research/src/python"` override beside it.
+- **GPU**: opt-in overlay (`jax[cuda]`); the locked environment is CPU-only and cross-platform.
+- **Not Python packages** (`uv sync` cannot supply these): the Graphviz `dot` binary (model-diagram figure only — skipped with a warning if absent, so it is the one optional tool); Quarto for report rendering, which bundles its own Pandoc, Dart Sass, Deno and Typst and so needs no separate Pandoc install; a XeLaTeX distribution (`quarto install tinytex`) plus the Source Sans 3 / Monaspace Neon fonts for the report book's `pdf` format only; and Node.js for spellcheck and Markdown formatting. `quarto check` reports what it resolved.
 - **Node dependencies** (spellcheck, formatting): `npm install`.
 
 ## Commands
@@ -32,15 +31,15 @@ Hybrid two-layer environment (shared across DSE research repos):
 ### Lint
 
 ```bash
-ruff check src/ scripts/
+uv run ruff check src/ scripts/
 ```
 
 ### Test
 
 ```bash
-pytest              # run all tests
-pytest tests/test_foo.py           # single file
-pytest tests/test_foo.py::test_bar # single test
+uv run pytest              # run all tests
+uv run pytest tests/test_foo.py           # single file
+uv run pytest tests/test_foo.py::test_bar # single test
 ```
 
 ### Spellcheck (Markdown/Quarto docs)
@@ -61,7 +60,7 @@ Uses Prettier. Configured in `.prettierrc.json`; ignore patterns in `.prettierig
 ### Prepare data
 
 ```bash
-python scripts/prepare_data.py
+uv run python scripts/prepare_data.py
 ```
 
 This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a DuckDB database at `data/vocabulary.duckdb`.
@@ -69,7 +68,7 @@ This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a Du
 One source is generated rather than committed by hand:
 
 ```bash
-python scripts/build_us01_source.py --verify
+uv run python scripts/build_us01_source.py --verify
 ```
 
 This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01`) from the item-level contributor files in the public `langcog/wordbank` repository, with a provenance manifest. It is not read from `data/wordbank_administration_data.csv`, because Wordbank's by-child download page age-truncates every administration to its instrument's registered window (345 Down syndrome administrations reduced to 194) and cannot separate the four all-blank administrations it scores as zeros. `--verify` checks the in-window rows against the export as a multiset. See [`data/vocab_data_us_01.md`](data/vocab_data_us_01.md). The export is still the source for the typically-developing pool, for which the age filter is appropriate.
@@ -77,7 +76,7 @@ This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01
 ### Fit a model
 
 ```bash
-python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>] [--trace-persistence <tier>]
+uv run python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>] [--trace-persistence <tier>]
 ```
 
 - `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, `vg19`, `vg20`, or `all`.
@@ -93,7 +92,7 @@ Output (traces, figures, summary tables) is written to `<output-root>/models/<mo
 ### Run parameter-recovery checks
 
 ```bash
-python scripts/fit_recovery.py <model|headline|all> [--config <config>] [--replicates <n>] [--truth posterior|prior] [--simulate-only | --fit-only | --compare-only] [--output-dir <dir>]
+uv run python scripts/fit_recovery.py <model|headline|all> [--config <config>] [--replicates <n>] [--truth posterior|prior] [--simulate-only | --fit-only | --compare-only] [--output-dir <dir>]
 ```
 
 Simulates a dataset from a model at a known parameter draw, refits the model to it with the engine's own pipeline, and scores the recovered posterior against the truth. `headline` is `vg20`, `vg12`, `vg15`; `all` is every supported model (`vg07`-`vg13`, `vg15`, `vg19`, `vg20` — VG16 is excluded because its cross-lag predictor is a function of the outcome). Truth defaults to the model of record's posterior (requires a fitted model of record); `--truth prior` needs no trace but tests parameter settings far from the reported regime. Recovery fits land in `<output-root>/models/<model_id>-<config>-recovery-rNN/` and never touch a model of record; tables land in `<output-root>/comparisons/recovery/`. A replicate is only assessed if its fit's convergence is confirmed. See `docs/runbooks/parameter-recovery.md`, including what a handful of replicates can and cannot establish.
@@ -101,7 +100,7 @@ Simulates a dataset from a model at a known parameter draw, refits the model to 
 ### Sync report figures
 
 ```bash
-python scripts/sync_report_figures.py [--config <config>] [--output-dir <dir>]
+uv run python scripts/sync_report_figures.py [--config <config>] [--output-dir <dir>]
 ```
 
 Validates the model definition, sampling configuration, raw-data fingerprint, complete lifecycle state, reporting quality, clean fit provenance and rendered model report before atomically replacing cached plots (`.svg`/`.png`) and summary tables (`.csv`) from the output root's `models/` and `comparisons/` in `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. `--allow-provisional` keeps lifecycle/model/sampling checks for local dev/test work while relaxing publication provenance. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.

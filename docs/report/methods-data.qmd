@@ -1,6 +1,6 @@
 ---
 title: "Data and measures"
-abstract: "This chapter describes the data behind the analyses: parent-report vocabulary assessments of children with Down syndrome pooled from several international studies and harmonised onto a common 810-item reference inventory. For each study we tabulate the numbers of words understood and spoken — and, for the signing sub-set, words signed — by age, alongside the observation and child counts, age range, and per-measure summaries. It then documents the measurement decisions that shape those counts: the common 810-item scale and its relationship to each source form's native checklist ceiling, the production-only treatment of Wordbank Words & Sentences records, and the study-specific inclusion rules applied when loading the data."
+abstract: "**TODO**"
 ---
 
 ::: {.callout-note}

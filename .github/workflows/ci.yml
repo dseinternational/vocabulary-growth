@@ -41,39 +41,49 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10.0.1
         with:
-          python-version: "3.14"
-
-      - name: Install ruff
-        run: pip install ruff
+          enable-cache: true
 
       - name: Lint
-        run: ruff check src/ scripts/
+        run: uv run ruff check src/ scripts/
 
-  # Linux only. Native Windows cannot solve the compiled stack at all
-  # (jax/jaxlib have no conda-forge win-64 build); Windows users work in Ubuntu
-  # on WSL, which is linux-64 and so is covered here. macOS (osx-arm64) is the
-  # local development platform and is exercised there; conda-lock.yml pins it,
-  # so CI does not spend a second full environment solve on it.
   model-fit-tests:
-    runs-on: ubuntu-26.04
-    defaults:
-      run:
-        shell: bash -el {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Native Windows is now covered. It was previously omitted because
+        # jax/jaxlib have no conda-forge win-64 build, which forced Windows
+        # contributors onto WSL; on PyPI jaxlib publishes cp314 win_amd64
+        # wheels, so the whole stack installs natively.
+        #
+        # macOS (osx-arm64) is the local development platform and is exercised
+        # there, so CI does not spend a third full run on it. Intel macOS is
+        # absent because upstream has dropped it: numba ships no macosx x86_64
+        # wheels at all. See `tool.uv.environments` in pyproject.toml.
+        os: [ubuntu-26.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # The console output uses ✓ and · characters. Windows still defaults stdout
+    # to the legacy cp1252 code page, and rich raises UnicodeEncodeError rather
+    # than degrading, so the first completed pipeline section kills the run.
+    # PEP 686 makes UTF-8 mode the default from Python 3.15; until then, ask.
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - name: Setup conda environment
-        uses: mamba-org/setup-micromamba@v3.2.1
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10.0.1
         with:
-          environment-file: environment.yml
-          cache-environment: true
-          cache-downloads: true
+          enable-cache: true
 
-      - name: Verify environment core matches the canonical spec
-        run: dse-check-env environment.yml
+      # --locked fails the build if uv.lock is stale rather than silently
+      # resolving something different from what was reviewed. uv provisions the
+      # interpreter itself from .python-version, so there is no setup-python
+      # step.
+      - name: Install the locked environment
+        run: uv sync --locked
 
       # Before pytest, not after: the tests that pin the study-level inclusion
       # counts quoted in the notes and the report open the real database rather
@@ -81,10 +91,10 @@ jobs:
       # ~300 ms, so running those assertions is effectively free — and a suite
       # that silently skipped them would report green while the counts drifted.
       - name: Prepare data
-        run: python scripts/prepare_data.py
+        run: uv run --no-sync python scripts/prepare_data.py
 
       - name: Run pytest
-        run: pytest
+        run: uv run --no-sync pytest
 
       - name: Fit model VG01 (dev)
-        run: python scripts/fit_model.py vg01 --config dev
+        run: uv run --no-sync python scripts/fit_model.py vg01 --config dev

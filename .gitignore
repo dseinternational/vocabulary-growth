@@ -61,9 +61,6 @@ __pycache__/
 venv/
 env/
 ENV/
-.conda/
-.condarc
-.python-version
 
 # Packaging / build
 build/

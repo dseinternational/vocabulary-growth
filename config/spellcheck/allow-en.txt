@@ -49,6 +49,7 @@ Marchman
 McElreath
 Mervis
 Miniforge
+Monaspace
 NZCDI
 Næss
 Odorico
@@ -56,6 +57,7 @@ Oijen
 Ornstein
 Pagnamenta
 Palacios
+Pandoc
 Plunkett
 Psychometrika
 PyMC
@@ -70,6 +72,7 @@ TOST
 Thal
 Tovar
 Trivariate
+Typst
 UKRI
 Uhlenbeck
 Vehtari
@@ -149,6 +152,7 @@ nonparametric
 nonparametrics
 nonwords
 nonzero
+numba
 nunique
 nutpie
 orcid
