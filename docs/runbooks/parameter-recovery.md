@@ -23,20 +23,21 @@ One consequence is worth stating plainly. In the real data a handful of rows rec
 python scripts/fit_recovery.py headline --config test
 ```
 
-`headline` is VG10, VG12 and VG15 — the three models #163 gates. Use a single model key for one model, or `all` for every supported model. Each replicate simulates, refits and scores.
+`headline` is VG20, VG12 and VG15 — the three models #163 gates, tracking the model-of-record roles rather than the lineage (it was VG10 until VG20 took the Down syndrome joint role on 2026-08-19). Use a single model key for one model, or `all` for every supported model. Each replicate simulates, refits and scores.
 
 Useful options:
 
-| Option                     | Effect                                                                  |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `--replicates N`           | Replicates per model (default 3).                                       |
-| `--replicate N`            | Run only replicate N; repeatable.                                       |
-| `--truth posterior\|prior` | Where the truth comes from (default `posterior`).                       |
-| `--config`                 | Sampling configuration; `test` is the honest tier for a recovery claim. |
-| `--simulate-only`          | Simulate and stop. No MCMC, so this is seconds per replicate.           |
-| `--fit-only`               | Refit existing simulated data.                                          |
-| `--compare-only`           | Re-score existing recovery fits.                                        |
-| `--output-dir`             | Output root, as elsewhere in the project.                               |
+| Option                     | Effect                                                                   |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `--replicates N`           | Replicates per model (default 3).                                        |
+| `--replicate N`            | Run only replicate N; repeatable.                                        |
+| `--truth posterior\|prior` | Where the truth comes from (default `posterior`).                        |
+| `--config`                 | Sampling configuration; `test` is the honest tier for a recovery claim.  |
+| `--simulate-only`          | Simulate and stop. No MCMC, so this is seconds per replicate.            |
+| `--fit-only`               | Refit existing simulated data.                                           |
+| `--compare-only`           | Re-score existing recovery fits.                                         |
+| `--variant NAME`           | Recover a registered sensitivity variant instead of the model of record. |
+| `--output-dir`             | Output root, as elsewhere in the project.                                |
 
 The stages are separable so a long run can be resumed, and so the simulation can be inspected before hours of sampling are committed. A sensible sequence for a real study:
 
@@ -53,6 +54,23 @@ Each replicate's inputs live in `<output root>/recovery/<model_id>-<config_name>
 - `synthetic_analysis_frame.parquet` — the simulated dataset, written and read through DuckDB. Parquet keeps dtypes, integer widths and missingness exactly, so a numeric-looking `subject_id` cannot come back as an integer; the round trip is verified at write time, including dtype identity, so a lossy write fails during simulation rather than surfacing as an unexplained difference in the refit. DuckDB carries its own Parquet implementation, so this needs no `pyarrow` Parquet support — which the pinned environment does not provide (see [#178](https://github.com/dseinternational/vocabulary-growth/issues/178)).
 - `truth.nc` — the single parameter draw the data were generated from, plus the reported deterministics computed from it.
 - `simulation.json` — provenance: the truth's source, chain and draw, the simulation order, the likelihood row counts, and every coherence check that passed.
+
+### Recovering a sensitivity variant
+
+Most registered variants change a prior, and a prior change does not need its own recovery: the structure whose recoverability was established is unchanged. `--variant` exists for the ones that change the **graph**, where the model of record's recovery says nothing.
+
+```bash
+python scripts/fit_recovery.py vg10 --variant a1-tau-age-varying --config test
+```
+
+Two things follow from the variant being a different model, and both are deliberate rather than incidental:
+
+- **The truth comes from the variant's own posterior**, not the record's, so `--truth posterior` requires the _variant_ to have been fitted. There is no alternative — a variant carrying parameters the record does not have (`log_tau_subj_q_ratio`, say) has nowhere else to get them.
+- **The engine is still resolved from the base model key.** A variant shares its base model's engine by construction; reading the recovery spec off the variant instead would let a mis-registered override quietly select a different simulator.
+
+Output is labelled `<model>-<variant>` throughout — `recovery_matrix_vg10-a1-tau-age-varying.csv` — so a variant's record cannot be confused with, or overwrite, the model of record's.
+
+**Siting the check where identification is hard.** A recovery whose truth sits where the data are plentiful will succeed and prove nothing. Proposal A1 is the worked example: its claim is about the split between the between-child scale and the dispersion, and [202608141600](../../notes/202608141600-rank-stability-tracking.md) §5 shows that on Down syndrome _production_ below 30 months the binomial measurement bound exceeds the entire within-child variance — the two are not separable there at all. A1's parameterisation puts a named parameter at each end of that range (`tau_subj_q_young` at 24 months against a flat `kappa_s`), so the young-age production question is scored directly, per parameter, on the full design. **A recovery failure on that pair is the informative outcome**, not a blocked one: it would confirm from inside the model what the repeated measures say from outside. Score comprehension and production separately — their measurement shares differ by an order of magnitude.
 
 ### Choosing the truth source
 
@@ -90,7 +108,7 @@ What a small number of replicates _does_ support:
 
 ## Coverage and known gaps
 
-Supported: VG07–VG13 and VG15 (the study-random-effect bivariate engine, the univariate engine, and the joint sign/speech engine). This covers all three headline models.
+Supported: VG07–VG13, VG15 and VG20 (the study-random-effect bivariate engine, the univariate engine, the joint sign/speech engine, and the correlated-subject bivariate engine). This covers all three headline models.
 
 Not supported, deliberately:
 

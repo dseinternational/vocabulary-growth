@@ -76,6 +76,32 @@ def comp_load(name):
     return pd.read_csv(p) if p.exists() else None
 
 
+def recovery_rows(model_id, quantity):
+    """One row per recovery replicate for `quantity`, or None if unavailable.
+
+    Replicate files are `comparisons/recovery/recovery_<model>_rNN.csv`; each
+    scores one simulate-and-refit against the draw it was simulated from. The
+    caveats that cite these want the replicates side by side, not aggregated,
+    because a bias claim rests on the direction repeating.
+    """
+    root = COMP_ROOT / "recovery"
+    if not root.is_dir():
+        return None
+    paths = sorted(root.glob(f"recovery_{model_id.lower()}_r[0-9][0-9].csv"))
+    rows = []
+    for p in paths:
+        df = pd.read_csv(p)
+        hit = df[df["quantity"] == quantity]
+        if not hit.empty:
+            rows.append(hit.iloc[0])
+    return pd.DataFrame(rows).reset_index(drop=True) if rows else None
+
+
+def zlist(df, fmt="{:+.2f}"):
+    """The z column of a recovery frame as a prose list."""
+    return ", ".join(fmt.format(z) for z in df["z"])
+
+
 def comp_at(name, match_col, match_val, col):
     """Value of `col` in comparison CSV `name` at the row whose `match_col` is
     nearest `match_val`, or None."""
@@ -110,6 +136,173 @@ def dq_facts(name="ds_td_comprehension_q_at_U", **kwargs):
     from vocab_growth.comparison import dq_contrast_facts
 
     return dq_contrast_facts(comp_load(name), **kwargs)
+
+
+# --- Generic derived facts over any comparison table -------------------------
+#
+# `dq_contrast_facts` is not specific to Δq: it takes the grid column and the
+# column prefix, coverage-filters, and reports the covered range, the credible
+# sub-ranges, the signed peak and whether the quantity rises with the grid. The
+# results chapters use it for every level- and age-indexed contrast, so a
+# direction word ("grows", "behind", "narrows") is always read off the same
+# filtered table the chapter tabulates and can never disagree with it.
+
+# Column names `summarise_draws` writes with no prefix (the attainment-delay
+# tables), mapped onto a prefix so the shared helper can read them.
+_BARE_COLS = ("median", "ci50_lo", "ci50_hi", "ci_lo", "ci_hi", "coverage", "p_gt0")
+
+
+def comp_facts(name, *, grid_col="age_months", prefix="d", bare=False, **kwargs):
+    """Derived facts about a comparison table, or None if it is not present."""
+    from vocab_growth.comparison import dq_contrast_facts
+
+    df = comp_load(name)
+    if df is not None and bare:
+        df = df.rename(columns={c: f"{prefix}_{c}" for c in _BARE_COLS if c in df.columns})
+    return dq_contrast_facts(df, grid_col=grid_col, prefix=prefix, **kwargs)
+
+
+def comp_row(name, grid_col, grid_val, *, prefix="d", bare=False):
+    """Row of a comparison table nearest a grid value, or None.
+
+    `bare=True` renames the unprefixed `summarise_draws` columns onto `prefix`,
+    matching `comp_facts`, so a single quantity per file reads like every other.
+    """
+    df = comp_load(name)
+    if df is None or grid_col not in df.columns:
+        return None
+    if bare:
+        df = df.rename(columns={c: f"{prefix}_{c}" for c in _BARE_COLS if c in df.columns})
+    return df.iloc[int((df[grid_col] - grid_val).abs().argmin())]
+
+
+def band(row, prefix="d", fmt="{:.1f}", unit=""):
+    """A median with its 89% interval, for prose: `13.2 months (89% 12.2 to 14.2)`."""
+    if row is None:
+        return "—"
+    keys = [f"{prefix}_median", f"{prefix}_ci_lo", f"{prefix}_ci_hi"]
+    if any(k not in row or pd.isna(row[k]) for k in keys):
+        return "—"
+    mid, lo, hi = (float(row[k]) for k in keys)
+    tail = f" {unit}" if unit else ""
+    return f"{fmt.format(mid)}{tail} (89% interval {fmt.format(lo)} to {fmt.format(hi)})"
+
+
+def comp_band(name, grid_col, grid_val, prefix="d", fmt="{:.1f}", unit="", *, bare=False):
+    """`band` for the row of a comparison table nearest a grid value."""
+    return band(comp_row(name, grid_col, grid_val, prefix=prefix, bare=bare), prefix, fmt, unit)
+
+
+def direction(row, prefix="d", *, positive, negative, unclear="not distinguishable from zero"):
+    """The word the interval licenses: one of three, chosen by where it sits.
+
+    Prose that names a direction must take it from the same interval it quotes.
+    Typing the word by hand is how the Δq paragraph came to call a positive
+    point estimate "negative" after a refit moved it.
+    """
+    if row is None:
+        return "—"
+    lo, hi = f"{prefix}_ci_lo", f"{prefix}_ci_hi"
+    if lo not in row or hi not in row or pd.isna(row[lo]) or pd.isna(row[hi]):
+        return "—"
+    if float(row[lo]) > 0:
+        return positive
+    if float(row[hi]) < 0:
+        return negative
+    return unclear
+
+
+def milestone(name, quantity, fmt="{:.0f}", unit="months"):
+    """A row of a milestones table (quantity/median/ci_lo/ci_hi) as prose."""
+    df = comp_load(name)
+    if df is None or "quantity" not in df.columns:
+        return "—"
+    hit = df[df["quantity"] == quantity]
+    if hit.empty:
+        return "—"
+    row = hit.iloc[0]
+    tail = f" {unit}" if unit else ""
+    return (
+        f"{fmt.format(row['median'])}{tail} "
+        f"(89% interval {fmt.format(row['ci_lo'])} to {fmt.format(row['ci_hi'])})"
+    )
+
+
+def counts_at(model_id, summary, ages, key="age_months"):
+    """A posterior summary reduced to selected ages, with reporting column names."""
+    df = load_summary(model_id, summary)
+    if df is None or key not in df.columns:
+        return None
+    rows = sorted({int((df[key] - a).abs().argmin()) for a in ages})
+    return format_counts(df.iloc[rows])
+
+
+def rows_at(model_id, summary, ages, columns, key="age_months"):
+    """Selected columns of a posterior summary at selected ages, renamed for display.
+
+    `columns` maps source column to display name. Unlike `counts_at` this makes
+    no assumption about the column schema, which VG15 needs: its canonical
+    tables prefix by outcome (`Ey_u_median`, not `Ey_median`) and carry no
+    predictive columns, because the joint sign/speech engine draws no predictive
+    counts on the plot grid.
+    """
+    df = load_summary(model_id, summary)
+    if df is None or key not in df.columns:
+        return None
+    rows = sorted({int((df[key] - a).abs().argmin()) for a in ages})
+    keep = {k: v for k, v in columns.items() if k in df.columns}
+    if not keep:
+        return None
+    return df.iloc[rows][list(keep)].rename(columns=keep).round(2)
+
+
+def caveats_table(models=None):
+    """The convergence caveats recorded for the fits a chapter relies on.
+
+    Returns None when the caveats file itself is absent — nothing is known —
+    and an explicit "none recorded" row when the file is present but names none
+    of these fits. The two cases must not read the same: a missing file is not
+    evidence that a fit sampled cleanly.
+    """
+    path = FIG_ROOT / "convergence_caveats.csv"
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    if models is not None:
+        df = df[df["model"].isin(list(models))]
+    if df.empty:
+        return pd.DataFrame([{
+            "Model": ", ".join(models) if models else "all",
+            "Caveat": "none recorded",
+            "Consequence": "these fits cleared both the hard and the soft convergence tiers.",
+        }])
+    return df.rename(columns={"model": "Model", "caveat": "Caveat",
+                              "consequence": "Consequence"}).reset_index(drop=True)
+
+
+def loo_table(models):
+    """Per-model leave-one-out summaries stacked into one table, or None.
+
+    Written by the fit (`loo_summary.csv`); absent until the model has been
+    refitted or backfilled, in which case the chapter reports it as pending
+    rather than quoting a number from somewhere else.
+    """
+    frames = []
+    for model_id in models:
+        df = load_summary(model_id, "loo_summary")
+        if df is None:
+            continue
+        keep = df[["outcome", "elpd_loo", "se", "p_loo", "n_data_points"]].copy()
+        keep.insert(0, "Model", model_id)
+        frames.append(keep)
+    if not frames:
+        return None
+    out = pd.concat(frames, ignore_index=True)
+    out.columns = ["Model", "Outcome", "ELPD", "SE", "Effective parameters", "Observations"]
+    out[["ELPD", "SE", "Effective parameters"]] = out[
+        ["ELPD", "SE", "Effective parameters"]
+    ].round(1)
+    return out
 
 
 def dq_words(kind="positive"):

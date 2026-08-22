@@ -12,7 +12,14 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      - repo
+      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
+      # for a git remote, and the per-model reports are rendered in the OUTPUT
+      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
+      # no repository above it, so `repo` became a hard render error. This emits
+      # the identical link and does not depend on where the render happens.
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
 ::: {.callout-note}
@@ -32,8 +39,12 @@ Every contrast is a **per-draw difference of the disjoint DS and TD posteriors**
 because the two datasets share no studies or children, the joint posterior
 factorises, so pairing draws gives an _exact_ credible interval for any contrast
 with **no joint model** required. (The generative joint model that would make the
-DS–TD gap itself a parameter is the reserved **VG16**; this report shows the
-headline questions are already answerable without it.)
+DS–TD gap itself a parameter is not built and holds no reserved model number —
+it was reserved as VG16 until that number was taken by the Down syndrome
+within-child cross-lag — and this report shows the headline questions are already
+answerable without it. The full reasoning, including what such a model could
+share across the two populations and what would reopen the decision, is in
+`notes/202608200906-joint-ds-td-model-not-built.md`.)
 
 ```{python}
 import numpy as np
@@ -71,18 +82,28 @@ def plain_at(df, idxcol, idxval, dec=0, cov_min=0.80):
 
 | Role                                   | Model(s)                          |
 | -------------------------------------- | --------------------------------- |
-| DS expected words / ratio / delay      | **VG10** (joint U+S, study+subject REs) |
-| DS dispersion / distribution           | **VG07** (joint U+S, study RE only)     |
-| DS sign-inclusive total expressive     | **VG14** (trivariate, `p_any`)          |
+| DS expected words / ratio / delay      | **VG20** (joint U+S, study+subject REs, correlated) |
+| DS dispersion / distribution           | **VG20** (as above)                     |
+| DS between-child heterogeneity         | **VG20** (as above)                     |
+| DS sign-inclusive total expressive     | **VG15** (joint sign/speech, `p_any`)   |
 | TD spoken / understood (univariate)    | **VG11 / VG12** (study RE)              |
 | TD joint (comprehension-matched)       | **VG13** (joint, 8–18 mo)               |
 
 All contrasts are at the **population level** (random effects excluded, so the
 estimand is identical on both sides) and restricted to the **empirical age/level
-overlap**. Dispersion and distributional contrasts deliberately use the
-**study-RE-only** DS model (VG07) so the Beta-Binomial concentration κ is the
-like-for-like between-child quantity — VG10's subject random effects would absorb
-child variance that the TD models keep in κ.
+overlap**.
+
+Every DS row now comes from the same model. It did not always: dispersion and
+distributional contrasts used the **study-RE-only** VG07, because κ only means the
+same thing on both sides when the two sides agree on whether a subject random
+effect is present to absorb between-child variance, and VG11/VG12 were study-RE
+only. Adding child random effects to the TD models (#164) inverted that — VG07's κ
+now carries child variance the TD models' κ does not — so the dispersion key moved
+to the DS model of record on **2026-08-05**. This table went on naming VG07 until
+**2026-08-19**, when the same edit that moved the model of record to VG20 caught
+it; readers of the earlier editions were told the dispersion contrast came from a
+model it had not come from for two weeks. The numbers in those editions were
+computed from VG10 and are unaffected.
 
 ::: {.callout-important}
 **The TD models only span ~8–30 months.** Several estimands are therefore
@@ -374,7 +395,7 @@ counts only persistent between-child differences: unlike $\sigma_Y$ it excludes
 the Beta-Binomial noise.
 
 $\tau$ is a parameter on the TD side (`tau_subject`, constant in age) but a
-*derived* quantity on the DS side. VG10 places its child effects on understood
+*derived* quantity on the DS side. VG20 places its child effects on understood
 (`tau_subj_u`) and on the production ratio (`tau_subj_q`), with spoken built as
 $p_S = p_U \cdot q$, so it has no spoken child scale to read off, and the induced
 spoken $\tau$ varies with age even though both underlying scales are constants.
@@ -411,19 +432,146 @@ pd.DataFrame(rows).set_index("Age (mo)")
 ![Between-child spread in expected words σ_child — understood](ds_td_understood_re_subject_spread.png){#fig-sdc-u .lightbox fig-align="left"}
 
 **The two scales disagree, and the relative one reverses the absolute reading.**
-Children with Down syndrome differ from one another _more_ than typically developing children do, on both outcomes and at every age in the overlap, with posterior probability ≈ 1.00. For spoken words τ_DS runs 1.44 at 8 months to 1.27 at 30, against a constant τ_TD of 1.04 (ratio 0.72 rising to 0.82); for comprehension τ_DS is 0.79 against τ_TD 0.69 (ratio 0.87). Yet σ_child in words runs the other way by a wide margin — 173 words TD against 36 DS for spoken at 30 months — because the typically developing group sits at a far higher level, and the same relative spread around a larger mean is a larger absolute spread.
+Children with Down syndrome differ from one another _more_ than typically developing children do, on both outcomes and at every age in the overlap, with posterior probability ≈ 1.00.
+
+```{python}
+#| echo: false
+#| output: asis
+# Computed, not typed: an earlier hand-written version of this paragraph quoted
+# spoken τ_DS as "1.44 at 8 months to 1.27 at 30" and the ratio as "0.72 rising
+# to 0.82". Under the 13-16 August refits that became 1.47 → 1.31 and 0.70 →
+# 0.80; under VG20's correlated between-child derivation (2026-08-19) it is
+# 1.69 → 1.50 and 0.61 → 0.69. Three sets of numbers, one paragraph, and the
+# prose only survived because it is generated.
+_lo, _hi = float(he_s["age_months"].min()), float(he_s["age_months"].max())
+_a, _b = _nearest(he_s, "age_months", _lo), _nearest(he_s, "age_months", _hi)
+_u = _nearest(he_u, "age_months", he_u["age_months"].max())
+_ulo, _uhi = float(he_u["age_months"].min()), float(he_u["age_months"].max())
+_sd = _nearest(he_s, "age_months", _hi)
+print(
+    f"For spoken words τ_DS runs {_a['tau_DS_median']:.2f} at {_lo:.0f} months to "
+    f"{_b['tau_DS_median']:.2f} at {_hi:.0f}, against a constant τ_TD of "
+    f"{_a['tau_TD_median']:.2f} (ratio {_a['tau_ratio_median']:.2f} rising to "
+    f"{_b['tau_ratio_median']:.2f}); for comprehension, over its own narrower "
+    f"overlap of {_ulo:.0f}–{_uhi:.0f} months, τ_DS is {_u['tau_DS_median']:.2f} "
+    f"against τ_TD {_u['tau_TD_median']:.2f} (ratio {_u['tau_ratio_median']:.2f}). "
+    f"Because only the DS side varies with age, a single ratio has to be quoted "
+    f"with the age it is read at. Yet σ_child in words runs the other way by a "
+    f"wide margin — {_sd['sdchild_TD_median']:.0f} words TD against "
+    f"{_sd['sdchild_DS_median']:.0f} DS for spoken at {_hi:.0f} months — because "
+    f"the typically developing group sits at a far higher level, and the same "
+    f"relative spread around a larger mean is a larger absolute spread."
+)
+```
 
 Both statements describe the same posterior. Which one answers "are these children more alike?" depends on what is being asked: on the population-relative scale Down syndrome vocabulary is the _more_ variable of the two, while in absolute word counts it is much the less variable. Neither is the reading a glance at the overdispersion panel above would suggest, which is the point of separating the two sections.
 
-The age profiles differ by construction, and are worth reading as a check on the derivation. τ_TD is flat because the univariate models place a single intercept on the outcome's logit; τ_DS for comprehension is flat for the same reason. τ_DS for _spoken_ declines with age even though both of VG10's subject scales are constants, because the spoken logit is reached through $p_U$ and $q$ — that decline is a property of the product form, not a finding about children becoming more alike.
+The age profiles differ by construction, and are worth reading as a check on the derivation. τ_TD is flat because the univariate models place a single intercept on the outcome's logit; τ_DS for comprehension is flat for the same reason. τ_DS for _spoken_ declines with age even though both of VG20's subject scales are constants, because the spoken logit is reached through $p_U$ and $q$ — that decline is a property of the product form, not a finding about children becoming more alike.
 
-Two caveats bound how far this contrast can be pushed. First, the priors are not
-symmetric: on the TD side $\tau_{subject}$ and $\kappa$ are sampled through the
-shared-budget reparameterisation, with an informative prior on how the budget
-splits, while on the DS side they are two free scales — so part of any $\tau$
-difference is a difference in prior structure, and the TD pool averages 1.21
-observations per child, which is what made that reparameterisation necessary in
-the first place. Second, $\tau$ is matched on *age*. At matched age the DS group
+::: {.callout-important title="The spoken contrast carries an assumption the comprehension contrast does not"}
+The comprehension contrast is like-for-like in a strong sense: a single Gaussian intercept on the understood logit on both sides. The spoken contrast is not, in three ways, and only the third biases the number.
+
+**Induced versus primitive.** τ_TD is a free parameter; τ_DS is derived by integrating $\text{sigmoid}(f_u + \tau_u Z_1)\cdot\text{sigmoid}(h + \tau_q Z_2)$. Targeting the SD of the child's *spoken logit* is what makes the two the same estimand — the alternative, contrasting `tau_subj_q` against `tau_subject`, would set the spread of a conversion ratio against the spread of a level. But the induced child-logit distribution is skewed where the TD one is exactly Gaussian, so equal τ matches the first two moments of differently shaped distributions and does not imply equal spread in the tails.
+
+**Age.** Only the DS side varies with age, so the ratio is a curve read at a point, not a single contrast.
+
+**An independence constraint that used to sit on one side only — now removed.** VG10 drew each child's comprehension deviation and production-ratio deviation as two independent standard Normals, estimated no correlation between them, and the derivation above assumed that independence; VG11's single spoken intercept never placed such a restriction, absorbing the whole between-child spoken variance, correlation included. So the asymmetry was in the contrast, not in one model's internals. **VG20 estimates the correlation**, and since 2026-08-19 the derivation above integrates $Z_2 = \rho Z_1 + \sqrt{1-\rho^2}\,Z_2'$ rather than an independent $Z_2$.
+
+```{python}
+#| echo: false
+#| output: asis
+_c = pd.read_csv("ds_subject_effect_correlation.csv")
+_c = _c.assign(_k=_c["model"].str.lower()).set_index("_k")
+_now = _c.loc["vg20"] if "vg20" in _c.index else _c.iloc[0]
+_then = _c.loc["vg10"] if "vg10" in _c.index else None
+_txt = (
+    f"The fitted correlation is **+0.368** (89% interval +0.287 to +0.447); read "
+    f"back out of the model's own per-child deviations it is "
+    f"{_now['corr_median']:+.3f} ({_now['corr_ci_lo']:+.3f} to "
+    f"{_now['corr_ci_hi']:+.3f}) across {_now['n_children']:.0f} children, which is "
+    f"the check that the parameter does what it claims to."
+)
+if _then is not None:
+    _txt += (
+        f" The superseded model's deviations correlated at only "
+        f"{_then['corr_median']:+.3f} ({_then['corr_ci_lo']:+.3f} to "
+        f"{_then['corr_ci_hi']:+.3f}) — the difference is the pull of a prior that "
+        f"asserted independence, not a difference between the children."
+    )
+_txt += (
+    " Since $\\log p_S = \\log p_U + \\log q$ gains $2\\,\\mathrm{Cov}$, the "
+    "independent-draw derivation **understated** the DS spoken between-child scale "
+    "by about 15% on the logit scale at every age. τ_DS for comprehension is "
+    "unaffected, as it must be: the correlation changes how the two deviations "
+    "co-vary, not either one's marginal spread."
+)
+print(_txt)
+```
+
+The direction is what saved the earlier finding. DS was already the more variable side, so the correction moves the spoken ratio further below 1 — it strengthens rather than reverses, and the tables above now carry the corrected value. Every spoken between-child contrast published before 2026-08-19 is superseded by this and was biased toward the comprehension value; the comprehension contrast is unchanged, and the two rows can now be read against each other, which the bias did not previously permit.
+
+One caveat survives, pointing the other way. 432 of the 767 children are seen once, and 342 of those inform the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where shared reporter bias is not separable from shared child ability. So **+0.368 leans high**. VG16's cross-lag, which reads the child's comprehension from a *different* administration and is therefore immune to that artefact, implies about **+0.24** (89% interval +0.11 to +0.38) once corrected for the unreliability of its predictor. The two overlap; the truth is more likely in the lower half of VG20's interval, which would put the correction at somewhat less than the 15% quoted above.
+:::
+
+::: {.callout-important title="And the comprehension contrast carries a measured bias the spoken one does not"}
+The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate, and parameter recovery finds the bias on this side rather than the other.
+
+```{python}
+#| echo: false
+#| output: asis
+import glob
+_rr = [
+    pd.read_csv(f)
+    for f in sorted(glob.glob("recovery_vg12_r*.csv"))
+    if "aggregates" not in f
+]
+_ts = pd.concat([d[d["quantity"] == "tau_subject"] for d in _rr])
+_sh = pd.concat([d[d["quantity"] == "subject_variance_share"] for d in _rr])
+_vt = pd.concat([d[d["quantity"] == "v_total"] for d in _rr])
+_miss = int((~_ts["within_ci89"]).sum())
+_bias = float((_ts["posterior_mean"] / _ts["truth"] - 1.0).mean())
+_zs = ", ".join(f"{z:+.2f}" for z in _ts["z"])
+print(
+    f"Refitting VG12 to data simulated from its own posterior returns "
+    f"`tau_subject` below the truth in {len(_ts)} replicates of {len(_ts)} "
+    f"(z = {_zs}), a bias of {_bias:+.1%}, with the truth outside the 89% "
+    f"interval {_miss} of {len(_ts)} times. The budget is not what is "
+    f"mis-estimated — `v_total` recovers with z = "
+    f"{', '.join(f'{z:+.2f}' for z in _vt['z'])} — but the split is, with "
+    f"`subject_variance_share` low at z = "
+    f"{', '.join(f'{z:+.2f}' for z in _sh['z'])}. "
+    f"$\\tau_{{subject}} = \\sqrt{{share \\cdot v_{{total}}}}$ inherits that "
+    f"amplified, because the transformation concentrates its posterior."
+)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+_r0 = he_u.iloc[0]
+_corr = (_r0["tau_TD_median"] / (1.0 + _bias)) / _r0["tau_DS_median"]
+_word = "overstates" if _corr > _r0["tau_ratio_median"] else "understates"
+print(
+    f"$\\tau_{{subject}}$ is the typically-developing side of this contrast, so "
+    f"a low bias there **{_word}** the reported difference: the ratio TD/DS of "
+    f"{_r0['tau_ratio_median']:.3f} would sit near {_corr:.2f} if the bias "
+    f"carried over at the size these replicates suggest. The direction is "
+    f"opposite to the independence bias on the spoken side above, so the two "
+    f"outcomes are biased *toward each other* — which inflates any reading of "
+    f"the comprehension and spoken ratios against one another at both ends."
+)
+```
+
+Three `test`-tier replicates, truths drawn from the model's own posterior, so this is a self-consistency check and the magnitude should not be quoted. The direction is consistent and has a mechanism. VG11 carries the same reparameterisation at a very different reference proportion and has not been through recovery. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md`.
+:::
+
+Two further caveats bound how far this contrast can be pushed. First, the priors
+are not symmetric: on the TD side $\tau_{subject}$ and $\kappa$ are sampled
+through the shared-budget reparameterisation, with an informative prior on how
+the budget splits, while on the DS side they are two free scales — so part of any
+$\tau$ difference is a difference in prior structure, and the TD pool averages
+1.21 observations per child, which is what made that reparameterisation necessary
+in the first place. Second, $\tau$ is matched on *age*. At matched age the DS group
 sits near a floor where any spread measure is mechanically small, so a like-for-like
 reading of "are these children more alike" also wants the comparison at matched
 vocabulary level — which is what the attainment-delay and matched-comprehension
@@ -438,26 +586,159 @@ for a in [16, 20, 24, 30]:
     r = _nearest(si, "age_months", a)
     gap_sp = r["gap_spoken_median"]
     gap_any = r["gap_any_median"]
+    gap_indep = r["gap_any_indep_median"]
     narrow = (gap_sp - gap_any) / gap_sp if gap_sp else float("nan")
+    narrow_indep = (gap_sp - gap_indep) / gap_sp if gap_sp else float("nan")
     rows.append({
         "Age (mo)": a,
         "Sign credit (words)": band_at(si, "age_months", a, "credit", dec=0),
         "Gap (spoken only)": f"{gap_sp:.0f}",
         "Gap (with sign)": f"{gap_any:.0f}",
         "Narrowed by": f"{narrow:.0%}",
+        "…if independence assumed": f"{narrow_indep:.0%}",
     })
 pd.DataFrame(rows).set_index("Age (mo)")
 ```
 
-Counting signed words (DS total expressive `p_any` from VG14, newly powered by the
-ie_02 signing data) credits DS extra early expressive vocabulary and narrows the
-DS–TD expressive gap by ~14–15% in the 24–30 mo window. Real and specifically
-enabled by the new signing data, but modest: the gap stays enormous because TD
-production is mid-explosion here, and the window is capped at 30 mo by TD support.
+Counting signed words (DS total expressive `p_any` from VG15) credits DS extra
+early expressive vocabulary and narrows the DS–TD expressive gap by ~11–13% in
+the 24–30 mo window, and by more at younger ages where TD production is still
+small. Real, but modest **against this comparator**: the gap stays enormous
+because TD production is mid-explosion here. Read this alongside
+@sec-ds-signing, which asks what signing is worth to the child rather than to the
+gap, and reaches a very different-looking number from the same posterior.
+
+The last column is the same contrast computed **as if** sign and speech were
+independent given age. VG15 measures that association at $\psi$ = 2.34
+(89% ETI [1.89, 2.81], P($\psi$>1) = 1.00) — a child who signs a word is more
+likely to also say it — so independence double-counts the overlap and overstates
+total expressive vocabulary. The overstatement is small here (under one
+percentage point of narrowing, 1.6 words at 24 mo), but it is reported rather
+than assumed away, and it is why this section reads VG15 rather than the
+independence-assuming VG14.
+
+::: {.callout-warning title="Two bounds on this contrast"}
+**The window is capped at 30 months by TD support, not by signing data.** DS
+signing is now observed on 904 administrations from 549 children across nine
+studies, out to 115 months. Every observation above 30 months — including all of
+`uk_07`'s and `uk_06`'s — is outside this figure and cannot enter it. No amount
+of further DS signing data will extend this section; @sec-ds-signing is where
+that evidence goes.
+
+**TD expressive vocabulary is assumed to equal TD spoken vocabulary.** The
+Wordbank source carries comprehension and production only, with no gesture or
+sign measure, so TD receives a sign credit of exactly zero by construction rather
+than by measurement. For lexical signing that is a reasonable assumption — TD
+children are not generally taught a sign vocabulary — but it is an assumption,
+and it works in the direction of making the narrowing look larger.
+:::
 
 ![DS expressive gap to TD: spoken-only vs sign-inclusive](ds_td_sign_inclusive_gap.png){#fig-si-gap .lightbox fig-align="left"}
 
 ![DS expressive credit from non-speech modalities](ds_td_sign_inclusive_credit.png){#fig-si-credit .lightbox fig-align="left"}
+
+## What signing is worth to the child {#sec-ds-signing}
+
+The section above measures signing against typically developing children, where
+it looks marginal. That is the wrong denominator for a parent, a teacher or a
+speech and language therapist, and it is bounded at 30 months by a comparator
+this question does not need. Dropping the comparator changes both: the DS-internal
+quantities run to the comprehension reporting cap at 84 months, and the effect
+stops looking marginal.
+
+```{python}
+sp = pd.read_csv("ds_signing_profile.csv")
+rows = []
+for a in [18, 24, 30, 36, 48, 60, 72, 84]:
+    r = _nearest(sp, "age_months", a)
+    rows.append({
+        "Age (mo)": a,
+        "Spoken": f"{r['spoken_median']:.0f}",
+        "Any modality": f"{r['any_median']:.0f}",
+        "× spoken alone": band_at(sp, "age_months", a, "uplift", dec=2),
+        "Sign-only words": f"{r['sign_only_median']:.0f}",
+        "Share sign-only": band_at(sp, "age_months", a, "sign_only_share", dec=2),
+    })
+pd.DataFrame(rows).set_index("Age (mo)")
+```
+
+At two years a child with Down syndrome expresses about **four times** as much
+vocabulary as a speech-only count records, and roughly **three-quarters of
+everything they can express is available only in sign**. A speech-only assessment
+at that age is not measuring a slightly smaller vocabulary — it is missing most
+of it.
+
+The uplift then falls away steadily: ×2.2 at 36 months, ×1.3 at 48, ×1.06 by 72.
+**This is signing as a bridge** — it carries the most weight exactly where speech
+is least available, and hands over as speech arrives — and the hand-over has
+identifiable milestones:
+
+```{python}
+ms = pd.read_csv("ds_signing_milestones.csv").set_index("quantity")
+labels = {
+    "sign_only_peak_age": "Sign-only vocabulary peaks (mo)",
+    "sign_only_peak_words": "…at how many words",
+    "sign_only_share_below_half_age": "Sign-only falls below half of expressive vocabulary (mo)",
+    "speech_only_overtakes_sign_only_age": "Speech-only overtakes sign-only (mo)",
+}
+pd.DataFrame([
+    {"Milestone": lab,
+     "Estimate": _hdi(ms.loc[k, "median"], ms.loc[k, "ci_lo"], ms.loc[k, "ci_hi"], 1),
+     "Draws reaching it": f"{ms.loc[k, 'draws_reaching']:.0%}"}
+    for k, lab in labels.items()
+]).set_index("Milestone")
+```
+
+Every one is reached in 100% of posterior draws, so unlike the peak-growth ages
+above these are not boundary-censored.
+
+The three arrive in that order, and the spacing is the substantive part.
+Sign-only vocabulary stops *growing* at ≈34 months, but it is still the majority
+of everything the child can express for another ≈4 months, and still larger than
+speech-only for ≈5 months beyond that. So the two crossings are not signing
+falling away — they happen on a slow decline from about 50 words to about 44,
+while speech-only nearly triples over the same span (17 → 45). **Signing is overtaken
+because speech grows, not because signing stops.**
+
+The signed fraction of comprehension $r(a)$ tells the same story on its own
+scale, peaking near 29 months at 0.33 and falling to 0.15 by 84. Note that it
+peaks *earlier* than the sign-only word count above, and so does the sign-only
+share of comprehension (≈28 months) — no contradiction, because those are
+**shares** and this is a **count**. Sign-only words are understood words × the
+sign-only share, so their growth rates add; at 28 months comprehension is still
+growing at ~6% a month while the share is flat, so the count keeps rising until
+the share's decline is steep enough to cancel it at ~34 months. The gap is a
+statement about comprehension still growing, not about signing. VG15's report
+works this through.
+
+Nothing here says the bridge *causes* the crossing — see the caveat below — but
+the shape of the hand-over is now measurable, which it was not before `uk_07` and
+the reinstated `uk_06` signing rows extended the signed tail past 30 months.
+
+![How DS expressive vocabulary is expressed](ds_signing_composition.png){#fig-ds-sign-comp .lightbox fig-align="left"}
+
+![Signing as a bridge: its share falls as speech arrives](ds_signing_share.png){#fig-ds-sign-share .lightbox fig-align="left"}
+
+![What counting sign adds to a child's own expressive vocabulary](ds_signing_uplift.png){#fig-ds-sign-uplift .lightbox fig-align="left"}
+
+::: {.callout-important title="Does early signing predict later speech?"}
+The obvious follow-up — do children who sign more go on to *say* more? — is
+answerable in these data only in part, and
+[`notes/202608160930`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608160930-early-signing-and-later-speech.md)
+records the attempt. Among 147 children with signing, comprehension and speech at
+an early wave and speech at a later one, and holding the child's earlier speech
+and comprehension standing fixed, **how much** a child signs relative to what they
+understand predicts later spoken vocabulary (+0.19 SD per SD, 89% ETI
+[0.03, 0.36], stable under study fixed effects and under dropping any single
+study). **Whether** a child signs at all does not separate: that contrast spans
+zero and flips sign when any one study is dropped, because signing is very nearly
+a study-level property here — two studies are ~100% signers and one is 0%.
+
+None of this is causal. Signing is taught *because* a child is not talking, so the
+residual selection pushes the estimate down, which is the one direction that
+helps: a positive association survives that bias. It is not evidence that teaching
+signs raises speech.
+:::
 
 ## Reading
 
@@ -469,6 +750,18 @@ low vocabulary size, P > 0 ≈ 1.00), peaks several years later, and leaves ~90%
 Beta-Binomial dispersion is comparable for comprehension, while DS production
 stays compressed near the floor across the overlap; how much children within each
 population differ from one another is a separate question, answered by $\tau$ in
-@sec-between-child rather than by anything in the dispersion section. Signing
-partially — not wholly — compensates in the early years. Every headline here is recovered from the disjoint
-fits with exact intervals, with no joint model required.
+@sec-between-child rather than by anything in the dispersion section.
+
+Signing compensates partially — and how partial depends entirely on the
+denominator, which is the one place in this report where the same posterior
+supports two honest headlines that sound opposed. Against typically developing
+children it closes ~11–13% of the expressive gap at 24–30 months: real, modest,
+and bounded at 30 months by the comparator. Against the child's own repertoire it
+is the difference between saying 9 words and expressing 37 at two years, with
+three-quarters of that available only in sign. Both are true. The first is the
+right number for describing the population gap; the second is the right number
+for deciding how to assess a two-year-old, and it is the one the earlier drafts
+of this report did not carry.
+
+Every headline here is recovered from the disjoint fits with exact intervals,
+with no joint model required.

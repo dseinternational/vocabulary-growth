@@ -4,7 +4,8 @@
 DS-vs-TD population contrasts between RE-based models (separate-model, per-draw).
 
 Honest comparators only: the DS side is the spoken / understood **sub-curve of a
-random-effects DS model** (VG10 by default — study + subject REs), not the
+random-effects DS model** (VG20 by default — study + subject REs, with the
+correlation between the child's two deviations estimated), not the
 no-RE VG01/VG02. The TD side is the univariate study-RE models VG11 (spoken) /
 VG12 (understood).
 
@@ -18,8 +19,11 @@ on a **common age grid restricted to the empirical overlap**, using the
 **population-level (RE-excluded) outcome-scale** curve on both sides so the
 estimand is identical. A joint/stacked model that makes the TD-DS gap itself a
 generative object (partial pooling, a directly-estimated delay, difference-in-
-differences, the "delayed/scaled TD trajectory" hypothesis) is the reserved
-future **VG16** and is intentionally NOT built here.
+differences, the "delayed/scaled TD trajectory" hypothesis) is intentionally NOT
+built here, and **is not currently registered against any model number**. It was
+reserved as VG16 until that number was taken by the DS within-child cross-lag;
+nothing has replaced the reservation, so a reader should not expect this gap to
+be closed by an existing model.
 
 Estimands, per outcome, written to the configured comparisons dir (default
 ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
@@ -40,7 +44,7 @@ Estimands, per outcome, written to the configured comparisons dir (default
   proper: τ, the SD across children of the child's own logit for this outcome,
   and the spread in expected words σ_child it induces, per population, with
   Δτ, τ_TD/τ_DS and Δσ_child. See ``comparison.subject_heterogeneity`` for why
-  this is not simply VG10's ``tau_subj_q`` read against VG11's ``tau_subject``.
+  this is not simply VG20's ``tau_subj_q`` read against VG11's ``tau_subject``.
 
 Each panel is emitted as its own standalone figure (linear axes, no subplot
 grids) so the figures are usable individually:
@@ -68,9 +72,13 @@ import pandas as pd
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
 
-# DS comparator: VG10 spoken/understood sub-curve (study+subject REs). One-line
-# swap to vg07/vg08/vg09 for a sensitivity check (all carry random effects).
-DS_KEY = "vg10"
+# DS comparator: the model of record's spoken/understood sub-curve (study+subject
+# REs). One-line swap to vg07/vg08/vg09/vg10 for a sensitivity check (all carry
+# random effects). Moved vg10 -> vg20 on 2026-08-19 with the role (#224): VG20 is
+# VG10 plus the correlation between the child's two deviations, so the population
+# curves here are unchanged, but the between-child panel below is not — see the
+# note on the subject-heterogeneity estimand.
+DS_KEY = "vg20"
 # Dispersion must contrast a kappa that means the same thing on both sides. What
 # kappa means depends on whether a subject random effect is present to absorb
 # between-child variance: without one, kappa carries that variance; with one, it
@@ -90,9 +98,18 @@ DS_KEY = "vg10"
 # of spoken counts marginally. That joint-vs-univariate difference predates this
 # correction and has not been audited — see the comparison book's caveat.
 #
-# (Mean/rate/delay keep VG10 — subject REs are mean-zero, so the population
-# trajectory is unaffected.)
-DISP_DS_KEY = "vg10"
+# (Mean/rate/delay keep the same model — subject REs are mean-zero, so the
+# population trajectory is unaffected.)
+#
+# Second correction, 2026-08-19 (#224): the between-child panel this key also
+# drives was derived on the assumption that a child's comprehension and
+# production-ratio deviations are independent, because no DS model estimated a
+# correlation between them. VG20 does, at +0.368, and since
+# log p_S = log p_U + log q gains 2 Cov, the old derivation understated the DS
+# spoken between-child scale by about 15% on the logit scale at every age. The
+# comprehension scale is unaffected, as it must be. The July-2026 and 13-16
+# August published spoken between-child contrasts are superseded by this.
+DISP_DS_KEY = "vg20"
 # TD comparator per outcome: the univariate models, which since #164 carry both
 # study and subject random effects.
 TD_KEYS = {"spoken": "vg11", "understood": "vg12"}
@@ -110,17 +127,52 @@ MIN_COVERAGE = 0.80
 KEY_AGES = [12, 18, 24, 30]
 
 # Comprehension-matched lens needs JOINT models (U and S coupled per draw): the
-# DS joint VG10 vs the TD joint VG13 (RE-based, 8-18 mo). VG13 is the only valid
+# DS joint VG20 vs the TD joint VG13 (RE-based, 8-18 mo). VG13 is the only valid
 # TD joint model (wide-age TD comprehension is not validly measured; VG06 was
 # excluded as invalid).
-JOINT_DS_KEY = "vg10"
+JOINT_DS_KEY = "vg20"
 JOINT_TD_KEY = "vg13"
+# Hard ceiling on every comprehension-matched contrast, in words understood.
+#
+# Set by the TD side's support, not by the DS side or by taste. The TD joint
+# model's q-by-understood grid reaches 220.9 words at VG13's 8-18 month window,
+# 328.0 under `window-22` (8-22) and 355.8 under `window-25` (8-25). 320 sits
+# just inside `window-22`, which is the extension adopted on 2026-08-21 --
+# `window-25`'s extra reach comes from the 23-25 month rows where 20-36% of
+# Oxford CDI administrations sit within 10% of the form's 418-item cap, and its
+# q reads visibly high there (0.602 against `window-22`'s 0.504 at 328 words,
+# 89% intervals no longer overlapping). Stopping at 320 keeps every published
+# matched-comprehension number inside ceiling-safe TD support.
+# See notes/202608211100-window-22-adopted.md.
+MAX_MATCHED_U = 320.0
+
 # Comprehension levels N (words understood) for the q(U=N) view. Small-N tail is
-# noisy (S/U unstable when U barely exceeds N); high-N tail is coverage-limited.
+# noisy (S/U unstable when U barely exceeds N); the high-N tail is bounded by
+# MAX_MATCHED_U above and coverage-filtered below it.
 N_GRID_Q = np.array(
-    [10, 15, 20, 25, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400],
+    [n for n in
+     [10, 15, 20, 25, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300, 320]
+     if n <= MAX_MATCHED_U],
     dtype=float,
 )
+
+def resolve_joint(key: str) -> tuple[str, int, str]:
+    """Resolve a joint-model key that may name a registered sensitivity variant.
+
+    Accepts ``vg13`` or ``vg13:window-22``. The suffix selects the variant's own
+    fit directory (``<model_id>-<config_name>-<suffix>``); the trial count and
+    population come from the base registry entry, which a window variant does
+    not change. Returns ``(trace_path, n_trials, label)``.
+    """
+    base, _, suffix = key.partition(":")
+    if not suffix:
+        return C.trace_path(base), C.n_trials(base), C.model_label(base)
+    trace = os.path.join(f"{C.model_dir(base)}-{suffix}", "trace.nc")
+    if not os.path.exists(trace):
+        raise SystemExit(f"no fitted variant trace at {trace}")
+    label = f"{C.model_label(base)[:-1]} {suffix})"
+    return trace, C.n_trials(base), label
+
 
 COL_TD = plot_styles.COLOUR_ORANGE
 COL_DS = plot_styles.COLOUR_BLUE
@@ -232,7 +284,7 @@ def run_outcome(outcome: str) -> None:
     # TD children do" — the subject scale answers that, and the two are two halves
     # of one scatter budget in the TD models. tau is the SD of the child's own
     # logit for this outcome, which is defined identically in both
-    # parameterisations even though VG10 reaches it through p_u and q rather than
+    # parameterisations even though VG20 reaches it through p_u and q rather than
     # through a single spoken intercept (comparison.subject_heterogeneity).
     _, TAU_ds, SDC_ds, _ = C.subject_heterogeneity(
         DISP_DS_KEY, outcome, ages=grid, draws=i_disp)
@@ -353,7 +405,7 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
     _save_single(
         pre + "overdispersion",
         # Both halves of the old title were wrong once DISP_DS_KEY moved to VG10.
-        # "study-RE only" described VG07; VG10 carries subject random effects too,
+        # "study-RE only" described VG07; VG10 and VG20 carry subject random effects too,
         # which is the whole point of the repointing. "mean-independent" overclaims:
         # the factor removes the explicit p(1-p) term, but kappa is itself
         # level-driven in this family, so a cross-population contrast still carries
@@ -390,7 +442,7 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
 def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
                         da_td, da_ds, qa_td, qa_ds) -> None:
     """Emit the four comprehension-matched panels as standalone figures."""
-    td_lab, ds_lab = C.model_label(td_key), C.model_label(ds_key)
+    td_lab, ds_lab = resolve_joint(td_key)[2], resolve_joint(ds_key)[2]
     pre = "ds_td_comprehension_"
 
     def q_at_U(ax):
@@ -485,14 +537,14 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     Matching on comprehension N (rather than age) strips out the TD/DS timescale
     difference: it asks "when a child understands N words, what fraction does
     she speak, and how much sooner does TD say them?". Requires JOINT models so
-    U and S are coupled per draw (VG10 DS vs VG13 TD).
+    U and S are coupled per draw (VG20 DS vs VG13 TD).
     """
-    print(f"\n=== COMPREHENSION-MATCHED: DS={C.model_label(ds_key)} vs "
-          f"TD={C.model_label(td_key)} ===", flush=True)
-    ages_ds, U_ds, S_ds = C.load_population_trajectory(
-        C.trace_path(ds_key), C.n_trials(ds_key))
-    ages_td, U_td, S_td = C.load_population_trajectory(
-        C.trace_path(td_key), C.n_trials(td_key))
+    ds_trace, ds_n, ds_lab = resolve_joint(ds_key)
+    td_trace, td_n, td_lab = resolve_joint(td_key)
+    print(f"\n=== COMPREHENSION-MATCHED: DS={ds_lab} vs TD={td_lab} "
+          f"(capped at U={MAX_MATCHED_U:.0f} words) ===", flush=True)
+    ages_ds, U_ds, S_ds = C.load_population_trajectory(ds_trace, ds_n)
+    ages_td, U_td, S_td = C.load_population_trajectory(td_trace, td_n)
     print(f"  DS draws={U_ds.shape[0]} ages {ages_ds.min():.0f}-{ages_ds.max():.0f} | "
           f"TD draws={U_td.shape[0]} ages {ages_td.min():.0f}-{ages_td.max():.0f}",
           flush=True)

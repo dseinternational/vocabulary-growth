@@ -56,8 +56,11 @@ def test_emit_monthly_summary_writes_table_and_figure(tmp_path):
     assert "posterior_summary_monthly_u.csv" in written
     assert "expected_counts_by_month_u.png" in written
     assert "expected_counts_by_month_u.svg" in written
-    # The figure's CSV companion is the same frame, so they cannot disagree.
-    reloaded = pd.read_csv(tmp_path / "expected_counts_by_month_u.csv")
+    # The figure gets no sidecar CSV: it is drawn from the frame already written
+    # under the canonical name, so a sidecar would be a byte-identical second
+    # copy of it under a second name.
+    assert "expected_counts_by_month_u.csv" not in written
+    reloaded = pd.read_csv(tmp_path / "posterior_summary_monthly_u.csv")
     assert len(reloaded) == len(monthly)
     assert reloaded["age_months"].tolist() == monthly["age_months"].tolist()
 

@@ -67,6 +67,7 @@ import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 import vocab_growth.intervals as intervals
 import vocab_growth.posterior_analysis as posterior_analysis
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -92,7 +93,7 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
-from vocab_growth.models.definitions import JointModelDefinition
+from vocab_growth.models.definitions import JointModelDefinition, clamp_targets
 from vocab_growth.models.gp_utils import (
     GPGrid,
     tent_and_gp,
@@ -140,6 +141,83 @@ PROD_CELL_COLUMNS = ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken
 # ============================================================
 # Dataclasses
 # ============================================================
+
+
+_QUANTITY_BY_SUFFIX = {
+    "u": reporting_ages.ReportedQuantity.UNDERSTOOD,
+    "s": reporting_ages.ReportedQuantity.SPOKEN,
+    "sign": reporting_ages.ReportedQuantity.SIGNED,
+}
+
+
+#: A hand-over milestone is only read once the child has at least this much
+#: expressive vocabulary. Below it the three cells are fractions of a word and
+#: their ordering carries no information.
+MIN_WORDS_FOR_MILESTONE = 1.0
+
+
+def _signing_milestones(
+    ages: np.ndarray,
+    sign_only: np.ndarray,
+    both: np.ndarray,
+    speak_only: np.ndarray,
+    ci_prob: float,
+    ci_kind: str,
+) -> pd.DataFrame:
+    """Per-draw ages for the sign-to-speech hand-over.
+
+    Arrays are ``(n_age, n_draw)``. Each milestone is found **in every draw and
+    then summarised**, never read off the median curve: the median of crossings
+    is not the crossing of the median, and for a peak the difference is not
+    subtle — averaging curves whose peaks sit at different ages flattens the
+    peak and drags it towards the middle of the grid.
+
+    ``draws_reaching`` is the reader's warning. A milestone reached in only part
+    of the posterior is weakly identified and should be read as a bound, the same
+    convention the comparison report's boundary-censored peak-growth ages use.
+    """
+    ages = np.asarray(ages, dtype=float)
+    total = np.maximum(sign_only + both + speak_only, 1e-9)
+
+    # A "crossing" is only meaningful once there is a vocabulary to divide up. At
+    # the youngest modelled ages all three cells are fractions of a word, so which
+    # is larger is arithmetic noise and every condition below is satisfied by
+    # accident. Gate on the child having at least one expressive word, per draw,
+    # rather than on a fixed number of grid points -- a point count silently
+    # depends on the grid step, and this function is called with a finer grid
+    # than the one it was first written against.
+    established = total >= MIN_WORDS_FOR_MILESTONE
+
+    def _first_age(condition: np.ndarray) -> np.ndarray:
+        out = np.full(condition.shape[1], np.nan)
+        for d in range(condition.shape[1]):
+            idx = np.flatnonzero(condition[:, d] & established[:, d])
+            if idx.size:
+                out[d] = ages[idx[0]]
+        return out
+
+    rows = [
+        ("sign_only_peak_age", ages[np.argmax(sign_only, axis=0)]),
+        ("sign_only_peak_words", np.max(sign_only, axis=0)),
+        ("sign_only_share_below_half_age", _first_age((sign_only / total) < 0.5)),
+        ("speech_only_overtakes_sign_only_age", _first_age(speak_only >= sign_only)),
+    ]
+    out = []
+    for name, draws in rows:
+        ok = np.isfinite(draws)
+        vals = draws[ok]
+        band = (
+            intervals.bands(vals[:, None], ci_prob, ci_kind, sample_axis=0)[0]
+            if vals.size
+            else (np.nan, np.nan)
+        )
+        out.append({
+            "quantity": name,
+            "median": float(np.median(vals)) if vals.size else np.nan,
+            "ci_lo": float(band[0]), "ci_hi": float(band[1]),
+            "draws_reaching": float(ok.mean()),
+        })
+    return pd.DataFrame(out)
 
 
 @dataclass
@@ -1088,6 +1166,12 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             dims=("obs_sign_id",),
         )
 
+        # One flag, two means: see definitions.clamp_targets. 'q_only' is
+        # truthy, so testing the raw value would clamp both.
+        _clamp_u, _clamp_q = clamp_targets(
+            definition.clamp_mean_above_hi_anchor
+        )
+
         # Latent full-grid trajectories (plain tensors), built by the shared
         # gp_utils helpers. Option D anchors each GP (per-draw zero at the
         # reference age) when the matching flag is set.
@@ -1110,7 +1194,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_u else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_u,
         )
         h_all = trend_and_gp(
             cfg_low=config.p_slope_low_q_dist,
@@ -1123,7 +1207,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             store_deterministic=False,
             anchor_idx=i_anchor if anchor_g_q else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_q,
         )
         # Signed marginal: three-anchor "tent" hump mean (young/peak/old) + GP; the
         # study random intercept delta_sign is added at obs level below. The GP is
@@ -1754,6 +1838,9 @@ def posterior_summary(context: JointContext):
             y_label=f"Expected {label}",
             dataframes=context.dataframes,
             plots=context.plots,
+            max_age_months=reporting_ages.max_age_for(
+                context.model_config, _QUANTITY_BY_SUFFIX[suffix]
+            ),
         )
 
     # Data-identified p_any vs independence (expected counts)
@@ -1919,6 +2006,82 @@ def _run_joint_plots(context: JointContext):
     _save_csv(pd.DataFrame({"age_months": X_sign, **{k: v[0] for k, v in comp.items()}}), od, "four_cell_composition")
     context.plots["four_cell_composition"] = fig
     plt.close(fig)
+
+    # 2b) What signing is worth to the child, and when speech takes over.
+    #
+    # The four-cell composition above is a set of *fractions of understood*, which
+    # answers "what proportion of the words a child knows can they sign?" but not
+    # "how much does signing add to what this child can express?". That second
+    # question is the one a parent, teacher or therapist asks, and it needs word
+    # counts and a denominator of the child's own expressive vocabulary rather
+    # than of comprehension. The two give very different-looking answers from the
+    # same posterior, which is exactly why both belong here.
+    #
+    # The pi_* cells are conditional on the word being understood, so they are
+    # scaled by p_u to become counts. Reading them as unconditional inflates every
+    # cell by 1/p_u -- a factor of about fifty at the youngest modelled ages.
+    spoken_w = s.p_u_plot[keep_sign, :] * s.q_plot[keep_sign, :] * n_trials
+    any_w = s.p_any_plot[keep_sign, :] * n_trials
+    sign_only_w = s.p_u_plot[keep_sign, :] * s.pi_sign_only_plot[keep_sign, :] * n_trials
+    both_w = s.p_u_plot[keep_sign, :] * s.pi_both_plot[keep_sign, :] * n_trials
+    speak_only_w = s.p_u_plot[keep_sign, :] * s.pi_speak_only_plot[keep_sign, :] * n_trials
+
+    eps = 1e-9
+    uplift = any_w / np.maximum(spoken_w, eps)
+    sign_only_share = sign_only_w / np.maximum(any_w, eps)
+
+    def _band(arr):
+        return np.median(arr, axis=1), intervals.bands(arr, ci_prob, ci_kind, sample_axis=1)
+
+    up_med, up_ci = _band(uplift)
+    sh_med, sh_ci = _band(sign_only_share)
+    so_med, so_ci = _band(sign_only_w)
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    for arr, lab, c in ((speak_only_w, "Speech only", "C1"),
+                        (both_w, "Both sign and speech", "C4"),
+                        (sign_only_w, "Sign only", "C2")):
+        med, hdi = _band(arr)
+        ax.fill_between(X_sign, hdi[:, 0], hdi[:, 1], alpha=0.18, color=c)
+        ax.plot(X_sign, med, lw=2.5, color=c, label=lab)
+    ax.set_xlabel("Age (months)")
+    ax.set_ylabel("Words")
+    ax.legend(loc="upper left", frameon=True)
+    ax.set_title("How expressive vocabulary is expressed")
+    fig.savefig(os.path.join(od, "signing_composition_words.png"), dpi=300)
+    fig.savefig(os.path.join(od, "signing_composition_words.svg"))
+    context.plots["signing_composition_words"] = fig
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    ax.fill_between(X_sign, up_ci[:, 0], up_ci[:, 1], alpha=0.20, color="C0")
+    ax.plot(X_sign, up_med, lw=3, color="C0",
+            label="Expressive vocabulary as a multiple of spoken")
+    ax.axhline(1.0, ls=":", color="grey", label="speech alone")
+    ax.set_xlabel("Age (months)")
+    ax.set_ylabel("p_any / spoken")
+    ax.legend(loc="upper right", frameon=True)
+    ax.set_title("What counting sign adds to a child's own expressive vocabulary")
+    fig.savefig(os.path.join(od, "signing_uplift.png"), dpi=300)
+    fig.savefig(os.path.join(od, "signing_uplift.svg"))
+    context.plots["signing_uplift"] = fig
+    plt.close(fig)
+
+    _save_csv(pd.DataFrame({
+        "age_months": X_sign,
+        "spoken_median": np.median(spoken_w, axis=1),
+        "any_median": np.median(any_w, axis=1),
+        "sign_only_median": so_med,
+        "sign_only_ci_lo": so_ci[:, 0], "sign_only_ci_hi": so_ci[:, 1],
+        "both_median": np.median(both_w, axis=1),
+        "speak_only_median": np.median(speak_only_w, axis=1),
+        "uplift_median": up_med, "uplift_ci_lo": up_ci[:, 0], "uplift_ci_hi": up_ci[:, 1],
+        "sign_only_share_median": sh_med,
+        "sign_only_share_ci_lo": sh_ci[:, 0], "sign_only_share_ci_hi": sh_ci[:, 1],
+    }), od, "signing_profile")
+
+    _signing_milestones(X_sign, sign_only_w, both_w, speak_only_w, ci_prob, ci_kind).to_csv(
+        os.path.join(od, "signing_milestones.csv"), index=False)
 
     # 3) psi posterior
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_MD)

@@ -30,7 +30,7 @@ import pandas as pd
 from vocab_growth import comparison
 from vocab_growth import environment as env
 
-DS_DIR = comparison.model_dir("vg10")
+DS_DIR = comparison.model_dir("vg20")
 TD_DIR = comparison.model_dir("vg13")
 OUT_DIR = env.comparisons_output_dir()
 

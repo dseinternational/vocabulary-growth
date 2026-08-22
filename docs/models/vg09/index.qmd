@@ -12,81 +12,45 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      - repo
+      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
+      # for a git remote, and the per-model reports are rendered in the OUTPUT
+      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
+      # no repository above it, so `repo` became a hard render error. This emits
+      # the identical link and does not depend on where the render happens.
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5; VG10 `q`-anchor reference corrected by Claude Code/Opus 4.8; dispersion prior descriptions by Claude Code/Opus 5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
 
 ```{python}
 #| echo: false
 #| output: asis
-# Report the sampling configuration this model was actually fitted at, read
-# from the trace header (chains x draws). rep / rep-lite are reporting-grade;
-# dev / test are flagged as approximate.
-import h5netcdf as _h5
+from vocab_growth.report_cells import render_sampling_banner
 
-with _h5.File("trace.nc", "r") as _f:
-    _post = _f["posterior"]
-    _n_chains = _post.dimensions["chain"].size
-    _n_draws = _post.dimensions["draw"].size
-
-_CONFIGS = {
-    (6, 6000): ("reporting", False),
-    (4, 4000): ("reporting-lite", False),
-    (4, 2000): ("test", True),
-    (2, 500): ("development", True),
-}
-_cfg_name, _approximate = _CONFIGS.get(
-    (_n_chains, _n_draws), (f"{_n_chains} chains × {_n_draws} draws", True)
-)
-
-print('::: {.callout-warning title="Warning: Preliminary model output"}')
-print()
-print(
-    "This model output is preliminary and likely to change as the model "
-    "evolves and further data are received."
-)
-print()
-print(
-    f"This model was fitted in **{_cfg_name}** configuration "
-    f"({_n_chains} chains × {_n_draws:,} draws per chain)."
-)
-if _approximate:
-    print()
-    print(
-        "It was **not** fitted in reporting mode, so these results are more "
-        "approximate than a full reporting-quality fit."
-    )
-print(":::")
+render_sampling_banner()
 ```
 
-This model extends VG08 by adding subject-level random intercepts on the production ratio $q$ in addition to the existing subject REs on the understood logit. The motivation is symmetry: if between-subject differences justify a subject RE on the understood trajectory, the same logic applies to how much of each child's understood vocabulary they actually speak. With both subject REs in place, the residual Beta-Binomial dispersion on both outcomes should reflect within-occasion measurement noise rather than between-subject heterogeneity.
+This model asks whether children differ from one another not only in how many words they understand but in how much of that comprehension they turn into speech. It extends VG08 by adding a child-level random intercept to the production ratio as well as to the understood trajectory.
 
-```{python}
-import matplotlib.pyplot as plt
-import pandas as pd
-```
+::: {.callout-important title="A development step — do not quote these numbers"}
 
-## Statistical model
+VG09 exists to complete a structural argument, not to supply an estimate. The model of record for the Down syndrome understood-and-spoken estimands is **VG20**, which takes VG10's structure — VG09's, plus a per-draw Gaussian process anchor for stability — and adds a correlation between the child's two random intercepts; VG09 was once the recommended model and has since been superseded twice over.
 
-Words understood use a Beta-Binomial likelihood on the common 810-word reference inventory. For paired, logically nested rows, spoken words use the conditional likelihood $S\mid U \sim \operatorname{BetaBinomial}(U,q,\kappa_S)$; rows without a usable understood count retain the marginal 810-word fallback. The structure follows VG08 with an additional non-centered subject-level random intercept on the production ratio $q$:
-
-$$f_U(a, s, i) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s] + \delta^{\text{subj}}_U[i]$$
-$$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s] + \delta^{\text{subj}}_q[i]$$
-
-where $\delta_U[s] \sim \text{Normal}(0, \tau_U)$ and $\delta_q[s] \sim \text{Normal}(0, \tau_q)$ are study-level random intercepts on the logit scale, and $\delta^{\text{subj}}_U[i] = \tau^{\text{subj}}_U \cdot z^U_i$, $\delta^{\text{subj}}_q[i] = \tau^{\text{subj}}_q \cdot z^q_i$ with $z^U_i, z^q_i \sim \text{Normal}(0, 1)$ are non-centered subject-level random intercepts on the understood and production-ratio logits. Plot and query predictions use the population-level trajectory ($\delta = 0$ throughout).
-
-::: {.callout-note title="Model at a glance"}
-
-- **Population:** children with Down syndrome.
-- **Outcomes:** words understood and words spoken.
-- **Hierarchy:** study random intercepts and subject random intercepts on both understood and `q`.
-- **Reported curves:** population-level trajectories with study and subject effects set to zero.
-- **Role in the lineage:** symmetry extension of VG08 and diagnostic stepping stone to VG10.
+That is a statement about model structure, not about how this fit sampled — the diagnostics section below is explicit that the fit reaching this page is a clean one. It nevertheless matters that the caution be taken seriously: VG09 and its predecessor VG08 differ only in whether the production ratio carries a child effect, and they disagree substantially about how much of a child's comprehension is spoken at older ages, and about whether the gap between understanding and speaking stays open or closes. A reader who quotes either report is quoting a superseded number, and the two reports do not agree on what it should be.
 
 :::
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
+```
 
 ::: {.callout-note}
 
@@ -94,74 +58,188 @@ For full details and discussion, please refer to the technical report.
 
 :::
 
-![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations, studies or children.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Estimand",
+    "Reference inventory",
+    "Logit",
+    "Odds and odds ratio",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Overdispersion and variance inflation",
+    "Conditional probability",
+    "Production ratio ($q$)",
+    "Age anchor",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "GP length-scale ($\\ell$)",
+    "GP amplitude ($\\eta$)",
+    "GP anchor",
+    "Mean clamp",
+    "Random intercept",
+    "Partial pooling",
+    "Between-child heterogeneity ($\\tau$)",
+    "Non-centred parameterisation",
+    "Sum-to-zero study effects",
+    "Population-level and subject-marginal",
+    "Credible interval",
+    "Equal-tailed interval (ETI)",
+    "Cross-sectional age derivative",
+    "Prior predictive check",
+    "Posterior predictive check",
+    "PMF and CDF",
+    "PIT (probability integral transform)",
+    "MCMC (Markov chain Monte Carlo)",
+    "Chain",
+    "R-hat ($\\hat{R}$)",
+    "Effective sample size (ESS)",
+    "Divergent transition",
+    "BFMI (Bayesian fraction of missing information)",
+])
+```
+
+## Statistical model
+
+Two outcomes are modelled together. Words understood is a bounded count out of the reference inventory with a Beta-Binomial likelihood. Words spoken is modelled _through_ comprehension rather than beside it: where a row carries a usable understood count, spoken words are drawn conditionally on it, $S \mid U \sim \operatorname{BetaBinomial}(U, q, \kappa_S)$, so $q$ is the fraction of the words a child understands that the same child also says. Rows without a usable understood count fall back to a marginal likelihood against the full reference inventory, and the same dispersion parameter governs both branches on two different denominators.
+
+On the logit scale, comprehension and the production ratio each follow a straight-line developmental trend plus a Gaussian process term that lets the curve bend away from the line by as much as the data support:
+
+$$f_U(a, s, i) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s] + \delta^{\text{subj}}_U[i]$$
+$$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s] + \delta^{\text{subj}}_q[i]$$
+
+Reading the symbols: $a$ is age and $a_z$ is age standardised to mean zero and unit standard deviation across the fitted frame; $s$ indexes the contributing study and $i$ the individual child; $g_U$ and $g_q$ are the Gaussian process terms, so "intercept plus slope" is the trend and $g$ is the wiggle around it. $f_U$ is the logit of the expected proportion understood, $p_U = \operatorname{sigmoid}(f_U)$, and $h$ is the logit of the production ratio, $q = \operatorname{sigmoid}(h)$. Expected spoken proportion is the product, $p_S = p_U \cdot q$.
+
+Neither trend line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages — an opinion about vocabulary at an age is something a reader can hold, an intercept at age zero is not.
+
+### The two levels of grouping
+
+Both random intercepts are written in **non-centred** form, $\delta = \tau z$, which describes the same distribution as drawing $\delta$ directly at scale $\tau$ but is far easier for the sampler to explore when $\tau$ is small.
+
+- **Study effects** $\delta_U[s]$ and $\delta_q[s]$ use a **sum-to-zero** normal: the study offsets are constrained to add to zero across studies, and are therefore mildly negatively correlated with one another rather than independent. The constraint is what makes the population curve the _average study_ rather than an arbitrary reference study, and it is why the fitted study offsets can be read as deviations from that average.
+- **Child effects** are now fitted on **both** outcomes: $\delta^{\text{subj}}_U[i] = \tau^{\text{subj}}_U z^U_i$ on comprehension and $\delta^{\text{subj}}_q[i] = \tau^{\text{subj}}_q z^q_i$ on the production ratio, each with a standard normal deviate. The second of these is the whole point of the model, and the parameter $\tau^{\text{subj}}_q$ is the one quantity VG09 exists to add.
+
+The motivation is symmetry. If differences between children justify a child effect on how many words they understand, the same logic applies to how much of that comprehension they say: some children are talkers and some are not, and that is a persistent property of the child rather than noise in one administration. With both effects in place, the residual dispersion on each outcome should describe variability _within_ an occasion rather than persistent differences between children.
+
+One consequence of adding a child effect on $q$ deserves stating before any figure is read. A curve drawn with all random effects set to zero is not the average of children's curves, because the logit link is nonlinear; adding a child effect on the production ratio therefore changes what the zero-effect curve means, and this model's population $q$ curve is not directly comparable with VG08's even though both are labelled the same way. It also means that, unlike in VG08, the median unseen child in this model does not speak the same number of words as the population curve implies. Both facts are properties of the structure, not signs of instability.
+
+### Two different predictions, and which figure shows which
+
+::: {.callout-important title="Population-level or subject-marginal?"}
+
+The same age curve can be drawn two ways, and they differ by roughly an order of magnitude in width. Every figure caption below states which one it is.
+
+- **Population-level** sets every random effect to zero: the average child in the average study. Its interval carries uncertainty about that average only. This is what the production ratio, the comprehension–production gap, the expected-count curves, the age derivatives and the dispersion curves show, and it is what the `p_population_*` and `Ey_population_*` columns of the summary tables report. The unprefixed historical `p_*` and `Ey_*` columns carry the same population-level meaning.
+- **Subject-marginal** draws a fresh child's random effects — on comprehension _and_ on the production ratio — for every posterior draw, and keeps that one child across the whole age grid. It answers _where would one more, unseen child fall?_ and is much wider. This is what the joint trajectory figures, the predictive ratio and predictive scatter, and every posterior predictive count artefact (PMF, CDF, count distributions, median trends) show, and it is what the `Y_*`, `P(Y<=k)`, `p_subject_marginal_*` and `Ey_subject_marginal_*` columns report.
+
+Confusing the two is the single easiest way to misread this report: the population band answers a question about a group average, and only the subject-marginal band answers a question about a child.
+
+:::
 
 ## Priors
 
-VG09 keeps the broad baseline `q` anchors while adding a subject random-effect scale for `q`. This is intentionally a demanding geometry: the `q` intercept, `q` GP, study effects, subject effects, and spoken dispersion can all compete to explain level and heterogeneity.
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
+
+render_priors_table()
+```
+
+The low-age anchors encode a floor expectation on both outcomes: few words understood, and a small fraction of them spoken, at the younger reference age. The high-age anchors are deliberately broad, so the prior rules out neither a low nor a high later vocabulary before the data are seen. The production-ratio anchors are not merely broad regularisation — the high one was recalibrated against directly observed spoken and understood pairs and carries real information about the conversion rate, which makes it a named sensitivity target in `docs/models/PRIORS.md`. The GP length-scale and amplitude priors permit smooth departures from the anchor-defined trend and no more.
+
+Three random-effect scales appear in the table above, and the last of them, the between-child scale on the production ratio, is the parameter this model adds to VG08. Judge each on the odds reading the table gives: a scale of one logit means a child one standard deviation above average has roughly $e$ times the odds of saying any given word they understand. The child-level priors are the wider of the two levels, because children within a study were expected to differ more than studies differ from each other, and because a subject scale set too tight would force the residual dispersion to keep absorbing between-child variation — the very thing the effect was added to stop. The scale used here replaces a substantially tighter earlier one that every subject-scale parameter in the model family sat in conflict with.
+
+### Dispersion
+
+Both dispersion blocks use the **two-anchor** form, with priors stated as $\kappa$ at two reference ages rather than as an intercept at the pool's mean age plus a slope. Two things follow. The prior is then directly comparable with a per-age dispersion estimate and does not shift meaning if the pool's age distribution changes. And, unlike the parameterisation VG08 retains, this form places no sign constraint on the age trend, so it can represent a $\kappa$ that rises with age as well as one that falls — which the comprehension outcome needs and the constrained form could not provide at any setting.
+
+These prior medians are **conditional** estimates. This model carries study and child random intercepts on both outcomes, so its $\kappa$ describes what is left once a child's own level is known, not the total spread between children at an age. A dispersion prior calibrated marginally would be badly wrong here, and that substitution is a large error rather than a rounding one.
+
+The Down syndrome joint frame is the thinnest the calibration covers, and there is no larger pool to draw on, since every Down syndrome model loads the same unfiltered records. On it the estimator recovers a known $\kappa$ with a one-directional downward bias that grows with the level, so its estimates are lower bounds; the medians used here are each estimate divided by the bias measured at it, and the prior widths are the widest anywhere in the model family in consequence. What is not in doubt is that the previous prior was wrong: it forced dispersion to fall with age, and this model's posterior sat at the far edge of that constraint. See `docs/models/PRIORS.md`.
 
 ### Understood trajectory
 
-![Lengthscale prior `ell_unit_u_dist`](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
-![Amplitude prior `eta_u_dist`](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
+![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
-![Low slope anchor (24 months) `p_slope_low_u_dist`](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+![Prior on the proportion of the reference inventory understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
 
-![High slope anchor (84 months) `p_slope_hi_u_dist`](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+![Prior on the proportion of the reference inventory understood at the high age anchor.](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
 
 ### Production ratio
 
-![Lengthscale prior `ell_unit_q_dist`](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
-![Amplitude prior `eta_q_dist`](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
+![How far the flexible term may depart from the straight-line trend in the production ratio, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
-![Low slope anchor (24 months) `p_slope_low_q_dist`](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+![Prior on the fraction of understood words that are also spoken, at the low age anchor.](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
 
-![High slope anchor (84 months) `p_slope_hi_q_dist`](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
+![Prior on the fraction of understood words that are also spoken, at the high age anchor.](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
 
-### Dispersion / overdispersion -- understood
+### Dispersion -- words understood
 
-Both dispersion blocks use the two-anchor form, with priors stated as `kappa` at 24 and 48 months rather than as an intercept and a slope. The medians are conditional estimates: this model carries study and child random intercepts, so its `kappa` describes what is left once a child's own level is known, not the total spread between children at an age.
+![Prior on the floor of the dispersion parameter for words understood.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
-The Down syndrome joint frame is the thinnest the calibration covers — 671 comprehension rows over 8-115 months, and there is no larger pool to draw on, since every Down syndrome model loads the same unfiltered 1,218 rows. On it the estimator recovers a known `kappa` with a one-directional downward bias that grows with the level, so its estimates are lower bounds; the medians here are each estimate divided by the bias measured at it, and `sigma` is 1.0 on all four anchors, wider than anywhere else in the family. What is not in doubt is that the previous prior was wrong: it forced dispersion to fall with age via `b_kappa_mag >= 0`, and this model's posterior sat at the far edge of that constraint. See `docs/models/PRIORS.md`.
+![Prior on the dispersion in words understood at the younger reference age, above the floor.](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
 
-![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+![Prior on the dispersion in words understood at the older reference age, above the floor.](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
 
-![`kappa_excess_young_u_dist` (24 months)](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
+### Dispersion -- words spoken
 
-![`kappa_excess_old_u_dist` (48 months)](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
+![Prior on the floor of the dispersion parameter for words spoken.](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
 
-### Dispersion / overdispersion -- spoken
+![Prior on the dispersion in words spoken at the younger reference age, above the floor.](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
 
-![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
-
-![`kappa_excess_young_s_dist` (24 months)](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
-
-![`kappa_excess_old_s_dist` (48 months)](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
+![Prior on the dispersion in words spoken at the older reference age, above the floor.](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
 
 ## Prior predictive checks
 
-For VG09, inspect both understood and spoken prior predictions with the subject effects in mind. The checks should show plausible child-to-child variation without letting the `q` hierarchy create extreme spoken/comprehension ratios.
+These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with four criteria: young children should usually sit near the floor on both outcomes; older trajectories should not be forced towards the ceiling; the production ratio should be free to rise across development without being pinned near zero or near one; and, with two child effects now in the model, the implied spread across simulated children should be wide enough to contain a real cohort without producing children who say nearly everything they understand at implausibly young ages. A prior that fails any of these would be shaping the answer rather than permitting it. Each grey trajectory is one course of development the model considers plausible in advance of the data, and the observations should fall comfortably inside the cloud rather than hugging its edge.
 
 ### Prior samples -- words understood
 
-![Prior sample trajectories (understood)](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
+![Understood-vocabulary trajectories drawn from the priors alone.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
 
 ### Prior samples -- words spoken
 
-![Prior sample trajectories (spoken)](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
+![Spoken-vocabulary trajectories implied by those same prior draws, through $p_S = p_U q$.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
 
-### Prior samples -- production rate q(a)
+### Prior samples -- production ratio $q(a)$
 
-![Prior sample trajectories for production ratio q(a)](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
+![Production-ratio trajectories drawn from the priors: the fraction of understood words the model considers a child might say at each age.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
 
 ## Data
 
+The fitted frame pools administrations from several international studies of children with Down syndrome onto the common reference inventory. Its size, the number of rows carrying each outcome, and the modelled age range are in the _Model at a glance_ block above, read from this fit's own manifest.
+
+Two features of the pool shape everything below. Comprehension is recorded on fewer administrations than production, so the understood curve rests on less data than the spoken one at every age. And the pool is weighted towards younger children with small spoken vocabularies, which is why the lower edge of the spoken predictive band sits near zero for a long stretch of the age range: at those ages a child saying almost nothing is an ordinary observation, not an outlier. Several classes of defective record — partial administrations, duplicated outcome columns, implausible production signatures, and children recorded only at their form's ceiling — are masked by default; the project's data documentation records each and the flag that reinstates it for sensitivity analysis.
+
 ```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+
 descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
 descriptive_stats
 ```
+
+::: {.callout-note}
+
+The normality tests in this table are reported for completeness. They are not a check on the model: both outcomes are bounded counts, which are not expected to be normally distributed, and the model does not assume that they are. Note also that the two outcomes are not observed on the same rows — the glance block above gives the count for each — so the understood and spoken columns are not summaries of one common set of children.
+
+:::
 
 ## Diagnostics
 
@@ -169,44 +247,9 @@ descriptive_stats
 #| label: convergence-caveats
 #| echo: false
 #| output: asis
-# Soft-tier caveats, read from this fit's own gate payload. Silent when the fit
-# is clean, so a clean report gains nothing and a caveated one cannot hide it.
-import json
-from pathlib import Path
+from vocab_growth.report_cells import render_convergence_caveats
 
-_gate_path = Path("diagnostics_summary.json")
-_marks = []
-if _gate_path.exists():
-    _gate = json.loads(_gate_path.read_text())
-    _checks = _gate.get("checks") or {}
-    _bfmi = [b for b in (_gate.get("bfmi_per_chain") or []) if b is not None]
-    if _checks.get("divergences") is False:
-        _marks.append(
-            f"**{_gate.get('divergences')} divergent transition(s)** — the sampler "
-            "failed to traverse part of the posterior, so reported expectations "
-            "may be biased."
-        )
-    if _checks.get("bfmi") is False:
-        _lo = f" (min {min(_bfmi):.3f})" if _bfmi else ""
-        _marks.append(
-            f"**Energy BFMI below 0.3**{_lo} — the energy chain explored the "
-            "posterior's tails poorly, so the interval bounds are less reliable "
-            "than the point estimates."
-        )
-
-if _marks:
-    print('::: {.callout-warning title="Soft-tier convergence caveats"}')
-    print()
-    print("This fit cleared the hard convergence tier (R-hat and effective sample")
-    print("size) but not the soft tier:")
-    print()
-    for _mark in _marks:
-        print(f"- {_mark}")
-    print()
-    print("It remains reportable and is published carrying this mark; see")
-    print("Appendix B of the technical report.")
-    print()
-    print(":::")
+render_convergence_caveats()
 ```
 
 ```{python}
@@ -216,69 +259,120 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter — including the random-effect elements, which the table itself does not list — before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds, or carries a recorded exception disclosed above. Any soft-tier mark (divergent transitions, or a low energy BFMI) would appear as a warning immediately above the table; where no warning appears, there was none to declare.
 
-![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
-![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level — a "hairy caterpillar" — with no drift and no chain sitting apart from the others.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-::: {.callout-note title="Diagnostic focus"}
+![Pairwise joint posteriors. Round blobs are healthy; a narrow diagonal ridge marks two parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-VG09 is ridge-prone. Focus on the `q` GP length-scale and amplitude, `tau_q`, `tau_subj_q`, and `kappa_s`. Weak diagnostics here are the reason VG10 adds the per-draw GP anchoring (and why the DS-joint family tightened the `q`-GP amplitude `eta_q`).
+![Marginal posterior distributions for the fitted parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+::: {.callout-note title="What to watch in this model"}
+
+@fig-pair is capped at the number of panels that stay legible, so it shows only the first few parameters: the two understood anchors, the understood GP length-scale and amplitude, and the two production-ratio anchors. That subset is well chosen for the trade-off it can reveal — a diagonal ridge between an anchor and the GP amplitude would mean the data cannot say whether the curve's level comes from the straight line or from the bend. The random-effect scales and the dispersion parameters are **not** in this figure; read them from the diagnostics table and @fig-trace instead.
+
+For @fig-posterior, compare each marginal with its prior figure earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior.
 
 :::
 
-## Joint trajectory
+::: {.callout-note title="A note on this model's history"}
 
-![Joint posterior predictive trajectory for words understood and spoken](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+Earlier VG09 fits genuinely did sample badly. Adding a second child effect gave the model several ways to explain the same level and the same heterogeneity — the production-ratio intercept, its Gaussian process, the study effects, the child effects and the spoken dispersion can all compete — and the resulting posterior had a ridge that longer tuning did not remove. That history is real, it is recorded in the project's sampler-diagnostics notes, and it is why VG10 was built.
 
-![Joint posterior predictive trajectory with 50% and 89% intervals](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+Two registered changes since removed it: the Gaussian process amplitude prior on the production ratio was widened, having earlier been tightened on a mis-scoped rationale, and this model's dispersion block was migrated to the two-anchor form, which lifted the sign constraint its posterior had been pinned against. Both are visible in the priors table above, and the fit reported on this page is the result.
 
-## Production ratio
+The conclusion to draw is narrow. **VG09 remains a development step because the model of record adds structure this model lacks, not because VG09 samples badly** — on the evidence above it does not. Read the diagnostics table for what this fit did, and read this note as history.
 
-The production ratio $q(a) = p_S(a) / p_U(a)$ represents the fraction of understood words that are spoken at each age.
-The posterior predictive figure below instead shows the ratio of posterior predictive spoken and understood counts, so it should be interpreted separately from $q(a)$.
+:::
 
-![Production rate q(a)](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+## Findings
 
-![Production ratio by words understood](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
 
-![Posterior predictive spoken/understood count ratio](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
+render_headline_quantities()
+```
+
+### How much do children and studies differ?
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_variation_table
+
+render_variation_table()
+```
+
+This is the table VG09 was built to produce, and it is the first in the lineage to carry all four rows. Compare the two child rows with the two study rows: they say how much of the modelled variation in each outcome is between children within a study, and how much is between the studies themselves. Then compare the two child rows with each other — the production ratio is the one that answers whether children differ more in what they understand or in how much of it they say.
+
+A large child-level scale is not a defect. It is the finding that children of the same age with Down syndrome differ widely from one another, which is why a population average is a poor description of any individual, and why the subject-marginal bands elsewhere in this report are so much wider than the population ones.
+
+Read this table together with the dispersion figures below rather than instead of them. Once a child's own level on an outcome is absorbed by its random intercept, the remaining $\kappa$ describes what is left _given_ that level — residual, occasion-level variability — and it must not be read as "how much children differ at this age". That quantity is in this table, not in $\kappa$. The clearest way to see the two effects working is to compare each dispersion curve with the same curve in VG07, which has neither child effect, and in VG08, which has only the comprehension one: each random effect should relieve the pressure on its own outcome's $\kappa$ and leave the other outcome's alone.
+
+## Posterior predictions
+
+### Joint trajectory
+
+![Predicted vocabulary for an unseen child: **subject-marginal**, with a fresh child's random effects drawn for each posterior draw and held across the whole age grid. Points are the observed administrations.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![The same **subject-marginal** prediction with the 50% inner and 89% outer equal-tailed intervals drawn explicitly.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+
+These are the widest bands in the report, and correctly so: they describe where a single unseen child might fall, not where the group average lies. Because this model carries a child effect on the production ratio as well as on comprehension, the spoken band here is wider relative to its population curve than VG08's is, and its median sits below the population median rather than on top of it. The comprehension curve stops earlier than the production curve because the two outcomes carry different reporting caps, which the _Model at a glance_ block states; the evidence for comprehension thins out earlier, so the model declines to publish an understood curve past that point.
+
+### Production ratio
+
+The production ratio $q(a)$ is the fraction of the words a child understands at age $a$ that the same child also says. It is what separates _knowing more words_ from _saying more of the words you know_.
+
+![The **population-level** production ratio against age: the average child in the average study, and not the average of children's own ratios.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+
+![The same **population-level** ratio, plotted against expected words understood rather than against age.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+@fig-production-rate-by-understood re-plots the identical quantity with comprehension on the horizontal axis. It answers a different question from the age plot: not _how old is this child?_ but _how far along in comprehension is this child?_ — which is the more useful framing when children of the same age are at very different stages. The horizontal axis is age re-expressed as comprehension, so it stretches where vocabulary grows fast and compresses where it does not; it is not an independent variable the model conditions on.
+
+![The ratio of **subject-marginal** predicted spoken to predicted understood counts.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
+
+@fig-production-rate-predictive is a different quantity from the two above and the difference is easy to miss. $q(a)$ is a ratio of expectations — one smooth curve divided by another. The predictive figure is a distribution of ratios of _drawn counts_ for a single simulated child, and the spoken count is drawn from a distribution whose denominator is itself a drawn understood count. At young ages that makes it far more variable than $q(a)$, and gives it a floor at zero that the smooth ratio does not have. Read it as "what ratio might one child show", not as an estimate of $q$.
+
+Above the high age anchor, $q$'s mean is held level by the mean clamp rather than allowed to extrapolate. The Gaussian process term is still free to move there, so the curve is not flat at the oldest ages, but it is not being carried upward by a straight line running past the last age the prior speaks to either.
 
 ```{python}
 summary_q = pd.read_csv("posterior_summary_q.csv")
 summary_q
 ```
 
-## Comprehension-production gap
+### Comprehension-production gap
 
-The expected difference in word counts between understanding and production.
+![The **population-level** difference between expected words understood and expected words spoken.](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
-![Comprehension-production gap](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
+The gap is the number of words the average child understands but does not yet say. It widens while comprehension outpaces production and narrows again once the production ratio catches up, so it has a peak at an intermediate age; the headline table above gives the peak and where it falls. Whether the gap then closes or stays open is a substantive claim about development, and it is one of the quantities on which this model and VG08 disagree — a further reason to take neither as final.
 
-## Words understood vs words spoken
+### Words understood versus words spoken
 
-![Expected words understood vs spoken](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
+![Expected words spoken against expected words understood, **population-level**, one curve per posterior draw.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
 
-![Posterior predictive words understood vs spoken](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+![The same relationship in **subject-marginal** predicted counts, one curve per posterior draw for a freshly drawn child.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+
+The pair differ in estimand, not just in scatter. The first shows what the model believes about the _average_ relationship between comprehension and production, and its spread is uncertainty about that average. The second shows the counts an individual child might actually record, and its spread additionally carries between-child differences — on both outcomes in this model — and the noise in a single administration.
+
+### Receptive to expressive vocabulary
+
+**How are comprehension and production related, cross-sectionally?** The joint model links them structurally through the production ratio: the expected number of words a child _says_ is the number they _understand_ scaled by $q(a)$,
+
+$$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
+
+![Predicted words spoken given words understood, at several representative ages. Each line's slope is the **population-level** median $q$ at that age, shaded by its 89% interval; the dashed line is the ceiling at which every understood word is also spoken.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
+
+Read across from a child's comprehension score to the line for their age, and the vertical position is the number of words the model expects them to say. This is the same information as the production-ratio figure above, expressed in the units a practitioner actually works in. Two cautions attach to it. First, $q(a)$ is a cross-sectional conversion proportion, not a mechanism: the figure is **not** evidence that raising a particular child's receptive vocabulary would cause a matching expressive gain. Second, the slopes are the _population_ production ratio — the average child's conversion rate, not this child's. The between-child scale for $q$ in the variation table above is precisely the amount by which an individual child may sit off these lines, and it is not small, so the shaded band around each line is far narrower than the range of children.
 
 ## Posterior predictions -- words understood
 
-::: {.callout-note title="Subject-marginalised posterior predictive"}
-
-The count distributions, PMF/CDF, median-trend plots and the `Y_*`
-and `P(Y<=k)` columns in the summary tables below integrate over the
-subject random-effect priors (`τ^{subj}_U ≈ 0.84`,
-`τ^{subj}_q ≈ 1.20`). This is the predictive distribution for an
-unseen DS child. The historical `p_*` and `Ey_*` columns retain their
-population-level meaning; the explicit `p_population_*` /
-`Ey_population_*` columns repeat that estimand, and the
-`p_subject_marginal_*` / `Ey_subject_marginal_*` columns report the
-matching new-child probability and expected-count estimand.
-
-:::
-
 ### Posterior summary table
+
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child and occasion-level variability, so it is much the wider of the two. The `_population_` and `_subject_marginal_` columns state the two estimands explicitly; the unprefixed columns are the population-level ones. Quote $Y$ or a `subject_marginal` column when asking where a single child might fall, and a `population` column when asking about the group average. Columns labelled `ci` are the 89% outer interval and those labelled `ci50` the 50% inner interval, both equal-tailed.
 
 ```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
@@ -287,11 +381,11 @@ posterior_summary_u
 
 ### Posterior predictive PMF
 
-![posterior_predictive_pmf_u](posterior_predictive_pmf_u.png){#fig-pmf-u .lightbox fig-align="left"}
+![The probability of each exact understood-word count at selected ages, **subject-marginal**.](posterior_predictive_pmf_u.png){#fig-pmf-u .lightbox fig-align="left"}
 
 ### Posterior predictive CDF
 
-![posterior_predictive_cdf_u](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
+![The probability of a given understood-word count or fewer at selected ages, **subject-marginal**. Read this one for questions of the form "what fraction of children understand 200 words or fewer?"](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
 
 ### Count distributions by age
 
@@ -305,36 +399,44 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_u")
 
 ### Median trend
 
-![posterior_predictive_median_trend_u](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+![Median predicted words understood with uncertainty intervals, against the observed data. **Subject-marginal**.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
-Smoothed:
-
-![posterior_predictive_median_trend_u_smoothed](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
+![The same trend, smoothed for presentation only. The underlying numbers are unchanged, so read the unsmoothed figure where the two appear to differ.](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
 ### Cross-sectional age derivative
 
-![expected_learning_rate_u](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
+![Rate of change of expected words understood with age, in words per month. **Population-level**.](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
+
+![The same rate, smoothed for presentation. The raw curve is differentiated numerically from a Gaussian process and is visibly noisy; the smoothing changes only the display.](expected_learning_rate_u_smoothed.png){#fig-rate-u-smooth .lightbox fig-align="left"}
+
+This is the slope of the fitted age trajectory: it describes how expected vocabulary differs between children of different ages. It is **not** a within-child learning rate, and should not be read as one — most of these data are cross-sectional, so the model has little to say about any individual child's trajectory over time. The age at which it peaks is in the headline table above; comparing it with the spoken peak below is the more informative reading, because the interval between the two is the lag between comprehension and production growth.
 
 ### Dispersion $\kappa$ -- understood
 
-![posterior_kappa_u](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
+![How the dispersion parameter for words understood changes with age, with uncertainty intervals. **Population-level**.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
+
+Lower $\kappa$ means **greater** residual variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the headline table above restates it as a variance inflation factor, where a larger number means a wider spread. Because this model carries a child random intercept on understood, this $\kappa$ is what remains once a child's own level is known.
 
 ## Posterior predictions -- words spoken
 
 ### Posterior summary table
+
+The columns mean the same as in the understood table above, with two differences worth knowing. This table runs to a later age, because production is reported past the comprehension cap, and its last rows sit above the high age anchor, where the production ratio is held level by the mean clamp; what still moves there is the comprehension trend, so those rows are a levelled-off projection rather than an estimate the data support. And the predictive draws behind $Y$ are nested: for the paired records each spoken count is drawn out of a _drawn_ understood count, not out of the full reference inventory.
 
 ```{python}
 posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
 posterior_summary_s
 ```
 
+This is also the table in which the two estimands most visibly part company. In a model with no child effect on the production ratio the population and subject-marginal medians nearly coincide; here they do not, because $q$ enters through a sigmoid and the between-child scale on it is large. Compare the `Ey_population_median` and `Ey_subject_marginal_median` columns directly: the difference between them is not error, it is what the extra hierarchy is telling you about the median child.
+
 ### Posterior predictive PMF
 
-![posterior_predictive_pmf_s](posterior_predictive_pmf_s.png){#fig-pmf-s .lightbox fig-align="left"}
+![The probability of each exact spoken-word count at selected ages, **subject-marginal**.](posterior_predictive_pmf_s.png){#fig-pmf-s .lightbox fig-align="left"}
 
 ### Posterior predictive CDF
 
-![posterior_predictive_cdf_s](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
+![The probability of a given spoken-word count or fewer at selected ages, **subject-marginal**.](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
 
 ### Count distributions by age
 
@@ -348,19 +450,47 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ### Median trend
 
-![posterior_predictive_median_trend_s](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+![Median predicted words spoken with uncertainty intervals, against the observed data. **Subject-marginal**.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
-Smoothed:
-
-![posterior_predictive_median_trend_s_smoothed](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
+![The same trend, smoothed for presentation only.](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
 ### Cross-sectional age derivative
 
-![expected_learning_rate_s](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
+![Rate of change of expected words spoken with age, in words per month. **Population-level**.](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
+
+![The same rate, smoothed for presentation.](expected_learning_rate_s_smoothed.png){#fig-rate-s-smooth .lightbox fig-align="left"}
+
+The same caution applies as for comprehension: this is a between-age comparison, not a within-child growth rate. The headline table gives the age at which this peaks; it falls substantially later than the comprehension peak, and that interval is the model's account of production lagging comprehension.
 
 ### Dispersion $\kappa$ -- spoken
 
-![posterior_kappa_s](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+![How the dispersion parameter for words spoken changes with age, with uncertainty intervals. **Population-level**.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+
+Again, larger $\kappa$ means less spread. This is the curve on which VG09's addition should show most clearly: with a child effect now carrying persistent differences in the production ratio, the spoken dispersion no longer has to absorb them, and it should sit well above VG08's at the same ages.
+
+## Expected vocabulary by month
+
+A finer companion to the tables above: one row per whole month. Each figure draws **both** estimands, which is what makes it the clearest single answer to the population-versus-individual question — the filled band is the expected count with parameter uncertainty only (population-level), and the dashed outline is the range a single child might fall in (subject-marginal). The difference in width between them is the difference between a statement about a group and a statement about a child.
+
+The `n_obs` column in the tables gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
+
+### Words understood
+
+![Expected words understood by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_u.png){#fig-expected-counts-by-month-u .lightbox fig-align="left"}
+
+```{python}
+monthly_u = pd.read_csv("posterior_summary_monthly_u.csv")
+monthly_u
+```
+
+### Words spoken
+
+![Expected words spoken by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_s.png){#fig-expected-counts-by-month-s .lightbox fig-align="left"}
+
+```{python}
+monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
+monthly_s
+```
 
 ## Predictive calibration
 
@@ -373,3 +503,24 @@ from vocab_growth.models.calibration import render_calibration_section
 
 render_calibration_section()
 ```
+
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+
+## Limits
+
+- **A development step, not a source of numbers.** VG20 is the model of record for these estimands, and the lineage between here and there adds a Gaussian process anchor and a correlation between the child's two random intercepts, neither of which this model has. Nothing in this report should be quoted as a finding about vocabulary in Down syndrome — and the point is not academic, since VG09 and VG08 disagree materially about the production ratio at older ages.
+- **The population curves are not averages of children.** With a child effect on the production ratio and a nonlinear link, the zero-effect curve is a particular child-level trajectory rather than the mean of the cohort's, and it is not comparable with the identically-labelled curve in a model without that effect.
+- **Above the high age anchor the production ratio is clamped**, and the reported comprehension range stops before the spoken range does. Both are stated in the _Model at a glance_ block. Rows beyond those points are carried by the model's smoothness assumptions rather than by observations; the monthly tables' `n_obs` column shows where that begins.
+- **The dispersion priors are lower bounds.** The calibration for this frame recovers a known $\kappa$ with a one-directional downward bias, corrected for in the prior medians but not eliminated, and the priors are correspondingly wide.
+- **Age is not a mechanism.** Everything reported is an association with age, not an effect of it, and the receptive-to-expressive mapping is a cross-sectional conversion, not a causal claim.
+- **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat.
+- **Not every spoken record is modelled as nested.** Records lacking a usable understood count, and records whose reported spoken count exceeds the reported understood count, use the marginal fallback described under Statistical model, and are informed by the production ratio less directly than the paired records are.

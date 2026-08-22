@@ -12,10 +12,29 @@ series, the joint engine writes ``q``/``r``/``p_any``/``psi`` + the four-cell
 composition. A variant whose fit did not converge (``r_hat > 1.01`` or ESS below
 threshold) is never reported as "robust": a shifted estimate from a bad fit is
 sampler noise, not prior sensitivity.
+
+Three ways a comparison can be worthless while still producing numbers, each
+detected here rather than left for a reader to notice:
+
+* **A stale pairing.** The baseline is a *moving* target — the model of record
+  gets refitted. Comparing a variant fitted before that against the new baseline
+  silently reports a mixture of the variant's effect and whatever else changed.
+  :func:`definition_mismatch` diffs the two recorded definitions and expects them
+  to differ only in the variant's own override keys (plus the naming fields), so
+  an intervening definition change is caught by name.
+* **Collapsed coverage.** The series are merged on ``age_months``, so a variant
+  whose grid differs contributes only the intersection. That reads as a normal
+  comparison over fewer points. :func:`coverage_report` measures the shortfall
+  against the baseline's own rows and names the series that went missing.
+* **A variant that never reported at all** — not fitted, or fitted and stopped by
+  the convergence gate. Those used to be skipped with a console note, leaving the
+  matrix silent about them; they are now rows with a status.
 """
 
 from __future__ import annotations
 
+import glob
+import json
 import os
 
 import numpy as np
@@ -23,6 +42,15 @@ import pandas as pd
 
 RHAT_MAX = 1.01
 ESS_THRESHOLD = 400
+
+#: Definition fields that always differ between a baseline and its variant, and
+#: whose difference carries no information: the variant's directory name and the
+#: banner printed at the top of its fit log.
+NAMING_FIELDS = frozenset({"config_name", "banner", "model_id"})
+
+#: Coverage below this fraction of the baseline's own comparable rows means the
+#: age grids disagree badly enough that the verdict is not about priors.
+MIN_COVERAGE = 0.9
 
 # (quantity, filename, median_col, ci_lo_col | None, ci_hi_col | None).
 # A series is loaded only if its file exists and carries the median column, so
@@ -92,6 +120,129 @@ def diagnostics_gate(dirpath: str) -> tuple[bool | None, float | None, float | N
     return (converged, max_rhat, min_ess)
 
 
+def _manifest(dirpath: str) -> dict | None:
+    """The fit manifest in ``dirpath``, or ``None`` if it has none."""
+    path = os.path.join(dirpath, "fit_manifest.json")
+    if not os.path.exists(path):
+        return None
+    with open(path) as fh:
+        return json.load(fh)
+
+
+def fit_created_at(dirpath: str) -> str | None:
+    """When the fit in ``dirpath`` was made, from its manifest."""
+    manifest = _manifest(dirpath)
+    return None if manifest is None else manifest.get("created_at_utc")
+
+
+def definition_mismatch(
+    baseline_dir: str, variant_dir: str, override_keys: set[str]
+) -> list[str]:
+    """Definition fields that differ but should not — empty when the pair is sound.
+
+    A variant fit is only a controlled comparison if it differs from the baseline
+    in the fields the registry overrides and nothing else. ``override_keys`` is
+    that expected set; anything else in the diff means the two fits were made
+    under different model definitions, so the delta is not attributable to the
+    variant. This is the check that catches a **stale pairing** — a variant
+    fitted before the model of record was refitted under a changed definition,
+    which produces a perfectly well-formed and completely misleading matrix row.
+
+    Returns ``[]`` when either manifest is unreadable: an unverifiable pairing is
+    reported through the status column rather than as a false mismatch.
+    """
+    base_m, var_m = _manifest(baseline_dir), _manifest(variant_dir)
+    if base_m is None or var_m is None:
+        return []
+    base = (base_m.get("model") or {}).get("definition") or {}
+    var = (var_m.get("model") or {}).get("definition") or {}
+    if not base or not var:
+        return []
+    allowed = NAMING_FIELDS | set(override_keys)
+    return sorted(
+        k
+        for k in set(base) | set(var)
+        if k not in allowed and base.get(k) != var.get(k)
+    )
+
+
+def coverage_report(baseline_dir: str, variant_dir: str) -> tuple[int, int, list[str]]:
+    """``(baseline_rows, shared_rows, missing_series)`` for a variant pairing.
+
+    ``baseline_rows`` counts every age the baseline reports across its headline
+    series; ``shared_rows`` counts those :func:`compare_dirs` will actually be
+    able to pair up. ``missing_series`` names quantities the baseline reports and
+    the variant does not at all.
+
+    **This must use exactly the matching rule** :func:`compare_dirs` **uses**, or
+    it reports coverage the comparison does not have. The rule is an exact match
+    on ``age_months``, which is safe for the query-grid series (integer months
+    from ``ages_query``) and consequential for the plot-grid ones: ``gap`` is
+    emitted on ``np.linspace(min_age, max_age, n_plot)``, so two fits share its
+    ages only if they share an age range. A variant that restricts the pool —
+    ``dse-native-only`` is the live example — gets a different linspace, and the
+    intersection collapses to the handful of points that coincide by arithmetic
+    accident: 3 of 355 in the 2026-08-16 run, which had been reported as a normal
+    "sensitive: gap" verdict. Measuring coverage the same way turns that into the
+    partial-coverage status it is.
+    """
+    base, var = load_headlines(baseline_dir), load_headlines(variant_dir)
+    baseline_rows = sum(len(frame) for frame in base.values())
+    shared_rows = 0
+    for qty, frame in base.items():
+        if qty not in var:
+            continue
+        b_ages = pd.Index(frame["age_months"])
+        v_ages = pd.Index(var[qty]["age_months"])
+        shared_rows += len(b_ages.intersection(v_ages))
+    missing = sorted(set(base) - set(var))
+    return baseline_rows, shared_rows, missing
+
+
+def failed_fit_dir(failed_root: str, model_id: str, config_name: str) -> str | None:
+    """The most recent retained failed fit for ``<model_id>-<config_name>``.
+
+    A fit stopped by the convergence gate is moved to ``output/failed/`` with a
+    UTC timestamp appended, so it is invisible to a ``models/`` lookup. Finding it
+    is what lets a non-converged variant appear in the matrix **with its reason**
+    rather than as a blank — the requirement recorded in
+    ``notes/202608142000-refit-run-record-and-disk-failure.md`` §5b.
+    """
+    if not os.path.isdir(failed_root):
+        return None
+    matches = sorted(glob.glob(os.path.join(failed_root, f"{model_id}-{config_name}-*")))
+    return matches[-1] if matches else None
+
+
+def summarise_absent(label: str, status: str, reason: str, variant_dir: str | None = None) -> dict:
+    """A matrix row for a variant that produced no comparable summaries.
+
+    ``status`` is ``"not-fitted"`` or ``"failed"``. A failed fit still has its
+    diagnostics, so its R-hat, ESS and failing parameters are reported: that is
+    the difference between "this variant does not sample" (an informative
+    negative) and "nobody ran it".
+    """
+    row = {
+        "variant": label,
+        "status": status,
+        "converged": None,
+        "max_rhat": None,
+        "min_ess": None,
+        "n_within_ci": 0,
+        "n_checked": 0,
+        "coverage": None,
+        "quantities_outside_ci": "",
+        "max_abs_delta": None,
+        "verdict": reason,
+    }
+    if variant_dir:
+        converged, max_rhat, min_ess = diagnostics_gate(variant_dir)
+        row["converged"] = converged
+        row["max_rhat"] = max_rhat
+        row["min_ess"] = min_ess
+    return row
+
+
 def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
     """Per-quantity, per-age comparison of a variant against its baseline.
 
@@ -138,8 +289,24 @@ def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def summarise(comparison: pd.DataFrame, variant_dir: str, label: str) -> dict:
-    """One-row robustness verdict for a variant (feeds the §7 matrix)."""
+def summarise(
+    comparison: pd.DataFrame,
+    variant_dir: str,
+    label: str,
+    *,
+    mismatch: list[str] | None = None,
+    coverage: tuple[int, int, list[str]] | None = None,
+) -> dict:
+    """One-row robustness verdict for a variant (feeds the §7 matrix).
+
+    The verdict is decided in a fixed order of severity, because a lower-severity
+    reading of a higher-severity problem is exactly the failure this function is
+    for: a stale pairing or collapsed coverage would otherwise be reported as
+    "robust", which is the most confident thing the matrix can say and the least
+    warranted. ``mismatch`` and ``coverage`` come from
+    :func:`definition_mismatch` and :func:`coverage_report`; both default to "not
+    checked" so an older caller keeps its behaviour.
+    """
     converged, max_rhat, min_ess = diagnostics_gate(variant_dir)
     checked = comparison.dropna(subset=["within_baseline_ci"])
     # The column mixes Python bools with None (P_psi_gt_1 / four-cell rows), so it
@@ -150,19 +317,45 @@ def summarise(comparison: pd.DataFrame, variant_dir: str, label: str) -> dict:
     n_checked = int(len(checked))
     outside = sorted(checked.loc[~within, "quantity"].unique().tolist())
     max_abs_delta = float(comparison["delta"].abs().max()) if len(comparison) else 0.0
-    if converged is False:
+
+    coverage_frac = None
+    if coverage is not None:
+        baseline_rows, shared_rows, missing = coverage
+        coverage_frac = (shared_rows / baseline_rows) if baseline_rows else None
+
+    status = "compared"
+    if mismatch:
+        status = "stale-pairing"
+        verdict = (
+            "STALE PAIRING (not assessed): baseline and variant differ in "
+            + ", ".join(mismatch)
+            + " — refit the variant against the current model of record"
+        )
+    elif converged is False:
+        status = "non-converged"
         verdict = "NON-CONVERGED (not assessed)"
+    elif coverage_frac is not None and coverage_frac < MIN_COVERAGE:
+        status = "partial-coverage"
+        missing_note = (
+            f"; missing series: {', '.join(coverage[2])}" if coverage[2] else ""
+        )
+        verdict = (
+            f"PARTIAL COVERAGE (not assessed): only {coverage[1]} of "
+            f"{coverage[0]} baseline rows are shared{missing_note}"
+        )
     elif not outside:
         verdict = "robust (all within baseline 89% interval)"
     else:
         verdict = "sensitive: " + ", ".join(outside)
     return {
         "variant": label,
+        "status": status,
         "converged": converged,
         "max_rhat": max_rhat,
         "min_ess": min_ess,
         "n_within_ci": n_within,
         "n_checked": n_checked,
+        "coverage": coverage_frac,
         "quantities_outside_ci": ", ".join(outside),
         "max_abs_delta": max_abs_delta,
         "verdict": verdict,

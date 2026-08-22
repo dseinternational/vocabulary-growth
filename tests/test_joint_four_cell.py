@@ -538,3 +538,82 @@ def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02():
     # question at once and cannot separate them — which is why it is documented as
     # a trajectory-shape check rather than a psi check.
     assert cells["study"].nunique() == 1
+
+
+# ------------------------------------------------- sign-to-speech milestones
+
+
+def test_signing_milestones_recover_a_known_hand_over():
+    """A synthetic hand-over with a known peak is recovered per draw.
+
+    The peak is deliberately jittered across draws: reading it off the median
+    curve instead would flatten and re-centre it, which is the error this
+    function exists to avoid.
+    """
+    import numpy as np
+
+    from vocab_growth.models.common_joint_modality import _signing_milestones
+
+    ages = np.arange(8.0, 84.0, 0.25)
+    rng = np.random.default_rng(11)
+    n_draw = 300
+    peaks = 34.0 + rng.normal(0.0, 1.5, n_draw)
+    sign_only = 50.0 * np.exp(-((ages[:, None] - peaks[None, :]) ** 2) / (2 * 10.0**2))
+    speak_only = 200.0 / (1.0 + np.exp(-(ages[:, None] - 50.0) / 6.0))
+    speak_only = np.repeat(speak_only, 1, axis=1) * np.ones((1, n_draw))
+    both = np.full_like(sign_only, 5.0)
+
+    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89, "eti")
+    got = got.set_index("quantity")
+
+    assert abs(got.loc["sign_only_peak_age", "median"] - 34.0) < 1.0
+    assert got.loc["sign_only_peak_age", "ci_lo"] < 34.0 < got.loc["sign_only_peak_age", "ci_hi"]
+    assert abs(got.loc["sign_only_peak_words", "median"] - 50.0) < 1.0
+    # Ordering: the peak comes first, then the crossings.
+    assert (
+        got.loc["sign_only_peak_age", "median"]
+        < got.loc["speech_only_overtakes_sign_only_age", "median"]
+    )
+    assert (got["draws_reaching"] == 1.0).all()
+
+
+def test_signing_milestones_ignore_the_pre_vocabulary_region():
+    """Below a word of expressive vocabulary, cell ordering is arithmetic noise.
+
+    Without the gate the "crossing" is found at the first grid point, because a
+    curve that is 1e-4 above another is still above it. The gate is on a word
+    count rather than a grid-point count so it cannot silently depend on the
+    step size — this function is called with two different grids.
+    """
+    import numpy as np
+
+    from vocab_growth.models.common_joint_modality import _signing_milestones
+
+    ages = np.arange(8.0, 84.0, 0.25)
+    n_draw = 20
+    # Speech exceeds sign everywhere, but both are negligible until ~40 months.
+    ramp = np.clip((ages - 40.0) / 40.0, 0.0, None)[:, None] * np.ones((1, n_draw))
+    sign_only = 10.0 * ramp
+    speak_only = 20.0 * ramp
+    both = np.zeros_like(sign_only)
+
+    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89, "eti").set_index("quantity")
+    crossing = got.loc["speech_only_overtakes_sign_only_age", "median"]
+    assert crossing > 40.0, f"crossing found in the pre-vocabulary region: {crossing}"
+
+
+def test_signing_milestones_flag_a_milestone_never_reached():
+    """draws_reaching is the identification warning, not decoration."""
+    import numpy as np
+
+    from vocab_growth.models.common_joint_modality import _signing_milestones
+
+    ages = np.arange(8.0, 84.0, 0.25)
+    n_draw = 10
+    sign_only = np.full((len(ages), n_draw), 60.0)
+    speak_only = np.full((len(ages), n_draw), 5.0)  # never overtakes
+    both = np.zeros_like(sign_only)
+
+    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89, "eti").set_index("quantity")
+    assert got.loc["speech_only_overtakes_sign_only_age", "draws_reaching"] == 0.0
+    assert np.isnan(got.loc["speech_only_overtakes_sign_only_age", "median"])

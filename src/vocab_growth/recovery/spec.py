@@ -216,6 +216,34 @@ _TARGETS: dict[str, tuple[str, EngineRecoverySpec]] = {
     "vg12": _UNIVARIATE_RE,
     "vg13": _BIVARIATE_RE,
     "vg15": _JOINT,
+    # VG19 runs VG10's engine and VG10's data-generating process. The child slope
+    # changes the PRIOR on each child's effect -- one deviate becomes an
+    # intercept/rate pair -- but not how counts are drawn, and the simulator
+    # samples the observation nodes from the real graph at a fixed truth draw, so
+    # the slope is carried without a spec change. Same reasoning as VG20 below.
+    #
+    # Scoring needs no entry either: `tau_subj_*_0`, `tau_subj_*_1` and
+    # `tau_subj_*_rho` are scalar, so `recovery/compare.py` picks them up by
+    # dimension; `tau_subj_*_rho_raw` is excluded by the `*_raw` rule; and
+    # `tau_subj_*_z` carries two dims (subject_id, child_effect), so it falls
+    # through both branches of `target_variables` rather than erroring.
+    #
+    # Registered because G3 of the VG19 plan is a recovery check, and without an
+    # entry `fit_recovery.py vg19` fails with the generic "no recovery
+    # specification registered". `tau1` is the parameter the check exists for:
+    # the plan predicts it is weakly identified, and recovery at `test` is how
+    # that is measured rather than assumed.
+    "vg19": _BIVARIATE_RE,
+    # VG20 runs the same engine and the same data-generating process as VG10 --
+    # the correlation changes the PRIOR on the pair of subject deviates, not how
+    # counts are simulated -- so the VG10 spec is correct here unchanged. It is
+    # registered because #224's second gate is recovery of `rho_uq` itself, and
+    # without an entry `fit_recovery.py vg20` fails with the generic "no recovery
+    # specification registered" rather than running. `rho_uq` needs no scoring
+    # entry of its own: it is a scalar Deterministic, so the target selection in
+    # recovery/compare.py picks it up, while `rho_uq_raw` is excluded by the
+    # existing `*_raw` rule as a non-centred offset with no interpretation.
+    "vg20": _BIVARIATE_RE,
 }
 
 UNSUPPORTED_REASONS: dict[str, str] = {
@@ -232,8 +260,12 @@ UNSUPPORTED_REASONS: dict[str, str] = {
     "vg14": "signing baseline on the trivariate engine (superseded by VG15)",
 }
 
-# The three models #163 names as preferred/headline, in reporting order.
-HEADLINE_MODELS: tuple[str, ...] = ("vg10", "vg12", "vg15")
+# The three models #163 names as preferred/headline, in reporting order. VG20
+# replaced VG10 here on 2026-08-19 when it took over as the model of record for
+# the Down syndrome joint understood + spoken estimands (#224); this list tracks
+# the models that carry reporting weight, so it follows the role, not the
+# lineage. VG10 stays a recovery target, it is simply no longer a headline one.
+HEADLINE_MODELS: tuple[str, ...] = ("vg20", "vg12", "vg15")
 
 
 def supported_models() -> list[str]:

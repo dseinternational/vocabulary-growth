@@ -138,6 +138,39 @@ class ModelType(Enum):
     JOINT = "joint"
 
 
+#: ``clamp_mean_above_hi_anchor`` value that levels off **only** the production
+#: ratio ``q``, leaving the understood mean free above the high anchor.
+CLAMP_Q_ONLY = "q_only"
+
+
+def clamp_targets(value: bool | str) -> tuple[bool, bool]:
+    """Return ``(clamp_understood, clamp_q)`` for a ``clamp_mean_above_hi_anchor``.
+
+    The flag started as a single boolean applied to both means. Measurement on
+    2026-08-14 showed the saturation it was added for is ``q``'s alone:
+    extrapolating VG10's own fitted anchors past the clamp gives ``q`` 0.996 at
+    115 months with ``P(mean > 0.99) = 0.999``, while the understood mean reaches
+    0.962 and **never** crosses 0.99 in any posterior draw. The unclamped DS
+    controls agree — VG01 and VG02 share this pool and these anchors with no
+    clamp, and neither saturates nor shows a corner at 84 months.
+
+    Because spoken is ``p_U(a) * q(a)``, clamping both means compounds: the
+    spoken trajectory inherits two levelled-off factors, which is what makes the
+    corner at 84 months so much sharper than either factor alone.
+
+    ``"q_only"`` is spelled as a string rather than added as a second boolean
+    field on purpose. ``fit_manifest.json`` fingerprints the definition with
+    ``asdict`` and compares it as whole-object equality, so a *new* field would
+    add a key to all fifteen models' definitions and invalidate every model of
+    record at once. Widening this field's domain leaves ``True``/``False``
+    serialising exactly as before, so only a definition that actually opts in
+    changes. See ``notes/202608141200-clamp-q-only.md``.
+    """
+    if value == CLAMP_Q_ONLY:
+        return False, True
+    return bool(value), bool(value)
+
+
 # ============================================================
 # Shared prior defaults (same default kappa shape reused by every model)
 # ============================================================
@@ -253,6 +286,141 @@ class SubjectVariancePartitionParams:
     """Beta alpha for the subject share of that scatter."""
     share_beta: float
     """Beta beta for the subject share of that scatter."""
+
+
+@dataclass(frozen=True)
+class SubjectSlopePriorParams:
+    """A child-level random *slope*: each child gets an intercept and a rate.
+
+    VG19 (``notes/202608141900-child-slope-implementation-plan.md``). This is the
+    structure Gate 1 selected on the fitted residuals, against two alternatives:
+    a random slope is worth ``2 x delta logL = 36.05`` on spoken over a constant
+    intercept and survives restriction to the 334 children with repeated spoken
+    measures (20.81), while an AR(1) transient collapses to zero persistence on
+    both outcomes. So the missing structure is drift, not an autocorrelated
+    child process.
+
+    The graph, non-centred, with the Cholesky written out::
+
+        tau0    ~ HalfNormal(tau0_sigma)     # spread at the reference age
+        tau1    ~ HalfNormal(tau1_sigma)     # spread of rates, PER YEAR
+        rho_raw ~ Beta(rho_eta, rho_eta);  rho01 = 2 * rho_raw - 1
+        z       ~ Normal(0, 1), dims (subject_id, 2)
+        L       = [[tau0, 0], [rho01 * tau1, tau1 * sqrt(1 - rho01 ** 2)]]
+        b       = z @ L.T
+        shift(obs) = b[subject, 0] + b[subject, 1] * (age - ref_age) / 12
+
+    Three properties are the point of the design, and none is incidental.
+
+    **The model of record is nested at ``tau1 = 0``**, so the slope has to be
+    evidenced rather than assumed, and Proposal A1 is the *other* special case at
+    ``rho01 = 1`` — one deviate scaled by an age function is a rank-one
+    covariance. Fitting with ``rho01`` free tests both in one model. Freeing it
+    costs 6.28 on 1 df on the repeats-only production fit (p ~ 0.012), which is
+    why it is free here and not pinned.
+
+    **``tau1`` is per year.** In logit/month the fitted values are 0.02-ish and a
+    prior on that scale is unreadable; per year they are 0.12-0.29.
+
+    **For a 2x2 matrix, ``(rho01 + 1) / 2 ~ Beta(eta, eta)`` is exactly
+    LKJ(eta)**, so this is the standard prior written in the one form that keeps
+    ``tau0``, ``tau1`` and ``rho01`` named free variables the posterior
+    summaries, the comparators and the recovery scorer can read — rather than
+    elements of a packed Cholesky vector. Same reasoning as
+    :class:`BivariateCorrelatedSubjectREModelDefinition`.
+
+    Supplied **in place of** a scalar ``tau_subj_*_sigma``, exactly as
+    :class:`AgeVaryingSubjectScale` is, so the field it replaces already selects
+    the subject-effect scale and no new field appears on the parent definition.
+    """
+
+    tau0_sigma: float
+    """HalfNormal scale for the between-child spread AT THE REFERENCE AGE. Set it
+    to the scalar ``tau_subj_*_sigma`` this object replaces, so the model of
+    record's own prior is what the intercept keeps."""
+    tau1_sigma: float
+    """HalfNormal scale for the spread of per-year rates. ``HalfNormal(0.5)`` has
+    median 0.34, covers both ML-fitted values (0.12-0.29) comfortably, and keeps
+    mass near zero so a slope the data do not support shrinks away."""
+    rho_eta: float = 2.0
+    """LKJ concentration for the intercept-slope correlation. ``eta = 1`` is
+    uniform on (-1, 1); ``eta = 2`` biases gently toward zero. The ML estimate to
+    compare against is +0.43."""
+
+
+@dataclass(frozen=True)
+class AgeVaryingSubjectScale:
+    """Proposal A1: an age-varying between-child scale, with ``kappa`` held flat.
+
+    Supplied **in place of** a scalar ``tau_subj_*_sigma`` / ``tau_subject_sigma``.
+    That is deliberate: the field it replaces already selects the subject-effect
+    scale, so A1 needs no new definition field, and the fifteen models of record
+    keep their fingerprints (a new field would appear in every ``asdict`` and
+    invalidate every fit). The same trick carries
+    :data:`CLAMP_Q_ONLY` on ``clamp_mean_above_hi_anchor``.
+
+    The scale is log-linear in standardised age between two reference ages, and
+    is parameterised so the model of record is **nested at zero**::
+
+        tau_young       ~ HalfNormal(young_sigma)      # the record's own prior
+        log_tau_ratio   ~ Normal(0, log_ratio_sigma)   # log(tau_old / tau_young)
+        tau(z)          = tau_young * exp(log_tau_ratio * (z - z_young) / (z_old - z_young))
+
+    Two properties follow, and both are the point of the design. At the young
+    anchor the prior on the subject scale is *exactly* the prior the model of
+    record places on its constant ``tau``, so the variant is one-factor. And
+    ``log_tau_ratio = 0`` reproduces the model of record exactly, so the
+    posterior for that one parameter answers "does the spread between children
+    widen with age?" as a credible interval around a null, rather than as a
+    model comparison. A multiplicative ratio also keeps the scale positive
+    without taking a logarithm of a ``HalfNormal`` that can approach zero.
+
+    ``hold_kappa_constant`` is part of A1 rather than a separate switch: the
+    proposal is that the age variation belongs on the between-child parameter,
+    so it is *moved* rather than duplicated. It forces ``b_kappa = 0`` in the
+    paired dispersion block — ``kappa_u`` for the understood scale, ``kappa_s``
+    for the production one — leaving the dispersion *level* free.
+
+    Structural caveat, stated where it cannot be missed: scaling a single
+    per-child deviate by ``tau(age)`` imposes **perfect rank correlation of
+    children across age**. Children never cross. That is measured, not assumed
+    — about 0.75-0.83 disattenuated out to two years and 0.28 beyond — so this
+    is registered-sensitivity material and not a candidate model of record. See
+    ``notes/202607261540-item-difficulty-and-the-aggregate-likelihood.md`` §9
+    and ``notes/202608141600-rank-stability-tracking.md`` §8.
+    """
+
+    anchor_ages: tuple[float, float]
+    """Reference ages (months) for the young and old ends of the scale. Set these
+    to the paired ``kappa`` block's anchors so the two parameters contest the
+    same span."""
+    young_sigma: float
+    """HalfNormal scale at the young anchor. Set it to the scalar
+    ``tau_subj_*_sigma`` this object replaces, or the variant is not one-factor."""
+    log_ratio_sigma: float
+    """Normal scale for ``log(tau_old / tau_young)``. Zero is 'no widening'."""
+    hold_kappa_constant: bool = True
+    """Force the paired ``kappa`` block flat in age (level still free)."""
+
+
+def subject_scale_spec(value) -> AgeVaryingSubjectScale | None:
+    """Return the A1 spec a subject-scale field carries, or ``None`` if scalar.
+
+    The one place the overloaded field is interpreted. Engines call this rather
+    than testing types inline, so "is this model A1?" has a single answer.
+    """
+    return value if isinstance(value, AgeVaryingSubjectScale) else None
+
+
+def subject_slope_spec(value) -> SubjectSlopePriorParams | None:
+    """Return the VG19 child-slope spec a subject-scale field carries, or ``None``.
+
+    The companion to :func:`subject_scale_spec`, on the same overloaded field.
+    The two are mutually exclusive by construction: a field holds a float, an
+    :class:`AgeVaryingSubjectScale`, or a :class:`SubjectSlopePriorParams`, and
+    each selector recognises exactly one of them.
+    """
+    return value if isinstance(value, SubjectSlopePriorParams) else None
 
 
 # ============================================================
@@ -569,7 +737,12 @@ class BivariateModelDefinition:
     midpoint of slope_anchors."""
 
     # -- Mean extrapolation above the high anchor --
-    clamp_mean_above_hi_anchor: bool = False
+    clamp_mean_above_hi_anchor: bool | str = False
+    """Level the mean off above the high slope anchor instead of extrapolating.
+
+    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
+    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
+    rather than testing truthiness -- ``"q_only"`` is truthy."""
     """If True, level the logit-linear mean off above the high anchor age instead
     of extrapolating the line. The transition is a soft minimum, so the mean stays
     differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
@@ -638,6 +811,76 @@ class BivariateModelDefinition:
     @property
     def model_type(self) -> ModelType:
         return ModelType.BIVARIATE
+
+
+@dataclass
+class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
+    """Bivariate definition that also correlates the two subject random effects.
+
+    VG20 (issue #224). The field lives on a **subclass**, not on
+    ``BivariateModelDefinition``, for the reason ``UnivariateREModelDefinition``
+    exists: a fit is validated by comparing the serialised definition field for
+    field, so adding a field to a definition class invalidates every existing fit
+    of that class — here VG05, VG07-VG10 and VG16, six models of record.
+
+    ``None`` means "behave exactly as the parent class", so the subclass is inert
+    until a definition sets the field; the engine reads it through ``getattr``.
+    """
+
+    subject_re_correlation_eta: float | None = None
+    """LKJ concentration for the correlation between the two subject intercepts.
+
+    ``None`` disables the correlation, leaving the two blocks independent as in
+    VG10. When set, ``(rho_uq + 1) / 2 ~ Beta(eta, eta)``, which for a 2x2 matrix
+    is exactly LKJ(eta) — so this is the standard prior, written in the one form
+    that keeps ``rho_uq`` a named free variable the summaries and the recovery
+    scorer can read, rather than an element of a packed Cholesky vector.
+
+    ``eta = 1`` is uniform on (-1, 1); ``eta = 2`` puts a gentle bias toward zero
+    (SD 0.45) so that a correlation has to be evidenced rather than assumed,
+    which is the point of the model. The nesting is exact: at ``rho_uq = 0`` the
+    graph emits what VG10's does.
+    """
+
+
+@dataclass
+class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
+    """Bivariate definition that gives each child a rate as well as an offset.
+
+    VG19 (``notes/202608141900-child-slope-implementation-plan.md``). VG08-VG10
+    and VG20 give each child a **constant** offset from the population
+    trajectory, so three distinct quantities have to live in two parameters:
+    persistent between-child differences, occasion-to-occasion movement, and
+    drift. This separates the third.
+
+    Inherits from ``BivariateModelDefinition``, **not** from
+    ``BivariateCorrelatedSubjectREModelDefinition``, and that is the decision
+    recorded on 2026-08-21: VG19 is gated against VG10, so VG10 is its parent and
+    ``subject_re_correlation_eta`` is a field it should not be able to set.
+
+    The two structures are not composable as written. VG20 estimates one
+    correlation, between the two outcomes' constant offsets; VG19 estimates two
+    different ones, between each outcome's own intercept and slope. The union is
+    a 4x4 covariance with six correlations, of which the most interesting -- do
+    children who gain comprehension faster also convert faster? -- is estimated
+    by neither. Carrying ``rho_uq`` across while leaving that at zero would
+    repeat, one level up, the assumption VG20 exists to correct. The engine
+    refuses the combination as defence in depth; this base class is why it should
+    never arise. See ``notes/202608211500-vg19-registration.md``.
+
+    The slope field is supplied through the ``tau_subj_*_sigma`` seam, so setting
+    neither reproduces the parent exactly.
+
+    ``subject_slope_ref_age_months`` is the age at which ``tau0`` *is* the
+    between-child spread. Centring at the design's centre is what keeps the
+    intercept and the slope from trading off in the sampler, and it makes
+    ``tau0`` a spread with a stated age attached rather than an extrapolated
+    intercept at age zero.
+    """
+
+    subject_slope_ref_age_months: float = 36.0
+    """Reference age (months) at which ``tau0`` is the between-child spread.
+    36 months is the Down syndrome pool's median age."""
 
 
 # ============================================================
@@ -764,7 +1007,12 @@ class TrivariateModelDefinition:
     """Upper bound on age (inclusive, months) for data loading. None = no limit."""
 
     # -- Mean extrapolation above the high anchor --
-    clamp_mean_above_hi_anchor: bool = False
+    clamp_mean_above_hi_anchor: bool | str = False
+    """Level the mean off above the high slope anchor instead of extrapolating.
+
+    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
+    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
+    rather than testing truthiness -- ``"q_only"`` is truthy."""
     """If True, level the logit-linear mean off above the high anchor age instead
     of extrapolating the line. The transition is a soft minimum, so the mean stays
     differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
@@ -779,7 +1027,9 @@ class TrivariateModelDefinition:
     """Highest query age (months) at which comprehension quantities are reported.
 
     Trims the understood and ``q`` summary tables and the production-ratio figure
-    to where their evidence stops, leaving spoken (and signed) on the full grid.
+    to where their evidence stops, leaving spoken on the full grid. Signed has its
+    own cap, ``report_max_age_signed``; before 2026-08-13 it did not, and the
+    sign-derived figures silently borrowed this one.
     Purely post-processing: the query grid, the model graph and the fitted trace
     are untouched, so changing this cannot move the posterior — proved by
     refitting VG10 across the change at a fixed seed and reproducing its
@@ -788,6 +1038,30 @@ class TrivariateModelDefinition:
     not regenerate them, and this field is part of the recorded definition, so a
     fit produced under a different value is correctly reported as stale. None
     reports every query age. See ``posterior_analysis.trim_reported_ages``."""
+
+    report_max_age_signed: int | None = None
+    """Highest query age (months) at which signed quantities are reported.
+
+    The trivariate counterpart of ``JointModelDefinition.report_max_age_signed``,
+    added 2026-08-13. The cap was introduced for VG15 alone (``feat(vg15)``), so
+    VG14 -- the only trivariate model, and the one whose signed results uk_07
+    moved most -- never had one. Its two consequences were wrong in the same
+    direction:
+
+    * ``plot_signed_rate`` and ``plot_sign_speech_crossover`` were passed
+      ``report_max_age_understood``, so the signed figures were trimmed by the
+      *comprehension* cap. Raising that cap from 72 to 84 moved VG14's signed
+      figures as a side effect, which nobody decided.
+    * the ``r(a)`` summary table was not trimmed at all, so it ran to the top of
+      the query grid at 90 while the figure beside it stopped at 72 -- the
+      table/figure disagreement ``tests/test_reporting_age_caps.py`` exists to
+      catch, inverted.
+
+    Set to 84 on VG14, matching VG15 on the same evidence: uk_07 rebuilt the
+    signed tail, the study owner raised VG15's cap from 60 to 84 in #212, and 84
+    is the high trend anchor above which the mean is levelled off rather than
+    fitted. Purely post-processing, but part of the recorded definition, so
+    changing it requires a refit. None reports every query age."""
 
     @property
     def model_type(self) -> ModelType:
@@ -995,7 +1269,12 @@ class JointModelDefinition:
     of slope_anchors."""
 
     # -- Mean extrapolation above the high anchor --
-    clamp_mean_above_hi_anchor: bool = False
+    clamp_mean_above_hi_anchor: bool | str = False
+    """Level the mean off above the high slope anchor instead of extrapolating.
+
+    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
+    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
+    rather than testing truthiness -- ``"q_only"`` is truthy."""
     """If True, level the logit-linear mean off above the high anchor age instead
     of extrapolating the line. The transition is a soft minimum, so the mean stays
     differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
@@ -1593,31 +1872,87 @@ _TD_YOUNG_Q_KAPPA_RE = KappaAnchorPriorParams(
 # one and the current posterior alike. The floor keeps the shared weak default.
 
 _DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
-    # Totals 110 @ 24 mo and 33 @ 48 mo. The dev-config posteriors these replace
-    # sat at 66 and 20 under a prior centred near 13, so this moves the prior to
-    # where the data already were rather than moving the fit.
-    anchor_ages=(24.0, 48.0),
-    kappa_min_mu=math.log(3.0),
+    # Recalibrated 2026-08-19 (#229), promoted from VG20's
+    # `kappa-anchor-18-72-floor` variant. Shared by VG09, VG10, VG14, VG15,
+    # VG16 and VG20, and changed here rather than on VG20 alone so those six
+    # keep a common dispersion treatment -- VG20 is defined as VG10 plus a
+    # correlated subject block and nothing else, an invariant two tests
+    # enforce, and a VG20-only change would have made that description false
+    # and `compare_vg10_vg20.py` a two-factor contrast.
+    #
+    # Two changes, made together because only the pair sampled cleanly.
+    #
+    # Anchors move from (24, 48) to (18, 72), so the reporting range is
+    # interpolation between two priored points rather than extrapolation onto
+    # the asymptote. 84 was considered and rejected: 18 administrations on 12
+    # children sit within +-6 months of it, against 51 on 46 children at 72.
+    #
+    # The floor's prior median moves from 3.0 to 7.8, where the conditional
+    # calibration puts it (`scripts/kappa_conditional_calibration.py --anchors
+    # 18,72 --mean spline`, stable at 7.5-8.0 across 6, 8, 10 and 14 knots;
+    # only the saturated per-cell mean collapses it, which is what that pool's
+    # "frame too thin" note is about). These blocks had kept the generic
+    # log(3.0) that VG11 was moved off. That was a considered position rather
+    # than an oversight -- notes/202608020829 §22 measured `kappa_min_s`'s
+    # posterior at 9.23 against the same prior median with contraction -0.05
+    # and left it, on the ground that only the sum at the anchors is
+    # identified, which remains true. Re-centring it is worth doing for the
+    # geometry and for saying what the data say, not because the old value
+    # biased anything.
+    #
+    # Excess medians are the calibrated TOTAL at each anchor minus the floor
+    # prior's median: totals 92.6 at 18 months and 14.0 at 72.
+    #
+    # NOTE: these are the *uncorrected* calibration. The values they replace
+    # were each estimate divided by the recovery bias measured at its level
+    # (81.6/0.74 = 110 at 24 months, 20.3/0.62 = 33 at 48), because recovered
+    # `kappa` on this frame is one-directionally low -- -2% at a truth of 12
+    # rising to -67% at 100. Dropping that a priori correction was noticed only
+    # after the promotion. §22 reports it "was not needed" on understood and
+    # under-corrected the ratio, and the measured consequence here is under 1%
+    # on reported kappa below 48 months, so it is left dropped -- but as a
+    # stated position, not an accident. See
+    # notes/202608191800-kappa-components-not-estimands.md §9.
+    #
+    # Expect little movement in what is reported. On a like-for-like `test`
+    # pairing all 395 checks fall inside the baseline's 89% interval (max
+    # |delta| 1.48), and reported kappa moves under 1% below 48 months, +6.5%
+    # at 72 and +13.8% at 84 -- a prior elasticity of 0.04 to 0.09. What the
+    # change buys is sampling geometry and honest prior placement, not a
+    # different answer: it is the only one of baseline, anchor-only, floor-only
+    # and both to sample with zero divergences.
+    # See notes/202608191800-kappa-components-not-estimands.md.
+    anchor_ages=(18.0, 72.0),
+    kappa_min_mu=math.log(7.8),
     kappa_min_sigma=0.8,
-    excess_young_mu=math.log(106.0),
+    excess_young_mu=math.log(84.8),
     excess_young_sigma=1.0,
-    excess_old_mu=math.log(28.7),
+    excess_old_mu=math.log(6.2),
     excess_old_sigma=1.0,
 )
 
 _DS_JOINT_Q_KAPPA_RE = KappaAnchorPriorParams(
-    # The production ratio on the nested scale the engines use: spoken out of that
-    # child's own observed understood count, mean q. Totals 17 @ 24 mo and 11 @ 48.
-    # 469 of 1,114 spoken rows fall back to the marginal out-of-810 likelihood
-    # because the understood count is missing or violated, so this calibration
-    # covers the 58% on the nested scale and kappa_s governs both.
-    anchor_ages=(24.0, 48.0),
-    kappa_min_mu=math.log(3.0),
+    # The production ratio on the nested scale the engines use: spoken out of
+    # that child's own observed understood count, mean q. 469 of 1,114 spoken
+    # rows fall back to the marginal out-of-810 likelihood because the
+    # understood count is missing or violated, so this calibration covers the
+    # 58% on the nested scale and kappa_s governs both.
+    #
+    # Recalibrated 2026-08-19 alongside the understood block above; see there
+    # for the anchor and floor rationale. Calibrated totals 18.2 at 18 months
+    # and 8.4 at 72, against a floor of 7.8 -- so the old excess is 0.6, very
+    # nearly the floor restated, and its calibration log-scale SE is 1.429.
+    # `excess_old_sigma` is 1.5 rather than the family's 1.0 for exactly that
+    # reason: a prior narrower than the estimate it is drawn from would assert
+    # more than the estimate supports. The anchor move helps comprehension more
+    # than it helps q, and that is visible here rather than hidden.
+    anchor_ages=(18.0, 72.0),
+    kappa_min_mu=math.log(7.8),
     kappa_min_sigma=0.8,
-    excess_young_mu=math.log(12.6),
+    excess_young_mu=math.log(10.4),
     excess_young_sigma=1.0,
-    excess_old_mu=math.log(6.7),
-    excess_old_sigma=1.0,
+    excess_old_mu=math.log(0.6),
+    excess_old_sigma=1.5,
 )
 
 VG01 = UnivariateModelDefinition(
@@ -1682,11 +2017,17 @@ VG02 = UnivariateModelDefinition(
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     eta_sigma=0.6,
-    # Comprehension reporting stops at 72 mo, matching the joint models. Only 15
-    # of the 905 understood rows sit at or above it (95th percentile 64 mo), and
-    # 78 and 90 fall at or past the high anchor. Reporting only -- it cannot move
-    # the posterior. The whole-month companion still covers the full observed span,
-    # where its n_obs column records the emptiness directly. See
+    # Comprehension reporting stops at 72 mo, matching the joint models; lowered
+    # from 84 on 2026-08-22. VG02 carries no q, so the model-dependence argument
+    # that binds the joint models (see VG05) does not arise here on its own terms --
+    # understood is the robust quantity, agreeing across VG10, VG19 and VG20 to
+    # within 0.15 interval widths at every age to 84. It follows the joint models
+    # anyway, because a single-outcome comprehension model reporting to 84 beside a
+    # joint model reporting to 72 would invite the reader to prefer whichever
+    # number ran further. Reporting only -- it cannot move the posterior. The
+    # whole-month companion still covers the full observed span, where its n_obs
+    # column records the emptiness directly. See
+    # notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     kappa=_DS_UNDERSTOOD_KAPPA,
@@ -1737,9 +2078,23 @@ VG04 = UnivariateModelDefinition(
     n_trials=810,
     slope_anchors=(12, 26),
     ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
-    # Comprehension observations end at 25 months, but the declared reporting
-    # range reaches 30. This preserves the existing 8-30 month HSGP domain.
+    # The 8-30 month HSGP domain is shared with VG03 and stays as it is.
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
+    # Comprehension reporting stops at 25 months, 2026-08-17 (#228). Comprehension
+    # rides only on the bivariate forms, and those stop at 25: on this model's
+    # English-only pool the last 591 comprehension rows are Floccia's Oxford CDI
+    # at 19-25 months, and NOTHING is observed at 26 or beyond. The query grid
+    # nonetheless ran to 30, so `posterior_summary.csv` -- and the rendered report
+    # table built from it -- published a 27- and a 30-month comprehension median
+    # on zero observations, while this model's own figures already stopped at 25.
+    # The gap between the HSGP domain and the reporting grid is exactly what this
+    # field is for; the note this replaced treated keeping the domain at 30 and
+    # reporting to 30 as the same decision, and they are not. Reporting only --
+    # it cannot move the posterior. Separately, and not changed here: the 26 mo
+    # high slope anchor VG04 shares with VG12 sits one month past the last
+    # comprehension observation. That is a prior question rather than a reporting
+    # one, and it is already registered as VG12's `hi-anchor-broad` sensitivity.
+    report_max_age_understood=25,
     # 12 mo understood low anchor — independent Wordbank TD norm: comprehension
     # median ~84 words/810 at 12 mo. Beta(1.2, 8) matches at median ~84 (the
     # in-sample mean ~82 corroborates); the old Beta(1,20) centred it at ~28, well
@@ -1822,15 +2177,37 @@ VG05 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG07 = BivariateModelDefinition(
@@ -1897,15 +2274,37 @@ VG07 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG08 = BivariateModelDefinition(
@@ -1974,15 +2373,37 @@ VG08 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG09 = BivariateModelDefinition(
@@ -2055,15 +2476,37 @@ VG09 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG10 = BivariateModelDefinition(
@@ -2140,15 +2583,37 @@ VG10 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG11 = UnivariateREModelDefinition(
@@ -2275,6 +2740,15 @@ VG12 = UnivariateREModelDefinition(
     # away -- so this model is still expected to need the caveated publication path.
     centred_study_re=True,
     subject_variance_partition=_TD_UNDERSTOOD_VARIANCE_PARTITION,
+    # Comprehension reporting stops at 25 months, 2026-08-17 (#228), for the same
+    # reason as VG04 and with more data behind it: comprehension rides only on the
+    # bivariate forms, and in this model's widened language scope they stop at 25
+    # (Floccia's Oxford CDI to 25, Caselli's Italian Words & Gestures to 24 --
+    # 694 rows above 18 months and none at all above 25). The query grid ran to
+    # 30, so the published report table carried a 27- and a 30-month median on no
+    # observations while this model's own figures already stopped at 25.
+    # Reporting only -- it cannot move the posterior.
+    report_max_age_understood=25,
     kappa=_TD_UNDERSTOOD_KAPPA_RE,
 )
 
@@ -2290,8 +2764,22 @@ VG13 = BivariateModelDefinition(
     # Oxford CDI (ceiling 418) are interpreted on this shared reference scale;
     # source-form ceilings remain an interpretation caveat.
     n_trials=810,
-    # Restrict to 8–18 months where WG/Oxford CDI data are dense and the WS
-    # bias (production proxy comprehension) is avoided entirely.
+    # Restrict to 8–18 months, where WG/Oxford CDI data are dense.
+    #
+    # This cap does NOT do the Words & Sentences work an earlier version of this
+    # comment claimed for it. `load_data` selects `WORDBANK_BIVARIATE_FORMS`
+    # whenever `understood` is requested, so WS is never loaded for a
+    # comprehension model at any age — the form filter avoids the production-proxy
+    # bias unconditionally, and the cap adds nothing to it. The cap's real
+    # justification, from the July review, was that above 18 months only Oxford
+    # CDI supplied bivariate rows: a single study. The Romance extension of
+    # 2026-08-03 retired that by admitting Italian Words & Gestures (registered
+    # 7-24), and 694 admissible administrations from two studies now sit above the
+    # cap — VG12 already fits every one of them. Density above 18 months is real
+    # but thin (36-163 rows a month against 499 at 18), and the Oxford CDI's
+    # 418-item ceiling binds hard at 23-25 months, so the cap is defensible; it is
+    # no longer self-evident. The `window-25` / `window-22` variants measure what
+    # it costs. See notes/202608171500-reporting-scope-audit.md and #228.
     max_age_months=18,
     slope_anchors=(10, 16),
     ages_query=[8, 10, 12, 14, 16, 18],
@@ -2416,15 +2904,41 @@ VG14 = TrivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=True,
+    # Signed gets its own cap rather than inheriting the comprehension one, which
+    # is what it did until 2026-08-13. 84 matches VG15's report_max_age_signed on
+    # the same evidence, and stops the r(a) table where the r(a) figure stops.
+    report_max_age_signed=84,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG15 = JointModelDefinition(
@@ -2505,13 +3019,35 @@ VG15 = JointModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
     # Signed evidence now reaches 84 months. Adopted 2026-08-07 at 60 on the same
     # argument that capped comprehension at 72 -- then 46 of 593 signed
@@ -2523,7 +3059,7 @@ VG15 = JointModelDefinition(
     # children thinning to one source per band, and 84 is the trend's high anchor.
     # Also caps p_any, a function of the signed ratio.
     report_max_age_signed=84,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 # ============================================================
@@ -2629,15 +3165,120 @@ VG16 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Understood is observed on 905 rows
-    # with a 95th percentile of 64 mo and only 15 rows (15 children) at or above
-    # 72, against 1346 spoken rows with a 95th percentile of 78 and 51 rows at or
-    # above 84 -- so the shared query grid quotes understood and q at ages where
-    # almost nothing was measured, and above the 84 mo anchor where the mean is a
-    # levelled-off extrapolation. Reporting only -- it cannot move the posterior,
-    # and spoken keeps the full grid. See notes/202608042030-q-mean-extrapolation.md.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
     report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=True,
+    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
+)
+
+# ============================================================
+# VG20 — correlated subject random effects (issue #224): VG10 + rho_uq
+# ============================================================
+
+
+def _as_definition_subclass(base, cls, **overrides):
+    """Rebuild ``base`` as an instance of ``cls``, overriding named fields.
+
+    Shallow by design: nested prior dataclasses are shared with ``base`` rather
+    than copied, so the derived definition serialises identically to its parent
+    except for what is overridden here. ``dataclasses.replace`` cannot do this —
+    it returns the base's own class — and ``asdict`` cannot either, because it
+    recursively converts the nested prior blocks to plain dicts.
+    """
+    values = {item.name: getattr(base, item.name) for item in fields(base)}
+    values.update(overrides)
+    return cls(**values)
+
+
+# Derived from VG10 so the two differ in exactly one thing, which is what makes
+# the comparison in #224 readable: VG10 is nested at rho_uq = 0, and any movement
+# in the reported trajectories is a red flag rather than a benefit. Deriving
+# rather than restating the priors also means VG10's anchor recalibrations cannot
+# drift away from VG20's.
+VG20 = _as_definition_subclass(
+    VG10,
+    BivariateCorrelatedSubjectREModelDefinition,
+    model_id="VG20",
+    config_name="age-understood-spoken-ds-re-subj-uq-anchored-corr",
+    banner=(
+        "Fitting Model VG20: VG10 + correlated subject random effects on U and q"
+        " (rho_uq) - Down syndrome"
+    ),
+    # eta = 2: a gentle pull toward independence, so a correlation has to be
+    # evidenced. The quantity this model exists to estimate is already known to be
+    # positive and small from two independent directions -- VG16's realised
+    # intercepts still correlate at +0.135 [0.087, 0.180] with its cross-lag
+    # fitted, and VG10's own fitted deviations at +0.152 [0.105, 0.195] with no
+    # cross-lag at all -- so a prior that made a large correlation cheap would be
+    # assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
+    subject_re_correlation_eta=2.0,
+)
+
+VG19 = _as_definition_subclass(
+    VG10,
+    BivariateChildSlopeModelDefinition,
+    model_id="VG19",
+    config_name="age-understood-spoken-ds-re-subj-uq-anchored-slope",
+    banner=(
+        "Fitting Model VG19: VG10 + a child random slope on U and q"
+        " - Down syndrome"
+    ),
+    # Gate 1 chose this structure on the fitted residuals before any of it was
+    # written: a random slope is worth 2 x delta logL = 36.05 on spoken over a
+    # constant intercept and survives restriction to the 334 children with
+    # repeated spoken measures (20.81), while an AR(1) transient collapses to
+    # zero persistence on both outcomes. See
+    # notes/202608141600-rank-stability-tracking.md §10.3.
+    #
+    # `tau0_sigma` is VG10's own `tau_subj_*_sigma` of 1.5 on both outcomes, so
+    # the intercept keeps the model of record's prior exactly and the model is
+    # one-factor against it.
+    #
+    # `tau1_sigma = 0.5` is on the PER YEAR scale. In logit/month the ML values
+    # are 0.02-ish and unreadable as a prior; per year they are 0.12-0.29, and
+    # HalfNormal(0.5) has median 0.34 -- covering both comfortably while keeping
+    # mass near zero, so a slope the data do not support shrinks away. The
+    # nesting is exact at tau1 = 0.
+    #
+    # Both outcomes carry a slope because the evidence cannot say which one owns
+    # the drift: it is measured on the spoken proportion, and spoken is p_u * q,
+    # so the likelihood sees only the product. Expect the two tau1s to be
+    # individually poorly identified and correlated, with the implied drift on
+    # spoken far better determined than either alone.
+    tau_subj_u_sigma=SubjectSlopePriorParams(tau0_sigma=1.5, tau1_sigma=0.5),
+    tau_subj_q_sigma=SubjectSlopePriorParams(tau0_sigma=1.5, tau1_sigma=0.5),
+    # The age at which tau0 IS the between-child spread. 36 months is the Down
+    # syndrome pool's median age; centring at the design's centre is what stops
+    # the intercept and slope trading off in the sampler, and it gives tau0 a
+    # stated age rather than an extrapolated value at age zero.
+    subject_slope_ref_age_months=36.0,
 )
 
 MODEL_REGISTRY: dict[
@@ -2662,6 +3303,8 @@ MODEL_REGISTRY: dict[
     "vg14": VG14,
     "vg15": VG15,
     "vg16": VG16,
+    "vg19": VG19,
+    "vg20": VG20,
 }
 
 

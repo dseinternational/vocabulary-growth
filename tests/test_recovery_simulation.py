@@ -371,3 +371,46 @@ def test_coherence_check_rejects_a_total_that_drifts_from_its_parent():
     frame.loc[0, "understood"] = 119.0
     with pytest.raises(RuntimeError, match="cell_total disagrees"):
         _verify_coherence(_EmptyModel(), JOINT_SPEC, frame, {})
+
+
+def test_frame_round_trip_accepts_an_object_dtype_string_column(tmp_path):
+    """An `object` column of strings comes back as pandas 3's `str` dtype.
+
+    The values are unchanged, so this is a faithful round trip and must not
+    abort. It reached VG15 and not the tests because a DataFrame built from
+    string literals is already `str` under pandas 3 — only a column constructed
+    explicitly as `object`, as the real analysis frames carry, shows the pair.
+    """
+    frame = _bivariate_frame()
+    frame["subject_id"] = pd.Series(
+        ["0012", "34", "56", "78", "90"], dtype=object, index=frame.index
+    )
+    path = tmp_path / "synthetic.parquet"
+
+    _write_frame(frame, str(path))
+    reloaded = _read_frame(str(path))
+
+    # Numeric-looking ids stay strings: the property the guard exists for.
+    assert reloaded["subject_id"].tolist() == ["0012", "34", "56", "78", "90"]
+
+
+def test_frame_round_trip_still_catches_an_id_turning_numeric(tmp_path, monkeypatch):
+    """Relaxing object-vs-str must not relax string-vs-integer.
+
+    This is the failure the guard was written for, and the one that would make a
+    recovery refit index children differently from the simulation.
+    """
+    frame = _bivariate_frame()
+    frame["subject_id"] = pd.Series(
+        ["12", "34", "56", "78", "90"], dtype=object, index=frame.index
+    )
+    path = tmp_path / "synthetic.parquet"
+
+    def _coercing_read(read_path):
+        loaded = _read_frame(read_path)
+        loaded["subject_id"] = loaded["subject_id"].astype("int64")
+        return loaded
+
+    monkeypatch.setattr("vocab_growth.recovery.simulate._read_frame", _coercing_read)
+    with pytest.raises(RuntimeError, match="changed dtype on the Parquet round trip"):
+        _write_frame(frame, str(path))

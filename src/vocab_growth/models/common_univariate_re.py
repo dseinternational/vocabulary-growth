@@ -29,6 +29,7 @@ import numpy as np
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -647,7 +648,11 @@ def univariate_re_stages(
         ("Posterior summary", posterior_summary),
         (
             "Plots",
-            lambda ctx: run_standard_plots(ctx, outcome_label=outcome_label),
+            lambda ctx: run_standard_plots(
+                    ctx,
+                    outcome_label=outcome_label,
+                    quantity=reporting_ages.quantity_for_outcome(definition.outcome),
+                ),
         ),
         ("Report", report),
     ]

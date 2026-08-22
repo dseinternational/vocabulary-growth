@@ -79,7 +79,7 @@ This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01
 uv run python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>] [--trace-persistence <tier>]
 ```
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, or `all`.
+- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, `vg19`, `vg20`, or `all`.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after the completed fit is atomically promoted. A rendering failure leaves the fit complete and available for a later `--render-only` retry.
 - `--render-only`: validate and render an existing compatible fit without sampling again.
@@ -95,7 +95,7 @@ Output (traces, figures, summary tables) is written to `<output-root>/models/<mo
 uv run python scripts/fit_recovery.py <model|headline|all> [--config <config>] [--replicates <n>] [--truth posterior|prior] [--simulate-only | --fit-only | --compare-only] [--output-dir <dir>]
 ```
 
-Simulates a dataset from a model at a known parameter draw, refits the model to it with the engine's own pipeline, and scores the recovered posterior against the truth. `headline` is `vg10`, `vg12`, `vg15`; `all` is every supported model (`vg07`-`vg13`, `vg15` — VG16 is excluded because its cross-lag predictor is a function of the outcome). Truth defaults to the model of record's posterior (requires a fitted model of record); `--truth prior` needs no trace but tests parameter settings far from the reported regime. Recovery fits land in `<output-root>/models/<model_id>-<config>-recovery-rNN/` and never touch a model of record; tables land in `<output-root>/comparisons/recovery/`. A replicate is only assessed if its fit's convergence is confirmed. See `docs/runbooks/parameter-recovery.md`, including what a handful of replicates can and cannot establish.
+Simulates a dataset from a model at a known parameter draw, refits the model to it with the engine's own pipeline, and scores the recovered posterior against the truth. `headline` is `vg20`, `vg12`, `vg15`; `all` is every supported model (`vg07`-`vg13`, `vg15`, `vg19`, `vg20` — VG16 is excluded because its cross-lag predictor is a function of the outcome). Truth defaults to the model of record's posterior (requires a fitted model of record); `--truth prior` needs no trace but tests parameter settings far from the reported regime. Recovery fits land in `<output-root>/models/<model_id>-<config>-recovery-rNN/` and never touch a model of record; tables land in `<output-root>/comparisons/recovery/`. A replicate is only assessed if its fit's convergence is confirmed. See `docs/runbooks/parameter-recovery.md`, including what a handful of replicates can and cannot establish.
 
 ### Sync report figures
 
@@ -129,7 +129,7 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 
 The full, canonical list of models -- each model's population, outcome, structure, and purpose -- is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
 
-There are currently fifteen registered models (`VG01`-`VG16`, with retired `VG06` omitted), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), and cross-lag structures.
+There are currently seventeen registered models (`VG01`-`VG16`, `VG19` and `VG20`, with retired `VG06` omitted and `VG17`/`VG18` reserved for the exploratory sign-group modules), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag and correlated-random-effect structures.
 
 ### Shared utilities (`dse_research_utils`)
 

@@ -11,7 +11,17 @@ project:
 jupyter: python3
 
 execute:
-  freeze: true
+  # `auto` re-executes a chapter when its source changes; `true` never does, and
+  # silently served a stale results chapter after its cells had been rewritten.
+  #
+  # `auto` is not sufficient on its own. It hashes a chapter's OWN source and not
+  # the files it transcludes, and the frozen result stores the document with
+  # includes already resolved — so editing `_caveats-signing.qmd` or
+  # `_report_data.qmd` and re-rendering leaves the old text in the output with no
+  # warning (hit 2026-08-16, a caveat edit that rendered as its pre-edit self).
+  # After editing any `_*.qmd`, delete `_freeze/<chapter>/` for every chapter that
+  # includes it. `_report_data.qmd` is included by nearly all of them.
+  freeze: auto
 
 date: now
 

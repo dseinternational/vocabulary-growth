@@ -13,7 +13,7 @@ import dataclasses
 
 import pytest
 
-from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15
+from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15, VG19, VG20
 from vocab_growth.sensitivity.overrides import make_variant, replace_kappa
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
@@ -118,12 +118,73 @@ def test_registry_counts_and_models():
     # added, weakly identified parameter, the same condition that created
     # Target 8), and the `psi-drop-*` pair (psi's source composition, which both
     # inclusion flags advertise but nothing ran).
-    assert len(VARIANTS) == 49
-    assert len(variants_for("vg10")) == 12
+    #
+    # +1 on 2026-08-14: `clamp-q-only`. `clamp_mean_above_hi_anchor` levels BOTH
+    # the understood mean and `q` off above the 84 mo anchor, and spoken is
+    # p_U * q, so the spoken trajectory inherits both — the corner at 84 months
+    # is the sharpest feature of its whole trajectory. Measurement says the
+    # saturation the flag was added for is `q`'s alone: extrapolating VG10's own
+    # fitted anchors gives q = 0.996 at 115 mo with P(mean > 0.99) = 0.999,
+    # while understood reaches 0.962 and never crosses 0.99 in any draw. This
+    # variant makes that a fit rather than an argument. See
+    # notes/202608141200-clamp-q-only.md.
+    #
+    # +1 on 2026-08-14: `a1-tau-age-varying`, Proposal A1 — the age variation
+    # moved off `kappa` and onto the between-child scale, on VG10 only. Unlike
+    # every variant above it this is a GRAPH change, carried on the existing
+    # `tau_subj_*_sigma` fields (as CLAMP_Q_ONLY is carried on
+    # `clamp_mean_above_hi_anchor`) so no definition gains a field and no
+    # fingerprint moves. It is registered as a diagnostic, not a candidate model
+    # of record: scaling one per-child deviate by tau(age) imposes perfect rank
+    # correlation across age, which is measured at 0.28 beyond two years. See
+    # notes/202607261540 §9 and notes/202608141600 §§8-10.
+    #
+    # +2 on 2026-08-17: the VG13 `window-*` pair (#228). Every variant above
+    # varies a prior; these two vary the observation *window*, and they are the
+    # first to do so. VG13's 18-month cap was justified in code by avoiding the
+    # WS production-proxy bias — work the form filter in `load_data` already does
+    # unconditionally — and in review by there being only one study above 18
+    # months, which the Romance extension of 2026-08-03 retired by admitting
+    # Italian Words & Gestures (registered 7-24). 694 admissible administrations
+    # sit above the cap. A window change drags its co-identified anchors, GP
+    # domain and query grid with it, so each is registered as one unit; see the
+    # registry comment for the measurements.
+    #
+    # +3 on 2026-08-19: VG20's kappa placement trio (#229), and the first
+    # variants registered against the model of record rather than against a
+    # development step. Two of them vary where the dispersion prior is placed
+    # rather than how wide it is; the third combines them. `anchor_ages` was
+    # already an overridable field, but treating anchor *placement* as a
+    # registered question is new, and it followed the measurement that
+    # kappa_min carries 42.5% of reported kappa_u at 84 months and 95.2% of
+    # kappa_s while recovery scores it at -40% to -60%.
+    #
+    # Restated the same day as `kappa-anchor-24-48`, `kappa-floor-generic` and
+    # `kappa-pre-promotion` when the combination was promoted into
+    # `_DS_JOINT_*_KAPPA_RE`: after promotion the originals perturbed toward the
+    # model of record rather than away from it, and one of them had become a
+    # literal no-op. The count is unchanged because each was inverted rather
+    # than dropped.
+    #
+    # +1 on 2026-08-21: `window-22-vague-anchors`, gating the promotion of
+    # `window-22` to a registered model. `window-22`'s 21-month anchors were
+    # recentred on in-sample medians because no CDI comprehension norm exists
+    # above 18 months, and the finding that rests on them -- the DS/TD gap
+    # closing by 300 words understood -- is exactly what a level-pinning prior
+    # could manufacture. The variant displaces the q high anchor upward and
+    # widens both, so a surviving closure is the data's and not the prior's.
+    # 58 with VG19's `max-age-84` (gate G5b): a leverage diagnostic that caps the
+    # data at 84 months and changes nothing else, so any movement in `tau1` is
+    # attributable to the discarded high-age rows rather than to a re-placed
+    # mean function. See notes/202608141900 SS G5b.
+    assert len(VARIANTS) == 58
+    assert len(variants_for("vg19")) == 1
+    assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 4
-    assert len(variants_for("vg13")) == 1
+    assert len(variants_for("vg13")) == 4
     assert len(variants_for("vg15")) == 27
+    assert len(variants_for("vg20")) == 3
 
 
 def test_td_models_account_for_repeated_children_by_default():
@@ -245,6 +306,8 @@ def test_variants_are_single_factor_or_documented_pairs():
             "vg12": VG12,
             "vg13": VG13,
             "vg15": VG15,
+            "vg19": VG19,
+            "vg20": VG20,
         }[model_key]
         assert v.model_type == base.model_type
         assert dataclasses.asdict(v) != dataclasses.asdict(base)
@@ -267,3 +330,109 @@ def test_variants_that_disable_subject_effects_also_clear_the_partition():
             f"{model_key} single-admin leaves the variance partition set while "
             "disabling subject effects; the engine rejects that combination."
         )
+
+
+def test_window_variants_stay_inside_their_own_gp_domain_and_anchors():
+    """A window variant must carry its GP domain, anchors and grid with it.
+
+    Pure checks, so they run without the database. The window is the only
+    variant factor here that the *rest* of the definition has to agree with:
+    the GP domain must contain the data (``build_utils`` refuses otherwise),
+    the high slope anchor must sit inside the window or the logit-linear trend
+    is extrapolated past its own anchor, and the query grid must not report
+    ages the window excludes.
+    """
+    for name, cap in (("window-25", 25), ("window-22", 22)):
+        (v,) = build_variant("vg13", name)
+        lo_domain, hi_domain = v.gp_domain_months
+        assert v.max_age_months == cap, name
+        assert hi_domain == cap, f"{name}: GP domain stops at {hi_domain}, window at {cap}"
+        assert lo_domain == 8, name
+        lo_anchor, hi_anchor = v.slope_anchors
+        assert lo_anchor >= lo_domain and hi_anchor <= cap, (
+            f"{name}: slope anchors {v.slope_anchors} are not inside the window"
+        )
+        assert hi_anchor > VG13.slope_anchors[1], (
+            f"{name}: the high anchor did not move into the new window, so the "
+            "trend extrapolates past it"
+        )
+        assert v.gp_anchor_age_months == (lo_anchor + hi_anchor) / 2, name
+        assert max(v.ages_query) <= cap, name
+        assert max(v.ages_query) > max(VG13.ages_query), name
+        # eta_q was 0.20 because only the bottom limb of q's S was in view.
+        assert v.eta_q_sigma > VG13.eta_q_sigma, name
+        # The kappa anchor ages must sit inside the window too, or the "old"
+        # anchor describes dispersion somewhere the model no longer stops.
+        for block in (v.kappa_u, v.kappa_s):
+            assert max(block.anchor_ages) <= cap, name
+            assert max(block.anchor_ages) > max(VG13.kappa_u.anchor_ages), name
+
+
+def test_window_variants_admit_the_rows_the_cap_discards():
+    """The point of the pair: more data, the same six studies, no WS.
+
+    Builds the real graphs, because the failure mode this guards against —
+    a variant whose definition is valid but whose engine rejects it — only
+    appears at build time. That gap is what let the ``single-admin`` variants
+    sit broken for two days.
+    """
+    import contextlib
+    import io
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def prepared(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            cbr.prepare_bivariate_re_data(ctx, definition)
+            cb.configure_bivariate_priors(ctx, definition)
+            cbr.build_model_re(ctx, definition)
+        frame = next(v for v in vars(ctx).values() if hasattr(v, "columns"))
+        return ctx, frame
+
+    with tempfile.TemporaryDirectory() as root:
+        base_ctx, base = prepared(VG13, root)
+        rows = {"base": len(base)}
+        studies = {"base": set(base["study"].unique())}
+        free_rvs = {"base": len(base_ctx.model.free_RVs)}
+        for name in ("window-22", "window-25", "window-22-vague-anchors"):
+            (variant,) = build_variant("vg13", name)
+            ctx, frame = prepared(variant, root)
+            rows[name] = len(frame)
+            studies[name] = set(frame["study"].unique())
+            free_rvs[name] = len(ctx.model.free_RVs)
+            assert frame["age"].max() == variant.max_age_months, name
+
+    # Strictly more data, and monotone in the window.
+    assert rows["base"] < rows["window-22"] < rows["window-25"], rows
+    # The window is the only factor: no study enters or leaves, and the graph
+    # keeps exactly the structure of the model of record.
+    assert studies["base"] == studies["window-22"] == studies["window-25"], studies
+    assert len(set(free_rvs.values())) == 1, free_rvs
+    # `window-22-vague-anchors` changes two prior HYPERparameters and nothing
+    # else, so it must be indistinguishable from `window-22` on every structural
+    # axis this test measures. If it ever differs here, the variant has stopped
+    # being a clean prior-sensitivity check and its result cannot be read as one.
+    assert rows["window-22-vague-anchors"] == rows["window-22"], rows
+    assert studies["window-22-vague-anchors"] == studies["window-22"], studies

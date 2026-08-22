@@ -3,6 +3,8 @@ title: "Discussion"
 abstract: "Summary --- *TODO*"
 ---
 
+{{< include _report_data.qmd >}}
+
 ::: {.callout-note}
 This chapter includes content drafted by an LLM-based AI tool (Claude Code/Fable 5).
 :::
@@ -15,11 +17,76 @@ The findings in this report should be read against the limitations set out below
 
 ### Who the data describe
 
-**The pooled sample is not a population sample.** The Down syndrome pool comprises 1,638 administrations from 846 children in 14 studies across six countries (Ireland, Italy, New Zealand, Spain, the United Kingdom and the United States; @sec-data). The children were recruited through research projects — including at least one intervention trial, the randomised feasibility study `uk_07` — and through charities and family organisations. Families who enrol in and complete such studies are likely to be more engaged with their child's development, more often English-speaking and of higher socio-economic status than families of children with Down syndrome in general, and the pool cannot tell us how large that selection is. Every trajectory, percentile and predictive interval in this report is therefore an expectation for the *modelled pool* — children who took part in these studies — and not a norm for the population of children with Down syndrome.
+```{python}
+#| label: pool-descriptives
+#| echo: false
+#| output: asis
+# Computed. Every pool count in this section was typed, and by the #215 data
+# build all of them had drifted (1,638 administrations from 846 children,
+# against an actual 1,521 from 781). They are data counts rather than fit
+# output, so nothing recomputed them and no check could compare; they now come
+# from `scripts/pool_descriptives.py` at render time.
+_pool = comp_load("pool_descriptives")
+if _pool is None:
+    print("**The pooled sample is not a population sample.** _Pool counts pending: run "
+          "`scripts/pool_descriptives.py` and `scripts/sync_report_figures.py`._")
+else:
+    _p = _pool.iloc[0]
+    print(
+        f"**The pooled sample is not a population sample.** The Down syndrome pool "
+        f"comprises {_p['administrations']:,} administrations from {_p['children']:,} "
+        f"children in {_p['studies']} studies across {_p['countries']} countries "
+        f"({_p['country_list'].replace('; ', ', ')}; @sec-data). The children were "
+        f"recruited through research projects — including at least one intervention "
+        f"trial, the randomised feasibility study `uk_07` — and through charities and "
+        f"family organisations."
+    )
+```
+
+Families who enrol in and complete such studies are likely to be more engaged with their child's development, more often English-speaking and of higher socio-economic status than families of children with Down syndrome in general, and the pool cannot tell us how large that selection is. Every trajectory, percentile and predictive interval in this report is therefore an expectation for the *modelled pool* — children who took part in these studies — and not a norm for the population of children with Down syndrome.
 
 **Data collection spans three decades.** The oldest source (`uk_01`) was collected in the 1990s and the newest (`ie_01`, `uk_07`) in the 2020s. Early intervention, health care, educational inclusion and the use of signing with young children with Down syndrome all changed over that period. The study-level random intercepts (@sec-randomeffects) absorb systematic level differences between sources but do not identify their cause; a study effect may be a cohort effect, a recruitment effect, an instrument effect or a translation effect, and the pooled trajectory averages across all of them.
 
-**Coverage is uneven across age, and age is partly confounded with study.** Observations are dense between about 18 and 54 months — 140 to 200 spoken-word administrations per 6-month band — and thin above 72 months, where the successive 6-month bands hold 44, 32, 31, 18, 6 and 4 spoken observations and 18, 11, 8 and 2 comprehension observations. The mix of contributing studies also changes with age: one study contributes below 6 months, 13 at 30–42 months and 3 above 90. Because the models estimate a single trajectory across the pool, the shape at the extremes of the age range is informed by few children from few sources, and the study intercepts can only partly separate "how vocabulary changes with age" from "which studies happen to contribute at that age". Comprehension tables are capped at 72 months for this reason, and monthly rows with `n_obs = 0` — 33 of the 108 whole months in the plotting range — are model extrapolation, not evidence.
+```{python}
+#| label: pool-coverage
+#| echo: false
+#| output: asis
+# Computed for the same reason as the block above: this paragraph's band counts
+# were typed and had all drifted. `scripts/pool_descriptives.py` writes them.
+_bands = comp_load("pool_coverage_bands")
+if _bands is None:
+    print("**Coverage is uneven across age, and age is partly confounded with study.** "
+          "_Band counts pending: run `scripts/pool_descriptives.py` and "
+          "`scripts/sync_report_figures.py`._")
+else:
+    _dense = _bands[(_bands["age_lo"] >= 18) & (_bands["age_lo"] < 54)]
+    _thin = _bands[_bands["age_lo"] >= 72]
+    _thin = _thin[_thin["spoken"] > 0]
+    _spoken = ", ".join(str(int(v)) for v in _thin["spoken"])
+    _understood = ", ".join(str(int(v)) for v in _thin[_thin["understood"] > 0]["understood"])
+    _by_study = _bands[_bands["administrations"] > 0]
+    _fewest = _by_study.loc[_by_study["studies"].idxmin()]
+    _most = _by_study.loc[_by_study["studies"].idxmax()]
+    print(
+        f"**Coverage is uneven across age, and age is partly confounded with study.** "
+        f"Observations are dense between about 18 and 54 months — "
+        f"{_dense['spoken'].min():.0f} to {_dense['spoken'].max():.0f} spoken-word "
+        f"administrations per 6-month band — and thin above 72 months, where the "
+        f"successive 6-month bands hold {_spoken} spoken observations and "
+        f"{_understood} comprehension observations. The mix of contributing studies "
+        f"also changes with age: as few as {_fewest['studies']:.0f} "
+        f"{'study contributes' if _fewest['studies'] == 1 else 'studies contribute'} "
+        f"in a single band (at {_fewest['age_lo']:.0f}–{_fewest['age_hi']:.0f} months) "
+        f"against {_most['studies']:.0f} at the fullest "
+        f"({_most['age_lo']:.0f}–{_most['age_hi']:.0f}). Because the models estimate a "
+        f"single trajectory across the pool, the shape at the extremes of the age "
+        f"range is informed by few children from few sources, and the study intercepts "
+        f"can only partly separate \"how vocabulary changes with age\" from \"which "
+        f"studies happen to contribute at that age\". Comprehension is capped at 84 "
+        f"months and production at 90 for this reason (@sec-data), and monthly rows "
+        f"with `n_obs = 0` are model extrapolation, not evidence."
+    )
+```
 
 **The pool mixes languages, and the typically-developing reference is not matched to it.** About a quarter of the Down syndrome pool is non-English (Spanish, Italian and Irish sources on translated or adapted checklists). The typically-developing reference pool is drawn from Wordbank: English-only for the single-outcome baselines, and English, Italian and Spanish (European) for the hierarchical models, so that both sides of the comparison span several languages. Pooling across languages is a modelling decision that the random intercepts make workable, not a demonstration that vocabulary trajectories are equivalent across languages or that translated checklists are equivalent instruments. The Down-syndrome-versus-typically-developing comparison is matched on age (or on words understood, for the production ratio) and on nothing else.
 
@@ -45,7 +112,7 @@ The findings in this report should be read against the limitations set out below
 
 **The data mix cross-sectional and longitudinal designs.** 432 of the 846 children were assessed more than once, so the subject random intercepts — and with them the estimate of stable between-child variation — are informed by roughly half the pool. Which children return for a second or third administration is not random. The cross-lag model has mostly two waves per child; a two-wave design cannot separate within-child change from stable between-child differences, so only the population-relative statement is interpretable.
 
-**The sign–speech association rests on four sources that disagree.** $\psi$ is identified only from the sources that record, per word, whether a child signs it, says it or both — `uk_02`, `uk_07`, `es_01` and `nz_01` — and it carries a study-level term because those sources differ by an order of magnitude on the crude odds ratio: the Spanish source sits close to independence where the UK and New Zealand sources do not. The per-study values are the primary read and the population value is a shrunk centre, not a consensus; with four informing sources the between-source spread is weakly identified and the prior does real work. An age-varying association was investigated and rejected, so the spread is not an age effect, but no source records how its children were taught to sign, and the tempting reading — that the difference reflects whether signing was taught alongside speech or arose in its absence — is not supported by anything measured here. Selecting on an estimate that clears the independence reference inflates it on average (the Type-M consequence of a noisy quantity). Signed observations are dense from about 12 to 60 months and sparse beyond, with two small sources above 72 months and one above 84, while the reported range runs to 115. Signing data exist only for the Down syndrome sources, so there is no typically-developing comparison for signing.
+**The sign–speech association rests on four sources that disagree.** $\psi$ is identified only from the sources that record, per word, whether a child signs it, says it or both — `uk_02`, `uk_07`, `es_01` and `nz_01` — and it carries a study-level term because those sources differ by an order of magnitude on the crude odds ratio: the Spanish source sits close to independence where the UK and New Zealand sources do not. The per-study values are the primary read and the population value is a shrunk centre, not a consensus; with four informing sources the between-source spread is weakly identified and the prior does real work. An age-varying association was investigated and rejected, so the spread is not an age effect, but no source records how its children were taught to sign, and the tempting reading — that the difference reflects whether signing was taught alongside speech or arose in its absence — is not supported by anything measured here. Two biases act here in opposite directions: selecting on an estimate that clears the independence reference inflates it on average (the Type-M consequence of a noisy quantity), while refitting the model to data simulated from its own posterior recovers both the population and the per-study values *below* what generated them, because the weakly identified between-source spread over-shrinks the sources with fewest children. The reported spread between sources is therefore, if anything, understated, and the population value conservative; which bias dominates at any one source is not established. Signed observations are dense from about 12 to 60 months and sparse beyond, with two small sources above 72 months and one above 84, while the reported range runs to 115. Signing data exist only for the Down syndrome sources, so there is no typically-developing comparison for signing.
 
 ### What the models assume
 
@@ -53,7 +120,9 @@ The findings in this report should be read against the limitations set out below
 
 **Priors matter where the data are thin.** The priors were set from the literature and recalibrated during development, and the report discloses where the data pressed against them (@sec-core-priors). Some model components are unidentified or fixed by construction — the peak age of the signing ratio and the length-scale of its Gaussian process among them — and are disclosed rather than repaired. Estimates beyond about 72 months for comprehension and 84 for production are correspondingly prior-dependent.
 
-**Different models answer different questions.** Only the models of record supply reported numbers — VG10 for the joint understood–spoken estimands, VG15 for signing and total expressive vocabulary, and the hierarchical typically-developing models for the reference trajectories. Earlier models in each lineage are development steps retained to show how structure was added. Model comparison is predictive (@sec-predictive-calibration, @sec-supersedes): a model that predicts held-out data better is preferred, which is not a demonstration that it is correct.
+**Different models answer different questions.** Only the models of record supply reported numbers — VG20 for the joint understood–spoken estimands, VG15 for signing and total expressive vocabulary, and the hierarchical typically-developing models for the reference trajectories. Earlier models in each lineage are development steps retained to show how structure was added. Model comparison is predictive (@sec-predictive-calibration, @sec-supersedes): a model that predicts held-out data better is preferred, which is not a demonstration that it is correct.
+
+**The Down syndrome versus typically-developing gap is a derived quantity, not a parameter.** The two pools share no studies and no children, so their posteriors are independent and every contrast in this report is formed draw by draw from the two separate fits. That gives exact credible intervals, and it is the same posterior a joint model with no shared parameters would produce. What it does not give is a model in which the gap has its own prior, hierarchy or shrinkage, or in which the two populations share a trajectory shape, a dispersion structure or an item calibration. That model is not built. The reasoning, the four things such a model could share, what declining it costs, and the conditions that would reopen the decision are recorded in `notes/202608200906-joint-ds-td-model-not-built.md`.
 
 **Parameter recovery is spot-checked, not exhaustive.** Simulation-based checks confirm that the fitting pipeline recovers known parameters in the reported regime for a handful of replicates of the headline models. That guards against pipeline error; it does not establish that the models would recover the truth under every plausible data-generating process, nor does it address model misspecification.
 

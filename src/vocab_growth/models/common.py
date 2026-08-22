@@ -47,11 +47,15 @@ import vocab_growth.environment as local_env
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
+import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import (
+    ACCEPTED_EXCEPTION_KEY,
     CONVERGENCE_CAVEATS_FILENAME,
     CONVERGENCE_FAILURE_FILENAME,
+    DIAGNOSTICS_SUMMARY_FILENAME,
     FIT_MANIFEST_FILENAME,
     TracePersistence,
+    accepted_rhat_exception,
     convergence_caveats,
     create_staging_root,
     git_metadata,
@@ -299,7 +303,13 @@ def kappa_anchor_derived_rows(config, *, X_obs_mean, X_obs_std, suffix=""):
 
 
 def build_kappa_for_config(
-    config, *, X_obs_mean, X_obs_std, suffix="", excess_young_value=None
+    config,
+    *,
+    X_obs_mean,
+    X_obs_std,
+    suffix="",
+    excess_young_value=None,
+    hold_constant=False,
 ):
     """Create the dispersion RVs for whichever kappa form ``config`` carries.
 
@@ -312,7 +322,11 @@ def build_kappa_for_config(
     ``excess_young_value`` supplies the young anchor from outside, for the
     variance-partition reparameterisation. It is only meaningful for the anchored
     form, so pairing it with the legacy one is rejected rather than silently
-    ignored.
+    ignored. ``hold_constant`` (Proposal A1) is rejected on the same grounds: the
+    legacy form's slope is a free ``b_kappa_mag``, so pinning it flat there would
+    be a different change to a different parameterisation, and silently ignoring
+    the flag would let an A1 variant report a dispersion trajectory it believes
+    it has switched off.
     """
     anchored = getattr(config, f"kappa_anchored{suffix}", None)
     if anchored is None:
@@ -320,6 +334,11 @@ def build_kappa_for_config(
             raise ValueError(
                 "excess_young_value requires the two-anchor kappa form; the "
                 f"legacy parameterisation is configured for suffix {suffix!r}."
+            )
+        if hold_constant:
+            raise ValueError(
+                "hold_constant requires the two-anchor kappa form; the legacy "
+                f"parameterisation is configured for suffix {suffix!r}."
             )
         kappa_min_dist, a_kappa_dist, b_kappa_mag_dist = _legacy_kappa_dists(
             config, suffix
@@ -336,6 +355,7 @@ def build_kappa_for_config(
         ),
         suffix=suffix,
         excess_young_value=excess_young_value,
+        hold_constant=hold_constant,
     )
 
 
@@ -1036,6 +1056,63 @@ def diagnostics_var_names(model) -> tuple[list[str], list[str]]:
     return summary_var_names, gate_var_names
 
 
+LOO_SUMMARY_FILENAME = "loo_summary.csv"
+
+
+def emit_loo_summary(
+    loo_by_label: dict,
+    dropped_by_label: dict[str, int],
+    output_dir: str,
+) -> pd.DataFrame:
+    """Persist the LOO-CV result, which every fit computed and then discarded.
+
+    ``elpd`` was printed to the console and dropped on the floor, while the
+    predictive-calibration section of every model report points the reader at
+    leave-one-out as the out-of-sample counterpart to its in-sample checks. The
+    number the reader was sent to find did not exist anywhere they could reach.
+
+    The Pareto k counts travel with the estimate because without them the
+    estimate cannot be judged: PSIS-LOO is only trustworthy where the importance
+    weights are well behaved, and a handful of observations above the threshold
+    is the signal that a reported ``elpd`` is optimistic. ArviZ's own threshold
+    (``good_k``, sample-size dependent) is recorded rather than a hard-coded
+    0.7, so the bands mean the same thing across fits of different lengths.
+    """
+    rows = []
+    for label, loo in loo_by_label.items():
+        pareto_k = getattr(loo, "pareto_k", None)
+        good_k = getattr(loo, "good_k", None)
+        counts = {"good": None, "bad": None, "very_bad": None}
+        if pareto_k is not None and good_k is not None:
+            values = np.asarray(pareto_k).ravel()
+            values = values[np.isfinite(values)]
+            counts = {
+                "good": int((values <= float(good_k)).sum()),
+                "bad": int(((values > float(good_k)) & (values <= 1.0)).sum()),
+                "very_bad": int((values > 1.0).sum()),
+            }
+        rows.append(
+            {
+                "outcome": label,
+                "elpd_loo": float(getattr(loo, "elpd", np.nan)),
+                "se": float(getattr(loo, "se", np.nan)),
+                "p_loo": float(getattr(loo, "p", np.nan)),
+                "n_data_points": int(getattr(loo, "n_data_points", 0)),
+                "n_samples": int(getattr(loo, "n_samples", 0)),
+                "n_dropped_degenerate": int(dropped_by_label.get(label, 0)),
+                "pareto_k_good": counts["good"],
+                "pareto_k_bad": counts["bad"],
+                "pareto_k_very_bad": counts["very_bad"],
+                "good_k_threshold": None if good_k is None else float(good_k),
+                "scale": str(getattr(loo, "scale", "log")),
+            }
+        )
+
+    frame = pd.DataFrame(rows)
+    frame.to_csv(os.path.join(output_dir, LOO_SUMMARY_FILENAME), index=False)
+    return frame
+
+
 def _loo_dropping_degenerate(idata, var_name=None):
     """Compute PSIS-LOO, excluding observations with a constant pointwise
     log-likelihood.
@@ -1202,6 +1279,7 @@ def diagnostics(
             gate_summary,
             sampling_config_name=context.sampling_config_name,
             output_dir=context.reporting.output_dir,
+            model_id=context.reporting.model_name,
         )
     except ConvergenceGateError:
         # A failed reporting fit never reaches posterior-predictive sampling,
@@ -1224,8 +1302,10 @@ def diagnostics(
 
     context.set_trace(trace)
 
+    dropped_by_label: dict[str, int] = {}
     if loo_var_names is None:
         loocv, n_dropped = _loo_dropping_degenerate(context.trace)
+        dropped_by_label["all"] = n_dropped
         if n_dropped:
             console.print(
                 f"[yellow]LOO: dropped {n_dropped} degenerate "
@@ -1234,12 +1314,18 @@ def diagnostics(
         context.set_loocv(loocv)
         heading("LOO-CV", style="bold cyan")
         console.print(loocv)
+        emit_loo_summary(
+            {"all": loocv}, dropped_by_label, context.reporting.output_dir
+        )
     else:
         loocv_by_name = {}
+        by_label = {}
         for var_name, label in loo_var_names:
             loocv_by_name[var_name], n_dropped = _loo_dropping_degenerate(
                 context.trace, var_name=var_name
             )
+            by_label[label] = loocv_by_name[var_name]
+            dropped_by_label[label] = n_dropped
             if n_dropped:
                 console.print(
                     f"[yellow]LOO ({label}): dropped {n_dropped} degenerate "
@@ -1249,6 +1335,7 @@ def diagnostics(
         for var_name, label in loo_var_names:
             heading(f"LOO-CV — {label}", style="bold cyan")
             console.print(loocv_by_name[var_name])
+        emit_loo_summary(by_label, dropped_by_label, context.reporting.output_dir)
 
 
 def sample_posterior_predictive(
@@ -1381,6 +1468,7 @@ def emit_monthly_summary(
     y_label: str = "Word count",
     dataframes: dict | None = None,
     plots: dict | None = None,
+    max_age_months: float | None = None,
 ):
     """Write the whole-month summary table and its expected-count figure.
 
@@ -1404,6 +1492,11 @@ def emit_monthly_summary(
         ci_prob=ci_prob,
         interval_kind=interval_kind,
     )
+    # One trim serves both artefacts. The table and the figure are built from
+    # this frame, so capping here is why they cannot disagree -- the same reason
+    # the frame is shared in the first place. See
+    # :mod:`vocab_growth.reporting_ages` for which cap each outcome takes.
+    monthly = posterior_analysis.trim_reported_ages(monthly, max_age_months)
     monthly.to_csv(os.path.join(output_dir, f"{stem}.csv"), index=False)
     if dataframes is not None:
         dataframes[stem] = monthly
@@ -1426,10 +1519,24 @@ def emit_monthly_summary(
     return monthly
 
 
-def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word count"):
+def run_standard_plots(
+    context: ModelFitContext,
+    *,
+    outcome_label: str = "Word count",
+    quantity: reporting_ages.ReportedQuantity | None = None,
+):
     """
     Run the standard set of posterior predictive plots for single-outcome models.
+
+    ``quantity`` says which outcome is being plotted, so every artefact below
+    stops where that outcome's evidence stops. It is optional only so an
+    engine that has not been told can still draw the full grid; the
+    single-outcome pipeline always passes it.
     """
+    max_age_months = (
+        None if quantity is None
+        else reporting_ages.max_age_for(context.model_config, quantity)
+    )
     plotting.plot_posterior_predictive_count_distributions_by_query_age(
         X_query=context.model_samples.X_query,
         y_query=context.model_samples.y_query,
@@ -1438,6 +1545,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_count_distributions",
         x_label=outcome_label,
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_pmf(
@@ -1447,6 +1555,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_pmf",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_cdf(
@@ -1456,6 +1565,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_cdf",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1465,6 +1575,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         context.model_samples.y_obs,
         output_dir=context.reporting.output_dir,
         filename="plot_posterior_predictive_median_trend",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1478,6 +1589,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="plot_posterior_predictive_median_trend_smoothed",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1487,6 +1599,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_expected_learning_rate(
@@ -1500,6 +1613,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         smooth_intervals=True,
         output_dir=context.reporting.output_dir,
         filename="expected_learning_rate_smoothed",
+        max_age_months=max_age_months,
     )
 
     plotting.plot_posterior_kappa(
@@ -1511,6 +1625,7 @@ def run_standard_plots(context: ModelFitContext, *, outcome_label: str = "Word c
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
         filename="posterior_kappa",
+        max_age_months=max_age_months,
     )
 
 
@@ -1581,6 +1696,7 @@ def enforce_convergence_gate(
     *,
     sampling_config_name: str,
     output_dir: str,
+    model_id: str | None = None,
 ) -> list[str]:
     """Stop reporting pipelines whose reporting-quality posterior did not converge.
 
@@ -1599,6 +1715,31 @@ def enforce_convergence_gate(
     )
     rhat_failing = gate_summary.get("rhat_failing") or []
     ess_failing = gate_summary.get("ess_failing") or []
+
+    # A registered, narrowly-scoped exception can accept an R-hat-only failure
+    # where the reported quantities converge and the failing parameter is a
+    # nuisance direction. It is recorded into the diagnostics payload rather
+    # than a marker file, because `convergence_caveats` recomputes from the
+    # payload on disk -- so the exception reaches `check_fit`, the figure sync
+    # and Appendix B by the same route as a divergence, and a fit carrying one
+    # is publishable only through the `-with-caveats` purposes.
+    accepted = accepted_rhat_exception(model_id, gate_summary)
+    if accepted is not None:
+        gate_summary[ACCEPTED_EXCEPTION_KEY] = {
+            "parameters": list(accepted.parameters),
+            "observed_max_rhat": gate_summary.get("max_rhat"),
+            "ceiling_max_rhat": accepted.max_rhat,
+            "reason": accepted.reason,
+            "decided": accepted.decided,
+        }
+        summary_path = os.path.join(output_dir, DIAGNOSTICS_SUMMARY_FILENAME)
+        if os.path.isfile(summary_path):
+            with open(summary_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            payload[ACCEPTED_EXCEPTION_KEY] = gate_summary[ACCEPTED_EXCEPTION_KEY]
+            write_json_atomic(summary_path, payload)
+        rhat_failing = []
+        scan_failed = False
 
     if scan_failed or rhat_failing or ess_failing:
         if scan_failed:
@@ -2085,7 +2226,11 @@ def fit_single_outcome_model(
             ("Posterior summary", posterior_summary),
             (
                 "Plots",
-                lambda ctx: run_standard_plots(ctx, outcome_label=outcome_label),
+                lambda ctx: run_standard_plots(
+                    ctx,
+                    outcome_label=outcome_label,
+                    quantity=reporting_ages.quantity_for_outcome(definition.outcome),
+                ),
             ),
             ("Report", report),
         ],

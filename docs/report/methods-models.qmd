@@ -107,7 +107,7 @@ Three properties are deliberate. **The clamp is one-sided:** below the low ancho
 
 The cost is that $p_{x_b}$ is no longer exactly the mean at the high anchor age, falling short by that same amount. Between the anchors the mean is untouched, so both anchor priors carry over unchanged.
 
-This applies to the Down syndrome joint and signing models (VG05, VG07–VG10, VG14–VG16), set by `clamp_mean_above_hi_anchor` in each model definition. The typically developing models do not use it: their evaluation domains extend barely beyond their high anchors. The univariate Down syndrome baselines, VG01 and VG02, extrapolate the line across the full domain.
+This applies to the Down syndrome joint and signing models (VG05, VG07–VG10, VG14–VG16 and VG20, which inherits VG10's setting), set by `clamp_mean_above_hi_anchor` in each model definition. The typically developing models do not use it: their evaluation domains extend barely beyond their high anchors. The univariate Down syndrome baselines, VG01 and VG02, extrapolate the line across the full domain.
 
 ### HSGP approximation {#sec-hsgp}
 
@@ -223,7 +223,7 @@ $$
 which sits below an independence-based upper bound whenever $\psi > 1$.
 
 ::: {.callout-important}
-$\psi$ is a **single scalar**, identified from a small four-cell cross-tab, and is treated as **descriptive / exploratory** throughout this report. See @sec-findings-signing <!-- findings-signing --> for its scope and caveats.
+$\psi$ is a **single scalar**, identified from a small four-cell cross-tab, and is treated as **descriptive / exploratory** throughout this report. See @sec-sign-speech-association for the estimate, @sec-psi-by-study for how far the contributing sources disagree about it, and @sec-signing-limits for its scope and caveats.
 :::
 
 ### Validation and publication gate {#sec-validation-gate}

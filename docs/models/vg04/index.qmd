@@ -12,76 +12,37 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      - repo
+      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
+      # for a git remote, and the per-model reports are rendered in the OUTPUT
+      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
+      # no repository above it, so `repo` became a hard render error. This emits
+      # the identical link and does not depend on where the render happens.
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
 
 ```{python}
 #| echo: false
 #| output: asis
-# Report the sampling configuration this model was actually fitted at, read
-# from the trace header (chains x draws). rep / rep-lite are reporting-grade;
-# dev / test are flagged as approximate.
-import h5netcdf as _h5
+from vocab_growth.report_cells import render_sampling_banner
 
-with _h5.File("trace.nc", "r") as _f:
-    _post = _f["posterior"]
-    _n_chains = _post.dimensions["chain"].size
-    _n_draws = _post.dimensions["draw"].size
-
-_CONFIGS = {
-    (6, 6000): ("reporting", False),
-    (4, 4000): ("reporting-lite", False),
-    (4, 2000): ("test", True),
-    (2, 500): ("development", True),
-}
-_cfg_name, _approximate = _CONFIGS.get(
-    (_n_chains, _n_draws), (f"{_n_chains} chains × {_n_draws} draws", True)
-)
-
-print('::: {.callout-warning title="Warning: Preliminary model output"}')
-print()
-print(
-    "This model output is preliminary and likely to change as the model "
-    "evolves and further data are received."
-)
-print()
-print(
-    f"This model was fitted in **{_cfg_name}** configuration "
-    f"({_n_chains} chains × {_n_draws:,} draws per chain)."
-)
-if _approximate:
-    print()
-    print(
-        "It was **not** fitted in reporting mode, so these results are more "
-        "approximate than a full reporting-quality fit."
-    )
-print(":::")
+render_sampling_banner()
 ```
 
-This model examines how age (a proxy for things that happen over time) influences words understood ($A \rightarrow U$).
+This model asks a single question: how does the number of words a typically-developing child understands change with age? Age here is a proxy for everything that happens over time ($A \rightarrow U$), not a cause in itself.
 
 ```{python}
-import matplotlib.pyplot as plt
-import pandas as pd
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
 ```
-
-## Statistical model
-
-We model the number of words understood as a bounded count outcome out of an 810-word reference inventory. The expected proportion of words understood is modelled as a smooth function of age. On the logit scale, this function is the sum of a linear developmental trend and a Gaussian process term that allows flexible nonlinear departures from linearity. To account for extra variation between children beyond that expected under a simple binomial model, we use a Beta-Binomial likelihood. The Beta-Binomial dispersion parameter is also allowed to vary with age, so the degree of heterogeneity may change over development. Wordbank WG and Oxford CDI rows contribute independently measured understood observations; Words & Sentences rows are excluded because their comprehension values are production proxies. Priors for the linear trend are specified indirectly through the expected proportion of words understood at two reference ages, making the prior assumptions more interpretable.
-
-::: {.callout-note title="Model at a glance"}
-
-- **Population:** typically developing children.
-- **Outcome:** words understood out of the common 810-word reference inventory.
-- **Age anchors:** 12 and 26 months.
-- **Data handling:** 25% TD subsample; Wordbank WG and Oxford CDI comprehension rows are included, and Words & Sentences comprehension proxies are excluded.
-- **Role in the model family:** baseline TD understood trajectory; VG12 is the full-data study-random-effect successor.
-
-:::
 
 ::: {.callout-note}
 
@@ -89,64 +50,153 @@ For full details and discussion, please refer to the technical report.
 
 :::
 
-![Model diagram](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## What this model is for
+
+This is a **reference baseline**. It exists so that the Down syndrome comprehension model, VG02, has a typically-developing curve on the same scale, fitted with the same engine and the same priors machinery, to be compared against. Every structural choice here mirrors VG02 except the population, the age anchors, the age range and the admissible measurement forms, so that a difference between the two curves is a difference between the populations rather than between two modelling approaches. It is also the comprehension counterpart of VG03, which models words spoken in the same pool.
+
+::: {.callout-warning title="A typically-developing curve is a reference, not a target"}
+
+Nothing in this report is a goal, a norm to be met, or a benchmark for an individual child. A typically-developing trajectory says what a different population does; it does not say what any child with Down syndrome should do, and a gap between the two curves is a description, not a deficit to be closed on a timetable. Read this model only as the comparison scale for the Down syndrome models.
+
+:::
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Estimand",
+    "Reference inventory",
+    "Logit",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Overdispersion and variance inflation",
+    "Age anchor",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "GP length-scale ($\\ell$)",
+    "GP amplitude ($\\eta$)",
+    "Credible interval",
+    "Equal-tailed interval (ETI)",
+    "Cross-sectional age derivative",
+    "Prior predictive check",
+    "Posterior predictive check",
+    "PMF and CDF",
+    "PIT (probability integral transform)",
+    "MCMC (Markov chain Monte Carlo)",
+    "Chain",
+    "R-hat ($\\hat{R}$)",
+    "Effective sample size (ESS)",
+    "Divergent transition",
+    "BFMI (Bayesian fraction of missing information)",
+])
+```
+
+## Statistical model
+
+We model the number of words understood as a bounded count out of the reference inventory. The expected proportion understood is a smooth function of age. On the logit scale that function is a straight-line developmental trend plus a Gaussian process term, which lets the curve bend away from the line by as much as the data support and no more.
+
+Children of the same age differ far more than a simple Binomial count would allow, so the likelihood is Beta-Binomial rather than Binomial. Its dispersion parameter is itself allowed to change with age, because how much children differ from one another is not fixed across development — it is one of the things worth measuring.
+
+The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion understood at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. Those anchors are much younger than the Down syndrome model's, because typical comprehension changes fastest across the second year.
+
+Only Wordbank Words & Gestures and Oxford CDI administrations contribute here. Words & Sentences comprehension values are excluded, because on that form they are production proxies rather than independently measured comprehension. This is the one substantive measurement difference between this model and its spoken counterpart, VG03, and it is why this model rests on fewer administrations over a shorter age range.
+
+::: {.callout-important title="What this model does not do"}
+
+This model has no study effects and no repeated-child effects. The pool contains children observed more than once, and children drawn from datasets that differ in recruitment and measurement — and one dataset contributes a large share of the rows, with nothing in the model to absorb that imbalance. **This model treats every observation as independent.** It is therefore a reference baseline, not the preferred account of typically-developing comprehension. For that, see VG12.
+
+It is also fitted to a **subsample of children** rather than to the whole typically-developing pool: whole children are drawn and all of their administrations kept, so the subsample is of children, not of rows. And the pool is restricted to **English-language** administrations, because with no random effects there is nothing here to absorb between-language variation — it would be reported as if it were variation between children.
+
+VG12 is the full-data successor, and it differs on more than data volume: it adds dataset **and** child random intercepts, anchors the Gaussian process at a reference age, and widens the reference pool beyond English. A comparison between this model and VG12 is therefore not a like-for-like check of how much the subsample cost.
+
+:::
 
 ## Priors
 
-The early TD understood anchor is tighter near the floor than the DS understood anchor because this model covers much younger children. The 26-month anchor mildly favours larger vocabularies while still allowing wide uncertainty on the 810-word scale. Prior predictive checks should be used to judge whether these anchors imply plausible rapid comprehension growth without excessive ceiling pressure.
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
 
-### Lengthscale
+render_priors_table()
+```
 
-![Lengthscale prior distribution `ell_unit_dist`](ell_unit_dist.png){#fig-lengthscale .lightbox fig-align="left"}
+The priors above are calibrated for this population and this outcome, not inherited from the Down syndrome models: the anchor ages, the Gaussian process amplitude and the dispersion anchors were each set for a typically-developing comprehension pool. Only the length-scale prior and its month window are the shared defaults.
+
+The low-age anchor is deliberately **not** a floor expectation. Typically-developing comprehension is already substantial in the first year, so this anchor was recalibrated upwards, off the floor, against published norms; it is not the near-zero prior the spoken models place at their low anchor. The high-age anchor is deliberately broad and favours neither a small nor a large comprehension vocabulary at that age — the table above gives both anchors' medians and ranges on the word scale. Note that the high anchor is broad regularisation rather than an encoded norm: there is no independent published comprehension norm at that age to place it against, which is why it is a registered sensitivity target — exercised on the full-data successor VG12, which carries the same anchor, rather than here.
+
+Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`, where `z` is standardised age. The age term is given priors at two reference ages rather than as an intercept at the pool's mean age plus a slope, so each prior is directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. See `docs/models/PRIORS.md`.
+
+Typically-developing comprehension dispersion is, unusually for these models, **flat** with age: the per-age estimates scatter without a trend across the ages this model covers. The two anchors are therefore set near-equal and only a few months apart, placed where the data are densest rather than spanning a decay, and the implied prior on the age slope of dispersion is near-symmetric about zero rather than forcing $\kappa$ to fall. The earlier single-slope parameterisation could not represent a flat dispersion curve at any setting, which is why this model uses the two-anchor form.
+
+::: {.callout-note title="This model's dispersion is not comparable with VG12's"}
+
+Because this model carries no random effects, its `kappa` has to absorb every source of spread at once, and its prior is calibrated **marginally** — against the pooled data. VG12's subject and dataset intercepts remove the between-child and between-study components first, so its `kappa` prior is calibrated **conditionally**, on what remains, and its anchors sit far higher for the same outcome. The two are answering different questions and their values should not be read against one another.
+
+:::
+
+### Length-scale
+
+![How far apart in age two points must be before the trend is allowed to move independently.](ell_unit_dist.png){#fig-lengthscale .lightbox fig-align="left"}
 
 ### Amplitude
 
-![Amplitude prior distribution `eta_dist`](eta_dist.png){#fig-amplitude .lightbox fig-align="left"}
+![How far the flexible term may depart from the straight-line trend, on the logit scale.](eta_dist.png){#fig-amplitude .lightbox fig-align="left"}
 
-### Slope
+### Anchors
 
-#### Low slope anchor (12 months)
+![Prior on the proportion of words understood at the low age anchor.](p_slope_low_dist.png){#fig-slope-low .lightbox fig-align="left"}
 
-![Slope prior distribution `p_slope_low_dist`](p_slope_low_dist.png){#fig-slope-low .lightbox fig-align="left"}
+![Prior on the proportion of words understood at the high age anchor.](p_slope_hi_dist.png){#fig-slope-hi .lightbox fig-align="left"}
 
-#### High slope anchor (26 months)
+### Dispersion
 
-![Slope prior distribution `p_slope_hi_dist`](p_slope_hi_dist.png){#fig-slope-hi .lightbox fig-align="left"}
+![Prior on the floor of the dispersion parameter.](kappa_min_dist.png){#fig-kappa-min .lightbox fig-align="left"}
 
-### Dispersion / overdispersion
+![Prior on the excess dispersion at the younger reference age.](kappa_excess_young_dist.png){#fig-kappa-excess-young .lightbox fig-align="left"}
 
-Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`, with the age term given priors at 12 and 18 months rather than an intercept at the pool's mean age and a slope. `a_kappa` and `b_kappa` are derived from those two anchors, so neither prior shifts meaning if the pool's age distribution changes.
-
-Typically-developing comprehension dispersion is **flat**: 11.8 at 12 months against 11.3 at 18, with per-age cells scattering 5.8–15.6 and no trend across 8–24 months. The two anchors are therefore near-equal and sit only six months apart, placed where the data are densest rather than spanning a decay, and the implied slope prior is near-symmetric about zero (P(`kappa` rising) 0.476). The earlier parameterisation forced `kappa` to fall and could not represent this at any setting. This model carries no random effects, so its `kappa` also absorbs the between-child spread that VG12's subject intercepts remove — which is why VG12's anchors sit near 43 for the same outcome. See `docs/models/PRIORS.md`.
-
-![Dispersion prior distribution `kappa_min_dist`](kappa_min_dist.png){#fig-kappa-min .lightbox fig-align="left"}
-
-![Dispersion prior distribution `kappa_excess_young_dist` (12 months)](kappa_excess_young_dist.png){#fig-kappa-excess-young .lightbox fig-align="left"}
-
-![Dispersion prior distribution `kappa_excess_old_dist` (18 months)](kappa_excess_old_dist.png){#fig-kappa-excess-old .lightbox fig-align="left"}
+![Prior on the excess dispersion at the older reference age.](kappa_excess_old_dist.png){#fig-kappa-excess-old .lightbox fig-align="left"}
 
 ## Prior predictive checks
 
-Read these checks as a pre-data plausibility test over the TD comprehension age range: simulated counts should allow rapid growth, but should not force the trajectory to the 810-word ceiling before the data are observed.
+These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria over the typically-developing age window: simulated comprehension should already be appreciable around the first birthday rather than sitting at zero, the priors should permit rapid growth across the second year, and later trajectories should not be mechanically pinned to the inventory ceiling. A prior that fails any of these would be shaping the answer rather than permitting it.
 
-### Prior samples
+![Trajectories drawn from the priors.](prior_samples.png){#fig-prior-samples .lightbox fig-align="left"}
 
-![Prior sample trajectories](prior_samples.png){#fig-prior-samples .lightbox fig-align="left"}
+![Word counts simulated from those trajectories.](prior_predictions.png){#fig-prior-predictions .lightbox fig-align="left"}
 
-### Prior predictions
-
-![Prior predictions](prior_predictions.png){#fig-prior-predictions .lightbox fig-align="left"}
-
-### Prior predictive checks
-
-![Prior predictive checks](prior_predictive_checks.png){#fig-prior-predictive-checks .lightbox width=640 fig-align="left"}
+![Simulated counts compared with the range the observed data occupy.](prior_predictive_checks.png){#fig-prior-predictive-checks .lightbox width=640 fig-align="left"}
 
 ## Data
 
 ```{python}
+import matplotlib.pyplot as plt
+import pandas as pd
+
 descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
 descriptive_stats
 ```
+
+::: {.callout-important title="Where the comprehension data stop"}
+
+The maximum age in this table is the oldest administration in the fitted frame, and it is **younger** than the oldest age this report quotes in its selected-age summary. The trajectory, derivative, dispersion and monthly figures are all drawn on the observed age grid and therefore stop at the last observation; the selected-age table and the per-age count-distribution figures continue past it on the model's extrapolation alone. Read anything above the last observed age as the model speaking, not the data: those rows are the widest in the table precisely because nothing constrains them. The monthly companion table near the end of this report stops at the last observation and is the reliable guide to where the evidence ends.
+
+:::
+
+::: {.callout-note}
+
+These descriptives are of the fitted subsample, not of the whole typically-developing pool. The normality tests are reported for completeness and are not a check on the model: the outcome is a bounded count, which is not expected to be normally distributed, and the model does not assume that it is.
+
+:::
 
 ## Diagnostics
 
@@ -154,44 +204,9 @@ descriptive_stats
 #| label: convergence-caveats
 #| echo: false
 #| output: asis
-# Soft-tier caveats, read from this fit's own gate payload. Silent when the fit
-# is clean, so a clean report gains nothing and a caveated one cannot hide it.
-import json
-from pathlib import Path
+from vocab_growth.report_cells import render_convergence_caveats
 
-_gate_path = Path("diagnostics_summary.json")
-_marks = []
-if _gate_path.exists():
-    _gate = json.loads(_gate_path.read_text())
-    _checks = _gate.get("checks") or {}
-    _bfmi = [b for b in (_gate.get("bfmi_per_chain") or []) if b is not None]
-    if _checks.get("divergences") is False:
-        _marks.append(
-            f"**{_gate.get('divergences')} divergent transition(s)** — the sampler "
-            "failed to traverse part of the posterior, so reported expectations "
-            "may be biased."
-        )
-    if _checks.get("bfmi") is False:
-        _lo = f" (min {min(_bfmi):.3f})" if _bfmi else ""
-        _marks.append(
-            f"**Energy BFMI below 0.3**{_lo} — the energy chain explored the "
-            "posterior's tails poorly, so the interval bounds are less reliable "
-            "than the point estimates."
-        )
-
-if _marks:
-    print('::: {.callout-warning title="Soft-tier convergence caveats"}')
-    print()
-    print("This fit cleared the hard convergence tier (R-hat and effective sample")
-    print("size) but not the soft tier:")
-    print()
-    for _mark in _marks:
-        print(f"- {_mark}")
-    print()
-    print("It remains reportable and is published carrying this mark; see")
-    print("Appendix B of the technical report.")
-    print()
-    print(":::")
+render_convergence_caveats()
 ```
 
 ```{python}
@@ -201,44 +216,56 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-![energy_plot](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
 
-![trace_plot](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
-![pair_plot](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-::: {.callout-note title="Diagnostic focus"}
+![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-Because this baseline model uses a random subsample of TD observations, diagnostics should be read together with the sampling seed and, for final claims, compared with the full-data VG12 model.
+![Marginal posterior distributions for the fitted parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+::: {.callout-note title="What to watch in this model"}
+
+The understood anchors, the GP length-scale and amplitude, and the age-varying dispersion parameters. Poor behaviour in any of them would propagate directly into the comprehension trajectory and its age derivative. Compare the marginal posteriors above with the prior figures earlier in this report: a parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. The dispersion slope `b_kappa` is worth a specific look, since the prior deliberately left the direction open — an interval straddling zero is the flat dispersion curve the calibration expected, not a failure to estimate.
+
+Diagnostics here should also be read together with the fixed sampling seed, since the fitted frame is one particular random subsample of children.
 
 :::
 
+## Findings
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
+
+render_headline_quantities()
+```
+
+Read these alongside the caveats above: with no study or child effects in the model, the spread reported here mixes genuine differences between children with differences between the datasets they came from, and repeated observations of the same child are counted as though they were different children. VG12 separates those sources; this model cannot. These are also the numbers to hold against the Down syndrome model's, VG02 — but as a comparison of populations, not as a standard.
+
 ## Posterior predictions
 
-The main findings to inspect are the understood trajectory, its cross-sectional age derivative, and whether posterior predictive intervals show realistic spread near the high end of the TD comprehension range.
+### Summary at selected ages
 
-### Posterior summary table for selected ages
-
-In this model, $p$ is the latent success probability -- the underlying proportion of the vocabulary checklist a child is expected to understand at a given age. $Ey$ is the expected value implied by the latent mean $p$. It reflects uncertainty in the mean developmental trajectory. $Y$ is a draw from the posterior predictive distribution. It reflects both uncertainty in the mean trajectory and extra-binomial variability (dispersion).
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall.
 
 ```{python}
 posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
 posterior_summary
 ```
 
-### Posterior predictive probability mass function (PMF) for word counts, by age
+The reporting ages for this model were declared to run past the age at which comprehension observations end, and this outcome carries no reporting cap to trim them. The rows above the last observed age are extrapolation from the anchor-defined trend, unconstrained by any observation, and should not be quoted. Compare with the monthly table below, which stops where the data do.
 
-The probability of observing a specific count of words understood for selected ages.
+### Distribution of word counts by age
 
-![posterior_predictive_pmf](posterior_predictive_pmf.png){#fig-posterior-predictive-pmf .lightbox fig-align="left"}
+![The probability of each exact understood-word count, at selected ages.](posterior_predictive_pmf.png){#fig-posterior-predictive-pmf .lightbox fig-align="left"}
 
-### Posterior predictive cumulative distribution function (CDF) for word counts, by age
+![The probability of a given understood-word count or fewer, at selected ages. Read this one for questions of the form "what fraction of children understand 200 words or fewer?"](posterior_predictive_cdf.png){#fig-posterior-predictive-cdf .lightbox fig-align="left"}
 
-The cumulative sum of the PMF: the probability that the count of words understood is less than or equal to a specified value for selected ages.
-
-![posterior_predictive_cdf](posterior_predictive_cdf.png){#fig-posterior-predictive-cdf .lightbox fig-align="left"}
-
-### Posterior predictive probability distributions for word counts, by age
+These two figures are drawn on the observed age grid, so the ages they show stop at the last observation. Query ages above it are snapped to that last age rather than being drawn separately, which is why the oldest curves here do not match the oldest rows of the table above.
 
 ```{python}
 #| echo: false
@@ -248,25 +275,38 @@ from vocab_growth.plotting import ppc_count_distribution_gallery
 ppc_count_distribution_gallery("posterior_predictive_count_distributions")
 ```
 
-### Posterior predictive median trend with uncertainty intervals
+### Median trend
 
-![plot_posterior_predictive_median_trend](plot_posterior_predictive_median_trend.png){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
+![Median predicted understood vocabulary with uncertainty intervals, against the observed data.](plot_posterior_predictive_median_trend.png){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
 
-Smoothed:
+![The same trend, smoothed for presentation. The underlying numbers are unchanged.](plot_posterior_predictive_median_trend_smoothed.png){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
 
-![plot_posterior_predictive_median_trend_smoothed](plot_posterior_predictive_median_trend_smoothed.png){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
+### Age derivative
 
-### Cross-sectional age derivative
+![Rate of change of expected understood vocabulary with age, in words per month.](expected_learning_rate.png){#fig-expected-learning-rate .lightbox fig-align="left"}
 
-The posterior distribution of the derivative of expected understood words with respect to age, in words per month. This is a cross-sectional derivative of the fitted age trajectory, not a within-child learning rate. The uncertainty bands show how the derivative varies across posterior draws of $f$.
+This is the slope of the fitted age trajectory: it describes how expected vocabulary differs between children of different ages. It is **not** a within-child learning rate, and should not be read as one — most of these data are cross-sectional, so the model has little to say about any individual child's trajectory over time. Where the interval spans zero, the data do not establish the direction of change at that age.
 
-![expected_learning_rate](expected_learning_rate.png){#fig-expected-learning-rate .lightbox fig-align="left"}
+The right-hand edge of this figure needs particular care. It sits at the last observed age, where the Gaussian process has observations on one side only, so the curve there is shaped partly by the smoother's boundary behaviour rather than by development.
 
-### Posterior distribution for dispersion parameter $\kappa$
+![The same derivative, smoothed for presentation. The underlying numbers are unchanged.](expected_learning_rate_smoothed.png){#fig-expected-learning-rate-smoothed .lightbox fig-align="left"}
 
-Lower $\kappa$ values indicate greater overdispersion (greater between-child variability relative to the mean), while higher $\kappa$ values indicate less overdispersion (less between-child variability relative to the mean). The plot shows how the estimated dispersion parameter $\kappa$ changes with age, along with uncertainty intervals.
+### Dispersion
 
-![posterior_kappa](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}
+![How the dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}
+
+Lower $\kappa$ means **greater** between-child variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. This is the model whose dispersion prior expected no trend with age, so the thing to check here is whether the fitted curve is flat and whether its interval is wide enough to admit a trend anyway.
+
+## Expected vocabulary by month
+
+A finer companion to the table above: one row per whole month, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model. Read a row with a small or zero `n_obs` as the model interpolating, not as evidence — and note that in this model the counts fall away sharply in the upper part of the range, well before the table ends.
+
+![Expected understood vocabulary by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month.png){#fig-expected-counts-by-month .lightbox fig-align="left"}
+
+```{python}
+monthly = pd.read_csv("posterior_summary_monthly.csv")
+monthly
+```
 
 ## Predictive calibration
 
@@ -279,3 +319,27 @@ from vocab_growth.models.calibration import render_calibration_section
 
 render_calibration_section()
 ```
+
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+
+## Limits
+
+- **A reference, not a target.** This curve describes a different population. It is not a norm any individual child is expected to meet, and it is not an intervention goal.
+- **The reported ages run past the evidence.** Comprehension observations stop before the oldest reported age, and this outcome carries no reporting cap, so the oldest rows of the selected-age table are extrapolation. The monthly table stops at the last observation and should be preferred.
+- **No hierarchy.** Study and repeated-child structure are absent, so uncertainty here is not a fair estimate of uncertainty about a new child, and one dominant contributing dataset has nothing to absorb it. Use VG12 for that.
+- **A subsample, and English only.** The fit uses a random subsample of children from the typically-developing pool, restricted to English-language administrations. VG12 uses the full pool and a wider language scope, so it is the model to use when coverage matters.
+- **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
+- **The reference inventory is a harmonisation.** No typically-developing child in this pool was assessed on the full inventory: the forms used here are shorter, and their counts are treated as nested inside the common scale so that typically-developing and Down syndrome counts are comparable. It is a unit of measurement, not an instrument any child sat.
+- **Comprehension is measured on fewer forms than production.** Words & Sentences comprehension is excluded as a production proxy, so this model rests on a smaller and younger pool than VG03 and the two are not equally well supported at the same ages.
+- **Dispersion is not comparable with VG12's**, for the marginal-versus-conditional reason given in the priors section.
+- **The dispersion floor is not identified.** With a flat dispersion curve, any split of the level between the floor `kappa_min` and the age term fits equally well, so the floor is a nuisance parameter here rather than a finding; the anchors carry the level.
+- **No sensitivity variants and no parameter-recovery check are registered for this model.** It is a descriptive baseline rather than a gated estimand, so the absence of those checks is by design — but it means the results here have not been stress-tested the way the models of record have.

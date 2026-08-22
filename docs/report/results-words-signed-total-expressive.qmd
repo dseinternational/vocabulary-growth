@@ -1,6 +1,382 @@
 ---
 title: "Words signed and total expressive vocabulary"
-abstract: "*TODO*"
+abstract: "Counting only speech understates what young children with Down syndrome can express. Through the preschool years a large share of a child's expressive vocabulary is available in sign alone, and a speech-only assessment misses it. Signing rises to a peak in the fourth year and then gives way to speech, so its contribution falls to near nothing by school age — a hand-over, not a plateau and not a replacement. Within a child's understood vocabulary, words that are signed and words that are said go together more often than independence would predict, and the sources that record this disagree about how strongly. Everything here is descriptive: no analysis in this report can say whether signing helps, hinders or merely accompanies the arrival of speech."
 ---
 
-[TODO]
+{{< include _report_data.qmd >}}
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+:::
+
+{{< include _caveats-ds.qmd >}}
+
+{{< include _caveats-signing.qmd >}}
+
+Numbers in this chapter come from the model of record for signing, **VG15**. VG14 is the development step it replaced: VG14 assumed that, within the words a child understands, signing and speaking are independent, and VG15 estimates the association instead. VG15 also carries the study and child random effects VG14 lacks. @sec-independence-bound reports what the independence assumption would have cost, because it is smaller than one might expect and the random effects matter more.
+
+The model writes each modality as a fraction of comprehension. If $p_U(a)$ is the proportion of the reference inventory a child understands at age $a$, then $q(a) = P(\text{speak} \mid \text{understand})$ is the production ratio of the previous chapter and $r(a) = P(\text{sign} \mid \text{understand})$ is the **signing ratio**. Total expressive vocabulary $p_\text{any}(a)$ is the union: the share of understood words a child produces in *some* modality, by sign, by speech, or by both.
+
+::: {.callout-note title="Two things this chapter does not report"}
+There is **no typically-developing comparison for signing**. Signing is recorded only in the Down syndrome sources, so every quantity here is within-population except @sec-sign-inclusive, which contrasts Down syndrome total expressive vocabulary against typically-developing *speech*.
+
+There are **no predictive intervals**. The joint sign/speech engine draws no posterior predictive counts on the plotting grid, so the tables below carry the expected count and its uncertainty only — not the range an individual child might fall in. For a single child's spoken vocabulary, use the predictive intervals in the previous chapter.
+:::
+
+## The signed vocabulary trajectory {#sec-ds-signed}
+
+```{python}
+#| label: tbl-signing-ratio
+#| echo: false
+show_or_pending(
+    rows_at("VG15", "posterior_summary_r", [12, 18, 24, 30, 36, 48, 60, 72, 84], {
+        "age_months": "Age (mo)", "r_median": "r(a)",
+        "r_ci_lo": "89% lo", "r_ci_hi": "89% hi",
+    }),
+    "the signing ratio",
+)
+```
+
+```{python}
+#| label: tbl-signed-words
+#| echo: false
+show_or_pending(
+    rows_at("VG15", "posterior_summary_sign", [12, 18, 24, 30, 36, 48, 60, 72, 84], {
+        "age_months": "Age (mo)", "Ey_sign_median": "Words signed",
+        "Ey_sign_ci_lo": "89% lo", "Ey_sign_ci_hi": "89% hi",
+    }),
+    "the signed-word trajectory",
+)
+```
+
+![The signed and spoken fractions of comprehension on the same axes (VG15).](figures/VG15-age-joint-signspeech-ds/signed_vs_spoken_rate.png){#fig-signed-vs-spoken}
+
+```{python}
+#| label: signing-ratio-finding
+#| echo: false
+#| output: asis
+_r = load_summary("VG15", "posterior_summary_r")
+if _r is None:
+    print("_The signing trajectory is pending: fit VG15 and run "
+          "`scripts/sync_report_figures.py`._")
+else:
+    _peak = _r.loc[_r["r_median"].idxmax()]
+    print(f"""
+The signing ratio rises, peaks and falls. It reaches its highest reported value of {_peak['r_median']:.2f} (89% interval {_peak['r_ci_lo']:.2f} to {_peak['r_ci_hi']:.2f}) at around {_peak['age_months']:.0f} months, and declines from there. Note what is falling: the *fraction of understood words that are signed*, not the number of signed words, and not a child's competence. As comprehension keeps growing, a shrinking fraction can still be a stable or growing count for some time.
+
+The shape of the rise and fall is more constrained by the model than the level is. The peak's position is estimated but its prior does real work, and the length-scale of the signing curve is not identified by these data, so the signed trajectory is close to parametric in practice. The peak of the *sign-only* contribution in @sec-ds-handover is the better-identified milestone, because it is pinned by the point where speech overtakes sign rather than by the curvature of $r(a)$ alone.
+""")
+```
+
+## What a child can express in any modality {#sec-ds-p-any}
+
+Total expressive vocabulary counts a word once if a child produces it at all — signed, spoken or both. Set against spoken vocabulary alone, the difference is what a speech-only assessment does not see.
+
+```{python}
+#| label: tbl-p-any
+#| echo: false
+show_or_pending(
+    rows_at("VG15", "posterior_summary_p_any", [12, 18, 24, 30, 36, 48, 60, 72, 84], {
+        "age_months": "Age (mo)", "Ey_any_median": "Any modality",
+        "Ey_any_ci_lo": "89% lo", "Ey_any_ci_hi": "89% hi",
+    }),
+    "total expressive vocabulary",
+)
+```
+
+```{python}
+#| label: tbl-signing-uplift
+#| echo: false
+_prof = comp_load("ds_signing_profile")
+_tab = None
+if _prof is not None:
+    _rows = sorted({int((_prof["age_months"] - a).abs().argmin())
+                    for a in [12, 18, 24, 30, 36, 48, 60, 72, 84]})
+    _cols = {"age_months": "Age (mo)", "spoken_median": "Spoken",
+             "any_median": "Any modality", "credit_median": "Difference",
+             "uplift_median": "Multiple of spoken",
+             "sign_only_share_median": "Share available only in sign"}
+    _tab = _prof.iloc[_rows][[c for c in _cols if c in _prof.columns]].rename(columns=_cols)
+    _tab = _tab.round({"Age (mo)": 0, "Spoken": 1, "Any modality": 1, "Difference": 1,
+                       "Multiple of spoken": 2, "Share available only in sign": 3})
+show_or_pending(_tab, "the signing profile")
+```
+
+![How expressive vocabulary is composed: speech only, sign only, and both.](figures/comparisons/ds_signing_composition.png){#fig-signing-composition}
+
+![Total expressive vocabulary as a multiple of spoken vocabulary alone.](figures/comparisons/ds_signing_uplift.png){#fig-signing-uplift}
+
+```{python}
+#| label: uplift-finding
+#| echo: false
+#| output: asis
+if comp_load("ds_signing_profile") is None:
+    print("_The signing profile is pending: run `scripts/compare_ds_td_expressive.py` "
+          "and `scripts/sync_report_figures.py`._")
+else:
+    print(f"""
+The multiple is large early and close to one late. At 24 months a child's expressive vocabulary is about {comp_band("ds_signing_profile", "age_months", 24, "uplift", "{:.2f}")} times what a spoken-word count alone records; by 36 months about {comp_band("ds_signing_profile", "age_months", 36, "uplift", "{:.2f}")} times; by 60 months about {comp_band("ds_signing_profile", "age_months", 60, "uplift", "{:.2f}")} times.
+
+In words rather than multiples, the difference between total expressive vocabulary and spoken vocabulary is about {comp_band("ds_signing_profile", "age_months", 24, "credit", "{:.0f}", "words")} at 24 months and about {comp_band("ds_signing_profile", "age_months", 36, "credit", "{:.0f}", "words")} at 36. The multiple falls faster than the difference does, because the spoken count it is divided by is growing quickly over the same period.
+
+This is the chapter's most directly practical result. A vocabulary measure that counts only speech will, for a preschooler with Down syndrome, record a small fraction of what that child can express, and the size of the shortfall changes sharply with age — so the same instrument understates different children by different amounts.
+""")
+```
+
+## The hand-over from sign to speech {#sec-ds-handover}
+
+Within the words a child understands, each word falls into one of four states: produced in neither modality, signed only, spoken only, or both. Tracking those four shares with age shows what signing is doing.
+
+```{python}
+#| label: tbl-four-cell
+#| echo: false
+_fc = load_summary("VG15", "four_cell_composition")
+_tab = None
+if _fc is not None:
+    _rows = sorted({int((_fc["age_months"] - a).abs().argmin())
+                    for a in [12, 18, 24, 30, 36, 48, 60, 72, 84]})
+    _tab = _fc.iloc[_rows].round(3).rename(columns={
+        "age_months": "Age (mo)", "neither": "Neither", "sign-only": "Sign only",
+        "sign+speech": "Both", "speak-only": "Speech only",
+    })
+show_or_pending(_tab, "the within-understood composition")
+```
+
+![The four states a understood word can be in, as fractions of comprehension (VG15).](figures/VG15-age-joint-signspeech-ds/four_cell_composition.png){#fig-four-cell}
+
+![The share of expressive vocabulary available only in sign, against the signing ratio.](figures/comparisons/ds_signing_share.png){#fig-signing-share}
+
+The four shares tell the story in order: "neither" falls throughout as children come to produce more of what they understand; "sign only" rises to a peak and then falls away; "both" rises as words a child signs start also being said; and "speech only" rises last and keeps rising. Three points on that sequence are worth naming:
+
+```{python}
+#| label: tbl-signing-milestones
+#| echo: false
+_ms = comp_load("ds_signing_milestones")
+_tab = None
+if _ms is not None:
+    _labels = {
+        "sign_only_peak_age": "Age at which sign-only vocabulary is largest (months)",
+        "sign_only_peak_words": "Size of sign-only vocabulary at that peak (words)",
+        "sign_only_share_below_half_age":
+            "Age at which sign-only drops below half of expressive vocabulary (months)",
+        "speech_only_overtakes_sign_only_age":
+            "Age at which speech-only overtakes sign-only (months)",
+    }
+    _tab = _ms.copy()
+    _tab["quantity"] = _tab["quantity"].map(_labels).fillna(_tab["quantity"])
+    _tab = _tab.rename(columns={"quantity": "Milestone", "median": "Median",
+                                "ci_lo": "89% lo", "ci_hi": "89% hi",
+                                "draws_reaching": "Draws reaching it"}).round(2)
+show_or_pending(_tab, "the sign-to-speech hand-over milestones")
+```
+
+```{python}
+#| label: handover-finding
+#| echo: false
+#| output: asis
+if comp_load("ds_signing_milestones") is None:
+    print("_The hand-over milestones are pending: run "
+          "`scripts/compare_ds_td_expressive.py` and `scripts/sync_report_figures.py`._")
+else:
+    print(f"""
+Sign-only vocabulary is at its largest at {milestone("ds_signing_milestones", "sign_only_peak_age")}, holding about {milestone("ds_signing_milestones", "sign_only_peak_words", unit="words")} on the 810-item scale. Sign stops being the majority of what a child can express at {milestone("ds_signing_milestones", "sign_only_share_below_half_age")}, and speech-only overtakes sign-only at {milestone("ds_signing_milestones", "speech_only_overtakes_sign_only_age")}.
+
+The ordering of those three is the finding, more than any one of them: signing does not plateau and it is not displaced abruptly. It carries a large share of expressive vocabulary through the third and fourth years, hands over during the fourth, and is a small residue by school age. The first two intervals overlap, so the gap between the peak and the loss of majority is not itself well resolved; the crossing with speech is separated from both.
+
+What this **cannot** say is why. These are observational trajectories from studies that did not record how, whether or for how long each child was taught to sign. A hand-over is equally consistent with signing supporting the arrival of speech, with signing being used until speech arrives for reasons unrelated to it, and with families stopping signing once speech makes it unnecessary. Nothing measured here separates those.
+""")
+```
+
+## Signing and speech go together {#sec-sign-speech-association}
+
+The four cells above are not independent. Within a child's understood vocabulary, is a word that is signed more or less likely also to be spoken than chance would predict? The model estimates that as an association parameter $\psi$, where $\psi = 1$ is exactly independence, above 1 means signed and spoken words coincide more than independence predicts, and below 1 means they substitute for one another.
+
+```{python}
+#| label: tbl-psi
+#| echo: false
+_psi = load_summary("VG15", "posterior_summary_psi")
+_tab = None
+if _psi is not None:
+    _tab = _psi.round(3).rename(columns={
+        "psi_median": "ψ", "psi_ci50_lo": "50% lo", "psi_ci50_hi": "50% hi",
+        "psi_ci_lo": "89% lo", "psi_ci_hi": "89% hi", "P_psi_gt_1": "P(ψ > 1)",
+    })
+show_or_pending(_tab, "the sign–speech association")
+```
+
+![Posterior distribution of the sign–speech association $\psi$, against the independence reference at 1.](figures/VG15-age-joint-signspeech-ds/psi_posterior.png){#fig-psi}
+
+```{python}
+#| label: psi-finding
+#| echo: false
+#| output: asis
+_ev = psi_evidence("VG15")
+_psi = load_summary("VG15", "posterior_summary_psi")
+if _ev is None or _psi is None:
+    print("_The sign–speech association is pending: fit VG15 and run "
+          "`scripts/sync_report_figures.py`._")
+else:
+    _p, _odds, _label = _ev
+    _row = _psi.iloc[0]
+    print(f"""
+The estimate is ψ = {_row['psi_median']:.2f} (89% interval {_row['psi_ci_lo']:.2f} to {_row['psi_ci_hi']:.2f}), above the independence reference of 1. On the report's shared evidence ladder that is **{_label}** evidence for a positive association (odds {_odds}).
+
+The plain reading is that a word a child with Down syndrome signs is *more* often also a word they say than independence would predict — signing and speaking cluster on the same words. The reading it rules out is the substitution picture, in which signed words would be the ones a child cannot say and the two vocabularies would be largely disjoint; that would put ψ below 1, and it is not what these data show.
+""")
+```
+
+### The sources disagree {#sec-psi-by-study}
+
+$\psi$ carries a study-level term, and the per-study values are the primary read. The population value is a shrunk centre across four sources, not a consensus among them.
+
+```{python}
+#| label: tbl-psi-study
+#| echo: false
+_by = load_summary("VG15", "posterior_summary_psi_study")
+_tab = None
+if _by is not None:
+    _tab = _by.round(3).rename(columns={
+        "study": "Study", "psi_median": "ψ", "psi_ci50_lo": "50% lo", "psi_ci50_hi": "50% hi",
+        "psi_ci_lo": "89% lo", "psi_ci_hi": "89% hi", "P_psi_gt_1": "P(ψ > 1)",
+    })
+show_or_pending(_tab, "the per-study sign–speech association")
+```
+
+```{python}
+#| label: psi-study-finding
+#| echo: false
+#| output: asis
+_by = load_summary("VG15", "posterior_summary_psi_study")
+if _by is None:
+    print("_The per-study association is pending: fit VG15 and run "
+          "`scripts/sync_report_figures.py`._")
+else:
+    _hi = _by.loc[_by["psi_median"].idxmax()]
+    _lo = _by.loc[_by["psi_median"].idxmin()]
+    _clear = _by[_by["psi_ci_lo"] > 1]
+    print(f"""
+Of the {len(_by)} sources that record, word by word, whether a child signs it, says it or both, {len(_clear)} put ψ credibly above 1. The spread across them is wide: from {_lo['psi_median']:.2f} (89% interval {_lo['psi_ci_lo']:.2f} to {_lo['psi_ci_hi']:.2f}) in `{_lo['study']}` to {_hi['psi_median']:.2f} (89% interval {_hi['psi_ci_lo']:.2f} to {_hi['psi_ci_hi']:.2f}) in `{_hi['study']}`. One source sits close to independence where the others do not.
+
+Four sources is few for estimating a between-source spread, so the spread itself is weakly identified and the prior does real work in setting it. An age-varying association was investigated and rejected, so the disagreement is not an age effect in disguise. Beyond that, no source records how its children were taught to sign, and the tempting explanation — that the difference reflects whether signing was taught alongside speech or emerged in its absence — is not supported by anything these data measure.
+""")
+```
+
+## What counting sign changes about the comparison with typically developing children {#sec-sign-inclusive}
+
+The previous chapter measured how far behind typically-developing speech the Down syndrome pool is. Counting sign changes that distance, because it changes what is being counted on the Down syndrome side.
+
+```{python}
+#| label: tbl-sign-inclusive
+#| echo: false
+_si = comp_load("ds_td_sign_inclusive")
+_tab = None
+if _si is not None:
+    _rows = sorted({int((_si["age_months"] - a).abs().argmin())
+                    for a in [12, 15, 18, 21, 24, 27, 30]})
+    _cols = {"age_months": "Age (mo)",
+             "gap_spoken_median": "TD speech − DS speech",
+             "gap_any_median": "TD speech − DS any modality",
+             "credit_median": "Difference the sign credit makes"}
+    _tab = _si.iloc[_rows][[c for c in _cols if c in _si.columns]].rename(columns=_cols).round(1)
+show_or_pending(_tab, "the sign-inclusive gap")
+```
+
+![The gap to typically-developing speech, counting Down syndrome speech alone and counting any modality.](figures/comparisons/ds_td_sign_inclusive_gap.png){#fig-sign-inclusive-gap}
+
+![The expressive credit sign adds, as a count of words.](figures/comparisons/ds_td_sign_inclusive_credit.png){#fig-sign-inclusive-credit}
+
+```{python}
+#| label: sign-inclusive-finding
+#| echo: false
+#| output: asis
+_si = comp_load("ds_td_sign_inclusive")
+if _si is None:
+    print("_The sign-inclusive contrast is pending: run "
+          "`scripts/compare_ds_td_expressive.py` and `scripts/sync_report_figures.py`._")
+else:
+    _last = float(_si["age_months"].max())
+    print(f"""
+At {_last:.0f} months — the oldest age the typically-developing comparator supports — the distance from typically-developing spoken vocabulary is about {comp_band("ds_td_sign_inclusive", "age_months", _last, "gap_spoken", "{:.0f}", "words")} counting Down syndrome speech alone, and about {comp_band("ds_td_sign_inclusive", "age_months", _last, "gap_any", "{:.0f}", "words")} counting any modality.
+
+Counting sign therefore narrows the gap without coming close to closing it. Two cautions are needed. The comparison stops at {_last:.0f} months because the typically-developing joint data stop there, which is *before* the sign-to-speech hand-over in @sec-ds-handover happens at all — so this contrast sees only the rising part of the signing story. And the two sides of it are not the same measurement: signed production and spoken production are not interchangeable for communicating with an unfamiliar listener, so a narrowed word-count gap is not by itself a narrowed communication gap.
+
+The within-population view in @sec-ds-p-any, which runs to school age and asks what a child can express rather than how far behind they are, is the more useful one for practice.
+""")
+```
+
+## What the independence assumption would have cost {#sec-independence-bound}
+
+Because $\psi > 1$, assuming independence would place total expressive vocabulary too high: if signed and spoken words coincide more than chance, the union of the two is smaller than an independence calculation makes it. That upper bound is what VG14 reported, and the distance between it and the data-identified value measures what changing the assumption bought.
+
+```{python}
+#| label: tbl-identified-vs-bound
+#| echo: false
+_ib = load_summary("VG15", "p_any_identified_vs_bound")
+_tab = None
+if _ib is not None:
+    _rows = sorted({int((_ib["age_months"] - a).abs().argmin())
+                    for a in [12, 24, 36, 48, 60, 72, 84]})
+    _tab = _ib.iloc[_rows].copy()
+    _tab["excess"] = _tab["independence_median"] - _tab["identified_median"]
+    _tab = _tab.rename(columns={
+        "age_months": "Age (mo)", "identified_median": "Data-identified",
+        "identified_ci_lo": "89% lo", "identified_ci_hi": "89% hi",
+        "independence_median": "Independence bound", "excess": "Overstatement",
+    }).round(1)
+show_or_pending(_tab, "the identified-versus-bound comparison")
+```
+
+![Total expressive vocabulary as estimated, against the independence upper bound (VG15).](figures/VG15-age-joint-signspeech-ds/p_any_identified_vs_bound.png){#fig-identified-vs-bound}
+
+```{python}
+#| label: identified-vs-bound-finding
+#| echo: false
+#| output: asis
+_ib = load_summary("VG15", "p_any_identified_vs_bound")
+if _ib is None:
+    print("_The identified-versus-bound comparison is pending: fit VG15 and run "
+          "`scripts/sync_report_figures.py`._")
+else:
+    _ib = _ib.assign(excess=lambda d: d["independence_median"] - d["identified_median"])
+    _worst = _ib.loc[_ib["excess"].idxmax()]
+    _rel = _worst["excess"] / _worst["identified_median"]
+    _inside = _worst["independence_median"] <= _worst["identified_ci_hi"]
+    _where = ("inside the 89% interval the identified value already carries"
+              if _inside else "outside the 89% interval the identified value carries")
+    print(f"""
+The overstatement is largest at {_worst['age_months']:.0f} months, where the independence bound sits about {_worst['excess']:.1f} words above the data-identified value — {_rel:.0%} of it, and {_where}. Assuming independence was therefore a real error but a modest one numerically, and it is not the main reason VG15 replaced VG14. That reason is the random effects: without study and child intercepts, VG14 attributed to the population differences that belong to particular studies and particular children.
+
+This is a useful reminder about model comparison generally. The assumption that is easiest to name and criticise is not always the one that moves the answer most.
+""")
+```
+
+## What this chapter does not establish {#sec-signing-limits}
+
+- **No causal claim, in either direction.** $\psi > 1$ says signed and spoken words coincide within a child's understood vocabulary more often than independence predicts. It does not say that signing causes, accelerates or delays speech, and the hand-over in @sec-ds-handover is a description of what happens, not an explanation of why. No source records how its children were taught to sign.
+- **The association rests on four sources that disagree.** Only the sources recording per-word modality identify $\psi$. With four of them the between-source spread is weakly identified, and selecting on an estimate that clears the independence reference inflates it on average, so the interval and the strength of evidence — not the point value — should carry the interpretation.
+- **Signing coverage thins sharply with age.** Signed observations are dense from about 12 to 60 months and sparse beyond, with two small sources above 72 months and one above 84. Estimates near the top of the reported range lean on the model's smoothness rather than on many children.
+- **Parts of the signing curve are fixed rather than estimated.** The length-scale of the signing Gaussian process is not identified by these data, and the peak of $r(a)$ is constrained by its prior. The hand-over milestones, which are pinned by a crossing between two curves, are better identified than the shape of either curve alone.
+- **The reporting range stops at 84 months for every quantity here,** including total expressive vocabulary, which stops at the tighter of its two components' caps: past the signing cap one of its two ingredients is no longer reported, and a union of a reported and an unreported quantity is not a quantity this report publishes.
+- **What "signs" means differs between sources.** One source recorded sign-only production and its signing counts are masked from these analyses; the project's own checklists record a total sign count. The harmonisation is documented in @sec-data and is a measurement decision, not a fact about children.
+- **Some of these fits carry recorded sampling caveats.** They are listed below, from the fits' own diagnostics; the full statement is in @sec-limitations.
+
+```{python}
+#| label: tbl-signing-caveats
+#| echo: false
+show_or_pending(caveats_table(["VG14", "VG15"]),
+                "the convergence caveats for the fits used here")
+```
+
+## Out-of-sample prediction {#sec-signing-loo}
+
+```{python}
+#| label: tbl-signing-loo
+#| echo: false
+show_or_pending(loo_table(["VG14", "VG15"]), "the leave-one-out summaries")
+```
+
+::: {.callout-warning title="These two rows cannot be compared with each other"}
+Expected log pointwise predictive density is a sum over observations, so it is only comparable between models fitted to the **same** observations. The `Observations` column above shows that VG14 and VG15 are not: VG15's sign–speech likelihood is evaluated on the sources that record modality word by word, which is a subset of the rows VG14 uses. The table is a record of each fit's own predictive reliability, not evidence for the choice between them — that choice was made on structure and on the assumption VG14 could not test, as set out in @sec-independence-bound and in the model inventory.
+
+The Pareto $k$ diagnostics in the models' own reports flag a substantial share of observations for VG15, which is the expected signature of leaving out one *observation* from a child who has others in the training set, not a sign of misfit. Leave-one-*subject*-out is the honest out-of-sample question for a model with child random effects, and the project runs it separately.
+:::

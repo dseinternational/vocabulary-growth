@@ -40,6 +40,7 @@ from vocab_growth.models.definitions import (
     KappaAnchorPriorParams,
     TrivariateModelDefinition,
     UnivariateModelDefinition,
+    subject_scale_spec,
 )
 
 MODELS_DIR = env.models_output_dir()
@@ -105,8 +106,26 @@ def univariate_priors(d: UnivariateModelDefinition) -> dict[str, pz.distribution
             alpha=partition.share_alpha, beta=partition.share_beta
         )
     elif getattr(d, "use_subject_re", False):
-        priors["tau_subject"] = pz.HalfNormal(sigma=d.tau_subject_sigma)
+        priors.update(subject_scale_priors(d.tau_subject_sigma, "tau_subject"))
     return priors
+
+
+def subject_scale_priors(value, name: str) -> dict:
+    """Priors for a subject-effect scale, whichever form the field carries.
+
+    Under Proposal A1 the scalar is replaced by an
+    :class:`AgeVaryingSubjectScale`, and the parameter that carries a prior is no
+    longer ``{name}`` (a Deterministic there) but the young anchor and the log
+    ratio. Plotting ``{name}`` against a HalfNormal it no longer has would be the
+    same error the variance partition already documents just above.
+    """
+    spec = subject_scale_spec(value)
+    if spec is None:
+        return {name: pz.HalfNormal(sigma=value)}
+    return {
+        f"{name}_young": pz.HalfNormal(sigma=spec.young_sigma),
+        f"log_{name}_ratio": pz.Normal(mu=0.0, sigma=spec.log_ratio_sigma),
+    }
 
 
 def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.distributions.Continuous]:
@@ -132,9 +151,9 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
         priors["tau_u"] = pz.HalfNormal(sigma=d.tau_u_sigma)
         priors["tau_q"] = pz.HalfNormal(sigma=d.tau_q_sigma)
     if getattr(d, "use_subject_re_u", False):
-        priors["tau_subj_u"] = pz.HalfNormal(sigma=d.tau_subj_u_sigma)
+        priors.update(subject_scale_priors(d.tau_subj_u_sigma, "tau_subj_u"))
     if getattr(d, "use_subject_re_q", False):
-        priors["tau_subj_q"] = pz.HalfNormal(sigma=d.tau_subj_q_sigma)
+        priors.update(subject_scale_priors(d.tau_subj_q_sigma, "tau_subj_q"))
     return priors
 
 

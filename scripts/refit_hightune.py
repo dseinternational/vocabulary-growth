@@ -1,14 +1,37 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Refit a model at reporting quality with overridden sampling parameters,
-without editing source. Monkey-patches the shared sampling-config factory so the
-'rep' tier returns the requested tune/draws/target_accept/chains; the fit is
-still treated as reporting-quality (convergence gate enforced). The refit
-overwrites the canonical model output dir (back it up first if you need it).
+"""Refit a model — or one of its registered sensitivity variants — at reporting
+quality with overridden sampling parameters, without editing source.
+Monkey-patches the shared sampling-config factory so the 'rep' tier returns the
+requested tune/draws/target_accept/chains; the fit is still treated as
+reporting-quality (convergence gate enforced). The refit overwrites the
+canonical output dir for whatever it fits (back it up first if you need it).
+
+Note that there is no ``rep-hightune`` sampling configuration: the registered
+tiers are ``dev``, ``test``, ``rep-lite`` and ``rep``, and a high-tune run is
+this script overriding ``rep``. Such a fit records itself as ``rep`` in its
+manifest, with the raised tune/draws in ``sampling.parameters`` — which is why
+VG12's and VG13's manifests read ``rep`` at tune=12000, draws=8000.
 
 Usage:
     python scripts/refit_hightune.py <model_key> \
         --tune 12000 --draws 8000 --target-accept 0.99 [--chains 6]
+
+    python scripts/refit_hightune.py vg11 --variant anchor-broad \
+        --tune 12000 --draws 8000 --target-accept 0.99
+
+``--variant`` builds the named variant from ``vocab_growth.sensitivity.registry``
+and runs it through the same engine ``fit_sensitivity.py`` uses, so the only
+difference from that script is the sampling override. It exists because a
+variant that misses the convergence gate marginally has no other way to be
+retried with heavier tuning — ``fit_sensitivity.py`` takes a registered tier and
+the tiers stop at ``rep``. Output lands in the variant's own directory and never
+touches the model of record.
+
+Be aware of what a high-tuned variant means for ``compare_sensitivity.py``: it
+scores the variant against a baseline that may have been fitted at plain ``rep``,
+so a difference between them is no longer attributable to the prior change
+alone. Record the mismatch wherever the comparison is reported.
 """
 import argparse
 import importlib
@@ -20,9 +43,28 @@ from dse_research_utils.statistics.models.sampling import SamplingConfiguration
 
 from vocab_growth import environment as env
 
+# Same mapping as scripts/fit_sensitivity.py — the engine each model's variants
+# are fitted through. Imported lazily in main so that a plain model refit does
+# not pay for the sensitivity imports.
+_RUNNER_IMPORTS = {
+    "vg10": ("common_bivariate_re", "fit_bivariate_re_model"),
+    "vg11": ("common_univariate_re", "fit_univariate_re_model"),
+    "vg12": ("common_univariate_re", "fit_univariate_re_model"),
+    "vg13": ("common_bivariate_re", "fit_bivariate_re_model"),
+    "vg15": ("common_joint_modality", "fit_joint_model"),
+}
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("model")
+    p.add_argument(
+        "--variant",
+        default=None,
+        help=(
+            "Registered sensitivity variant to fit instead of the model of "
+            "record (e.g. anchor-broad). Output goes to the variant's own dir."
+        ),
+    )
     p.add_argument("--tune", type=int, required=True)
     p.add_argument("--draws", type=int, required=True)
     p.add_argument("--target-accept", type=float, required=True)
@@ -30,6 +72,12 @@ if __name__ == "__main__":
     p.add_argument("--output-dir", default=None)
     freeze_support()
     a = p.parse_args()
+
+    if a.variant and a.model not in _RUNNER_IMPORTS:
+        p.error(
+            f"No sensitivity variants for model {a.model!r} "
+            f"(available: {', '.join(_RUNNER_IMPORTS)})."
+        )
 
     _orig = S.get_sampling_configuration
 
@@ -49,9 +97,24 @@ if __name__ == "__main__":
 
     env.set_output_root(a.output_dir)
     setup.init_script()
+    target = f"{a.model} [variant: {a.variant}]" if a.variant else a.model
     print(
-        f"[refit_hightune] {a.model}: rep-tier overridden -> tune={a.tune} "
+        f"[refit_hightune] {target}: rep-tier overridden -> tune={a.tune} "
         f"draws={a.draws} target_accept={a.target_accept} chains={a.chains}"
     )
-    m = importlib.import_module(f"vocab_growth.models.model_{a.model}")
-    m.fit("rep")
+
+    if a.variant:
+        from vocab_growth.sensitivity.registry import build_variant
+
+        module_name, runner_name = _RUNNER_IMPORTS[a.model]
+        runner = getattr(
+            importlib.import_module(f"vocab_growth.models.{module_name}"),
+            runner_name,
+        )
+        # build_variant raises KeyError on an unregistered name, which is the
+        # right failure: better than fitting the model of record by accident.
+        (vdef,) = build_variant(a.model, a.variant)
+        runner("rep", vdef)
+    else:
+        m = importlib.import_module(f"vocab_growth.models.model_{a.model}")
+        m.fit("rep")

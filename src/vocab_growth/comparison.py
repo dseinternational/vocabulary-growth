@@ -41,7 +41,11 @@ import pandas as pd
 
 from vocab_growth import environment as env
 from vocab_growth import intervals
-from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
+from vocab_growth.models.definitions import (
+    MODEL_REGISTRY,
+    ModelType,
+    subject_slope_spec,
+)
 
 DEFAULT_MILESTONES = (25, 50, 100, 200, 400)
 DEFAULT_MIN_COVERAGE = 0.80
@@ -134,6 +138,65 @@ def load_population_trajectory(
     """
     ages, (p_u, p_s), _ = _load_reshaped_draws(path, ("p_u_plot", "p_s_plot"))
     return ages, p_u * n_trials_, p_s * n_trials_
+
+
+#: Series the joint sign/speech engine (VG15) reports on the plot grid, as
+#: fractions. ``pi_*`` are the four-cell composition **conditional on the word
+#: being understood**, so they are scaled by ``p_u`` — not by ``n_trials`` alone —
+#: to become word counts. Getting that wrong silently inflates every cell by
+#: ``1 / p_u``, which at 12 months is a factor of fifty.
+SIGN_SPEECH_SERIES = (
+    "p_u_plot",
+    "q_plot",
+    "p_any_plot",
+    "p_any_indep_plot",
+    "r_plot",
+    "pi_sign_only_plot",
+    "pi_both_plot",
+    "pi_speak_only_plot",
+)
+
+
+def load_sign_speech_trajectory(
+    path: str, n_trials_: int
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Return ``(ages, series)`` for the joint sign/speech engine's trajectory.
+
+    ``series`` maps each name below to ``(n_draw, n_age)`` **word counts**, all
+    from one posterior so they are draw-aligned with each other:
+
+    ``understood``
+        Expected words understood.
+    ``spoken``
+        ``p_u * q``. VG15 emits no ``p_s_plot`` — spoken is a ratio of
+        understood in this engine, so it is reconstructed here rather than read.
+    ``any``
+        Total expressive vocabulary, in any modality, with the sign–speech
+        association ``psi`` estimated from the data.
+    ``any_indep``
+        The same total computed **as if** sign and speech were independent given
+        age — the assumption VG14 has no choice but to make. Shipping both makes
+        the cost of that assumption a visible contrast rather than an argument.
+    ``sign_only`` / ``both`` / ``speak_only``
+        The composition of expressive vocabulary. ``sign_only`` is the count a
+        speech-only assessment would miss entirely.
+
+    ``r`` is returned separately as a **fraction** (of understood words signed),
+    because it is a ratio by construction and a word count of it is meaningless.
+    """
+    ages, arrays, _ = _load_reshaped_draws(path, SIGN_SPEECH_SERIES)
+    p_u, q, p_any, p_any_indep, r, sign_only, both, speak_only = arrays
+    understood = p_u * n_trials_
+    return ages, {
+        "understood": understood,
+        "spoken": p_u * q * n_trials_,
+        "any": p_any * n_trials_,
+        "any_indep": p_any_indep * n_trials_,
+        "sign_only": p_u * sign_only * n_trials_,
+        "both": p_u * both * n_trials_,
+        "speak_only": p_u * speak_only * n_trials_,
+        "r": r,
+    }
 
 
 def load_univariate_trajectory(
@@ -581,6 +644,72 @@ def _logit_sigmoid_product(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return log_p - log_1mp
 
 
+def child_scale_of_age(
+    tau0: np.ndarray,
+    tau1: np.ndarray,
+    rho01: np.ndarray,
+    ages: np.ndarray,
+    *,
+    ref_age_months: float = 36.0,
+) -> np.ndarray:
+    """Between-child scale at each age under a child intercept-and-slope block.
+
+    VG19. Where the model of record gives each child one constant offset, the
+    child-slope block gives each child ``b0 + b1 * D`` with
+    ``D = (age - ref) / 12`` in years, so the between-child SD is no longer a
+    number but a curve::
+
+        sd(age) = sqrt(tau0^2 + 2 rho01 tau0 tau1 D + tau1^2 D^2)
+
+    which is just ``Var(b0 + b1 D)`` with ``Cov(b0, b1) = rho01 tau0 tau1``.
+
+    ``tau0``, ``tau1`` and ``rho01`` are per-draw scalars ``(n_draw,)``; ``ages``
+    is the evaluation grid ``(n_age,)``. Returns ``(n_draw, n_age)``, ready to
+    pass straight to :func:`child_spread_single` or :func:`child_spread_product`,
+    both of which accept an age-varying scale in place of a constant one.
+
+    Two properties worth stating because they are what makes the reported number
+    interpretable. At ``age == ref_age_months`` the scale is exactly ``tau0``,
+    which is why the reference age is a definition field rather than a constant
+    — ``tau0`` is a spread with a stated age attached. And the curve is a
+    parabola in age with its minimum at ``D = -rho01 tau0 / tau1``: a negative
+    ``rho01`` puts the tightest point in the future and children fan out on
+    both sides of it, which is a real qualitative claim the constant-offset model
+    cannot make and should be read off the figure rather than assumed.
+    """
+    d_years = (np.asarray(ages, dtype=float) - float(ref_age_months)) / 12.0
+    t0 = np.asarray(tau0, dtype=float)[:, None]
+    t1 = np.asarray(tau1, dtype=float)[:, None]
+    r = np.asarray(rho01, dtype=float)[:, None]
+    var = t0 * t0 + 2.0 * r * t0 * t1 * d_years + (t1 * d_years) ** 2
+    # A variance by construction; the clip guards floating point at the edge
+    # where |rho01| -> 1 and the parabola touches zero.
+    return np.sqrt(np.maximum(var, 0.0))
+
+
+def _tau_to_draw_age(tau: np.ndarray, shape: tuple[int, ...], *, what: str):
+    """Accept a per-draw constant scale or a per-draw, per-age one.
+
+    ``(n_draw,)`` is the constant-offset case every model up to VG20 supplies,
+    and is returned as ``(n_draw, 1)`` to broadcast over ages exactly as before.
+    ``(n_draw, n_age)`` is the VG19 child-slope case from
+    :func:`child_scale_of_age`, and is returned unchanged. Anything else is an
+    error rather than a silent broadcast, because a wrong-shaped scale here
+    produces a plausible curve instead of a failure.
+    """
+    t = np.asarray(tau, dtype=float)
+    if t.ndim == 1:
+        return t[:, None]
+    if t.ndim == 2:
+        if t.shape != shape:
+            raise ValueError(
+                f"age-varying {what} has shape {t.shape}, expected {shape} to match "
+                "the population logit grid."
+            )
+        return t
+    raise ValueError(f"{what} must be 1-D (n_draw) or 2-D (n_draw, n_age); got {t.ndim}-D.")
+
+
 def child_spread_single(
     f: np.ndarray, tau: np.ndarray, n: int, *, n_nodes: int = 21
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -594,7 +723,7 @@ def child_spread_single(
     since this is persistent between-child variation only).
     """
     x, w = _gauss_hermite_standard_normal(n_nodes)
-    tau_col = np.asarray(tau, dtype=float)[:, None]
+    tau_col = _tau_to_draw_age(tau, f.shape, what="tau")
     m1 = np.zeros_like(f)
     m2 = np.zeros_like(f)
     for xi, wi in zip(x, w, strict=True):
@@ -612,23 +741,58 @@ def child_spread_product(
     tau_q: np.ndarray,
     n: int,
     *,
+    rho: np.ndarray | None = None,
     n_nodes: int = 21,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Between-child spread of spoken in a joint ``p_s = p_u * q`` model.
 
     A child's spoken proportion is ``sigmoid(f_u + tau_u*Z1) * sigmoid(h + tau_q*Z2)``
-    with independent standard Normal ``Z1``, ``Z2``, so the SD of the child's
-    *spoken* logit is neither ``tau_u`` nor ``tau_q`` and is age-varying even though
-    both scales are constants. Returns the same ``(tau_logit, sd_child_words)`` pair
-    as :func:`child_spread_single`, evaluated on a tensor Gauss-Hermite grid.
+    with standard Normal ``Z1``, ``Z2``, so the SD of the child's *spoken* logit is
+    neither ``tau_u`` nor ``tau_q`` and is age-varying even though both scales are
+    constants. Returns the same ``(tau_logit, sd_child_words)`` pair as
+    :func:`child_spread_single`, evaluated on a tensor Gauss-Hermite grid.
+
+    ``rho`` is the correlation between the child's two deviations, one value per
+    draw. ``None`` means independent ``Z1``, ``Z2`` — the VG05–VG16 assumption and
+    this function's historical behaviour. Where a model estimates the correlation
+    (VG20's ``rho_uq``), passing it applies to the quadrature nodes the same
+    Cholesky the model samples under, ``Z2 = rho*Z1 + sqrt(1 - rho^2)*Z2'``.
+
+    The correction has a known direction: ``log p_S = log p_U + log q`` gains
+    ``2 Cov``, so assuming independence when the correlation is positive
+    **understates** the spoken between-child spread. That asymmetry was a
+    disclosed limitation of the DS-versus-TD contrast for as long as no DS model
+    estimated the correlation — the TD comparator's single spoken intercept
+    absorbs it whether or not anyone models it.
 
     This is the quantity that is like-for-like with a univariate model's
     ``tau_subject``; contrasting ``tau_subj_q`` against it instead would compare the
     spread of a conversion ratio with the spread of a level.
     """
     x, w = _gauss_hermite_standard_normal(n_nodes)
-    tu = np.asarray(tau_u, dtype=float)[:, None]
-    tq = np.asarray(tau_q, dtype=float)[:, None]
+    # Decide age-varying from the CALLER's input, not from the adapter's output:
+    # the adapter returns (n_draw, 1) for a constant scale, which is also 2-D.
+    age_varying = np.asarray(tau_u).ndim == 2 or np.asarray(tau_q).ndim == 2
+    if rho is not None and age_varying:
+        # The engine refuses to build this combination (see
+        # `_resolve_subject_re_correlation`), so reaching it means a caller has
+        # paired a child-slope scale with a cross-outcome correlation by hand.
+        # `rho` would then be read as the intercept-intercept element of a 4x4
+        # covariance that was never estimated.
+        raise ValueError(
+            "an age-varying child scale (VG19) cannot be combined with a "
+            "cross-outcome correlation (VG20's rho_uq): that is a 4x4 covariance "
+            "and this quadrature assumes a 2x2."
+        )
+    tu = _tau_to_draw_age(tau_u, f_u.shape, what="tau_u")
+    tq = _tau_to_draw_age(tau_q, h.shape, what="tau_q")
+    if rho is None:
+        r = s = None
+    else:
+        r = np.asarray(rho, dtype=float)[:, None]
+        # Clipped rather than trusted: rho lives on (-1, 1) by construction, but
+        # a floating-point 1 - rho^2 can go very slightly negative at the edge.
+        s = np.sqrt(np.maximum(1.0 - r * r, 0.0))
     p1 = np.zeros_like(f_u)
     p2 = np.zeros_like(f_u)
     l1 = np.zeros_like(f_u)
@@ -636,7 +800,7 @@ def child_spread_product(
     for xi, wi in zip(x, w, strict=True):
         a = f_u + tu * xi
         for xj, wj in zip(x, w, strict=True):
-            b = h + tq * xj
+            b = h + (tq * xj if r is None else tq * (r * xi + s * xj))
             weight = wi * wj
             p = _sigmoid(a) * _sigmoid(b)
             lg = _logit_sigmoid_product(a, b)
@@ -669,6 +833,15 @@ def subject_heterogeneity(
     ``f_u_plot`` + ``tau_subj_u`` for understood, and additionally ``h_plot`` +
     ``tau_subj_q`` for spoken, which needs :func:`child_spread_product`.
 
+    Where a model gives its children a *rate* rather than a constant offset
+    (VG19), the scale it reads is not a number but the curve
+    :func:`child_scale_of_age` builds from ``tau_subj_*_0``, ``tau_subj_*_1`` and
+    ``tau_subj_*_rho``, evaluated on the returned grid. Both quadratures accept a
+    ``(n_draw, n_age)`` scale, so the dispatch is the only thing that changes.
+    ``tau_logit`` is then age-varying for two reasons at once — the population
+    logit moves and the child scale moves — where under a constant offset only
+    the first applies.
+
     ``ages`` evaluates on a caller-supplied grid instead of the model's own plot
     grid. The population logits are interpolated *before* the quadrature (they are
     smooth in age; the derived SD need not be), which for a 0.5-month comparison
@@ -684,15 +857,55 @@ def subject_heterogeneity(
     n = n_trials(key)
     path = trace_path(key)
 
-    def _prepare(
-        native: np.ndarray, Y: np.ndarray, tau: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _prepare(native: np.ndarray, Y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if draws is not None:
-            Y, tau = Y[draws], tau[draws]
+            Y = Y[draws]
         if ages is None:
-            return native, Y, tau
+            return native, Y
         out = np.asarray(ages, dtype=float)
-        return out, interp_draws(native, Y, out), tau
+        return out, interp_draws(native, Y, out)
+
+    def _scale_names(base: str, slope) -> tuple[str, ...]:
+        """Trace variables carrying one outcome's between-child scale."""
+        if slope is None:
+            return (base,)
+        return (f"{base}_0", f"{base}_1", f"{base}_rho")
+
+    def _scale(
+        scal: dict[str, np.ndarray], base: str, slope, grid: np.ndarray
+    ) -> np.ndarray:
+        """One outcome's between-child scale: a per-draw scalar, or a curve in age.
+
+        A model whose child effect carries a *rate* (VG19) has no single
+        between-child scale: the spread is
+        ``sqrt(tau0^2 + 2 rho01 tau0 tau1 D + tau1^2 D^2)`` at ``D`` years from
+        the reference age. Reading its `tau_subj_*` Deterministic and stopping
+        there would report the reference-age spread at every age, discarding
+        `tau1` and `rho01` — the same defect #224 found in the subject-marginal
+        predictive, where a fitted parameter was thrown away by the derived
+        quantity that existed to use it. `tau_subj_*` is *present* in a VG19
+        trace, so nothing would fail; the curve would just be silently flat.
+
+        Keyed off the definition's scale field rather than off which variables
+        the trace happens to contain, so a model that should carry a rate and
+        does not fails loudly in :func:`_load_reshaped_draws`.
+
+        Evaluated on ``grid`` — the caller's age grid once resolved, not the
+        model's native one — because the scale is a function of age and must be
+        computed at the ages actually reported, never interpolated from another
+        grid.
+        """
+        if slope is None:
+            tau = scal[base]
+            return tau if draws is None else tau[draws]
+        t0, t1, r = (scal[f"{base}_0"], scal[f"{base}_1"], scal[f"{base}_rho"])
+        if draws is not None:
+            t0, t1, r = t0[draws], t1[draws], r[draws]
+        # Resolved exactly as `common_bivariate_re.build_model_re` resolves it,
+        # default included: a reference age here that differs from the one the
+        # fit used would silently shift the whole curve.
+        ref = float(getattr(d, "subject_slope_ref_age_months", 36.0) or 36.0)
+        return child_scale_of_age(t0, t1, r, grid, ref_age_months=ref)
 
     if mt is ModelType.UNIVARIATE:
         if d.outcome.value != outcome:
@@ -704,8 +917,17 @@ def subject_heterogeneity(
                 f"{key} carries no subject random effect; it has no between-child "
                 "scale to report. Use a model with use_subject_re=True."
             )
+        # No univariate model carries a child rate; if one is ever added, this
+        # branch must grow the same treatment rather than silently reporting the
+        # reference-age spread at every age.
+        if subject_slope_spec(getattr(d, "tau_subject_sigma", None)) is not None:
+            raise NotImplementedError(
+                f"{key} carries a child slope on a univariate engine; "
+                "subject_heterogeneity has no age-varying path for it."
+            )
         native, (f,), scal = _load_reshaped_draws(path, ("f_plot",), ("tau_subject",))
-        grid, f, tau = _prepare(native, f, scal["tau_subject"])
+        grid, f = _prepare(native, f)
+        tau = _scale(scal, "tau_subject", None, grid)
         tau_logit, sd_words = child_spread_single(f, tau, n, n_nodes=n_nodes)
         return grid, tau_logit, sd_words, n
 
@@ -716,10 +938,12 @@ def subject_heterogeneity(
                     f"{key} carries no understood subject random effect "
                     "(use_subject_re_u=False)."
                 )
+            slope_u = subject_slope_spec(d.tau_subj_u_sigma)
             native, (f_u,), scal = _load_reshaped_draws(
-                path, ("f_u_plot",), ("tau_subj_u",)
+                path, ("f_u_plot",), _scale_names("tau_subj_u", slope_u)
             )
-            grid, f_u, tau_u = _prepare(native, f_u, scal["tau_subj_u"])
+            grid, f_u = _prepare(native, f_u)
+            tau_u = _scale(scal, "tau_subj_u", slope_u, grid)
             tau_logit, sd_words = child_spread_single(f_u, tau_u, n, n_nodes=n_nodes)
             return grid, tau_logit, sd_words, n
         if outcome == "spoken":
@@ -732,13 +956,35 @@ def subject_heterogeneity(
                     "understood *and* ratio subject effects; both use_subject_re_u "
                     "and use_subject_re_q must be set."
                 )
-            native, (f_u, h), scal = _load_reshaped_draws(
-                path, ("f_u_plot", "h_plot"), ("tau_subj_u", "tau_subj_q")
+            # A model that estimates the correlation between the two child
+            # deviations must have it carried into the derived spoken scale;
+            # otherwise the parameter is fitted and then thrown away here, which
+            # is exactly the defect #224 found in the subject-marginal
+            # predictive. Keyed off the definition field rather than off the
+            # variable's presence in the trace, so a model that should carry a
+            # correlation and does not fails loudly in _load_reshaped_draws.
+            slope_u = subject_slope_spec(d.tau_subj_u_sigma)
+            slope_q = subject_slope_spec(d.tau_subj_q_sigma)
+            scalar_names = _scale_names("tau_subj_u", slope_u) + _scale_names(
+                "tau_subj_q", slope_q
             )
-            grid, f_u, tau_u = _prepare(native, f_u, scal["tau_subj_u"])
-            _, h, tau_q = _prepare(native, h, scal["tau_subj_q"])
+            correlated = getattr(d, "subject_re_correlation_eta", None) is not None
+            if correlated:
+                scalar_names += ("rho_uq",)
+            native, (f_u, h), scal = _load_reshaped_draws(
+                path, ("f_u_plot", "h_plot"), scalar_names
+            )
+            grid, f_u = _prepare(native, f_u)
+            _, h = _prepare(native, h)
+            tau_u = _scale(scal, "tau_subj_u", slope_u, grid)
+            tau_q = _scale(scal, "tau_subj_q", slope_q, grid)
+            rho = None
+            if correlated:
+                rho = scal["rho_uq"]
+                if draws is not None:
+                    rho = rho[draws]
             tau_logit, sd_words = child_spread_product(
-                f_u, h, tau_u, tau_q, n, n_nodes=n_nodes
+                f_u, h, tau_u, tau_q, n, rho=rho, n_nodes=n_nodes
             )
             return grid, tau_logit, sd_words, n
         raise ValueError(f"outcome must be 'spoken' or 'understood', got {outcome!r}.")
@@ -746,6 +992,71 @@ def subject_heterogeneity(
     raise ValueError(
         f"{key}: model_type {mt} is not supported by subject_heterogeneity."
     )
+
+
+def subject_effect_correlation(
+    key: str,
+    *,
+    names: tuple[str, str] = ("delta_subj_u", "delta_subj_q"),
+    thin: int = 20,
+) -> tuple[np.ndarray, int]:
+    """Per-draw correlation *across children* between two subject random effects.
+
+    The joint DS models give each child two deviations — one on comprehension
+    (``delta_subj_u``) and one on the production ratio (``delta_subj_q``). In
+    VG05–VG16 they are drawn as two *independent* standard Normal vectors, and
+    :func:`child_spread_product` derives the spoken between-child scale on
+    exactly that assumption; the univariate TD comparator places a single
+    intercept on the spoken logit and so carries no such constraint, which made
+    the assumption a live asymmetry in the DS-vs-TD ``tau`` contrast rather than
+    an internal detail. VG20 estimates the correlation as a free parameter
+    (``rho_uq``), which is the fix rather than the measurement.
+
+    This function keeps both roles. On a model that does not estimate the
+    correlation it is the only check available without a refit; on one that does,
+    it is an *internal consistency check* — the realised deviations should
+    reproduce the fitted ``rho_uq``, and on VG20 they do (0.371 against 0.369).
+
+    Returns ``(correlations, n_children)``: one correlation per retained draw —
+    computed across children within the draw — so the result carries posterior
+    uncertainty, unlike a single correlation of the posterior *means*, which is
+    inflated by the shrinkage the two effects share.
+
+    Two cautions, and they apply only to the uncorrelated models. The estimate is
+    shrunk toward zero by the independence prior, so its magnitude is a lower
+    bound — VG10's realised +0.151 against VG20's fitted +0.369 measures how much
+    that prior suppresses. And because ``log p_S = log p_U + log q``, a positive
+    correlation means the independent-draw derivation **understates** the spoken
+    between-child spread; a negative one means it overstates it.
+
+    ``thin`` keeps every ``thin``-th draw: the correlation is over hundreds of
+    children per draw, so a few thousand draws already resolve the interval.
+    """
+    d = az.from_netcdf(trace_path(key))
+    post = _dataset(d, "posterior")
+    for name in names:
+        if name not in post:
+            raise ValueError(
+                f"{key}: {name!r} is not in the posterior. This check needs both "
+                "per-child deviation vectors; a trace saved under a reduced "
+                "persistence tier may not carry them."
+            )
+    a, b = (
+        np.asarray(post[n].values, dtype=float).reshape(-1, post[n].values.shape[-1])[
+            ::thin
+        ]
+        for n in names
+    )
+    a = a - a.mean(axis=1, keepdims=True)
+    b = b - b.mean(axis=1, keepdims=True)
+    denominator = np.sqrt((a * a).sum(axis=1) * (b * b).sum(axis=1))
+    correlations = np.divide(
+        (a * b).sum(axis=1),
+        denominator,
+        out=np.full(a.shape[0], np.nan),
+        where=denominator > 0,
+    )
+    return correlations, int(a.shape[1])
 
 
 def align_draws(

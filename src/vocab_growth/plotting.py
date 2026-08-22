@@ -221,10 +221,22 @@ def _draw_ppc_count_distribution(
     ax.fill_betweenx(
         [0, ylim_max * 0.96], lo50, hi50, color=plot_styles.COLOUR_GREEN, alpha=0.18
     )
+    # Both bands are annotated. The inner one was drawn but unlabelled, which left
+    # the reader to guess what the darker shading meant -- and the two are easy to
+    # confuse precisely because an equal-tailed interval is asymmetric about the
+    # median, so neither band's edges sit where an eye expects them to.
+    inner_pct = int(round(intervals.INNER_CI_PROB * 100))
     ax.text(
         hi + label_off,
         ylim_max * 0.9,
         f"{pct}% {kind_label}: {lo:.0f} to {hi:.0f}",
+        color=plot_styles.COLOUR_GREEN,
+        ha="center",
+    )
+    ax.text(
+        hi + label_off,
+        ylim_max * 0.82,
+        f"{inner_pct}% {kind_label}: {lo50:.0f} to {hi50:.0f}",
         color=plot_styles.COLOUR_GREEN,
         ha="center",
     )
@@ -262,6 +274,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     filename: str | None = None,
     x_label: str = "Word count",
     count_axis_max: int | None = None,
+    max_age_months: float | None = None,
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts, as a histogram.
@@ -276,6 +289,17 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     own ISO A-landscape file ``{filename}_{age}m.{png,svg}`` and the summary
     table ``{filename}.csv`` (issue #123).
     """
+    # ``max_age_months`` drops query ages past the outcome's reporting cap. This
+    # grid is the one place the two came apart: ``ages_query`` runs to 90, so the
+    # understood panels were drawn at 90 while every other understood artefact
+    # stopped at 84. See :mod:`vocab_growth.reporting_ages`.
+    X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    y_query = np.asarray(y_query)
+    if max_age_months is not None:
+        keep = X_query <= max_age_months
+        X_query = X_query[keep]
+        y_query = y_query[keep, ...]
+
     nq = len(X_query)
     axis_max = n_trials if count_axis_max is None else count_axis_max
 
@@ -298,6 +322,29 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     fig.suptitle("Posterior predictive distributions at query ages", y=1.02)
 
     if filename is not None and output_dir is not None:
+        # Clear the previous run's per-age figures before writing this run's.
+        # Without this a tightened reporting cap leaves the old, wider set on
+        # disk, and `ppc_count_distribution_gallery` globs whatever it finds:
+        # VG02 kept publishing a 90-month comprehension figure against an
+        # 84-month cap, and it propagated into docs/report/figures/. The
+        # capped `{filename}.csv` written below has no matching row, so the
+        # orphan was invisible to `tests/test_reporting_age_policy.py`, which
+        # reads tables.
+        import glob as _glob
+        import re as _re
+
+        # Anchored on the full basename: an unanchored `{filename}_*m.png` glob
+        # also matches another outcome's files, so the understood writer would
+        # delete the spoken figures when the prefixes share a stem.
+        stale_pattern = _re.compile(
+            rf"^{_re.escape(filename)}_\d+(?:\.\d+)?m\.(?:png|svg)$"
+        )
+        for stale in _glob.glob(os.path.join(output_dir, f"{filename}_*m.png")) + _glob.glob(
+            os.path.join(output_dir, f"{filename}_*m.svg")
+        ):
+            if stale_pattern.match(os.path.basename(stale)):
+                os.remove(stale)
+
         # The combined grid is no longer written — reports embed the per-age
         # figures below (via ppc_count_distribution_gallery). The grid is still
         # returned for callers/tests.
@@ -340,16 +387,39 @@ def ppc_count_distribution_gallery(
     when no per-age files are present (e.g. before a model is re-fit with the
     individual plots), so the report section is never empty. Prints nothing if
     neither is present.
+
+    Ages absent from the companion table ``{prefix}.csv`` are skipped. That
+    table is written under the outcome's reporting cap, so this keeps the
+    gallery inside the cap even when a figure from an earlier, looser run is
+    still on disk -- which is how VG02 came to publish a 90-month comprehension
+    figure against an 84-month cap. The fit-time writer now clears stale
+    figures, but this guard also protects fits produced before it did.
     """
     import glob
     import re
 
+    # Anchored on the prefix so that a gallery for one outcome cannot pick up
+    # another's files when the prefixes share a stem.
+    age_pattern = re.compile(rf"^{re.escape(prefix)}_(\d+(?:\.\d+)?)m\.png$")
+
     def _age(path: str) -> float:
-        m = re.search(r"_(\d+(?:\.\d+)?)m\.png$", os.path.basename(path))
+        m = age_pattern.match(os.path.basename(path))
         return float(m.group(1)) if m else float("inf")
+
+    permitted: set[float] | None = None
+    table_path = os.path.join(directory, f"{prefix}.csv")
+    if os.path.exists(table_path):
+        try:
+            table = pd.read_csv(table_path)
+            if "age_months" in table:
+                permitted = {float(age) for age in table["age_months"]}
+        except (OSError, ValueError):
+            permitted = None
 
     candidates = glob.glob(os.path.join(directory, f"{prefix}_*m.png"))
     files = [path for path in candidates if _age(path) != float("inf")]
+    if permitted is not None:
+        files = [path for path in files if _age(path) in permitted]
     files.sort(key=_age)
     if not files:
         combined = os.path.join(directory, f"{prefix}.png")
@@ -372,10 +442,19 @@ def plot_posterior_predictive_pmf(
     output_dir: str | None = None,
     filename: str | None = None,
     x_label: str = "Word count",
+    max_age_months: float | None = None,
 ) -> Figure:
     """
     For each query age, plot the posterior predictive distribution of counts as a PMF on a common support.
+
+    ``max_age_months`` drops query ages past the outcome's reporting cap. Age
+    lives in the *column names* here (``pmf_84m``), not in a column, so this
+    table is easy to miss when auditing which artefacts are capped — it was.
     """
+    X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    if max_age_months is not None:
+        X_query = X_query[X_query <= max_age_months]
+
     all_draws = []
     idxs = []
     for a in X_query:
@@ -433,7 +512,17 @@ def plot_posterior_predictive_cdf(
     output_dir: str | None = None,
     filename: str | None = None,
     x_label: str = "Words spoken (count)",
+    max_age_months: float | None = None,
 ) -> Figure:
+    """For each query age, plot the posterior predictive CDF of counts.
+
+    ``max_age_months`` drops query ages past the outcome's reporting cap; as in
+    :func:`plot_posterior_predictive_pmf`, age is carried in the column names.
+    """
+    X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    if max_age_months is not None:
+        X_query = X_query[X_query <= max_age_months]
+
     draws_by_age = []
     plot_idx_by_age = []
 
@@ -563,6 +652,7 @@ def plot_posterior_predictive_median_trend(
     output_dir: str | None = None,
     filename: str | None = None,
     y_label: str = "Predicted word count",
+    max_age_months: float | None = None,
 ):
     """
     Plot the posterior predictive distribution of counts as a function of age,
@@ -599,6 +689,18 @@ def plot_posterior_predictive_median_trend(
     y_plot = np.asarray(y_plot)
     x_obs = np.asarray(x_obs).reshape(-1)
     y_obs = np.asarray(y_obs).reshape(-1)
+
+    # Trim before smoothing, and trim the scattered observations with the curve.
+    # Leaving the points in place would run the x axis past the reported range
+    # and invite the trimmed curve to be read as a finding about the trajectory
+    # rather than as the edge of what is reported.
+    if max_age_months is not None:
+        keep = X_plot <= max_age_months
+        X_plot = X_plot[keep]
+        y_plot = y_plot[keep, :] if y_plot.ndim == 2 else y_plot[keep]
+        keep_obs = x_obs <= max_age_months
+        x_obs = x_obs[keep_obs]
+        y_obs = y_obs[keep_obs]
 
     if y_plot.ndim != 2:
         raise ValueError("y_plot must have shape (n_grid, n_samples).")
@@ -679,13 +781,16 @@ def plot_posterior_predictive_median_trend(
 
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
+        # The *plotted* arrays, so the table is the figure's own numbers -- see
+        # the note in plot_expected_learning_rate. Without this the "smoothed"
+        # sidecar is byte-identical to the unsmoothed one.
         _save_csv(pd.DataFrame({
             "age_months": X_plot,
-            "median": y_plot_samples_median,
-            "ci50_lo": predictive_interval_inner[:, 0],
-            "ci50_hi": predictive_interval_inner[:, 1],
-            "ci_lo": predictive_interval_outer[:, 0],
-            "ci_hi": predictive_interval_outer[:, 1],
+            "median": y_plot_samples_median_plot,
+            "ci50_lo": predictive_interval_inner_plot[:, 0],
+            "ci50_hi": predictive_interval_inner_plot[:, 1],
+            "ci_lo": predictive_interval_outer_plot[:, 0],
+            "ci_hi": predictive_interval_outer_plot[:, 1],
         }), output_dir, filename)
 
     return plt.gcf()
@@ -704,10 +809,16 @@ def plot_expected_learning_rate(
     savgol_polyorder: int = 3,
     smooth_intervals: bool = True,
     y_label: str = "Estimated word score gain per month",
+    max_age_months: float | None = None,
 ):
     """
     Plot the posterior distribution of the estimated learning rate
     (estimated gain in spoken words per month) across age.
+
+    ``max_age_months`` stops the curve where its outcome's evidence stops, and
+    is applied *before* smoothing so the Savitzky-Golay window cannot pull
+    values from beyond the cap back across it. See
+    :mod:`vocab_growth.reporting_ages`.
 
     The is the derivative of the conditional expectation of the count given the
     latent function f. The posterior uncertainty bands show how that estimated
@@ -753,6 +864,11 @@ def plot_expected_learning_rate(
     x_plot_values = np.asarray(X_plot, dtype=float).reshape(-1)
     # f_plot arrives as (n_plot, n_samples); transpose to (n_samples, n_plot)
     f_plot_values = np.asarray(f_plot).T
+
+    if max_age_months is not None:
+        keep = x_plot_values <= max_age_months
+        x_plot_values = x_plot_values[keep]
+        f_plot_values = f_plot_values[:, keep]
 
     if f_plot_values.shape[1] != x_plot_values.shape[0]:
         raise ValueError(
@@ -838,13 +954,18 @@ def plot_expected_learning_rate(
 
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
+        # The *plotted* arrays, so the table is the figure's own numbers. Saving
+        # the pre-smoothing arrays made `expected_learning_rate_smoothed.csv`
+        # byte-identical to `expected_learning_rate.csv`, so a reader who
+        # downloaded the smoothed table to check the smoothed figure got the
+        # unsmoothed series without being told.
         _save_csv(pd.DataFrame({
             "age_months": x_plot_values,
-            "median_rate": median_rate,
-            "ci50_lo": ci50_rate[:, 0],
-            "ci50_hi": ci50_rate[:, 1],
-            "ci_lo": ci_rate[:, 0],
-            "ci_hi": ci_rate[:, 1],
+            "median_rate": median_rate_plot,
+            "ci50_lo": ci50_rate_plot[:, 0],
+            "ci50_hi": ci50_rate_plot[:, 1],
+            "ci_lo": ci_rate_plot[:, 0],
+            "ci_hi": ci_rate_plot[:, 1],
         }), output_dir, filename)
 
     return plt.gcf()
@@ -860,10 +981,16 @@ def plot_posterior_kappa(
     interval_kind: intervals.IntervalKind = "hdi",
     output_dir: str | None = None,
     filename: str | None = None,
+    max_age_months: float | None = None,
 ) -> tuple[Figure, pd.DataFrame, pd.DataFrame]:
     """
     Plot the posterior distribution of κ(age) on the plot grid, and return
     summary DataFrames for both the plot grid and query ages.
+
+    ``max_age_months`` stops the curve where its outcome's evidence stops. κ is
+    the dispersion *of one outcome*, so it takes that outcome's cap -- see
+    :mod:`vocab_growth.reporting_ages`. It trims the query grid as well as the
+    plot grid, and the saved CSVs with the figure, so none of them can disagree.
 
     Parameters
     ----------
@@ -899,6 +1026,14 @@ def plot_posterior_kappa(
     kappa_plot_samps = np.asarray(kappa_plot)
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
     kappa_query_samps = np.asarray(kappa_query)
+
+    if max_age_months is not None:
+        keep_plot = X_plot <= max_age_months
+        X_plot = X_plot[keep_plot]
+        kappa_plot_samps = kappa_plot_samps[keep_plot, :]
+        keep_query = X_query <= max_age_months
+        X_query = X_query[keep_query]
+        kappa_query_samps = kappa_query_samps[keep_query, :]
 
     inner = intervals.INNER_CI_PROB
     kind_label = "HDI" if interval_kind == "hdi" else "interval"
@@ -1237,6 +1372,12 @@ def plot_expected_counts_by_month(
 
     if output_dir is not None and filename is not None:
         _save_png_svg(fig, output_dir, filename)
-        _save_csv(monthly, output_dir, filename)
+        # No sidecar CSV. Unlike every other figure here, this one is handed a
+        # frame the caller has *already* written under its own canonical name,
+        # `posterior_summary_monthly[_<outcome>].csv` -- the name the reports
+        # read, the model inventory documents and the figure sync ships. A
+        # sidecar would be a byte-identical second copy under a second name,
+        # which is how a reader ends up unsure which of two files is current.
+        # See `emit_monthly_summary` in models/common.py.
 
     return fig

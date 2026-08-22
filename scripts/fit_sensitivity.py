@@ -42,13 +42,21 @@ _RUNNER_BY_KEY = {
     "vg12": fit_univariate_re_model,
     "vg13": fit_bivariate_re_model,
     "vg15": fit_joint_model,
+    # VG20 is the DS joint model of record and shares VG10's engine; its
+    # correlated subject block is a field on the definition, not a different
+    # runner. Added 2026-08-19 with the kappa placement variants (#229) -- the
+    # first sensitivity variants registered against a model of record.
+    "vg20": fit_bivariate_re_model,
+    # VG19 shares VG10's engine; its child slope is a field on the definition,
+    # not a different runner. Added 2026-08-21 for gate G5b.
+    "vg19": fit_bivariate_re_model,
 }
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "model",
-        help="Model key with sensitivity variants (vg10, vg11, vg12, vg13, vg15).",
+        help="Model key with sensitivity variants (vg10, vg11, vg12, vg13, vg15, vg20).",
     )
     parser.add_argument("variant", help="Variant name, or 'all' for every variant of the model.")
     parser.add_argument(

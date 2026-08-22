@@ -72,6 +72,124 @@ def build_kappa_of_z(kappa_min_dist, a_kappa_dist, b_kappa_mag_dist, suffix=""):
     return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
 
 
+def build_subject_scale_of_z(spec, *, anchor_z, name):
+    """Create the A1 age-varying subject-effect scale and return its closure.
+
+    ``spec`` is an
+    :class:`~vocab_growth.models.definitions.AgeVaryingSubjectScale`; ``anchor_z``
+    is its two reference ages on the standardised scale; ``name`` is the scalar
+    parameter this replaces (``"tau_subj_u"``, ``"tau_subj_q"``,
+    ``"tau_subject"``), which fixes every emitted variable name.
+
+    The graph is::
+
+        {name}_young  ~ HalfNormal(spec.young_sigma)
+        log_{name}_ratio ~ Normal(0, spec.log_ratio_sigma)
+        tau(z) = {name}_young * exp(log_ratio * (z - z_young) / (z_old - z_young))
+
+    so ``log_{name}_ratio = 0`` is the constant-scale model of record and its
+    posterior interval *is* the answer to "does the between-child spread widen".
+    The ratio is multiplicative rather than log-linear between two independent
+    anchors: no logarithm is taken of a ``HalfNormal`` that can approach zero,
+    and the young anchor keeps the record's own prior unmodified.
+
+    ``{name}`` itself is emitted as a scalar ``Deterministic`` equal to the scale
+    **at the young anchor**, so every consumer that reads the constant-``tau``
+    name — the posterior summaries, the heterogeneity comparators, the recovery
+    scorer — keeps working and reads a quantity with a stated age attached.
+    ``{name}_old`` is emitted for symmetry with the kappa anchors.
+
+    Returns ``(tau_of_z, tau_young)`` — the closure, and the young-anchor scalar
+    itself so the caller can reuse it without going back through the model's
+    variable table (which is not populated until the build returns).
+    """
+    z_young, z_old = (float(anchor_z[0]), float(anchor_z[1]))
+    if not z_old > z_young:
+        raise ValueError(
+            f"subject-scale anchor_z must be ordered (young, old); got {anchor_z!r}."
+        )
+    span = z_old - z_young
+    tau_young = pm.HalfNormal(f"{name}_young", sigma=spec.young_sigma)
+    log_ratio = pm.Normal(
+        f"log_{name}_ratio", mu=0.0, sigma=spec.log_ratio_sigma
+    )
+    _ = pm.Deterministic(name, tau_young)
+    _ = pm.Deterministic(f"{name}_old", tau_young * pm.math.exp(log_ratio))
+
+    def tau_of_z(z):
+        return tau_young * pm.math.exp(log_ratio * (z - z_young) / span)
+
+    return tau_of_z, tau_young
+
+
+def build_child_slope(spec, *, age_obs_months, subject_obs, ref_age_months, name):
+    """Create the VG19 child intercept-and-slope block and return its closure.
+
+    ``spec`` is a
+    :class:`~vocab_growth.models.definitions.SubjectSlopePriorParams`;
+    ``age_obs_months`` is the observation ages in **months** (unstandardised —
+    the slope is per year of real age, not per standard deviation, so that
+    ``tau1`` stays readable and comparable across pools); ``subject_obs`` indexes
+    each observation's child; ``ref_age_months`` is the age at which ``tau0`` is
+    the between-child spread; ``name`` is the scalar parameter this replaces
+    (``"tau_subj_u"`` / ``"tau_subj_q"``), which fixes every emitted name.
+
+    The graph, non-centred, with the 2x2 Cholesky written out::
+
+        {name}_0    ~ HalfNormal(spec.tau0_sigma)
+        {name}_1    ~ HalfNormal(spec.tau1_sigma)       # per year
+        {name}_rho_raw ~ Beta(eta, eta)
+        rho01       = 2 * {name}_rho_raw - 1
+        z           ~ Normal(0, 1), dims (subject_id, "child_effect")
+        b0 = tau0 * z[:, 0]
+        b1 = tau1 * (rho01 * z[:, 0] + sqrt(1 - rho01**2) * z[:, 1])
+        shift(obs) = b0[subject] + b1[subject] * (age - ref) / 12
+
+    which is ``z @ L.T`` for ``L = [[tau0, 0], [rho01*tau1, tau1*sqrt(1-rho01^2)]]``
+    written elementwise, so the two columns keep their names in the trace.
+
+    **Name preservation.** ``{name}`` is emitted as a scalar ``Deterministic``
+    equal to ``tau0`` — the spread at the reference age — so every consumer that
+    reads the constant-tau name keeps working and reads a quantity with a stated
+    age attached, exactly as :func:`build_subject_scale_of_z` does.
+    ``delta_{name-without-tau_}`` keeps its per-child meaning as the offset at
+    the reference age. ``{name}_rho`` is emitted so the correlation is a named
+    variable rather than an element of a packed vector.
+
+    Returns ``(shift_obs, tau0)`` — the per-observation shift and the reference-age
+    scale, the latter so the caller can reuse it without going back through the
+    model's variable table.
+    """
+    if not spec.tau0_sigma > 0 or not spec.tau1_sigma > 0:
+        raise ValueError(
+            f"child-slope scales must be positive; got tau0_sigma="
+            f"{spec.tau0_sigma!r}, tau1_sigma={spec.tau1_sigma!r}."
+        )
+    if not spec.rho_eta > 0:
+        raise ValueError(f"child-slope rho_eta must be positive; got {spec.rho_eta!r}.")
+
+    tau0 = pm.HalfNormal(f"{name}_0", sigma=spec.tau0_sigma)
+    tau1 = pm.HalfNormal(f"{name}_1", sigma=spec.tau1_sigma)
+    rho_raw = pm.Beta(f"{name}_rho_raw", alpha=spec.rho_eta, beta=spec.rho_eta)
+    rho01 = pm.Deterministic(f"{name}_rho", 2.0 * rho_raw - 1.0)
+
+    z = pm.Normal(f"{name}_z", mu=0.0, sigma=1.0, dims=("subject_id", "child_effect"))
+    b0 = pm.Deterministic(f"b0_{name}", tau0 * z[:, 0], dims="subject_id")
+    b1 = pm.Deterministic(
+        f"b1_{name}",
+        tau1 * (rho01 * z[:, 0] + pm.math.sqrt(1.0 - rho01**2) * z[:, 1]),
+        dims="subject_id",
+    )
+
+    # The record's own name, and its per-child companion, both read at ref_age.
+    _ = pm.Deterministic(name, tau0)
+    _ = pm.Deterministic(f"delta_{name.replace('tau_', '')}", b0, dims="subject_id")
+
+    years = (age_obs_months - float(ref_age_months)) / 12.0
+    shift_obs = b0[subject_obs] + b1[subject_obs] * years
+    return shift_obs, tau0
+
+
 def build_kappa_of_z_anchored(
     kappa_min_dist,
     excess_young_dist,
@@ -80,6 +198,7 @@ def build_kappa_of_z_anchored(
     anchor_z,
     suffix="",
     excess_young_value=None,
+    hold_constant=False,
 ):
     """Create the two-anchor kappa RVs and return the dispersion closure.
 
@@ -96,6 +215,23 @@ def build_kappa_of_z_anchored(
     :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams` for why the
     reparameterisation is worth making.
 
+    **Only the anchor totals are estimands.** The split of each total into
+    ``kappa_min`` plus an excess is not identified: parameter recovery scores
+    ``kappa_min`` at -60.1%, -55.7%, -53.9% (VG10) and ``kappa_excess_old_s`` at
+    +263%, +155%, +112% (VG20), while ``kappa_old_u`` and ``kappa_old_s`` --
+    the sums containing them -- come back within a few percent on the same
+    fits. The floor's *share* of reported kappa carries an 89% interval of
+    [13.2%, 78.3%] on comprehension at 84 months and [21.0%, 99.8%] on the
+    nested spoken scale. So ``kappa_min``, ``kappa_excess_young`` and
+    ``kappa_excess_old`` are sampling coordinates; report and interpret
+    ``kappa`` at an age, never a component, and never a trend in one.
+
+    The totals themselves are data-driven. Re-centring the ``kappa_min`` prior
+    from a median of 3.0 to the conditionally calibrated 7.8 -- a 160% move --
+    shifts reported kappa by 14.2% at 84 months and 6.6% at 72 on
+    comprehension, an elasticity of 0.09 and 0.04, and the 89% intervals
+    overlap throughout. See ``notes/202608191800-kappa-components-not-estimands.md``.
+
     ``a_kappa{suffix}`` and ``b_kappa{suffix}`` are still stored as named
     ``Deterministic``\\ s, under the same names the legacy form gives them, so a
     migrated model's dispersion posterior stays directly comparable with the
@@ -110,12 +246,34 @@ def build_kappa_of_z_anchored(
     -b_kappa_mag <= 0`` is not). When it does rise, ``kappa_min`` is the
     *young*-age asymptote rather than an old-age floor — the exponential term
     vanishes at whichever end the slope points away from.
+
+    ``hold_constant`` pins ``b_kappa`` to exactly zero, so dispersion is flat in
+    age with its *level* still free (``kappa_min + excess_young``). It exists for
+    Proposal A1, which *moves* the age variation onto the between-child scale
+    rather than adding it there, and it drops ``excess_old_dist`` — there is no
+    old anchor left to place a prior on. Every name the anchored form emits is
+    still emitted, with ``kappa_old`` equal to ``kappa_young`` by construction,
+    so a flat-kappa fit stays directly comparable with the fits around it.
     """
     z_young, z_old = (float(anchor_z[0]), float(anchor_z[1]))
     if not z_old > z_young:
         raise ValueError(
             f"kappa anchor_z must be ordered (young, old); got {anchor_z!r}."
         )
+    if hold_constant:
+        kappa_min = kappa_min_dist.to_pymc(f"kappa_min{suffix}")
+        if excess_young_value is None:
+            excess_young = excess_young_dist.to_pymc(f"kappa_excess_young{suffix}")
+        else:
+            excess_young = pm.Deterministic(
+                f"kappa_excess_young{suffix}", excess_young_value
+            )
+        _ = pm.Deterministic(f"kappa_excess_old{suffix}", excess_young)
+        b_kappa = pm.Deterministic(f"b_kappa{suffix}", pt.zeros(()))
+        a_kappa = pm.Deterministic(f"a_kappa{suffix}", pm.math.log(excess_young))
+        _ = pm.Deterministic(f"kappa_young{suffix}", kappa_min + excess_young)
+        _ = pm.Deterministic(f"kappa_old{suffix}", kappa_min + excess_young)
+        return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
     kappa_min = kappa_min_dist.to_pymc(f"kappa_min{suffix}")
     if excess_young_value is None:
         excess_young = excess_young_dist.to_pymc(f"kappa_excess_young{suffix}")
@@ -185,10 +343,36 @@ def build_variance_partition(
     kappa_min + excess_young`` is positive by construction.
 
     Both original parameters are returned to the graph under their usual names, so
-    this changes what the sampler explores and not what the model reports; the
-    DS/TD heterogeneity contrast that ``tau_subject`` feeds is unaffected. The
-    prior does move, necessarily and by design — it now sits on the budget and the
-    split, which is where a prior on this pair can actually be reasoned about.
+    this changes what the sampler explores and not which quantities the model
+    reports. The prior does move, necessarily and by design — it now sits on the
+    budget and the split, which is where a prior on this pair can actually be
+    reasoned about.
+
+    **It does not follow that the reported values are unaffected, and this
+    docstring used to claim they were.** Parameter recovery on VG12 returns
+    ``tau_subject`` below its truth in three replicates of three, by about 5.8%,
+    with the truth outside the 89% interval every time. ``v_total`` recovers
+    cleanly (z = +1.05, +0.63, −0.10) and ``subject_variance_share`` is biased low
+    (−20.6%, −12.7%, −8.7%), so on VG12 it is the split that is mis-estimated
+    rather than the budget, and ``tau_subject`` inherits the bias amplified
+    because the square root concentrates its posterior.
+
+    **This docstring used to add that VG10, carrying two free scales and no
+    partition, showed no such consistent direction. That is false.** VG10 returns
+    −5.28%, −8.23%, −3.20% and VG20 −7.08%, −4.42%, −5.95%, against VG12's
+    −6.59%, −5.32%, −5.66%: the same size and the same sign in 9 replicates of
+    9, with the partition and without it. So the partition is not the cause — but
+    the two families fail differently. VG12 keeps its budget and mis-splits it,
+    whereas in VG10 and VG20 the dispersion concentration at the young anchor
+    comes back low alongside the subject scale (9 of 9), so there the budget
+    itself is under-recovered rather than merely misallocated.
+
+    Since ``tau_subject`` is the typically-developing side of the DS/TD
+    between-child contrast, a low bias there **overstates** the reported
+    difference — but the Down syndrome side now carries a bias of the same sign
+    and similar size, so the contrast is far less affected than either side
+    alone. See ``notes/202608161700-recovery-baseline-215.md`` and issues #225
+    and #229; treat the contrast as carrying this caveat until one reports.
 
     See ``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4 and 7.1.
     """

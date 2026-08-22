@@ -30,8 +30,15 @@ from __future__ import annotations
 
 import math
 
-from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.definitions import MODEL_REGISTRY, AgeVaryingSubjectScale
 from vocab_growth.sensitivity.overrides import make_variant
+
+# A1's subject-scale anchors must be the paired kappa block's own anchors, or the
+# two parameters contest different spans and the variant stops being one-factor.
+# Read them off the model the variant is registered on rather than off the shared
+# prior constants, so the coupling survives VG10 being given its own kappa block.
+_VG10_KAPPA_U_ANCHORS = MODEL_REGISTRY["vg10"].kappa_u.anchor_ages
+_VG10_KAPPA_S_ANCHORS = MODEL_REGISTRY["vg10"].kappa_s.anchor_ages
 
 # (model_key, variant_name) -> {"suffix": str, "scalar"?: dict, "kappa"?: dict}
 VARIANTS: dict[tuple[str, str], dict] = {
@@ -245,6 +252,53 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_hi_u_alpha": 1.1, "p_slope_hi_u_beta": 1.1}},
     ("vg10", "eta-u-narrow"): {"suffix": "eta-u-narrow", "scalar": {"eta_u_sigma": 0.4}},
 
+    # VG10 clamp scope. `clamp_mean_above_hi_anchor` was `True` -- levelling BOTH
+    # the understood mean and `q` off above the 84 mo anchor -- until 2026-08-14,
+    # when it became `CLAMP_Q_ONLY` for the whole DS joint family. Measurement
+    # drove that: extrapolating VG10's own fitted anchors past the clamp gives
+    # q = 0.996 at 115 mo with P(mean > 0.99) = 0.999, while understood reaches
+    # 0.962 and never crosses 0.99 in any draw, so only `q` ever needed it. The
+    # `clamp-q-only` variant that established this is now the model of record and
+    # has been REPLACED by its inverse rather than retired: `clamp-both` restores
+    # the old behaviour, so the decision keeps a check that can still fail. (A
+    # variant that can no longer vary anything reads as robustness it has not
+    # demonstrated -- the principle the retired ceiling and uk_06 variants went
+    # out under.) See notes/202608141200-clamp-q-only.md.
+    ("vg10", "clamp-both"): {"suffix": "clamp-both", "scalar": {
+        "clamp_mean_above_hi_anchor": True}},
+
+    # VG10 Proposal A1 -- the age variation moved off `kappa` and onto the
+    # between-child scale. `tau_subj_*` becomes log-linear in age between the
+    # SAME two anchors the kappa blocks use (24 and 48 months), and both kappa
+    # blocks are held flat, so the two parameters contest one span rather than
+    # one of them absorbing what the other cannot express. Registered on VG10
+    # alone: it is the model of record whose `kappa` decline the report reads
+    # developmentally, and the diagnostic only needs one model to answer how
+    # much of that decline is misattributed widening.
+    #
+    # `log_tau_subj_*_ratio ~ Normal(0, 0.5)` is centred on the model of record
+    # (ratio 1, no widening) and puts 89% of its mass on a 24->48 month ratio in
+    # [0.48, 2.1]; the tracking note's non-measurement spread rises by about 1.4x
+    # over that span on DS spoken, so the prior brackets the measured effect
+    # without asserting it. The young anchor keeps HalfNormal(1.5) exactly, so
+    # this is one factor: the constant scale becoming a slope.
+    #
+    # NOT a candidate model of record, and the reason is measured rather than
+    # stylistic: scaling one per-child deviate by tau(age) imposes perfect rank
+    # correlation across age, and the observed disattenuated correlation is 0.28
+    # beyond two years. See notes/202607261540 §9 and notes/202608141600 §8.
+    ("vg10", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subj_u_sigma": AgeVaryingSubjectScale(
+            anchor_ages=_VG10_KAPPA_U_ANCHORS,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        ),
+        "tau_subj_q_sigma": AgeVaryingSubjectScale(
+            anchor_ages=_VG10_KAPPA_S_ANCHORS,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
+
     # VG11 (TD spoken anchors, #138): revert the (norm-anchored) spoken band and eta.
     ("vg11", "anchor-broad"): {"suffix": "anchor-broad", "scalar": {
         "p_slope_low_alpha": 1.0, "p_slope_low_beta": 15.0,
@@ -260,6 +314,214 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg12", "hi-anchor-broad"): {"suffix": "hi-anchor-broad", "scalar": {
         "p_slope_hi_alpha": 1.1, "p_slope_hi_beta": 1.1}},
     ("vg12", "eta-narrow"): {"suffix": "eta-narrow", "scalar": {"eta_sigma": 0.4}},
+
+    # -- VG13 observation window (#228) --
+    #
+    # These two are the widest-scoped variants registered on VG13, and the only
+    # ones here that change the *data* rather than a prior. They exist because
+    # VG13's 18-month cap turned out to rest on two reasons that no longer hold.
+    #
+    # The cap's code comment says it "avoids the WS bias (production proxy
+    # comprehension) entirely". It does not do that work: `load_data` selects
+    # `WORDBANK_BIVARIATE_FORMS` whenever `understood` is requested, so WS is
+    # never loaded for a comprehension model at ANY age. The July review gave the
+    # real reason -- above 18 months only Oxford CDI supplied bivariate rows, a
+    # single study. The Romance extension of 2026-08-03 retired that objection
+    # without anyone revisiting the cap: Italian Words & Gestures is registered
+    # 7-24 months, so Caselli now sits alongside Floccia above 18.
+    #
+    # What the cap currently discards, measured on the loader's own code path in
+    # VG13's language scope: 694 administrations from 323 children, all on forms
+    # the pipeline already treats as genuinely bivariate. Raising the cap to 25
+    # takes the pool from 6,358 rows to 7,052 -- which is VG12's pool exactly,
+    # same six studies, same rows. VG12 already fits and reports these
+    # observations; VG13 is the only model that drops them, and VG13 is the one
+    # carrying the Down-syndrome-versus-typically-developing comparison.
+    #
+    # Why this costs more than a `max_age_months` override. Over 8-18 months the
+    # production ratio `q` runs from a median of 0.04 to 0.22 -- the bottom limb
+    # of its S, which is what justifies `eta_q_sigma = 0.20` and a logit-linear
+    # trend between anchors at 10 and 16 months. Over 8-25 it runs to 0.83.
+    # Extending the window alone would extrapolate that trend nine months past
+    # its high anchor into the part of the curve that decelerates: on understood
+    # it reaches p = 0.85 (687 words) at 25 months against an observed median of
+    # 0.42. So each variant moves its high anchor into the new window, recentres
+    # both high-anchor Betas on the in-sample median there, widens `eta_q` to
+    # give the GP the curvature the longer window needs, and moves the GP domain,
+    # GP anchor and query grid to match. Co-identified, therefore one unit --
+    # the same discipline the Beta anchors are varied under above.
+    #
+    # The high-anchor Betas are recentred on IN-SAMPLE medians, not on published
+    # norms, because no CDI comprehension norm exists above 18 months (this is
+    # the same gap that makes VG12's 26-month anchor a named sensitivity target).
+    # They sit just below the in-sample median, per the house convention that an
+    # anchor is recentred toward the empirical level and not tightened onto it.
+    #
+    # `kappa_u`'s anchor ages move from (12, 17) to (12, 20) -- VG12's, since
+    # VG12 is calibrated on exactly this comprehension pool over exactly this
+    # window. `kappa_s` follows so the two blocks contest one span. The
+    # magnitudes are inherited rather than recalibrated, and that is a named
+    # limitation rather than a claim.
+    #
+    # Two windows rather than one, because the Oxford CDI's 418-item ceiling
+    # bites unevenly. Below 19 months 1-5% of administrations sit above 90% of
+    # their form's ceiling; at 19-22 it is 7-8%, and at 23-25 it jumps to 20-36%.
+    # Ceiling compression biases the comprehension trend down where it bites, so
+    # `window-22` is the ceiling-safe half of the pair and the difference between
+    # the two measures the exposure rather than arguing about it. `window-25` is
+    # the one to fit first: it is the one that answers the question, reaching a
+    # median of 340 understood words against VG13's ~220.
+    ("vg13", "window-25"): {"suffix": "window-25", "scalar": {
+        "max_age_months": 25,
+        "slope_anchors": (10, 24),
+        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22, 24],
+        "gp_domain_months": (8, 25),
+        "gp_anchor_age_months": 17.0,
+        # 24 mo in-sample medians: understood 0.415 of 810, q 0.675.
+        "p_slope_hi_u_alpha": 2.0, "p_slope_hi_u_beta": 2.8,   # median 0.404
+        "p_slope_hi_q_alpha": 2.0, "p_slope_hi_q_beta": 1.3,   # median 0.630
+        "eta_q_sigma": 0.5},
+     "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
+               "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
+    ("vg13", "window-22"): {"suffix": "window-22", "scalar": {
+        "max_age_months": 22,
+        "slope_anchors": (10, 21),
+        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22],
+        "gp_domain_months": (8, 22),
+        "gp_anchor_age_months": 15.5,
+        # 21 mo in-sample medians: understood 0.359 of 810, q 0.417.
+        "p_slope_hi_u_alpha": 2.0, "p_slope_hi_u_beta": 3.2,   # median 0.369
+        "p_slope_hi_q_alpha": 2.0, "p_slope_hi_q_beta": 2.6,   # median 0.425
+        "eta_q_sigma": 0.5},
+     "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
+               "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
+
+    # `window-22-vague-anchors` is `window-22` with its two HIGH anchors made
+    # much less informative, and nothing else changed. It exists to answer one
+    # objection to promoting `window-22` (notes/202608211100-window-22-adopted.md
+    # §6): its 21-month anchors were recentred on the *in-sample* medians
+    # (understood 0.359, q 0.417) because no CDI comprehension norm exists above
+    # 18 months -- US-English WG stops there. VG13's own 16-month anchor is
+    # norm-validated (prior median 0.228 against a Wordbank median of 0.222,
+    # PRIORS.md "TD anchor priors vs Wordbank norms"), so the extension really
+    # does sit on weaker footing, and this repository has already had to correct
+    # one case of setting a prior from the data it is fitted to (the DS-joint
+    # anchors read off the VG07 posterior; same PRIORS.md section).
+    #
+    # The finding at risk is specific: under `window-22` the DS/TD gap closes,
+    # Delta-q = -0.00 at 300 words and +0.00 at 320 (P(TD>DS) = 0.49, 0.51),
+    # where `window-25` has it reopening to +0.09. That closure needs TD q to
+    # reach ~0.48 at U=320, and the q high anchor is what pins the level q can
+    # reach. So the threatening displacement is UPWARD: if the anchor is holding
+    # TD q down, a higher, wider one should let the gap reopen.
+    #
+    #   p_slope_hi_q  Beta(2, 2.6) -> Beta(1.3, 1.3)   median 0.425 -> 0.500,
+    #       5-95% 0.110-0.795 -> 0.079-0.921. The centre moves off the in-sample
+    #       value and the span roughly doubles. Beta(1.3, 1.3) is not invented
+    #       here: it is the house broad high anchor already used by VG03, VG04,
+    #       VG11 and VG12.
+    #   p_slope_hi_u  Beta(2, 3.2) -> Beta(1.2, 2.0)   median 0.369 -> 0.346,
+    #       5-95% 0.092-0.731 -> 0.044-0.803. Widened rather than displaced, on
+    #       purpose. Beta(1.3, 1.3) would put the understood median at 0.500 =
+    #       405 words, essentially at the Oxford CDI's own 418-item ceiling
+    #       (0.516) -- PRIORS.md warns that a high understood anchor near 0.5
+    #       "would sit against the WG ceiling and implicitly assume near-total
+    #       WG comprehension". That is not a vague prior, it is a wrong one, and
+    #       it would confound the test rather than sharpen it.
+    #
+    # Read it as a gate, not as a candidate for reporting: if the closure
+    # survives, the prior limitation is a disclosure; if it does not, the
+    # closure was prior-held and must not be published.
+    ("vg13", "window-22-vague-anchors"): {"suffix": "window-22-vague-anchors", "scalar": {
+        "max_age_months": 22,
+        "slope_anchors": (10, 21),
+        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22],
+        "gp_domain_months": (8, 22),
+        "gp_anchor_age_months": 15.5,
+        "p_slope_hi_u_alpha": 1.2, "p_slope_hi_u_beta": 2.0,   # median 0.346
+        "p_slope_hi_q_alpha": 1.3, "p_slope_hi_q_beta": 1.3,   # median 0.500
+        "eta_q_sigma": 0.5},
+     "kappa": {"kappa_u": {"anchor_ages": (12.0, 20.0)},
+               "kappa_s": {"anchor_ages": (12.0, 20.0)}}},
+
+    # -- Target 9: where the dispersion prior is placed (#229) --
+    #
+    # These three were registered on 2026-08-19 as `kappa-anchor-18-72`,
+    # `kappa-floor-recentred` and `kappa-anchor-18-72-floor`, perturbing a base
+    # anchored at (24, 48) with a floor prior median of 3.0. The combination was
+    # promoted into `_DS_JOINT_*_KAPPA_RE` the same day, so they are restated
+    # here as the inverse: a sensitivity variant has to perturb *away* from the
+    # model of record, and after promotion the originals pointed at it. The
+    # priors are unchanged, so the `test`-tier fits made under the old names are
+    # these variants under new labels -- their output directories still carry the
+    # old suffixes, and the numbers are in
+    # notes/202608191800-kappa-components-not-estimands.md.
+    #
+    #   kappa-anchor-24-48   the old anchors, keeping the calibrated floor. Asks
+    #                        whether anchoring outside the reporting range, so
+    #                        that everything above 48 months is extrapolation
+    #                        onto the asymptote, changes what is reported. On the
+    #                        evidence so far it does not: under 1% on
+    #                        comprehension at every age above 24 months.
+    #   kappa-floor-generic  the old generic log(3.0) floor prior, keeping the
+    #                        new anchors. This is the factor that does move the
+    #                        old-age numbers -- 14.2% at 84 months -- though only
+    #                        by about a fifth of that quantity's own 89%
+    #                        interval, and notes/202608020829 §22 had already
+    #                        judged the uncentred floor immaterial because only
+    #                        the sum at the anchors is identified.
+    #   kappa-pre-promotion  both, which is the dispersion block every DS joint
+    #                        fit carried before 2026-08-19. Keeps the previous
+    #                        model of record reachable as a registered variant
+    #                        rather than only in git history.
+    # VG19 gate G5b (notes/202608141900 SS G5b). A LEVERAGE diagnostic, not a
+    # reportable narrower model, and the difference dictates the design: this
+    # variant changes `max_age_months` and NOTHING else.
+    #
+    # The `window-22` precedent moves `gp_domain_months`, the anchors and the
+    # slope priors along with the cap, because it exists to report over a narrow
+    # window and the mean function has to be right there. Doing that here would
+    # confound the measurement: `tau1` could then move because the population
+    # curve changed rather than because the high-age observations left, and the
+    # whole point is to attribute its movement to one cause. Holding the GP
+    # domain at (8, 115) leaves the basis and both slope anchors exactly where
+    # the reference fit put them, so the likelihood below 84 months is the same
+    # function of the same parameters. Above 84 the GP is unconstrained, which
+    # costs nothing: no observation is there to be fitted.
+    #
+    # Reading it: `tau1` stable => the rate is carried by the longitudinal
+    # subset and the concentration is harmless. `tau1` materially moved => it is
+    # set by the sparse tail (50 spoken rows above 84 months, 3.5% of the data
+    # carrying 28-35% of the cross-sectional information about it), and the
+    # slope should be reported only over the range that supports it.
+    ("vg19", "max-age-84"): {"suffix": "max-age-84", "scalar": {
+        "max_age_months": 84}},
+
+    ("vg20", "kappa-anchor-24-48"): {"suffix": "kappa-anchor-24-48", "kappa": {
+        "kappa_u": {"anchor_ages": (24.0, 48.0),
+                    "excess_young_mu": math.log(63.4),
+                    "excess_old_mu": math.log(19.9)},
+        "kappa_s": {"anchor_ages": (24.0, 48.0),
+                    "excess_young_mu": math.log(7.6),
+                    "excess_old_mu": math.log(2.2),
+                    "excess_old_sigma": 1.0}}},
+    ("vg20", "kappa-floor-generic"): {"suffix": "kappa-floor-generic", "kappa": {
+        "kappa_u": {"kappa_min_mu": math.log(3.0),
+                    "excess_young_mu": math.log(89.6),
+                    "excess_old_mu": math.log(11.0)},
+        "kappa_s": {"kappa_min_mu": math.log(3.0),
+                    "excess_young_mu": math.log(15.2),
+                    "excess_old_mu": math.log(5.4)}}},
+    ("vg20", "kappa-pre-promotion"): {"suffix": "kappa-pre-promotion", "kappa": {
+        "kappa_u": {"anchor_ages": (24.0, 48.0),
+                    "kappa_min_mu": math.log(3.0),
+                    "excess_young_mu": math.log(106.0),
+                    "excess_old_mu": math.log(28.7)},
+        "kappa_s": {"anchor_ages": (24.0, 48.0),
+                    "kappa_min_mu": math.log(3.0),
+                    "excess_young_mu": math.log(12.6),
+                    "excess_old_mu": math.log(6.7),
+                    "excess_old_sigma": 1.0}}},
 }
 
 

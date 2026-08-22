@@ -21,6 +21,7 @@ above (see issue #65).
 Plot and query predictions use the population-level trajectory (delta=0).
 """
 
+import math
 import os
 from collections.abc import Callable
 
@@ -36,6 +37,7 @@ from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
     standardize_ages,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
@@ -56,8 +58,18 @@ from vocab_growth.models.common_bivariate import (
     sample,
     sample_posterior_predictive,
 )
-from vocab_growth.models.definitions import BivariateModelDefinition
-from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
+from vocab_growth.models.definitions import (
+    BivariateModelDefinition,
+    clamp_targets,
+    subject_scale_spec,
+    subject_slope_spec,
+)
+from vocab_growth.models.gp_utils import (
+    GPGrid,
+    build_child_slope,
+    build_subject_scale_of_z,
+    trend_and_gp,
+)
 from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.reporting import (
     dataframe_table,
@@ -257,6 +269,64 @@ def _validate_cross_lag(lag_baseline: str, use_subject_re_u: bool) -> None:
             "population-relative and within-child baselines are defined relative to "
             "the child's understood subject intercept."
         )
+
+
+def _resolve_subject_re_correlation(
+    definition,
+    *,
+    use_subject_re_u: bool,
+    use_subject_re_q: bool,
+    spec_u,
+    spec_q,
+    slope_u=None,
+    slope_q=None,
+) -> float | None:
+    """LKJ concentration for the subject-effect correlation, or None (issue #224).
+
+    Read through ``getattr`` because the field lives on a definition subclass, as
+    the variance partition and child slopes do: putting it on
+    ``BivariateModelDefinition`` would change the serialised definition of the six
+    bivariate models of record and invalidate every one of their fits.
+
+    Each rejection below is a configuration that would otherwise fit something
+    other than what was asked for, silently:
+
+    * one block missing — there is nothing to correlate, and the graph would
+      quietly emit an unused ``rho_uq`` that reads as an estimate;
+    * an age-varying scale (Proposal A1) — the deviate is scaled by tau(age) per
+      observation there, so a single constant correlation between the two blocks
+      is not the model anyone means; supporting the combination needs its own
+      design rather than an implicit reading of this one.
+    """
+    eta = getattr(definition, "subject_re_correlation_eta", None)
+    if eta is None:
+        return None
+    if not (use_subject_re_u and use_subject_re_q):
+        raise ValueError(
+            "subject_re_correlation_eta requires use_subject_re_u=True and "
+            "use_subject_re_q=True: a correlation needs both subject blocks."
+        )
+    if spec_u is not None or spec_q is not None:
+        raise ValueError(
+            "subject_re_correlation_eta cannot be combined with an age-varying "
+            "subject scale (Proposal A1): the age-varying path scales each "
+            "child's deviate per observation, so a single constant correlation "
+            "between the blocks is not well defined."
+        )
+    if slope_u is not None or slope_q is not None:
+        raise ValueError(
+            "subject_re_correlation_eta cannot be combined with a child slope "
+            "(VG19): each outcome then carries its own 2x2 intercept/slope "
+            "covariance, so correlating the two outcomes is a 4x4 design and "
+            "not this one constant. Supporting it needs its own Gate 1 rather "
+            "than an implicit reading of `rho_uq` as the intercept-intercept "
+            "element."
+        )
+    if not isinstance(eta, (int, float)) or not math.isfinite(eta) or eta <= 0:
+        raise ValueError(
+            f"subject_re_correlation_eta must be a positive finite number; got {eta!r}."
+        )
+    return float(eta)
 
 
 def _compute_prev_wave_lag(analysis_df, n_trials: int):
@@ -484,6 +554,11 @@ def build_model_re(
     }
     if use_subject_codes:
         coords["subject_id"] = np.arange(n_subjects)
+    # VG19: the two per-child effects (offset at the reference age, and rate).
+    # Declared unconditionally -- an unused coord adds no variable to the graph,
+    # and making it conditional would put a `subject_slope_spec` call ahead of
+    # the model context for no benefit.
+    coords["child_effect"] = np.array(["intercept", "slope"])
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -530,6 +605,12 @@ def build_model_re(
             L=L,
         )
 
+        # One flag, two means: see definitions.clamp_targets. 'q_only' is
+        # truthy, so testing the raw value would clamp both.
+        _clamp_u, _clamp_q = clamp_targets(
+            definition.clamp_mean_above_hi_anchor
+        )
+
         # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
         f_u_all = trend_and_gp(
             cfg_low=config.p_slope_low_u_dist,
@@ -543,7 +624,7 @@ def build_model_re(
             latent_name="f_u_all",
             anchor_idx=i_anchor if anchor_g_u else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_u,
         )
 
         # ---- Production ratio: h(a) -> q(a) = sigmoid(h(a)) ----
@@ -559,7 +640,7 @@ def build_model_re(
             latent_name="h_all",
             anchor_idx=i_anchor if anchor_g_q else None,
             n_obs=n,
-            clamp_above_hi=definition.clamp_mean_above_hi_anchor,
+            clamp_above_hi=_clamp_q,
         )
 
         # ============================================================
@@ -594,31 +675,148 @@ def build_model_re(
         # Subject-level random intercepts (non-centered)
         # ============================================================
 
+        # Proposal A1 (registered sensitivity): where a subject-scale field
+        # carries an `AgeVaryingSubjectScale` instead of a scalar, the per-child
+        # deviate is scaled by tau(age) at each observation's own age and the
+        # paired kappa block is held flat. The scalar path below is untouched and
+        # emits exactly the ops it always did, so every model of record keeps its
+        # graph. `tau_*_of_z` is carried forward to emit the plot/query scales
+        # once the standardised grids exist.
+        spec_u = subject_scale_spec(definition.tau_subj_u_sigma)
+        spec_q = subject_scale_spec(definition.tau_subj_q_sigma)
+        # VG19: the same overloaded field can instead carry a child slope, which
+        # is a different age function through the seam A1 opened.
+        slope_u = subject_slope_spec(definition.tau_subj_u_sigma)
+        slope_q = subject_slope_spec(definition.tau_subj_q_sigma)
+        slope_ref_age = float(
+            getattr(definition, "subject_slope_ref_age_months", 36.0) or 36.0
+        )
+        corr_eta = _resolve_subject_re_correlation(
+            definition,
+            use_subject_re_u=use_subject_re_u,
+            use_subject_re_q=use_subject_re_q,
+            spec_u=spec_u,
+            spec_q=spec_q,
+            slope_u=slope_u,
+            slope_q=slope_q,
+        )
+        tau_u_of_z = tau_q_of_z = None
+        # Built here rather than reusing the named `z_obs` Deterministic, which is
+        # created further down: reordering that would change every model's graph.
+        z_obs_raw = (
+            X_all_z_data[i_obs0:i_obs1, 0]
+            if (spec_u is not None or spec_q is not None)
+            else None
+        )
+
         if use_subject_re_u:
-            tau_subj_u = pm.HalfNormal(
-                "tau_subj_u", sigma=definition.tau_subj_u_sigma
-            )
-            delta_subj_u_raw = pm.Normal(
-                "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
-            )
-            delta_subj_u = pm.Deterministic(
-                "delta_subj_u", tau_subj_u * delta_subj_u_raw, dims="subject_id"
-            )
-            subject_shift_u = delta_subj_u[subject_obs]
+            if slope_u is not None:
+                subject_shift_u, tau_subj_u = build_child_slope(
+                    slope_u,
+                    age_obs_months=X_obs.flatten(),
+                    subject_obs=subject_obs,
+                    ref_age_months=slope_ref_age,
+                    name="tau_subj_u",
+                )
+            elif spec_u is None:
+                tau_subj_u = pm.HalfNormal(
+                    "tau_subj_u", sigma=definition.tau_subj_u_sigma
+                )
+                delta_subj_u_raw = pm.Normal(
+                    "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                delta_subj_u = pm.Deterministic(
+                    "delta_subj_u", tau_subj_u * delta_subj_u_raw, dims="subject_id"
+                )
+                subject_shift_u = delta_subj_u[subject_obs]
+            else:
+                tau_u_of_z, tau_subj_u_young = build_subject_scale_of_z(
+                    spec_u,
+                    anchor_z=standardize_anchor_ages(
+                        spec_u.anchor_ages,
+                        X_obs_mean=X_obs_mean,
+                        X_obs_std=X_obs_std,
+                    ),
+                    name="tau_subj_u",
+                )
+                delta_subj_u_raw = pm.Normal(
+                    "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                # `delta_subj_u` keeps its name and its per-child meaning, read at
+                # the young anchor; the shift applied to the likelihood is the
+                # age-scaled one.
+                _ = pm.Deterministic(
+                    "delta_subj_u",
+                    tau_subj_u_young * delta_subj_u_raw,
+                    dims="subject_id",
+                )
+                subject_shift_u = tau_u_of_z(z_obs_raw) * delta_subj_u_raw[subject_obs]
         else:
             subject_shift_u = 0.0
 
         if use_subject_re_q:
-            tau_subj_q = pm.HalfNormal(
-                "tau_subj_q", sigma=definition.tau_subj_q_sigma
-            )
-            delta_subj_q_raw = pm.Normal(
-                "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
-            )
-            delta_subj_q = pm.Deterministic(
-                "delta_subj_q", tau_subj_q * delta_subj_q_raw, dims="subject_id"
-            )
-            subject_shift_q = delta_subj_q[subject_obs]
+            if slope_q is not None:
+                # `corr_eta` is guaranteed None here: the resolver refuses the
+                # combination, so no branch on it is needed or wanted.
+                subject_shift_q, tau_subj_q = build_child_slope(
+                    slope_q,
+                    age_obs_months=X_obs.flatten(),
+                    subject_obs=subject_obs,
+                    ref_age_months=slope_ref_age,
+                    name="tau_subj_q",
+                )
+            elif spec_q is None:
+                tau_subj_q = pm.HalfNormal(
+                    "tau_subj_q", sigma=definition.tau_subj_q_sigma
+                )
+                delta_subj_q_raw = pm.Normal(
+                    "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                if corr_eta is None:
+                    delta_subj_q_value = tau_subj_q * delta_subj_q_raw
+                else:
+                    # VG20 (issue #224). A child's two deviations are drawn from a
+                    # joint Normal rather than independently, in Cholesky form so
+                    # the nesting is exact: at rho_uq = 0 this is the expression
+                    # above, op for op.
+                    #
+                    # `delta_subj_u_raw` is reused as the shared first coordinate
+                    # and `delta_subj_q_raw` becomes the whitened second one, so
+                    # both keep their names, their standard-Normal priors and
+                    # their dims. Every downstream reader of `delta_subj_u` and
+                    # `delta_subj_q` — the summaries, the comparison suite, the
+                    # recovery scorer — sees what it always saw.
+                    rho_raw = pm.Beta(
+                        "rho_uq_raw", alpha=corr_eta, beta=corr_eta
+                    )
+                    rho_uq = pm.Deterministic("rho_uq", 2.0 * rho_raw - 1.0)
+                    delta_subj_q_value = tau_subj_q * (
+                        rho_uq * delta_subj_u_raw
+                        + pm.math.sqrt(1.0 - rho_uq**2) * delta_subj_q_raw
+                    )
+                delta_subj_q = pm.Deterministic(
+                    "delta_subj_q", delta_subj_q_value, dims="subject_id"
+                )
+                subject_shift_q = delta_subj_q[subject_obs]
+            else:
+                tau_q_of_z, tau_subj_q_young = build_subject_scale_of_z(
+                    spec_q,
+                    anchor_z=standardize_anchor_ages(
+                        spec_q.anchor_ages,
+                        X_obs_mean=X_obs_mean,
+                        X_obs_std=X_obs_std,
+                    ),
+                    name="tau_subj_q",
+                )
+                delta_subj_q_raw = pm.Normal(
+                    "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                )
+                _ = pm.Deterministic(
+                    "delta_subj_q",
+                    tau_subj_q_young * delta_subj_q_raw,
+                    dims="subject_id",
+                )
+                subject_shift_q = tau_q_of_z(z_obs_raw) * delta_subj_q_raw[subject_obs]
         else:
             subject_shift_q = 0.0
 
@@ -725,12 +923,34 @@ def build_model_re(
             "z_query", X_all_z_data[i_query0:i_query1, 0], dims=("query_id",)
         )
 
+        # Proposal A1's age-varying subject scale, reported on the same grids as
+        # kappa so the two can be read against each other — which is the whole
+        # point of the variant.
+        if tau_u_of_z is not None:
+            _ = pm.Deterministic(
+                "tau_subj_u_plot", tau_u_of_z(z_plot), dims="plot_id"
+            )
+            _ = pm.Deterministic(
+                "tau_subj_u_query", tau_u_of_z(z_query), dims="query_id"
+            )
+        if tau_q_of_z is not None:
+            _ = pm.Deterministic(
+                "tau_subj_q_plot", tau_q_of_z(z_plot), dims="plot_id"
+            )
+            _ = pm.Deterministic(
+                "tau_subj_q_query", tau_q_of_z(z_query), dims="query_id"
+            )
+
         # ============================================================
         # Kappa — understood
         # ============================================================
 
         kappa_u_of_z = build_kappa_for_config(
-            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_u"
+            config,
+            X_obs_mean=X_obs_mean,
+            X_obs_std=X_obs_std,
+            suffix="_u",
+            hold_constant=spec_u is not None and spec_u.hold_kappa_constant,
         )
 
         kappa_u_obs = pm.Deterministic(
@@ -744,7 +964,11 @@ def build_model_re(
         # ============================================================
 
         kappa_s_of_z = build_kappa_for_config(
-            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std, suffix="_s"
+            config,
+            X_obs_mean=X_obs_mean,
+            X_obs_std=X_obs_std,
+            suffix="_s",
+            hold_constant=spec_q is not None and spec_q.hold_kappa_constant,
         )
 
         kappa_s_obs = pm.Deterministic(
