@@ -11,45 +11,54 @@ requires-python = ">=3.14"
 license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Frank Buckley" }]
 
+# The scientific stack is inherited transitively rather than restated here: the
+# canonical floors (numpy/scipy/pandas/pymc/pytensor/nutpie/arviz/preliz/xarray/
+# …) live in dse-research-utils' own pyproject.toml, so they cannot drift
+# between the repositories that share them. Only the extras this repository
+# actually needs are named:
+#   columnar  duckdb — the prepared-data store (also brings polars, pyreadstat)
+#   graphs    graphviz bindings for the model DAG (needs the system `dot` too)
+#   io        orjson / tabulate, used by the shared reporting helpers
+#   jax       jax + numpyro — imported directly (jax.numpy, jax.scipy.special)
+#   notebook  jupyter + jupytext — Jupytext notebooks and Quarto's kernel
+#   storage   h5netcdf / h5py — trace.nc is NetCDF, and the model reports
+#             import h5netcdf directly to inspect a trace before opening it
+#   viz       seaborn
+# nutpie is deliberately absent: PyMC 6 declares it as `pymc[nutpie]` and
+# auto-selects it as the default NUTS sampler when present, so it is a base
+# dependency of dse-research-utils to keep the sampler identical across repos.
 dependencies = [
-  "arviz-plots>=1.3.0",
-  "arviz-stats>=1.3.0",
-  "arviz>=1.3.0",
-  "duckdb>=1.5.5",
-  "dse-research-utils>=0.10.0",
-  # jaxlib is conda-owned but only arrives transitively via jax; environment.yml
-  # does not declare it (nothing here imports it directly — it is numpyro's
-  # backend). Keep this floor at or below what the conda layer may solve to —
-  # conda's jax 0.10.2 admits jaxlib >=0.10.1,<=0.10.2 — or `conda env update`
-  # makes pip try to take ownership of a conda package and fail with
-  # "no RECORD file".
-  "jaxlib>=0.10.1",
-  "matplotlib>=3.11.1",
-  "numpy>=2.4.6,<2.5",  # pymc -> pytensor -> numba pins numpy <2.5; matches the shared conda core
-  "numpyro>=0.21.0",
-  "nutpie>=0.16.11",
-  "pandas>=3.0.5",
-  "preliz>=0.27.1",
-  "pymc>=6.3.1",
-  "scipy>=1.18.0",
-  "rich>=15.0.0",
-  "xarray>=2026.7.0"
+  "dse-research-utils[columnar,graphs,io,jax,notebook,storage,viz]"
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
+# Development-only tooling. A PEP 735 group is never written into published
+# package metadata, so none of this reaches anything that depends on us.
 dev = [
   "ipython>=9.13.0",
   "ipywidgets>=8.1.8",
-  "notebook>=7.5.6",
   "pytest>=9.1.1",
   "ruff>=0.16.1"
 ]
 
+[tool.uv]
+# Platforms the lockfile resolves for — the same set as dse-research-utils.
+# Intel macOS is absent because numba publishes no macOS x86_64 wheels, an
+# upstream decision. Native win-amd64 is now covered: jaxlib, which had no
+# conda-forge win-64 build, ships a cp314 wheel on PyPI, so Windows
+# contributors no longer need WSL.
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'win32' and platform_machine == 'AMD64'"
+]
+
 [tool.uv.sources]
 # dse-research-utils isn't published to PyPI — resolve it from the public git
-# tag. (The conda env in environment.yml installs it from the same tag in its
-# pip layer; this entry is only consumed by uv.)
-dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.10.0" }
+# tag. To develop against a sibling checkout instead, comment this out and use:
+#   dse-research-utils = { path = "../research/src/python", editable = true }
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.11.0" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"

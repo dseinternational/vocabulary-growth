@@ -48,12 +48,14 @@ Marchman
 McElreath
 Mervis
 Miniforge
+Monaspace
 NZCDI
 Næss
 Odorico
 Oijen
 Pagnamenta
 Palacios
+Pandoc
 Plunkett
 Psychometrika
 PyMC
@@ -68,6 +70,7 @@ TOST
 Thal
 Tovar
 Trivariate
+Typst
 UKRI
 Vehtari
 Walle
@@ -123,6 +126,7 @@ nonparametric
 nonparametrics
 nonwords
 nonzero
+numba
 nutpie
 orcid
 overclaiming
