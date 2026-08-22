@@ -1,7 +1,7 @@
 # Runbook: full reporting-config refit of all models
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section by Claude Code/Opus 5).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section, and the PowerShell driver and dirty-checkout material, by Claude Code/Opus 5).
 
 How to refit the whole `VG01`–`VG16` family at reporting quality (`rep`) on a
 large VM, render every report, and produce comparisons — with the pitfalls that a
@@ -10,10 +10,11 @@ naive run hits. Distilled from the 2026-07-12 run
 
 ## TL;DR
 
-- Canonical, resumable, sequential path: `scripts/run_replication.sh --config rep`.
+- Canonical, resumable path: `scripts/run_replication.ps1 -Config rep`. It needs
+  PowerShell Core 7+ and runs unchanged on Linux, macOS and Windows.
 - On a many-core VM, fit the **DS models concurrently** and the **TD models one at
-  a time** (see [Parallel fitting](#parallel-fitting-on-a-large-vm)); this is the
-  only reason to deviate from `run_replication.sh`.
+  a time** (see [Parallel fitting](#parallel-fitting-on-a-large-vm)) — pass
+  `-MaxParallel` rather than driving a pool by hand.
 - Three things bite every time: the **DuckDB lock** on concurrent fits, the
   **R-hat gate rounding** (need `dse-research-utils >= v0.6.0`), and the
   **understood-GP R-hat ridge** in the DS joint/hierarchical models.
@@ -75,7 +76,7 @@ The failure is at least safe: validation runs for all models first, and the firs
 
 ### Batch failure semantics
 
-`python scripts/fit_model.py all --config rep --render --upload` treats convergence and rendering as per-model failures and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, atomically promotes every successful fit before rendering it, continues rendering after an individual Quarto failure, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. A render failure leaves the completed fit available for `--render-only`; other fitting exceptions still abort immediately. The canonical `run_replication.sh` path remains resumable and invokes one model at a time.
+`python scripts/fit_model.py all --config rep --render --upload` treats convergence and rendering as per-model failures and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, atomically promotes every successful fit before rendering it, continues rendering after an individual Quarto failure, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. A render failure leaves the completed fit available for `--render-only`; other fitting exceptions still abort immediately. The canonical `run_replication.ps1` path remains resumable and fits one model at a time unless `-MaxParallel` raises it.
 
 ### us_01 implausible-production sensitivity
 
@@ -114,29 +115,42 @@ Four further VG15 variants exist for the 2026-08-12 changes and cost a fit each.
 
 ### Default (sequential, resumable)
 
-```bash
-scripts/run_replication.sh --config rep --output-dir <scratch>
+```powershell
+./scripts/run_replication.ps1 -Config rep -OutputDir <scratch>
 ```
 
 Idempotent: a model is skipped only when its state is `complete` and its model definition, requested sampling tier and minimum statistical effort, raw-data fingerprint, and Git commit match the current run (`--fresh` forces a refit). Host-dependent `cores` is ignored; a documented high-tuning refit is compatible when its draws, tuning iterations, chains and target acceptance meet or exceed the tier. A trace file by itself is never treated as complete. The script refuses to start from a dirty checkout, fits models, validates the set once, retries per-model rendering without resampling, runs comparisons, atomically synchronises figures, renders the report and comparison book, and optionally uploads. Development/test runs use provisional figure sync and do not upload. Any required-step failure stops all downstream comparison and publication phases and leaves a `FAILED` marker in the run log directory; an entirely successful run leaves `SUCCESS`. Estimate approximately 15–25 hours sequentially.
+
+The dirty-checkout refusal is not fussiness, and `-AllowDirty` is a development-only escape. `write_fit_manifest` records `git_metadata` when the manifest is written — at the **end** of each fit, not its start — so editing the working tree mid-run stamps `dirty: true` on every fit still in flight, and `check_fit.py --purpose publish` then refuses them as "produced from a dirty or unverifiable checkout". Land any code or documentation change as a commit **before** starting a run, not during one; a run interrupted for a repository change has to be restarted, not resumed, because `--purpose resume` also compares the current commit against each fit's.
 
 ### Parallel fitting on a large VM
 
 The DS datasets are small; the full-data TD models (`vg11`, `vg12`) are
 memory-heavy. So:
 
-- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16`): run a pool,
-  `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores). **Pin each chain to one
-  thread** first, or the pool oversubscribes (see the warning below):
-  ```bash
-  export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1
-  printf '%s\n' vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 \
-    | xargs -P 5 -I {} python scripts/fit_model.py {} --config rep --output-dir <scratch>
+- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20`): run
+  a pool, `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores):
+
+  ```powershell
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20
   ```
+
+  `-MaxParallel` above 1 pins `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+  `MKL_NUM_THREADS` and `NUMBA_NUM_THREADS` to 1 for you, because each fit already
+  runs its own chains in parallel and a pool otherwise oversubscribes the box
+  through the BLAS/OpenMP thread pools (see the warning below). Setting any of
+  them yourself beforehand keeps your value.
+
+  `-MinFreeGB` (default 16) additionally holds a launch back while available
+  memory is below the floor and a fit is already running, so the pool throttles
+  itself rather than stacking peaks — the post-sampling assembly step is where
+  these fits spike, not the sampling.
+
 - **TD models** (`vg03 vg04 vg13 vg11 vg12`): **strictly one at a time** — the
   full-data TD fits can OOM if stacked. `vg03` and `vg04` are the exception and may
   share the box; `vg11`, `vg12` and `vg13` must not share it with anything, including
-  a batch of small DS sensitivity fits (see below).
+  a batch of small DS sensitivity fits (see below). Run them as a separate
+  `-MaxParallel 1` pass; a single pool with a mixed model list cannot express this.
 
 ### Surviving a full disk
 
@@ -144,10 +158,12 @@ On 2026-08-14 at 16:12 the output volume reached 100% and five in-flight refits 
 
 **The cause was the trace tier, not the disk size.** Every fit that run wrote at the default `--trace-persistence full`. `compact` drops observation-sized deterministics that are recomputable from the free parameters, and the reporting output is byte-identical. Applied afterwards to 21 fits it took **229 GB to 77 GB** — the volume went from 100% to 63% with no loss of anything the report reads.
 
-**Set the tier before the run:**
+**Set the tier before the run**, either on the driver or in the environment:
 
-```bash
-export DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact
+```powershell
+./scripts/run_replication.ps1 -Config rep -TracePersistence compact
+# or, for anything driven directly:
+$env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
 ```
 
 **Three models should stay at `full`: VG10, VG12 and VG15.** They are `fit_recovery.py`'s headline set, and recovery scoring refuses a compacted trace up front — as do `regenerate_plots.py` and `loso_compare.py`. Pass `--trace-persistence full` for those three specifically. Everything else can be compacted, at the cost of needing a refit if its plots ever have to be regenerated.
@@ -230,8 +246,9 @@ sensitivity fit dies alone instead of killing a seven-hour one.
 **4. Sample per-process RSS, not machine-wide `used_GB`.** A machine-level sampler
 records that the box hit 244 GB but not which process did it — after the 2026-08-13
 kill, `vg13` could only be distinguished from its three co-tenants by reading the
-kernel log. Log `ps -eo rss=,args=` filtered to the fit scripts, so the next model's
-budget comes from measurement (`scripts/memwatch.sh`).
+kernel log. Sample per-process RSS filtered to the fit scripts, so the next model's
+budget comes from measurement — `scripts/memwatch.ps1 <logfile>`, which reads
+`/proc/meminfo` and `ps` on Linux and the equivalent CIM classes on Windows.
 
 **5. Read the kernel log before re-running anything.** `sudo dmesg -T | grep -i oom`
 and `journalctl --since …` distinguish the three cases that look identical from the
@@ -480,7 +497,7 @@ in-repo `output/`.
 
 Quarto resolves the Jupyter kernel for a report's python cells from `PATH`, independently of the interpreter running the fit. Driving the scripts by absolute interpreter path (`.venv/bin/python scripts/fit_model.py …`) without also putting that `bin/` on `PATH` therefore renders against whichever `python` `PATH` finds — on macOS the system framework python, which has no `h5netcdf` and cannot open `trace.nc`. The tell-tale is a fit that samples, gates, and promotes normally, followed by `ModuleNotFoundError: No module named 'h5netcdf'` from the render (2026-08-03 `test`-config refit: fifteen clean fits, fifteen failed renders, all recovered with `--render-only`).
 
-`fit_model.py` pins `QUARTO_PYTHON` to its own `sys.executable`, so per-model reports are immune. The two `quarto render` calls above are bare shell invocations and are not: either activate the env, or `export QUARTO_PYTHON="$PWD/.venv/bin/python"` before rendering the books. `run_replication.sh` puts the project environment on `PATH` itself and needs neither.
+`fit_model.py` pins `QUARTO_PYTHON` to its own `sys.executable`, so per-model reports are immune. The two `quarto render` calls above are bare shell invocations and are not: either activate the env, or `export QUARTO_PYTHON="$PWD/.venv/bin/python"` before rendering the books. `run_replication.ps1` puts the project environment on `PATH` itself and needs neither.
 
 On Linux the failure looks different and is worth recognising, because it does **not** stop the render: quarto reports `ModuleNotFoundError: No module named 'dse_research_utils'` for the affected chapters, prints `WARN: Error encountered when rendering files`, and still **exits 0** having produced a book with those chapters missing. Checking the exit status is not enough — confirm the chapter HTML you expected actually exists.
 
