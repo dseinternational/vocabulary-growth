@@ -13,20 +13,53 @@ Policy
 ==========================  ===  =========================================
 quantity                    cap  rationale
 ==========================  ===  =========================================
-understood                   84  25 rows / 20 children / 5 studies in the
-                                 72-84 band; at or above 84 only 13 rows
-                                 from 11 children, and 84 is the high trend
-                                 anchor above which the mean is levelled
-                                 off rather than fitted.
-ratio of understood          84  ``q`` (spoken given understood), ``r``
+understood                   72  Lowered from 84 on 2026-08-22. Not for
+                                 want of data — the 72-84 band holds 25
+                                 rows from 20 children across 5 studies —
+                                 but because the number there is set by
+                                 the child-effect structure rather than by
+                                 the data. See below.
+ratio of understood          72  ``q`` (spoken given understood), ``r``
                                  (fraction of understood signed) and
                                  ``p_any`` are all conditioned on
                                  understood, so they inherit its cap.
-                                 ``p_any`` has a second, independent reason
-                                 to stop there — see below.
+                                 ``q`` is the quantity that now *binds*
+                                 it — see below.
 signed                       84  Its own field since #212; see below.
 spoken                       90  The top of the query grid.
 ==========================  ===  =========================================
+
+Why comprehension stops at 72 rather than 84
+--------------------------------------------
+The 2026-08-13 raise to 84 asked the right question for its purpose — is the
+72-84 band observed rather than extrapolated? — and answered it correctly. This
+cap applies a second and stricter test that the raise did not: **is the number
+in that band determined by the data, or by the model?**
+
+VG19 and VG20 differ only in how a child departs from the population trajectory,
+and are indistinguishable out of sample (k-fold LOSO, +0.93 SE over 767
+children). They nevertheless put ``q`` at 0.75 against 0.85 at 72 months and
+0.83 against 0.94 at 84 — gaps of 0.89 and 0.93 of VG20's *own* 89% ETI width.
+Twenty-five comprehension observations cannot separate the two structures, so a
+number quoted above 72 reports a modelling choice. Below 60 months the same
+comparison never exceeds 0.15 interval widths.
+
+Two consequences worth stating, because neither is obvious from the number.
+
+**The binding quantity is now ``q``, not ``understood``.** The three models agree
+on the understood curve itself to within 0.15 interval widths at every age to 84,
+so understood alone would still support 84. It is trimmed with ``q`` because both
+ride this one definition field, and giving ``q`` its own would invalidate all
+seventeen models to express a cap this field already expresses correctly, if
+conservatively. The policy is per quantity; the *mechanism* is not, here, and
+this is where that costs something.
+
+**"Enough data" is no longer the test for raising it again.** The trigger is
+whether the 72-84 band can *distinguish* the child structures, which is answered
+by rerunning ``scripts/experiments/model_dependence_of_reported_quantities.py``
+on new older-child comprehension data, not by recounting rows.
+
+Recorded in ``notes/202608221200-reporting-source-by-quantity.md``.
 
 Why ``p_any`` stops at the tighter of its components
 -----------------------------------------------------
@@ -35,9 +68,14 @@ It takes the **tighter** of the two: past the signing cap one of its two
 components is no longer reported, and a union of a reported and an unreported
 quantity is not a quantity this project publishes. Study owner, 2026-08-16.
 
-That happens to agree with the conditioning rule above — both give 84 — but the
-two arguments are independent, and this one is the binding constraint if the
-comprehension cap ever moves without the signing cap moving with it. Stated
+The two arguments used to agree — both gave 84 — and they no longer do. On
+2026-08-22 the comprehension cap moved to 72 without the signing cap moving with
+it, which is precisely the case this paragraph was written to anticipate. The
+conditioning rule now gives 72 and the components rule 84, so **the conditioning
+rule binds** and ``p_any`` stops at 72, which is what ``max_age_for`` returns
+because ``p_any`` is a ``RATIO_OF_UNDERSTOOD``. Note the anticipation was
+half-right: it assumed the components rule would be the binding one, which holds
+only if the comprehension cap moves *up*. Whichever is tighter binds. Stated
 here because it is a reporting decision, not an arithmetic consequence: it was
 what let VG14's modality figure run to 115 months above a ``p_any`` table
 trimmed to 84 without anything objecting.

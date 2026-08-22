@@ -2017,16 +2017,19 @@ VG02 = UnivariateModelDefinition(
     p_slope_hi_alpha=2.0,
     p_slope_hi_beta=1.5,
     eta_sigma=0.6,
-    # Comprehension reporting stops at 84 mo, matching the joint models; raised from
-    # 72 on 2026-08-13 once uk_07 and the reinstated uk_06 signing rows rebuilt the
-    # older tail. 38 of the 987 understood rows now sit at or above 72 (95th
-    # percentile 69 mo), 25 of them from 20 children in the 72-84 band. Above 84
-    # only 13 rows from 11 children remain, and 84 is the high trend anchor past
-    # which the mean is levelled off rather than fitted. Reporting only -- it cannot
-    # move the posterior. The whole-month companion still covers the full observed
-    # span, where its n_obs column records the emptiness directly. See
+    # Comprehension reporting stops at 72 mo, matching the joint models; lowered
+    # from 84 on 2026-08-22. VG02 carries no q, so the model-dependence argument
+    # that binds the joint models (see VG05) does not arise here on its own terms --
+    # understood is the robust quantity, agreeing across VG10, VG19 and VG20 to
+    # within 0.15 interval widths at every age to 84. It follows the joint models
+    # anyway, because a single-outcome comprehension model reporting to 84 beside a
+    # joint model reporting to 72 would invite the reader to prefer whichever
+    # number ran further. Reporting only -- it cannot move the posterior. The
+    # whole-month companion still covers the full observed span, where its n_obs
+    # column records the emptiness directly. See
+    # notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     kappa=_DS_UNDERSTOOD_KAPPA,
 )
 
@@ -2174,21 +2177,36 @@ VG05 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
@@ -2256,21 +2274,36 @@ VG07 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
@@ -2340,21 +2373,36 @@ VG08 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
@@ -2428,21 +2476,36 @@ VG09 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
@@ -2520,21 +2583,36 @@ VG10 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
@@ -2826,21 +2904,36 @@ VG14 = TrivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     # Signed gets its own cap rather than inheriting the comprehension one, which
     # is what it did until 2026-08-13. 84 matches VG15's report_max_age_signed on
     # the same evidence, and stops the r(a) table where the r(a) figure stops.
@@ -2926,21 +3019,36 @@ VG15 = JointModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     # Signed evidence now reaches 84 months. Adopted 2026-08-07 at 60 on the same
     # argument that capped comprehension at 72 -- then 46 of 593 signed
     # observations lay above 60 and none above 72. uk_07 (PACT-DS) adds 82
@@ -3057,21 +3165,36 @@ VG16 = BivariateModelDefinition(
     # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
     # same defect about 3x milder. One-sided, and the corner is rounded over about
     # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 84 mo, raised from 72 on 2026-08-13 once
-    # uk_07 and the reinstated uk_06 signing rows rebuilt the older tail. Understood
-    # is observed on 987 rows with a 95th percentile of 69 mo; the 72-84 band now
-    # carries 25 rows from 20 children across five studies (ie_01, uk_01, uk_06,
-    # uk_07, us_02), so reporting it is no longer extrapolation. That is the same
-    # test, and the same threshold, the study owner applied when raising
-    # report_max_age_signed from 60 to 84 in #212.
-    # 84 and no further, for two reasons that coincide: at or above it understood
-    # has only 13 rows from 11 children, and 84 is the high trend anchor, above
-    # which clamp_mean_above_hi_anchor levels the mean off rather than fitting it --
-    # so anything quoted there is a levelled-off extrapolation moved by the GP alone.
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 25 understood rows from 20 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate all seventeen models to express a cap that this one already
+    # expresses correctly, if conservatively, for understood.
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
     # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84. Reporting only -- it cannot move the posterior. See
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
     # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=84,
+    report_max_age_understood=72,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
