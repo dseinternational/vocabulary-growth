@@ -11,7 +11,9 @@
 #
 # Key properties
 #   * Detached: --detach re-execs under setsid so an SSH drop can't kill it.
-#   * Conda-safe: activates the env explicitly (setsid shells don't do this).
+#   * Environment-safe: puts the project's uv environment on PATH explicitly
+#     (setsid shells inherit no activation, and Quarto resolves its Jupyter
+#     kernel from PATH).
 #   * Per-model isolation: each model fits in its own subprocess, while any
 #     failure stops comparisons, rendering, and publication for the batch.
 #   * Idempotent / resumable: only complete output made with the requested
@@ -36,7 +38,7 @@ Usage: scripts/run_replication.sh [options]
   --models "<...>"   Space-separated model keys to run (default: all registered)
   --output-dir <d>   Output root (overrides $DSE_VOCAB_GROWTH_OUTPUT_DIR)
   --log-dir <d>      Where to write run logs (default: <output>/replication-logs)
-  --env <name>       Conda env name (default: dse-vocab-growth)
+  --no-sync          Skip the `uv sync --locked` preflight
   --fresh            Refit even if compatible complete output exists
   --include-kfold    Also run kfold_loso.py (expensive; refits per fold)
   --no-descriptives  Skip prepare_data + descriptive report
@@ -56,7 +58,7 @@ CONFIG="rep"
 MODELS=""
 OUTPUT_DIR=""
 LOG_DIR=""
-CONDA_ENV="dse-vocab-growth"
+DO_SYNC=1
 FRESH=0
 INCLUDE_KFOLD=0
 DO_DESCRIPTIVES=1
@@ -72,7 +74,7 @@ while [ $# -gt 0 ]; do
     --models)          MODELS="$2"; shift 2 ;;
     --output-dir)      OUTPUT_DIR="$2"; shift 2 ;;
     --log-dir)         LOG_DIR="$2"; shift 2 ;;
-    --env)             CONDA_ENV="$2"; shift 2 ;;
+    --no-sync)         DO_SYNC=0; shift ;;
     --fresh)           FRESH=1; shift ;;
     --include-kfold)   INCLUDE_KFOLD=1; shift ;;
     --no-descriptives) DO_DESCRIPTIVES=0; shift ;;
@@ -97,7 +99,7 @@ if [ "$PROVISIONAL_SYNC" = 1 ] && [ "$DO_UPLOAD" = 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Paths + conda (setsid/non-login shells do NOT activate conda automatically)
+# Paths + project environment (setsid/non-login shells inherit no activation)
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -113,13 +115,20 @@ if [ -n "$GIT_STATUS" ]; then
   exit 1
 fi
 
-if [ -z "${CONDA_PREFIX:-}" ] || [ "$(basename "${CONDA_PREFIX:-}")" != "$CONDA_ENV" ]; then
-  # shellcheck disable=SC1091
-  source /opt/conda/etc/profile.d/conda.sh 2>/dev/null \
-    || source "$(conda info --base 2>/dev/null)/etc/profile.d/conda.sh" 2>/dev/null \
-    || { echo "Could not source conda.sh" >&2; exit 1; }
-  conda activate "$CONDA_ENV" || { echo "Failed to activate conda env '$CONDA_ENV'" >&2; exit 1; }
+# Install exactly what uv.lock records. --locked fails on a stale lockfile
+# rather than resolving something other than what was reviewed; an exact
+# replication run must not silently move its own dependencies.
+if [ "$DO_SYNC" = 1 ]; then
+  uv sync --locked || { echo "uv sync --locked failed" >&2; exit 1; }
 fi
+
+# Activation by PATH rather than `source .venv/bin/activate`: the same export
+# reaches the bare `quarto render` calls, which resolve their Jupyter kernel
+# from PATH independently of the interpreter running the fits.
+VENV="$REPO/.venv"
+[ -x "$VENV/bin/python" ] || { echo "No project environment at $VENV; run 'uv sync --locked'." >&2; exit 1; }
+export VIRTUAL_ENV="$VENV"
+export PATH="$VENV/bin:$PATH"
 
 # Output root: --output-dir wins over env, which wins over repo-local output/.
 [ -n "$OUTPUT_DIR" ] && export DSE_VOCAB_GROWTH_OUTPUT_DIR="$OUTPUT_DIR"
@@ -138,7 +147,8 @@ RUN_TS="$(date -u +'%Y%m%dT%H%M%SZ')"
 # ---------------------------------------------------------------------------
 if [ "$DETACH" = "1" ] && [ -z "${_REPL_DETACHED:-}" ]; then
   export _REPL_DETACHED=1
-  set -- --config "$CONFIG" --env "$CONDA_ENV" --log-dir "$LOG_DIR"
+  set -- --config "$CONFIG" --log-dir "$LOG_DIR"
+  [ "$DO_SYNC" = 0 ]      && set -- "$@" --no-sync
   [ -n "$MODELS" ]        && set -- "$@" --models "$MODELS"
   [ -n "$OUTPUT_DIR" ]    && set -- "$@" --output-dir "$OUTPUT_DIR"
   [ "$FRESH" = 1 ]        && set -- "$@" --fresh
@@ -218,7 +228,7 @@ if [ -z "$MODELS" ]; then
 fi
 
 log "===== REPLICATION RUN START ====="
-log "config=$CONFIG env=$CONDA_ENV fresh=$FRESH output=$OUT_ROOT"
+log "config=$CONFIG python=$(command -v python) fresh=$FRESH output=$OUT_ROOT"
 log "models: $MODELS"
 log "phases: descriptives=$DO_DESCRIPTIVES fit=$DO_FIT compare=$DO_COMPARE render=$DO_RENDER upload=$DO_UPLOAD kfold=$INCLUDE_KFOLD"
 

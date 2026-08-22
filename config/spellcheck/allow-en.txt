@@ -123,6 +123,7 @@ nonparametric
 nonparametrics
 nonwords
 nonzero
+numba
 nutpie
 orcid
 overclaiming

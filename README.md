@@ -75,7 +75,7 @@ In the same directory (perhaps `dseinternational`):
 git clone https://github.com/dseinternational/vocabulary-growth.git
 ```
 
-For now, also:
+The shared library, `dse-research-utils`, is resolved from a public Git tag, so no second clone is needed to run anything here. Clone it as a sibling only to develop against it (see the override noted in `pyproject.toml`):
 
 ```bash
 git clone https://github.com/dseinternational/research.git
@@ -85,13 +85,15 @@ git clone https://github.com/dseinternational/research.git
 
 #### Fitting models
 
-To fit models, a recent Python installation is required. Some of our dependencies are best installed from [conda-forge](https://conda-forge.org/), for which either [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/main) or [Miniforge](https://conda-forge.org/download/) is required.
-
-Then, to install Python dependencies, from the repository root:
+Python dependencies are managed with [uv](https://docs.astral.sh/uv/), which provisions the interpreter as well as the packages — no separate Python installation is needed. Install it, then, from the repository root:
 
 ```bash
-conda env update -f environment.yml
+uv sync
 ```
+
+This creates `.venv/` from `uv.lock`, so every contributor gets the same resolved environment. Linux, macOS (Apple Silicon) and Windows are all supported natively. See [docs/runbooks/environment-locks.md](docs/runbooks/environment-locks.md) for how the lock is created and refreshed.
+
+The model-diagram figure additionally needs the Graphviz `dot` binary, which is not a Python package (`brew install graphviz`, `apt install graphviz`, or `winget install Graphviz.Graphviz`). It is optional: without it, that one figure is skipped.
 
 #### Creating reports
 
@@ -107,17 +109,11 @@ npm install
 
 From the repository root:
 
-Activate the Conda environment (if not yet activated):
-
 ```bash
-conda activate dse-vocab-growth
+uv run python scripts/prepare_data.py
 ```
 
-Run the script:
-
-```bash
-python scripts/prepare_data.py
-```
+`uv run` uses the project environment without activating it. Activate it instead — `source .venv/bin/activate`, or `.venv\Scripts\activate` on Windows — if you would rather call `python` directly.
 
 ## License
 

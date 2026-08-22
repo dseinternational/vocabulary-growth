@@ -20,7 +20,7 @@ naive run hits. Distilled from the 2026-07-12 run
 
 ## 0. Prerequisites
 
-- Conda env `dse-vocab-growth` active; `dse-check-env environment.yml` clean. Activation matters for **rendering**, not only fitting — read [Rendering without an activated environment](#rendering-without-an-activated-environment) first if you drive the scripts by absolute interpreter path instead.
+- Locked project environment installed and active: `uv sync --locked`, then `source .venv/bin/activate`. The commands below assume it is on `PATH`; without activation, prefix each with `uv run`. Activation matters for **rendering**, not only fitting — read [Rendering without an activated environment](#rendering-without-an-activated-environment) first if you drive the scripts by absolute interpreter path instead.
 - **`dse-research-utils >= v0.6.0`** — earlier versions' convergence gate rounds
   R-hat/ESS to 2 significant figures and can certify a fit that truly fails the
   ≤1.01 gate (research#65). A banner reading exactly `max R-hat = 1.0` is the
@@ -237,9 +237,9 @@ in-repo `output/`.
 
 ### Rendering without an activated environment
 
-Quarto resolves the Jupyter kernel for a report's python cells from `PATH`, independently of the interpreter running the fit. Driving the scripts by absolute interpreter path (`~/miniconda3/envs/dse-vocab-growth/bin/python scripts/fit_model.py …`) without also putting that `bin/` on `PATH` therefore renders against whichever `python` `PATH` finds — on macOS the system framework python, which has no `h5netcdf` and cannot open `trace.nc`. The tell-tale is a fit that samples, gates, and promotes normally, followed by `ModuleNotFoundError: No module named 'h5netcdf'` from the render (2026-08-03 `test`-config refit: fifteen clean fits, fifteen failed renders, all recovered with `--render-only`).
+Quarto resolves the Jupyter kernel for a report's python cells from `PATH`, independently of the interpreter running the fit. Driving the scripts by absolute interpreter path (`.venv/bin/python scripts/fit_model.py …`) without also putting that `bin/` on `PATH` therefore renders against whichever `python` `PATH` finds — on macOS the system framework python, which has no `h5netcdf` and cannot open `trace.nc`. The tell-tale is a fit that samples, gates, and promotes normally, followed by `ModuleNotFoundError: No module named 'h5netcdf'` from the render (2026-08-03 `test`-config refit: fifteen clean fits, fifteen failed renders, all recovered with `--render-only`).
 
-`fit_model.py` pins `QUARTO_PYTHON` to its own `sys.executable`, so per-model reports are immune. The two `quarto render` calls above are bare shell invocations and are not: either activate the env, or `export QUARTO_PYTHON=/Users/…/envs/dse-vocab-growth/bin/python` before rendering the books. `run_replication.sh` activates the env itself and needs neither.
+`fit_model.py` pins `QUARTO_PYTHON` to its own `sys.executable`, so per-model reports are immune. The two `quarto render` calls above are bare shell invocations and are not: either activate the env, or `export QUARTO_PYTHON="$PWD/.venv/bin/python"` before rendering the books. `run_replication.sh` puts the project environment on `PATH` itself and needs neither.
 
 ## 4. Completion checklist
 
