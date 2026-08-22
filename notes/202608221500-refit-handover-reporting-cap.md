@@ -73,7 +73,8 @@ What **is** stale and was produced this session before the cap changed: the figu
 ## 6. Verification before publishing
 
 - `python scripts/check_fit.py all --config rep --purpose publish --output-dir <root>` passes.
-- `pytest` is clean. **39 tests currently fail** and all 39 are this staleness — `test_reporting_age_policy.py` (30) and `test_reported_age_range.py` (9) check persisted output against the current policy. 809 pass, 43 skip. If any of the 39 survives the refits, it is a real defect and not this.
+- `pytest` is clean. **30 tests currently fail**, all in `test_reporting_age_policy.py`, and all of them are this staleness: they read the persisted CSVs and check them against the current policy, so they pass once the output is regenerated at 72. If any survives the refits it is a real defect and not this.
+  - A further 9 failures in `test_reported_age_range.py` were **not** staleness and are already fixed on this branch. That test pins the cap by name — `test_comprehension_reporting_stops_at_84_months` asserted `== 84` — so it is a specification test that had to move with the policy, not an artefact of stale output. It was missed on the first pass because it failed alongside the 30 and was counted with them; CI caught it, because the staleness tests are `@needs_fit` and skip on a runner with no fitted models while the pinned test does not. Worth remembering as the general shape: **a green local run and a red CI run can disagree here in either direction**, since CI sees the specification and not the output.
 - Spot-check that comprehension figures and tables now stop at 72 and that **spoken still runs to 90** and **signed to 84** — the whole point of the per-quantity policy is that they move independently.
 
 ## 7. Decisions that could be folded into the same session

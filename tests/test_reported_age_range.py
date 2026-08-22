@@ -9,6 +9,10 @@ rows at or above 72 months against spoken's 127, and above 84 only 13 against
 59. ``report_max_age_understood`` trims understood and ``q`` without touching
 spoken.
 
+Since 2026-08-22 "where the evidence stops" means something stricter than
+"where the rows stop" — see the cap test below, and ``reporting_ages`` for the
+policy it enforces.
+
 Two failure modes are specific to this design and neither shows up in a unit
 test of the helper alone, so they are tested directly:
 
@@ -118,14 +122,25 @@ def test_every_engine_passes_the_cap_from_definition_to_configuration(module):
 
 
 @pytest.mark.parametrize("model_id", TRIMMED_MODELS)
-def test_comprehension_reporting_stops_at_84_months(model_id):
-    """Raised from 72 to 84 on 2026-08-13. uk_07 and the reinstated uk_06 rows
-    rebuilt the older tail, so the 72-84 band carries 25 rows from 20 children
-    across five studies rather than the near-nothing the 72 cap was set against.
-    84 and no further: above it understood has 13 rows from 11 children, and 84
-    is the high trend anchor past which the mean is levelled off, not fitted."""
+def test_comprehension_reporting_stops_at_72_months(model_id):
+    """Returned to 72 on 2026-08-22, reversing the 2026-08-13 raise to 84.
+
+    The raise was not wrong on its own terms: it asked whether the 72-84 band is
+    observed rather than extrapolated, and 25 rows from 20 children across five
+    studies says it is. The cap comes back down on a stricter test the raise did
+    not apply — is the number in that band fixed by the data, or by the model?
+
+    It is not fixed by the data. VG19 and VG20 differ only in the child-effect
+    structure and are indistinguishable out of sample (k-fold LOSO, +0.93 SE over
+    767 children), yet they put ``q`` at 0.75 against 0.85 at 72 months and 0.83
+    against 0.94 at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width.
+    Below 60 months the same comparison never exceeds 0.15.
+
+    Raise it again when the band can *distinguish* the child structures, not when
+    it is merely populated. See notes/202608221200-reporting-source-by-quantity.md
+    and scripts/experiments/model_dependence_of_reported_quantities.py."""
     definition = getattr(D, model_id)
-    assert definition.report_max_age_understood == 84
+    assert definition.report_max_age_understood == 72
 
 
 def test_the_cap_lies_on_the_query_grid():
@@ -146,8 +161,8 @@ def test_the_cap_actually_removes_query_ages():
 
 def test_spoken_only_models_are_left_alone():
     """VG01 is production-only and its data run to 115 months, so trimming it to
-    the comprehension range would discard exactly the evidence that argued
-    against an 84-month cap."""
+    the comprehension range would discard exactly the evidence that argues
+    against applying a comprehension cap to production at all."""
     assert D.VG01.report_max_age_understood is None
 
 
