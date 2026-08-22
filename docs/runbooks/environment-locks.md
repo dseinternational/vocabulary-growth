@@ -22,7 +22,14 @@ uv run python scripts/prepare_data.py
 uv run pytest
 ```
 
-Two things are not Python packages and so are not in the lock. The model-diagram figure shells out to the Graphviz `dot` binary (`brew install graphviz`, `apt install graphviz`, `winget install Graphviz.Graphviz`); a missing `dot` only skips that figure. Rendering reports needs [Quarto](https://quarto.org/docs/get-started/), and Quarto resolves its Jupyter kernel from `PATH` — see [Full refit](full-refit.md) for what that means in practice.
+Four things are not Python packages and so are not in the lock:
+
+- **Graphviz** (`brew install graphviz`, `apt install graphviz`, `winget install Graphviz.Graphviz`) — the model-diagram figure shells out to `dot`. The only optional one: a missing `dot` skips that figure with a warning instead of failing the fit.
+- **[Quarto](https://quarto.org/docs/get-started/)** — report rendering. Quarto resolves its Jupyter kernel from `PATH`, independently of the interpreter that ran the fit; see [Full refit](full-refit.md) for what that means in practice.
+- **LaTeX** (`quarto install tinytex`) — the report book's `pdf` format only, which sets `mainfont`/`monofont` and so needs a XeLaTeX-capable distribution plus the Source Sans 3 and Monaspace Neon fonts. The `html` and `docx` formats need neither.
+- **Node.js** (`npm install`) — CSpell for spellcheck, Prettier for Markdown formatting.
+
+Pandoc is deliberately absent from that list: Quarto bundles its own (Pandoc 3.8.3 in Quarto 1.9.36), together with Dart Sass, Deno and Typst, and prefers them to anything on `PATH`. `quarto check` prints the bundled versions and the LaTeX, Python and Jupyter it resolved — including, on a machine where the project environment is not on `PATH`, the wrong Python.
 
 The lock intentionally covers CPU installations. GPU drivers and CUDA are host-specific and remain an opt-in overlay rather than part of the reporting baseline.
 

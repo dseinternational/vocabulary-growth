@@ -93,17 +93,20 @@ uv sync
 
 This creates `.venv/` from `uv.lock`, so every contributor gets the same resolved environment. Linux, macOS (Apple Silicon) and Windows are all supported natively. See [docs/runbooks/environment-locks.md](docs/runbooks/environment-locks.md) for how the lock is created and refreshed.
 
-The model-diagram figure additionally needs the Graphviz `dot` binary, which is not a Python package (`brew install graphviz`, `apt install graphviz`, or `winget install Graphviz.Graphviz`). It is optional: without it, that one figure is skipped.
+#### External tools
 
-#### Creating reports
+Four things are not Python packages, so `uv sync` cannot supply them:
 
-To update or create reports, [Quarto](https://quarto.org/docs/get-started/) is required. We also use CSpell for checking spelling, for which a recent installation of [Node.js](https://nodejs.org/en) is required.
+| Tool                                               | Needed for                                                                       | Install                                                                               |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Graphviz](https://graphviz.org/download/) (`dot`) | the model-diagram figure (`gp_model_graph.svg`) each fit writes                  | `brew install graphviz` / `apt install graphviz` / `winget install Graphviz.Graphviz` |
+| [Quarto](https://quarto.org/docs/get-started/)     | rendering the per-model reports and the report book                              | platform installer                                                                    |
+| LaTeX                                              | the report book's PDF format only — its HTML and DOCX formats need nothing extra | `quarto install tinytex`                                                              |
+| [Node.js](https://nodejs.org/en)                   | spellcheck (CSpell) and Markdown formatting (Prettier)                           | platform installer, then `npm install` in the repository root                         |
 
-To install Node dependencies, from the repository root:
+**Pandoc is not a separate requirement.** Quarto bundles its own copy — Pandoc 3.8.3 in Quarto 1.9.36 — alongside Dart Sass, Deno and Typst, and uses those in preference to anything on `PATH`. Run `quarto check` to see the bundled versions, and the LaTeX, Python and Jupyter it has resolved.
 
-```bash
-npm install
-```
+Only Graphviz is optional: a missing `dot` is caught and the figure skipped with a warning rather than failing the fit, so the symptom is a broken image in the model report rather than a lost run. The PDF format additionally expects the Source Sans 3 and Monaspace Neon fonts.
 
 ### Preparing data
 

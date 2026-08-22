@@ -23,7 +23,7 @@ Single-layer [uv](https://docs.astral.sh/uv/) environment (shared across DSE res
 - **Platforms**: Linux, Apple Silicon macOS and **native Windows** (no WSL — `jaxlib` ships win-amd64 wheels on PyPI). Intel macOS is unsupported upstream: numba publishes no macOS x86_64 wheels.
 - **Local dev against research**: comment the `dse-research-utils` git entry in `[tool.uv.sources]` and uncomment the `path = "../research/src/python"` override beside it.
 - **GPU**: opt-in overlay (`jax[cuda]`); the locked environment is CPU-only and cross-platform.
-- **Not Python packages**: the Graphviz `dot` binary (model-diagram figure only; skipped if absent) and Quarto (rendering).
+- **Not Python packages** (`uv sync` cannot supply these): the Graphviz `dot` binary (model-diagram figure only — skipped with a warning if absent, so it is the one optional tool); Quarto for report rendering, which bundles its own Pandoc, Dart Sass, Deno and Typst and so needs no separate Pandoc install; a XeLaTeX distribution (`quarto install tinytex`) plus the Source Sans 3 / Monaspace Neon fonts for the report book's `pdf` format only; and Node.js for spellcheck and Markdown formatting. `quarto check` reports what it resolved.
 - **Node dependencies** (spellcheck, formatting): `npm install`.
 
 ## Commands
