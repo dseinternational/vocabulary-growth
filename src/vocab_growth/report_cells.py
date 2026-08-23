@@ -651,17 +651,57 @@ def render_headline_quantities(directory: str = ".") -> None:
 
     for suffix in (None, "u", "s", "sign"):
         stem = "expected_learning_rate" if suffix is None else f"expected_learning_rate_{suffix}"
-        peak = _peak_row(_read(directory, stem), "median_rate")
+        frame = _read(directory, stem)
+        peak = _peak_row(frame, "median_rate")
         if peak is None:
             continue
         label = _OUTCOME_LABELS[suffix]
-        rows.append(
-            (
-                f"Fastest growth in {label}",
-                f"{peak['median_rate']:.1f} words/month at {peak['age_months']:.0f} months",
-                f"{peak['ci_lo']:.1f} – {peak['ci_hi']:.1f}",
+        # A maximum on the first or last grid age says only that the peak was
+        # not located *within* the reported range — the true peak lies at or
+        # beyond its edge — so it must not be reported as "fastest growth at
+        # age X" (#234).
+        peak_position = frame["median_rate"].idxmax()
+        at_boundary = peak_position in (frame.index[0], frame.index[-1])
+        peak_info = _read(directory, f"{stem}_peak")
+        if at_boundary:
+            rows.append(
+                (
+                    f"Growth rate in {label}",
+                    f"highest estimated rate ({peak['median_rate']:.1f} "
+                    f"words/month) occurs at the boundary of the reported "
+                    f"range ({peak['age_months']:.0f} months); the peak age is "
+                    "not located within it",
+                    f"rate {peak['ci_lo']:.1f} – {peak['ci_hi']:.1f}",
+                )
             )
-        )
+        elif peak_info is not None and "peak_age_median_months" in peak_info:
+            info = peak_info.iloc[0]
+            share = float(info.get("boundary_draw_share", 0.0))
+            share_note = (
+                f"; {share:.0%} of draws peak at the range edge" if share >= 0.05 else ""
+            )
+            rows.append(
+                (
+                    f"Fastest growth in {label}",
+                    f"{peak['median_rate']:.1f} words/month around "
+                    f"{info['peak_age_median_months']:.0f} months",
+                    f"peak age {info['peak_age_ci_lo_months']:.0f} – "
+                    f"{info['peak_age_ci_hi_months']:.0f} months; rate "
+                    f"{peak['ci_lo']:.1f} – {peak['ci_hi']:.1f}{share_note}",
+                )
+            )
+        else:
+            # A fit predating the draw-wise peak table: the age is read off the
+            # median curve and carries no location uncertainty.
+            rows.append(
+                (
+                    f"Fastest growth in {label}",
+                    f"{peak['median_rate']:.1f} words/month at "
+                    f"{peak['age_months']:.0f} months (age read off the median "
+                    "curve; refit for peak-age uncertainty)",
+                    f"rate {peak['ci_lo']:.1f} – {peak['ci_hi']:.1f}",
+                )
+            )
 
     gap = _read(directory, "comprehension_production_gap")
     peak = _peak_row(gap, "gap_median")
@@ -690,18 +730,53 @@ def render_headline_quantities(directory: str = ".") -> None:
         kappa = _read(directory, stem)
         if kappa is None or "vif_median" not in kappa:
             continue
-        first, last = kappa.iloc[0], kappa.iloc[-1]
-        direction = "widens" if last["vif_median"] > first["vif_median"] else "narrows"
-        rows.append(
-            (
-                f"Spread between children in {_OUTCOME_LABELS[suffix]}",
-                f"{direction} with age "
-                f"({first['vif_median']:.0f}× the Binomial variance at "
-                f"{first['age_months']:.0f} months, "
-                f"{last['vif_median']:.0f}× at {last['age_months']:.0f})",
-                "",
+        # "Between administrations", not "between children": the Beta-Binomial
+        # kappa is marginal count dispersion at an age. In models without child
+        # effects it mixes between-child, between-study and occasion variation;
+        # in models with them it is the residual within-child spread. Neither is
+        # a between-child quantity (#234).
+        label = f"Spread across same-age administrations, {_OUTCOME_LABELS[suffix]}"
+        trend = _read(directory, f"{stem}_trend")
+        if trend is not None and "p_widens" in trend:
+            info = trend.iloc[0]
+            p_widens = float(info["p_widens"])
+            if p_widens >= 0.95:
+                direction = "widens"
+            elif p_widens <= 0.05:
+                direction = "narrows"
+            else:
+                direction = "does not change clearly"
+            rows.append(
+                (
+                    label,
+                    f"{direction} with age "
+                    f"({info['vif_young_median']:.0f}× the Binomial variance at "
+                    f"{info['age_young_months']:.0f} months, "
+                    f"{info['vif_old_median']:.0f}× at "
+                    f"{info['age_old_months']:.0f})",
+                    f"ratio ×{info['vif_ratio_median']:.2f} "
+                    f"({info['vif_ratio_ci_lo']:.2f} – "
+                    f"{info['vif_ratio_ci_hi']:.2f}); "
+                    f"P(widens) = {p_widens:.2f}",
+                )
             )
-        )
+        else:
+            # A fit predating the draw-wise endpoint contrast: the direction is
+            # a comparison of two plug-in medians and carries no uncertainty.
+            first, last = kappa.iloc[0], kappa.iloc[-1]
+            direction = (
+                "widens" if last["vif_median"] > first["vif_median"] else "narrows"
+            )
+            rows.append(
+                (
+                    label,
+                    f"{direction} with age "
+                    f"({first['vif_median']:.0f}× the Binomial variance at "
+                    f"{first['age_months']:.0f} months, "
+                    f"{last['vif_median']:.0f}× at {last['age_months']:.0f})",
+                    "read off the median curve; refit for a draw-wise contrast",
+                )
+            )
 
     if not rows:
         print("_This fit writes none of the summary tables this block reads._")
@@ -714,9 +789,11 @@ def render_headline_quantities(directory: str = ".") -> None:
     print()
     print(
         ": Computed at render time from this fit's own summary tables, so these "
-        "figures cannot drift from the model they describe. Ages are read off the "
-        "median curve rather than being posterior medians of the crossing, and "
-        "the interval is on the quantity at that age."
+        "figures cannot drift from the model they describe. Where a draw-wise "
+        "summary exists (peak age, dispersion ratio) its posterior interval is "
+        "shown; crossing ages are still read off the median curve rather than "
+        "being posterior medians of the crossing, and rate intervals are on the "
+        "quantity at the stated age."
     )
 
 
@@ -803,7 +880,13 @@ def render_loo_section(directory: str = ".") -> None:
 
     print(
         "Leave-one-out cross-validation estimates how well this model would "
-        "predict an observation it had not seen. `elpd_loo` is that estimate on "
+        "predict an observation it had not seen. An observation here is a single "
+        "**administration** of a checklist — repeated administrations of the "
+        "same child are separate observations — so this is "
+        "leave-one-administration-out: it scores prediction of another "
+        "administration like those in the frame, possibly from a child or study "
+        "the model has already seen, not generalisation to a new child or "
+        "study. `elpd_loo` is that estimate on "
         "the log scale: **higher is better**, and it is only meaningful when "
         "compared with another model fitted to the same observations — it has no "
         "absolute interpretation on its own. `p_loo` is the effective number of "

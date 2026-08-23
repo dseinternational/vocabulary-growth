@@ -208,3 +208,95 @@ def test_render_calibration_section_carries_the_in_sample_caveat(tmp_path, capsy
     assert "in-sample" in out.lower()
     assert "not* evidence" in out or "not evidence" in out
     assert "LOO" in out  # points at the out-of-sample counterpart
+
+
+def test_discrete_reference_matches_theory_for_calibrated_bernoulli():
+    """Perfectly calibrated Bernoulli(0.5): mid-PIT variance 0.0625, not 1/12.
+
+    The canonical counter-example to the continuous-uniform reference (#234):
+    the observed mid-PIT variance must sit close to the model-implied
+    ``expected_mid_pit_variance`` — well below 1/12 — with no miscalibration
+    anywhere, and the equal-tailed discrete interval covers with probability 1
+    against a 0.89 nominal level, which ``expected_coverage`` must record.
+    """
+    rng = np.random.default_rng(7)
+    predictive = rng.integers(0, 2, size=(500, 4000))
+    observed = rng.integers(0, 2, size=500)
+    ages = np.full(500, 10.0)
+
+    table = predictive_calibration_table(observed, predictive, ages)
+    overall = table[table["age_band_months"] == "all"]
+
+    assert overall["expected_mid_pit_variance"].iloc[0] == pytest.approx(
+        0.0625, abs=0.002
+    )
+    assert overall["mid_pit_variance"].iloc[0] == pytest.approx(
+        overall["expected_mid_pit_variance"].iloc[0], abs=0.01
+    )
+    # Discreteness alone puts every level's expected coverage at 1 here.
+    assert (overall["expected_coverage"] > 0.99).all()
+
+
+def test_expected_coverage_tracks_nominal_for_a_spread_out_predictive():
+    """With mass spread over many counts the discrete corrections shrink."""
+    rng = np.random.default_rng(3)
+    predictive = rng.binomial(400, 0.5, size=(300, 4000))
+    observed = rng.binomial(400, 0.5, size=300)
+    ages = np.full(300, 10.0)
+
+    table = predictive_calibration_table(observed, predictive, ages)
+    overall = table[table["age_band_months"] == "all"]
+
+    assert overall["expected_mid_pit_variance"].iloc[0] == pytest.approx(
+        1.0 / 12.0, abs=0.003
+    )
+    for _, row in overall.iterrows():
+        # Discrete intervals cover at least their nominal mass (the interval
+        # endpoints are atoms), with the excess shrinking as the mass spreads —
+        # here at most a few points of probability.
+        assert (
+            row["interval_probability"] - 1e-9
+            <= row["expected_coverage"]
+            <= row["interval_probability"] + 0.05
+        )
+
+
+def test_render_calibration_section_uses_the_discrete_reference(tmp_path, capsys):
+    from vocab_growth.models.calibration import render_calibration_section
+
+    observed = np.array([0, 2, 4, 6])
+    predictive = np.array(
+        [[0, 0, 1, 1], [1, 2, 2, 3], [3, 4, 4, 5], [5, 6, 6, 7]]
+    )
+    table = predictive_calibration_table(
+        observed, predictive, np.array([8.0, 10.0, 14.0, 18.0])
+    )
+    table.insert(0, "outcome", "words")
+    table.to_csv(tmp_path / "posterior_predictive_calibration.csv", index=False)
+
+    render_calibration_section(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "Calibrated coverage" in out
+    assert "Calibrated PIT variance" in out
+    assert "not against the nominal level" in out
+
+
+def test_render_calibration_section_explains_a_legacy_table(tmp_path, capsys):
+    """A table written before the discrete reference existed still renders honestly."""
+    from vocab_growth.models.calibration import render_calibration_section
+
+    observed = np.array([0, 2, 4, 6])
+    predictive = np.array(
+        [[0, 0, 1, 1], [1, 2, 2, 3], [3, 4, 4, 5], [5, 6, 6, 7]]
+    )
+    table = predictive_calibration_table(
+        observed, predictive, np.array([8.0, 10.0, 14.0, 18.0])
+    )
+    table = table.drop(columns=["expected_mid_pit_variance", "expected_coverage"])
+    table.insert(0, "outcome", "words")
+    table.to_csv(tmp_path / "posterior_predictive_calibration.csv", index=False)
+
+    render_calibration_section(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "predates the calibrated discrete reference" in out
+    assert "Calibrated coverage" not in out

@@ -23,7 +23,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
 
 ```{python}
@@ -96,11 +96,11 @@ We model the number of words spoken as a bounded count out of the reference inve
 
 Children of the same age differ far more than a simple Binomial count would allow, so the likelihood is Beta-Binomial rather than Binomial. Its dispersion parameter is itself allowed to change with age, because how much children differ from one another is not fixed across development — it is one of the things worth measuring.
 
-The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion spoken at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero.
+The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion spoken at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. One caution on reading them: these anchors parameterise the straight-line component only. The fitted trajectory at a reference age is the anchor plus whatever the Gaussian process adds there, and in this model the process is unconstrained at the anchors — so `p_slope_low` and `p_slope_hi` are coordinates of the trend, not exact values of the fitted curve at those ages.
 
 ::: {.callout-important title="What this model does not do"}
 
-This model has no study effects and no repeated-child effects. The pool contains children observed more than once, and children drawn from studies that differ in recruitment and measurement, and **this model treats every observation as independent**. It is therefore a baseline for comparison, not the preferred account of spoken vocabulary in Down syndrome. For that, see VG20, which carries both kinds of structure.
+This model has no study effects and no repeated-child effects. The pool contains children observed more than once, and children drawn from studies that differ in recruitment and measurement, and **this model treats every observation as independent**. Its estimand is an administration-weighted pooled trajectory: children and studies influence the curve in proportion to how many administrations they contribute, not equally. It is therefore a baseline for comparison, not the preferred account of spoken vocabulary in Down syndrome. For that, see VG20, which carries both kinds of structure.
 
 :::
 
@@ -114,9 +114,9 @@ from vocab_growth.report_cells import render_priors_table
 render_priors_table()
 ```
 
-The low-age anchor encodes a strong floor expectation: very few spoken words at the younger anchor age. The high-age anchor is deliberately broad, so the prior rules out neither a low nor a high later spoken vocabulary before the data are seen. The GP length-scale and amplitude priors permit smooth departures from that anchor-defined trend, and the dispersion priors let between-child variability change with age.
+The low-age anchor encodes a strong floor expectation: very few spoken words at the younger anchor age. The high-age anchor is deliberately broad, so the prior rules out neither a low nor a high later spoken vocabulary before the data are seen. The GP length-scale and amplitude priors permit smooth departures from that anchor-defined trend, and the dispersion priors let the marginal spread between same-age administrations change with age.
 
-Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`. The age term is given priors at two reference ages rather than as an intercept at the pool's mean age plus a slope, so each prior is directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. See `docs/models/PRIORS.md`.
+Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`. The age term is given priors at two reference ages rather than as an intercept at the pool's mean age plus a slope, so each prior is directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. Like the other three univariate baselines, the dispersion anchors are empirical-Bayes priors: their medians are centred on a dispersion curve fitted to this model's own analysis frame, with deliberately wide scales. See `docs/models/PRIORS.md` for the calibration and for which priors are independently anchored.
 
 ### Length-scale
 
@@ -142,7 +142,7 @@ Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`. The ag
 
 ## Prior predictive checks
 
-These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria: young children should usually sit near the floor, older trajectories should not be forced towards the ceiling, and simulated counts should show realistic between-child spread. A prior that fails any of these would be shaping the answer rather than permitting it.
+These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria: young children should usually sit near the floor, older trajectories should not be forced towards the ceiling, and simulated counts should show realistic spread. A prior that fails any of these would be shaping the answer rather than permitting it. One caveat: the dispersion priors were calibrated against this model's own analysis frame, so on the spread criterion these checks pass partly by construction — they test internal consistency of the specification, not independent prior plausibility.
 
 ![Trajectories drawn from the priors.](prior_samples.png){#fig-prior-samples .lightbox fig-align="left"}
 
@@ -216,7 +216,7 @@ Read these alongside the caveat above: with no study or child effects in the mod
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to produce at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to produce at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** the marginal spread between same-age administrations. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a new administration — one more checklist from this pooled population, not a specific child tracked over time — might fall.
 
 ```{python}
 posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
@@ -253,13 +253,13 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 ![How the dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}
 
-Lower $\kappa$ means **greater** between-child variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread.
+Lower $\kappa$ means **greater** spread between same-age administrations relative to the mean; higher $\kappa$ means less. In this model that spread mixes between-child, between-study and repeat-visit variation — it is marginal count dispersion, not a between-child quantity. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread.
 
 ## Expected vocabulary by month
 
-A finer companion to the six-monthly table above: one row per whole month, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
+A finer companion to the six-monthly table above: one row per whole month, with the expected count, the range a new administration might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
 
-![Expected spoken vocabulary by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month.png){#fig-expected-counts-by-month .lightbox fig-align="left"}
+![Expected spoken vocabulary by month, with both the mean-trajectory and administration-level intervals.](expected_counts_by_month.png){#fig-expected-counts-by-month .lightbox fig-align="left"}
 
 ```{python}
 monthly = pd.read_csv("posterior_summary_monthly.csv")

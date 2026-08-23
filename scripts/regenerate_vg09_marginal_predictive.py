@@ -141,8 +141,7 @@ def main() -> None:
     )
     plotting.plot_posterior_predictive_pmf(
         X_query=X_query,
-        X_plot=X_plot,
-        y_plot=y_u_plot_T,
+        y_query=y_u_query_T,
         n_trials=N_TRIALS,
         output_dir=VG09_DIR,
         filename="posterior_predictive_pmf_u",
@@ -150,8 +149,7 @@ def main() -> None:
     )
     plotting.plot_posterior_predictive_cdf(
         X_query=X_query,
-        X_plot=X_plot,
-        y_plot=y_u_plot_T,
+        y_query=y_u_query_T,
         n_trials=N_TRIALS,
         output_dir=VG09_DIR,
         filename="posterior_predictive_cdf_u",
@@ -189,8 +187,7 @@ def main() -> None:
     )
     plotting.plot_posterior_predictive_pmf(
         X_query=X_query,
-        X_plot=X_plot,
-        y_plot=y_s_plot_T,
+        y_query=y_s_query_T,
         n_trials=N_TRIALS,
         output_dir=VG09_DIR,
         filename="posterior_predictive_pmf_s",
@@ -198,8 +195,7 @@ def main() -> None:
     )
     plotting.plot_posterior_predictive_cdf(
         X_query=X_query,
-        X_plot=X_plot,
-        y_plot=y_s_plot_T,
+        y_query=y_s_query_T,
         n_trials=N_TRIALS,
         output_dir=VG09_DIR,
         filename="posterior_predictive_cdf_s",
