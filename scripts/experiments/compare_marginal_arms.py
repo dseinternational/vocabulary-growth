@@ -203,6 +203,12 @@ for label, arm in arms.items():
         f"{arm['max_rhat']:7.4f} {arm['min_ess']:8.0f} {arm['ridge']:7.3f}"
     )
 
+def _node_count(label):
+    """The arm's quadrature node count, from its label ("...-marg-40-...")."""
+    found = re.search(r"-marg-(\d+)-", label)
+    return int(found.group(1)) if found else None
+
+
 print(f"\n{'arm':<34} {'gradients':>12} {'ESS/1e6 grad':>13} {'wall clock':>12}")
 for label, arm in arms.items():
     is_marginal = "explicit" not in label
@@ -218,6 +224,16 @@ print(
     f"  (ESS per million gradient evaluations, with a marginalised gradient "
     f"weighted {args.gradient_cost}x; wall clock covers the whole pipeline.)"
 )
+
+_node_counts = {n for n in (_node_count(label) for label in arms) if n is not None}
+if len(_node_counts) > 1:
+    _low, _high = min(_node_counts), max(_node_counts)
+    print(
+        f"  One weight is applied to every marginalised arm, but these arms do not\n"
+        f"  share a node count ({_low} and {_high}): a gradient costs more the more\n"
+        f"  nodes it sums, so the cost column flatters the {_high}-node arm. Compare\n"
+        f"  arms at equal node counts, or re-run with --gradient-cost per arm."
+    )
 print(
     "  Read the cost column, not the clock: the arms share a machine, so an arm\n"
     "  that outlives the others gets more of it, and anything else running takes\n"

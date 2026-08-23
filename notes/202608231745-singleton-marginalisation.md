@@ -131,12 +131,13 @@ The reported trajectory agrees too, which is the comparison the report actually 
 
 ## 9. What the bench returned, and the recommendation
 
-Run 2026-08-23, VG12 at `test` config (4 chains, 2,000 draws after 2,000 tuning), three arms launched together into a throwaway output root. The `K=40` arm was still sampling when this was written; the two arms below settle the question, and `K=40` can only confirm or refute node-count insensitivity, not change the cost.
+Run 2026-08-23, VG12 at `test` config (4 chains, 2,000 draws after 2,000 tuning), three arms launched together into a throwaway output root.
 
 | arm            | sampled dimensions | min BFMI | divergences | max R-hat | min ESS | ridge | gradient evaluations |
 | -------------- | -----------------: | -------: | ----------: | --------: | ------: | ----: | -------------------: |
 | explicit       |              5,850 |    0.187 |          20 |    1.0110 |     550 | 0.770 |              400,869 |
 | marginal, K=20 |              1,031 |    0.492 |          48 |    1.0102 |     611 | 0.754 |              247,001 |
+| marginal, K=40 |              1,031 |    0.455 |         164 |    1.0124 |     417 | 0.765 |              244,319 |
 
 The dimension count is exactly as designed: 5,850 - 1,031 = 4,819, the number of children VG12 sees once.
 
@@ -166,6 +167,14 @@ The published trajectory agrees too: posterior mean `p_query` differs by at most
 times an explicit one. It does not come close. The microbenchmark in section 5 put it at 22x. This fit puts it lower -- sampling took 6,203 s against 955 s for 0.616 times as many gradients, so about **10.5x** in situ -- and that figure is itself an upper bound, because the marginalised arm met contention from the typically-developing comparison rerun that the explicit arm never saw. Both numbers are far above 1.80, so the conclusion is robust to the discrepancy between them: **at the 22x weight the explicit arm delivers 1,372 effective samples per million gradient evaluations against 113, a factor of 12.2; at the in-situ 10.5x it is a factor of 5.9.** Either way the marginalisation costs several times more work per effective sample than it saves.
 
 The discrepancy between 22x and 10.5x is worth recording on its own account: section 5's figure is a microbenchmark of the density and its gradient in isolation, and it overstates the cost inside a real fit by about a factor of two. Anywhere that 22 is quoted as the cost of this lever, it should be read as the ceiling rather than the estimate.
+
+**Doubling the nodes leaves the answer alone and makes the sampling worse.** The `K=40` arm agrees with the explicit arm on every scalar to |z| <= 1.08 -- `tau_subject` 0.6862 against 0.6861, `ell` the widest at -1.08 -- so the quadrature is converged at twenty nodes and the accuracy question section 2 raised is closed. That is what the check was for, and it passes.
+
+What it also shows was not anticipated. Forty nodes cost sampler quality for nothing: divergences rise from 48 to 164, minimum effective sample size falls from 611 to 417, and BFMI edges down from 0.492 to 0.455, while the posterior stays put. Section 8 assumed the arm "must move nothing"; it moved the diagnostics substantially and the estimates not at all. The mechanism is not established here and would need a fit of its own to pin down -- the plausible candidate is that the mode search is held out of the gradient (`disconnected_grad`, section 3), so what the sampler differentiates is not exactly the gradient of what it evaluates, and the two need not drift apart gently as the node set widens. Recorded as an open question rather than answered, because nothing in the recommendation depends on it.
+
+Two consequences worth carrying forward. The first is that **the node count is a real tuning parameter with a cost on both sides**, not a free accuracy dial: more nodes is not conservatively safer, which is how a quadrature parameter is usually treated. The second is arithmetic: `compare_marginal_arms.py` applies one `--gradient-cost` weight to every marginalised arm, so the `ESS/1e6 grad` column above understates `K=40`, whose gradient is dearer than `K=20`'s. Measured in situ -- sampling took 9,134 s against 6,203 s for about the same number of gradients -- a `K=40` gradient costs roughly **1.47x** a `K=20` one, and so about **15.7x** an explicit one. Ranked on work per effective sample with each arm at its own cost, the explicit arm beats `K=20` by 5.8x and `K=40` by 12.6x. The ordering is the same whichever weight is used; only the size of the gap moves.
+
+The 1.47x is itself worth noting as the one piece of good news in the arm: doubling the nodes did not double the work, because the per-row terms are hoisted out of the node loop (section 1). About half the K=20 cost is in the loop and half is paid once per row.
 
 **Recommendation: do not adopt the flag for VG12.** Keep the code, the tests and this note. It is exact, it is tested, it is the cleanest available demonstration of what the singleton children do to the geometry, and it stays available if the arithmetic changes -- a cheaper quadrature, a model whose singleton fraction is far higher, or a sampler that exploits the smaller space better than nutpie does here. What it is not is a way to fit VG12 faster or better today. The `singleton_marginalisation` field stays `None` on every registered definition, so nothing in the project's fitted output is affected by leaving it in the tree.
 
