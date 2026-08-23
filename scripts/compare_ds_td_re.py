@@ -191,6 +191,17 @@ def _merge(grid: np.ndarray, grid_name: str, **frames: pd.DataFrame) -> pd.DataF
     return base
 
 
+def _grid_age(frame: pd.DataFrame, age: float) -> float:
+    """The grid point ``_at_age`` will actually read for ``age``.
+
+    The console rows are labelled with this rather than the requested age: the
+    understood grid stops at 25 months, so a row asked for at 30 is answered at
+    25, and labelling it "30 mo" overstated the age the estimate belongs to.
+    """
+    i = int((frame["age_months"] - age).abs().idxmin())
+    return float(frame.loc[i, "age_months"])
+
+
 def _at_age(frame: pd.DataFrame, age: float, col: str) -> float:
     """Nearest-grid-point value of ``col`` at ``age`` (for console summaries)."""
     i = int((frame["age_months"] - age).abs().idxmin())
@@ -496,7 +507,8 @@ def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
 def _print_summary(outcome, ew, lr, ad, disp, het, disp_ds_lab) -> None:
     print(f"  Expected words & learning rate at key ages ({outcome}):")
     for a in KEY_AGES:
-        print(f"    {a:>2} mo: TD={_at_age(ew,a,'TD_median'):6.1f}  "
+        shown = _grid_age(ew, a)
+        print(f"    {shown:>4g} mo: TD={_at_age(ew,a,'TD_median'):6.1f}  "
               f"DS={_at_age(ew,a,'DS_median'):6.1f}  "
               f"ratio={_at_age(ew,a,'ratio_median'):4.1f}x  "
               f"|  rate TD={_at_age(lr,a,'TD_median'):5.1f}  "
@@ -509,7 +521,8 @@ def _print_summary(outcome, ew, lr, ad, disp, het, disp_ds_lab) -> None:
     print(f"  Residual (observation-level) dispersion at key ages "
           f"(DS={disp_ds_lab}, study + subject REs):")
     for a in KEY_AGES:
-        print(f"    {a:>2} mo: kappa TD={_at_age(disp,a,'kappa_TD_median'):4.1f} "
+        shown = _grid_age(disp, a)
+        print(f"    {shown:>4g} mo: kappa TD={_at_age(disp,a,'kappa_TD_median'):4.1f} "
               f"DS={_at_age(disp,a,'kappa_DS_median'):4.1f} "
               f"(Δκ P>0={_at_age(disp,a,'dkappa_p_gt0'):.2f})  |  "
               f"σ_Y TD={_at_age(disp,a,'sdY_TD_median'):4.1f} "
@@ -518,7 +531,8 @@ def _print_summary(outcome, ew, lr, ad, disp, het, disp_ds_lab) -> None:
               f"φ_TD/φ_DS={_at_age(disp,a,'phi_ratio_median'):.2f}")
     print("  Between-child heterogeneity at key ages (the subject scale):")
     for a in KEY_AGES:
-        print(f"    {a:>2} mo: tau TD={_at_age(het,a,'tau_TD_median'):5.2f} "
+        shown = _grid_age(het, a)
+        print(f"    {shown:>4g} mo: tau TD={_at_age(het,a,'tau_TD_median'):5.2f} "
               f"DS={_at_age(het,a,'tau_DS_median'):5.2f} "
               f"(ratio={_at_age(het,a,'tau_ratio_median'):4.2f}, "
               f"P(TD>DS)={_at_age(het,a,'dtau_p_gt0'):.2f})  |  "
