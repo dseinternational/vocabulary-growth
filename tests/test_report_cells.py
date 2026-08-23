@@ -12,7 +12,9 @@ VG10 and VG15 described amplitudes that had been changed months earlier.
 """
 
 import json
+import os
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -449,3 +451,114 @@ def test_priors_table_describes_an_age_varying_subject_scale():
     assert "HalfNormal(1.5)" in distribution
     assert "24 months" in reading
 
+
+
+# --- render_headline_quantities: draw-wise summaries and boundary handling -----
+
+
+def _write_learning_rate(directory, median_rate, peak_info=None):
+    ages = np.linspace(12.0, 84.0, len(median_rate))
+    pd.DataFrame(
+        {
+            "age_months": ages,
+            "median_rate": median_rate,
+            "ci_lo": np.asarray(median_rate) - 1.0,
+            "ci_hi": np.asarray(median_rate) + 1.0,
+        }
+    ).to_csv(os.path.join(directory, "expected_learning_rate.csv"), index=False)
+    if peak_info is not None:
+        pd.DataFrame(peak_info).to_csv(
+            os.path.join(directory, "expected_learning_rate_peak.csv"), index=False
+        )
+
+
+def test_headline_boundary_maximum_is_not_reported_as_fastest_growth(tmp_path, capsys):
+    """A median-curve maximum on the grid edge locates no peak (#234)."""
+    _write_learning_rate(str(tmp_path), [1.0, 2.0, 3.0, 4.0, 5.0])
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "Fastest growth" not in out
+    assert "boundary of the reported range" in out
+    assert "not located" in out
+
+
+def test_headline_interior_peak_reports_draw_wise_age_interval(tmp_path, capsys):
+    _write_learning_rate(
+        str(tmp_path),
+        [1.0, 4.0, 9.0, 4.0, 1.0],
+        peak_info={
+            "peak_age_median_months": [47.0],
+            "peak_age_ci_lo_months": [39.0],
+            "peak_age_ci_hi_months": [55.0],
+            "boundary_draw_share": [0.02],
+        },
+    )
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "Fastest growth in words" in out
+    assert "around 47 months" in out
+    assert "peak age 39 – 55 months" in out
+    # A negligible boundary share is not reported as a caveat.
+    assert "range edge" not in out
+
+
+def test_headline_interior_peak_without_peak_table_says_so(tmp_path, capsys):
+    _write_learning_rate(str(tmp_path), [1.0, 4.0, 9.0, 4.0, 1.0])
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "read off the median curve" in out
+    assert "refit for peak-age uncertainty" in out
+
+
+def _write_kappa(directory, trend=None):
+    pd.DataFrame(
+        {
+            "age_months": [12.0, 48.0, 84.0],
+            "vif_median": [12.0, 20.0, 40.0],
+        }
+    ).to_csv(os.path.join(directory, "posterior_kappa.csv"), index=False)
+    if trend is not None:
+        pd.DataFrame(trend).to_csv(
+            os.path.join(directory, "posterior_kappa_trend.csv"), index=False
+        )
+
+
+_TREND = {
+    "age_young_months": [12.0],
+    "age_old_months": [84.0],
+    "vif_young_median": [12.0],
+    "vif_old_median": [40.0],
+    "vif_ratio_median": [3.3],
+    "vif_ratio_ci_lo": [2.1],
+    "vif_ratio_ci_hi": [4.8],
+    "p_widens": [0.99],
+}
+
+
+def test_headline_dispersion_uses_the_draw_wise_contrast(tmp_path, capsys):
+    _write_kappa(str(tmp_path), trend=_TREND)
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    # kappa is marginal count dispersion, not a between-child quantity.
+    assert "Spread between children" not in out
+    assert "Spread across same-age administrations" in out
+    assert "widens with age" in out
+    assert "P(widens) = 0.99" in out
+    assert "ratio ×3.30 (2.10 – 4.80)" in out
+
+
+def test_headline_dispersion_with_unresolved_direction_says_so(tmp_path, capsys):
+    trend = {**_TREND, "p_widens": [0.62]}
+    _write_kappa(str(tmp_path), trend=trend)
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "does not change clearly" in out
+    assert "widens with age" not in out
+
+
+def test_headline_dispersion_without_trend_table_is_hedged(tmp_path, capsys):
+    _write_kappa(str(tmp_path))
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "Spread between children" not in out
+    assert "read off the median curve; refit for a draw-wise contrast" in out
