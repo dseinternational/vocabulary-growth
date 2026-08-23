@@ -15,7 +15,7 @@ the three things the bench has to answer
    of notes/202608050900-td-hierarchical-geometry.md §9.
 3. **cost** -- effective samples per **gradient evaluation**, which is the
    comparison that survives running the arms on different machines or at
-   different times: a marginalised gradient costs about 21x an explicit one on
+   different times: a marginalised gradient costs about 22x an explicit one on
    VG12, so the lever pays only if it buys that back in leapfrog steps or in
    effective samples per step. Wall-clock is printed beside it, from the fit
    state, and covers the whole pipeline rather than sampling alone.
@@ -172,9 +172,9 @@ parser.add_argument("--model", default="VG12")
 parser.add_argument(
     "--gradient-cost",
     type=float,
-    default=21.0,
+    default=22.0,
     help="cost of a marginalised gradient relative to an explicit one, for the "
-    "effective-samples-per-unit-work column (VG12 at full size: 21)",
+    "effective-samples-per-unit-work column (VG12 at full size: 22)",
 )
 args = parser.parse_args()
 

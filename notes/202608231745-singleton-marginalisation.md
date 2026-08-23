@@ -38,7 +38,7 @@ Measured against a mode-centred fine-grid integral, on the real rows and real po
 
 VG11 is the harder model: its dispersion reaches `kappa` 714 at the youngest ages against VG12's 98, and a larger `kappa` is a sharper spike. Note what the table says about the naive fix — eighty prior nodes, four times the cost, still leave VG11 wrong by 6e-02 on a row.
 
-Re-measured against the shipped implementation rather than a prototype of it, on 800 of VG12's singleton rows at four posterior draws: twenty nodes give a worst row error of 3.4e-06 and 1.2e-05 summed over those rows; forty give 5.8e-10 and 2.8e-09. The rule converges steeply once the nodes are in the right place, which is what makes the node-doubling check in §8 a real check rather than a formality — and what says twelve nodes (1.1e-04 worst) is the wrong economy.
+Re-measured against the shipped implementation rather than a prototype of it: on 800 of VG12's singleton rows at four posterior draws, twenty nodes give a worst row error of 3.4e-06 and 1.2e-05 summed over those rows, and forty give 5.8e-10 and 2.8e-09; on 1,200 of VG11's, twenty give 4.0e-05, thirty 4.5e-06 and forty 6.3e-07, reproducing the prototype's figures to every digit quoted. The rule converges steeply once the nodes are in the right place, which is what makes the node-doubling check in §8 a real check rather than a formality — and what says twelve nodes (1.1e-04 worst) is the wrong economy.
 
 **The adopted rule places the nodes at each row's own integrand mode and scales them by its curvature** — adaptive Gauss–Hermite, which `lme4` and `glmmTMB` use for exactly this reason. Three details are load-bearing:
 
@@ -54,7 +54,7 @@ Both were invisible to tests that evaluate the density, because in both the **va
 
 **PyMC's own Beta-Binomial log density returns a non-finite gradient inside a `CustomDist`.** Calling `pm.logp(pm.BetaBinomial.dist(...), value)` for the conditional block gave a non-finite gradient at 132 of 150 jittered points, against 0 of 150 for the same density written out in `gammaln` terms. NUTS cannot start from a point whose gradient is not finite, so nutpie rejected every initial point it tried, reporting only an opaque `Logp function returned error: ErrorCode(3)`. Both blocks now use this module's own density, which a test pins against PyMC's to 1e-9.
 
-**Advanced indexing to put the two blocks back in row order was worse than useless.** First as a scatter into a zero vector: PyTensor rewrites `set_subtensor` into an in-place write, and nutpie evaluates the density from several threads at once, so it raced — correct at one chain, a Windows access violation at two. Then as a gather of a concatenation, which sampled at one chain but still returned non-finite gradients on the assembled term. Ordering the rows so that the two blocks are slices removes the whole class: the likelihood now contains no advanced indexing at all. After both fixes the model-level check is **0 of 400** jittered points with a non-finite gradient, against 251 of 400 before, and nutpie samples at one chain, at two chains on two cores, and at two chains on one.
+**Advanced indexing to put the two blocks back in row order was worse than useless.** First as a scatter into a zero vector: PyTensor rewrites `set_subtensor` into an in-place write, and nutpie evaluates the density from several threads at once, so it raced — correct at one chain, a Windows access violation at two. Then as a gather of a concatenation, which sampled at one chain but still returned non-finite gradients on the assembled term. Ordering the rows so that the two blocks are slices removes it from the likelihood's own arithmetic, which now compiles to seven basic slice operations, one concatenation and nothing else. The claim is deliberately narrow: the linear predictor still gathers its study and child effects, as every model here always has, and the explicit model is clean at the same test — what broke was indexing the assembled _result_, and nothing here says a gather is dangerous in general. After both fixes the model-level check is **0 of 400** jittered points with a non-finite gradient. The first implementation gave 319 of 400; holding the node placement out of the gradient took it to 251, the written-out density to 101, and the slices to none. nutpie samples at one chain, at two chains on two cores, and at two chains on one.
 
 A third change came out of the same hunt and is kept on its own merits: the node placement is held out of the gradient with `disconnected_grad`. The mode search divides second differences by the square of a 1e-3 step, so differentiating through it is numerically violent, and pruning that backward pass is most of what the gradient used to cost. It is legitimate because the rule's value is, to quadrature accuracy, invariant to where its nodes sit: what the sampler gets is the exact gradient of the same rule with the nodes held fixed, which is that same quadrature applied to the derivative of the integrand.
 
@@ -66,15 +66,16 @@ It also takes a large bite out of what a fit stores, which has been a binding co
 
 ## 5. What it costs, which is the part the proposing note did not anticipate
 
-| VG12, full size     | explicit | marginalised |
-| ------------------- | -------: | -----------: |
-| sampled dimensions  |    5,849 |        1,030 |
-| gradient evaluation |  1.62 ms |      34.7 ms |
-| graph compilation   |     ~1 s |        ~36 s |
+| VG12, full size            | explicit | marginalised |
+| -------------------------- | -------: | -----------: |
+| sampled dimensions         |    5,849 |        1,030 |
+| gradient evaluation, numba |  1.52 ms |     34.46 ms |
+| gradient evaluation, C     |  1.62 ms |      34.7 ms |
+| graph compilation, numba   |    1.1 s |        8.4 s |
 
-**A gradient costs 21 times more.** The arithmetic is not subtle: a marginalised row evaluates the Beta-Binomial at twenty nodes plus twelve mode-search points, against one evaluation before, and the gradient of `gammaln` is a digamma of the same cost. Fewer nodes buy back only a little — the mode search is a fixed twelve — and the accuracy table above says twelve nodes is where the error starts to matter.
+**A gradient costs about 22 times more.** The two backends agree — 22.7 times under numba, which is what nutpie compiles with, and 21.4 under PyTensor's own — so the factor is a property of the arithmetic rather than of the compiler. The arithmetic is not subtle: a marginalised row evaluates the Beta-Binomial at twenty nodes plus twelve mode-search points, against one evaluation before, and the gradient of `gammaln` is a digamma of the same cost. Fewer nodes buy back only a little — the mode search is a fixed twelve — and the accuracy table above says twelve nodes is where the error starts to matter.
 
-So the lever's arbiter cannot be energy BFMI alone. Removing 4,819 dimensions has to buy back a factor of 21 in the sampler's own work before it is free, and only what it buys beyond that is a gain. In tree-depth terms the fit needs about a twenty-fold cut in gradient evaluations per iteration, or the same number of them with far higher effective sample size, to break even. That is not obviously out of reach for a geometry that currently fails BFMI — the whole point of a funnel is that the sampler takes many small steps through it — but it is now a measured question rather than an assumption, and **the bench must report effective samples per second beside the diagnostics** (§8).
+So the lever's arbiter cannot be energy BFMI alone. Removing 4,819 dimensions has to buy back a factor of 22 in the sampler's own work before it is free, and only what it buys beyond that is a gain. In tree-depth terms the fit needs about a twenty-fold cut in gradient evaluations per iteration, or the same number of them with far higher effective sample size, to break even. That is not obviously out of reach for a geometry that currently fails BFMI — the whole point of a funnel is that the sampler takes many small steps through it — but it is now a measured question rather than an assumption, and **the bench must report effective samples per second beside the diagnostics** (§8).
 
 Two costs that are not in the table but are real: compile time is a fixed per-fit cost that grows with the node count, and PyTensor caches between runs so the figures above are the warm ones -- a cold `nutpie` compilation for a full `rep` fit will be longer; and the posterior-predictive path runs the custom draw function in Numba object mode, which is slow but happens once per fit rather than per gradient.
 
@@ -102,7 +103,7 @@ scripts/experiments/marginal_arm.py marginal --nodes 40 --output-dir <throwaway>
 
 1. **Equivalence** — `tau_subject`, `kappa` and the reported trajectory must agree between `explicit` and `marginal` within Monte Carlo error. The marginalisation is exact, so this test has teeth: a disagreement is a bug, not a trade-off. It cannot be a bit-for-bit comparison, because the sampled spaces have different dimensions.
 2. **Geometry** — energy BFMI, divergences, R-hat, and the `tau_subject`/`kappa` ridge correlation, against the four arms already in that table.
-3. **Cost** — effective samples per **gradient evaluation**, which is the comparison that survives running the arms on different machines: the sampler's own leapfrog count is in `sample_stats.n_steps`, and §5's factor of 21 converts it to work. This is the number that decides adoption; wall-clock is printed beside it but covers the whole pipeline rather than sampling alone.
+3. **Cost** — effective samples per **gradient evaluation**, which is the comparison that survives running the arms on different machines: the sampler's own leapfrog count is in `sample_stats.n_steps`, and §5's factor of 22 converts it to work. This is the number that decides adoption; wall-clock is printed beside it but covers the whole pipeline rather than sampling alone.
 
 **Expectations, set before the first arm runs**, so the bench can falsify them:
 
@@ -121,6 +122,8 @@ Both arms were run at 5% of the children and `dev` sampling (two chains, 500 dra
 | marginal, K=20 |                 81 |    0.632 |           6 |    1.0128 |      51 | 0.725 |
 
 Equivalence held on every shared parameter — `tau_subject`, `kappa_young`, `kappa_old`, `v_total`, `subject_variance_share`, `tau`, `eta`, `ell` — with |z| at most 1.01, which is what the exactness claim predicts and what a botched marginalisation would have failed.
+
+The reported trajectory agrees too, which is the comparison the report actually publishes: over the eight query ages the two arms' posterior means for `p_query` differ by at most 0.0015 in probability — about one word in 810 — and every difference is inside 1.7 Monte Carlo standard errors once the standard errors are taken from the effective sample size rather than the draw count. Worth noting from the same table: the marginalised arm's effective sample size on `p_query` runs 213 to 314 against 89 to 230, so at equal iterations it delivers more usable draws of the reported quantity — which is part of what the bench has to weigh against the gradient's cost.
 
 **Two cautions.** The explicit arm is not converged at this budget (max R-hat 1.117, min ESS 16), so its effective sample size — and therefore the work comparison, which came out at 617 against 119 effective samples per million gradient evaluations in the explicit arm's favour — is not a number to quote. And a twentieth of the children is a different funnel from the whole pool: 294 children against 5,819, of whom 50 rather than 1,000 are repeat-measured. What the rehearsal does say is that the plumbing works end to end, that the direction of the geometry change is the predicted one, and that the equivalence check has been exercised rather than merely specified.
 
