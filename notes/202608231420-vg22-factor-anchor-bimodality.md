@@ -52,7 +52,23 @@ What the permutation preserves, by construction: `Sigma = L L'` and its positive
 
 A regression test now pins the anchor pattern per rank — the set of `w` entries, the HalfNormal placement, the free-parameter counts, and specifically that no diagonal sits on `b1u` for any registered rank — since no existing test constrained the structure at all.
 
-## 5. Consequences and the general lesson
+## 5. What the refits did, and what they say about the rank
+
+All three ranks were refitted from the fixing commit. The anchor fix works, and the family it produced settles the rank question rather differently from the way it was posed.
+
+| rank | sampling                        | divergences | max R-hat | min ESS | min BFMI |      `rho_uq` | `tau_subj_u` | `tau_subj_q` |
+| ---- | ------------------------------- | ----------: | --------: | ------: | -------: | ------------: | -----------: | -----------: |
+| 1    | `rep`                           |  **failed** |     2.305 |       7 |        - |   pinned at 1 |            - |            - |
+| 2    | `rep` hightune, 12k/8k, ta 0.99 |          18 |    1.0064 |   1,913 |    0.458 | 0.340 (0.055) |        0.751 |        1.172 |
+| 3    | `rep`, 6k/6k, ta 0.95           |           8 |    1.0041 |     870 |    0.455 | 0.321 (0.061) |        0.740 |        1.179 |
+
+**Rank 1 is not a member of the family.** With one factor every child effect is a multiple of a single latent, so the model asserts `rho_uq = 1` by construction — and that is what the trace shows, a point mass at 1 with zero spread. The rest follows: 838 parameters above the R-hat threshold, a maximum of 2.305, minimum ESS 7, and the loadings on the three non-anchored rows multimodal. It failed the hard gate after 4h27m and is retained under `output/failed/`. This is not a tuning problem and no hightune will fix it; it is the rank-1 form telling us the data do not support a single shared factor.
+
+**Rank 2 needed the soft-tier remedy; rank 3 did not.** The model of record at rank 2 came in at 178 divergences on the plain `rep` configuration and 18 after the hightune retry (tune 12,000, draws 8,000, target accept 0.99) — a real improvement, and the caveat it publishes under is now mild. Rank 3 reached 8 divergences at plain `rep`. That ordering is worth stating plainly: **the larger factor model was the easier geometry**, which is the opposite of the usual expectation and consistent with rank 2 having to press four child effects into a two-dimensional space.
+
+**Where the two agree, they agree closely; where they differ, it is the slopes.** The reported intercept-level quantities are stable — `rho_uq` 0.340 against 0.321, `tau_subj_u` 0.751 against 0.740, `tau_subj_q` 1.172 against 1.179, all within a standard error of each other. The child-**slope** scales are not: the spoken slope scale is 0.348 at rank 2 against 0.576 at rank 3, and the understood slope scale 0.049 against 0.105. Rank 2 has no room left for slope variation once the two intercepts are fitted, so it reports less of it. Any reading that leans on the intercept correlation is safe at rank 2; a reading that quantifies how differently children's trajectories _steepen_ is not, and should use rank 3.
+
+## 6. Consequences and the general lesson
 
 Operationally: all three ranks refit from the fixing commit (~45–52 minutes each at `rep` for ranks 2 and 3; rank-1's first attempt suggests longer), so the whole family comes from one clean commit. The two failed fits are retained under `output/failed/` for this note's evidence and can be deleted once it is merged.
 
