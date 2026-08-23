@@ -562,3 +562,40 @@ def test_headline_dispersion_without_trend_table_is_hedged(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Spread between children" not in out
     assert "read off the median curve; refit for a draw-wise contrast" in out
+
+
+def test_headline_dispersion_is_labelled_residual_with_child_effects(tmp_path, capsys):
+    # With a child random effect in the fit, kappa is conditional on it — the
+    # residual within-child spread — and must not be labelled as the spread
+    # across (different children's) administrations, which is tau_subject's
+    # job (#240).
+    _write_kappa(str(tmp_path), trend=_TREND)
+    pd.DataFrame({"mean": [0.9]}, index=["tau_subject"]).to_csv(
+        os.path.join(str(tmp_path), "diagnostics.csv")
+    )
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "Within-child spread between same-age administrations" in out
+    assert "Spread across same-age administrations" not in out
+
+
+def test_headline_dispersion_labels_are_per_outcome(tmp_path, capsys):
+    # VG08's shape: a child effect on understood only. kappa_u is conditional
+    # on it (within-child); the nested spoken mean is p_u * q with no child
+    # effect on q, so kappa_s keeps the marginal-style label.
+    for suffix in ("u", "s"):
+        pd.DataFrame(
+            {"age_months": [12.0, 48.0, 84.0], "vif_median": [12.0, 20.0, 40.0]}
+        ).to_csv(
+            os.path.join(str(tmp_path), f"posterior_kappa_{suffix}.csv"), index=False
+        )
+    pd.DataFrame({"mean": [0.9]}, index=["tau_subj_u"]).to_csv(
+        os.path.join(str(tmp_path), "diagnostics.csv")
+    )
+    report_cells.render_headline_quantities(str(tmp_path))
+    out = capsys.readouterr().out
+    assert (
+        "Within-child spread between same-age administrations, words understood"
+        in out
+    )
+    assert "Spread across same-age administrations, words spoken" in out
