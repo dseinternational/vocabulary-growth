@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pymc as pm
 import pytensor.tensor as pt
 from dse_research_utils.statistics.models.pymc_utils import logit
@@ -403,6 +404,16 @@ class GPGrid:
     and boundaries ``L`` (each a length-one list for the 1-D age kernel, passed
     straight to ``pm.gp.HSGP``). Bundling them keeps the helper signatures small and
     identical across engines.
+
+    ``x_center_z`` optionally pins the HSGP basis centre (on the standardised age
+    scale). Left ``None``, PyMC centres the basis on the midpoint of the min/max
+    of whatever ``X`` reaches ``hsgp.prior`` — for these engines the stacked
+    ``[obs, plot, query]`` grid, so a reporting query that extends past the
+    observed range silently moves the approximation's accuracy region. Passing
+    the declared GP domain's midpoint here decouples the basis from the
+    reporting grid (#234). For every current model of record the two midpoints
+    coincide, so pinning is a numerical no-op that removes latent regression
+    debt rather than changing any fitted graph.
     """
 
     sa_z: float
@@ -411,6 +422,7 @@ class GPGrid:
     ell_high_z: float
     M: list[int]
     L: list[float]
+    x_center_z: float | None = None
 
 
 #: Sharpness of the soft clamp above the high anchor, in units of the anchor span
@@ -759,6 +771,14 @@ def _gp_from_mean(
     eta = cfg_eta.to_pymc(f"eta{suffix}")
     cov = pm.gp.cov.ExpQuad(1, ls=ell)
     hsgp = pm.gp.HSGP(cov_func=cov, m=grid.M, L=grid.L)
+    if grid.x_center_z is not None:
+        # PyMC (6.3.1) exposes no constructor argument for the basis centre; it
+        # sets `_X_center` lazily from min/max of the X passed to `prior`, guarded
+        # by a None check (pymc/gp/hsgp_approx.py). Pre-setting it here pins the
+        # centre to the declared GP domain's midpoint so the reporting grid
+        # cannot move the approximation. Covered by a regression test against the
+        # locked PyMC version.
+        hsgp._X_center = np.array([float(grid.x_center_z)])
     g_unit = hsgp.prior(f"g_unit{suffix}", X=X_all_z_data, dims="all_id")
     if anchor_idx is not None:
         if n_obs is None or nuisance_basis is None:

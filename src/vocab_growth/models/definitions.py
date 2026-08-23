@@ -2060,9 +2060,11 @@ VG03 = UnivariateModelDefinition(
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
     eta_sigma=0.5,
-    # Bumped from 0.1: total TD pool shrank from 16,552 to 6,134
-    # after the WS exclusion; this keeps the effective training set
-    # (~1,500 rows) close to the previous VG03 fit.
+    # Spoken-only loading includes the WS production-only rows (see n_trials
+    # note above), so the 25% subject subsample draws from the full TD spoken
+    # pool and yields a frame of 4,075 rows (the figure the kappa calibration
+    # table above records). An earlier rationale here claimed WS was excluded
+    # and the frame was ~1,500 rows; both halves were stale (#234).
     sample_fraction=0.25,
     kappa=_TD_SPOKEN_KAPPA,
 )
