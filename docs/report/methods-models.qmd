@@ -4,7 +4,7 @@ abstract: "*TODO*"
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Codex/GPT-5; dispersion and random-effect prior sections updated by Claude Code/Opus 5).
+Drafted by an LLM-based AI tool (Codex/GPT-5; dispersion and random-effect prior sections updated by Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
 
 Our goal is to estimate **age-associated change** in a vocabulary outcome, not to claim that age alone causally determines vocabulary growth. Many factors influence a child's opportunities to learn and produce words, including exposure, explicit teaching and therapy, hearing, and words already learned. Age is a useful ordering variable because these opportunities accumulate over time, but the pooled observational data also vary by study, instrument, recruitment, cohort, and sample selection.
@@ -43,14 +43,13 @@ What item difficulty *does* affect is the interpretation of the production ratio
 
 ### Age-varying dispersion {#sec-kappa}
 
-Vocabulary counts are more dispersed at older ages than at younger ones, and both experience and existing research lead us to expect that. We therefore let the conditional distribution become more dispersed with age by modelling the concentration as a decreasing function of age,
+Spoken vocabulary counts are more dispersed at older ages than at younger ones, and both experience and existing research lead us to expect that. We therefore let the conditional dispersion vary with age by modelling the concentration as a log-linear function of age above an asymptote,
 
 $$
-\kappa(z) = \kappa_{\min} + \exp\!\left(a_\kappa + b_\kappa z\right),
-\qquad b_\kappa < 0 .
+\kappa(z) = \kappa_{\min} + \exp\!\left(a_\kappa + b_\kappa z\right).
 $$
 
-This encodes two assumptions. First, heterogeneity **increases** with age: because $b_\kappa < 0$, $\exp(a_\kappa + b_\kappa z)$ decreases, so $\kappa(z)$ decreases and dispersion increases. Second, the increase **levels off**: as $z \to \infty$, $\kappa(z) \to \kappa_{\min}$, giving a later-age plateau in dispersion. We impose the monotone decline by setting $b_\kappa = -b_{\mathrm{mag}}$ with $b_{\mathrm{mag}} > 0$.
+The sign of $b_\kappa$ is **not constrained** in most current models. Every model with an empirically calibrated dispersion prior (VG01--VG04, VG09--VG13, VG15 and VG16) states the age term at two reference ages and derives $a_\kappa$ and $b_\kappa$ from them (see below), so the slope's sign is whatever the two anchors imply -- necessary because the fitted comprehension dispersion *rises* with age, which a negative-slope constraint cannot represent. Where the slope is negative, $\exp(a_\kappa + b_\kappa z)$ decreases, $\kappa(z)$ falls toward $\kappa_{\min}$, and dispersion increases with age before levelling off. The legacy parameterisation retained by VG05, VG07, VG08 and VG14 does impose that monotone decline, by setting $b_\kappa = -b_{\mathrm{mag}}$ with $b_{\mathrm{mag}} > 0$.
 
 These are assumptions about the model's concentration parameter, and it is worth being explicit about what they are not. On a bounded inventory $\kappa$ **cannot** be read as latent between-child heterogeneity: a fitted decline in $\kappa$ is quantitatively consistent with latent spread that does not grow at all, and this is true even under perfect item exchangeability, so it is not a defect of the item model. Nor do these data yield a corrected estimate of how far children really diverge — a total score sufficient for ability carries no information about the item structure that separating the two would require. What the fitted $\kappa(z)$ licenses is a statement about the dispersion of observed counts at a given age, not a measurement of underlying heterogeneity.
 

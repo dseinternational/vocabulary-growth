@@ -84,9 +84,12 @@ GLOSSARY: dict[str, str] = {
         "mean. **Larger $\\kappa$ means *less* variability** (approaching an "
         "ordinary Binomial); smaller $\\kappa$ allows more. The direction is "
         "counter-intuitive, so read the $\\kappa$ figures as *falling $\\kappa$ = "
-        "children becoming more spread out*. In models with subject random "
-        "intercepts it is an observation-level residual, not a measure of how "
-        "much children differ."
+        "same-age administrations becoming more spread out*. It is marginal "
+        "count dispersion, not a between-child quantity: in models without "
+        "child or study effects it mixes between-child, between-source and "
+        "repeat-visit variation, and in models with subject random intercepts "
+        "it is an observation-level residual — in neither case a measure of "
+        "how much children differ."
     ),
     "Overdispersion and variance inflation": (
         "How much more variable the observed counts are than an ordinary "
@@ -108,7 +111,10 @@ GLOSSARY: dict[str, str] = {
     "Age anchor": (
         "A reference age at which a prior is placed on an expected vocabulary "
         "proportion. Two anchors define the broad linear trend on the logit "
-        "scale in a more interpretable way than an intercept at age zero."
+        "scale in a more interpretable way than an intercept at age zero. The "
+        "anchors parameterise the linear component: unless the model pins its "
+        "GP at a reference age, the fitted trajectory at an anchor age is the "
+        "anchor plus the GP's deviation there."
     ),
     # -- The flexible part of the trend --
     "Gaussian process (GP)": (

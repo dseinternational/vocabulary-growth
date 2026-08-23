@@ -23,7 +23,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
 
 ```{python}
@@ -106,13 +106,13 @@ We model the number of words understood as a bounded count out of the reference 
 
 Children of the same age differ far more than a simple Binomial count would allow, so the likelihood is Beta-Binomial rather than Binomial. Its dispersion parameter is itself allowed to change with age, because how much children differ from one another is not fixed across development — it is one of the things worth measuring.
 
-The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion understood at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. Those anchors are much younger than the Down syndrome model's, because typical comprehension changes fastest across the second year.
+The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion understood at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. Those anchors are much younger than the Down syndrome model's, because typical comprehension changes fastest across the second year. One caution on reading them: these anchors parameterise the straight-line component only. The fitted trajectory at a reference age is the anchor plus whatever the Gaussian process adds there, and in this model the process is unconstrained at the anchors — so `p_slope_low` and `p_slope_hi` are coordinates of the trend, not exact values of the fitted curve at those ages.
 
 Only Wordbank Words & Gestures and Oxford CDI administrations contribute here. Words & Sentences comprehension values are excluded, because on that form they are production proxies rather than independently measured comprehension. This is the one substantive measurement difference between this model and its spoken counterpart, VG03, and it is why this model rests on fewer administrations over a shorter age range.
 
 ::: {.callout-important title="What this model does not do"}
 
-This model has no study effects and no repeated-child effects. The pool contains children observed more than once, and children drawn from datasets that differ in recruitment and measurement — and one dataset contributes a large share of the rows, with nothing in the model to absorb that imbalance. **This model treats every observation as independent.** It is therefore a reference baseline, not the preferred account of typically-developing comprehension. For that, see VG12.
+This model has no study effects and no repeated-child effects. The pool contains children observed more than once, and children drawn from datasets that differ in recruitment and measurement — and one dataset contributes a large share of the rows, with nothing in the model to absorb that imbalance. **This model treats every observation as independent.** Its estimand is an administration-weighted pooled trajectory: children and datasets influence the curve in proportion to how many administrations they contribute, not equally. It is therefore a reference baseline, not the preferred account of typically-developing comprehension. For that, see VG12.
 
 It is also fitted to a **subsample of children** rather than to the whole typically-developing pool: whole children are drawn and all of their administrations kept, so the subsample is of children, not of rows. And the pool is restricted to **English-language** administrations, because with no random effects there is nothing here to absorb between-language variation — it would be reported as if it were variation between children.
 
@@ -132,7 +132,7 @@ render_priors_table()
 
 The priors above are calibrated for this population and this outcome, not inherited from the Down syndrome models: the anchor ages, the Gaussian process amplitude and the dispersion anchors were each set for a typically-developing comprehension pool. Only the length-scale prior and its month window are the shared defaults.
 
-The low-age anchor is deliberately **not** a floor expectation. Typically-developing comprehension is already substantial in the first year, so this anchor was recalibrated upwards, off the floor, against published norms; it is not the near-zero prior the spoken models place at their low anchor. The high-age anchor is deliberately broad and favours neither a small nor a large comprehension vocabulary at that age — the table above gives both anchors' medians and ranges on the word scale. Note that the high anchor is broad regularisation rather than an encoded norm: there is no independent published comprehension norm at that age to place it against, which is why it is a registered sensitivity target — exercised on the full-data successor VG12, which carries the same anchor, rather than here.
+The low-age anchor is deliberately **not** a floor expectation. Typically-developing comprehension is already substantial in the first year, so this anchor was recalibrated upwards, off the floor, against published norms; it is not the near-zero prior the spoken models place at their low anchor. The high-age anchor is deliberately broad and favours neither a small nor a large comprehension vocabulary at that age — the table above gives both anchors' medians and ranges on the word scale. Note that the high anchor is broad regularisation rather than an encoded norm: there is no independent published comprehension norm at that age to place it against, which is why it is a registered sensitivity target — exercised on the full-data successor VG12, which carries the same anchor, rather than here. The frame also contains no comprehension observations above 25 months, so the 26-month anchor sits just past the data: do not read it as data-supported at its own age.
 
 Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`, where `z` is standardised age. The age term is given priors at two reference ages rather than as an intercept at the pool's mean age plus a slope, so each prior is directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. See `docs/models/PRIORS.md`.
 
@@ -168,7 +168,7 @@ Because this model carries no random effects, its `kappa` has to absorb every so
 
 ## Prior predictive checks
 
-These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria over the typically-developing age window: simulated comprehension should already be appreciable around the first birthday rather than sitting at zero, the priors should permit rapid growth across the second year, and later trajectories should not be mechanically pinned to the inventory ceiling. A prior that fails any of these would be shaping the answer rather than permitting it.
+These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria over the typically-developing age window: simulated comprehension should already be appreciable around the first birthday rather than sitting at zero, the priors should permit rapid growth across the second year, and later trajectories should not be mechanically pinned to the inventory ceiling. A prior that fails any of these would be shaping the answer rather than permitting it. One caveat: the dispersion priors were calibrated marginally against this model's own analysis frame, so on the spread criterion these checks pass partly by construction — they test internal consistency of the specification, not independent prior plausibility.
 
 ![Trajectories drawn from the priors.](prior_samples.png){#fig-prior-samples .lightbox fig-align="left"}
 
@@ -250,14 +250,14 @@ Read these alongside the caveats above: with no study or child effects in the mo
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** the marginal spread between same-age administrations. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a new administration — one more checklist from this pooled population, not a specific child tracked over time — might fall.
 
 ```{python}
 posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
 posterior_summary
 ```
 
-The reporting ages for this model were declared to run past the age at which comprehension observations end, and this outcome carries no reporting cap to trim them. The rows above the last observed age are extrapolation from the anchor-defined trend, unconstrained by any observation, and should not be quoted. Compare with the monthly table below, which stops where the data do.
+Comprehension reporting for this model is capped at 25 months (`report_max_age_understood`), the last observed comprehension age: the 27- and 30-month entries of the query grid are extrapolation from the anchor-defined trend, unconstrained by any observation, and are no longer reported. The monthly table below likewise stops where the data do.
 
 ### Distribution of word counts by age
 
@@ -265,7 +265,7 @@ The reporting ages for this model were declared to run past the age at which com
 
 ![The probability of a given understood-word count or fewer, at selected ages. Read this one for questions of the form "what fraction of children understand 200 words or fewer?"](posterior_predictive_cdf.png){#fig-posterior-predictive-cdf .lightbox fig-align="left"}
 
-These two figures are drawn on the observed age grid, so the ages they show stop at the last observation. Query ages above it are snapped to that last age rather than being drawn separately, which is why the oldest curves here do not match the oldest rows of the table above.
+These two figures stop at this outcome's reporting cap: query ages above it are dropped rather than drawn. Each curve is drawn from the posterior predictive at exactly its labelled age.
 
 ```{python}
 #| echo: false
@@ -295,13 +295,13 @@ The right-hand edge of this figure needs particular care. It sits at the last ob
 
 ![How the dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}
 
-Lower $\kappa$ means **greater** between-child variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. This is the model whose dispersion prior expected no trend with age, so the thing to check here is whether the fitted curve is flat and whether its interval is wide enough to admit a trend anyway.
+Lower $\kappa$ means **greater** spread between same-age administrations relative to the mean; higher $\kappa$ means less. In this model that spread mixes between-child, between-dataset and repeat-visit variation — it is marginal count dispersion, not a between-child quantity. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. This is the model whose dispersion prior expected no trend with age, so the thing to check here is whether the fitted curve is flat and whether its interval is wide enough to admit a trend anyway.
 
 ## Expected vocabulary by month
 
-A finer companion to the table above: one row per whole month, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model. Read a row with a small or zero `n_obs` as the model interpolating, not as evidence — and note that in this model the counts fall away sharply in the upper part of the range, well before the table ends.
+A finer companion to the table above: one row per whole month, with the expected count, the range a new administration might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model. Read a row with a small or zero `n_obs` as the model interpolating, not as evidence — and note that in this model the counts fall away sharply in the upper part of the range, well before the table ends.
 
-![Expected understood vocabulary by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month.png){#fig-expected-counts-by-month .lightbox fig-align="left"}
+![Expected understood vocabulary by month, with both the mean-trajectory and administration-level intervals.](expected_counts_by_month.png){#fig-expected-counts-by-month .lightbox fig-align="left"}
 
 ```{python}
 monthly = pd.read_csv("posterior_summary_monthly.csv")
@@ -334,7 +334,7 @@ render_loo_section()
 ## Limits
 
 - **A reference, not a target.** This curve describes a different population. It is not a norm any individual child is expected to meet, and it is not an intervention goal.
-- **The reported ages run past the evidence.** Comprehension observations stop before the oldest reported age, and this outcome carries no reporting cap, so the oldest rows of the selected-age table are extrapolation. The monthly table stops at the last observation and should be preferred.
+- **The query grid runs past the evidence, so reporting is capped.** Comprehension observations stop at 25 months, and this outcome's reporting cap trims the 27- and 30-month query ages, which would otherwise be pure extrapolation. The monthly table stops at the last observation and should be preferred.
 - **No hierarchy.** Study and repeated-child structure are absent, so uncertainty here is not a fair estimate of uncertainty about a new child, and one dominant contributing dataset has nothing to absorb it. Use VG12 for that.
 - **A subsample, and English only.** The fit uses a random subsample of children from the typically-developing pool, restricted to English-language administrations. VG12 uses the full pool and a wider language scope, so it is the model to use when coverage matters.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
