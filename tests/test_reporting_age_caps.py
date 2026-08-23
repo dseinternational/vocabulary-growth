@@ -57,16 +57,31 @@ CAPPED_TRIVARIATE_CALLS = [
 # ``report_max_age_understood``, so they satisfied the "is it capped?" test above
 # while being trimmed by the wrong outcome's evidence -- and raising the
 # comprehension cap from 72 to 84 moved VG14's signed figures as a side effect.
-# Keyed by plot function; every other capped call uses the comprehension cap.
-SIGN_DERIVED_CALLS = frozenset({"plot_signed_rate", "plot_sign_speech_crossover"})
-
-
-def _expected_cap_attr(func_name: str) -> str:
-    return (
-        "report_max_age_signed"
-        if func_name in SIGN_DERIVED_CALLS
-        else "report_max_age_understood"
-    )
+# The 2026-08-13 fix then over-corrected: it mapped those figures to
+# ``report_max_age_signed`` alone, and when the comprehension cap moved DOWN to
+# 72 on 2026-08-22 the signing cap stopped being the tighter one, so the
+# figures ran to 84 against a policy that says 72 (#238). The trivariate
+# pipeline now computes named cap locals from vocab_growth.reporting_ages --
+# ``ratio_cap`` for ratios of understood, ``sign_ratio_cap`` (the tighter of
+# the comprehension and signing caps) for the sign-bearing ratios -- and each
+# call site must pass the local named for its quantity. The bivariate pipeline
+# still passes the definition attribute directly; its one cap is the
+# comprehension cap, so there is no wrong attribute to pick.
+#
+# Values: ("attr", name) for an attribute access, ("name", name) for a local.
+EXPECTED_CAP = {
+    (common_bivariate, "plot_production_rate"): ("attr", "report_max_age_understood"),
+    (common_bivariate, "plot_production_rate_by_understood"): ("attr", "report_max_age_understood"),
+    (common_bivariate, "plot_production_rate_predictive"): ("attr", "report_max_age_understood"),
+    (common_bivariate, "plot_comprehension_production_gap"): ("attr", "report_max_age_understood"),
+    (common_bivariate, "plot_understood_vs_spoken"): ("attr", "report_max_age_understood"),
+    (common_bivariate, "plot_understood_vs_spoken_predictive"): ("attr", "report_max_age_understood"),
+    (common_bivariate, "plot_spoken_given_understood"): ("attr", "report_max_age_understood"),
+    (common_trivariate, "plot_production_rate"): ("name", "ratio_cap"),
+    (common_trivariate, "plot_comprehension_production_gap"): ("name", "ratio_cap"),
+    (common_trivariate, "plot_signed_rate"): ("name", "sign_ratio_cap"),
+    (common_trivariate, "plot_sign_speech_crossover"): ("name", "sign_ratio_cap"),
+}
 
 
 def _call_sites(module, func_name):
@@ -113,14 +128,17 @@ def test_each_call_site_passes_the_cap_for_its_own_outcome(module, func_name):
     moves whenever a comprehension decision is taken. That is the actual defect
     found on VG14 on 2026-08-13.
     """
-    expected = _expected_cap_attr(func_name)
+    kind, expected = EXPECTED_CAP[(module, func_name)]
     for call in _call_sites(module, func_name):
         kw = next(k for k in call.keywords if k.arg == "max_age_months")
-        attr = getattr(kw.value, "attr", None)
-        assert attr == expected, (
+        if kind == "attr":
+            actual = getattr(kw.value, "attr", None)
+        else:
+            actual = kw.value.id if isinstance(kw.value, ast.Name) else None
+        assert actual == expected, (
             f"{module.__name__} calls {func_name} with max_age_months="
-            f"...{attr} (line {call.lineno}), expected {expected}. A plot must be "
-            "trimmed by its own outcome's reporting cap, not another's."
+            f"...{actual} (line {call.lineno}), expected {expected}. A plot must be "
+            "trimmed by its own quantity's reporting cap, not another's."
         )
 
 
@@ -272,9 +290,13 @@ def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
         n_trials=810,
         output_dir=str(tmp_path),
         filename="modality_trajectories",
-        max_age_months_understood=84,
+        max_age_months_understood=72,
         max_age_months_spoken=90,
         max_age_months_signed=84,
+        # p_any's cap is explicit since #238: the call site passes
+        # reporting_ages.max_age_for_sign_ratio (tighter of comprehension and
+        # signing), rather than the function deriving min(spoken, signed).
+        max_age_months_any=72,
     )
 
     frame = pd.read_csv(tmp_path / "modality_trajectories.csv")
@@ -286,13 +308,12 @@ def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
     assert len(frame) == int((ages <= widest).sum()), "one row per in-range grid age"
 
     caps = {
-        "understood_median": 84,
+        "understood_median": 72,
         "spoken_median": 90,
         "signed_median": 84,
-        # p_any is a union over speaking and signing and takes the tighter cap.
-        "any_median": 84,
-        "any_ci_lo": 84,
-        "any_ci_hi": 84,
+        "any_median": 72,
+        "any_ci_lo": 72,
+        "any_ci_hi": 72,
     }
     for column, cap in caps.items():
         inside = frame.loc[frame.age_months <= cap, column]

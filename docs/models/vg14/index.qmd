@@ -194,6 +194,12 @@ The understood and production-ratio priors follow the baseline Down syndrome joi
 
 Dispersion is handled in two different ways in this one model, which the table above records. Understood and spoken take the **two-anchor** form, where the prior is placed on $\kappa$ at two reference ages rather than as an intercept and slope, so each prior is directly comparable with a per-age dispersion estimate. The signed block stays on the earlier **intercept-and-slope** form, deliberately: nothing in the calibration exercise estimates a signing dispersion on this frame, so there is no anchored prior to move to. See `docs/models/PRIORS.md`.
 
+::: {.callout-warning title="The anchored dispersion priors were calibrated for a different graph"}
+
+The understood and spoken two-anchor blocks are shared with VG09, VG10, VG15, VG16 and VG20, and they are the **conditional** calibration: $\kappa$ given study and child random effects, describing what is left over once a child's own level is known. VG14 has no random effects, so its $\kappa$ is *marginal* dispersion — a different, much smaller quantity, because it must also absorb between-child, between-study and repeat-visit variation. Applying the calibration procedure to VG14's own graph gives understood targets of roughly 13.7 at 18 months and 3.2 at 72, against the imported components' 92.6 and 14.0 — the imported priors favour substantially less unexplained variation than this model's estimand carries, and the matching targets sit in their extreme lower tails. This is a known mismatch, retained because VG14 is superseded and supplies no reported number ([#238](https://github.com/dseinternational/vocabulary-growth/issues/238)); it is one more reason the dispersion and predictive intervals on this page should not be quoted.
+
+:::
+
 ### Signed ratio
 
 The empirical signed fraction of understood words is a **hump** — near zero in infancy, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean is therefore a **three-anchor "tent"**: Beta priors on $r$ at a young, a peak and an old reference age, joined by two logit-linear segments that meet at the peak anchor and are clamped flat outside it, so the prior median is itself a hill rather than the flat line an intercept-only mean gives or the spurious young extrapolation a monotone slope gives. The anchor ages and levels come from the independent Down syndrome signing literature (Miller/Clibbens, Zampini, Te Kaat-van den Os); the Gaussian process then carries only smooth departures, so its amplitude reverts toward the standard level.
@@ -407,7 +413,7 @@ Everything in this section is the independence-based **upper bound** described a
 
 :::
 
-![Expected vocabulary by modality, including the derived total-expressive quantity. The total curve is an independence upper bound, and it is drawn past the reported age cap listed in the model-at-a-glance box above, where the mean is a levelled-off extrapolation rather than an estimate supported by observations.](modality_trajectories.png){#fig-modality .lightbox fig-align="left"}
+![Expected vocabulary by modality, including the derived total-expressive quantity. The total curve is an independence upper bound. Each curve stops at its own quantity's reporting cap; the total, a ratio of understood built from the signed ratio, stops at the tighter of the comprehension and signing caps.](modality_trajectories.png){#fig-modality .lightbox fig-align="left"}
 
 The table below is the same quantity at the query ages. Its `Ey_any_*` columns are word counts on the reference inventory under the independence assumption; they are an over-count, and they are the columns most likely to be copied out of this page by mistake.
 
@@ -421,7 +427,7 @@ summary_p_any
 `uk_02` is the only source that records each understood word as sign-only, sign-and-speech, speech-only, or understood-only, so the independence assumption can be tested directly against raw counts rather than inferred. Two comparisons are recorded, both in the table below:
 
 - `independence_bias_pp` — build the independence union $1-(1-r)(1-q)$ from `uk_02`'s **own** observed sign and speech fractions and compare it with `uk_02`'s **observed** union over the stated window. This isolates the cost of the assumption itself, on one study's data, with no model involved. It is positive because signing and speaking are positively associated, so independence over-states the union.
-- `model_gap_pp` — compare VG14's fitted union over the same window with the same observed union. A negative value means the fitted union sits _below_ the observed one. This is not a measure of the independence assumption: it also carries every difference between `uk_02` and the wider pool of signing studies, which VG14 has no study random effect to absorb.
+- `model_gap_pp` — compare VG14's fitted union with the same observed union, evaluated **per posterior draw at `uk_02`'s own observed ages** so the two sides share one empirical age distribution, and summarised with an 89% interval (`model_gap_pp_ci_lo`/`_hi`). An earlier version averaged the model's pointwise median over an equally spaced grid, so part of any reported gap was age weighting rather than model behaviour, and no interval was supplied (#238). A negative value means the fitted union sits _below_ the observed one. This is not a measure of the independence assumption: it also carries every difference between `uk_02` and the wider pool of signing studies, which VG14 has no study random effect to absorb.
 
 The two therefore answer different questions, and the second is not bounded by the first: if `model_gap_pp` is larger in magnitude than `independence_bias_pp`, the fitted union's distance from this study is dominated by pooling, not by independence — which is an argument for VG15 rather than a correction to it. This check also rests on one study over a narrow age window, so it cannot speak to the ages where the figures above are nonetheless drawn.
 
@@ -648,10 +654,12 @@ render_loo_section()
 
 - **Superseded for reporting.** VG15 replaces this model for every total-expressive number, for the signed peak age, and for the sign-to-speech hand-over. This page is a record of how the signing structure was built.
 - **No hierarchy.** No study effects and no repeated-child effects, so the age curves absorb source composition and the uncertainty is not a fair estimate of uncertainty about a new child.
+- **The dispersion priors were calibrated for a different graph.** The anchored $\kappa$ blocks are the conditional (random-effects) calibration shared with VG09/VG10/VG15/VG16/VG20; VG14's marginal dispersion is a different estimand, and a calibration matching this graph would sit far lower. See the priors section.
+- **The likelihood is a pragmatic composite, not exact marginalisation.** Rows with a usable understood count use a conditional ratio likelihood and rows without fall back to a marginal one, and both share a single dispersion curve per outcome — but a conditional ratio and its marginal product do not generally share a Beta-Binomial dispersion, so the two row types mix generative variance meanings.
 - **$p_\text{any}$ is an upper bound, not an estimate.** It assumes signing and speaking are independent within a child; they are not.
 - **The signed peak age is a knot, not a finding.** It is fixed at the middle anchor by construction.
 - **Signing rests on a minority of the studies and thins sharply with age.** See the support tables above before quoting anything at the edges of the range.
-- **The independence check rests on one study.** `uk_02` is the only four-cell source available to this model, over a narrow age window.
+- **The independence check rests on one study.** It reads `uk_02` only, over a narrow age window; `uk_07`, `es_01` and `nz_01` also carry cross-tabulations with materially different associations, so this is a uk_02-specific check, not a general validation of conditional independence. VG15 identifies the association from all four.
 - **`uk_01`'s signing is masked, and the alternative is not a fitted sensitivity.** Reinstating it means changing the model definition and refitting; no such variant exists on disk, unlike the fitted sensitivity variants of VG10 and VG15.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat.

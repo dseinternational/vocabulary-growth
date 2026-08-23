@@ -155,7 +155,10 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ("p_slope_low_sign", "Signed ratio at the low age anchor", "p_slope_low_sign", "ratio"),
     ("p_slope_mid_sign", "Signed ratio at the peak anchor", "p_slope_mid_sign", "ratio"),
     ("p_slope_hi_sign", "Signed ratio at the high age anchor", "p_slope_hi_sign", "ratio"),
-    ("peak_unit_sign", "Age at which the signed ratio peaks", "peak_unit_sign", "peak"),
+    # The knot, not the curve maximum: the anchor heights are sampled
+    # independently and a GP departure is then added, so the fitted r(a) can
+    # peak elsewhere (#238). The full-curve peak is `signed_ratio_peak.csv`.
+    ("peak_unit_sign", "Age of the signed tent's peak anchor (knot)", "peak_unit_sign", "peak"),
     ("ell_unit", "GP length-scale", "ell_unit", "lengthscale"),
     ("ell_unit_u", "GP length-scale, understood", "ell_unit_u", "lengthscale"),
     ("ell_unit_q", "GP length-scale, production ratio $q$", "ell_unit_q", "lengthscale"),

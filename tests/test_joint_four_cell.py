@@ -563,7 +563,7 @@ def test_signing_milestones_recover_a_known_hand_over():
     speak_only = np.repeat(speak_only, 1, axis=1) * np.ones((1, n_draw))
     both = np.full_like(sign_only, 5.0)
 
-    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89, "eti")
+    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89)
     got = got.set_index("quantity")
 
     assert abs(got.loc["sign_only_peak_age", "median"] - 34.0) < 1.0
@@ -575,15 +575,18 @@ def test_signing_milestones_recover_a_known_hand_over():
         < got.loc["speech_only_overtakes_sign_only_age", "median"]
     )
     assert (got["draws_reaching"] == 1.0).all()
+    assert (got["draws_censored"] == 0.0).all()
 
 
-def test_signing_milestones_ignore_the_pre_vocabulary_region():
-    """Below a word of expressive vocabulary, cell ordering is arithmetic noise.
+def test_signing_milestones_classify_always_true_states_as_censored():
+    """A state already true at establishment is censored, not an early crossing.
 
-    Without the gate the "crossing" is found at the first grid point, because a
-    curve that is 1e-4 above another is still above it. The gate is on a word
-    count rather than a grid-point count so it cannot silently depend on the
-    step size — this function is called with two different grids.
+    Below a word of expressive vocabulary, cell ordering is arithmetic noise, so
+    milestones are only read once the draw's child has a vocabulary to divide up
+    (a word-count gate, not a grid-point one, so it cannot depend on the step
+    size). But the gate alone is not enough: in this scenario speech leads sign
+    at every established age, so there is no overtake to date — the pre-#238
+    rule nevertheless reported the first established age as one.
     """
     import numpy as np
 
@@ -597,9 +600,15 @@ def test_signing_milestones_ignore_the_pre_vocabulary_region():
     speak_only = 20.0 * ramp
     both = np.zeros_like(sign_only)
 
-    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89, "eti").set_index("quantity")
-    crossing = got.loc["speech_only_overtakes_sign_only_age", "median"]
-    assert crossing > 40.0, f"crossing found in the pre-vocabulary region: {crossing}"
+    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89).set_index("quantity")
+    row = got.loc["speech_only_overtakes_sign_only_age"]
+    # Speech leads sign from the first established age in every draw, so there
+    # is no overtake TRANSITION anywhere on the grid: the state is left-censored,
+    # not an early crossing. The pre-#238 rule reported the first established
+    # age (~41 months) as an overtake, which this scenario never contains.
+    assert row["draws_reaching"] == 0.0
+    assert row["draws_censored"] == 1.0
+    assert np.isnan(row["median"])
 
 
 def test_signing_milestones_flag_a_milestone_never_reached():
@@ -614,6 +623,9 @@ def test_signing_milestones_flag_a_milestone_never_reached():
     speak_only = np.full((len(ages), n_draw), 5.0)  # never overtakes
     both = np.zeros_like(sign_only)
 
-    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89, "eti").set_index("quantity")
+    got = _signing_milestones(ages, sign_only, both, speak_only, 0.89).set_index("quantity")
     assert got.loc["speech_only_overtakes_sign_only_age", "draws_reaching"] == 0.0
+    # Never true is distinct from censored: the condition never held, so the
+    # state was not already-true at establishment either.
+    assert got.loc["speech_only_overtakes_sign_only_age", "draws_censored"] == 0.0
     assert np.isnan(got.loc["speech_only_overtakes_sign_only_age", "median"])

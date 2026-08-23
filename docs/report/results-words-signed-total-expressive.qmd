@@ -29,7 +29,7 @@ There are **no predictive intervals**. The joint sign/speech engine draws no pos
 #| label: tbl-signing-ratio
 #| echo: false
 show_or_pending(
-    rows_at("VG15", "posterior_summary_r", [12, 18, 24, 30, 36, 48, 60, 72, 84], {
+    rows_at("VG15", "posterior_summary_r", [12, 18, 24, 30, 36, 48, 60, 72], {
         "age_months": "Age (mo)", "r_median": "r(a)",
         "r_ci_lo": "89% lo", "r_ci_hi": "89% hi",
     }),
@@ -76,7 +76,7 @@ Total expressive vocabulary counts a word once if a child produces it at all —
 #| label: tbl-p-any
 #| echo: false
 show_or_pending(
-    rows_at("VG15", "posterior_summary_p_any", [12, 18, 24, 30, 36, 48, 60, 72, 84], {
+    rows_at("VG15", "posterior_summary_p_any", [12, 18, 24, 30, 36, 48, 60, 72], {
         "age_months": "Age (mo)", "Ey_any_median": "Any modality",
         "Ey_any_ci_lo": "89% lo", "Ey_any_ci_hi": "89% hi",
     }),
@@ -91,7 +91,7 @@ _prof = comp_load("ds_signing_profile")
 _tab = None
 if _prof is not None:
     _rows = sorted({int((_prof["age_months"] - a).abs().argmin())
-                    for a in [12, 18, 24, 30, 36, 48, 60, 72, 84]})
+                    for a in [12, 18, 24, 30, 36, 48, 60, 72]})
     _cols = {"age_months": "Age (mo)", "spoken_median": "Spoken",
              "any_median": "Any modality", "credit_median": "Difference",
              "uplift_median": "Multiple of spoken",
@@ -134,7 +134,7 @@ _fc = load_summary("VG15", "four_cell_composition")
 _tab = None
 if _fc is not None:
     _rows = sorted({int((_fc["age_months"] - a).abs().argmin())
-                    for a in [12, 18, 24, 30, 36, 48, 60, 72, 84]})
+                    for a in [12, 18, 24, 30, 36, 48, 60, 72]})
     _tab = _fc.iloc[_rows].round(3).rename(columns={
         "age_months": "Age (mo)", "neither": "Neither", "sign-only": "Sign only",
         "sign+speech": "Both", "speak-only": "Speech only",
@@ -166,7 +166,8 @@ if _ms is not None:
     _tab["quantity"] = _tab["quantity"].map(_labels).fillna(_tab["quantity"])
     _tab = _tab.rename(columns={"quantity": "Milestone", "median": "Median",
                                 "ci_lo": "89% lo", "ci_hi": "89% hi",
-                                "draws_reaching": "Draws reaching it"}).round(2)
+                                "draws_reaching": "Draws reaching it",
+                                "draws_censored": "Draws censored"}).round(2)
 show_or_pending(_tab, "the sign-to-speech hand-over milestones")
 ```
 
@@ -315,7 +316,7 @@ _ib = load_summary("VG15", "p_any_identified_vs_bound")
 _tab = None
 if _ib is not None:
     _rows = sorted({int((_ib["age_months"] - a).abs().argmin())
-                    for a in [12, 24, 36, 48, 60, 72, 84]})
+                    for a in [12, 24, 36, 48, 60, 72]})
     _tab = _ib.iloc[_rows].copy()
     _tab["excess"] = _tab["independence_median"] - _tab["identified_median"]
     _tab = _tab.rename(columns={
@@ -356,7 +357,7 @@ This is a useful reminder about model comparison generally. The assumption that 
 - **The association rests on four sources that disagree.** Only the sources recording per-word modality identify $\psi$. With four of them the between-source spread is weakly identified, and selecting on an estimate that clears the independence reference inflates it on average, so the interval and the strength of evidence — not the point value — should carry the interpretation.
 - **Signing coverage thins sharply with age.** Signed observations are dense from about 12 to 60 months and sparse beyond, with two small sources above 72 months and one above 84. Estimates near the top of the reported range lean on the model's smoothness rather than on many children.
 - **Parts of the signing curve are fixed rather than estimated.** The length-scale of the signing Gaussian process is not identified by these data, and the peak of $r(a)$ is constrained by its prior. The hand-over milestones, which are pinned by a crossing between two curves, are better identified than the shape of either curve alone.
-- **The reporting range stops at 84 months for every quantity here,** including total expressive vocabulary, which stops at the tighter of its two components' caps: past the signing cap one of its two ingredients is no longer reported, and a union of a reported and an unreported quantity is not a quantity this report publishes.
+- **The reporting range stops where each quantity's evidence rule stops.** Signed word counts run to 84 months. The signing ratio, the composition and total expressive vocabulary are ratios of understood, so they take the tighter of the comprehension and signing caps — 72 months since the comprehension cap moved on 2026-08-22 — because a ratio cannot be reported past its denominator, and a union of a reported and an unreported quantity is not a quantity this report publishes.
 - **What "signs" means differs between sources.** One source recorded sign-only production and its signing counts are masked from these analyses; the project's own checklists record a total sign count. The harmonisation is documented in @sec-data and is a measurement decision, not a fact about children.
 - **Some of these fits carry recorded sampling caveats.** They are listed below, from the fits' own diagnostics; the full statement is in @sec-limitations.
 
@@ -378,5 +379,5 @@ show_or_pending(loo_table(["VG14", "VG15"]), "the leave-one-out summaries")
 ::: {.callout-warning title="These two rows cannot be compared with each other"}
 Expected log pointwise predictive density is a sum over observations, so it is only comparable between models fitted to the **same** observations. The `Observations` column above shows that VG14 and VG15 are not: VG15's sign–speech likelihood is evaluated on the sources that record modality word by word, which is a subset of the rows VG14 uses. The table is a record of each fit's own predictive reliability, not evidence for the choice between them — that choice was made on structure and on the assumption VG14 could not test, as set out in @sec-independence-bound and in the model inventory.
 
-The Pareto $k$ diagnostics in the models' own reports flag a substantial share of observations for VG15, which is the expected signature of leaving out one *observation* from a child who has others in the training set, not a sign of misfit. Leave-one-*subject*-out is the honest out-of-sample question for a model with child random effects, and the project runs it separately.
+The Pareto $k$ diagnostics in the models' own reports flag a substantial share of observations for VG15, which is the expected signature of leaving out one *observation* from a child who has others in the training set, not a sign of misfit. Leave-one-*subject*-out is the honest out-of-sample question for a model with child random effects. The project runs it for the bivariate Down syndrome models (`scripts/kfold_loso.py` covers VG07–VG10, VG19 and VG20); **no subject-level held-out assessment exists yet for VG15**, so its LOO row above is the only out-of-sample number it has, and it does not cover the composition likelihood that identifies the association. Extending child-level held-out validation to VG15 is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 :::

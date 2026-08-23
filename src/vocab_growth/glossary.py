@@ -188,11 +188,13 @@ GLOSSARY: dict[str, str] = {
     ),
     "Population-level and subject-marginal": (
         "Two different predictions. A **population-level** curve sets all random "
-        "effects to zero: it is the average child in the average study, and its "
-        "interval reflects uncertainty in that average. A **subject-marginal** "
-        "prediction draws a new child's random effect too: it answers *where "
-        "would one more child fall?* and is much wider. Confusing them is the "
-        "single easiest way to misread these reports."
+        "effects to zero: a *reference* child in a *reference* study — not the "
+        "outcome-scale average over children, because the logit transform is "
+        "nonlinear, so averaging children gives a different (typically flatter) "
+        "curve. Its interval reflects uncertainty in that reference trajectory. "
+        "A **subject-marginal** prediction draws a new child's random effect "
+        "too: it answers *where would one more child fall?* and is much wider. "
+        "Confusing them is the single easiest way to misread these reports."
     ),
     # -- Reading the numbers --
     "Credible interval": (
