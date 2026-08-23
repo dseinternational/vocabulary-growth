@@ -104,6 +104,26 @@ scripts/experiments/marginal_arm.py marginal --nodes 40 --output-dir <throwaway>
 2. **Geometry** — energy BFMI, divergences, R-hat, and the `tau_subject`/`kappa` ridge correlation, against the four arms already in that table.
 3. **Cost** — effective samples per **gradient evaluation**, which is the comparison that survives running the arms on different machines: the sampler's own leapfrog count is in `sample_stats.n_steps`, and §5's factor of 21 converts it to work. This is the number that decides adoption; wall-clock is printed beside it but covers the whole pipeline rather than sampling alone.
 
+**Expectations, set before the first arm runs**, so the bench can falsify them:
+
+- **Equivalence holds.** A disagreement beyond Monte Carlo error is a bug in the marginalisation, not a property of it.
+- **Divergences fall**, from the 14 the partition arm reported. The funnel that produces them is what leaves the sampled space.
+- **Energy BFMI rises materially**, from the 0.19–0.20 every arm of [202608050900](202608050900-td-hierarchical-geometry.md) §9 reported towards the 0.981 its single-administration arm reached by _deleting_ the child effects. Marginalisation removes the same dimensions without changing the model, so if BFMI stays near 0.2 the mechanism that note attributes the failure to is wrong — which would be worth more than the lever.
+- **Effective samples per gradient is genuinely open.** The gradient is 21 times dearer and the tree should be shallower; nothing measured so far says by how much.
+
+### A desk-scale rehearsal
+
+Both arms were run at 5% of the children and `dev` sampling (two chains, 500 draws) to exercise the harness end to end. This is **not** the bench and cannot stand in for it, but it is the first side-by-side evidence:
+
+| arm            | sampled dimensions | min BFMI | divergences | max R-hat | min ESS | ridge |
+| -------------- | -----------------: | -------: | ----------: | --------: | ------: | ----: |
+| explicit       |                325 |    0.223 |          15 |    1.1172 |      16 | 0.759 |
+| marginal, K=20 |                 81 |    0.632 |           6 |    1.0128 |      51 | 0.725 |
+
+Equivalence held on every shared parameter — `tau_subject`, `kappa_young`, `kappa_old`, `v_total`, `subject_variance_share`, `tau`, `eta`, `ell` — with |z| at most 1.01, which is what the exactness claim predicts and what a botched marginalisation would have failed.
+
+**Two cautions.** The explicit arm is not converged at this budget (max R-hat 1.117, min ESS 16), so its effective sample size — and therefore the work comparison, which came out at 617 against 119 effective samples per million gradient evaluations in the explicit arm's favour — is not a number to quote. And a twentieth of the children is a different funnel from the whole pool: 294 children against 5,819, of whom 50 rather than 1,000 are repeat-measured. What the rehearsal does say is that the plumbing works end to end, that the direction of the geometry change is the predicted one, and that the equivalence check has been exercised rather than merely specified.
+
 ## 9. What the tests pin
 
 `tests/test_subject_marginal.py` (29 tests, 83 s) covers: the quadrature weights as a normalised expectation; the written-out density against PyMC's to 1e-9; the marginal against a fine-grid integral at both models' fitted regimes; that doubling the nodes moves nothing; that a vanishing child scale reproduces the conditional density; that the marginal is never a probability above one, including on rows a fit reaches only in early warmup; the row partition, the sentinel gather, the singleton-first order and the likelihood's refusal to build without it; the definition guards; and, on a real VG12 subsample, that data preparation applies that order while a flag-off build keeps the rows as they came, that only repeat-measured children keep an effect, that marginalised rows' `f_obs` does not move when the effects move, that repeat rows keep the conditional density to 1e-9, that marginalised rows match an independent numerical integration, and that the whole path — NUTS, `compute_log_likelihood`, posterior predictive — runs and returns the shapes every consumer expects.

@@ -33,6 +33,8 @@ import arviz as az
 import numpy as np
 import xarray as xr
 
+from vocab_growth.fit_artifacts import SAMPLED_PARAMETERS_ATTR
+
 EQUIVALENCE_PARAMETERS = (
     "tau_subject",
     "kappa_young",
@@ -119,13 +121,20 @@ def _arm_summary(directory):
         if tau_subject is not None and kappa_young is not None
         else float("nan")
     )
+    # The sampled space, not the stored one: the trace records which variables
+    # the sampler actually moved (fit_artifacts.SAMPLED_PARAMETERS_ATTR), and
+    # the plot and query grids stored beside them are not part of it.
+    # Read straight off the group: fit_artifacts' reader takes a whole trace,
+    # and these arms are opened one group at a time.
+    recorded = posterior.attrs.get(SAMPLED_PARAMETERS_ATTR)
+    sampled = json.loads(recorded) if isinstance(recorded, str) else recorded
+    counted = [name for name in (sampled or free) if name in posterior.data_vars]
     return {
         "directory": directory,
         "posterior": posterior,
         "draws": int(posterior.sizes["chain"] * posterior.sizes["draw"]),
-        "dimensions": sum(
-            int(np.prod(posterior[name].shape[2:])) for name in free
-        ),
+        "dimensions": sum(int(np.prod(posterior[name].shape[2:])) for name in counted),
+        "dimensions_are_sampled": sampled is not None,
         "min_bfmi": float(_bfmi(sample_stats).min()),
         "divergences": divergences,
         "max_rhat": float(np.nanmax(rhat_values)),
@@ -189,7 +198,7 @@ for directory in directories:
 print(f"\n{'arm':<34} {'dims':>7} {'BFMI':>7} {'div':>5} {'R-hat':>7} {'minESS':>8} {'ridge':>7}")
 for label, arm in arms.items():
     print(
-        f"{label:<34} {arm['dimensions']:7d} {arm['min_bfmi']:7.3f} "
+        f"{label:<34} {arm['dimensions']:8d} {arm['min_bfmi']:7.3f} "
         f"{arm['divergences'] if arm['divergences'] is not None else -1:5d} "
         f"{arm['max_rhat']:7.4f} {arm['min_ess']:8.0f} {arm['ridge']:7.3f}"
     )
