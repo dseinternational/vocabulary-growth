@@ -244,7 +244,13 @@ model:
   nothing to that. The restriction's own justification is density — thin above
   18 months, and increasingly exposed to the Oxford CDI's 418-item ceiling. The
   `window-25` and `window-22` sensitivity variants measure what it costs; see
-  `notes/202608171500-reporting-scope-audit.md` and issue #228.
+  `notes/202608171500-reporting-scope-audit.md` and issue #228. Both window
+  variants were fitted on 2026-08-20 and the study owner **adopted the
+  8–22-month specification** for the matched-comprehension comparison,
+  rejecting 8–25 as ceiling-contaminated
+  (`notes/202608211100-window-22-adopted.md`); its promotion as a registered
+  successor model (VG21) is tracked in issue #240, and until it lands VG13
+  remains the 8–18-month model of record.
 
 ### Typically developing single-outcome, with hierarchy (VG11, VG12)
 
