@@ -117,10 +117,12 @@ def test_kappa_recovers_to_within_the_design_s_resolution():
     1,200 observations with a saturated mean spending 15 degrees of freedom do
     not pin a dispersion parameter down: across seeds this design returns 26-33
     against a truth of 30, and at the ~300 of VG11's real posterior it returns
-    anywhere from 158 to 298. The tight check belongs on the real 16,235-row
-    frame, where `scripts/kappa_conditional_calibration.py --recover` puts it
-    within 7% (see section 19 of the note); what is checkable here is that the
-    estimate lands in the right region rather than at the prior or at a bound.
+    anywhere from 158 to 298. The tight check belongs on the real VG11 frame
+    (16,235 rows when section 19 of the note ran it; 18,500 now that the
+    frames use the registered language scope, #240), where
+    `scripts/kappa_conditional_calibration.py --recover` puts it within 7%;
+    what is checkable here is that the estimate lands in the right region
+    rather than at the prior or at a bound.
     """
     res = _refit(_synthetic_design(), _DISPERSION_HEAVY, seed=7)
     truth = _DISPERSION_HEAVY["kappa_min"] + _DISPERSION_HEAVY["excess_young"]
@@ -452,3 +454,29 @@ def test_every_registered_pool_names_a_real_model_and_ordered_anchors():
         assert hasattr(_MODULE.defs, pool.model_id), key
         assert pool.anchors[1] > pool.anchors[0], key
         assert pool.part in (None, "u", "s"), key
+
+
+# --- registered language scope (#240) ---------------------------------------
+
+
+def test_frames_use_the_registered_language_scope():
+    """The calibration frames must match the registered model frames (#240).
+
+    ``univariate_frame`` and ``bivariate_frames`` used to call the loader
+    without ``definition.td_languages`` and so calibrated on the English-only
+    default (16,235 / 5,997 / 5,406 rows for VG11 / VG12 / VG13-understood).
+    The registered graphs fit English plus Romance; the counts pinned here are
+    those frames after source-level deduplication, and they move only when the
+    export is refreshed.
+    """
+    import os
+
+    import vocab_growth.data_utils as du
+    from vocab_growth.models.definitions import VG11, VG12, VG13
+
+    if not os.path.exists(du.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    assert _MODULE.univariate_frame(VG11).n_obs == 18_500
+    assert _MODULE.univariate_frame(VG12).n_obs == 7_049
+    assert _MODULE.bivariate_frames(VG13)["u"].n_obs == 6_356
