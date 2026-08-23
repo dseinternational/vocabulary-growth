@@ -129,7 +129,49 @@ The reported trajectory agrees too, which is the comparison the report actually 
 
 **Two cautions.** The explicit arm is not converged at this budget (max R-hat 1.117, min ESS 16), so its effective sample size — and therefore the work comparison, which came out at 617 against 119 effective samples per million gradient evaluations in the explicit arm's favour — is not a number to quote. And a twentieth of the children is a different funnel from the whole pool: 294 children against 5,819, of whom 50 rather than 1,000 are repeat-measured. What the rehearsal does say is that the plumbing works end to end, that the direction of the geometry change is the predicted one, and that the equivalence check has been exercised rather than merely specified.
 
-## 9. What the tests pin
+## 9. What the bench returned, and the recommendation
+
+Run 2026-08-23, VG12 at `test` config (4 chains, 2,000 draws after 2,000 tuning), three arms launched together into a throwaway output root. The `K=40` arm was still sampling when this was written; the two arms below settle the question, and `K=40` can only confirm or refute node-count insensitivity, not change the cost.
+
+| arm            | sampled dimensions | min BFMI | divergences | max R-hat | min ESS | ridge | gradient evaluations |
+| -------------- | -----------------: | -------: | ----------: | --------: | ------: | ----: | -------------------: |
+| explicit       |              5,850 |    0.187 |          20 |    1.0110 |     550 | 0.770 |              400,869 |
+| marginal, K=20 |              1,031 |    0.492 |          48 |    1.0102 |     611 | 0.754 |              247,001 |
+
+The dimension count is exactly as designed: 5,850 - 1,031 = 4,819, the number of children VG12 sees once.
+
+**Equivalence holds, which is the test with teeth.** Every shared scalar agrees within Monte Carlo error, the largest discrepancy being 0.85 standard errors:
+
+| parameter                | explicit | marginal |     z |
+| ------------------------ | -------: | -------: | ----: |
+| `tau_subject`            |   0.6861 |   0.6864 |  0.45 |
+| `kappa_young`            |  36.9011 |  36.9424 |  0.37 |
+| `kappa_old`              |  66.8101 |  66.7633 | -0.42 |
+| `v_total`                |   0.7880 |   0.7874 | -0.85 |
+| `subject_variance_share` |   0.5981 |   0.5991 |  0.69 |
+| `tau`                    |   0.2229 |   0.2227 | -0.16 |
+| `eta`                    |   0.8592 |   0.8545 | -0.35 |
+| `ell`                    |   3.0159 |   3.0179 |  0.07 |
+
+The published trajectory agrees too: posterior mean `p_query` differs by at most **0.00126** in probability across the eight query ages -- about one word in 810 -- with every difference inside 2.3 effective-sample-size-corrected standard errors, and no pattern beyond what eight comparisons produce. The marginalisation is exact and is now confirmed exact at full scale, not merely at desk scale.
+
+**The mechanism is confirmed, and that was pre-registered as worth more than the lever.** Section 8 said that if energy BFMI stayed near 0.2 then [202608050900](202608050900-td-hierarchical-geometry.md)'s attribution of the geometry failure to the child effects would be wrong. It did not stay: minimum BFMI rises from 0.187 to 0.492, a factor of 2.6, with nothing else in the model changed and the posterior demonstrably identical. The children seen exactly once are a real and substantial part of what suppresses energy exploration in the typically-developing hierarchical models. They are not all of it -- 0.492 is still far below the 0.981 that note's single-administration arm reached by _deleting_ the child effects rather than integrating them out, so a second mechanism remains, and it is not the `tau_subject`/`kappa` ridge, which barely moves (0.770 to 0.754).
+
+**One pre-registered expectation was falsified: divergences rose, 20 to 48.** Section 8 predicted they would fall, on the reasoning that the funnel producing them leaves the sampled space. The funnel does leave -- BFMI says so -- and the divergences went up anyway. Nothing else here depends on that prediction, and it is recorded rather than quietly dropped because a note that only lists its confirmed predictions is not evidence. What it most likely means is that the residual geometry the sampler must now negotiate, in a space 5.7 times smaller, is locally sharper; it is not explained by this bench and is not worth a fit to chase, given the verdict below.
+
+**The cost decides it, and it decides against.** Marginalising bought a 1.62-fold reduction in gradient evaluations (247,001 against 400,869) and 1.11 times the minimum effective sample size. So the lever pays only if a marginalised gradient costs at most
+
+    (611 / 550) x (400,869 / 247,001) = 1.80
+
+times an explicit one. It does not come close. The microbenchmark in section 5 put it at 22x. This fit puts it lower -- sampling took 6,203 s against 955 s for 0.616 times as many gradients, so about **10.5x** in situ -- and that figure is itself an upper bound, because the marginalised arm met contention from the typically-developing comparison rerun that the explicit arm never saw. Both numbers are far above 1.80, so the conclusion is robust to the discrepancy between them: **at the 22x weight the explicit arm delivers 1,372 effective samples per million gradient evaluations against 113, a factor of 12.2; at the in-situ 10.5x it is a factor of 5.9.** Either way the marginalisation costs several times more work per effective sample than it saves.
+
+The discrepancy between 22x and 10.5x is worth recording on its own account: section 5's figure is a microbenchmark of the density and its gradient in isolation, and it overstates the cost inside a real fit by about a factor of two. Anywhere that 22 is quoted as the cost of this lever, it should be read as the ceiling rather than the estimate.
+
+**Recommendation: do not adopt the flag for VG12.** Keep the code, the tests and this note. It is exact, it is tested, it is the cleanest available demonstration of what the singleton children do to the geometry, and it stays available if the arithmetic changes -- a cheaper quadrature, a model whose singleton fraction is far higher, or a sampler that exploits the smaller space better than nutpie does here. What it is not is a way to fit VG12 faster or better today. The `singleton_marginalisation` field stays `None` on every registered definition, so nothing in the project's fitted output is affected by leaving it in the tree.
+
+A caution on the wall clock, which is why it is absent from the table above: the three arms shared a machine unevenly and the comparison rerun took cores from the marginalised arms late in their run. Elapsed times are reported by the harness but should not be compared between arms; the gradient counts and effective sample sizes are what carry the argument, and neither depends on what else the machine was doing.
+
+## 10. What the tests pin
 
 `tests/test_subject_marginal.py` (29 tests, 83 s) covers: the quadrature weights as a normalised expectation; the written-out density against PyMC's to 1e-9; the marginal against a fine-grid integral at both models' fitted regimes; that doubling the nodes moves nothing; that a vanishing child scale reproduces the conditional density; that the marginal is never a probability above one, including on rows a fit reaches only in early warmup; the row partition, the sentinel gather, the singleton-first order and the likelihood's refusal to build without it; the definition guards; and, on a real VG12 subsample, that data preparation applies that order while a flag-off build keeps the rows as they came, that only repeat-measured children keep an effect, that marginalised rows' `f_obs` does not move when the effects move, that repeat rows keep the conditional density to 1e-9, that marginalised rows match an independent numerical integration, and that the whole path — NUTS, `compute_log_likelihood`, posterior predictive — runs and returns the shapes every consumer expects.
 

@@ -142,6 +142,7 @@ logind
 logit
 logits
 matplotlib
+microbenchmark
 miscalibrated
 miscited
 missingness
