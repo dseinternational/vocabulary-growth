@@ -156,7 +156,7 @@ memory-heavy. So:
 
 On 2026-08-14 at 16:12 the output volume reached 100% and five in-flight refits died on `[Errno 28] No space left on device` — VG16 and VG14 part-way through writing `trace.nc`, and VG10, VG07 and VG05 before they had started. Nothing warned first: the fits simply failed at the moment they wrote.
 
-**The cause was the trace tier, not the disk size.** Every fit that run wrote at the default `--trace-persistence full`. `compact` drops observation-sized deterministics that are recomputable from the free parameters, and the reporting output is byte-identical. Applied afterwards to 21 fits it took **229 GB to 77 GB** — the volume went from 100% to 63% with no loss of anything the report reads.
+**The cause was the trace tier, not the disk size.** Every fit that run wrote at the default `--trace-persistence full`. `compact` drops observation-sized deterministics that are recomputable from the free parameters, and the reporting output is byte-identical. Applied afterwards to 21 fits it took **229 GB to 77 GB** — the volume went from 100% to 63% with no loss of anything the report reads. (Since 2026-08-23 those observation-sized deterministics are not sampled at all, at any tier — see `--trace-persistence` in `CLAUDE.md` — so a new `full` trace is already close to what `compact` used to leave; the arithmetic in this section and the sizing below describe the fits that run produced, not what a fit writes now.)
 
 **Set the tier before the run**, either on the driver or in the environment:
 

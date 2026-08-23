@@ -29,6 +29,8 @@ import dse_research_utils.math.constants as math_constants
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
+import dse_research_utils.statistics.models.reporting as reporting
+import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pymc as pm
 
@@ -41,6 +43,7 @@ from vocab_growth.models.build_utils import (
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
+    ModelFitContext,
     build_kappa_for_config,
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
@@ -1145,3 +1148,43 @@ def fit_bivariate_re_model(
     Fit pipeline for bivariate model with study random intercepts (VG07).
     """
     return run_fit_pipeline(config, definition, stages=bivariate_re_stages(definition))
+
+
+def rebuild_model_context(
+    definition: BivariateModelDefinition,
+    *,
+    output_dir: str,
+    sampling_config: str = "dev",
+) -> BivariateREContext:
+    """Build ``definition``'s model graph without sampling it.
+
+    For readers of a stored fit that must recompute a posterior quantity the
+    trace does not carry -- since 2026-08-23 the observation-sized
+    deterministics are not sampled (``fit_artifacts.sampled_variable_names``),
+    and ``vocab_growth.posterior_recompute.with_deterministics`` rebuilds them
+    from the stored free parameters given the graph. It runs the engine's own
+    data preparation and build, so the observation order and every data rule
+    are exactly those of a fit of ``definition``; the caller still has to check
+    that the fit *was* of this definition on the current data
+    (``fit_artifacts.validate_fit_output``) before aligning anything by row.
+
+    ``output_dir`` receives the preparation stage's descriptive-statistics CSV
+    and should be scratch. ``sampling_config`` only fills the context's
+    sampling configuration, which the build does not read.
+    """
+    context: BivariateREContext = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name=definition.model_id,
+            config_name=definition.config_name,
+            output_root_dir=output_dir,
+            ci_prob=0.89,
+            interval_kind="eti",
+        ),
+        sampling=sampling.get_sampling_configuration(sampling_config),
+        sampling_config_name=sampling_config,
+    )
+    os.makedirs(context.reporting.output_dir, exist_ok=True)
+    prepare_bivariate_re_data(context, definition)
+    configure_bivariate_priors(context, definition)
+    build_model_re(context, definition)
+    return context

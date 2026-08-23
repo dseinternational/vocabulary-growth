@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import os
+import tempfile
 from dataclasses import dataclass
 
 import arviz as az
@@ -41,7 +42,14 @@ from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
-from vocab_growth.fit_artifacts import require_full_trace
+from vocab_growth.fit_artifacts import (
+    require_full_trace,
+    source_data_hash,
+    validate_fit_output,
+)
+from vocab_growth.models.common_bivariate_re import rebuild_model_context
+from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.posterior_recompute import missing_deterministics, with_deterministics
 
 EPSILON = 1e-12
 # TODO(#131): derive from definition.n_trials (this script keys off trace
@@ -65,6 +73,37 @@ SPECS = [
     ModelSpec("VG08", "VG08-age-understood-spoken-ds-re-subj", True, False),
     ModelSpec("VG09", "VG09-age-understood-spoken-ds-re-subj-uq", True, True),
 ]
+
+#: The observation-level posterior the marginal LOSO reconstructs the held-out
+#: predictive from. Fits made since 2026-08-23 do not store these (the sampler
+#: is told not to -- fit_artifacts.sampled_variable_names), so they are
+#: recomputed from the stored free parameters on a rebuilt model graph.
+OBS_LEVEL_POSTERIOR = ("f_u_obs", "h_obs", "kappa_u_obs", "kappa_s_obs")
+
+
+def rebuilt_model_for(spec: ModelSpec, fit_dir: str, scratch_dir: str):
+    """The fit's model graph, rebuilt on the current data, for recomputation.
+
+    Recomputing an observation-level quantity from a stored posterior is only
+    right if the rebuilt graph is the one the posterior came from, on the same
+    rows in the same order; so the fit is first checked against the registered
+    definition and the current source-data hash, and refused by name otherwise.
+    """
+    definition = MODEL_REGISTRY[spec.short.lower()]
+    errors = validate_fit_output(
+        fit_dir,
+        expected_definition=definition,
+        expected_source_data_hash=source_data_hash(env.DATA_DIR),
+    )
+    if errors:
+        raise RuntimeError(
+            f"Cannot recompute {spec.short}'s observation-level posterior: the fit "
+            f"at {fit_dir} does not match the registered definition on the current "
+            "data -- " + "; ".join(errors)
+        )
+    print(f"  rebuilding {spec.short}'s model graph to recompute "
+          f"{', '.join(OBS_LEVEL_POSTERIOR)} …", flush=True)
+    return rebuild_model_context(definition, output_dir=scratch_dir).model
 
 
 def load_analysis_frame() -> pd.DataFrame:
@@ -148,8 +187,14 @@ def marginal_subject_loglik(
     n_re_samples: int = 500,
     thin: int = 36,
     seed: int = 47,
+    model=None,
 ) -> np.ndarray:
     """Compute marginal per-subject log-likelihood under spec's RE structure.
+
+    ``model`` is the fit's graph rebuilt on the same data
+    (``rebuild_model_context``), needed to recompute the observation-level
+    posterior for a trace that does not store it; a trace that does (one written
+    before 2026-08-23) is read as it is and ``model`` is not consulted.
 
     For each (thinned) posterior draw and subject, this draws K samples from
     each active subject-RE prior and Monte-Carlo integrates the conditional
@@ -170,6 +215,19 @@ def marginal_subject_loglik(
     draws_idx = np.arange(0, post.sizes["draw"], thin)
     n_chain = post.sizes["chain"]
     n_draw = len(draws_idx)
+    # Thin first, then fill in what the trace does not carry: the
+    # observation-level posterior is recomputed on the thinned draws only, which
+    # is the whole point of not storing it (fit_artifacts.sampled_variable_names).
+    post_thin = (post.to_dataset() if hasattr(post, "to_dataset") else post).isel(
+        draw=draws_idx
+    )
+    if missing_deterministics(post_thin, OBS_LEVEL_POSTERIOR):
+        if model is None:
+            raise RuntimeError(
+                f"{spec.short}'s trace does not carry {OBS_LEVEL_POSTERIOR} and no "
+                "rebuilt model was supplied to recompute them."
+            )
+        post_thin = with_deterministics(post_thin, model, OBS_LEVEL_POSTERIOR)
     n_subjects = int(analysis_df["subject_code"].max()) + 1
 
     has_u = analysis_df["understood"].notna().values
@@ -184,17 +242,17 @@ def marginal_subject_loglik(
     subj_u = analysis_df.loc[has_u, "subject_code"].to_numpy(int)
     subj_s = analysis_df.loc[has_s, "subject_code"].to_numpy(int)
 
-    f_u_obs = post["f_u_obs"].values[:, draws_idx, :]
-    h_obs = post["h_obs"].values[:, draws_idx, :]
-    delta_u = post["delta_u"].values[:, draws_idx, :]
-    delta_q = post["delta_q"].values[:, draws_idx, :]
-    kappa_u_obs = post["kappa_u_obs"].values[:, draws_idx, :]
-    kappa_s_obs = post["kappa_s_obs"].values[:, draws_idx, :]
+    f_u_obs = post_thin["f_u_obs"].values
+    h_obs = post_thin["h_obs"].values
+    delta_u = post_thin["delta_u"].values
+    delta_q = post_thin["delta_q"].values
+    kappa_u_obs = post_thin["kappa_u_obs"].values
+    kappa_s_obs = post_thin["kappa_s_obs"].values
 
     if spec.use_subject_re_u:
-        tau_subj_u = post["tau_subj_u"].values[:, draws_idx]
+        tau_subj_u = post_thin["tau_subj_u"].values
     if spec.use_subject_re_q:
-        tau_subj_q = post["tau_subj_q"].values[:, draws_idx]
+        tau_subj_q = post_thin["tau_subj_q"].values
 
     subj_to_u_ix = {s: np.where(subj_u == s)[0] for s in range(n_subjects)}
     subj_to_s_ix = {s: np.where(subj_s == s)[0] for s in range(n_subjects)}
@@ -272,6 +330,7 @@ def to_marginal_idata(
     spec: ModelSpec,
     n_re_samples: int = 500,
     thin: int = 36,
+    model=None,
 ) -> xr.DataTree:
     print(
         f"  computing marginal subject log-lik for {spec.short} "
@@ -279,7 +338,7 @@ def to_marginal_idata(
         flush=True,
     )
     ll = marginal_subject_loglik(
-        idata, analysis_df, spec, n_re_samples=n_re_samples, thin=thin
+        idata, analysis_df, spec, n_re_samples=n_re_samples, thin=thin, model=model
     )
     n_chain, n_draw, n_subjects = ll.shape
     post_thin = idata.posterior.isel(draw=slice(0, None, thin))
@@ -323,6 +382,11 @@ def main() -> None:
     marginal_idatas: dict[str, xr.DataTree] = {}
     summary_rows: list[dict] = []
 
+    # Scratch for the rebuilt models' preparation-stage output (a descriptive
+    # statistics CSV); nothing in it is read back.
+    scratch = tempfile.TemporaryDirectory(prefix="loso-rebuild-")
+    scratch_dir = scratch.name
+
     for spec in SPECS:
         trace_path = os.path.join(MODELS_DIR, spec.folder, "trace.nc")
         if not os.path.exists(trace_path):
@@ -339,6 +403,13 @@ def main() -> None:
         )
         print(f"Loading {spec.short} trace …", flush=True)
         idata = az.from_netcdf(trace_path)
+        model = None
+        posterior = idata.posterior
+        posterior = (
+            posterior.to_dataset() if hasattr(posterior, "to_dataset") else posterior
+        )
+        if missing_deterministics(posterior, OBS_LEVEL_POSTERIOR):
+            model = rebuilt_model_for(spec, os.path.dirname(trace_path), scratch_dir)
 
         print(f"  conditional LOSO for {spec.short} …", flush=True)
         subj_idata = aggregate_to_subject(idata, analysis_df)
@@ -348,7 +419,7 @@ def main() -> None:
         summary_rows.append(_summary_row(f"{spec.short}_conditional", loo_cond))
 
         print(f"  marginal LOSO for {spec.short} …", flush=True)
-        marg_idata = to_marginal_idata(idata, analysis_df, spec)
+        marg_idata = to_marginal_idata(idata, analysis_df, spec, model=model)
         loo_marg = az.loo(marg_idata, var_name="y_subj", pointwise=True)
         print(f"    {loo_marg}\n")
         marginal_idatas[spec.short] = marg_idata

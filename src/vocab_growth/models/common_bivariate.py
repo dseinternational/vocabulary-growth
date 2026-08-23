@@ -133,7 +133,14 @@ class BivariateModelConfiguration(BaseModelConfiguration):
 
 @dataclass
 class BivariateModelSamples:
-    """Posterior and predictive samples from the bivariate model."""
+    """Posterior and predictive samples from the bivariate model.
+
+    Plot- and query-grid quantities only: the observation-level posterior
+    (``f_u_obs``, ``p_u_obs``, ``h_obs``, ``q_obs``, ``f_s_obs``, ``p_s_obs``,
+    ``z_obs``) used to be extracted as well, at ``n_obs x n_samples`` each, and
+    nothing read it; since 2026-08-23 the sampler does not store those
+    variables at all (:func:`vocab_growth.fit_artifacts.sampled_variable_names`).
+    """
 
     # Shared age grids
     X_obs: np.ndarray
@@ -143,18 +150,14 @@ class BivariateModelSamples:
     X_query: np.ndarray
     """Ages in months for the query points, shape (n_query,)."""
 
-    X_obs_z: np.ndarray
-    """Standardized observed ages, shape (n, n_samples)."""
     X_plot_z: np.ndarray
     """Standardized ages for the plot points, shape (n_plot, n_samples)."""
     X_query_z: np.ndarray
     """Standardized ages for the query points, shape (n_query, n_samples)."""
 
     # Understood (U) samples
-    f_u_obs: np.ndarray
     f_u_plot: np.ndarray
     f_u_query: np.ndarray
-    p_u_obs: np.ndarray
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
     p_u_query_subject_marginal: np.ndarray
@@ -165,18 +168,14 @@ class BivariateModelSamples:
     kappa_u_query: np.ndarray
 
     # Production rate (q) samples
-    h_obs: np.ndarray
     h_plot: np.ndarray
     h_query: np.ndarray
-    q_obs: np.ndarray
     q_plot: np.ndarray
     q_query: np.ndarray
 
     # Spoken (S) samples (derived)
-    f_s_obs: np.ndarray
     f_s_plot: np.ndarray
     f_s_query: np.ndarray
-    p_s_obs: np.ndarray
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
     p_s_query_subject_marginal: np.ndarray
@@ -727,11 +726,9 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     """Extract model samples into a structured format for plotting and reporting."""
 
     # Understood
-    f_u_obs = _extract_posterior(trace, "f_u_obs", "obs_id")
     f_u_plot = _extract_posterior(trace, "f_u_plot", "plot_id")
     f_u_query = _extract_posterior(trace, "f_u_query", "query_id")
 
-    p_u_obs = _extract_posterior(trace, "p_u_obs", "obs_id")
     p_u_plot = _extract_posterior(trace, "p_u_plot", "plot_id")
     p_u_query = _extract_posterior(trace, "p_u_query", "query_id")
 
@@ -739,20 +736,16 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     kappa_u_query = _extract_posterior(trace, "kappa_u_query", "query_id")
 
     # Production rate
-    h_obs = _extract_posterior(trace, "h_obs", "obs_id")
     h_plot = _extract_posterior(trace, "h_plot", "plot_id")
     h_query = _extract_posterior(trace, "h_query", "query_id")
 
-    q_obs = _extract_posterior(trace, "q_obs", "obs_id")
     q_plot = _extract_posterior(trace, "q_plot", "plot_id")
     q_query = _extract_posterior(trace, "q_query", "query_id")
 
     # Spoken (derived)
-    f_s_obs = _extract_posterior(trace, "f_s_obs", "obs_id")
     f_s_plot = _extract_posterior(trace, "f_s_plot", "plot_id")
     f_s_query = _extract_posterior(trace, "f_s_query", "query_id")
 
-    p_s_obs = _extract_posterior(trace, "p_s_obs", "obs_id")
     p_s_plot = _extract_posterior(trace, "p_s_plot", "plot_id")
     p_s_query = _extract_posterior(trace, "p_s_query", "query_id")
 
@@ -802,7 +795,6 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     X_query = np.array(trace.constant_data["X_query"].values)
 
     # Standardised ages
-    X_obs_z = _extract_posterior(trace, "z_obs", "obs_id")
     X_plot_z = _extract_posterior(trace, "z_plot", "plot_id")
     X_query_z = _extract_posterior(trace, "z_query", "query_id")
 
@@ -810,13 +802,10 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         X_obs=X_obs,
         X_plot=X_plot,
         X_query=X_query,
-        X_obs_z=X_obs_z,
         X_plot_z=X_plot_z,
         X_query_z=X_query_z,
-        f_u_obs=f_u_obs,
         f_u_plot=f_u_plot,
         f_u_query=f_u_query,
-        p_u_obs=p_u_obs,
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
         p_u_query_subject_marginal=p_u_query_subject_marginal,
@@ -825,16 +814,12 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         y_u_query=y_u_query,
         kappa_u_plot=kappa_u_plot,
         kappa_u_query=kappa_u_query,
-        h_obs=h_obs,
         h_plot=h_plot,
         h_query=h_query,
-        q_obs=q_obs,
         q_plot=q_plot,
         q_query=q_query,
-        f_s_obs=f_s_obs,
         f_s_plot=f_s_plot,
         f_s_query=f_s_query,
-        p_s_obs=p_s_obs,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
         p_s_query_subject_marginal=p_s_query_subject_marginal,
@@ -934,13 +919,14 @@ sample = _shared_sample
 def diagnostics(context: BivariateContext):
     """Run diagnostics on the posterior samples.
 
-    Thin wrapper over the shared engine (common.py): bivariate adds
-    ``kappa_u_obs``/``kappa_s_obs`` to the trace plot and reports per-outcome
-    LOO-CV for the spoken/understood likelihoods.
+    Thin wrapper over the shared engine (common.py): bivariate reports
+    per-outcome LOO-CV for the spoken/understood likelihoods. (It used to name
+    ``kappa_u_obs``/``kappa_s_obs`` for the trace plot as well; an
+    observation-sized variable never fitted under ArviZ's subplot cap, so they
+    never rendered, and since 2026-08-23 the sampler does not store them.)
     """
     _shared_diagnostics(
         context,
-        extra_trace_var_names=("kappa_u_obs", "kappa_s_obs"),
         loo_var_names=(
             ("y_s_obs", "words spoken"),
             ("y_u_obs", "words understood"),
