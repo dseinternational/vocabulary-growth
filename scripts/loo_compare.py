@@ -69,6 +69,35 @@ class LooEntry:
     n_high_pareto: int
 
 
+#: Share of observations above Pareto-k 0.7 beyond which the PSIS estimate is
+#: reported as unusable rather than merely caveated. PSIS-LOO degenerates for the
+#: subject-random-effect models -- leaving one observation out swings the child
+#: intercept it is nearly the only evidence for -- and past this fraction the
+#: elpd is not comparable with another model's. Held well below the 50% VG11
+#: reaches so the notice fires before a table looks authoritative.
+HIGH_PARETO_K_UNUSABLE_SHARE = 0.20
+
+
+def _warn_if_unusable(label: str, row: dict) -> None:
+    """Print a notice when a row's PSIS-LOO has degenerated past use."""
+    n = row["n_observations"]
+    if not n:
+        return
+    share = row["pareto_k_gt_0.7"] / n
+    if share < HIGH_PARETO_K_UNUSABLE_SHARE:
+        return
+    print(
+        f"      [unusable] {label}: {share:.0%} of observations above Pareto-k 0.7 "
+        f"(p_loo = {row['p_loo']:.0f} on {n} observations).\n"
+        "      PSIS-LOO has degenerated here; do not compare this elpd with another "
+        "model's.\n"
+        "      Leaving out one observation removes most of what identifies that "
+        "child's effect,\n"
+        "      which is what leave-one-subject-out (loso_compare.py) exists to "
+        "measure instead."
+    )
+
+
 def _loo_summary_row(label: str, loo, reff=None) -> dict:
     if hasattr(loo, "pareto_k"):
         k = loo.pareto_k.values
@@ -133,8 +162,10 @@ def per_model_loo() -> dict[str, list[dict]]:
         # the importance-weight tail degenerates — "All tail values are the
         # same"). Guard each az.loo call so one such model is skipped with a
         # warning rather than aborting the whole comparison, matching the
-        # missing-trace / missing-log_likelihood skips above. The high Pareto-k
-        # counts already flag the models whose PSIS-LOO is unreliable.
+        # missing-trace / missing-log_likelihood skips above. A model whose
+        # PSIS-LOO survives numerically but has degenerated is caught after the
+        # fact by _warn_if_unusable, which judges the high Pareto-k share rather
+        # than leaving the reader to.
         reff = reff_or_default(idata, label=short)
         if short in UNIVARIATE:
             try:
@@ -149,6 +180,7 @@ def per_model_loo() -> dict[str, list[dict]]:
                 f"± {row['se']:.1f}, p_loo = {row['p_loo']:.1f}, "
                 f"high-k = {row['pareto_k_gt_0.7']}/{row['n_observations']}"
             )
+            _warn_if_unusable(short, row)
         else:
             _attach_joint_log_likelihood(idata)
             for var in ("y_u_obs", "y_s_obs", "y_joint"):
@@ -164,6 +196,7 @@ def per_model_loo() -> dict[str, list[dict]]:
                     f"± {row['se']:.1f}, p_loo = {row['p_loo']:.1f}, "
                     f"high-k = {row['pareto_k_gt_0.7']}/{row['n_observations']}"
                 )
+                _warn_if_unusable(f"{short} [{var}]", row)
 
         if not rows:
             print(f"  {short}: no usable LOO — skipped")
