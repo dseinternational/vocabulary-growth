@@ -35,6 +35,7 @@ import pymc as pm
 import vocab_growth.data_utils as vocab_data_utils
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     standardize_anchor_ages,
@@ -224,6 +225,7 @@ def prepare_bivariate_re_data(
     # Create a BinomialModelData for the context interface
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_valid = analysis_df.loc[analysis_df["understood"].notna(), "understood"]
+    require_integral_counts(y_u_valid.to_numpy(dtype=float), "understood")
     y_obs_placeholder = np.zeros(n, dtype=int)
     y_obs_placeholder[analysis_df["understood"].notna().values] = (
         y_u_valid.values.astype(int)
@@ -388,9 +390,12 @@ def build_model_re(
     has_s_train = has_s & ~holdout
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(
-        analysis_df.loc[has_u_train, "understood"], dtype=int
-    )
+    # Validate before casting: the int cast truncates fractional and non-finite
+    # values silently, so the bounds checks below would pass values like 810.9
+    # or -0.1 if they ran on the already-cast array (#236).
+    y_u_raw = analysis_df.loc[has_u_train, "understood"].to_numpy(dtype=float)
+    require_integral_counts(y_u_raw, "understood")
+    y_u_observed = y_u_raw.astype(int)
     study_codes = np.asarray(analysis_df["study_code"], dtype=int)
 
     idx_u = np.where(has_u_train)[0]

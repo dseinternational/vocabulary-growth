@@ -174,18 +174,29 @@ def construct_age_grids(
 
 
 def require_integral_counts(values: np.ndarray, name: str) -> None:
-    """Fail loudly if a count column carries fractional values.
+    """Fail loudly if a count column carries non-finite or fractional values.
 
     Every engine casts its outcome columns to ``int`` for the Beta-Binomial
     likelihood, and NumPy's cast truncates toward zero silently — a fractional
     count (an averaged or hand-edited source cell, a bad merge) would be floored
-    without a trace. All current source counts are integral, so this guard costs
-    nothing until the day it fires (#234).
+    without a trace, and an infinity would cast to an arbitrary integer that a
+    later bounds check could only misdiagnose. All current source counts are
+    finite and integral, so this guard costs nothing until the day it fires
+    (#234, #236).
 
     ``values`` must already be free of NaN (callers drop or mask missing counts
-    before casting).
+    before casting); a NaN that does reach this guard is reported as non-finite
+    rather than truncated.
     """
     values = np.asarray(values, dtype=float)
+    non_finite = ~np.isfinite(values)
+    if non_finite.any():
+        bad = np.flatnonzero(non_finite)
+        examples = ", ".join(f"{values[i]:g}" for i in bad[:5])
+        raise ValueError(
+            f"{name} contains {bad.size} non-finite count(s) "
+            f"(e.g. {examples}); counts must be finite whole numbers."
+        )
     fractional = values != np.floor(values)
     if fractional.any():
         bad = np.flatnonzero(fractional)

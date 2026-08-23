@@ -394,7 +394,12 @@ def build_model(
     has_s = analysis_df["spoken"].notna().values
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
+    # Validate before casting: the int cast truncates fractional and non-finite
+    # values silently, so the bounds checks below would pass values like 810.9
+    # or -0.1 if they ran on the already-cast array (#236).
+    y_u_raw = analysis_df.loc[has_u, "understood"].to_numpy(dtype=float)
+    require_integral_counts(y_u_raw, "understood")
+    y_u_observed = y_u_raw.astype(int)
 
     idx_u = np.where(has_u)[0]
 
