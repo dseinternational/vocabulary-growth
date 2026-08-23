@@ -173,6 +173,30 @@ def construct_age_grids(
     )
 
 
+def require_integral_counts(values: np.ndarray, name: str) -> None:
+    """Fail loudly if a count column carries fractional values.
+
+    Every engine casts its outcome columns to ``int`` for the Beta-Binomial
+    likelihood, and NumPy's cast truncates toward zero silently — a fractional
+    count (an averaged or hand-edited source cell, a bad merge) would be floored
+    without a trace. All current source counts are integral, so this guard costs
+    nothing until the day it fires (#234).
+
+    ``values`` must already be free of NaN (callers drop or mask missing counts
+    before casting).
+    """
+    values = np.asarray(values, dtype=float)
+    fractional = values != np.floor(values)
+    if fractional.any():
+        bad = np.flatnonzero(fractional)
+        examples = ", ".join(f"{values[i]:g}" for i in bad[:5])
+        raise ValueError(
+            f"{name} contains {bad.size} non-integral count(s) "
+            f"(e.g. {examples}); counts must be whole numbers — a silent cast "
+            "would truncate them."
+        )
+
+
 def validate_ell_bounds(ell_months_range) -> tuple[float, float]:
     """Return ``(ell_low_months, ell_high_months)`` as floats after validation.
 

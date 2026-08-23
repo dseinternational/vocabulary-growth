@@ -5,7 +5,8 @@
 > [!NOTE]
 > Drafted by LLM-based AI tools (OpenAI Codex/GPT-5; "Evidence base" section and
 > prior–norm comparison by Claude Code/Opus 4.8; dispersion and random-effect
-> scale sections by Claude Code/Opus 5).
+> scale sections by Claude Code/Opus 5; anchor-binding note by Claude
+> Code/Fable 5).
 
 > [!WARNING]
 > This is a working document for issue 89, last reviewed on 2026-07-01. It
@@ -121,6 +122,18 @@ The anchors are probabilities. For direct vocabulary trajectories, multiplying
 by 810 gives the expected number of words out of the common reference inventory.
 For `q`, the anchor is a fraction of understood words, so it should not be read
 as a direct word count without also considering `p_U(a)`.
+
+How exactly the anchors bind differs by engine. In every model they
+parameterise the logit-linear **trend**; the fitted trajectory adds a GP
+deviation on top. The random-effects and joint engines orthogonalise the GP
+against the trend's basis and pin it to zero at a reference age, so their
+anchors also fix the full trajectory's level there. The plain univariate
+engine (VG01-VG04) does neither: its GP is unconstrained at the anchor ages,
+so `p_slope_low` and `p_slope_hi` are coordinates of the trend component only,
+and the induced prior on the full trajectory at a reference age is the anchor
+prior widened by the GP's prior deviation. The observable interpretations
+below are therefore exact for the trend, and approximate for the fitted curve
+in those four models.
 
 | Prior use                             | Models                     | Distribution     | Observable interpretation                                              |
 | ------------------------------------- | -------------------------- | ---------------- | ---------------------------------------------------------------------- |
