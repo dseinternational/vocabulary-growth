@@ -26,9 +26,9 @@ Focused tests covering model definitions, nested likelihoods, four-cell construc
 The actual current graphs built with the following dimensions and finite initial log densities:
 
 | Model | Analysis rows | Initial log density |
-|---|---:|---:|
-| VG14 | 1,431 | -22,220.496 |
-| VG15 | 1,431 | -26,074.348 |
+| ----- | ------------: | ------------------: |
+| VG14  |         1,431 |         -22,220.496 |
+| VG15  |         1,431 |         -26,074.348 |
 
 No current compatible reporting-quality trace was present. Consequently, this review verifies the current graph, algebra, priors, masks, data classification and initial execution, but it cannot confirm current-definition convergence, effective sample sizes, posterior predictive coverage or the numerical magnitude of the identified specification risks.
 
@@ -52,12 +52,12 @@ VG15 constructs child effects for understood, spoken and signed marginal traject
 
 The current association data contain:
 
-| Source | Administrations | Children |
-|---|---:|---:|
-| `es_01` | 185 | 185 |
-| `uk_02` | 56 | 28 |
-| `uk_07` | 82 | 30 |
-| `nz_01` | 111 | 33 |
+| Source  | Administrations | Children |
+| ------- | --------------: | -------: |
+| `es_01` |             185 |      185 |
+| `uk_02` |              56 |       28 |
+| `uk_07` |              82 |       30 |
+| `nz_01` |             111 |       33 |
 
 The 249 longitudinal administrations in `uk_02`, `uk_07` and `nz_01` come from 91 children and are conditionally independent between visits in the cell likelihood. The Dirichlet-Multinomial concentration accounts for extra variability among cells within one administration; it does not model serial correlation between a child's visits.
 
@@ -83,12 +83,12 @@ VG14 has no study or child random effects, but imports `_DS_JOINT_UNDERSTOOD_KAP
 
 Applying the committed calibration procedure to VG14's exact current frame produced approximately:
 
-| Dispersion concentration | No-effects calibration | Current component target |
-|---|---:|---:|
-| Understood at 18 months | 13.7 | 92.6 |
-| Understood at 72 months | 3.23 | 14.0 |
-| Conditional spoken ratio at 18 months | 7.1 | 18.2 |
-| Conditional spoken ratio at 72 months | 1.67 | 8.4 |
+| Dispersion concentration              | No-effects calibration | Current component target |
+| ------------------------------------- | ---------------------: | -----------------------: |
+| Understood at 18 months               |                   13.7 |                     92.6 |
+| Understood at 72 months               |                   3.23 |                     14.0 |
+| Conditional spoken ratio at 18 months |                    7.1 |                     18.2 |
+| Conditional spoken ratio at 72 months |                   1.67 |                      8.4 |
 
 In a Beta-Binomial model, larger `kappa` means less unexplained variation. The current priors therefore favour substantially narrower individual predictive variation than a calibration matching VG14's graph. The no-effects targets lie near the extreme lower tail of the imported priors, so their nominal breadth does not make the mismatch negligible.
 

@@ -133,6 +133,7 @@ idxmin
 iloc
 incl
 indep
+isfile
 isna
 iterrows
 judgments
