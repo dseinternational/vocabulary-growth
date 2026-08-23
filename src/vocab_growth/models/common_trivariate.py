@@ -50,6 +50,7 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     validate_ell_bounds,
@@ -487,7 +488,9 @@ def build_model(
     has_sign = analysis_df["signed"].notna().values
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
+    y_u_values = np.asarray(analysis_df.loc[has_u, "understood"], dtype=float)
+    require_integral_counts(y_u_values, "understood")
+    y_u_observed = y_u_values.astype(int)
 
     idx_u = np.where(has_u)[0]
 
@@ -1979,8 +1982,7 @@ def _run_trivariate_outcome_plots(
 
     plotting.plot_posterior_predictive_pmf(
         samples.X_query,
-        samples.X_plot,
-        y_plot,
+        y_query,
         n_trials,
         output_dir=output_dir,
         filename=f"posterior_predictive_pmf_{suffix}",
@@ -1990,8 +1992,7 @@ def _run_trivariate_outcome_plots(
 
     plotting.plot_posterior_predictive_cdf(
         samples.X_query,
-        samples.X_plot,
-        y_plot,
+        y_query,
         n_trials,
         output_dir=output_dir,
         filename=f"posterior_predictive_cdf_{suffix}",

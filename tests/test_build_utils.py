@@ -12,6 +12,7 @@ import pytest
 
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     standardize_anchor_ages,
@@ -216,3 +217,15 @@ def test_construct_age_grids_anchor_explicit_age():
     X, mean, std, g = _grids(use_gp_anchor=True, gp_anchor_age_months=19.0)
     assert g.anchor_age_months == 19.0
     np.testing.assert_allclose(g.X_all_z[g.i_anchor, 0], (19.0 - mean) / std)
+
+
+# --- require_integral_counts ----------------------------------------------------
+
+
+def test_require_integral_counts_accepts_whole_numbers():
+    require_integral_counts(np.array([0.0, 3.0, 810.0]), "spoken")
+
+
+def test_require_integral_counts_rejects_fractions_with_examples():
+    with pytest.raises(ValueError, match="spoken contains 2 non-integral"):
+        require_integral_counts(np.array([1.0, 2.5, 3.0, 4.25]), "spoken")

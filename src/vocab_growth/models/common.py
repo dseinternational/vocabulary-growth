@@ -70,6 +70,7 @@ from vocab_growth.fit_artifacts import (
 )
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     standardize_anchor_ages,
@@ -870,6 +871,12 @@ def build_model(
                 ell_high_z=ell_high_z,
                 M=M,
                 L=L,
+                # Pin the HSGP basis centre to the declared domain's midpoint so
+                # a reporting-query change cannot move the approximation's
+                # accuracy region (#234). For every current model of record the
+                # pinned value equals the lazily computed one, so this changes
+                # no fitted graph.
+                x_center_z=float(np.mean(grids.X_gp_domain_z)),
             ),
             store_deterministic=True,
             latent_name="f_all",
@@ -1550,8 +1557,7 @@ def run_standard_plots(
 
     plotting.plot_posterior_predictive_pmf(
         context.model_samples.X_query,
-        context.model_samples.X_plot,
-        context.model_samples.y_plot,
+        context.model_samples.y_query,
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_pmf",
@@ -1560,8 +1566,7 @@ def run_standard_plots(
 
     plotting.plot_posterior_predictive_cdf(
         context.model_samples.X_query,
-        context.model_samples.X_plot,
-        context.model_samples.y_plot,
+        context.model_samples.y_query,
         context.model_data.n_trials,
         output_dir=context.reporting.output_dir,
         filename="posterior_predictive_cdf",
@@ -1843,7 +1848,11 @@ def prepare_univariate_data(
     y_col = definition.outcome.value
     df = vocab_data_utils.load_data(
         population=definition.population,
-        columns=["age", y_col],
+        # `study` and `subject_id` are provenance columns: the model itself sees
+        # only age and outcome, but discarding them here left the fit manifest's
+        # source counts empty and the frame unauditable (#234). They ride along
+        # on the analysis frame; the model arrays below never read them.
+        columns=["age", y_col, "study", "subject_id"],
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
         # TD language scope is part of the model graph; DS ignores it.
@@ -1851,23 +1860,30 @@ def prepare_univariate_data(
             definition, "td_languages", vocab_data_utils.ENGLISH_LANGUAGES
         ),
     )
-    analysis_df = df[["age", y_col]].dropna()
+    analysis_df = df[["age", y_col, "study", "subject_id"]].dropna(
+        subset=["age", y_col]
+    )
 
-    desc = descriptive_stats.describe_all(analysis_df, alpha=0.05)
+    desc = descriptive_stats.describe_all(analysis_df[["age", y_col]], alpha=0.05)
 
+    n_children = int(analysis_df.groupby(["study", "subject_id"]).ngroups)
     key_value_table(
         "Data",
         [
             ("Population", definition.population.name),
             ("Outcome column", y_col),
             ("Rows after NA drop", len(analysis_df)),
+            ("Children", n_children),
+            ("Sources", int(analysis_df["study"].nunique())),
             ("Sample fraction", definition.sample_fraction),
         ],
     )
     dataframe_table(desc, title="Descriptive statistics")
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_obs = np.asarray(analysis_df[y_col], dtype=int)
+    y_values = np.asarray(analysis_df[y_col], dtype=float)
+    require_integral_counts(y_values, y_col)
+    y_obs = y_values.astype(int)
 
     data = model_data.BinomialModelData(
         X_obs=X_obs, y_obs=y_obs, n_trials=definition.n_trials
@@ -2018,6 +2034,11 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
         for column in ("understood", "spoken", "signed")
         if column in analysis_df.columns
     }
+    children = (
+        int(analysis_df.groupby(["study", "subject_id"]).ngroups)
+        if {"study", "subject_id"}.issubset(analysis_df.columns)
+        else None
+    )
     packages: dict[str, str] = {}
     direct_origins: dict[str, object] = {}
     for distribution in importlib_metadata.distributions():
@@ -2051,6 +2072,9 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
             "source_data_hash": source_data_hash(local_env.DATA_DIR),
             "source_row_counts": source_counts,
             "observed_outcome_counts": outcome_counts,
+            # None when the frame carries no subject identifiers (kept rather
+            # than omitted so readers can tell "not recorded" from "zero").
+            "children": children,
         },
         "code": git_metadata(local_env.ROOT_DIR),
         "runtime": {

@@ -165,6 +165,7 @@ def test_dse_native_restriction_keeps_only_the_810_reference_form():
     assert (filtered["survey_vocab_max"] == data_utils.DSE_NATIVE_VOCAB_MAX).all()
 
 
+@requires_real_db
 def test_dse_native_restriction_on_the_real_pool():
     """The real sources: which studies survive, and how much of each outcome.
 
