@@ -122,6 +122,13 @@ def build_subject_scale_of_z(spec, *, anchor_z, name):
     return tau_of_z, tau_young
 
 
+#: Anchor order for VG22's child-factor gauge, as indices into the effect order
+#: ``(b0u, b1u, b0q, b1q)``: the two levels first, then the production-ratio
+#: rate, with the comprehension rate last so it carries a diagonal at no
+#: registered rank. See :func:`build_child_factor` for why.
+CHILD_FACTOR_ANCHOR_ORDER = (0, 2, 3, 1)
+
+
 def build_child_factor(
     spec,
     *,
@@ -144,7 +151,8 @@ def build_child_factor(
     ratio level and rate. The graph::
 
         tau        = [tau_subj_u_0, tau_subj_u_1, tau_subj_q_0, tau_subj_q_1]
-        W          lower-triangular in its leading k x k block, positive diagonal
+        W          triangular with a positive diagonal when its rows are taken
+                   in the anchor order (b0u, b0q, b1q, b1u) -- see below
         L[i, :]    = tau[i] * W[i, :] / ||W[i, :]||          # unit directions
         z          ~ Normal(0, 1), dims (subject_id, factor)
         b          = z @ L.T                                  # (subject, 4)
@@ -156,14 +164,28 @@ def build_child_factor(
     what keeps ``tau_subj_u_0`` meaning the same between-child spread it means in
     VG10, VG19 and VG20 rather than something rank-dependent.
 
-    **Why the triangular constraint.** ``L`` and ``L Q`` give the same covariance
-    for any orthogonal ``Q``, so without it the loadings sit on a rotational
-    ridge -- a sampling problem, not merely an interpretive one. Fixing the
-    leading ``k x k`` block to be lower-triangular with a positive diagonal
-    removes exactly the ``k (k - 1) / 2`` rotational degrees of freedom, leaving
+    **Why the triangular constraint, and why the anchor order.** ``L`` and
+    ``L Q`` give the same covariance for any orthogonal ``Q``, so without it the
+    loadings sit on a rotational ridge -- a sampling problem, not merely an
+    interpretive one. Taking ``k`` anchor rows and making their ``k x k`` block
+    lower-triangular with a positive diagonal removes exactly the
+    ``k (k - 1) / 2`` rotational degrees of freedom and the reflections, leaving
     ``4 + (k - 1) * (k / 2 + 4 - k)`` free covariance parameters: 4, 7 and 9 at
     ranks 1, 2 and 3, reproducing the rank table in
-    ``notes/202608221000-four-by-four-gate1.md`` §4.
+    ``notes/202608221000-four-by-four-gate1.md`` §4. Which rows anchor is a
+    gauge choice -- it changes neither ``Sigma`` nor the counts -- but it is not
+    a free one: a diagonal only pins its column's sign if the row it sits on has
+    real between-child variance, because a row whose ``tau`` is ~0 contributes
+    ~0 to ``L`` whatever its direction, and its constraint then pins nothing.
+    The anchors are therefore :data:`CHILD_FACTOR_ANCHOR_ORDER`,
+    ``(b0u, b0q, b1q, b1u)``: the two levels, then the production-ratio rate,
+    with the comprehension rate last so it carries a diagonal at no registered
+    rank. ``b1u`` is the one effect every fit of this family puts at ~0 (Gate 1:
+    0.079; the dev and first ``rep`` fits: 0.04), and anchoring the second
+    factor on it is exactly what split the 2026-08-23 ``rep`` fit into mirror
+    modes -- see ``notes/202608231420-vg22-factor-anchor-bimodality.md``. At
+    ``k = 1`` the anchor order changes nothing: every row has one entry and only
+    ``b0u``'s is positive.
 
     **Name preservation.** ``tau_subj_u`` and ``tau_subj_q`` are emitted as
     scalar deterministics equal to the two level scales, and
@@ -191,17 +213,29 @@ def build_child_factor(
     tau1_q = pm.HalfNormal("tau_subj_q_1", sigma=spec.tau1_q_sigma)
     tau = pm.math.stack([tau0_u, tau1_u, tau0_q, tau1_q])
 
-    # Rows of the raw loading matrix. Row i carries min(i + 1, k) entries, so the
-    # leading k x k block is lower-triangular; its diagonal is HalfNormal so the
-    # rotation (and the overall sign of each factor) is pinned. Rows are built
-    # individually rather than as a masked matrix because the mask would put
-    # structural zeros in the trace and make the free-parameter count unreadable.
+    # Rows of the raw loading matrix, emitted in effect order but constrained in
+    # anchor order: the row at anchor position p carries min(p + 1, k) entries
+    # and, for p < k, a HalfNormal at column p, so the k anchor rows form a
+    # lower-triangular block with a positive diagonal and the rotation (and the
+    # sign of each factor) is pinned on rows that have variance to pin it with.
+    # Rows are built individually rather than as a masked matrix because the
+    # mask would put structural zeros in the trace and make the free-parameter
+    # count unreadable.
+    width_of = {
+        effect: min(position + 1, k)
+        for position, effect in enumerate(CHILD_FACTOR_ANCHOR_ORDER)
+    }
+    diagonal_of = {
+        effect: position
+        for position, effect in enumerate(CHILD_FACTOR_ANCHOR_ORDER)
+        if position < k
+    }
     rows = []
     for i in range(4):
-        width = min(i + 1, k)
+        width = width_of[i]
         entries = []
         for j in range(width):
-            if j == i:
+            if diagonal_of.get(i) == j:
                 entries.append(pm.HalfNormal(f"subject_factor_w_{i}{j}", sigma=1.0))
             else:
                 entries.append(pm.Normal(f"subject_factor_w_{i}{j}", mu=0.0, sigma=1.0))

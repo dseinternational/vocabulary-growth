@@ -394,14 +394,21 @@ class SubjectFactorPriorParams:
     **The free-parameter count reproduces the note's rank table exactly**, which
     is the check that this parameterisation is the one the gate analysed. Row
     directions live on a ``(k-1)``-sphere and ``L`` is fixed against rotation by
-    constraining its leading ``k x k`` block to be lower-triangular with a
-    positive diagonal, so the covariance carries
+    taking ``k`` anchor rows and constraining their ``k x k`` block to be
+    lower-triangular with a positive diagonal, so the covariance carries
     ``4 + (k - 1) * (k / 2 + 4 - k)`` free parameters: **4** at ``k = 1``,
     **7** at 2, **9** at 3 and **10** at 4 -- against the note's 4, 7, 9, 10.
 
     Without that triangular constraint ``L`` and ``L Q`` are the same covariance
     for any orthogonal ``Q``, which leaves the loadings on a rotational ridge and
-    is a sampling problem rather than merely an interpretive one.
+    is a sampling problem rather than merely an interpretive one. The anchors
+    are ``(b0u, b0q, b1q, b1u)`` -- the two levels, then the production-ratio
+    rate, with the comprehension rate last -- because a diagonal only pins its
+    column's sign if the row it sits on has real between-child variance, and
+    ``b1u``'s is ~0 in every fit of this family. Anchoring on it is what split
+    the first ``rep`` fit into mirror modes (``gp_utils.build_child_factor``,
+    ``notes/202608231420-vg22-factor-anchor-bimodality.md``). The anchor order
+    is a gauge choice: it changes neither ``Sigma`` nor the counts.
 
     **What is nested, and what is not.** ``rank = 1`` makes every child's four
     effects one deviate scaled four ways -- perfect correlation throughout, the
