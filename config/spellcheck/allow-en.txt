@@ -86,6 +86,7 @@ apraxia
 argmin
 arrowsize
 asis
+autodiff
 azcopy
 baselining
 bimodality
@@ -134,6 +135,7 @@ incl
 indep
 isna
 iterrows
+jittered
 judgments
 lengthscale
 logind
@@ -201,6 +203,7 @@ swapon
 tanh
 timepoint
 toddlerhood
+trigamma
 unassessable
 unbiasedness
 unbuildable

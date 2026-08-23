@@ -548,6 +548,41 @@ def subject_factor_spec(value) -> SubjectFactorPriorParams | None:
     return value if isinstance(value, SubjectFactorPriorParams) else None
 
 
+@dataclass(frozen=True)
+class SingletonMarginalisationParams:
+    """Integrate out the child effects that only one observation ever sees.
+
+    Selects the likelihood in :mod:`~vocab_growth.models.subject_marginal`: a
+    child assessed once has its ``delta_subject`` integrated out by
+    Gauss-Hermite quadrature, while a child with repeated administrations keeps
+    an explicit effect. The marginal likelihood still contains ``tau_subject``,
+    so this is **not** the subject-RE removal that
+    ``notes/202608050900-td-hierarchical-geometry.md`` §7 rejected: the model,
+    ``kappa``'s meaning as within-child dispersion, and the posterior of every
+    retained quantity are unchanged up to quadrature error. What changes is the
+    sampled space, which loses the thousands of prior-dominated singleton
+    dimensions that carry the funnel mass. See
+    ``notes/202608231410-td-geometry-remaining-levers.md`` §3.
+
+    It is still a graph change, so it needs a refit; and it changes what a
+    marginalised row's pointwise ``log_likelihood`` and posterior predictive
+    draw mean -- both become marginal rather than conditional -- so ``elpd``
+    values do not compare across the change.
+    """
+
+    n_nodes: int
+    """Gauss-Hermite nodes for each marginalised row.
+
+    Required rather than defaulted, so a model's accuracy setting is written at
+    its registration site. Twenty is what
+    :data:`~vocab_growth.models.subject_marginal.DEFAULT_QUADRATURE_NODES`
+    recommends, and the value the node-sensitivity check doubles."""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.n_nodes, int) or self.n_nodes < 2:
+            raise ValueError(f"n_nodes must be an integer >= 2; got {self.n_nodes!r}.")
+
+
 # ============================================================
 # Univariate model definition
 # ============================================================
@@ -730,6 +765,29 @@ class UnivariateREModelDefinition(UnivariateModelDefinition):
     if the cause is missing within-child replication rather than bad coordinates,
     which is what §4 of the note argues. Kept for the divergence reduction, not as
     a BFMI remedy. See :class:`SubjectVariancePartitionParams`."""
+
+
+@dataclass
+class UnivariateMarginalisedREModelDefinition(UnivariateREModelDefinition):
+    """A univariate RE model whose singleton child effects are integrated out.
+
+    On its own subclass for the reason :class:`UnivariateREModelDefinition`
+    gives: a fit is validated by comparing ``dataclasses.asdict`` field for
+    field, so a definition class that gains a field invalidates every existing
+    fit of that class. VG11 and VG12 are models of record fitted with every
+    singleton child effect sampled explicitly; until the VG12 bench says the
+    lever earns their refits, the field lives here and they stay instances of
+    the parent class.
+
+    The engine reads the field through ``getattr`` with a default, so a plain
+    :class:`UnivariateREModelDefinition` still builds.
+    """
+
+    singleton_marginalisation: SingletonMarginalisationParams | None = None
+    """If set, integrate out the child effects of children seen once.
+
+    Requires ``use_subject_re``; :func:`validate_model_definition` rejects the
+    combination without it, where the flag would silently do nothing."""
 
 
 # ============================================================
@@ -3736,6 +3794,13 @@ def validate_model_definition(definition) -> None:
         definition, "use_subject_re_u", False
     ):
         raise ValueError(f"{prefix} cross-lag requires use_subject_re_u=True.")
+
+    marginalisation = getattr(definition, "singleton_marginalisation", None)
+    if marginalisation is not None and not getattr(definition, "use_subject_re", False):
+        raise ValueError(
+            f"{prefix}.singleton_marginalisation integrates out child effects, but "
+            "the model has no subject random effect to integrate."
+        )
 
     _validate_positive_scale_fields(definition, path=prefix)
 
