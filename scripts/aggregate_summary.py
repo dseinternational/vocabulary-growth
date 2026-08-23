@@ -95,11 +95,26 @@ def parse_log_timings(log_path: str) -> dict[str, Any]:
     }
 
 
+def _group_names(idata) -> set[str]:
+    """The trace's group names, without the paths ArviZ 1.x prefixes them with.
+
+    ``groups`` is a property on the ``DataTree`` ArviZ 1.x reads a trace into,
+    and its entries are paths ("/sample_stats"); it was a method returning bare
+    names before. Accept either, and strip the path — testing membership against
+    the raw paths silently finds nothing, which here would report every model as
+    having no divergences.
+    """
+    groups = idata.groups
+    if callable(groups):  # pre-1.x readers
+        groups = groups()
+    return {str(name).rsplit("/", 1)[-1] for name in groups}
+
+
 def trace_divergences(trace_path: str) -> int | None:
     if not os.path.exists(trace_path):
         return None
     idata = az.from_netcdf(trace_path)
-    if "sample_stats" not in idata.groups():
+    if "sample_stats" not in _group_names(idata):
         return None
     diverging = idata.sample_stats.get("diverging")
     if diverging is None:
