@@ -57,10 +57,35 @@ ages against VG12's 98, and a larger ``kappa`` is a sharper spike.) The nodes
 are therefore placed at the integrand's own mode and scaled by its curvature --
 adaptive Gauss-Hermite, the rule ``lme4`` and ``glmmTMB`` use for the same
 reason. The mode comes from a short damped Newton search on **finite
-differences** of the log-integrand rather than on its analytic derivatives: that
-keeps the whole expression a composition of ordinary Beta-Binomial evaluations,
-so PyTensor differentiates it exactly without needing a third derivative of
-``gammaln``, which it does not implement.
+differences** of the log-integrand rather than on its analytic derivatives,
+which would need digamma and trigamma and then, for the gradient with respect to
+the model's parameters, a third derivative of ``gammaln`` that PyTensor does not
+implement. The search is then held out of the gradient altogether, so what the
+sampler differentiates is the quadrature at fixed nodes; :func:`_marginal_logp`
+gives the reasoning and the measurement behind that.
+
+What the implementation requires
+--------------------------------
+
+Three things here are load-bearing, and each was found by fitting a model rather
+than by testing the density -- in every case the value was right and the
+gradient was not. See ``notes/202608231745-singleton-marginalisation.md``
+section 3.
+
+* **Rows ordered marginalised-first**, so the two blocks are slices.
+  :func:`singleton_first_order` produces that order and the engine's data
+  preparation applies it. Indexing the blocks out and permuting the result back
+  returned non-finite gradients; the scatter that PyTensor rewrites a
+  ``set_subtensor`` into is an in-place write, and nutpie evaluates the density
+  from several threads at once, so it raced.
+* **Both blocks on this module's own density.** ``pm.logp`` of a
+  ``pm.BetaBinomial`` agrees with :func:`betabinomial_logp` on the value to
+  1e-9, but inside a ``CustomDist`` it returns a non-finite gradient at most
+  points a sampler's initialisation jitter visits.
+* **Double precision throughout.** PyTensor types a bare Python scalar constant
+  as the narrowest dtype that holds it, and single-precision ``gammaln`` of an
+  argument in the hundreds is wrong in the fourth decimal -- a hundred times the
+  quadrature error this module exists to keep small, and silent.
 """
 
 from __future__ import annotations

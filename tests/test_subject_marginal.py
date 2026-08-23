@@ -10,15 +10,20 @@ that admissible, and which these tests pin:
 1. it is **exact** -- the marginal log density matches a fine-grid numerical
    integral of the same integrand, at the dispersion and scale both models of
    record actually occupy, and it does not move when the node count doubles;
-2. it changes **nothing** for a child seen repeatedly -- those rows keep the
-   conditional Beta-Binomial density the models have always used, to the last
-   bit;
+2. it changes **nothing of substance** for a child seen repeatedly -- those rows
+   keep the conditional Beta-Binomial density the models have always used, to
+   within 1e-9. Not bit for bit: the block is computed by this module's
+   written-out density rather than by ``pm.logp``, because inside a
+   ``CustomDist`` PyMC's version returns a non-finite gradient;
 3. it removes exactly the singleton dimensions from the sampled space, and
    leaves an exact zero in the linear predictor where the effect used to be;
-4. with the flag off the graph is the one every existing fit was produced
+4. the likelihood reads its two blocks as slices, so it requires -- and the data
+   preparation supplies -- rows ordered with every marginalised row first; and
+5. with the flag off the graph is the one every existing fit was produced
    under, and neither VG11 nor VG12 carries the flag, so their fits stay valid.
 
-See ``notes/202608231410-td-geometry-remaining-levers.md`` §3.
+See ``notes/202608231410-td-geometry-remaining-levers.md`` §3 for the lever and
+``notes/202608231745-singleton-marginalisation.md`` for what building it took.
 """
 
 import dataclasses
