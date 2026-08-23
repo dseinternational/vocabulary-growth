@@ -853,6 +853,15 @@ def _droppable_variables(dataset: Any, *, drop_derived_effects: bool) -> list[st
 #: predates the setting and stored everything.
 NOT_SAMPLED_ATTR = "not_sampled_deterministics"
 
+#: Attribute on ``trace.posterior`` naming, as a JSON list, the model's free
+#: random variables -- the parameters the sampler actually moved, as opposed to
+#: the deterministics computed from them. Written by the ``sample`` stage so a
+#: reader of the stored trace can tell the two apart without rebuilding the
+#: model, which is what pinning PSIS-LOO's relative efficiency to the sampled
+#: parameters needs (:mod:`vocab_growth.loo_reff`). Absent from traces written
+#: before 2026-08-23.
+SAMPLED_PARAMETERS_ATTR = "sampled_parameters"
+
 
 def unsampled_deterministic_names(model: Any) -> list[str]:
     """Names of ``model``'s deterministics the sampler should not store.
@@ -1023,8 +1032,23 @@ def save_trace(
     not_sampled = read_not_sampled_attr(trace)
     if not_sampled is not None:
         record["not_sampled"] = not_sampled
+    sampled = read_sampled_parameters_attr(trace)
+    if sampled is not None:
+        record["sampled_parameters"] = sampled
     record_trace_persistence(output_dir, record)
     return record
+
+
+def _read_name_list_attr(trace: Any, attr: str) -> list[str] | None:
+    """A JSON-list-of-names attribute of the posterior group, or ``None``."""
+    posterior = _group_dataset(trace, "posterior")
+    if posterior is None:
+        return None
+    raw = posterior.attrs.get(attr)
+    if raw is None:
+        return None
+    names = json.loads(raw) if isinstance(raw, str) else list(raw)
+    return [str(name) for name in names]
 
 
 def read_not_sampled_attr(trace: Any) -> list[str] | None:
@@ -1034,14 +1058,16 @@ def read_not_sampled_attr(trace: Any) -> list[str] | None:
     from before the setting existed, which stored everything — or when the
     posterior cannot be read at all.
     """
-    posterior = _group_dataset(trace, "posterior")
-    if posterior is None:
-        return None
-    raw = posterior.attrs.get(NOT_SAMPLED_ATTR)
-    if raw is None:
-        return None
-    names = json.loads(raw) if isinstance(raw, str) else list(raw)
-    return [str(name) for name in names]
+    return _read_name_list_attr(trace, NOT_SAMPLED_ATTR)
+
+
+def read_sampled_parameters_attr(trace: Any) -> list[str] | None:
+    """The free random variables ``trace``'s posterior records as sampled.
+
+    ``None`` when the posterior carries no :data:`SAMPLED_PARAMETERS_ATTR` — a
+    trace written before 2026-08-23 — or cannot be read at all.
+    """
+    return _read_name_list_attr(trace, SAMPLED_PARAMETERS_ATTR)
 
 
 def read_trace_persistence_record(output_dir: str) -> dict[str, Any] | None:

@@ -43,10 +43,12 @@ from scipy.stats import betabinom
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
+    read_sampled_parameters_attr,
     require_full_trace,
     source_data_hash,
     validate_fit_output,
 )
+from vocab_growth.loo_reff import sampled_parameter_reff
 from vocab_growth.models.common_bivariate_re import rebuild_model_context
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.posterior_recompute import missing_deterministics, with_deterministics
@@ -82,12 +84,14 @@ OBS_LEVEL_POSTERIOR = ("f_u_obs", "h_obs", "kappa_u_obs", "kappa_s_obs")
 
 
 def rebuilt_model_for(spec: ModelSpec, fit_dir: str, scratch_dir: str):
-    """The fit's model graph, rebuilt on the current data, for recomputation.
+    """The fit's model graph, rebuilt on the current data.
 
-    Recomputing an observation-level quantity from a stored posterior is only
-    right if the rebuilt graph is the one the posterior came from, on the same
-    rows in the same order; so the fit is first checked against the registered
-    definition and the current source-data hash, and refused by name otherwise.
+    Used to recompute the observation-level posterior a trace does not carry
+    and to name the sampled parameters of a trace that predates the record of
+    them. Recomputing from a stored posterior is only right if the rebuilt graph
+    is the one the posterior came from, on the same rows in the same order; so
+    the fit is first checked against the registered definition and the current
+    source-data hash, and refused by name otherwise.
     """
     definition = MODEL_REGISTRY[spec.short.lower()]
     errors = validate_fit_output(
@@ -101,8 +105,7 @@ def rebuilt_model_for(spec: ModelSpec, fit_dir: str, scratch_dir: str):
             f"at {fit_dir} does not match the registered definition on the current "
             "data -- " + "; ".join(errors)
         )
-    print(f"  rebuilding {spec.short}'s model graph to recompute "
-          f"{', '.join(OBS_LEVEL_POSTERIOR)} …", flush=True)
+    print(f"  rebuilding {spec.short}'s model graph …", flush=True)
     return rebuild_model_context(definition, output_dir=scratch_dir).model
 
 
@@ -359,7 +362,7 @@ def to_marginal_idata(
     })
 
 
-def _summary_row(label: str, loo) -> dict:
+def _summary_row(label: str, loo, reff: float) -> dict:
     k = loo.pareto_k.values if hasattr(loo, "pareto_k") else loo.diagnostics.values
     return {
         "label": label,
@@ -368,6 +371,9 @@ def _summary_row(label: str, loo) -> dict:
         "p_loo": float(loo.p),
         "pareto_k_gt_0.7": int((k > 0.7).sum()),
         "n_subjects": int(k.size),
+        # Relative efficiency over the sampled parameters (loo_reff): recorded
+        # because the Pareto-k column depends on it.
+        "reff": float(reff),
     }
 
 
@@ -378,8 +384,11 @@ def main() -> None:
     n_subjects = analysis_df["subject_code"].nunique()
     print(f"  {len(analysis_df)} observations / {n_subjects} subjects\n")
 
-    conditional_idatas: dict[str, xr.DataTree] = {}
-    marginal_idatas: dict[str, xr.DataTree] = {}
+    # Precomputed LOO results (ELPDData), not traces: az.compare recomputes LOO
+    # with ArviZ's posterior-wide relative efficiency when handed traces, and
+    # the point of loo_reff is that every LOO here shares one convention.
+    conditional_elpds: dict = {}
+    marginal_elpds: dict = {}
     summary_rows: list[dict] = []
 
     # Scratch for the rebuilt models' preparation-stage output (a descriptive
@@ -408,39 +417,54 @@ def main() -> None:
         posterior = (
             posterior.to_dataset() if hasattr(posterior, "to_dataset") else posterior
         )
-        if missing_deterministics(posterior, OBS_LEVEL_POSTERIOR):
+        # The model graph is needed when the trace does not carry the
+        # observation-level posterior (fits since 2026-08-23) and, for a trace
+        # that predates the sampled-parameters record, to name the parameters
+        # LOO's relative efficiency is pinned to (loo_reff). Either way it is
+        # rebuilt once, validated against the definition and the data.
+        sampled = read_sampled_parameters_attr(idata)
+        if missing_deterministics(posterior, OBS_LEVEL_POSTERIOR) or sampled is None:
             model = rebuilt_model_for(spec, os.path.dirname(trace_path), scratch_dir)
+        if sampled is None:
+            sampled = [rv.name for rv in model.free_RVs]
 
         print(f"  conditional LOSO for {spec.short} …", flush=True)
         subj_idata = aggregate_to_subject(idata, analysis_df)
-        loo_cond = az.loo(subj_idata, var_name="y_subj", pointwise=True)
+        reff_cond = sampled_parameter_reff(subj_idata, names=sampled)
+        loo_cond = az.loo(subj_idata, var_name="y_subj", pointwise=True, reff=reff_cond)
+        print(f"    reff (sampled parameters) = {reff_cond:.4f}")
         print(f"    {loo_cond}\n")
-        conditional_idatas[spec.short] = subj_idata
-        summary_rows.append(_summary_row(f"{spec.short}_conditional", loo_cond))
+        conditional_elpds[spec.short] = loo_cond
+        summary_rows.append(_summary_row(f"{spec.short}_conditional", loo_cond, reff_cond))
 
         print(f"  marginal LOSO for {spec.short} …", flush=True)
         marg_idata = to_marginal_idata(idata, analysis_df, spec, model=model)
-        loo_marg = az.loo(marg_idata, var_name="y_subj", pointwise=True)
+        # The marginal idata's posterior is the thinned one the held-out
+        # predictive was computed on, so its relative efficiency is measured
+        # there too.
+        reff_marg = sampled_parameter_reff(marg_idata, names=sampled)
+        loo_marg = az.loo(marg_idata, var_name="y_subj", pointwise=True, reff=reff_marg)
+        print(f"    reff (sampled parameters, thinned) = {reff_marg:.4f}")
         print(f"    {loo_marg}\n")
-        marginal_idatas[spec.short] = marg_idata
-        summary_rows.append(_summary_row(f"{spec.short}_marginal", loo_marg))
+        marginal_elpds[spec.short] = loo_marg
+        summary_rows.append(_summary_row(f"{spec.short}_marginal", loo_marg, reff_marg))
 
         pd.DataFrame(
             [
-                _summary_row(f"{spec.short}_conditional", loo_cond),
-                _summary_row(f"{spec.short}_marginal", loo_marg),
+                _summary_row(f"{spec.short}_conditional", loo_cond, reff_cond),
+                _summary_row(f"{spec.short}_marginal", loo_marg, reff_marg),
             ]
         ).to_csv(os.path.join(OUT_DIR, f"loso_loo_{spec.short}.csv"), index=False)
 
     # Pairwise comparisons.
-    if len(conditional_idatas) >= 2:
+    if len(conditional_elpds) >= 2:
         print("\n=== Conditional comparison ===")
-        df_cond = az.compare(conditional_idatas, var_name="y_subj")
+        df_cond = az.compare(conditional_elpds)
         print(df_cond.to_string())
         df_cond.to_csv(os.path.join(OUT_DIR, "loso_compare_conditional.csv"))
 
         print("\n=== Marginal comparison (honest one) ===")
-        df_marg = az.compare(marginal_idatas, var_name="y_subj")
+        df_marg = az.compare(marginal_elpds)
         print(df_marg.to_string())
         df_marg.to_csv(os.path.join(OUT_DIR, "loso_compare_marginal.csv"))
 

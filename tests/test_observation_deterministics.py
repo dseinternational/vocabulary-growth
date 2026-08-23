@@ -272,3 +272,14 @@ def test_recompute_works_on_a_thinned_posterior(two_fits):
     np.testing.assert_allclose(
         rebuilt["f_u_obs"].values, full_post["f_u_obs"].values, rtol=1e-10, atol=1e-12
     )
+
+
+def test_trace_records_the_sampled_parameters(two_fits):
+    # What loo_reff pins PSIS-LOO's relative efficiency to, readable from the
+    # stored trace without the model.
+    from vocab_growth.fit_artifacts import read_sampled_parameters_attr
+
+    lean, full = two_fits
+    expected = [rv.name for rv in lean.model.free_RVs]
+    assert read_sampled_parameters_attr(lean.trace) == expected
+    assert read_sampled_parameters_attr(full.trace) == expected

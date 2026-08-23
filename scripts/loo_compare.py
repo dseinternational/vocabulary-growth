@@ -33,6 +33,7 @@ import pandas as pd
 import xarray as xr
 
 from vocab_growth import environment as env
+from vocab_growth.loo_reff import reff_or_default
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
 MODELS_DIR = env.models_output_dir()
@@ -68,7 +69,7 @@ class LooEntry:
     n_high_pareto: int
 
 
-def _loo_summary_row(label: str, loo) -> dict:
+def _loo_summary_row(label: str, loo, reff=None) -> dict:
     if hasattr(loo, "pareto_k"):
         k = loo.pareto_k.values
     else:
@@ -78,6 +79,10 @@ def _loo_summary_row(label: str, loo) -> dict:
         "elpd_loo": float(loo.elpd),
         "se": float(loo.se),
         "p_loo": float(loo.p),
+        # The relative efficiency this LOO used: pinned to the sampled
+        # parameters where the trace records them (loo_reff), else ArviZ's
+        # posterior-wide default, so a mixed-convention table shows it.
+        "reff": None if reff is None else float(reff),
         "looic": float(-2.0 * loo.elpd),
         "looic_se": float(2.0 * loo.se),
         "pareto_k_gt_0.7": int((k > 0.7).sum()),
@@ -130,13 +135,14 @@ def per_model_loo() -> dict[str, list[dict]]:
         # warning rather than aborting the whole comparison, matching the
         # missing-trace / missing-log_likelihood skips above. The high Pareto-k
         # counts already flag the models whose PSIS-LOO is unreliable.
+        reff = reff_or_default(idata, label=short)
         if short in UNIVARIATE:
             try:
-                loo = az.loo(idata, pointwise=True)
+                loo = az.loo(idata, pointwise=True, reff=reff)
             except Exception as exc:  # noqa: BLE001 - any LOO failure -> skip
                 print(f"  {short}: LOO failed ({type(exc).__name__}: {exc}) — skipped")
                 continue
-            row = _loo_summary_row("y_obs", loo)
+            row = _loo_summary_row("y_obs", loo, reff)
             rows.append(row)
             print(
                 f"  {short}: elpd_loo = {row['elpd_loo']:.1f} "
@@ -147,11 +153,11 @@ def per_model_loo() -> dict[str, list[dict]]:
             _attach_joint_log_likelihood(idata)
             for var in ("y_u_obs", "y_s_obs", "y_joint"):
                 try:
-                    loo = az.loo(idata, pointwise=True, var_name=var)
+                    loo = az.loo(idata, pointwise=True, var_name=var, reff=reff)
                 except Exception as exc:  # noqa: BLE001 - any LOO failure -> skip
                     print(f"  {short} [{var}]: LOO failed ({type(exc).__name__}: {exc}) — skipped")
                     continue
-                row = _loo_summary_row(var, loo)
+                row = _loo_summary_row(var, loo, reff)
                 rows.append(row)
                 print(
                     f"  {short} [{var}]: elpd_loo = {row['elpd_loo']:.1f} "
@@ -174,11 +180,22 @@ def compare_pair(
     *,
     var_name: str | None = None,
 ) -> None:
-    """Run az.compare on the given InferenceData objects and write CSV."""
-    compare_dict = {name: idata for name, idata in members}
+    """Run az.compare on the given InferenceData objects and write CSV.
+
+    Each member's LOO is computed here first, with its relative efficiency
+    pinned to the sampled parameters (loo_reff), and the results are handed to
+    ``az.compare`` as ``ELPDData`` -- passing the traces would have it recompute
+    LOO with ArviZ's posterior-wide default.
+    """
+    compare_dict = {}
+    for name, idata in members:
+        reff = reff_or_default(idata, label=name)
+        try:
+            compare_dict[name] = az.loo(idata, pointwise=True, var_name=var_name, reff=reff)
+        except Exception as exc:  # noqa: BLE001 - degenerate PSIS-LOO -> skip this comparison
+            print(f"  compare {tag}: LOO for {name} failed ({type(exc).__name__}: {exc}) — skipped")
+            return
     kwargs = {"method": "stacking"}
-    if var_name is not None:
-        kwargs["var_name"] = var_name
     try:
         df = az.compare(compare_dict, **kwargs)
     except Exception as exc:  # noqa: BLE001 - degenerate PSIS-LOO -> skip this comparison

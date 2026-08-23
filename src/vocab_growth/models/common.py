@@ -55,6 +55,7 @@ from vocab_growth.fit_artifacts import (
     DIAGNOSTICS_SUMMARY_FILENAME,
     FIT_MANIFEST_FILENAME,
     NOT_SAMPLED_ATTR,
+    SAMPLED_PARAMETERS_ATTR,
     TracePersistence,
     accepted_rhat_exception,
     convergence_caveats,
@@ -71,6 +72,7 @@ from vocab_growth.fit_artifacts import (
     write_fit_state,
     write_json_atomic,
 )
+from vocab_growth.loo_reff import sampled_parameter_reff
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     slope_anchor_logit_coeffs,
@@ -1042,10 +1044,15 @@ def sample(context: ModelFitContext, *, store_observation_deterministics: bool =
             var_names=var_names,
         )
 
-    # Stored as a JSON string rather than a list: netCDF attribute support for
+    # Stored as JSON strings rather than lists: netCDF attribute support for
     # string arrays differs between backends, and a single string round-trips
-    # through every one of them.
+    # through every one of them. The sampled-parameters record is what lets a
+    # reader of the stored trace pin PSIS-LOO's relative efficiency to the
+    # parameters the sampler moved (loo_reff) without rebuilding the model.
     trace.posterior.attrs[NOT_SAMPLED_ATTR] = json.dumps(not_sampled)
+    trace.posterior.attrs[SAMPLED_PARAMETERS_ATTR] = json.dumps(
+        [rv.name for rv in context.model.free_RVs]
+    )
 
     context.set_trace(trace)
 
@@ -1077,6 +1084,8 @@ def emit_loo_summary(
     loo_by_label: dict,
     dropped_by_label: dict[str, int],
     output_dir: str,
+    *,
+    reff: float | None = None,
 ) -> pd.DataFrame:
     """Persist the LOO-CV result, which every fit computed and then discarded.
 
@@ -1091,6 +1100,11 @@ def emit_loo_summary(
     is the signal that a reported ``elpd`` is optimistic. ArviZ's own threshold
     (``good_k``, sample-size dependent) is recorded rather than a hard-coded
     0.7, so the bands mean the same thing across fits of different lengths.
+
+    ``reff`` is the relative efficiency every LOO here was computed with — pinned
+    to the sampled parameters (:mod:`vocab_growth.loo_reff`) — recorded because
+    the Pareto-k bands depend on it and a reader comparing fits should be able
+    to see they share the convention.
     """
     rows = []
     for label, loo in loo_by_label.items():
@@ -1119,6 +1133,7 @@ def emit_loo_summary(
                 "pareto_k_very_bad": counts["very_bad"],
                 "good_k_threshold": None if good_k is None else float(good_k),
                 "scale": str(getattr(loo, "scale", "log")),
+                "reff": None if reff is None else float(reff),
             }
         )
 
@@ -1127,7 +1142,7 @@ def emit_loo_summary(
     return frame
 
 
-def _loo_dropping_degenerate(idata, var_name=None):
+def _loo_dropping_degenerate(idata, var_name=None, *, reff=None):
     """Compute PSIS-LOO, excluding observations with a constant pointwise
     log-likelihood.
 
@@ -1172,7 +1187,7 @@ def _loo_dropping_degenerate(idata, var_name=None):
     # Compute LOO for the resolved ``name`` (not the raw ``var_name``): when
     # ``var_name`` is None, ``az.loo`` rejects a log-likelihood group holding
     # more than one array, so keep the LOO target identical to the drop target.
-    return az.loo(loo_source, var_name=name), n_dropped
+    return az.loo(loo_source, var_name=name, reff=reff), n_dropped
 
 
 def diagnostics(
@@ -1316,9 +1331,17 @@ def diagnostics(
 
     context.set_trace(trace)
 
+    # Relative efficiency over the sampled parameters, not over whatever the
+    # posterior group happens to store (loo_reff explains the difference and
+    # the decision behind it). Computed once and shared by every LOO below.
+    reff = sampled_parameter_reff(
+        context.trace, names=[rv.name for rv in context.model.free_RVs]
+    )
+    console.print(f"PSIS-LOO relative efficiency (sampled parameters): {reff:.4f}")
+
     dropped_by_label: dict[str, int] = {}
     if loo_var_names is None:
-        loocv, n_dropped = _loo_dropping_degenerate(context.trace)
+        loocv, n_dropped = _loo_dropping_degenerate(context.trace, reff=reff)
         dropped_by_label["all"] = n_dropped
         if n_dropped:
             console.print(
@@ -1329,14 +1352,14 @@ def diagnostics(
         heading("LOO-CV", style="bold cyan")
         console.print(loocv)
         emit_loo_summary(
-            {"all": loocv}, dropped_by_label, context.reporting.output_dir
+            {"all": loocv}, dropped_by_label, context.reporting.output_dir, reff=reff
         )
     else:
         loocv_by_name = {}
         by_label = {}
         for var_name, label in loo_var_names:
             loocv_by_name[var_name], n_dropped = _loo_dropping_degenerate(
-                context.trace, var_name=var_name
+                context.trace, var_name=var_name, reff=reff
             )
             by_label[label] = loocv_by_name[var_name]
             dropped_by_label[label] = n_dropped
@@ -1349,7 +1372,9 @@ def diagnostics(
         for var_name, label in loo_var_names:
             heading(f"LOO-CV — {label}", style="bold cyan")
             console.print(loocv_by_name[var_name])
-        emit_loo_summary(by_label, dropped_by_label, context.reporting.output_dir)
+        emit_loo_summary(
+            by_label, dropped_by_label, context.reporting.output_dir, reff=reff
+        )
 
 
 def sample_posterior_predictive(
