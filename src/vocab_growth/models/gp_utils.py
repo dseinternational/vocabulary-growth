@@ -122,6 +122,137 @@ def build_subject_scale_of_z(spec, *, anchor_z, name):
     return tau_of_z, tau_young
 
 
+def build_child_factor(
+    spec,
+    *,
+    tau0_u_sigma,
+    tau0_q_sigma,
+    age_obs_months,
+    subject_obs,
+):
+    """Create VG22's low-rank factor over the four child effects.
+
+    ``spec`` is a
+    :class:`~vocab_growth.models.definitions.SubjectFactorPriorParams`;
+    ``tau0_u_sigma`` / ``tau0_q_sigma`` are the definition's own scalar
+    ``tau_subj_*_sigma`` priors, re-used for the two LEVEL scales so the parent's
+    priors are inherited rather than restated; ``age_obs_months`` is
+    unstandardised age in months, because the rate is per year of real age.
+
+    The four effects, in this order throughout, are
+    ``(b0u, b1u, b0q, b1q)`` -- comprehension level and rate, then production
+    ratio level and rate. The graph::
+
+        tau        = [tau_subj_u_0, tau_subj_u_1, tau_subj_q_0, tau_subj_q_1]
+        W          lower-triangular in its leading k x k block, positive diagonal
+        L[i, :]    = tau[i] * W[i, :] / ||W[i, :]||          # unit directions
+        z          ~ Normal(0, 1), dims (subject_id, factor)
+        b          = z @ L.T                                  # (subject, 4)
+        shift_u(obs) = b[subject, 0] + b[subject, 1] * (age - ref) / 12
+        shift_q(obs) = b[subject, 2] + b[subject, 3] * (age - ref) / 12
+
+    so ``Sigma = L L'`` is positive semi-definite by construction with no
+    constraint to enforce, and ``Sigma_ii = tau[i] ** 2`` exactly -- which is
+    what keeps ``tau_subj_u_0`` meaning the same between-child spread it means in
+    VG10, VG19 and VG20 rather than something rank-dependent.
+
+    **Why the triangular constraint.** ``L`` and ``L Q`` give the same covariance
+    for any orthogonal ``Q``, so without it the loadings sit on a rotational
+    ridge -- a sampling problem, not merely an interpretive one. Fixing the
+    leading ``k x k`` block to be lower-triangular with a positive diagonal
+    removes exactly the ``k (k - 1) / 2`` rotational degrees of freedom, leaving
+    ``4 + (k - 1) * (k / 2 + 4 - k)`` free covariance parameters: 4, 7 and 9 at
+    ranks 1, 2 and 3, reproducing the rank table in
+    ``notes/202608221000-four-by-four-gate1.md`` §4.
+
+    **Name preservation.** ``tau_subj_u`` and ``tau_subj_q`` are emitted as
+    scalar deterministics equal to the two level scales, and
+    ``delta_subj_u`` / ``delta_subj_q`` as the per-child offsets at the reference
+    age, so every consumer written against the constant-offset models keeps
+    working and reads a quantity with a stated age attached -- the same contract
+    :func:`build_child_slope` and :func:`build_subject_scale_of_z` keep.
+    ``rho_uq`` is emitted as the implied level-level correlation so that VG20's
+    comparator reads the quantity VG20 estimates, and the full 4x4 correlation is
+    emitted as ``subject_factor_corr`` because with a factor form the individual
+    correlations are derived rather than sampled.
+
+    Returns ``(shift_u_obs, shift_q_obs, tau0_u, tau0_q)``.
+    """
+    k = int(spec.rank)
+    if not tau0_u_sigma > 0 or not tau0_q_sigma > 0:
+        raise ValueError(
+            "child-factor level scales must be positive; got "
+            f"tau0_u_sigma={tau0_u_sigma!r}, tau0_q_sigma={tau0_q_sigma!r}."
+        )
+
+    tau0_u = pm.HalfNormal("tau_subj_u_0", sigma=tau0_u_sigma)
+    tau1_u = pm.HalfNormal("tau_subj_u_1", sigma=spec.tau1_u_sigma)
+    tau0_q = pm.HalfNormal("tau_subj_q_0", sigma=tau0_q_sigma)
+    tau1_q = pm.HalfNormal("tau_subj_q_1", sigma=spec.tau1_q_sigma)
+    tau = pm.math.stack([tau0_u, tau1_u, tau0_q, tau1_q])
+
+    # Rows of the raw loading matrix. Row i carries min(i + 1, k) entries, so the
+    # leading k x k block is lower-triangular; its diagonal is HalfNormal so the
+    # rotation (and the overall sign of each factor) is pinned. Rows are built
+    # individually rather than as a masked matrix because the mask would put
+    # structural zeros in the trace and make the free-parameter count unreadable.
+    rows = []
+    for i in range(4):
+        width = min(i + 1, k)
+        entries = []
+        for j in range(width):
+            if j == i:
+                entries.append(pm.HalfNormal(f"subject_factor_w_{i}{j}", sigma=1.0))
+            else:
+                entries.append(pm.Normal(f"subject_factor_w_{i}{j}", mu=0.0, sigma=1.0))
+        if width < k:
+            entries.extend([pt.constant(0.0)] * (k - width))
+        rows.append(pm.math.stack(entries))
+    W = pm.math.stack(rows)  # (4, k)
+
+    # Unit rows, so tau carries the whole marginal scale. The floor is numerical
+    # insurance only: with a HalfNormal on every leading diagonal entry and
+    # Normals elsewhere, a zero row has probability zero.
+    norms = pm.math.sqrt(pm.math.sum(W**2, axis=1) + 1e-12)
+    L = pm.Deterministic(
+        "subject_factor_loadings",
+        (tau / norms)[:, None] * W,
+        dims=("child_effect4", "factor"),
+    )
+
+    sigma_mat = pm.math.dot(L, L.T)
+    sd = pm.math.sqrt(pm.math.diag(sigma_mat))
+    corr = pm.Deterministic(
+        "subject_factor_corr",
+        sigma_mat / (sd[:, None] * sd[None, :]),
+        dims=("child_effect4", "child_effect4_b"),
+    )
+    # The element VG20 estimates, so its comparator and the recovery scorer read
+    # the same named quantity here as there.
+    _ = pm.Deterministic("rho_uq", corr[0, 2])
+
+    z = pm.Normal(
+        "subject_factor_z", mu=0.0, sigma=1.0, dims=("subject_id", "factor")
+    )
+    b = pm.math.dot(z, L.T)  # (subject, 4)
+
+    b0_u = pm.Deterministic("b0_tau_subj_u", b[:, 0], dims="subject_id")
+    b1_u = pm.Deterministic("b1_tau_subj_u", b[:, 1], dims="subject_id")
+    b0_q = pm.Deterministic("b0_tau_subj_q", b[:, 2], dims="subject_id")
+    b1_q = pm.Deterministic("b1_tau_subj_q", b[:, 3], dims="subject_id")
+
+    # Constant-offset names, kept for every downstream reader.
+    _ = pm.Deterministic("tau_subj_u", tau0_u)
+    _ = pm.Deterministic("tau_subj_q", tau0_q)
+    _ = pm.Deterministic("delta_subj_u", b0_u, dims="subject_id")
+    _ = pm.Deterministic("delta_subj_q", b0_q, dims="subject_id")
+
+    d_obs = (pt.as_tensor_variable(age_obs_months) - spec.ref_age_months) / 12.0
+    shift_u = b0_u[subject_obs] + b1_u[subject_obs] * d_obs
+    shift_q = b0_q[subject_obs] + b1_q[subject_obs] * d_obs
+    return shift_u, shift_q, tau0_u, tau0_q
+
+
 def build_child_slope(spec, *, age_obs_months, subject_obs, ref_age_months, name):
     """Create the VG19 child intercept-and-slope block and return its closure.
 

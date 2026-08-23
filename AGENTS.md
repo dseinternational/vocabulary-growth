@@ -129,7 +129,7 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 
 The full, canonical list of models -- each model's population, outcome, structure, and purpose -- is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
 
-There are currently seventeen registered models (`VG01`-`VG16`, `VG19` and `VG20`, with retired `VG06` omitted and `VG17`/`VG18` reserved for the exploratory sign-group modules), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag and correlated-random-effect structures.
+There are currently nineteen registered models (`VG01`-`VG16` and `VG19`-`VG22`, with retired `VG06` omitted and `VG17`/`VG18` reserved for the exploratory sign-group modules), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag, correlated-random-effect, child-slope and low-rank-factor structures.
 
 ### Shared utilities (`dse_research_utils`)
 

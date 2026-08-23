@@ -1000,6 +1000,45 @@ def _child_slope_offsets(context: BivariateContext, definition):
     )
 
 
+def _child_factor_block(context: BivariateContext):
+    """VG22's loading matrix, or ``None``.
+
+    Detected by the one name :func:`~vocab_growth.models.gp_utils.build_child_factor`
+    emits for it. Checked **before** :func:`_child_slope_block` and
+    :func:`_subject_scales`, both of which a factor model would otherwise match:
+    it emits ``tau_subj_*_0`` and ``tau_subj_*_1`` like a slope model, and a
+    ``tau_subj_*`` like a constant-offset one, but its unseen child is neither a
+    2x2 draw nor a scaled deviate.
+    """
+    return context.model_variables.get("subject_factor_loadings")
+
+
+def _unseen_child_factor_deltas(context, definition, outcome: str):
+    """One unseen child's factor draw, as plot/query logit offsets for ``outcome``.
+
+    The **same** child has to serve both outcomes -- that coupling is the entire
+    point of the factor form -- but the two outcomes are handled in separate
+    branches further down. So the child's ``b = L z`` is created once, on
+    whichever branch runs first, and read back by name on the second. Drawing a
+    fresh ``z`` per outcome would silently restore the independence VG22 exists
+    to remove.
+    """
+    model = context.model
+    if "_b_factor_marg" in model.named_vars:
+        b = model.named_vars["_b_factor_marg"]
+    else:
+        loadings = context.model_variables["subject_factor_loadings"]
+        z = pm.Normal("_z_factor_marg", mu=0.0, sigma=1.0, dims="factor")
+        b = pm.Deterministic(
+            "_b_factor_marg", pm.math.dot(loadings, z), dims="child_effect4"
+        )
+    ref = float(definition.subject_factor.ref_age_months)
+    d_plot = (model["X_plot"] - ref) / 12.0
+    d_query = (model["X_query"] - ref) / 12.0
+    i0, i1 = (0, 1) if outcome == "u" else (2, 3)
+    return b[i0] + b[i1] * d_plot, b[i0] + b[i1] * d_query
+
+
 def _unseen_child_slope_deltas(context, definition, name, tag):
     """One ``(b0, b1)`` pair per posterior draw, as plot/query logit offsets.
 
@@ -1052,7 +1091,13 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             f_u_plot_var = context.model_variables["f_u_plot"]
             f_u_query_var = context.model_variables["f_u_query"]
             plot_scale, query_scale = _subject_scales(context, "tau_subj_u")
-            if _child_slope_block(context, "tau_subj_u") is not None:
+            if _child_factor_block(context) is not None:
+                # VG22. Checked before the slope branch, which its parameter
+                # names would otherwise match.
+                delta_u_plot, delta_u_query = _unseen_child_factor_deltas(
+                    context, definition, "u"
+                )
+            elif _child_slope_block(context, "tau_subj_u") is not None:
                 # VG19. Checked first: a slope model has an age-varying spread
                 # too, but its unseen child is a (b0, b1) pair rather than one
                 # deviate scaled by a curve.
@@ -1105,7 +1150,16 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             # deviates is not a model anyone means.
             rho_marg = context.model_variables.get("rho_uq")
             correlated = rho_marg is not None and use_subject_re_u
-            if _child_slope_block(context, "tau_subj_q") is not None:
+            if _child_factor_block(context) is not None:
+                # VG22, reading back the same child the u side drew. `correlated`
+                # is False by construction: the engine refuses `rho_uq` as a
+                # field alongside a factor, and the `rho_uq` this model emits is
+                # a deterministic element of the factor covariance rather than a
+                # coupling to apply again here.
+                delta_q_plot, delta_q_query = _unseen_child_factor_deltas(
+                    context, definition, "q"
+                )
+            elif _child_slope_block(context, "tau_subj_q") is not None:
                 # VG19, and `correlated` is False by construction here: the
                 # engine refuses `rho_uq` alongside a slope, so there is no
                 # cross-outcome coupling to carry.

@@ -61,11 +61,13 @@ from vocab_growth.models.common_bivariate import (
 from vocab_growth.models.definitions import (
     BivariateModelDefinition,
     clamp_targets,
+    subject_factor_spec,
     subject_scale_spec,
     subject_slope_spec,
 )
 from vocab_growth.models.gp_utils import (
     GPGrid,
+    build_child_factor,
     build_child_slope,
     build_subject_scale_of_z,
     trend_and_gp,
@@ -559,6 +561,17 @@ def build_model_re(
     # and making it conditional would put a `subject_slope_spec` call ahead of
     # the model context for no benefit.
     coords["child_effect"] = np.array(["intercept", "slope"])
+    # VG22: the four effects the low-rank factor spans, and its latent
+    # dimensions. `child_effect4_b` is the second axis of the 4x4 correlation --
+    # ArviZ needs two distinct dim names for a square matrix.
+    coords["child_effect4"] = np.array(
+        ["u_intercept", "u_slope", "q_intercept", "q_slope"]
+    )
+    coords["child_effect4_b"] = np.array(
+        ["u_intercept", "u_slope", "q_intercept", "q_slope"]
+    )
+    _factor_spec = subject_factor_spec(getattr(definition, "subject_factor", None))
+    coords["factor"] = np.arange(_factor_spec.rank if _factor_spec else 1)
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -700,6 +713,52 @@ def build_model_re(
             slope_u=slope_u,
             slope_q=slope_q,
         )
+        # VG22: a low-rank factor over all four child effects. Built once, ahead
+        # of the per-outcome branches, because unlike every other subject
+        # structure here it spans both outcomes -- the whole point of the form is
+        # that one child's comprehension standing and production-ratio rate are
+        # driven by shared latent dimensions. The per-outcome branches below then
+        # consume the shifts it returns rather than building their own.
+        factor = subject_factor_spec(getattr(definition, "subject_factor", None))
+        if factor is not None:
+            if not (use_subject_re_u and use_subject_re_q):
+                raise ValueError(
+                    "subject_factor requires use_subject_re_u and "
+                    "use_subject_re_q: the form is a joint covariance over both "
+                    "outcomes' child effects and is undefined when only one "
+                    "outcome carries a child effect."
+                )
+            if spec_u is not None or spec_q is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with an age-varying "
+                    "subject scale (A1): both claim the same seam, and A1's "
+                    "rank-one scaling is a special case of the factor form."
+                )
+            if slope_u is not None or slope_q is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with a child slope "
+                    "(VG19): the factor already carries a rate per outcome, and "
+                    "supplying both would give a child two of each effect."
+                )
+            if corr_eta is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with "
+                    "subject_re_correlation_eta (VG20): the level-level "
+                    "correlation that field creates is an element of the "
+                    "factor's own covariance, emitted as `rho_uq`."
+                )
+            factor_shift_u, factor_shift_q, factor_tau_u, factor_tau_q = (
+                build_child_factor(
+                    factor,
+                    tau0_u_sigma=definition.tau_subj_u_sigma,
+                    tau0_q_sigma=definition.tau_subj_q_sigma,
+                    age_obs_months=X_obs.flatten(),
+                    subject_obs=subject_obs,
+                )
+            )
+        else:
+            factor_shift_u = factor_shift_q = None
+
         tau_u_of_z = tau_q_of_z = None
         # Built here rather than reusing the named `z_obs` Deterministic, which is
         # created further down: reordering that would change every model's graph.
@@ -710,7 +769,9 @@ def build_model_re(
         )
 
         if use_subject_re_u:
-            if slope_u is not None:
+            if factor_shift_u is not None:
+                subject_shift_u, tau_subj_u = factor_shift_u, factor_tau_u
+            elif slope_u is not None:
                 subject_shift_u, tau_subj_u = build_child_slope(
                     slope_u,
                     age_obs_months=X_obs.flatten(),
@@ -755,7 +816,9 @@ def build_model_re(
             subject_shift_u = 0.0
 
         if use_subject_re_q:
-            if slope_q is not None:
+            if factor_shift_q is not None:
+                subject_shift_q, tau_subj_q = factor_shift_q, factor_tau_q
+            elif slope_q is not None:
                 # `corr_eta` is guaranteed None here: the resolver refuses the
                 # combination, so no branch on it is needed or wanted.
                 subject_shift_q, tau_subj_q = build_child_slope(

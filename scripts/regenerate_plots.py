@@ -132,6 +132,8 @@ ENGINE_BY_MODEL = {
     "vg16": "bivariate_re",
     "vg19": "bivariate_re",
     "vg20": "bivariate_re",
+    "vg21": "bivariate_re",
+    "vg22": "bivariate_re",
     "vg14": "trivariate",
     "vg15": "joint",
 }
