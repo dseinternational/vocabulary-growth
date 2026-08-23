@@ -218,6 +218,11 @@ print(
     f"  (ESS per million gradient evaluations, with a marginalised gradient "
     f"weighted {args.gradient_cost}x; wall clock covers the whole pipeline.)"
 )
+print(
+    "  Read the cost column, not the clock: the arms share a machine, so an arm\n"
+    "  that outlives the others gets more of it, and anything else running takes\n"
+    "  it away again. Only compare wall clocks between arms that ran alone."
+)
 
 reference_label = next((label for label in arms if "explicit" in label), None)
 if reference_label is None:

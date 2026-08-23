@@ -105,6 +105,8 @@ scripts/experiments/marginal_arm.py marginal --nodes 40 --output-dir <throwaway>
 2. **Geometry** — energy BFMI, divergences, R-hat, and the `tau_subject`/`kappa` ridge correlation, against the four arms already in that table.
 3. **Cost** — effective samples per **gradient evaluation**, which is the comparison that survives running the arms on different machines: the sampler's own leapfrog count is in `sample_stats.n_steps`, and §5's factor of 22 converts it to work. This is the number that decides adoption; wall-clock is printed beside it but covers the whole pipeline rather than sampling alone.
 
+**The wall clock in this run is not a fair comparison, and the cost column is.** All three arms were launched together at 19:31 UTC on 2026-08-23 and shared one machine. The explicit arm finished at 19:53 and handed its cores back to the other two; the typically-developing comparison rerun then started at 20:54 and took cores away from them again, reading multi-gigabyte traces while they sampled. So the explicit arm lived its whole life under three-way contention and the marginalised arms did not, and then met contention of a different kind. The elapsed times are therefore not comparable in either direction. This is exactly why the arbiter is effective samples per gradient evaluation: the sampler's leapfrog count does not care what else the machine was doing. Quote the cost column; quote a wall clock only from arms that ran alone.
+
 **Expectations, set before the first arm runs**, so the bench can falsify them:
 
 - **Equivalence holds.** A disagreement beyond Monte Carlo error is a bug in the marginalisation, not a property of it.
