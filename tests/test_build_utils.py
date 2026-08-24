@@ -13,6 +13,7 @@ import pytest
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_integral_counts,
+    require_valid_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     standardize_anchor_ages,
@@ -229,3 +230,32 @@ def test_require_integral_counts_accepts_whole_numbers():
 def test_require_integral_counts_rejects_fractions_with_examples():
     with pytest.raises(ValueError, match="spoken contains 2 non-integral"):
         require_integral_counts(np.array([1.0, 2.5, 3.0, 4.25]), "spoken")
+
+
+# --- require_valid_counts ----------------------------------------------------
+#
+# The contract the nested spoken likelihood already gets from
+# nested_outcome_spec, applied to a count column an engine casts itself. VG13
+# cast `understood` to int before any check, so a fractional value would have
+# been silently truncated (#240).
+
+
+def test_require_valid_counts_accepts_integral_in_range():
+    require_valid_counts(np.array([0.0, 3.0, 810.0]), "understood", 810)
+
+
+def test_require_valid_counts_rejects_fractions():
+    with pytest.raises(ValueError, match="understood contains 1 non-integral"):
+        require_valid_counts(np.array([1.0, 2.5]), "understood", 810)
+
+
+def test_require_valid_counts_rejects_non_finite():
+    with pytest.raises(ValueError, match="non-finite"):
+        require_valid_counts(np.array([1.0, np.inf]), "understood", 810)
+
+
+def test_require_valid_counts_rejects_out_of_range():
+    with pytest.raises(ValueError, match="between 0 and n_trials"):
+        require_valid_counts(np.array([1.0, 811.0]), "understood", 810)
+    with pytest.raises(ValueError, match="between 0 and n_trials"):
+        require_valid_counts(np.array([-1.0, 3.0]), "understood", 810)

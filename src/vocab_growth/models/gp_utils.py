@@ -474,8 +474,11 @@ def trend_and_gp(
     trivariate / joint engines). When ``anchor_idx`` is set the GP is
     orthogonalised against this mean's identifiable basis (coefficients fitted on
     the first ``n_obs`` observed rows only) and pinned to zero at the reference-age
-    anchor row — so it carries only nonlinear curvature and its level is fixed
-    against ``intercept``/``slope`` (see :func:`_gp_from_mean`).
+    anchor row — so it carries no linear component over the observed rows and
+    cannot alias with ``slope``. The pinning shift restores a constant component
+    (fixed to zero at the reference age), so the level is identified by the point
+    anchor itself rather than by orthogonality to ``[1]`` — see
+    :func:`_orthogonalise_and_anchor` for exactly what the composition guarantees.
 
     ``clamp_above_hi`` levels the mean off above the high anchor instead of
     extrapolating the line. The Down syndrome GP domain runs to 115 months while
@@ -616,8 +619,10 @@ def tent_and_gp(
     therefore sits at the middle anchor age by construction, and the GP carries
     smooth departures. When anchored the GP is orthogonalised against this mean's
     full basis — the three fixed tent hats spanning ``{p_low, p_mid, p_hi}``, a
-    larger space than ``[1, z]`` — so it cannot mimic a shift of any anchor, then
-    pinned to zero at the reference-age anchor row (see :func:`_gp_from_mean`).
+    larger space than ``[1, z]`` — so it cannot mimic a *relative* shift of the
+    anchors, then pinned to zero at the reference-age anchor row. The pinning
+    restores a common constant, so orthogonality to the hats holds up to that
+    constant rather than exactly (see :func:`_orthogonalise_and_anchor`).
     """
     p_low = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_mid = cfg_mid.to_pymc(f"p_slope_mid{suffix}")
@@ -709,6 +714,17 @@ def _orthogonalise_and_anchor(g_unit, nuisance_basis, n_obs, anchor_idx, *, ridg
       deliberate model choice, unlike the plot/query grids). The linear/tent
       directions removed above are the additional decoupling that stops the GP
       aliasing with ``slope`` / the anchors.
+
+    The two steps do **not** compose into full-basis orthogonality, and this
+    docstring must not claim they do (#240): subtracting ``g[anchor_idx]``
+    restores a constant component that is generically nonzero over the observed
+    rows, so the result is not orthogonal to the constant direction — nor, for
+    the tent basis, to any individual hat except up to that shared constant.
+    What survives exactly is the centred orthogonality (``z`` is standardised
+    over the observed rows, so orthogonality to it is constant-invariant and the
+    GP still carries no linear component there) and the point anchor, which is
+    what fixes the level. No graph-identification failure follows: the constant
+    direction is pinned by the anchor rather than projected away.
 
     A tiny ridge stabilises the normal-equations solve if a basis column is empty
     over the observed rows (e.g. a tent hat with no observations in its support).

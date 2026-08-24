@@ -36,6 +36,7 @@ import pymc as pm
 import vocab_growth.data_utils as vocab_data_utils
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_valid_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     standardize_anchor_ages,
@@ -558,16 +559,22 @@ def build_model_re(
     has_s_train = has_s & ~holdout
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(
-        analysis_df.loc[has_u_train, "understood"], dtype=int
+    n_trials = context.model_data.n_trials
+    y_u_values = np.asarray(
+        analysis_df.loc[has_u_train, "understood"], dtype=float
     )
+    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
+    # fractional or out-of-range understood count would corrupt the likelihood
+    # without a trace. The spoken side gets the same finite/integral/range
+    # checks from nested_outcome_spec below (#240).
+    require_valid_counts(y_u_values, "understood", n_trials)
+    y_u_observed = y_u_values.astype(int)
     study_codes = np.asarray(analysis_df["study_code"], dtype=int)
 
     idx_u = np.where(has_u_train)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_trials = context.model_data.n_trials
     spoken_spec = nested_outcome_spec(
         analysis_df,
         parent_col="understood",

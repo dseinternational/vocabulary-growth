@@ -300,6 +300,84 @@ def test_td_load_data_can_widen_languages(tmp_path, monkeypatch):
     assert "Norwegian" in df["language"].tolist()
 
 
+def test_td_loader_deduplicates_on_complete_source_identity(tmp_path, monkeypatch):
+    """Exact full-row copies collapse; rows that collide only after the outcome
+    projection survive (#240).
+
+    The Wordbank export records some administrations twice, identically; a
+    repeated row double-weights that administration in every likelihood and, in
+    the random-effect models, makes a single-visit child look like a
+    repeated-measures one. Deduplication must run on the complete source row,
+    before the loader's projection: two genuinely distinct same-child, same-age
+    administrations can agree on every projected column and differ only in one
+    the loader drops (``sex`` here; ``caregiver_education`` and others in the
+    real export), and collapsing those would delete a real observation.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.executemany(
+            "INSERT INTO wordbank_child VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                # An exact copy of the fixture's c01 row: one of the two must go.
+                ("WG", "English (British)", "Fenson (2007)", "c01", None, 12.0, 40, 12, True, None),
+                # Two distinct administrations that collide after projection.
+                ("WG", "English (British)", "Fenson (2007)", "c90", "Female", 14.0, 80, 25, True, None),
+                ("WG", "English (British)", "Fenson (2007)", "c90", "Male", 14.0, 80, 25, True, None),
+            ],
+        )
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    df = data_utils.load_data(
+        Population.TYPICALLY_DEVELOPING,
+        columns=["study", "subject_id", "age", "understood", "spoken"],
+    )
+
+    exact_copy = df[(df["age"] == 12.0) & (df["understood"] == 40)]
+    assert len(exact_copy) == 1
+    projection_collision = df[(df["age"] == 14.0) & (df["understood"] == 80)]
+    assert len(projection_collision) == 2
+
+
+@requires_real_db
+def test_td_frames_of_record_are_free_of_source_duplicates():
+    """Pin the registered VG11-VG13 frame sizes after source-level dedup (#240).
+
+    Before the loader deduplicated, 22 excess exact source copies entered
+    VG11's frame (18,522 rows), 3 VG12's (7,052) and 2 VG13's (6,358); the
+    removal counts of record are the differences pinned here. These pins move
+    only when the export is refreshed — re-run the audit in
+    notes/202608231830-vg11-vg13-immediate-remediation.md when they do.
+    """
+    from vocab_growth.models.definitions import VG11, VG12, VG13
+
+    def univariate_frame_len(definition):
+        y_col = definition.outcome.value
+        df = data_utils.load_data(
+            definition.population,
+            ["age", y_col, "study", "subject_id"],
+            languages=definition.td_languages,
+        )
+        df = df.dropna(subset=["age", y_col])
+        df, _ = data_utils.filter_studies_by_min_obs(
+            df, definition.min_study_observations
+        )
+        return len(df)
+
+    assert univariate_frame_len(VG11) == 18_500  # was 18,522
+    assert univariate_frame_len(VG12) == 7_049  # was 7,052
+
+    df = data_utils.load_data(
+        VG13.population,
+        ["age", "understood", "spoken", "study", "subject_id"],
+        languages=VG13.td_languages,
+        max_age_months=VG13.max_age_months,
+    )
+    df = df.dropna(subset=["age"])
+    df = df[df["understood"].notna() | df["spoken"].notna()]
+    df, _ = data_utils.filter_studies_by_min_obs(df, VG13.min_study_observations)
+    assert len(df) == 6_356  # was 6,358
+
+
 def test_td_romance_scope_admits_italian_and_spanish_only(tmp_path, monkeypatch):
     """ENGLISH_AND_ROMANCE_LANGUAGES widens the pool to exactly two more languages.
 
