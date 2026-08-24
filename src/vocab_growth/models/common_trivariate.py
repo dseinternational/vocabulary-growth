@@ -165,7 +165,12 @@ class TrivariateModelConfiguration(BaseModelConfiguration):
 
 @dataclass
 class TrivariateModelSamples:
-    """Posterior and predictive samples from the trivariate model."""
+    """Posterior and predictive samples from the trivariate model.
+
+    Plot- and query-grid quantities only; the observation-level posterior is no
+    longer extracted (nothing read it) or stored by the sampler -- see
+    :class:`vocab_growth.models.common_bivariate.BivariateModelSamples`.
+    """
 
     # Shared age grids
     X_obs: np.ndarray
@@ -175,18 +180,14 @@ class TrivariateModelSamples:
     X_query: np.ndarray
     """Ages in months for the query points, shape (n_query,)."""
 
-    X_obs_z: np.ndarray
-    """Standardized observed ages, shape (n, n_samples)."""
     X_plot_z: np.ndarray
     """Standardized ages for the plot points, shape (n_plot, n_samples)."""
     X_query_z: np.ndarray
     """Standardized ages for the query points, shape (n_query, n_samples)."""
 
     # Understood (U) samples
-    f_u_obs: np.ndarray
     f_u_plot: np.ndarray
     f_u_query: np.ndarray
-    p_u_obs: np.ndarray
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
     y_u_obs: np.ndarray
@@ -196,18 +197,14 @@ class TrivariateModelSamples:
     kappa_u_query: np.ndarray
 
     # Production rate (q) samples
-    h_obs: np.ndarray
     h_plot: np.ndarray
     h_query: np.ndarray
-    q_obs: np.ndarray
     q_plot: np.ndarray
     q_query: np.ndarray
 
     # Spoken (S) samples (derived)
-    f_s_obs: np.ndarray
     f_s_plot: np.ndarray
     f_s_query: np.ndarray
-    p_s_obs: np.ndarray
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
     y_s_obs: np.ndarray
@@ -225,10 +222,8 @@ class TrivariateModelSamples:
     r_query: np.ndarray
 
     # Signed (Sign) samples (derived)
-    f_sign_obs: np.ndarray
     f_sign_plot: np.ndarray
     f_sign_query: np.ndarray
-    p_sign_obs: np.ndarray
     p_sign_plot: np.ndarray
     p_sign_query: np.ndarray
     y_sign_obs: np.ndarray
@@ -967,11 +962,9 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     """Extract model samples into a structured format for plotting and reporting."""
 
     # Understood
-    f_u_obs = _extract_posterior(trace, "f_u_obs", "obs_id")
     f_u_plot = _extract_posterior(trace, "f_u_plot", "plot_id")
     f_u_query = _extract_posterior(trace, "f_u_query", "query_id")
 
-    p_u_obs = _extract_posterior(trace, "p_u_obs", "obs_id")
     p_u_plot = _extract_posterior(trace, "p_u_plot", "plot_id")
     p_u_query = _extract_posterior(trace, "p_u_query", "query_id")
 
@@ -979,20 +972,16 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     kappa_u_query = _extract_posterior(trace, "kappa_u_query", "query_id")
 
     # Production rate
-    h_obs = _extract_posterior(trace, "h_obs", "obs_id")
     h_plot = _extract_posterior(trace, "h_plot", "plot_id")
     h_query = _extract_posterior(trace, "h_query", "query_id")
 
-    q_obs = _extract_posterior(trace, "q_obs", "obs_id")
     q_plot = _extract_posterior(trace, "q_plot", "plot_id")
     q_query = _extract_posterior(trace, "q_query", "query_id")
 
     # Spoken (derived)
-    f_s_obs = _extract_posterior(trace, "f_s_obs", "obs_id")
     f_s_plot = _extract_posterior(trace, "f_s_plot", "plot_id")
     f_s_query = _extract_posterior(trace, "f_s_query", "query_id")
 
-    p_s_obs = _extract_posterior(trace, "p_s_obs", "obs_id")
     p_s_plot = _extract_posterior(trace, "p_s_plot", "plot_id")
     p_s_query = _extract_posterior(trace, "p_s_query", "query_id")
 
@@ -1009,11 +998,9 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     r_query = _extract_posterior(trace, "r_query", "query_id")
 
     # Signed (derived)
-    f_sign_obs = _extract_posterior(trace, "f_sign_obs", "obs_id")
     f_sign_plot = _extract_posterior(trace, "f_sign_plot", "plot_id")
     f_sign_query = _extract_posterior(trace, "f_sign_query", "query_id")
 
-    p_sign_obs = _extract_posterior(trace, "p_sign_obs", "obs_id")
     p_sign_plot = _extract_posterior(trace, "p_sign_plot", "plot_id")
     p_sign_query = _extract_posterior(trace, "p_sign_query", "query_id")
 
@@ -1074,7 +1061,6 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     X_query = np.array(trace.constant_data["X_query"].values)
 
     # Standardised ages
-    X_obs_z = _extract_posterior(trace, "z_obs", "obs_id")
     X_plot_z = _extract_posterior(trace, "z_plot", "plot_id")
     X_query_z = _extract_posterior(trace, "z_query", "query_id")
 
@@ -1082,13 +1068,10 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         X_obs=X_obs,
         X_plot=X_plot,
         X_query=X_query,
-        X_obs_z=X_obs_z,
         X_plot_z=X_plot_z,
         X_query_z=X_query_z,
-        f_u_obs=f_u_obs,
         f_u_plot=f_u_plot,
         f_u_query=f_u_query,
-        p_u_obs=p_u_obs,
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
         y_u_obs=y_u_obs,
@@ -1096,16 +1079,12 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         y_u_query=y_u_query,
         kappa_u_plot=kappa_u_plot,
         kappa_u_query=kappa_u_query,
-        h_obs=h_obs,
         h_plot=h_plot,
         h_query=h_query,
-        q_obs=q_obs,
         q_plot=q_plot,
         q_query=q_query,
-        f_s_obs=f_s_obs,
         f_s_plot=f_s_plot,
         f_s_query=f_s_query,
-        p_s_obs=p_s_obs,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
         y_s_obs=y_s_obs,
@@ -1119,10 +1098,8 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         r_obs=r_obs,
         r_plot=r_plot,
         r_query=r_query,
-        f_sign_obs=f_sign_obs,
         f_sign_plot=f_sign_plot,
         f_sign_query=f_sign_query,
-        p_sign_obs=p_sign_obs,
         p_sign_plot=p_sign_plot,
         p_sign_query=p_sign_query,
         y_sign_obs=y_sign_obs,
@@ -1251,13 +1228,14 @@ sample = _shared_sample
 def diagnostics(context: TrivariateContext):
     """Run diagnostics on the posterior samples.
 
-    Thin wrapper over the shared engine (common.py): trivariate adds the
-    three per-outcome kappas to the trace plot and reports per-outcome LOO-CV
-    for understood/spoken/signed.
+    Thin wrapper over the shared engine (common.py): trivariate reports
+    per-outcome LOO-CV for understood/spoken/signed. (It used to name the three
+    observation-level kappas for the trace plot as well; an observation-sized
+    variable never fitted under ArviZ's subplot cap, so they never rendered, and
+    since 2026-08-23 the sampler does not store them.)
     """
     _shared_diagnostics(
         context,
-        extra_trace_var_names=("kappa_u_obs", "kappa_s_obs", "kappa_sign_obs"),
         loo_var_names=(
             ("y_u_obs", "words understood"),
             ("y_s_obs", "words spoken"),

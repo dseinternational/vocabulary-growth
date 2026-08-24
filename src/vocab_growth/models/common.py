@@ -54,6 +54,8 @@ from vocab_growth.fit_artifacts import (
     CONVERGENCE_FAILURE_FILENAME,
     DIAGNOSTICS_SUMMARY_FILENAME,
     FIT_MANIFEST_FILENAME,
+    NOT_SAMPLED_ATTR,
+    SAMPLED_PARAMETERS_ATTR,
     TracePersistence,
     accepted_rhat_exception,
     convergence_caveats,
@@ -63,11 +65,14 @@ from vocab_growth.fit_artifacts import (
     normalise_for_json,
     promote_staged_fit,
     retain_failed_fit,
+    sampled_variable_names,
     save_trace,
     source_data_hash,
+    unsampled_deterministic_names,
     write_fit_state,
     write_json_atomic,
 )
+from vocab_growth.loo_reff import sampled_parameter_reff
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_integral_counts,
@@ -362,26 +367,29 @@ def build_kappa_for_config(
 
 @dataclass
 class ModelSamples:
+    """Posterior, predictive and constant quantities the reporting stages read.
+
+    Carries the plot- and query-grid quantities only. The observation-level
+    posterior (``f_obs``, ``p_obs``, ``z_obs``) used to be extracted here as
+    well, at ``n_obs x n_samples`` each, and nothing read it; since 2026-08-23
+    those variables are not stored by the sampler at all (see
+    :func:`vocab_growth.fit_artifacts.sampled_variable_names`).
+    """
+
     X_obs: np.ndarray
     """Observed ages in months, shape (n,)."""
     X_plot: np.ndarray
     """Ages in months for the plot points, shape (n_plot,)."""
     X_query: np.ndarray
     """Ages in months for the query points, shape (n_query,)."""
-    X_obs_z: np.ndarray
-    """Standardized observed ages, shape (n, n_samples)."""
     X_plot_z: np.ndarray
     """Standardized ages for the plot points, shape (n_plot, n_samples)."""
     X_query_z: np.ndarray
     """Standardized ages for the query points, shape (n_query, n_samples)."""
-    f_obs: np.ndarray
-    """Posterior samples of the latent linear predictor f for the observed points: (n, n_samples)"""
     f_plot: np.ndarray
     """Posterior samples of the latent linear predictor f for the plot points: (n_plot, n_samples)"""
     f_query: np.ndarray
     """Posterior samples of the latent linear predictor f for the query points: (n_query, n_samples)"""
-    p_obs: np.ndarray
-    """Posterior samples of p(z) for the observed points: (n, n_samples)"""
     p_plot: np.ndarray
     """Posterior samples of p(z) for the plot points: (n_plot, n_samples)"""
     p_query: np.ndarray
@@ -597,14 +605,6 @@ def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
     Extract model samples into a structured format for plotting and reporting.
     """
 
-    # Posterior samples of the latent linear predictor f: (n, n_samples)
-    f_obs = np.array(
-        trace.posterior["f_obs"]
-        .stack(sample=("chain", "draw"))
-        .transpose("obs_id", "sample")
-        .values
-    )
-
     # Posterior samples of the latent linear predictor f for the plot points: (n_plot, n_samples)
     f_plot = np.array(
         trace.posterior["f_plot"]
@@ -618,13 +618,6 @@ def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
         trace.posterior["f_query"]
         .stack(sample=("chain", "draw"))
         .transpose("query_id", "sample")
-        .values
-    )
-
-    p_obs = np.array(
-        trace.posterior["p_obs"]
-        .stack(sample=("chain", "draw"))
-        .transpose("obs_id", "sample")
         .values
     )
 
@@ -686,13 +679,6 @@ def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
 
     X_query = np.array(trace.constant_data["X_query"].values)
 
-    X_obs_z = np.array(
-        trace.posterior["z_obs"]
-        .stack(sample=("chain", "draw"))
-        .transpose("obs_id", "sample")
-        .values
-    )
-
     X_plot_z = np.array(
         trace.posterior["z_plot"]
         .stack(sample=("chain", "draw"))
@@ -711,13 +697,10 @@ def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
         X_obs=X_obs,
         X_plot=X_plot,
         X_query=X_query,
-        X_obs_z=X_obs_z,
         X_plot_z=X_plot_z,
         X_query_z=X_query_z,
-        f_obs=f_obs,
         f_plot=f_plot,
         f_query=f_query,
-        p_obs=p_obs,
         p_plot=p_plot,
         p_query=p_query,
         y_obs=y_obs,
@@ -1018,11 +1001,38 @@ def prior_predictive_checks(
     )
 
 
-def sample(context: ModelFitContext):
+def sample(context: ModelFitContext, *, store_observation_deterministics: bool = False):
     """
     Draw samples from the posterior using MCMC.
+
+    The observation-sized deterministics (``f_obs``, ``p_obs``, ``kappa_obs``,
+    their per-outcome counterparts and the concatenated ``*_all`` grids) are not
+    stored: ``pm.sample`` is given ``var_names`` from
+    :func:`vocab_growth.fit_artifacts.sampled_variable_names`, and nutpie then never
+    evaluates the rest. The graph is untouched, so the draws are identical to a
+    fit that stored them, and the deterministics remain in the model for
+    :mod:`vocab_growth.posterior_recompute` to rebuild on demand. Nothing in the
+    fit pipeline reads them; storing them was what made fit memory scale as
+    ``n_obs x draws`` (``notes/202608050900-td-hierarchical-geometry.md`` §10).
+
+    ``store_observation_deterministics=True`` restores the old behaviour, for a
+    caller that will read them across every draw anyway and would gain nothing
+    from a second pass (``scripts/kfold_loso.py``). The trace records which
+    deterministics were left out in its posterior attributes either way.
     """
     config_table("Sampling configuration", context.sampling)
+
+    if store_observation_deterministics:
+        var_names = None
+        not_sampled: list[str] = []
+    else:
+        var_names = sampled_variable_names(context.model)
+        not_sampled = unsampled_deterministic_names(context.model)
+        if not_sampled:
+            console.print(
+                f"Not storing {len(not_sampled)} observation-sized deterministic(s): "
+                + ", ".join(not_sampled)
+            )
 
     with context.model:
         trace = pm.sample(
@@ -1038,7 +1048,18 @@ def sample(context: ModelFitContext):
             progressbar=sys.stdout.isatty(),
             return_inferencedata=True,
             random_seed=context.sampling.random_seed,
+            var_names=var_names,
         )
+
+    # Stored as JSON strings rather than lists: netCDF attribute support for
+    # string arrays differs between backends, and a single string round-trips
+    # through every one of them. The sampled-parameters record is what lets a
+    # reader of the stored trace pin PSIS-LOO's relative efficiency to the
+    # parameters the sampler moved (loo_reff) without rebuilding the model.
+    trace.posterior.attrs[NOT_SAMPLED_ATTR] = json.dumps(not_sampled)
+    trace.posterior.attrs[SAMPLED_PARAMETERS_ATTR] = json.dumps(
+        [rv.name for rv in context.model.free_RVs]
+    )
 
     context.set_trace(trace)
 
@@ -1070,6 +1091,8 @@ def emit_loo_summary(
     loo_by_label: dict,
     dropped_by_label: dict[str, int],
     output_dir: str,
+    *,
+    reff: float | None = None,
 ) -> pd.DataFrame:
     """Persist the LOO-CV result, which every fit computed and then discarded.
 
@@ -1084,6 +1107,11 @@ def emit_loo_summary(
     is the signal that a reported ``elpd`` is optimistic. ArviZ's own threshold
     (``good_k``, sample-size dependent) is recorded rather than a hard-coded
     0.7, so the bands mean the same thing across fits of different lengths.
+
+    ``reff`` is the relative efficiency every LOO here was computed with — pinned
+    to the sampled parameters (:mod:`vocab_growth.loo_reff`) — recorded because
+    the Pareto-k bands depend on it and a reader comparing fits should be able
+    to see they share the convention.
     """
     rows = []
     for label, loo in loo_by_label.items():
@@ -1112,6 +1140,7 @@ def emit_loo_summary(
                 "pareto_k_very_bad": counts["very_bad"],
                 "good_k_threshold": None if good_k is None else float(good_k),
                 "scale": str(getattr(loo, "scale", "log")),
+                "reff": None if reff is None else float(reff),
             }
         )
 
@@ -1120,7 +1149,7 @@ def emit_loo_summary(
     return frame
 
 
-def _loo_dropping_degenerate(idata, var_name=None):
+def _loo_dropping_degenerate(idata, var_name=None, *, reff=None):
     """Compute PSIS-LOO, excluding observations with a constant pointwise
     log-likelihood.
 
@@ -1165,7 +1194,7 @@ def _loo_dropping_degenerate(idata, var_name=None):
     # Compute LOO for the resolved ``name`` (not the raw ``var_name``): when
     # ``var_name`` is None, ``az.loo`` rejects a log-likelihood group holding
     # more than one array, so keep the LOO target identical to the drop target.
-    return az.loo(loo_source, var_name=name), n_dropped
+    return az.loo(loo_source, var_name=name, reff=reff), n_dropped
 
 
 def diagnostics(
@@ -1309,9 +1338,17 @@ def diagnostics(
 
     context.set_trace(trace)
 
+    # Relative efficiency over the sampled parameters, not over whatever the
+    # posterior group happens to store (loo_reff explains the difference and
+    # the decision behind it). Computed once and shared by every LOO below.
+    reff = sampled_parameter_reff(
+        context.trace, names=[rv.name for rv in context.model.free_RVs]
+    )
+    console.print(f"PSIS-LOO relative efficiency (sampled parameters): {reff:.4f}")
+
     dropped_by_label: dict[str, int] = {}
     if loo_var_names is None:
-        loocv, n_dropped = _loo_dropping_degenerate(context.trace)
+        loocv, n_dropped = _loo_dropping_degenerate(context.trace, reff=reff)
         dropped_by_label["all"] = n_dropped
         if n_dropped:
             console.print(
@@ -1322,14 +1359,14 @@ def diagnostics(
         heading("LOO-CV", style="bold cyan")
         console.print(loocv)
         emit_loo_summary(
-            {"all": loocv}, dropped_by_label, context.reporting.output_dir
+            {"all": loocv}, dropped_by_label, context.reporting.output_dir, reff=reff
         )
     else:
         loocv_by_name = {}
         by_label = {}
         for var_name, label in loo_var_names:
             loocv_by_name[var_name], n_dropped = _loo_dropping_degenerate(
-                context.trace, var_name=var_name
+                context.trace, var_name=var_name, reff=reff
             )
             by_label[label] = loocv_by_name[var_name]
             dropped_by_label[label] = n_dropped
@@ -1342,7 +1379,9 @@ def diagnostics(
         for var_name, label in loo_var_names:
             heading(f"LOO-CV — {label}", style="bold cyan")
             console.print(loocv_by_name[var_name])
-        emit_loo_summary(by_label, dropped_by_label, context.reporting.output_dir)
+        emit_loo_summary(
+            by_label, dropped_by_label, context.reporting.output_dir, reff=reff
+        )
 
 
 def sample_posterior_predictive(

@@ -29,6 +29,8 @@ import dse_research_utils.math.constants as math_constants
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
+import dse_research_utils.statistics.models.reporting as reporting
+import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -43,6 +45,7 @@ from vocab_growth.models.build_utils import (
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
+    ModelFitContext,
     build_kappa_for_config,
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
@@ -63,11 +66,13 @@ from vocab_growth.models.common_bivariate import (
 from vocab_growth.models.definitions import (
     BivariateModelDefinition,
     clamp_targets,
+    subject_factor_spec,
     subject_scale_spec,
     subject_slope_spec,
 )
 from vocab_growth.models.gp_utils import (
     GPGrid,
+    build_child_factor,
     build_child_slope,
     build_subject_scale_of_z,
     trend_and_gp,
@@ -101,6 +106,18 @@ def prepare_bivariate_re_data(
     )
     if use_subject_codes:
         columns = columns + ["subject_id"]
+    # `survey_vocab_max` is kept for the whole Down syndrome pool, not just the
+    # defect rules and the cross-lag audit that used to be its only callers: the
+    # observed-trajectory overlay on the median-trend plots cannot tell a real
+    # reversal from a change of recording form without it. Safe there because
+    # `load_data` returns `df[columns]` for this population -- a pure projection
+    # -- the column has no missing values, and the only row filter here is
+    # `dropna(subset=["age"])`, so asking for it changes no fit.
+    #
+    # **Down syndrome only.** The typically-developing frame is built from a
+    # Wordbank query that never produces this column, so requesting it there
+    # raises `KeyError`. The other three flags are DS-only in practice; the
+    # population test is what actually makes this safe for VG11-VG13 and VG21.
     if (
         definition.exclude_us01_spoken_ceiling
         or definition.dse_native_only
@@ -109,6 +126,7 @@ def prepare_bivariate_re_data(
         # form identity the frame carries. Loading it changes no likelihood
         # input and no raw-data fingerprint.
         or definition.use_cross_lag
+        or definition.population is vocab_data_utils.Population.DOWN_SYNDROME
     ):
         columns = columns + ["survey_vocab_max"]
 
@@ -751,6 +769,17 @@ def build_model_re(
     # and making it conditional would put a `subject_slope_spec` call ahead of
     # the model context for no benefit.
     coords["child_effect"] = np.array(["intercept", "slope"])
+    # VG22: the four effects the low-rank factor spans, and its latent
+    # dimensions. `child_effect4_b` is the second axis of the 4x4 correlation --
+    # ArviZ needs two distinct dim names for a square matrix.
+    coords["child_effect4"] = np.array(
+        ["u_intercept", "u_slope", "q_intercept", "q_slope"]
+    )
+    coords["child_effect4_b"] = np.array(
+        ["u_intercept", "u_slope", "q_intercept", "q_slope"]
+    )
+    _factor_spec = subject_factor_spec(getattr(definition, "subject_factor", None))
+    coords["factor"] = np.arange(_factor_spec.rank if _factor_spec else 1)
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -892,6 +921,52 @@ def build_model_re(
             slope_u=slope_u,
             slope_q=slope_q,
         )
+        # VG22: a low-rank factor over all four child effects. Built once, ahead
+        # of the per-outcome branches, because unlike every other subject
+        # structure here it spans both outcomes -- the whole point of the form is
+        # that one child's comprehension standing and production-ratio rate are
+        # driven by shared latent dimensions. The per-outcome branches below then
+        # consume the shifts it returns rather than building their own.
+        factor = subject_factor_spec(getattr(definition, "subject_factor", None))
+        if factor is not None:
+            if not (use_subject_re_u and use_subject_re_q):
+                raise ValueError(
+                    "subject_factor requires use_subject_re_u and "
+                    "use_subject_re_q: the form is a joint covariance over both "
+                    "outcomes' child effects and is undefined when only one "
+                    "outcome carries a child effect."
+                )
+            if spec_u is not None or spec_q is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with an age-varying "
+                    "subject scale (A1): both claim the same seam, and A1's "
+                    "rank-one scaling is a special case of the factor form."
+                )
+            if slope_u is not None or slope_q is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with a child slope "
+                    "(VG19): the factor already carries a rate per outcome, and "
+                    "supplying both would give a child two of each effect."
+                )
+            if corr_eta is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with "
+                    "subject_re_correlation_eta (VG20): the level-level "
+                    "correlation that field creates is an element of the "
+                    "factor's own covariance, emitted as `rho_uq`."
+                )
+            factor_shift_u, factor_shift_q, factor_tau_u, factor_tau_q = (
+                build_child_factor(
+                    factor,
+                    tau0_u_sigma=definition.tau_subj_u_sigma,
+                    tau0_q_sigma=definition.tau_subj_q_sigma,
+                    age_obs_months=X_obs.flatten(),
+                    subject_obs=subject_obs,
+                )
+            )
+        else:
+            factor_shift_u = factor_shift_q = None
+
         tau_u_of_z = tau_q_of_z = None
         # Built here rather than reusing the named `z_obs` Deterministic, which is
         # created further down: reordering that would change every model's graph.
@@ -902,7 +977,9 @@ def build_model_re(
         )
 
         if use_subject_re_u:
-            if slope_u is not None:
+            if factor_shift_u is not None:
+                subject_shift_u, tau_subj_u = factor_shift_u, factor_tau_u
+            elif slope_u is not None:
                 subject_shift_u, tau_subj_u = build_child_slope(
                     slope_u,
                     age_obs_months=X_obs.flatten(),
@@ -947,7 +1024,9 @@ def build_model_re(
             subject_shift_u = 0.0
 
         if use_subject_re_q:
-            if slope_q is not None:
+            if factor_shift_q is not None:
+                subject_shift_q, tau_subj_q = factor_shift_q, factor_tau_q
+            elif slope_q is not None:
                 # `corr_eta` is guaranteed None here: the resolver refuses the
                 # combination, so no branch on it is needed or wanted.
                 subject_shift_q, tau_subj_q = build_child_slope(
@@ -1277,3 +1356,43 @@ def fit_bivariate_re_model(
     Fit pipeline for bivariate model with study random intercepts (VG07).
     """
     return run_fit_pipeline(config, definition, stages=bivariate_re_stages(definition))
+
+
+def rebuild_model_context(
+    definition: BivariateModelDefinition,
+    *,
+    output_dir: str,
+    sampling_config: str = "dev",
+) -> BivariateREContext:
+    """Build ``definition``'s model graph without sampling it.
+
+    For readers of a stored fit that must recompute a posterior quantity the
+    trace does not carry -- since 2026-08-23 the observation-sized
+    deterministics are not sampled (``fit_artifacts.sampled_variable_names``),
+    and ``vocab_growth.posterior_recompute.with_deterministics`` rebuilds them
+    from the stored free parameters given the graph. It runs the engine's own
+    data preparation and build, so the observation order and every data rule
+    are exactly those of a fit of ``definition``; the caller still has to check
+    that the fit *was* of this definition on the current data
+    (``fit_artifacts.validate_fit_output``) before aligning anything by row.
+
+    ``output_dir`` receives the preparation stage's descriptive-statistics CSV
+    and should be scratch. ``sampling_config`` only fills the context's
+    sampling configuration, which the build does not read.
+    """
+    context: BivariateREContext = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name=definition.model_id,
+            config_name=definition.config_name,
+            output_root_dir=output_dir,
+            ci_prob=0.89,
+            interval_kind="eti",
+        ),
+        sampling=sampling.get_sampling_configuration(sampling_config),
+        sampling_config_name=sampling_config,
+    )
+    os.makedirs(context.reporting.output_dir, exist_ok=True)
+    prepare_bivariate_re_data(context, definition)
+    configure_bivariate_priors(context, definition)
+    build_model_re(context, definition)
+    return context

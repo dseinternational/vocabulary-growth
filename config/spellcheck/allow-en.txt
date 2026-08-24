@@ -87,6 +87,7 @@ argmax
 argmin
 arrowsize
 asis
+autodiff
 azcopy
 baselining
 bimodality
@@ -136,12 +137,14 @@ indep
 isfile
 isna
 iterrows
+jittered
 judgments
 lengthscale
 logind
 logit
 logits
 matplotlib
+microbenchmark
 miscalibrated
 miscited
 missingness
@@ -160,6 +163,7 @@ nutpie
 orcid
 orthant
 overclaiming
+overfits
 overfitting
 parameterisation
 parameterisations
@@ -202,6 +206,7 @@ swapon
 tanh
 timepoint
 toddlerhood
+trigamma
 unassessable
 unbiasedness
 unbuildable

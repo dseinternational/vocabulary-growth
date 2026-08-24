@@ -41,6 +41,7 @@ import pandas as pd
 import xarray as xr
 
 from vocab_growth import environment as env
+from vocab_growth.loo_reff import reff_or_default
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
 MODELS_DIR = env.models_output_dir()
@@ -76,7 +77,36 @@ class LooEntry:
     n_high_pareto: int
 
 
-def _loo_summary_row(label: str, loo) -> dict:
+#: Share of observations above Pareto-k 0.7 beyond which the PSIS estimate is
+#: reported as unusable rather than merely caveated. PSIS-LOO degenerates for the
+#: subject-random-effect models -- leaving one observation out swings the child
+#: intercept it is nearly the only evidence for -- and past this fraction the
+#: elpd is not comparable with another model's. Held well below the 50% VG11
+#: reaches so the notice fires before a table looks authoritative.
+HIGH_PARETO_K_UNUSABLE_SHARE = 0.20
+
+
+def _warn_if_unusable(label: str, row: dict) -> None:
+    """Print a notice when a row's PSIS-LOO has degenerated past use."""
+    n = row["n_observations"]
+    if not n:
+        return
+    share = row["pareto_k_gt_0.7"] / n
+    if share < HIGH_PARETO_K_UNUSABLE_SHARE:
+        return
+    print(
+        f"      [unusable] {label}: {share:.0%} of observations above Pareto-k 0.7 "
+        f"(p_loo = {row['p_loo']:.0f} on {n} observations).\n"
+        "      PSIS-LOO has degenerated here; do not compare this elpd with another "
+        "model's.\n"
+        "      Leaving out one observation removes most of what identifies that "
+        "child's effect,\n"
+        "      which is what leave-one-subject-out (loso_compare.py) exists to "
+        "measure instead."
+    )
+
+
+def _loo_summary_row(label: str, loo, reff=None) -> dict:
     if hasattr(loo, "pareto_k"):
         k = loo.pareto_k.values
     else:
@@ -86,6 +116,10 @@ def _loo_summary_row(label: str, loo) -> dict:
         "elpd_loo": float(loo.elpd),
         "se": float(loo.se),
         "p_loo": float(loo.p),
+        # The relative efficiency this LOO used: pinned to the sampled
+        # parameters where the trace records them (loo_reff), else ArviZ's
+        # posterior-wide default, so a mixed-convention table shows it.
+        "reff": None if reff is None else float(reff),
         "looic": float(-2.0 * loo.elpd),
         "looic_se": float(2.0 * loo.se),
         "pareto_k_gt_0.7": int((k > 0.7).sum()),
@@ -169,36 +203,41 @@ def per_model_loo() -> dict[str, list[dict]]:
         # the importance-weight tail degenerates — "All tail values are the
         # same"). Guard each az.loo call so one such model is skipped with a
         # warning rather than aborting the whole comparison, matching the
-        # missing-trace / missing-log_likelihood skips above. The high Pareto-k
-        # counts already flag the models whose PSIS-LOO is unreliable.
+        # missing-trace / missing-log_likelihood skips above. A model whose
+        # PSIS-LOO survives numerically but has degenerated is caught after the
+        # fact by _warn_if_unusable, which judges the high Pareto-k share rather
+        # than leaving the reader to.
+        reff = reff_or_default(idata, label=short)
         if short in UNIVARIATE:
             try:
-                loo = az.loo(idata, pointwise=True)
+                loo = az.loo(idata, pointwise=True, reff=reff)
             except Exception as exc:  # noqa: BLE001 - any LOO failure -> skip
                 print(f"  {short}: LOO failed ({type(exc).__name__}: {exc}) — skipped")
                 continue
-            row = _loo_summary_row("y_obs", loo)
+            row = _loo_summary_row("y_obs", loo, reff)
             rows.append(row)
             print(
                 f"  {short}: elpd_loo = {row['elpd_loo']:.1f} "
                 f"± {row['se']:.1f}, p_loo = {row['p_loo']:.1f}, "
                 f"high-k = {row['pareto_k_gt_0.7']}/{row['n_observations']}"
             )
+            _warn_if_unusable(short, row)
         else:
             _attach_joint_log_likelihood(idata)
             for var in ("y_u_obs", "y_s_obs", "y_joint"):
                 try:
-                    loo = az.loo(idata, pointwise=True, var_name=var)
+                    loo = az.loo(idata, pointwise=True, var_name=var, reff=reff)
                 except Exception as exc:  # noqa: BLE001 - any LOO failure -> skip
                     print(f"  {short} [{var}]: LOO failed ({type(exc).__name__}: {exc}) — skipped")
                     continue
-                row = _loo_summary_row(var, loo)
+                row = _loo_summary_row(var, loo, reff)
                 rows.append(row)
                 print(
                     f"  {short} [{var}]: elpd_loo = {row['elpd_loo']:.1f} "
                     f"± {row['se']:.1f}, p_loo = {row['p_loo']:.1f}, "
                     f"high-k = {row['pareto_k_gt_0.7']}/{row['n_observations']}"
                 )
+                _warn_if_unusable(f"{short} [{var}]", row)
 
         if not rows:
             print(f"  {short}: no usable LOO — skipped")
@@ -215,11 +254,22 @@ def compare_pair(
     *,
     var_name: str | None = None,
 ) -> None:
-    """Run az.compare on the given InferenceData objects and write CSV."""
-    compare_dict = {name: idata for name, idata in members}
+    """Run az.compare on the given InferenceData objects and write CSV.
+
+    Each member's LOO is computed here first, with its relative efficiency
+    pinned to the sampled parameters (loo_reff), and the results are handed to
+    ``az.compare`` as ``ELPDData`` -- passing the traces would have it recompute
+    LOO with ArviZ's posterior-wide default.
+    """
+    compare_dict = {}
+    for name, idata in members:
+        reff = reff_or_default(idata, label=name)
+        try:
+            compare_dict[name] = az.loo(idata, pointwise=True, var_name=var_name, reff=reff)
+        except Exception as exc:  # noqa: BLE001 - degenerate PSIS-LOO -> skip this comparison
+            print(f"  compare {tag}: LOO for {name} failed ({type(exc).__name__}: {exc}) — skipped")
+            return
     kwargs = {"method": "stacking"}
-    if var_name is not None:
-        kwargs["var_name"] = var_name
     try:
         df = az.compare(compare_dict, **kwargs)
     except Exception as exc:  # noqa: BLE001 - degenerate PSIS-LOO -> skip this comparison

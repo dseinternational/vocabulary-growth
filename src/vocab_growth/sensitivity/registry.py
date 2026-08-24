@@ -30,7 +30,11 @@ from __future__ import annotations
 
 import math
 
-from vocab_growth.models.definitions import MODEL_REGISTRY, AgeVaryingSubjectScale
+from vocab_growth.models.definitions import (
+    MODEL_REGISTRY,
+    AgeVaryingSubjectScale,
+    SubjectFactorPriorParams,
+)
 from vocab_growth.sensitivity.overrides import make_variant
 
 # A1's subject-scale anchors must be the paired kappa block's own anchors, or the
@@ -522,6 +526,35 @@ VARIANTS: dict[tuple[str, str], dict] = {
                     "excess_young_mu": math.log(12.6),
                     "excess_old_mu": math.log(6.7),
                     "excess_old_sigma": 1.0}}},
+
+    # VG22's rank family. `notes/202608221000-four-by-four-gate1.md` §5 is
+    # explicit that this analysis cannot choose `k`: rank 2 and rank 3 are 2.60
+    # apart on 2 df and rank 3 and rank 4 are identical, so 2 and 3 are both
+    # defensible and 4 is not. Registering the other two against the default is
+    # the "honest way to settle it" the note asks for, and it is cheap because
+    # the three differ by one column of L.
+    #
+    # The default moved from rank 2 to rank 3 on 2026-08-24, so the variants are
+    # now 1 and 2. What decided it was the fits rather than the residual
+    # likelihood: rank 3 cleared the gate on plain `rep` where rank 2 needed a
+    # hightune, and the two disagree on the spoken child-slope scale by about 2.8
+    # combined standard errors. See
+    # notes/202608231420-vg22-factor-anchor-bimodality.md §5, §7.
+    #
+    # Rank 1 is not a throwaway lower bound. It is the rank-one case Proposal A1
+    # assumes -- every child's four effects one deviate scaled four ways, so all
+    # four correlate perfectly -- and Gate 1 rejects it decisively on residuals
+    # (2 x delta logL = 221 on 3 df). Fitting it here tests that rejection under
+    # the real likelihood rather than the Gaussian-on-logit approximation.
+    #
+    # The two rate scales are held at the default's 0.5 so the rank is the only
+    # thing that moves, which is what keeps the family one-factor.
+    ("vg22", "rank-1"): {"suffix": "rank-1", "scalar": {
+        "subject_factor": SubjectFactorPriorParams(
+            rank=1, tau1_u_sigma=0.5, tau1_q_sigma=0.5, ref_age_months=36.0)}},
+    ("vg22", "rank-2"): {"suffix": "rank-2", "scalar": {
+        "subject_factor": SubjectFactorPriorParams(
+            rank=2, tau1_u_sigma=0.5, tau1_q_sigma=0.5, ref_age_months=36.0)}},
 }
 
 

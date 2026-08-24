@@ -211,7 +211,11 @@ def fit_fold(
     context.set_model_data(bmd, analysis_df_with_holdout)
     configure_bivariate_priors(context, definition)
     build_model_re(context, definition)
-    sample(context)
+    # The held-out predictive below reads p_u_obs / p_s_obs / q_obs /
+    # kappa_*_obs at every draw, which the sampler otherwise no longer stores
+    # (fit_artifacts.sampled_variable_names). Storing them here costs the same
+    # memory as recomputing them afterwards and saves the second pass.
+    sample(context, store_observation_deterministics=True)
 
     return context.trace, n
 

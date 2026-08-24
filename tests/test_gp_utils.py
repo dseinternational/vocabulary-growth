@@ -7,10 +7,12 @@ Covers the kappa dispersion-closure factory (``make_kappa_of_z`` — pinning the
 closed form ``z -> kappa_min + exp(a_kappa + b_kappa * z)``), the two-anchor
 builder over the same curve (``build_kappa_of_z_anchored``), the trend + HSGP
 graph builders (``trend_and_gp`` / ``intercept_and_gp`` — checking which RVs and
-deterministics they emit), and ``get_hsgp_hyperparams`` (the boundary/basis
-sizing). Evaluating with constant inputs is sufficient (and matches the
-per-engine usage, where the same expression is built from random variables the
-caller has already created).
+deterministics they emit), ``get_hsgp_hyperparams`` (the boundary/basis
+sizing), and VG22's child-factor builder (``build_child_factor`` — pinning which
+raw loading entries exist, which are positive, and that the gauge is anchored on
+effects with between-child variance). Evaluating with constant inputs is
+sufficient (and matches the per-engine usage, where the same expression is built
+from random variables the caller has already created).
 """
 
 import numpy as np
@@ -20,10 +22,13 @@ import pytensor.tensor as pt
 import pytest
 
 from vocab_growth.models.common import get_hsgp_hyperparams
+from vocab_growth.models.definitions import SubjectFactorPriorParams
 from vocab_growth.models.gp_utils import (
     _CLAMP_SOFTNESS,
+    CHILD_FACTOR_ANCHOR_ORDER,
     GPGrid,
     _soft_clamp_z,
+    build_child_factor,
     build_kappa_of_z_anchored,
     intercept_and_gp,
     make_kappa_of_z,
@@ -464,6 +469,113 @@ def test_get_hsgp_hyperparams_boundary_covers_centred_grid():
 
 
 
+# ---------------------------------------------------------------------------
+# build_child_factor: the gauge is anchored on effects that have variance
+# ---------------------------------------------------------------------------
+#
+# The first `rep` fit of VG22 (2026-08-23) split its chains into mirror modes
+# because the triangular identification anchored on `b1u`, the comprehension
+# rate, whose between-child scale the data put at ~0.04: a row with no scale
+# pins nothing, so the second factor's reflection was free. These tests pin the
+# anchor order (b0u, b0q, b1q, b1u) and the structure it implies, which no test
+# constrained before. See notes/202608231420-vg22-factor-anchor-bimodality.md.
+
+_EFFECTS = ("b0u", "b1u", "b0q", "b1q")
+
+
+def _build_child_factor(rank):
+    spec = SubjectFactorPriorParams(rank=rank, tau1_u_sigma=0.5, tau1_q_sigma=0.5)
+    n_subjects, n_obs = 5, 8
+    rng = np.random.default_rng(0)
+    with pm.Model(
+        coords={
+            "subject_id": range(n_subjects),
+            "factor": range(rank),
+            "child_effect4": _EFFECTS,
+            "child_effect4_b": _EFFECTS,
+        }
+    ) as m:
+        build_child_factor(
+            spec,
+            tau0_u_sigma=1.0,
+            tau0_q_sigma=1.0,
+            age_obs_months=rng.uniform(12.0, 60.0, size=n_obs),
+            subject_obs=rng.integers(0, n_subjects, size=n_obs),
+        )
+    return m
+
+
+def _raw_loading_entries(model):
+    """``{(row, col): distribution name}`` for every raw loading entry."""
+    out = {}
+    for rv in model.free_RVs:
+        if rv.name.startswith("subject_factor_w_"):
+            out[(int(rv.name[-2]), int(rv.name[-1]))] = rv.owner.op.name
+    return out
+
+
+def test_child_factor_anchor_order_is_levels_then_q_rate_then_u_rate():
+    assert CHILD_FACTOR_ANCHOR_ORDER == (0, 2, 3, 1)
+    assert [_EFFECTS[i] for i in CHILD_FACTOR_ANCHOR_ORDER] == ["b0u", "b0q", "b1q", "b1u"]
+
+
+@pytest.mark.parametrize(
+    "rank, expected_entries, expected_positive",
+    [
+        # One column: every row has one entry; only b0u's is positive.
+        (1, {(0, 0), (1, 0), (2, 0), (3, 0)}, {(0, 0)}),
+        # Two columns: b0u pins column 1, b0q pins column 2; b1q and b1u are free.
+        (
+            2,
+            {(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (3, 1)},
+            {(0, 0), (2, 1)},
+        ),
+        # Three columns: b1q pins column 3; b1u carries all three, none positive.
+        (
+            3,
+            {(0, 0), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)},
+            {(0, 0), (2, 1), (3, 2)},
+        ),
+    ],
+)
+def test_child_factor_anchors_on_live_effects(rank, expected_entries, expected_positive):
+    entries = _raw_loading_entries(_build_child_factor(rank))
+    assert set(entries) == expected_entries
+    positive = {key for key, dist in entries.items() if dist == "halfnormal"}
+    assert positive == expected_positive
+    assert all(dist in {"halfnormal", "normal"} for dist in entries.values())
+    # The comprehension rate (row 1) never carries a diagonal at any registered
+    # rank: it is the one effect every fit of the family puts at ~0.
+    assert all(row != 1 for row, _col in positive)
+
+
+@pytest.mark.parametrize("rank, expected", [(1, 4), (2, 7), (3, 9)])
+def test_child_factor_free_covariance_parameter_count(rank, expected):
+    m = _build_child_factor(rank)
+    n_w = sum(1 for rv in m.free_RVs if rv.name.startswith("subject_factor_w_"))
+    # Four scales plus the raw loading entries, minus one unit-row normalisation
+    # per effect -- Gate 1's rank table (4, 7, 9), unchanged by the anchor order.
+    assert 4 + n_w - 4 == expected
+
+
+@pytest.mark.parametrize("rank", [1, 2, 3])
+def test_child_factor_rows_carry_tau_and_sigma_has_rank_k(rank):
+    m = _build_child_factor(rank)
+    L, *taus = pm.draw(
+        [
+            m["subject_factor_loadings"],
+            m["tau_subj_u_0"],
+            m["tau_subj_u_1"],
+            m["tau_subj_q_0"],
+            m["tau_subj_q_1"],
+        ],
+        random_seed=7,
+    )
+    assert L.shape == (4, rank)
+    assert np.allclose(np.linalg.norm(L, axis=1), taus)
+    assert np.linalg.matrix_rank(L @ L.T) == rank
+
+
 # --- HSGP basis centre pinning (GPGrid.x_center_z) -----------------------------
 
 
@@ -540,3 +652,4 @@ def test_pinned_centre_decouples_the_basis_from_appended_query_rows():
         _trend_gp_model(X_extended, None, 10)["f_all"], random_seed=11
     )
     assert not np.allclose(lazy_base, lazy_extended[:9])
+

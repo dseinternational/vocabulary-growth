@@ -349,6 +349,119 @@ class SubjectSlopePriorParams:
 
 
 @dataclass(frozen=True)
+class SubjectFactorPriorParams:
+    """VG22: the four child effects as ``b = L z``, a low-rank factor form.
+
+    VG19 gives each child an intercept and a rate on **each** outcome, in two
+    independent 2x2 blocks; VG20 correlates the two **intercepts** and holds the
+    rates at zero. Their union is a 4x4 over ``(b0u, b1u, b0q, b1q)`` with four
+    scales and six correlations. Gate 1
+    (``notes/202608221000-four-by-four-gate1.md``) fitted that 4x4 on the
+    residuals and returned two negatives:
+
+    * the element that motivated it -- ``corr(b1u, b1q)``, do children who gain
+      comprehension faster also convert faster -- is the **weakest** of the six
+      (2.47 across all children, 0.57 on repeat-measured children, where a
+      within-child rate coupling would have to show if it existed); and
+    * the 4x4 is **not identified** by these data. Its maximum-likelihood
+      correlation matrix is singular to 2.1e-08, a rank-3 fit reaches an
+      identical likelihood to four decimal places, and rank 2 costs only 2.60 on
+      2 df.
+
+    So the successor is not a correlation matrix of any shape. It is a factor
+    form, in which ``k`` latent dimensions drive all four effects::
+
+        b_child = L z_child,   z ~ Normal(0, I_k),   L is (4, k)
+
+    giving ``Sigma = L L'`` -- positive semi-definite by construction, with **no
+    positive-definiteness constraint to hand-write into the graph**, which is
+    the awkward part of a constrained correlation matrix and the reason §5 of
+    the note rejects one.
+
+    **Scale and direction are separated**, so the marginal spreads keep the
+    names, the priors and the meanings they have in VG19 and VG20. Each row of
+    ``L`` is a marginal SD times a unit direction::
+
+        tau_i        ~ HalfNormal(sigma_i)          # marginal SD of effect i
+        w_i          ~ Normal(0, 1) on R^k, then normalised to unit length
+        L[i, :]      = tau_i * w_i / ||w_i||
+
+    so ``Sigma_ii = tau_i ** 2`` exactly and ``tau_subj_u_0`` still means "the
+    between-child spread of comprehension standing at the reference age",
+    comparable across ``rank`` and against both parents. The correlations become
+    named deterministics rather than sampled parameters.
+
+    **The free-parameter count reproduces the note's rank table exactly**, which
+    is the check that this parameterisation is the one the gate analysed. Row
+    directions live on a ``(k-1)``-sphere and ``L`` is fixed against rotation by
+    taking ``k`` anchor rows and constraining their ``k x k`` block to be
+    lower-triangular with a positive diagonal, so the covariance carries
+    ``4 + (k - 1) * (k / 2 + 4 - k)`` free parameters: **4** at ``k = 1``,
+    **7** at 2, **9** at 3 and **10** at 4 -- against the note's 4, 7, 9, 10.
+
+    Without that triangular constraint ``L`` and ``L Q`` are the same covariance
+    for any orthogonal ``Q``, which leaves the loadings on a rotational ridge and
+    is a sampling problem rather than merely an interpretive one. The anchors
+    are ``(b0u, b0q, b1q, b1u)`` -- the two levels, then the production-ratio
+    rate, with the comprehension rate last -- because a diagonal only pins its
+    column's sign if the row it sits on has real between-child variance, and
+    ``b1u``'s is ~0 in every fit of this family. Anchoring on it is what split
+    the first ``rep`` fit into mirror modes (``gp_utils.build_child_factor``,
+    ``notes/202608231420-vg22-factor-anchor-bimodality.md``). The anchor order
+    is a gauge choice: it changes neither ``Sigma`` nor the counts.
+
+    **What is nested, and what is not.** ``rank = 1`` makes every child's four
+    effects one deviate scaled four ways -- perfect correlation throughout, the
+    rank-one case Proposal A1 assumes. VG20 is the special case with the two
+    rate loadings at zero. **VG19 is not nested here at any rank below 4**: two
+    independent 2x2 blocks are a full-rank 4x4 with cross terms at zero, and a
+    factor form reaches zero cross-correlation only by giving the two outcomes
+    orthogonal directions, which at ``k < 4`` it cannot do for all four effects
+    at once. This is a different family, not a strict generalisation, and the
+    comparison with VG19 is therefore between models rather than within one.
+
+    **``rank`` is a definition field because the data cannot choose it.** Rank 2
+    and rank 3 are 2.60 apart on 2 df and rank 3 and rank 4 are identical, so 2
+    and 3 are both defensible and 4 is not. Fit ``rank = 1, 2, 3`` as a
+    registered sensitivity family; they differ by one column of ``L``.
+
+    One caveat the note is explicit about and this docstring should not soften:
+    residual maximum likelihood sits on the singularity boundary and a Bayesian
+    fit will not. The finding is **not** "the fourth dimension is zero" but that
+    **the data carry almost no information about it, so the prior supplies
+    nearly all of it** -- which is why ``rank`` is declared rather than inferred.
+    """
+
+    rank: int
+    """Number of latent dimensions ``k``. Gate 1 supports 1-3; 4 is refused,
+    because rank 3 already reaches the free 4x4's likelihood exactly."""
+
+    tau1_u_sigma: float
+    """HalfNormal scale for the spread of per-year comprehension rates. Per year,
+    not per month, for the reason ``SubjectSlopePriorParams.tau1_sigma`` gives."""
+
+    tau1_q_sigma: float
+    """HalfNormal scale for the spread of per-year production-ratio rates."""
+
+    ref_age_months: float = 36.0
+    """Age at which the two ``tau0`` scales are the between-child spreads. The
+    level scales themselves are the definition's own ``tau_subj_u_sigma`` and
+    ``tau_subj_q_sigma``, so this form re-uses the parent's priors rather than
+    restating them."""
+
+    def __post_init__(self) -> None:
+        if self.rank not in (1, 2, 3):
+            raise ValueError(
+                "SubjectFactorPriorParams.rank must be 1, 2 or 3: Gate 1 found "
+                "rank 3 already reaches the free 4x4's likelihood exactly, so "
+                f"rank 4 buys nothing. Got {self.rank!r}."
+            )
+        for name in ("tau1_u_sigma", "tau1_q_sigma"):
+            if not getattr(self, name) > 0:
+                raise ValueError(f"{name} must be positive; got {getattr(self, name)!r}.")
+
+
+@dataclass(frozen=True)
 class AgeVaryingSubjectScale:
     """Proposal A1: an age-varying between-child scale, with ``kappa`` held flat.
 
@@ -421,6 +534,53 @@ def subject_slope_spec(value) -> SubjectSlopePriorParams | None:
     each selector recognises exactly one of them.
     """
     return value if isinstance(value, SubjectSlopePriorParams) else None
+
+
+def subject_factor_spec(value) -> SubjectFactorPriorParams | None:
+    """Return the VG22 low-rank factor spec, or ``None``.
+
+    Unlike :func:`subject_scale_spec` and :func:`subject_slope_spec` this does
+    **not** read an overloaded ``tau_subj_*_sigma`` field. A factor spans both
+    outcomes at once, so it is not "the u scale" or "the q scale" and putting it
+    in one of them would misname it; it lives on its own subclass field, the
+    pattern :class:`BivariateCorrelatedSubjectREModelDefinition` established.
+    """
+    return value if isinstance(value, SubjectFactorPriorParams) else None
+
+
+@dataclass(frozen=True)
+class SingletonMarginalisationParams:
+    """Integrate out the child effects that only one observation ever sees.
+
+    Selects the likelihood in :mod:`~vocab_growth.models.subject_marginal`: a
+    child assessed once has its ``delta_subject`` integrated out by
+    Gauss-Hermite quadrature, while a child with repeated administrations keeps
+    an explicit effect. The marginal likelihood still contains ``tau_subject``,
+    so this is **not** the subject-RE removal that
+    ``notes/202608050900-td-hierarchical-geometry.md`` §7 rejected: the model,
+    ``kappa``'s meaning as within-child dispersion, and the posterior of every
+    retained quantity are unchanged up to quadrature error. What changes is the
+    sampled space, which loses the thousands of prior-dominated singleton
+    dimensions that carry the funnel mass. See
+    ``notes/202608231410-td-geometry-remaining-levers.md`` §3.
+
+    It is still a graph change, so it needs a refit; and it changes what a
+    marginalised row's pointwise ``log_likelihood`` and posterior predictive
+    draw mean -- both become marginal rather than conditional -- so ``elpd``
+    values do not compare across the change.
+    """
+
+    n_nodes: int
+    """Gauss-Hermite nodes for each marginalised row.
+
+    Required rather than defaulted, so a model's accuracy setting is written at
+    its registration site. Twenty is what
+    :data:`~vocab_growth.models.subject_marginal.DEFAULT_QUADRATURE_NODES`
+    recommends, and the value the node-sensitivity check doubles."""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.n_nodes, int) or self.n_nodes < 2:
+            raise ValueError(f"n_nodes must be an integer >= 2; got {self.n_nodes!r}.")
 
 
 # ============================================================
@@ -605,6 +765,29 @@ class UnivariateREModelDefinition(UnivariateModelDefinition):
     if the cause is missing within-child replication rather than bad coordinates,
     which is what §4 of the note argues. Kept for the divergence reduction, not as
     a BFMI remedy. See :class:`SubjectVariancePartitionParams`."""
+
+
+@dataclass
+class UnivariateMarginalisedREModelDefinition(UnivariateREModelDefinition):
+    """A univariate RE model whose singleton child effects are integrated out.
+
+    On its own subclass for the reason :class:`UnivariateREModelDefinition`
+    gives: a fit is validated by comparing ``dataclasses.asdict`` field for
+    field, so a definition class that gains a field invalidates every existing
+    fit of that class. VG11 and VG12 are models of record fitted with every
+    singleton child effect sampled explicitly; until the VG12 bench says the
+    lever earns their refits, the field lives here and they stay instances of
+    the parent class.
+
+    The engine reads the field through ``getattr`` with a default, so a plain
+    :class:`UnivariateREModelDefinition` still builds.
+    """
+
+    singleton_marginalisation: SingletonMarginalisationParams | None = None
+    """If set, integrate out the child effects of children seen once.
+
+    Requires ``use_subject_re``; :func:`validate_model_definition` rejects the
+    combination without it, where the flag would silently do nothing."""
 
 
 # ============================================================
@@ -882,6 +1065,38 @@ class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
     subject_slope_ref_age_months: float = 36.0
     """Reference age (months) at which ``tau0`` is the between-child spread.
     36 months is the Down syndrome pool's median age."""
+
+
+@dataclass
+class BivariateFactorSubjectREModelDefinition(BivariateModelDefinition):
+    """Bivariate definition whose four child effects share latent factors.
+
+    VG22, the successor to VG19 and VG20 selected by
+    ``notes/202608221000-four-by-four-gate1.md`` §5. See
+    :class:`SubjectFactorPriorParams` for the structure and the evidence.
+
+    Inherits from ``BivariateModelDefinition`` rather than from either parent,
+    for the reason recorded on :class:`BivariateChildSlopeModelDefinition`: it is
+    gated against VG10, so VG10 is its parent, and neither
+    ``subject_re_correlation_eta`` nor the slope seam is a field it should be
+    able to set. Both structures are special cases of this one at the covariance
+    level, but expressing either *through* this class would give two ways to
+    write the same model.
+
+    The field lives on a **subclass** so that VG05, VG07-VG10, VG16, VG19 and
+    VG20 keep their serialised definitions and therefore their fitted output;
+    ``None`` means "behave exactly as the parent", so the subclass is inert until
+    a definition sets it.
+    """
+
+    subject_factor: SubjectFactorPriorParams | None = None
+    """Low-rank factor structure over ``(b0u, b1u, b0q, b1q)``, or ``None`` for
+    the parent's two independent constant offsets.
+
+    Requires ``use_subject_re_u`` and ``use_subject_re_q`` both set: the form is
+    a joint covariance over both outcomes' effects and is not defined when only
+    one outcome carries a child effect. The engine refuses the combination.
+    """
 
 
 # ============================================================
@@ -1835,6 +2050,33 @@ _TD_YOUNG_Q_KAPPA_RE = KappaAnchorPriorParams(
     # VG13's posterior is already at 40.4 and 29.7, so like VG11 this re-centres a
     # prior the data had overruled rather than changing the answer.
     anchor_ages=(12.0, 17.0),
+    kappa_min_mu=math.log(3.0),
+    kappa_min_sigma=0.8,
+    excess_young_mu=math.log(33.0),
+    excess_young_sigma=0.7,
+    excess_old_mu=math.log(27.0),
+    excess_old_sigma=0.7,
+)
+
+# VG21's understood and production-ratio kappa. Identical to the VG13 pair above
+# except for the anchor ages, moved from (12, 17) to (12, 20) so the high anchor
+# sits inside the wider 8-22 month window rather than five months short of its
+# top. The magnitudes are deliberately NOT recalibrated -- they are inherited
+# from VG13, which inherited them from VG12 -- and
+# notes/202608211100-window-22-adopted.md §6 lists that as an outstanding item on
+# the promotion rather than something these fits settle.
+_TD_WINDOW22_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
+    anchor_ages=(12.0, 20.0),
+    kappa_min_mu=math.log(30.0),
+    kappa_min_sigma=0.6,
+    excess_young_mu=math.log(10.0),
+    excess_young_sigma=0.9,
+    excess_old_mu=math.log(90.0),
+    excess_old_sigma=0.9,
+)
+
+_TD_WINDOW22_Q_KAPPA_RE = KappaAnchorPriorParams(
+    anchor_ages=(12.0, 20.0),
     kappa_min_mu=math.log(3.0),
     kappa_min_sigma=0.8,
     excess_young_mu=math.log(33.0),
@@ -3306,6 +3548,111 @@ VG19 = _as_definition_subclass(
     subject_slope_ref_age_months=36.0,
 )
 
+# Promotion of the `window-22` sensitivity variant to a numbered model, per
+# notes/202608211100-window-22-adopted.md (adoption) and
+# notes/202608211545-window-22-prior-gate-passed.md (prior gate). VG13 stops at
+# 18 months and so runs out of matched comprehension at ~221 understood words;
+# this window reaches 328, which is what the DS/TD matched contrast needs.
+#
+# 22 and not 25. The Oxford CDI's 418-item ceiling bites unevenly: below 19
+# months 1-5% of administrations sit within 10% of their form's ceiling, at 19-22
+# it is 7-8%, and at 23, 24, 25 it jumps to 20.2%, 27.7%, 36.1%. Compressing
+# understood at the ceiling while spoken keeps rising inflates q = S/U, so a
+# contaminated window reads HIGH -- and `window-25` does, by 0.098 at 328 words.
+# `window-25` remains fitted as the measurement of that exposure and must not
+# supply a reported number.
+#
+# The finding this carries is that the DS/TD gap in q CLOSES by 300 understood
+# words (Delta q = -0.00, P(TD>DS) = 0.49) where `window-25` keeps it open at
+# +0.09. That closure was gated against its own priors under a rule fixed before
+# the fit -- `window-22-vague-anchors` widened both high slope anchors in the
+# direction that would reopen it -- and survived, moving P(TD>DS) by at most
+# 0.0085 anywhere on the grid.
+#
+# Two weaknesses are inherited and unresolved (adoption note §6): the high-anchor
+# priors come from in-sample medians rather than published norms, because no CDI
+# comprehension norm exists above 18 months, and the kappa magnitudes are VG12's
+# rather than recalibrated for the wider window.
+VG21 = _as_definition_subclass(
+    VG13,
+    BivariateModelDefinition,
+    model_id="VG21",
+    config_name="age-understood-spoken-td-re-window22",
+    banner=(
+        "Fitting Model VG21: Joint words understood + spoken (TD, 8-22 months) "
+        "with dataset-level study random intercepts"
+    ),
+    max_age_months=22,
+    slope_anchors=(10, 21),
+    ages_query=[8, 10, 12, 14, 16, 18, 20, 22],
+    gp_domain_months=(8, 22),
+    gp_anchor_age_months=15.5,
+    # 21 mo in-sample medians: understood 0.359 of 810, q 0.417.
+    p_slope_hi_u_alpha=2.0,
+    p_slope_hi_u_beta=3.2,
+    p_slope_hi_q_alpha=2.0,
+    p_slope_hi_q_beta=2.6,
+    # VG13 keeps 0.20 because only the bottom limb of the logit-q S-curve is in
+    # its window; four more months brings enough curvature to need the family's
+    # wider amplitude.
+    eta_q_sigma=0.5,
+    kappa_u=_TD_WINDOW22_UNDERSTOOD_KAPPA_RE,
+    kappa_s=_TD_WINDOW22_Q_KAPPA_RE,
+)
+
+
+# Derived from VG10 for the same reason VG19 and VG20 are: it is gated against
+# VG10, so any movement in the reported population trajectories is a red flag
+# rather than a benefit, and VG10's anchor recalibrations cannot drift away from
+# this model's. See notes/202608221000-four-by-four-gate1.md.
+#
+# `rank = 3` is the registered default, moved from 2 by the study owner on
+# 2026-08-24. Gate 1 could not choose between them -- rank 2 is within 2.60 on 2 df
+# of rank 3, and rank 3 within 0.0000 of the free 4x4, so 4 is excluded outright and
+# 2 and 3 are both defensible on the residual likelihood. The fits decided it, in
+# two ways Gate 1 could not see. Rank 3 cleared the convergence gate on the plain
+# `rep` configuration with 8 divergences where rank 2 needed a hightune to reach 18
+# (178 without it): the larger factor model is the easier geometry, rank 2 having to
+# press four child effects into a two-dimensional space. And the two disagree on the
+# spoken child-slope scale -- 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at
+# rank 3, about 2.8 combined standard errors on shared data -- so the rank is not a
+# free choice for any reading about how differently children's spoken trajectories
+# steepen. The intercept-level quantities agree closely across both and are not at
+# stake. See notes/202608231420-vg22-factor-anchor-bimodality.md SS5, SS7.
+#
+# The sensitivity family is 1, 2 and 3 throughout; only which of them is the
+# registered default has moved.
+VG22 = _as_definition_subclass(
+    VG10,
+    BivariateFactorSubjectREModelDefinition,
+    model_id="VG22",
+    config_name="age-understood-spoken-ds-re-subj-uq-anchored-factor",
+    # No rank in the banner: the sensitivity machinery appends
+    # "[sensitivity: rank-N]" to this string, so a hard-coded number contradicts
+    # every variant that is not the default (the stored rank-3 fit is labelled
+    # "a rank-2 factor ... [sensitivity: rank-3]").
+    banner=(
+        "Fitting Model VG22: VG10 + a low-rank factor over the four child effects"
+        " (U and q, level and rate) - Down syndrome"
+    ),
+    # The two LEVEL scales stay VG10's own 1.5 on both outcomes, inherited
+    # through `tau_subj_u_sigma` / `tau_subj_q_sigma` rather than restated, so
+    # the intercepts keep the model of record's priors exactly.
+    #
+    # The two RATE scales are VG19's 0.5 per year, for the reason recorded there:
+    # in logit/month the ML values are 0.02-ish and unreadable as a prior, per
+    # year they are 0.12-0.29, and HalfNormal(0.5) has median 0.34 -- covering
+    # both while keeping mass near zero so a rate the data do not support shrinks
+    # away.
+    subject_factor=SubjectFactorPriorParams(
+        rank=3,
+        tau1_u_sigma=0.5,
+        tau1_q_sigma=0.5,
+        ref_age_months=36.0,
+    ),
+)
+
+
 MODEL_REGISTRY: dict[
     str,
     UnivariateModelDefinition
@@ -3330,6 +3677,8 @@ MODEL_REGISTRY: dict[
     "vg16": VG16,
     "vg19": VG19,
     "vg20": VG20,
+    "vg21": VG21,
+    "vg22": VG22,
 }
 
 
@@ -3505,6 +3854,13 @@ def validate_model_definition(definition) -> None:
         definition, "use_subject_re_u", False
     ):
         raise ValueError(f"{prefix} cross-lag requires use_subject_re_u=True.")
+
+    marginalisation = getattr(definition, "singleton_marginalisation", None)
+    if marginalisation is not None and not getattr(definition, "use_subject_re", False):
+        raise ValueError(
+            f"{prefix}.singleton_marginalisation integrates out child effects, but "
+            "the model has no subject random effect to integrate."
+        )
 
     _validate_positive_scale_fields(definition, path=prefix)
 
