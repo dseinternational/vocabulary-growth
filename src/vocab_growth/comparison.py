@@ -36,6 +36,7 @@ from __future__ import annotations
 import os
 
 import arviz as az
+import dse_research_utils.plot.io as plot_io
 import dse_research_utils.statistics.intervals as shared_intervals
 import numpy as np
 import pandas as pd
@@ -444,9 +445,9 @@ def overlay_age_curves(title, series, out_base, *, ylabel="Expected words"):
     ax.set_title(title)
     ax.set_ylim(bottom=0)
     ax.legend(loc="upper left", frameon=True)
-    fig.savefig(out_base + ".png")
-    fig.savefig(out_base + ".svg")
-    plt.close(fig)
+    plot_io.save_styled_figure(
+        os.path.dirname(out_base), os.path.basename(out_base), fig=fig, bbox_inches=None
+    )
 
 
 def plot_summary_band(
@@ -499,10 +500,7 @@ def save_panel(out_dir, filename, ax_setup, draw, *, figsize=(8.0, 5.0)) -> None
     ax.legend(loc="best", frameon=True, fontsize=9)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    os.makedirs(out_dir, exist_ok=True)
-    fig.savefig(os.path.join(out_dir, f"{filename}.png"), dpi=200)
-    fig.savefig(os.path.join(out_dir, f"{filename}.svg"))
-    plt.close(fig)
+    plot_io.save_styled_figure(out_dir, filename, fig=fig, bbox_inches=None)
 
 
 # ----------------------------------------------------------------------------
