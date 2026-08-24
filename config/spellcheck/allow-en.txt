@@ -146,6 +146,7 @@ logits
 matplotlib
 microbenchmark
 miscalibrated
+miscalibration
 miscited
 missingness
 modeling
