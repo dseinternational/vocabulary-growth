@@ -30,6 +30,7 @@ import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
 import numpy as np
+import pandas as pd
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
@@ -100,7 +101,15 @@ def prepare_bivariate_re_data(
     )
     if use_subject_codes:
         columns = columns + ["subject_id"]
-    if definition.exclude_us01_spoken_ceiling or definition.dse_native_only:
+    if (
+        definition.exclude_us01_spoken_ceiling
+        or definition.dse_native_only
+        # The cross-lag audit records checklist-form transitions between the
+        # source and current waves (issue #242); the ceiling column is the
+        # form identity the frame carries. Loading it changes no likelihood
+        # input and no raw-data fingerprint.
+        or definition.use_cross_lag
+    ):
         columns = columns + ["survey_vocab_max"]
 
     df = vocab_data_utils.load_data(
@@ -330,38 +339,199 @@ def _resolve_subject_re_correlation(
     return float(eta)
 
 
-def _compute_prev_wave_lag(analysis_df, n_trials: int):
+def iter_subject_age_waves(subject, age):
+    """Yield each ``(subject, recorded age)`` administration wave as one group.
+
+    A wave is every row a child carries at one recorded age, taken complete:
+    the indices are yielded together so a caller can assign one prior-wave
+    state to all of them before any of them advances that state. Children are
+    walked in code order and each child's waves in increasing age. The set of
+    indices in each yielded wave is invariant to the input row order; only
+    their order inside the wave follows it.
+    """
+    order = np.lexsort((age, subject))
+    n = len(order)
+    start = 0
+    while start < n:
+        stop = start
+        s, a = subject[order[start]], age[order[start]]
+        while stop < n and subject[order[stop]] == s and age[order[stop]] == a:
+            stop += 1
+        yield order[start:stop]
+        start = stop
+
+
+def compute_prev_wave_lag(subject, age, understood, n_trials):
     """Per-observation prior-wave understood lag source for the VG16 cross-lag.
 
-    For each observation, locate the child's immediately-earlier age wave
-    that carries an understood measure (the lag source). Returns
-    ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation arrays:
-    ``has_lag_f`` is 1.0 where such a prior wave exists and 0.0 otherwise (a
-    child's first wave, or when every earlier wave lacks comprehension);
-    ``prev_idx`` points at that prior wave (0 where absent, gated by
-    ``has_lag_f``); ``y_u_prev_logit`` is the logit of the prior-wave understood
+    The unit is an **administration wave**: every row a child carries at one
+    recorded age, processed as a complete group (issue #242).
+
+    * Every row in a wave receives the same source — the child's most recent
+      strictly earlier wave with at least one usable understood count,
+      skipping earlier waves without one.
+    * The source state advances only after a whole wave is assigned, so a row
+      can never receive a same-age source and the result is invariant to the
+      input row order. The row-by-row walk this replaced advanced state
+      immediately after each row, so which of two same-recorded-age rows
+      (two checklist forms) carried the lag depended on arbitrary tie order —
+      66 spoken observations from 46 children lost their lag to it on the
+      2026-08 frame.
+    * Where a source wave carries several understood measurements (two forms
+      at one recorded age), the largest count is selected: every count is
+      scored against the same ``n_trials`` inventory under the project's
+      difficulty-ordering harmonisation, and a shorter form right-truncates
+      it, so the largest observed count is the least-truncated measurement
+      available. On the current frame no source wave carries more than one
+      understood measurement, so the rule is registered ahead of need. Rows
+      of one wave share child, study and recorded age, so which *row* the
+      source index points at cannot move the likelihood — only the selected
+      count can.
+
+    Returns ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation
+    arrays: ``has_lag_f`` is 1.0 where a source wave exists and 0.0 otherwise
+    (a child's first wave, or when every earlier wave lacks comprehension);
+    ``prev_idx`` points at the selected source row (0 where absent, gated by
+    ``has_lag_f``); ``y_u_prev_logit`` is the logit of the source understood
     proportion (clipped away from 0/1), and 0.0 where there is no lag source.
     """
-    n = len(analysis_df)
+    subject = np.asarray(subject, dtype=int)
+    age = np.asarray(age, dtype=float)
+    understood = np.asarray(understood, dtype=float)
+    n = len(subject)
     prev_idx = np.zeros(n, dtype=int)
     has_lag_f = np.zeros(n, dtype=float)
-    subj = np.asarray(analysis_df["subject_code"], dtype=int)
-    age = np.asarray(analysis_df["age"], dtype=float)
-    und = analysis_df["understood"].to_numpy(dtype=float)
-    row_order = np.arange(n)
-    prev_subj, last, last_age = -1, -1, np.nan
-    for pos in np.lexsort((row_order, age, subj)):  # walk each child in age order
-        if subj[pos] != prev_subj:
-            prev_subj, last, last_age = subj[pos], -1, np.nan
-        if last >= 0 and age[pos] > last_age:
-            prev_idx[pos] = last
-            has_lag_f[pos] = 1.0
-        if not np.isnan(und[pos]):
-            last, last_age = pos, age[pos]
-    und_prev = np.where(has_lag_f > 0, und[prev_idx], n_trials * 0.5)
+    current_subject, source = -1, -1
+    for wave in iter_subject_age_waves(subject, age):
+        s = subject[wave[0]]
+        if s != current_subject:
+            current_subject, source = s, -1
+        if source >= 0:
+            prev_idx[wave] = source
+            has_lag_f[wave] = 1.0
+        with_u = wave[~np.isnan(understood[wave])]
+        if with_u.size:
+            source = int(with_u[np.argmax(understood[with_u])])
+    und_prev = np.where(has_lag_f > 0, understood[prev_idx], n_trials * 0.5)
     p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
     y_u_prev_logit = np.where(has_lag_f > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0)
     return prev_idx, has_lag_f, y_u_prev_logit
+
+
+def _compute_prev_wave_lag(analysis_df, n_trials: int):
+    """DataFrame adapter for :func:`compute_prev_wave_lag`."""
+    return compute_prev_wave_lag(
+        np.asarray(analysis_df["subject_code"], dtype=int),
+        np.asarray(analysis_df["age"], dtype=float),
+        analysis_df["understood"].to_numpy(dtype=float),
+        n_trials,
+    )
+
+
+def cross_lag_audit_frame(
+    analysis_df,
+    prev_idx,
+    has_lag_f,
+    spoken_indices,
+    spoken_is_conditional,
+):
+    """One row per observation with a prior-wave understood source (issue #242).
+
+    Persists the cross-lag coefficient's support as a fit artefact so reports
+    read the counts from a file instead of restating them: the source wave and
+    its gap, the selected source count (flagging clipped zeros and waves where
+    the largest-count selection had more than one measurement to choose from),
+    whether the row enters the spoken likelihood and on which branch, and —
+    where the frame carries form ceilings — the checklist transition between
+    the source and current waves.
+    """
+    n = len(analysis_df)
+    branch = np.full(n, "", dtype=object)
+    branch[np.asarray(spoken_indices, dtype=int)] = np.where(
+        np.asarray(spoken_is_conditional, dtype=bool), "conditional", "marginal"
+    )
+    lagged = np.flatnonzero(np.asarray(has_lag_f, dtype=float) > 0)
+    src = np.asarray(prev_idx, dtype=int)[lagged]
+    subj = np.asarray(analysis_df["subject_code"], dtype=int)
+    age = np.asarray(analysis_df["age"], dtype=float)
+    und = analysis_df["understood"].to_numpy(dtype=float)
+    # Understood measurements available at each child-age wave, keyed so the
+    # audit can say how often the largest-count source selection actually had
+    # a choice to make.
+    wave_u_counts = (
+        analysis_df.assign(_subj=subj, _age=age)
+        .groupby(["_subj", "_age"])["understood"]
+        .count()
+    )
+    src_keys = list(zip(subj[src], age[src], strict=True))
+    frame = pd.DataFrame(
+        {
+            "row": lagged,
+            "subject_code": subj[lagged],
+            "age_months": age[lagged],
+            "source_row": src,
+            "source_age_months": age[src],
+            "gap_months": age[lagged] - age[src],
+            "source_understood": und[src],
+            "source_understood_zero": und[src] == 0,
+            "source_wave_understood_measurements": [
+                int(wave_u_counts.loc[k]) for k in src_keys
+            ],
+            # "" = the row carries no spoken observation in the likelihood, so
+            # its lag cannot inform beta_lag.
+            "spoken_branch": branch[lagged],
+        }
+    )
+    if "study" in analysis_df.columns:
+        frame.insert(2, "study", np.asarray(analysis_df["study"])[lagged])
+    if "survey_vocab_max" in analysis_df.columns:
+        ceilings = analysis_df["survey_vocab_max"].to_numpy(dtype=float)
+        frame["source_form_ceiling"] = ceilings[src]
+        frame["form_ceiling"] = ceilings[lagged]
+        frame["form_ceiling_changed"] = (
+            (ceilings[lagged] != ceilings[src])
+            & ~np.isnan(ceilings[lagged])
+            & ~np.isnan(ceilings[src])
+        )
+    return frame
+
+
+def _report_cross_lag_support(context, audit: pd.DataFrame, n_obs: int) -> None:
+    """Write ``cross_lag_audit.csv`` and print the support summary (issue #242)."""
+    audit.to_csv(
+        os.path.join(context.reporting.output_dir, "cross_lag_audit.csv"),
+        index=False,
+    )
+    supporting = audit[audit["spoken_branch"] != ""]
+    gaps = supporting["gap_months"]
+    rows: list[tuple[str, object]] = [
+        ("Observations with a prior-wave understood source", len(audit)),
+        ("... of them entering the spoken likelihood", len(supporting)),
+        ("Children contributing a supporting observation", supporting["subject_code"].nunique()),
+        ("Supporting rows on the conditional S|U branch", int((supporting["spoken_branch"] == "conditional").sum())),
+        ("Supporting rows on the marginal fallback branch", int((supporting["spoken_branch"] == "marginal").sum())),
+        (
+            "Gap to source (months): median (IQR) [range]",
+            f"{gaps.median():.1f} ({gaps.quantile(0.25):.1f}-{gaps.quantile(0.75):.1f}) "
+            f"[{gaps.min():.0f}-{gaps.max():.0f}]"
+            if len(supporting)
+            else "n/a",
+        ),
+        ("Zero-count sources (clipped logit)", int(supporting["source_understood_zero"].sum())),
+        (
+            "Source waves offering >1 understood measurement",
+            int((supporting["source_wave_understood_measurements"] > 1).sum()),
+        ),
+    ]
+    if "form_ceiling_changed" in supporting.columns:
+        rows.append(
+            (
+                "Supporting rows changing form ceiling source -> target",
+                int(supporting["form_ceiling_changed"].sum()),
+            )
+        )
+    rows.append(("Observations in the frame", n_obs))
+    key_value_table("Cross-lag support (cross_lag_audit.csv)", rows)
 
 
 def build_model_re(
@@ -429,12 +599,12 @@ def build_model_re(
         subject_codes = None
         n_subjects = 0
 
-    # Cross-lag (VG16, issue #113): for each observation, the child's
-    # immediately-earlier age wave with understood data is the lag source;
-    # x_lag = 0 where there is no such prior wave (first wave, same-age
-    # duplicates, or every earlier wave lacks comprehension).
-    # prev_idx/has_lag_f/y_u_prev_logit are consumed below when injecting
-    # beta_lag * x_lag into the q logit.
+    # Cross-lag (VG16, issue #113): the child's most recent strictly earlier
+    # administration wave with understood data is the lag source, computed
+    # over complete (subject, age) wave groups (issue #242); x_lag = 0 where
+    # there is no such prior wave (a child's first wave, or every earlier wave
+    # lacks comprehension). prev_idx/has_lag_f/y_u_prev_logit are consumed
+    # below when injecting beta_lag * x_lag into the q logit.
     use_cross_lag = bool(definition.use_cross_lag)
     prev_idx = np.zeros(n, dtype=int)
     has_lag_f = np.zeros(n, dtype=float)
@@ -445,6 +615,17 @@ def build_model_re(
         print(
             f"Cross-lag ({definition.lag_baseline}): "
             f"{int(has_lag_f.sum())} of {n} observations have a prior-wave understood source."
+        )
+        _report_cross_lag_support(
+            context,
+            cross_lag_audit_frame(
+                analysis_df,
+                prev_idx,
+                has_lag_f,
+                spoken_spec.indices,
+                spoken_spec.is_conditional,
+            ),
+            n_obs=n,
         )
 
     # Validate
@@ -1067,7 +1248,10 @@ def bivariate_re_stages(
         ),
         ("Prior predictive checks", prior_predictive_checks),
         ("Posterior sampling", sample),
-        ("Diagnostics", diagnostics),
+        # The definition travels with the stage so the cross-lag models can
+        # reorder the pair plot and suppress the leaking understood LOO
+        # (issue #242); every other model takes the default path unchanged.
+        ("Diagnostics", lambda ctx: diagnostics(ctx, definition)),
         (
             "Posterior predictions",
             lambda ctx: sample_posterior_predictive(ctx, definition),

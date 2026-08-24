@@ -24,7 +24,10 @@ deliberately excluded from that harness because its cross-lag predictor is a
 function of the outcome. Simulation therefore has to walk each child's waves in
 age order, deriving `x_lag` at wave t from the *already simulated* understood
 count at wave t-1. That sequential dependence is the whole point here, so it is
-built explicitly below.
+built explicitly below. The wave walk and the lag indexing are the engine's own
+(`iter_subject_age_waves` / `compute_prev_wave_lag`), imported rather than
+copied: an earlier copy of the engine's row-by-row walk reproduced its
+row-order-dependent lag-assignment defect here (issue #242).
 
 **What this does and does not establish.** The estimators are marginal
 likelihood, with the child effects integrated out by Gauss-Hermite quadrature
@@ -60,6 +63,10 @@ from scipy.optimize import minimize_scalar
 from scipy.special import gammaln
 
 from vocab_growth import environment as env
+from vocab_growth.models.common_bivariate_re import (
+    compute_prev_wave_lag,
+    iter_subject_age_waves,
+)
 
 VG16_DIR = "VG16-age-understood-spoken-ds-re-subj-uq-crosslag"
 N_TRIALS = 810
@@ -130,19 +137,18 @@ def load_truth(root):
     return truth, design
 
 
-def child_order(age, subj):
-    """Row order walking each child's waves in age order, and the wave index."""
-    order = np.lexsort((np.arange(len(age)), age, subj))
-    return order
-
-
 def simulate(rng, truth, design, beta_lag, baseline):
     """Simulate understood and spoken counts at a known ``beta_lag``.
 
-    Walks each child in age order so ``x_lag`` at wave t is built from the
-    understood count simulated at wave t-1, exactly as the engine builds it from
-    the observed one. ``baseline`` selects the data-generating baseline; the
-    estimators below are applied to whatever is generated here.
+    Walks each child's administration waves — complete ``(subject, age)``
+    groups, matching the engine's corrected lag construction (issue #242) — so
+    ``x_lag`` at wave t is built from the understood count simulated at the
+    child's previous wave, exactly as the engine builds it from the observed
+    one: every row of a wave shares one prior source, and the source state
+    advances only once the whole wave is simulated (largest simulated observed
+    count where a wave carries several understood measurements). ``baseline``
+    selects the data-generating baseline; the estimators below are applied to
+    whatever is generated here.
     """
     age, subj = design["age"], design["subj"]
     umask, cond = design["umask"], design["cond"]
@@ -159,32 +165,42 @@ def simulate(rng, truth, design, beta_lag, baseline):
     x_lag = np.zeros(n)
     has = np.zeros(n, dtype=bool)
 
-    prev_subj, last, last_age = -1, -1, np.nan
-    for pos in child_order(age, subj):
-        i = subj[pos]
+    prev_subj, source = -1, -1
+    for wave in iter_subject_age_waves(subj, age):
+        i = subj[wave[0]]
         if i != prev_subj:
-            prev_subj, last, last_age = i, -1, np.nan
+            prev_subj, source = i, -1
 
-        p_u = sig(f_u[pos] + d_u[i])
-        y_u[pos] = rbetabinom(rng, np.array([N_TRIALS]), np.array([p_u]), k_u[pos])[0]
-
-        if last >= 0 and age[pos] > last_age:
-            has[pos] = True
-            base = f_u[last]  # population + study at the prior wave
-            if baseline == "within":
-                base = base + d_u[i]
-            x_lag[pos] = logit(y_u[last] / N_TRIALS) - base
-
-        q = sig(h[pos] + d_q[i] + beta_lag * x_lag[pos])
-        if cond[pos]:
-            y_s[pos] = rbetabinom(rng, np.array([y_u[pos]]), np.array([q]), k_s[pos])[0]
-        else:
-            y_s[pos] = rbetabinom(
-                rng, np.array([N_TRIALS]), np.array([p_u * q]), k_s[pos]
+        # The whole wave's understood counts first: its rows share one prior
+        # source, and only a completed wave may become the next one.
+        for pos in wave:
+            p_u = sig(f_u[pos] + d_u[i])
+            y_u[pos] = rbetabinom(
+                rng, np.array([N_TRIALS]), np.array([p_u]), k_u[pos]
             )[0]
 
-        if umask[pos]:
-            last, last_age = pos, age[pos]
+        if source >= 0:
+            has[wave] = True
+            base = f_u[source]  # population + study at the prior wave
+            if baseline == "within":
+                base = base + d_u[i]
+            x_lag[wave] = logit(y_u[source] / N_TRIALS) - base
+
+        for pos in wave:
+            p_u = sig(f_u[pos] + d_u[i])
+            q = sig(h[pos] + d_q[i] + beta_lag * x_lag[pos])
+            if cond[pos]:
+                y_s[pos] = rbetabinom(
+                    rng, np.array([y_u[pos]]), np.array([q]), k_s[pos]
+                )[0]
+            else:
+                y_s[pos] = rbetabinom(
+                    rng, np.array([N_TRIALS]), np.array([p_u * q]), k_s[pos]
+                )[0]
+
+        observed = wave[umask[wave]]
+        if observed.size:
+            source = int(observed[np.argmax(y_u[observed])])
 
     return {"y_u": y_u, "y_s": y_s, "x_lag_true": x_lag, "has_true": has,
             "d_u": d_u, "d_q": d_q}
@@ -268,7 +284,6 @@ def estimate(truth, design, sim, baseline):
     """Estimate ``beta_lag`` under the chosen baseline, by marginal likelihood."""
     age, subj = design["age"], design["subj"]
     umask, smask, cond = design["umask"], design["smask"], design["cond"]
-    n = len(age)
     y_u = sim["y_u"]
 
     if baseline == "within":
@@ -281,20 +296,16 @@ def estimate(truth, design, sim, baseline):
     else:
         d_u_hat = None
 
-    prev_idx = np.zeros(n, dtype=int)
-    has = np.zeros(n, dtype=bool)
-    prev_subj, last, last_age = -1, -1, np.nan
-    for pos in child_order(age, subj):
-        if subj[pos] != prev_subj:
-            prev_subj, last, last_age = subj[pos], -1, np.nan
-        if last >= 0 and age[pos] > last_age:
-            prev_idx[pos], has[pos] = last, True
-        if umask[pos]:
-            last, last_age = pos, age[pos]
+    # The engine's own wave-grouped construction (issue #242): understood
+    # counts are usable as a source only where the real design observed them.
+    prev_idx, has_f, y_prev_logit = compute_prev_wave_lag(
+        subj, age, np.where(umask, y_u.astype(float), np.nan), N_TRIALS
+    )
+    has = has_f > 0
     base = design["f_u"][prev_idx]
     if d_u_hat is not None:
         base = base + d_u_hat[subj]
-    x = np.where(has, logit(y_u[prev_idx] / N_TRIALS) - base, 0.0)
+    x = np.where(has, y_prev_logit - base, 0.0)
 
     use = has & smask & cond & (y_u > 0)
     if use.sum() < 20:
