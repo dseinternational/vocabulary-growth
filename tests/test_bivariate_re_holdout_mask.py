@@ -29,7 +29,6 @@ import pymc as pm
 import pytest
 import xarray as xr
 
-import vocab_growth.models.common_bivariate as common_bivariate
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.common_bivariate import (
     configure_bivariate_priors,
@@ -42,6 +41,11 @@ from vocab_growth.models.definitions import (
     BivariateChildSlopeModelDefinition,
     SubjectSlopePriorParams,
 )
+
+# Every test here builds a VG07 graph and runs prior- and posterior-predictive
+# sampling through it. Minutes, not seconds, so deselected unless `-m ""`
+# asks for it.
+pytestmark = pytest.mark.slow
 
 
 class _NoopDigraph:
@@ -64,7 +68,6 @@ def _build_holdout_model(tmp_path, monkeypatch, definition=VG07):
     """
     # Keep the build hermetic and fast: skip the per-prior diagnostic plots and,
     # if this build variant renders a model graph, the graphviz ``dot`` call.
-    monkeypatch.setattr(common_bivariate, "_plot_and_print_dist", lambda *a, **k: None)
     monkeypatch.setattr(
         pymc_utils, "model_to_graphviz", lambda model: _NoopDigraph(), raising=False
     )

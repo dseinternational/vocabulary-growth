@@ -1,4 +1,5 @@
 ArviZ
+autouse
 BFGS
 BFMI
 Bello
@@ -12,6 +13,7 @@ COMPREHENSIÓN
 Caselli
 Checa
 Clibbens
+conftest
 Counterintuitively
 D'Souza
 Deckers
@@ -227,8 +229,10 @@ unsmoothed
 urlsafe
 vars
 vocab
+Wilk
 worklist
 workstream
 worktree
+worktrees
 xarray
 zygosity

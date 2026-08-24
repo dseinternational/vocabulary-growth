@@ -101,3 +101,30 @@ Both stored fits are now stale, and neither can be renamed into its new role. `v
 The rank-3 fit's _graph_ is what the new canonical asks for; it differs only in `config_name` and `banner`, both of which the validation compares. So **the canonical rank-3 fit and the rank-2 variant fit are both outstanding refits.** The precedent is the same one VG21 sits under: promoting a sensitivity variant to a registered identity means fitting it under that identity, not relabelling the variant's output. At the 45–52 minutes each that §6 records, this is cheap as refits go.
 
 Riding along with the change: the canonical banner no longer hard-codes a rank number. It read "a rank-2 factor", and because the sensitivity machinery appends `[sensitivity: rank-N]` to it, the stored rank-3 fit is labelled "a rank-2 factor … [sensitivity: rank-3]". It now reads "a low-rank factor", which is true at every rank.
+
+## 8. The refits, and what they returned
+
+Both refits §7 left outstanding landed on 2026-08-24, from `2944e4c` (merged to `main` as `b70fe65`), and both validate field-for-field against the registered definitions. §7's closing statement that they are outstanding is discharged here.
+
+| fit               | sampling                         |    wall | divergences | max R-hat | min ESS | min BFMI |
+| ----------------- | -------------------------------- | ------: | ----------: | --------: | ------: | -------: |
+| canonical, rank 3 | plain `rep` — 6k/6k, ta 0.95     | 50m 19s |          11 |    1.0072 |     887 |    0.463 |
+| variant, rank 2   | `rep` hightune — 8k/12k, ta 0.99 |  2h 31m |          18 |    1.0064 |   1,913 |    0.459 |
+
+Both clear the hard gate on R-hat and ESS and carry the same divergence caveat as before; rank 3 came in at 11 rather than §5's 8, which changes nothing about its standing.
+
+**The rank-2 variant was deliberately fitted at the hightune rather than at plain `rep`.** §5 records rank 2 at 178 divergences on plain `rep` and 18 after the hightune, and every rank-2 number §5 and §7 quote comes from the hightune fit. Fitting the variant at plain `rep` would have left those numbers without a live artefact. The sampler is not a model factor — more tuning changes how well the posterior is explored, not which posterior — so the rank remains the only thing that moves between the default and this variant. `_sampling_parameter_errors` treats draws, tune, chains and target accept as minimum requirements for exactly this case, so the hightune validates as a `rep` fit. There is no CLI path to it: the run used a wrapper that patches the sampling factory, the same device the July reporting run used.
+
+**§7's central claim is confirmed rather than assumed.** The stored rank-3 variant's recorded definition differs from the new canonical's in **exactly 2 of 51 fields** — `banner` and `config_name` — so the graph really was identical and relabelling really was impossible. That is the whole reason this refit existed.
+
+**§5's substantive readings reproduce.** The intercept quantities agree across the two ranks as §5 said they would (`rho_uq` 0.340 against 0.322, `tau_subj_u` 0.751 against 0.742, `tau_subj_q` 1.172 against 1.179), and the spoken child-slope scale still separates them: 0.348 (sd 0.047) at rank 2 against 0.579 (sd 0.066) at rank 3, **2.85 combined standard errors** — the "about 2.8" §7 relied on, recomputed from the new fits.
+
+### One thing not explained
+
+The rank-2 refit reproduces the superseded canonical **exactly** — 18 divergences, R-hat 1.0064, minimum ESS 1,913.1, BFMI 0.4585, every reported scalar to three decimals. Agreement to five significant figures on minimum ESS is not something two independent runs of the same posterior produce, so those are the same chains, and the code delta between the two dates is numerically inert for this engine.
+
+The rank-3 refit is **not** the same chains as the stored rank-3 variant, though it is statistically indistinguishable from it: across 41 shared quantities scored in Monte Carlo standard errors the median |z| is 1.06 and exactly one exceeds 3. Both stored fits ran on identical code — only documentation commits landed between them — and both refits ran on identical code, so the same delta separates both pairs. Why one pair is bit-identical and the other is not is unresolved. The leading candidate is that the two refits ran concurrently without isolated `NUMBA_CACHE_DIR` / PyTensor `base_compiledir` settings, which this project already cautions against for parallel fits.
+
+Nothing rests on it: the canonical validates, clears the gate, and agrees with the stored variant on every reported estimand. It is recorded because "the same model, the same seed, the same data" not reproducing bitwise is worth knowing about before someone else treats a rerun as a check.
+
+Worth noting where the largest raw discrepancy landed. Ranked by _relative_ difference in posterior mean the worst was `kappa_excess_old_s` at 8.4%, which looks alarming and is not: scaled by its own Monte Carlo error it does not reach the top eight. That is [#229](https://github.com/dseinternational/vocabulary-growth/issues/229)'s "components are not estimands" finding showing up unprompted — the dispersion floor and excesses are sampling coordinates, and only totals at ages are estimands.

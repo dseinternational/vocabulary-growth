@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   spellcheck:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -26,6 +26,9 @@ jobs:
         uses: actions/setup-node@v7.0.0
         with:
           node-version: "24"
+          # cspell ships its dictionaries as packages; without this the whole
+          # tree is re-downloaded on every run.
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -37,7 +40,7 @@ jobs:
         run: npm run format:check
 
   lint:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -46,14 +49,23 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Lint
-        run: uv run ruff check src/ scripts/
+      # `uv run ruff` on its own syncs the whole project environment — 174
+      # packages, PyMC, JAX and ArviZ among them — to run a self-contained Rust
+      # binary. uv's cache makes that cheap when it is warm (287 ms on the run
+      # this replaced), so the saving is a few seconds rather than minutes; the
+      # point is that the job no longer depends on that cache being warm. The
+      # `lint` group holds ruff alone, at the version uv.lock pins.
+      - name: Install ruff
+        run: uv sync --locked --only-group lint
 
-  model-fit-tests:
+      - name: Lint
+        run: uv run --no-sync ruff check src/ scripts/ tests/
+
+  tests:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04]
+        os: [ubuntu-26.04-arm]
     runs-on: ${{ matrix.os }}
     # PEP 686 makes UTF-8 mode the default from Python 3.15.
     env:
@@ -72,8 +84,39 @@ jobs:
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
 
+      # `slow or not slow` selects everything, overriding the `not slow` default
+      # in pyproject.toml: locally the sampler and optimiser tests are
+      # deselected to keep the inner loop short, but CI is where they have to
+      # run. Spelt out rather than an empty `-m ""`, which pwsh drops before
+      # pytest sees it, so a Windows contributor can paste the same command.
+      # `--dist loadfile` keeps each module's fixtures on one worker, which
+      # matters for the modules whose fixture is itself a fit.
       - name: Run pytest
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest -n auto --dist loadfile -m "slow or not slow"
+
+  # Split from the test job: neither needs the other's result, and once pytest
+  # is parallelised this fit is the longer of the two.
+  model-fit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04-arm]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      - name: Prepare data
+        run: uv run --no-sync python scripts/prepare_data.py
 
       - name: Fit model VG01 (dev)
         run: uv run --no-sync python scripts/fit_model.py vg01 --config dev

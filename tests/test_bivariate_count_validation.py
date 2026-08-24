@@ -17,10 +17,6 @@ the non-RE engine and to both engines' preparation paths as well.
 
 import os
 
-import matplotlib
-
-matplotlib.use("Agg")
-
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
@@ -28,8 +24,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import vocab_growth.models.common as common
-import vocab_growth.models.common_bivariate as common_bivariate
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.common_bivariate import build_model, configure_bivariate_priors
 from vocab_growth.models.common_bivariate_re import build_model_re
@@ -65,12 +59,7 @@ def _context_with_frame(tmp_path, monkeypatch, definition, understood_values):
         n_trials=definition.n_trials,
     )
     context.set_model_data(bmd, analysis_df)
-    # Populate the model configuration the build reads first; skip the
-    # per-prior diagnostic plots so the test needs no output artefacts. The
-    # kappa priors plot through common's helper, not common_bivariate's, so
-    # both modules need the stub.
-    monkeypatch.setattr(common_bivariate, "_plot_and_print_dist", lambda *a, **k: None)
-    monkeypatch.setattr(common, "_plot_and_print_dist", lambda *a, **k: None)
+    # Populate the model configuration the build reads first.
     os.makedirs(context.reporting.output_dir, exist_ok=True)
     configure_bivariate_priors(context, definition)
     return context
