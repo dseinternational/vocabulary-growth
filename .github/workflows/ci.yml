@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   spellcheck:
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -40,7 +40,7 @@ jobs:
         run: npm run format:check
 
   lint:
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -51,8 +51,10 @@ jobs:
 
       # `uv run ruff` on its own syncs the whole project environment — 174
       # packages, PyMC, JAX and ArviZ among them — to run a self-contained Rust
-      # binary. The `lint` dependency group holds ruff alone, at the version
-      # uv.lock pins, so this installs one package.
+      # binary. uv's cache makes that cheap when it is warm (287 ms on the run
+      # this replaced), so the saving is a few seconds rather than minutes; the
+      # point is that the job no longer depends on that cache being warm. The
+      # `lint` group holds ruff alone, at the version uv.lock pins.
       - name: Install ruff
         run: uv sync --locked --only-group lint
 
@@ -63,14 +65,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04-arm]
+        os: [ubuntu-26.04]
     runs-on: ${{ matrix.os }}
     # PEP 686 makes UTF-8 mode the default from Python 3.15.
     env:
       PYTHONUTF8: "1"
-      # Keep PyTensor's compile cache inside the workspace, where one cache step
-      # can reach it; its default home differs per platform.
-      PYTENSOR_FLAGS: base_compiledir=${{ github.workspace }}/.pytensor
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -78,17 +77,6 @@ jobs:
         uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
-
-      # `g++` is available on the runner, so every PyMC graph the suite builds
-      # is compiled through it and the cache is otherwise thrown away with the
-      # runner. Keyed on uv.lock, so a PyTensor bump invalidates it. Unmeasured
-      # — if it does not pay for its upload and download, delete this step.
-      - name: Cache the PyTensor compile directory
-        uses: actions/cache@v4.3.0
-        with:
-          path: .pytensor
-          key: pytensor-${{ matrix.os }}-${{ hashFiles('uv.lock') }}
-          restore-keys: pytensor-${{ matrix.os }}-
 
       - name: Install the locked environment
         run: uv sync --locked
@@ -116,7 +104,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       PYTHONUTF8: "1"
-      PYTENSOR_FLAGS: base_compiledir=${{ github.workspace }}/.pytensor
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -124,13 +111,6 @@ jobs:
         uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
-
-      - name: Cache the PyTensor compile directory
-        uses: actions/cache@v4.3.0
-        with:
-          path: .pytensor
-          key: pytensor-fit-${{ matrix.os }}-${{ hashFiles('uv.lock') }}
-          restore-keys: pytensor-fit-${{ matrix.os }}-
 
       - name: Install the locked environment
         run: uv sync --locked
