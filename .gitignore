@@ -73,6 +73,9 @@ MANIFEST
 
 # Test / coverage
 .pytest_cache/
+# PyTensor's compile cache, redirected into the workspace by CI so one cache
+# step covers every platform (see .github/workflows/ci.yml).
+.pytensor/
 .coverage
 .coverage.*
 htmlcov/
