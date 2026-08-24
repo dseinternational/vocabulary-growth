@@ -52,14 +52,14 @@ Not the modelling. Collection is 4 s, so imports were never the problem; the cos
 
 The measurements above are from a workstation. The runner is a different machine, and two of the expectations they set did not survive contact with it. Run 32750160197 on this branch, against runs 32744206912 and 32735578234 on the branch it replaced:
 
-| step (ubuntu-26.04)    | before                       | after                    |
-| ---------------------- | ---------------------------- | ------------------------ |
-| `Run pytest`           | 1212 s, 1047 s               | 616 s, 608 s             |
-| `Fit model VG01 (dev)` | 290 s, 237 s                 | 316 s, 283 s             |
-| job critical path      | ~1390 s (both, sequentially) | ~640 s (concurrent jobs) |
-| `lint` job, total      | 13 s                         | 10 s                     |
+| step (ubuntu-26.04)    | before                       | after                       |
+| ---------------------- | ---------------------------- | --------------------------- |
+| `Run pytest`           | 1212 s, 1047 s               | 616 s, 608 s, 393 s         |
+| `Fit model VG01 (dev)` | 290 s, 237 s                 | 316 s, 283 s, 306 s         |
+| job critical path      | ~1390 s (both, sequentially) | 430–640 s (concurrent jobs) |
+| `lint` job, total      | 13 s                         | 6–10 s                      |
 
-So CI improves by about **2.2× on the critical path**, not the 3.3× measured locally. Two reasons: the runner has four slower cores, and the run is bounded by its slowest module rather than by worker count, so a slower core lengthens the floor directly.
+So CI improves by somewhere between **2× and 3× on the critical path**, against 3.3× measured locally. Quote the range rather than a figure: three runs of near-identical content put the pytest step at 616, 608 and 393 seconds, which is most of the spread between those multiples on its own. Two things hold the ceiling down — the runner has four slower cores, and the run is bounded by its slowest module rather than by worker count, so a slower core lengthens the floor directly.
 
 **The PyTensor compile cache did not pay, and has been removed.** It was the one speculative item — unmeasurable here, because this machine has no C++ compiler and PyTensor used its Python linker throughout. On the runner `g++` is present and every graph is compiled through it, so the cache should have helped. It did not: with the `compiledir` cached and restored (12 MB, restore and save about a second each), `Run pytest` went 616 s cold to 608 s warm, which is inside the run-to-run noise. The `model-fit` job went 316 s to 283 s, which is one sample and equally consistent with noise. Carrying a cache step that does nothing is worse than not having one, because it reads as load-bearing, so both steps and the `base_compiledir` redirection are gone.
 
