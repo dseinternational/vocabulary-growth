@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from scipy.signal import savgol_filter
 
 import vocab_growth.intervals as intervals
@@ -37,6 +38,103 @@ def _save_png_svg(
     fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=dpi)
     if svg:
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+
+
+#: A child needs at least this many administrations before their observations are
+#: joined into a trajectory. Two points are a segment, not a trajectory: they say
+#: nothing about shape, and drawing them costs the ink that makes the children who
+#: do have a shape readable.
+MIN_ADMINISTRATIONS_FOR_TRAJECTORY = 3
+
+#: An observation at or above this share of its **own** form's item count is
+#: marked. Its value is compressed by the instrument rather than by the child, and
+#: it is the usual explanation for an apparent plateau or reversal.
+NEAR_CEILING_SHARE = 0.90
+
+#: Neutral grey for the observed trajectories. They are data, not another modelled
+#: series, and must not read as a category beside the predictive bands.
+_TRAJECTORY_COLOUR = "0.30"
+
+
+def _draw_subject_trajectories(
+    x_obs,
+    y_obs,
+    subject_ids,
+    form_max=None,
+    min_administrations: int = MIN_ADMINISTRATIONS_FOR_TRAJECTORY,
+) -> dict[str, int]:
+    """Join each child's observations into a trajectory, on the current axes.
+
+    Segments are drawn **solid within one recording form and dashed across a
+    change of form**, because a change of form makes consecutive counts
+    incomparable. The Down syndrome pool spans item counts from 396 to 810, and
+    roughly half the children with three or more administrations are recorded on
+    more than one form; a child near the ceiling of a short form can record
+    *fewer* words on a longer form a month later. One real child in this pool
+    scores 393 understood on a 416-item form at 47 months and 347 on an 810-item
+    form at 48. Joining that with a plain line draws a developmental reversal
+    that did not happen, which is the whole hazard of turning a scatter into a
+    set of trajectories.
+
+    Returns the counts the caller needs for the legend, so the figure states its
+    own composition rather than relying on a caption written elsewhere.
+    """
+    frame = pd.DataFrame(
+        {
+            "subject": np.asarray(subject_ids),
+            "age": np.asarray(x_obs, dtype=float),
+            "count": np.asarray(y_obs, dtype=float),
+        }
+    )
+    have_forms = form_max is not None
+    frame["form"] = np.asarray(form_max, dtype=float) if have_forms else np.nan
+    frame = frame.dropna(subset=["age", "count"])
+
+    sizes = frame.groupby("subject")["age"].transform("size")
+    frame = frame.loc[sizes >= min_administrations].sort_values(["subject", "age"])
+    empty = {"children": 0, "form_changes": 0, "near_ceiling": 0}
+    if frame.empty:
+        return empty
+
+    form_changes = 0
+    for _, rows in frame.groupby("subject", sort=False):
+        ages = rows["age"].to_numpy()
+        counts = rows["count"].to_numpy()
+        forms = rows["form"].to_numpy()
+        for i in range(ages.size - 1):
+            same_form = (not have_forms) or forms[i] == forms[i + 1]
+            if not same_form:
+                form_changes += 1
+            plt.plot(
+                ages[i : i + 2],
+                counts[i : i + 2],
+                color=_TRAJECTORY_COLOUR,
+                lw=0.7,
+                alpha=0.55 if same_form else 0.5,
+                ls="-" if same_form else (0, (2, 2)),
+                zorder=2.5,
+            )
+
+    near_ceiling = 0
+    if have_forms:
+        compressed = frame["count"] >= NEAR_CEILING_SHARE * frame["form"]
+        near_ceiling = int(compressed.sum())
+        if near_ceiling:
+            plt.scatter(
+                frame.loc[compressed, "age"],
+                frame.loc[compressed, "count"],
+                s=28,
+                facecolors="none",
+                edgecolors=_TRAJECTORY_COLOUR,
+                linewidths=0.9,
+                zorder=2.6,
+            )
+
+    return {
+        "children": int(frame["subject"].nunique()),
+        "form_changes": form_changes,
+        "near_ceiling": near_ceiling,
+    }
 
 
 def _interval_by_sample(
@@ -653,10 +751,20 @@ def plot_posterior_predictive_median_trend(
     filename: str | None = None,
     y_label: str = "Predicted word count",
     max_age_months: float | None = None,
+    subject_ids=None,
+    form_max=None,
+    min_administrations: int = MIN_ADMINISTRATIONS_FOR_TRAJECTORY,
 ):
     """
     Plot the posterior predictive distribution of counts as a function of age,
     showing the predictive median and multiple predictive percentile intervals.
+
+    When ``subject_ids`` is given, the observed points belonging to one child are
+    joined, so the figure contrasts individual growth with the population median
+    rather than showing an undifferentiated cloud. ``form_max`` supplies each
+    observation's recording-form item count and should be passed whenever it is
+    available: see :func:`_draw_subject_trajectories` for why a trajectory drawn
+    without it can show a reversal that is an artefact of the instrument.
 
     Parameters
     ----------
@@ -668,6 +776,15 @@ def plot_posterior_predictive_median_trend(
         Observed ages.
     y_obs
         Observed counts.
+    subject_ids
+        Per-observation child identifier. ``None`` (the default) draws the
+        observations as a scatter only, which is the behaviour every caller had
+        before trajectories existed.
+    form_max
+        Per-observation item count of the recording form.
+    min_administrations
+        A child is drawn as a trajectory only with at least this many
+        observations.
     output_dir
         Output directory for saved figure.
     filename
@@ -701,6 +818,12 @@ def plot_posterior_predictive_median_trend(
         keep_obs = x_obs <= max_age_months
         x_obs = x_obs[keep_obs]
         y_obs = y_obs[keep_obs]
+        # The trajectory inputs are per-observation and must be cut with the same
+        # mask, or a child's points are joined to another child's.
+        if subject_ids is not None:
+            subject_ids = subject_ids[keep_obs]
+        if form_max is not None:
+            form_max = form_max[keep_obs]
 
     if y_plot.ndim != 2:
         raise ValueError("y_plot must have shape (n_grid, n_samples).")
@@ -766,6 +889,16 @@ def plot_posterior_predictive_median_trend(
         lw=3,
         label="Posterior median (predictive)",
     )
+    trajectories = None
+    if subject_ids is not None:
+        trajectories = _draw_subject_trajectories(
+            x_obs,
+            y_obs,
+            subject_ids,
+            form_max=form_max,
+            min_administrations=min_administrations,
+        )
+
     plt.scatter(
         x_obs,
         y_obs,
@@ -776,7 +909,41 @@ def plot_posterior_predictive_median_trend(
 
     plt.xlabel("Age (months)")
     plt.ylabel(y_label)
-    plt.legend(loc="upper left", frameon=True)
+    if trajectories and trajectories["children"]:
+        handles, labels = plt.gca().get_legend_handles_labels()
+        handles.append(
+            Line2D([], [], color=_TRAJECTORY_COLOUR, lw=0.7, alpha=0.55)
+        )
+        labels.append(
+            f"Same child ({trajectories['children']} with {min_administrations}+)"
+        )
+        if trajectories["form_changes"]:
+            handles.append(
+                Line2D(
+                    [], [], color=_TRAJECTORY_COLOUR, lw=0.7, alpha=0.5,
+                    ls=(0, (2, 2)),
+                )
+            )
+            labels.append(
+                f"Form changed - not comparable ({trajectories['form_changes']})"
+            )
+        if trajectories["near_ceiling"]:
+            handles.append(
+                Line2D(
+                    [], [], ls="none", marker="o", markerfacecolor="none",
+                    markeredgecolor=_TRAJECTORY_COLOUR, markeredgewidth=0.9,
+                )
+            )
+            labels.append(
+                f"Near that form's ceiling ({trajectories['near_ceiling']})"
+            )
+        # Seven entries at the default size cover a quarter of the axes.
+        plt.legend(
+            handles=handles, labels=labels, loc="upper left",
+            frameon=True, fontsize="small",
+        )
+    else:
+        plt.legend(loc="upper left", frameon=True)
     plt.ylim(-20, np.max(y_plot) + 50)
 
     if filename is not None and output_dir is not None:

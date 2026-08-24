@@ -104,7 +104,23 @@ def prepare_bivariate_re_data(
     )
     if use_subject_codes:
         columns = columns + ["subject_id"]
-    if definition.exclude_us01_spoken_ceiling or definition.dse_native_only:
+    # `survey_vocab_max` is kept for the whole Down syndrome pool, not just the
+    # two defect rules that used to be the only callers: the observed-trajectory
+    # overlay on the median-trend plots cannot tell a real reversal from a change
+    # of recording form without it. Safe there because `load_data` returns
+    # `df[columns]` for this population -- a pure projection -- the column has no
+    # missing values, and the only row filter here is `dropna(subset=["age"])`,
+    # so asking for it changes no fit.
+    #
+    # **Down syndrome only.** The typically-developing frame is built from a
+    # Wordbank query that never produces this column, so requesting it there
+    # raises `KeyError`. The two flags below are DS-only in practice; the
+    # population test is what actually makes this safe for VG11-VG13 and VG21.
+    if (
+        definition.exclude_us01_spoken_ceiling
+        or definition.dse_native_only
+        or definition.population is vocab_data_utils.Population.DOWN_SYNDROME
+    ):
         columns = columns + ["survey_vocab_max"]
 
     df = vocab_data_utils.load_data(

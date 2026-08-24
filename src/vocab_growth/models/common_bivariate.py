@@ -1873,6 +1873,18 @@ def plot_spoken_given_understood(
 # ============================================================
 
 
+def _optional_column(analysis_df: pd.DataFrame, mask, name: str) -> pd.Series | None:
+    """``analysis_df[mask, name]``, or ``None`` where the column is not carried.
+
+    The frame's columns depend on the definition -- a model without subject
+    random effects has no ``subject_key`` -- and the trajectory overlay degrades
+    to the plain scatter rather than failing when one is absent.
+    """
+    if name not in analysis_df.columns:
+        return None
+    return analysis_df.loc[mask, name]
+
+
 def _run_bivariate_outcome_plots(
     samples: BivariateModelSamples,
     y_plot: np.ndarray,
@@ -1890,6 +1902,8 @@ def _run_bivariate_outcome_plots(
     outcome_label: str,
     y_label: str,
     max_age_months: float | None = None,
+    subject_ids: pd.Series | None = None,
+    form_max: pd.Series | None = None,
 ):
     """Run the standard per-outcome plotting pipeline for a bivariate model.
 
@@ -1954,6 +1968,8 @@ def _run_bivariate_outcome_plots(
         filename=f"posterior_predictive_median_trend_{suffix}",
         y_label=y_label,
         max_age_months=max_age_months,
+        subject_ids=subject_ids,
+        form_max=form_max,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1969,6 +1985,8 @@ def _run_bivariate_outcome_plots(
         filename=f"posterior_predictive_median_trend_{suffix}_smoothed",
         y_label=y_label,
         max_age_months=max_age_months,
+        subject_ids=subject_ids,
+        form_max=form_max,
     )
 
     plotting.plot_expected_learning_rate(
@@ -2152,6 +2170,8 @@ def _run_bivariate_joint_plots(
         kappa_query=samples.kappa_u_query,
         x_obs=analysis_df.loc[has_u, "age"],
         y_obs=analysis_df.loc[has_u, "understood"],
+        subject_ids=_optional_column(analysis_df, has_u, "subject_key"),
+        form_max=_optional_column(analysis_df, has_u, "survey_vocab_max"),
         n_trials=context.model_data.n_trials,
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
@@ -2175,6 +2195,8 @@ def _run_bivariate_joint_plots(
         kappa_query=samples.kappa_s_query,
         x_obs=analysis_df.loc[has_s, "age"],
         y_obs=analysis_df.loc[has_s, "spoken"],
+        subject_ids=_optional_column(analysis_df, has_s, "subject_key"),
+        form_max=_optional_column(analysis_df, has_s, "survey_vocab_max"),
         n_trials=context.model_data.n_trials,
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
