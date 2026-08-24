@@ -474,7 +474,7 @@ One further caution on the contrast itself. In one simulation with a known withi
 
 ::: {.callout-important title="Which estimand each figure shows — and the conditioning they all share"}
 
-- A **population-level** curve sets every random effect and the lag term to zero: the average child in the average study, with the interval reflecting uncertainty in that average. In the summary tables these are the `p_population_*` and `Ey_population_*` columns.
+- A **population-level** curve sets every random effect and the lag term to zero: the typical (median) child in the average study, which on the count scale is not the same thing as the average across children, with the interval reflecting uncertainty in that curve. In the summary tables these are the `p_population_*` and `Ey_population_*` columns.
 - A **subject-marginal** prediction draws a new child's random effects too, answering _where would one more child fall?_ These are the `p_subject_marginal_*` / `Ey_subject_marginal_*` columns and the `Y_*` and `P(Y<=k)` columns.
 
 **Every prediction on this page is a zero-lag reference** ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)): the grids set $x^{\text{lag}} = 0$, which is the model's own prediction for a child with **no usable lag history** — a first or only assessment, exactly the situation of most children in the frame. They are *not* marginal draws over histories from VG16's sequential data-generating process: a full longitudinal prediction would have to assume a visit schedule, simulate the earlier comprehension count and form the lag it implies, and no figure here does that. For a child known to have stood above or below expectation at an earlier visit, the model predicts a shifted production ratio these tables do not show — the worked example under [Findings](#what-the-coefficient-means-in-units) is how to add that shift by hand.
@@ -522,7 +522,7 @@ Conclude from the pair that the relation between the two vocabularies is not a f
 
 ## Posterior predictions -- words understood
 
-$p$ is the latent proportion of the reference inventory a child is expected to understand; $Ey$ the expected count it implies; $Y$ a draw from the posterior predictive distribution. Read the `*_population_*` columns for the average child in the average study and the `*_subject_marginal_*` and `Y_*` columns for a single unseen child — the latter are much the wider, and are the ones to quote about an individual.
+$p$ is the latent proportion of the reference inventory a child is expected to understand; $Ey$ the expected count it implies; $Y$ a draw from the posterior predictive distribution. Read the `*_population_*` columns for the zero-effect trajectory — the typical (median) child in the average study, which on the count scale is not the same thing as the average across children and the `*_subject_marginal_*` and `Y_*` columns for a single unseen child — the latter are much the wider, and are the ones to quote about an individual.
 
 ```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")

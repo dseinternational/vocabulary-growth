@@ -171,8 +171,11 @@ GLOSSARY: dict[str, str] = {
         "$\\kappa$: in a model carrying subject random effects, persistent "
         "between-child differences are absorbed by $\\tau$ and $\\kappa$ "
         "describes what remains. As an odds multiplier, a $\\tau$ of 0.8 means a "
-        "child one standard deviation above average has about $e^{0.8} \\approx "
-        "2.2$ times the odds of the average child."
+        "child one standard deviation above the centre has about $e^{0.8} "
+        "\\approx 2.2$ times the odds of a child at the centre. That centre is "
+        "the *median* child -- the effects are symmetric around zero on the "
+        "logit scale and the inverse-logit is monotone -- not the arithmetic "
+        "average of children's counts."
     ),
     "Non-centred parameterisation": (
         "Writing a random effect as $\\delta = \\tau z$ with $z \\sim "

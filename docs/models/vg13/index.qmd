@@ -368,7 +368,7 @@ The headline table above gives where this gap is largest within the modelled win
 
 ![Expected spoken vocabulary against expected understood vocabulary. The curve stays below the diagonal by construction, since a child cannot say more words than they understand.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
 
-![The same relationship in predictive terms, so the scatter reflects where a single child might fall rather than where the average child sits.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+![The same relationship in predictive terms, so the scatter reflects where a single child might fall rather than where the zero-effect curve sits.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
 ## Receptive to expressive (cross-sectional)
 
@@ -390,7 +390,7 @@ Each line runs across the full width of the reference inventory, but at the youn
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first is the average child in the average study and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — the typical (median) child in the average study, which on the count scale is not the same thing as the average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
 
 ```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
