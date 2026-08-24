@@ -379,6 +379,8 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
+The spoken rows appear three times: pooled, and then split by which likelihood branch fitted them. 455 of the 1,428 spoken observations cannot condition on an observed understood count -- 444 have no comprehension total and 11 record more spoken than understood words -- and take a substitute likelihood, $S\sim\mathrm{BetaBinomial}(N,p_Uq,\kappa_S)$, which has the paired model's mean but not its variance. The discrepancy is exact and signed: the true marginal is more dispersed than the substitute exactly when $q\kappa_S > \kappa_U$ and less when the inequality reverses, so which way this model errs is a question about its own fitted concentrations rather than a bias in a known direction. The two branches differ systematically in age and in study composition as well, so a well-behaved pooled row can hide a badly-behaved branch; that is what the split is for. Three registered sensitivities -- `paired-only`, `fallback-dispersion` and `marginal-moments` -- bound, measure and remove the approximation respectively ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233), [#236](https://github.com/dseinternational/vocabulary-growth/issues/236)).
+
 ## Limits
 
 - **This is not a causal claim.** The correlation describes how two persistent child-level quantities line up in this pool. It licenses no statement about what would happen if a child's comprehension were raised.
