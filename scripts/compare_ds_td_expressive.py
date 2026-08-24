@@ -59,7 +59,9 @@ import pandas as pd
 
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
+from vocab_growth import posterior_analysis, reporting_ages
 from vocab_growth.models.common_joint_modality import MIN_WORDS_FOR_MILESTONE
+from vocab_growth.models.definitions import VG15
 
 # -- Comparators (joint U+S models so U and S are coupled per draw) --
 DS_JOINT_KEY = "vg20"          # DS joint, study+subject REs, correlated (model of record)
@@ -98,10 +100,13 @@ TD_UNDERSTOOD_KEY = "vg12"
 DS_SIGN_KEY = "vg15"
 
 # Highest age for the DS-internal signing profile. That section has no TD
-# comparator, so it is not bounded by TD support at 30 months -- it stops at the
-# comprehension reporting cap instead, since every quantity in it is conditioned
-# on understood. See vocab_growth.reporting_ages.
-DS_SIGNING_MAX_AGE = 84.0
+# comparator, so it is not bounded by TD support at 30 months -- every quantity
+# in it is a ratio of understood built from the signed ratio, so it stops at
+# the tighter of VG15's comprehension and signing reporting caps. Derived from
+# the model definition rather than hardcoded: this constant sat at a literal
+# 84.0 while describing itself as the comprehension cap, and did not move when
+# that cap dropped to 72 on 2026-08-22 (#238).
+DS_SIGNING_MAX_AGE = float(reporting_ages.max_age_for_sign_ratio(VG15))
 
 OUT_DIR = env.comparisons_output_dir()
 SEED = 20260626
@@ -276,60 +281,25 @@ def run_sign_inclusive() -> None:
                       title="DS expressive credit from non-speech modalities"), cred)
 
 
-def _first_age(
-    grid: np.ndarray, condition: np.ndarray, established: np.ndarray
-) -> np.ndarray:
-    """Per-draw earliest grid age at which ``condition`` holds, else NaN.
-
-    ``established`` gates on the child having a vocabulary to divide up at all.
-    At the youngest modelled ages the three cells are fractions of a word, so
-    which is larger is arithmetic noise and every condition is satisfied by
-    accident. Gating on a word count rather than on a fixed number of grid points
-    keeps the answer independent of the grid step — the same rule the fit
-    pipeline applies in ``common_joint_modality._signing_milestones``.
-    """
-    out = np.full(condition.shape[0], np.nan)
-    for d in range(condition.shape[0]):
-        idx = np.flatnonzero(condition[d] & established[d])
-        if idx.size:
-            out[d] = grid[idx[0]]
-    return out
-
-
 def _signing_milestones(grid: np.ndarray, g: dict[str, np.ndarray]) -> pd.DataFrame:
-    """Per-draw ages for the sign-to-speech hand-over.
+    """Per-draw ages for the sign-to-speech hand-over (shared implementation).
 
-    Computed **per draw and then summarised**, never by reading a milestone off
-    the median curve — the median of crossings is not the crossing of the median,
-    and the project's own helper docstrings say so
-    (:func:`vocab_growth.comparison.first_crossing`).
+    Delegates to :func:`vocab_growth.posterior_analysis.signing_milestone_table`,
+    the same implementation the fit pipeline writes ``signing_milestones.csv``
+    with — this script used to carry a duplicate whose crossing rule reported
+    *first age true* rather than a genuine false-to-true transition, whose peak
+    rule reported a grid-boundary maximum as reached, and whose intervals were
+    equal-tailed where the project policy for milestone ages is HDI (#238). The
+    script's arrays are ``(n_draw, n_age)``; the helper takes ``(n_age, n_draw)``.
     """
-    total = np.clip(g["sign_only"] + g["both"] + g["speak_only"], 1e-9, None)
-    established = total >= MIN_WORDS_FOR_MILESTONE
-    peak_idx = np.argmax(g["sign_only"], axis=1)
-    rows = [
-        ("sign_only_peak_age", grid[peak_idx]),
-        ("sign_only_peak_words", np.max(g["sign_only"], axis=1)),
-        ("sign_only_share_below_half_age",
-         _first_age(grid, (g["sign_only"] / total) < 0.5, established)),
-        ("speech_only_overtakes_sign_only_age",
-         _first_age(grid, g["speak_only"] >= g["sign_only"], established)),
-    ]
-    out = []
-    for name, draws in rows:
-        ok = np.isfinite(draws)
-        vals = draws[ok]
-        out.append({
-            "quantity": name,
-            "median": float(np.median(vals)) if vals.size else np.nan,
-            "ci_lo": float(np.percentile(vals, 5.5)) if vals.size else np.nan,
-            "ci_hi": float(np.percentile(vals, 94.5)) if vals.size else np.nan,
-            # A milestone reached in only part of the posterior is weakly
-            # identified; the fraction is the reader's warning, as it is for the
-            # boundary-censored peak-growth ages.
-            "draws_reaching": float(ok.mean()),
-        })
-    return pd.DataFrame(out)
+    return posterior_analysis.signing_milestone_table(
+        grid,
+        g["sign_only"].T,
+        g["both"].T,
+        g["speak_only"].T,
+        ci_prob=0.89,
+        min_words=MIN_WORDS_FOR_MILESTONE,
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -348,8 +318,9 @@ def run_ds_signing_profile() -> None:
 
     This section drops the comparator and asks the DS-internal question instead:
     of everything a child can express, how much is available only in sign, and
-    for how long? Three quantities, all conditioned on understood and therefore
-    capped at the comprehension reporting age:
+    for how long? Three quantities, all ratios of understood built from the
+    signed ratio and therefore capped at the tighter of VG15's comprehension
+    and signing reporting ages (``DS_SIGNING_MAX_AGE``):
 
     * ``uplift`` — total expressive vocabulary as a multiple of spoken alone.
     * ``sign_only_share`` — the fraction of expressive vocabulary a speech-only
@@ -396,7 +367,8 @@ def run_ds_signing_profile() -> None:
     for _, m in _signing_milestones(grid, g).iterrows():
         print(f"    {m['quantity']:<38} {m['median']:6.1f} "
               f"[{m['ci_lo']:.1f}, {m['ci_hi']:.1f}]  "
-              f"(reached in {m['draws_reaching']:.0%} of draws)", flush=True)
+              f"(reached in {m['draws_reaching']:.0%} of draws; "
+              f"censored in {m['draws_censored']:.0%})", flush=True)
 
     def composition(ax):
         _band(ax, frames["speak_only"], "age_months", "Speech only", COL_TD)

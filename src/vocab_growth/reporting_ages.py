@@ -80,6 +80,12 @@ here because it is a reporting decision, not an arithmetic consequence: it was
 what let VG14's modality figure run to 115 months above a ``p_any`` table
 trimmed to 84 without anything objecting.
 
+The tighter-of rule is mechanised as :func:`max_age_for_sign_ratio`, which the
+sign-bearing ratio artefacts (``r``, ``p_any``, the crossover) use so that a
+future move of either cap re-binds automatically. The VG14/VG15 statistical
+review (#238) found several call sites still trimming those artefacts with the
+signing cap alone, on the pre-2026-08-22 assumption that it was the tighter.
+
 Why ``spoken`` is derived rather than declared
 ----------------------------------------------
 The two declared caps live on the **model definition**, which is fingerprinted
@@ -140,7 +146,12 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-__all__ = ["ReportedQuantity", "max_age_for", "quantity_for_outcome"]
+__all__ = [
+    "ReportedQuantity",
+    "max_age_for",
+    "max_age_for_sign_ratio",
+    "quantity_for_outcome",
+]
 
 
 class ReportedQuantity(Enum):
@@ -198,3 +209,31 @@ def max_age_for(config: Any, quantity: ReportedQuantity) -> float | None:
     # UNDERSTOOD and RATIO_OF_UNDERSTOOD share the comprehension cap.
     understood = getattr(config, "report_max_age_understood", None)
     return None if understood is None else float(understood)
+
+
+def max_age_for_sign_ratio(config: Any) -> float | None:
+    """The cap for sign-bearing ratios of understood: ``r``, ``p_any``.
+
+    These quantities are conditioned on understood *and* built from the signed
+    ratio, so two rules apply and **whichever is tighter binds** (the ``p_any``
+    section of this module's docstring): the conditioning rule gives the
+    comprehension cap, the components rule the signing cap. They agreed at 84
+    until 2026-08-22; since the comprehension cap moved to 72 the conditioning
+    rule binds. Encoded as a min rather than as either cap alone so a future
+    move of either cap in either direction cannot silently un-bind the rule —
+    which is exactly what happened to ``posterior_summary_r`` and
+    ``posterior_summary_p_any``, trimmed with the signing cap on the assumption
+    it was always the tighter (found by the VG14/VG15 statistical review, #238).
+
+    ``q`` does NOT use this: it involves no signing, so it takes
+    ``max_age_for(config, ReportedQuantity.RATIO_OF_UNDERSTOOD)`` alone.
+    """
+    caps = [
+        cap
+        for cap in (
+            max_age_for(config, ReportedQuantity.RATIO_OF_UNDERSTOOD),
+            max_age_for(config, ReportedQuantity.SIGNED),
+        )
+        if cap is not None
+    ]
+    return min(caps) if caps else None

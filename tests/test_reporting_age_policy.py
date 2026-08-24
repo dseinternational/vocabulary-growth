@@ -32,6 +32,7 @@ from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting_ages import (
     ReportedQuantity,
     max_age_for,
+    max_age_for_sign_ratio,
     quantity_for_outcome,
 )
 
@@ -44,6 +45,14 @@ SUFFIX_QUANTITY = [
     ("_q", ReportedQuantity.RATIO_OF_UNDERSTOOD),
 ]
 
+# Sign-bearing ratios of understood (r, p_any, the crossover and their derived
+# tables): the tighter of the comprehension and signing caps binds, computed by
+# max_age_for_sign_ratio. These stems were mapped to SIGNED until #238, which
+# encoded the pre-2026-08-22 assumption that the signing cap was always the
+# tighter one -- so this test passed while the artefacts ran to 84 beside a
+# policy that says 72.
+SIGN_RATIO = "sign_ratio"
+
 # Artefacts whose name carries no outcome suffix, mapped explicitly. Anything
 # not listed here and not suffixed is skipped rather than guessed at -- a wrong
 # guess would make this test assert the wrong policy and read as a pass.
@@ -55,11 +64,24 @@ BY_STEM = {
     "comprehension_production_gap": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "understood_vs_spoken": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "understood_vs_spoken_predictive": ReportedQuantity.RATIO_OF_UNDERSTOOD,
-    "signed_rate": ReportedQuantity.SIGNED,
-    "sign_speech_crossover": ReportedQuantity.SIGNED,
-    "posterior_summary_r": ReportedQuantity.SIGNED,
-    "posterior_summary_p_any": ReportedQuantity.SIGNED,
+    "signed_rate": SIGN_RATIO,
+    "sign_speech_crossover": SIGN_RATIO,
+    "posterior_summary_r": SIGN_RATIO,
+    "posterior_summary_p_any": SIGN_RATIO,
+    # VG15's sign-ratio artefacts, previously invisible to this test (no
+    # outcome suffix, no stem entry).
+    "four_cell_composition": SIGN_RATIO,
+    "signing_profile": SIGN_RATIO,
+    "p_any_identified_vs_bound": SIGN_RATIO,
+    "signed_vs_spoken_rate": SIGN_RATIO,
 }
+
+
+def _cap_for(config, quantity):
+    """The reporting cap for a stem's quantity, sign-ratio marker included."""
+    if quantity == SIGN_RATIO:
+        return max_age_for_sign_ratio(config)
+    return max_age_for(config, quantity)
 
 # Artefacts written by the *summary* stage rather than the plot stage, which
 # ``regenerate_plots.py`` cannot refresh because it re-runs the plot stage only.
@@ -141,18 +163,52 @@ needs_fit = pytest.mark.skipif(not FITTED, reason="no fitted model of record on 
 
 
 def test_the_policy_is_the_one_that_was_agreed():
-    """Pin the numbers themselves, so a silent edit to the policy is visible."""
+    """Pin the numbers themselves, so a silent edit to the policy is visible.
+
+    These are the caps agreed on 2026-08-22: comprehension (and with it every
+    ratio of understood) at 72, signing at 84, spoken at the top of the query
+    grid. Until #238 this test pinned the pre-2026-08-22 configuration
+    (understood = 84), so it kept passing while several artefacts encoded the
+    superseded policy.
+    """
 
     class _DS:
         ages_query = [12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90]
-        report_max_age_understood = 84
+        report_max_age_understood = 72
         report_max_age_signed = 84
 
     cfg = _DS()
-    assert max_age_for(cfg, ReportedQuantity.UNDERSTOOD) == 84
-    assert max_age_for(cfg, ReportedQuantity.RATIO_OF_UNDERSTOOD) == 84
+    assert max_age_for(cfg, ReportedQuantity.UNDERSTOOD) == 72
+    assert max_age_for(cfg, ReportedQuantity.RATIO_OF_UNDERSTOOD) == 72
     assert max_age_for(cfg, ReportedQuantity.SIGNED) == 84
     assert max_age_for(cfg, ReportedQuantity.SPOKEN) == 90
+    # Sign-bearing ratios (r, p_any): whichever of the two caps is tighter binds.
+    assert max_age_for_sign_ratio(cfg) == 72
+
+
+def test_the_registered_ds_signing_models_carry_the_agreed_caps():
+    """The registry's own VG14/VG15 definitions, not a synthetic config."""
+    for key in ("vg14", "vg15"):
+        definition = MODEL_REGISTRY[key]
+        assert max_age_for(definition, ReportedQuantity.UNDERSTOOD) == 72
+        assert max_age_for(definition, ReportedQuantity.SIGNED) == 84
+        assert max_age_for_sign_ratio(definition) == 72
+
+
+def test_sign_ratio_takes_the_tighter_cap_in_both_directions():
+    """The binding rule must survive either cap moving past the other."""
+
+    class _Cfg:
+        ages_query = [12, 90]
+
+        def __init__(self, understood, signed):
+            self.report_max_age_understood = understood
+            self.report_max_age_signed = signed
+
+    assert max_age_for_sign_ratio(_Cfg(72, 84)) == 72
+    assert max_age_for_sign_ratio(_Cfg(84, 72)) == 72
+    assert max_age_for_sign_ratio(_Cfg(None, 84)) == 84
+    assert max_age_for_sign_ratio(_Cfg(None, None)) is None
 
 
 def test_spoken_tracks_the_query_grid():
@@ -194,7 +250,7 @@ def test_every_table_respects_its_outcome_cap(model_id, output_dir):
         quantity = _quantity_for(stem)
         if quantity is None:
             continue
-        cap = max_age_for(config, quantity)
+        cap = _cap_for(config, quantity)
         if cap is None:
             continue
         try:
@@ -208,7 +264,8 @@ def test_every_table_respects_its_outcome_cap(model_id, output_dir):
         if len(ages) and ages.max() > cap + 1e-6:
             if stem in KNOWN_STALE.get(model_id, set()):
                 continue
-            offenders.append(f"{stem}: max age {ages.max():g} > {quantity.value} cap {cap:g}")
+            label = getattr(quantity, "value", quantity)
+            offenders.append(f"{stem}: max age {ages.max():g} > {label} cap {cap:g}")
     assert not offenders, (
         f"{model_id} reports past its caps:\n  " + "\n  ".join(offenders)
     )
@@ -231,7 +288,7 @@ def test_age_keyed_columns_respect_their_cap(model_id, output_dir):
         quantity = _quantity_for(stem) or quantity_for_outcome(
             MODEL_REGISTRY[model_id].outcome
         )
-        cap = max_age_for(config, quantity)
+        cap = _cap_for(config, quantity)
         if cap is None:
             continue
         header = pd.read_csv(path, nrows=0).columns
@@ -242,7 +299,8 @@ def test_age_keyed_columns_respect_their_cap(model_id, output_dir):
             if not token.replace(".", "").isdigit():
                 continue
             if float(token) > cap + 1e-6:
-                offenders.append(f"{stem}: column {column} > {quantity.value} cap {cap:g}")
+                label = getattr(quantity, "value", quantity)
+                offenders.append(f"{stem}: column {column} > {label} cap {cap:g}")
     assert not offenders, (
         f"{model_id} has age-keyed columns past its caps:\n  " + "\n  ".join(offenders)
     )
@@ -289,7 +347,7 @@ def test_known_stale_entries_are_still_needed(model_id, output_dir):
             unnecessary.append(f"{stem} (no longer written)")
             continue
         quantity = _quantity_for(stem)
-        cap = max_age_for(config, quantity) if quantity else None
+        cap = _cap_for(config, quantity) if quantity else None
         if cap is None:
             continue
         table = pd.read_csv(path)
@@ -336,12 +394,15 @@ def test_modality_trajectories_trims_each_series_independently(model_id, output_
         f"modality_trajectories runs to {ages.max():g}, past the widest cap {widest:g}"
     )
 
-    # p_any is a union over speaking and signing and takes the tighter of the two.
+    # p_any is a ratio of understood built from the signed ratio: the tighter of
+    # the comprehension and signing caps binds (it was min(spoken, signed) until
+    # #238, the pre-2026-08-22 components rule).
+    any_cap = max_age_for_sign_ratio(config)
     for column, cap in (
         ("understood_median", u_cap),
         ("spoken_median", s_cap),
         ("signed_median", sign_cap),
-        ("any_median", min(s_cap, sign_cap)),
+        ("any_median", any_cap),
     ):
         values = pd.to_numeric(table[column], errors="coerce")
         assert values[ages > cap + 1e-6].isna().all(), (

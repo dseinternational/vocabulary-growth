@@ -2877,6 +2877,18 @@ VG14 = TrivariateModelDefinition(
     # `kappa_sign` deliberately stays legacy, matching VG15: the signed block sits
     # comfortably inside its prior (CDF 0.25, contraction 0.49) and has no reason
     # to move. See notes/202608051500-report-critical-review.md section 4a.
+    #
+    # KNOWN MISMATCH, retained deliberately (#238): these components are the
+    # CONDITIONAL calibration — kappa given study and child random effects,
+    # which VG14 does not have. VG14's kappa is marginal dispersion, a different
+    # estimand; the no-effects calibration on VG14's own frame targets totals of
+    # roughly 13.7/3.2 (understood at 18/72 months) against these components'
+    # 92.6/14.0, so the priors favour substantially less unexplained variation
+    # than a calibration matching this graph would. Not recalibrated because
+    # VG14 is superseded by VG15 for every reported number and supplies no
+    # inferential output (docs/models/README.md role table); if VG14 is ever
+    # retained for substantive use, recalibrate these first
+    # (scripts/kappa_conditional_calibration.py without the RE conditioning).
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
     # Understood trajectory: matches VG05, including the 2026-08-04 anchor
@@ -3060,7 +3072,9 @@ VG15 = JointModelDefinition(
     # where the evidence stops -- it hid the pool's only real measurement of the
     # post-peak signing decline. Above 84 stays out: 12 observations from 10
     # children thinning to one source per band, and 84 is the trend's high anchor.
-    # Also caps p_any, a function of the signed ratio.
+    # This caps the signed COUNTS. r and p_any are ratios of understood built
+    # from the signed ratio, so they take the tighter of this cap and the
+    # comprehension one (reporting_ages.max_age_for_sign_ratio) -- currently 72.
     report_max_age_signed=84,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
@@ -3463,9 +3477,28 @@ def validate_model_definition(definition) -> None:
     if sign_anchors is not None and (
         len(sign_anchors) != 3
         or not all(math.isfinite(age) for age in sign_anchors)
-        or tuple(sign_anchors) != tuple(sorted(sign_anchors))
+        # Strictly increasing, not merely sorted: the tent's segment slopes
+        # divide by the anchor gaps, so a duplicated anchor is a division by
+        # zero in the model graph (#238).
+        or not (sign_anchors[0] < sign_anchors[1] < sign_anchors[2])
     ):
-        raise ValueError(f"{prefix}.sign_anchor_ages must be three ordered ages.")
+        raise ValueError(
+            f"{prefix}.sign_anchor_ages must be three strictly increasing ages."
+        )
+    sign_peak_prior = getattr(definition, "sign_peak_prior", None)
+    if sign_peak_prior is not None and (
+        len(sign_peak_prior) != 2
+        or not all(
+            math.isfinite(parameter) and parameter > 0
+            for parameter in sign_peak_prior
+        )
+    ):
+        # The engines index this pair straight into pz.Beta(alpha, beta), which
+        # accepts and then samples garbage from a non-positive parameter (#238).
+        raise ValueError(
+            f"{prefix}.sign_peak_prior must be two finite positive Beta "
+            "parameters (alpha, beta)."
+        )
     if getattr(definition, "lag_baseline", "within") not in {"within", "population"}:
         raise ValueError(f"{prefix}.lag_baseline must be 'within' or 'population'.")
     if getattr(definition, "use_cross_lag", False) and not getattr(
