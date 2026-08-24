@@ -105,6 +105,32 @@ def test_priors_table_omits_parameters_the_fit_did_not_sample(tmp_path, capsys):
     assert "Cross-lag" not in out
 
 
+def test_priors_table_carries_the_correlation_prior(tmp_path, capsys):
+    """VG20's whole reason for existing had no row in its own priors table (#233).
+
+    `subject_re_correlation_eta` is a top-level scalar rather than part of a
+    subject-scale block, so neither the scalar HalfNormal path nor
+    `_subject_scale_row` reached it and the table simply omitted it.
+    """
+    fit = _fit(
+        tmp_path,
+        definition={"subject_re_correlation_eta": 2.0},
+        parameters=("rho_uq",),
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "LKJ(2)" in out
+    assert "Beta(2, 2)" in out
+    assert "a correlation has to be evidenced" in out
+
+
+def test_priors_table_omits_the_correlation_for_an_uncorrelated_model(tmp_path, capsys):
+    """VG10 records the field's default in its manifest but never samples it."""
+    fit = _fit(tmp_path, definition={"eta_u_sigma": 0.6}, parameters=("eta_u",))
+    report_cells.render_priors_table(str(fit))
+    assert "LKJ" not in capsys.readouterr().out
+
+
 def test_signed_anchors_use_the_signed_anchor_ages(tmp_path, capsys):
     """Signing has its own anchor ages; labelling them with slope_anchors lies."""
     fit = _fit(
@@ -599,3 +625,107 @@ def test_headline_dispersion_labels_are_per_outcome(tmp_path, capsys):
         in out
     )
     assert "Spread across same-age administrations, words spoken" in out
+
+
+# --------------------------------------------------------------------------
+# Variation table under a child intercept-and-rate block (#233)
+# --------------------------------------------------------------------------
+
+
+def _slope_fit(tmp_path, *, ref_age=36.0, with_rho=True):
+    """A VG19-shaped fit: alias scales, the rate block, and a reporting cap.
+
+    Values are VG19's own `rep` posterior means from
+    notes/202608212000-vg19-gates-g2-g4-g5.md section 2.
+    """
+    index = ["tau_subj_u_0", "tau_subj_u_1", "tau_subj_q_0", "tau_subj_q_1",
+             "tau_subj_u", "tau_subj_q"]
+    mean = [0.751, 0.176, 1.207, 0.640, 0.751, 1.207]
+    if with_rho:
+        index += ["tau_subj_u_rho", "tau_subj_q_rho"]
+        mean += [-0.219, 0.469]
+    manifest = {
+        "model": {
+            "model_id": "VG19",
+            "definition": {
+                "subject_slope_ref_age_months": ref_age,
+                "ages_query": [12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+                "report_max_age_understood": 72,
+            },
+        },
+        "sampling": {"configuration_name": "rep"},
+    }
+    (tmp_path / "fit_manifest.json").write_text(json.dumps(manifest))
+    pd.DataFrame({"mean": mean}, index=index).to_csv(tmp_path / "diagnostics.csv")
+    return tmp_path
+
+
+def test_variation_table_dates_the_alias_scales_under_a_rate(tmp_path, capsys):
+    """`tau_subj_u` is tau0 at the reference age, not a spread that holds at every age.
+
+    The alias exists so consumers written against VG10 keep working, and the
+    cost is that a row labelled "Between children, understood" describes one age
+    while implying all of them.
+    """
+    report_cells.render_variation_table(str(_slope_fit(tmp_path)))
+    out = capsys.readouterr().out
+    assert "Between children, understood (at 36 months)" in out
+    assert "Between children, production ratio $q$ (at 36 months)" in out
+
+
+def test_variation_table_reports_the_age_varying_child_scale(tmp_path, capsys):
+    """The spread is a parabola in age; one number cannot state it.
+
+    With rho01 = -0.219, tau0 = 0.751 and tau1 = 0.176 the comprehension scale
+    has its minimum at D = -rho01 * tau0 / tau1 = +0.93 years, so it must fall
+    from 12 months to the reference age and rise again by 72.
+    """
+    report_cells.render_variation_table(str(_slope_fit(tmp_path)))
+    out = capsys.readouterr().out
+    assert "| 12 mo | 30 mo | 36 mo | 54 mo | 72 mo |" in out
+    assert "Plug-in, not a posterior summary" in out
+
+    row = next(
+        line for line in out.splitlines()
+        if line.startswith("| Between children, understood |")
+    )
+    values = [float(cell) for cell in row.strip("| ").split(" | ")[1:]]
+    assert values[0] > values[2], "the spread must be wider below the reference age"
+    assert values[-1] > values[3], "and widen again above the parabola's minimum"
+    assert values[2] == pytest.approx(0.751, abs=0.005), "tau0 at the reference age"
+
+
+def test_variation_table_caps_the_age_columns_at_the_reporting_cap(tmp_path, capsys):
+    """Both scales ride comprehension, so neither may outrun its reporting cap."""
+    report_cells.render_variation_table(str(_slope_fit(tmp_path)))
+    out = capsys.readouterr().out
+    assert "84 mo" not in out
+    assert "90 mo" not in out
+
+
+def test_variation_table_declines_the_age_scale_without_a_named_correlation(
+    tmp_path, capsys
+):
+    """VG22 carries the correlation inside a matrix; a guessed element is worse
+    than no table."""
+    report_cells.render_variation_table(str(_slope_fit(tmp_path, with_rho=False)))
+    out = capsys.readouterr().out
+    assert "Between children, understood (at 36 months)" in out
+    assert "12 mo | 30 mo" not in out
+    assert "not tabulated for this" in out
+
+
+def test_variation_table_is_unchanged_for_a_constant_offset_model(tmp_path, capsys):
+    """VG10 and every earlier model must render exactly as before."""
+    (tmp_path / "fit_manifest.json").write_text(
+        json.dumps({"model": {"definition": {"ages_query": [12, 24]}}})
+    )
+    pd.DataFrame(
+        {"mean": [0.787, 1.286, 0.35]},
+        index=["tau_subj_u", "tau_subj_q", "tau_u"],
+    ).to_csv(tmp_path / "diagnostics.csv")
+    report_cells.render_variation_table(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "Between children, understood |" in out
+    assert "(at " not in out
+    assert "Plug-in" not in out

@@ -1630,7 +1630,25 @@ def plot_production_rate_by_understood(
     filename: str | None = None,
     max_age_months: float | None = None,
 ):
-    """Plot production ratio q against expected words understood (median p_U * n_trials).
+    """Plot population production ratio q against population expected words understood.
+
+    **What this is, and what it is not (issue #233).** Both axes are read off the
+    *population* curves at zero study and zero child effects: ``p_u_plot`` and
+    ``q_plot``. The x value at a plotted point is the population median expected
+    comprehension AT SOME AGE, and the y value is the population conversion ratio
+    AT THAT SAME AGE. The curve therefore describes how the two population
+    trajectories move together as children get older -- a developmental-stage
+    relationship -- and NOT the conditional quantity ``E[q | understood = U]``
+    for a child who happens to understand U words.
+
+    The two differ whenever children vary, and here they differ in a known
+    direction. A child observed above the population comprehension curve carries
+    a positive understood child effect, and under VG20's ``rho_uq`` = +0.368 a
+    positive conversion effect with it, so the genuine conditional expectation
+    rises with U more steeply than this curve does. Nothing here conditions the
+    child effects on observed comprehension or uses ``rho_uq`` at all. Computing
+    the conditional version means integrating the joint child-effect posterior
+    through the understood Beta-Binomial likelihood, which is a separate output.
 
     ``max_age_months`` is essential here rather than cosmetic. The x axis is age
     *reparameterised* by expected comprehension, so without the cap the curve
@@ -1673,11 +1691,11 @@ def plot_production_rate_by_understood(
     )
     ax.plot(x_words, q_median, lw=3, label="Median q")
 
-    ax.set_xlabel("Expected words understood")
+    ax.set_xlabel("Population expected words understood (by age)")
     ax.set_ylabel("q = p_S / p_U")
     ax.set_ylim(0, 1)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Production ratio by words understood")
+    ax.set_title("Population production ratio by developmental stage")
 
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
@@ -1905,15 +1923,28 @@ def plot_spoken_given_understood(
     filename: str | None = None,
     max_age_months: float | None = None,
 ):
-    """Predicted words spoken given words understood, by age (issue #112, Q1).
+    """Words spoken implied by the POPULATION conversion ratio, by age (issue #112, Q1).
 
-    The bivariate model implies E[spoken | understood = U, age a] = U * q(a),
-    where q(a) = P(speak | understood). This plots that structural read-out as a
-    fan of lines (one per representative age), each shaded by the posterior HDI of
-    q(a), so a reader can answer directly: "given a child understands N words at
-    age a, how many words are they expected to say?". The slope of each line is
-    q(a); the dashed y = x line is the ceiling (a child cannot say more distinct
-    words than they understand).
+    A fan of lines, one per representative age, each with slope the population
+    ``q(a)`` from ``q_query`` and shaded by that ratio's posterior interval. The
+    dashed y = x line is the ceiling: a child cannot say more distinct words than
+    they understand.
+
+    **The estimand is population-level, and the line is not a conditional
+    expectation (issue #233).** ``q_query`` is evaluated at zero study and zero
+    child effects, so ``U * q(a)`` is "U words converted at the rate a typical
+    child of age a converts at" -- not ``E[spoken | understood = U, age a]``.
+    The nested likelihood does give ``E[S | U, a, child] = U * q(a, child)``
+    exactly, but the child's own conversion effect is missing from ``q(a)``, and
+    it is not independent of U: a child understanding more words than typical for
+    their age has a positive understood child effect, which under VG20's
+    ``rho_uq`` = +0.368 comes with a positive conversion effect. So the genuine
+    conditional line is steeper than this one at high U and shallower at low U,
+    and this plot understates the spread besides, showing only the uncertainty in
+    ``q(a)`` and none of the between-child variation in it.
+
+    Read a line as "what the population rate implies at this comprehension
+    level", and read the caveat with it wherever it is published.
     """
     q_query = samples.q_query  # (n_query, n_samples)
     ages = np.asarray(samples.X_query)  # (n_query,)
@@ -1963,10 +1994,10 @@ def plot_spoken_given_understood(
     )
 
     ax.set_xlabel("Words understood")
-    ax.set_ylabel("Predicted words spoken")
+    ax.set_ylabel("Words spoken at the population rate")
     ax.set_xlim(0, n_trials)
     ax.set_ylim(0, n_trials)
-    ax.set_title("Predicted words spoken given words understood")
+    ax.set_title("Words spoken implied by the population conversion ratio")
     ax.legend(loc="upper left", frameon=True, title="Age")
 
     if output_dir is not None and filename is not None:

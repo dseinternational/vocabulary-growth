@@ -39,7 +39,12 @@ Useful options:
 | `--variant NAME`           | Recover a registered sensitivity variant instead of the model of record. |
 | `--output-dir`             | Output root, as elsewhere in the project.                                |
 
-The stages are separable so a long run can be resumed, and so the simulation can be inspected before hours of sampling are committed. A sensible sequence for a real study:
+The stages are separable so a long run can be resumed, and so the simulation can be inspected before hours of sampling are committed. Two provenance checks make the separation safe, both added 2026-08-24 for [#233](https://github.com/dseinternational/vocabulary-growth/issues/233):
+
+- **The source fit is validated before a truth is taken from it.** `--truth posterior` puts the model of record's output directory through `fit_artifacts.validate_fit_output`, comparing the normalised definition and the raw-data fingerprint and requiring a complete fit. Matching free-variable _names_ used to be the only check, and names survive most definition changes — every anchor recalibration, every prior widening, the whole reporting-cap family — so a stale trace passed. That mattered more here than elsewhere, because the deterministics are recomputed from the current graph: a stale trace's free parameters plus today's deterministics is a truth no fit ever held.
+- **The simulation records its definition, and every later stage compares it.** `--fit-only` and `--compare-only` refuse a simulation written from a different definition and name the fields that differ. Nothing else would catch a definition edited between the stages — the frame carries only counts, and the truth carries only parameter values.
+
+Both refuse rather than warn. Re-run the simulate step, or check out the revision the simulation was made under. A sensible sequence for a real study:
 
 ```bash
 python scripts/fit_recovery.py headline --config test --simulate-only

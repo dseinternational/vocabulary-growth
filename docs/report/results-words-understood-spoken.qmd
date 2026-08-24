@@ -66,7 +66,7 @@ show_or_pending(_gap, "the comprehension–production gap in words")
 The gap above is in words, and it widens with age for most of the range even as the *ratio* $q(a)$ rises: a child who understands many more words can be behind on a larger absolute number of them while saying a larger share of them. The two views are reported separately for that reason.
 
 ::: {.callout-important title="Where these numbers stop resting on data"}
-Comprehension observations thin out above about 60 months and spoken observations above about 72. The tables above are capped at the reporting ages the project applies to each quantity — 84 months for words understood and quantities derived from it, 90 for words spoken — and the monthly reference tables in Appendix C carry an `n_obs` column showing how many observations sit near each age. Rows with no nearby observations are the model's smoothness assumption, not evidence.
+Comprehension observations thin out above about 60 months and spoken observations above about 72. The tables above are capped at the reporting ages the project applies to each quantity — 72 months for words understood and quantities derived from it, 90 for words spoken — and the monthly reference tables in Appendix C carry an `n_obs` column showing how many observations sit near each age. Rows with no nearby observations are the model's smoothness assumption, not evidence.
 :::
 
 ## How fast vocabulary grows {#sec-ds-growth-rate}
@@ -155,9 +155,9 @@ _qds
 
 This reproduces, in a large pooled sample, the long-standing observation that expressive vocabulary lags behind receptive vocabulary in Down syndrome.
 
-The same ratio can be plotted against comprehension level rather than age, which removes the timescale from the picture and asks what a child who understands $N$ words typically says:
+The same ratio can be plotted against comprehension level rather than age, which removes the timescale from the picture. Read it as a statement about **developmental stage**, not about an individual: both axes are population curves, so a point says "at the age when children typically understand $N$ words, they typically say this share of them". It is not $E[q \mid \text{understood} = N]$ for a particular child who understands $N$ words. The two come apart because children differ, and in a known direction — a child ahead of the population comprehension curve for their age carries a positive comprehension offset, and the fitted correlation between those two offsets is positive (@sec-ds-td-variation) — so the genuine conditional relationship rises with $N$ more steeply than this curve. Computing it means integrating the joint child-effect posterior through the comprehension likelihood, which this figure does not do (see [#233](https://github.com/dseinternational/vocabulary-growth/issues/233)).
 
-![The production ratio against words understood rather than age (VG20).](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/production_rate_by_understood.png){#fig-ds-q-by-u}
+![The population production ratio against population expected words understood rather than age (VG20). A developmental-stage relationship between two population curves, not a conditional expectation for a child at a given comprehension level.](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/production_rate_by_understood.png){#fig-ds-q-by-u}
 
 ## Comparison with typically developing children {#sec-ds-td}
 

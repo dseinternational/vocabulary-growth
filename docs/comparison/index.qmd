@@ -643,13 +643,13 @@ The section above measures signing against typically developing children, where
 it looks marginal. That is the wrong denominator for a parent, a teacher or a
 speech and language therapist, and it is bounded at 30 months by a comparator
 this question does not need. Dropping the comparator changes both: the DS-internal
-quantities run to the comprehension reporting cap at 84 months, and the effect
+quantities run to the comprehension reporting cap at 72 months, and the effect
 stops looking marginal.
 
 ```{python}
 sp = pd.read_csv("ds_signing_profile.csv")
 rows = []
-for a in [18, 24, 30, 36, 48, 60, 72, 84]:
+for a in [18, 24, 30, 36, 48, 60, 72]:
     r = _nearest(sp, "age_months", a)
     rows.append({
         "Age (mo)": a,

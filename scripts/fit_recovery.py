@@ -104,7 +104,7 @@ def _score(model_key: str, definition, label: str) -> None:
         if not os.path.isfile(trace_path):
             console.print(f"[yellow]skip r{replicate:02d}: no recovery trace at {trace_path}[/yellow]")
             continue
-        _frame, truth, record = load_simulation(sim_dir)
+        _frame, truth, record = load_simulation(sim_dir, expected_definition=definition)
         table, aggregates, summary = compare_replicate(
             truth,
             trace_path,

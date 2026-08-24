@@ -244,12 +244,24 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     approximation, and it needs no trace: the median and both interval bounds
     rescale together.
 
-    It carries the same information as the ratio plot and answers a different
-    question. The ratio asks "of the words this child understands, what share do
-    they say?"; this asks "at the same level of comprehension, how many words
-    does a child say?", which is the form a family or teacher is more likely to
-    want. Because both curves are multiplied by the same ``U``, their ratio at
-    any point is unchanged — the vertical scale changes, the finding does not.
+    It carries the same information as the ratio plot and puts it in the form a
+    family or teacher is more likely to want. Because both curves are multiplied
+    by the same ``U``, their ratio at any point is unchanged — the vertical scale
+    changes, the finding does not.
+
+    **Both sides are population quantities, and the comparison is between
+    developmental stages (issue #233).** ``production_rate_by_understood.csv``
+    is written from ``p_u_plot`` and ``q_plot``, both evaluated at zero study and
+    zero child effects, so ``U`` on the grid is the population median expected
+    comprehension at some age and ``q(U)`` is the population ratio at that same
+    age. Neither model conditions its child effects on observed comprehension.
+    So this answers "at the stage where children of each population typically
+    understand U words, what share do they typically say?", NOT "of two children
+    who each understand U words, one with Down syndrome and one without, what
+    does each say?". The second is a conditional expectation that needs the joint
+    child-effect posterior integrated through the comprehension likelihood, and
+    it is not what is computed here. Label it accordingly wherever it is
+    published.
     """
     ds = _read("vg20", "production_rate_by_understood.csv")
     td = _read("vg13", "production_rate_by_understood.csv")
