@@ -161,6 +161,7 @@ class BivariateModelSamples:
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
     p_u_query_subject_marginal: np.ndarray
+    p_u_plot_subject_marginal: np.ndarray | None
     y_u_obs: np.ndarray
     y_u_plot: np.ndarray
     y_u_query: np.ndarray
@@ -179,6 +180,7 @@ class BivariateModelSamples:
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
     p_s_query_subject_marginal: np.ndarray
+    p_s_plot_subject_marginal: np.ndarray | None
     y_s_obs: np.ndarray
     y_s_plot: np.ndarray
     y_s_query: np.ndarray
@@ -788,6 +790,14 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     p_s_query_subject_marginal = posterior_analysis.extract_posterior_predictive_float(
         trace, "p_s_query_subject_marginal", "query_id"
     )
+    # Absent from any trace whose posterior predictive predates the plot-grid
+    # pair; the trajectory overlay is then simply not drawn.
+    p_u_plot_subject_marginal = _optional_posterior_predictive(
+        trace, "p_u_plot_subject_marginal", "plot_id"
+    )
+    p_s_plot_subject_marginal = _optional_posterior_predictive(
+        trace, "p_s_plot_subject_marginal", "plot_id"
+    )
 
     # Constant data
     X_obs = np.array(trace.constant_data["X_obs"].values)
@@ -809,6 +819,7 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
         p_u_query_subject_marginal=p_u_query_subject_marginal,
+        p_u_plot_subject_marginal=p_u_plot_subject_marginal,
         y_u_obs=y_u_obs,
         y_u_plot=y_u_plot,
         y_u_query=y_u_query,
@@ -823,6 +834,7 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
         p_s_query_subject_marginal=p_s_query_subject_marginal,
+        p_s_plot_subject_marginal=p_s_plot_subject_marginal,
         y_s_obs=y_s_obs,
         y_s_plot=y_s_plot,
         y_s_query=y_s_query,
@@ -1182,6 +1194,26 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
         pm.Deterministic(
             "p_s_query_subject_marginal", p_s_query, dims=("query_id",)
         )
+        # The same quantities on the plot grid, which is what a *trajectory*
+        # needs. `y_*_plot` below is already a coherent unseen child -- one child
+        # effect reused across the grid -- but it carries Beta-Binomial noise
+        # drawn independently at each of the grid's points, and on VG20 that noise
+        # moves a mean of ~90 words between adjacent points against ~1.3 for the
+        # curve underneath it. Drawing the counts as a line gives scribble; these
+        # are the expected trajectory the noise is scattered around.
+        #
+        # Stored rather than recomputed by the plotting code because the unseen
+        # child differs by model -- a correlated pair under `rho_uq`, a (b0, b1)
+        # pair for VG19, a factor block for VG22, one deviate scaled by tau(age)
+        # under the age-varying scale -- and reproducing that outside this
+        # function is how the correlation came to be silently dropped once
+        # before (#224).
+        pm.Deterministic(
+            "p_u_plot_subject_marginal", p_u_plot, dims=("plot_id",)
+        )
+        pm.Deterministic(
+            "p_s_plot_subject_marginal", p_u_plot * q_plot, dims=("plot_id",)
+        )
 
         # Understood — plot
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
@@ -1226,10 +1258,12 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
                 "y_u_plot",
                 "y_u_query",
                 "p_u_query_subject_marginal",
+                "p_u_plot_subject_marginal",
                 "y_u_obs",
                 "y_s_plot",
                 "y_s_query",
                 "p_s_query_subject_marginal",
+                "p_s_plot_subject_marginal",
                 "y_s_obs",
             ],
             extend_inferencedata=True,
@@ -1873,6 +1907,17 @@ def plot_spoken_given_understood(
 # ============================================================
 
 
+def _expected_counts(probabilities, n_trials: int):
+    """Unseen-child probabilities as expected counts, or ``None`` if absent.
+
+    The plot works in counts, and the stored subject-marginal quantity is a
+    probability on the fixed item scale.
+    """
+    if probabilities is None:
+        return None
+    return np.asarray(probabilities) * n_trials
+
+
 def _optional_column(analysis_df: pd.DataFrame, mask, name: str) -> pd.Series | None:
     """``analysis_df[mask, name]``, or ``None`` where the column is not carried.
 
@@ -1883,6 +1928,18 @@ def _optional_column(analysis_df: pd.DataFrame, mask, name: str) -> pd.Series | 
     if name not in analysis_df.columns:
         return None
     return analysis_df.loc[mask, name]
+
+
+def _optional_posterior_predictive(trace, name: str, dim: str) -> np.ndarray | None:
+    """``extract_posterior_predictive_float``, or ``None`` where the name is absent.
+
+    A trace written before a predictive variable existed must still load: the
+    features that read it degrade, rather than the whole extractor failing.
+    """
+    group = getattr(trace, "posterior_predictive", None)
+    if group is None or name not in group.data_vars:
+        return None
+    return posterior_analysis.extract_posterior_predictive_float(trace, name, dim)
 
 
 def _run_bivariate_outcome_plots(
@@ -1904,6 +1961,7 @@ def _run_bivariate_outcome_plots(
     max_age_months: float | None = None,
     subject_ids: pd.Series | None = None,
     form_max: pd.Series | None = None,
+    trajectory_samples: np.ndarray | None = None,
 ):
     """Run the standard per-outcome plotting pipeline for a bivariate model.
 
@@ -1970,6 +2028,7 @@ def _run_bivariate_outcome_plots(
         max_age_months=max_age_months,
         subject_ids=subject_ids,
         form_max=form_max,
+        trajectory_samples=trajectory_samples,
     )
 
     plotting.plot_posterior_predictive_median_trend(
@@ -1987,6 +2046,7 @@ def _run_bivariate_outcome_plots(
         max_age_months=max_age_months,
         subject_ids=subject_ids,
         form_max=form_max,
+        trajectory_samples=trajectory_samples,
     )
 
     plotting.plot_expected_learning_rate(
@@ -2172,6 +2232,9 @@ def _run_bivariate_joint_plots(
         y_obs=analysis_df.loc[has_u, "understood"],
         subject_ids=_optional_column(analysis_df, has_u, "subject_key"),
         form_max=_optional_column(analysis_df, has_u, "survey_vocab_max"),
+        trajectory_samples=_expected_counts(
+            samples.p_u_plot_subject_marginal, context.model_data.n_trials
+        ),
         n_trials=context.model_data.n_trials,
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,
@@ -2197,6 +2260,9 @@ def _run_bivariate_joint_plots(
         y_obs=analysis_df.loc[has_s, "spoken"],
         subject_ids=_optional_column(analysis_df, has_s, "subject_key"),
         form_max=_optional_column(analysis_df, has_s, "survey_vocab_max"),
+        trajectory_samples=_expected_counts(
+            samples.p_s_plot_subject_marginal, context.model_data.n_trials
+        ),
         n_trials=context.model_data.n_trials,
         ci_prob=context.reporting.ci_prob,
         output_dir=context.reporting.output_dir,

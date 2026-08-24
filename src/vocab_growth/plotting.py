@@ -55,6 +55,15 @@ NEAR_CEILING_SHARE = 0.90
 #: series, and must not read as a category beside the predictive bands.
 _TRAJECTORY_COLOUR = "0.30"
 
+#: How many unseen-child trajectories to draw. Enough to read the spread, few
+#: enough to see through to the bands and the observed lines underneath.
+DEFAULT_PREDICTIVE_TRAJECTORIES = 60
+
+#: The predictive trajectories take the median's own colour, thin and
+#: translucent, because that is what they are: draws of the quantity the median
+#: line summarises, not a separate series.
+_PREDICTIVE_TRAJECTORY_COLOUR = plot_styles.COLOUR_DARK_BLUE
+
 
 def _draw_subject_trajectories(
     x_obs,
@@ -135,6 +144,48 @@ def _draw_subject_trajectories(
         "form_changes": form_changes,
         "near_ceiling": near_ceiling,
     }
+
+
+def _draw_predictive_trajectories(
+    X_plot: np.ndarray,
+    trajectory_samples: np.ndarray,
+    n_trajectories: int,
+    seed: int,
+) -> int:
+    """Draw a sample of unseen-child trajectories on the current axes.
+
+    Each column of ``trajectory_samples`` is one posterior draw's expected curve
+    for a child the model has not seen, built by the engine from a single child
+    effect reused across the whole age grid. That coherence is the point: the
+    predictive bands are pointwise quantiles, and a set of pointwise intervals
+    does not tell you what a trajectory looks like -- it cannot say whether the
+    spread comes from children differing in level, in rate, or in shape.
+
+    Returns how many were drawn, for the legend.
+    """
+    samples = np.asarray(trajectory_samples)
+    if samples.ndim != 2:
+        raise ValueError("trajectory_samples must have shape (n_grid, n_samples).")
+    if samples.shape[0] != X_plot.size:
+        raise ValueError(
+            f"trajectory_samples grid ({samples.shape[0]}) must match "
+            f"X_plot ({X_plot.size})."
+        )
+    if samples.shape[1] == 0:
+        return 0
+
+    take = min(int(n_trajectories), samples.shape[1])
+    columns = np.random.default_rng(seed).choice(samples.shape[1], take, replace=False)
+    for column in columns:
+        plt.plot(
+            X_plot,
+            samples[:, column],
+            color=_PREDICTIVE_TRAJECTORY_COLOUR,
+            lw=0.7,
+            alpha=0.45,
+            zorder=2.2,
+        )
+    return take
 
 
 def _interval_by_sample(
@@ -754,6 +805,9 @@ def plot_posterior_predictive_median_trend(
     subject_ids=None,
     form_max=None,
     min_administrations: int = MIN_ADMINISTRATIONS_FOR_TRAJECTORY,
+    trajectory_samples=None,
+    n_trajectories: int = DEFAULT_PREDICTIVE_TRAJECTORIES,
+    trajectory_seed: int = 0,
 ):
     """
     Plot the posterior predictive distribution of counts as a function of age,
@@ -785,6 +839,22 @@ def plot_posterior_predictive_median_trend(
     min_administrations
         A child is drawn as a trajectory only with at least this many
         observations.
+    trajectory_samples
+        Posterior predictive **expected counts for an unseen child**, shape
+        ``(n_grid, n_samples)``. A sample of its columns is drawn as curves, so
+        the figure shows the trajectories the predictive bands summarise rather
+        than only their pointwise quantiles -- a band of pointwise intervals and
+        a set of coherent trajectories are different objects, and only the second
+        answers how much children differ.
+
+        Pass the *expected* curve, not the predictive counts: the counts carry
+        observation noise drawn independently at each grid point, which on a
+        500-point grid swamps the trajectory it is scattered around.
+    n_trajectories
+        How many columns to draw.
+    trajectory_seed
+        Seed for choosing them, so a figure redrawn from the same trace is the
+        same figure.
     output_dir
         Output directory for saved figure.
     filename
@@ -815,6 +885,9 @@ def plot_posterior_predictive_median_trend(
         keep = X_plot <= max_age_months
         X_plot = X_plot[keep]
         y_plot = y_plot[keep, :] if y_plot.ndim == 2 else y_plot[keep]
+        if trajectory_samples is not None:
+            # Grid-indexed like y_plot, and must be cut with it.
+            trajectory_samples = np.asarray(trajectory_samples)[keep, :]
         keep_obs = x_obs <= max_age_months
         x_obs = x_obs[keep_obs]
         y_obs = y_obs[keep_obs]
@@ -889,6 +962,12 @@ def plot_posterior_predictive_median_trend(
         lw=3,
         label="Posterior median (predictive)",
     )
+    predictive_trajectories = 0
+    if trajectory_samples is not None:
+        predictive_trajectories = _draw_predictive_trajectories(
+            X_plot, trajectory_samples, n_trajectories, trajectory_seed
+        )
+
     trajectories = None
     if subject_ids is not None:
         trajectories = _draw_subject_trajectories(
@@ -909,8 +988,13 @@ def plot_posterior_predictive_median_trend(
 
     plt.xlabel("Age (months)")
     plt.ylabel(y_label)
+    handles, labels = plt.gca().get_legend_handles_labels()
+    if predictive_trajectories:
+        handles.append(
+            Line2D([], [], color=_PREDICTIVE_TRAJECTORY_COLOUR, lw=0.7, alpha=0.45)
+        )
+        labels.append(f"Predicted child ({predictive_trajectories} draws)")
     if trajectories and trajectories["children"]:
-        handles, labels = plt.gca().get_legend_handles_labels()
         handles.append(
             Line2D([], [], color=_TRAJECTORY_COLOUR, lw=0.7, alpha=0.55)
         )
@@ -937,13 +1021,15 @@ def plot_posterior_predictive_median_trend(
             labels.append(
                 f"Near that form's ceiling ({trajectories['near_ceiling']})"
             )
-        # Seven entries at the default size cover a quarter of the axes.
+    if len(labels) > 4:
+        # More than the four the plain figure carries: shrink, or the box covers
+        # a quarter of the axes.
         plt.legend(
             handles=handles, labels=labels, loc="upper left",
             frameon=True, fontsize="small",
         )
     else:
-        plt.legend(loc="upper left", frameon=True)
+        plt.legend(handles=handles, labels=labels, loc="upper left", frameon=True)
     plt.ylim(-20, np.max(y_plot) + 50)
 
     if filename is not None and output_dir is not None:

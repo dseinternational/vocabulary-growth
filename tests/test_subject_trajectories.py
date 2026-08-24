@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 from vocab_growth import plotting  # noqa: E402
 
 _COLOUR = plotting._TRAJECTORY_COLOUR
+_PP_COLOUR = plotting._PREDICTIVE_TRAJECTORY_COLOUR
 
 
 @pytest.fixture(autouse=True)
@@ -250,3 +251,127 @@ def test_rows_with_a_missing_outcome_are_not_joined_across():
     assert summary["children"] == 1
     drawn = sorted(tuple(ln.get_xdata()) for ln in _trajectory_lines())
     assert drawn == [(12.0, 24.0), (24.0, 30.0)]
+
+
+# ---------------------------------------------------------------------------
+# Posterior predictive unseen-child trajectories
+# ---------------------------------------------------------------------------
+def _pp_lines():
+    return [ln for ln in plt.gca().get_lines() if ln.get_color() == _PP_COLOUR]
+
+
+def _samples(n_grid=25, n_samples=200, seed=0):
+    """Coherent curves: one child offset per column, applied across the grid."""
+    rng = np.random.default_rng(seed)
+    base = np.linspace(5, 300, n_grid)[:, None]
+    offset = rng.normal(1.0, 0.35, size=(1, n_samples))
+    return base * offset
+
+
+def test_predictive_trajectories_draw_the_requested_number():
+    plt.figure()
+    drawn = plotting._draw_predictive_trajectories(
+        np.linspace(10, 40, 25), _samples(), n_trajectories=12, seed=0
+    )
+    assert drawn == 12
+    assert len(_pp_lines()) == 12
+
+
+def test_more_requested_than_available_draws_what_there_is():
+    plt.figure()
+    drawn = plotting._draw_predictive_trajectories(
+        np.linspace(10, 40, 25), _samples(n_samples=7), n_trajectories=60, seed=0
+    )
+    assert drawn == 7
+
+
+def test_no_samples_draws_nothing():
+    plt.figure()
+    drawn = plotting._draw_predictive_trajectories(
+        np.linspace(10, 40, 25), np.zeros((25, 0)), n_trajectories=10, seed=0
+    )
+    assert drawn == 0
+    assert _pp_lines() == []
+
+
+def test_the_same_seed_redraws_the_same_figure():
+    """A figure regenerated from one trace must not change which draws it shows."""
+    samples = _samples()
+    ages = np.linspace(10, 40, 25)
+    plt.figure()
+    plotting._draw_predictive_trajectories(ages, samples, 10, seed=3)
+    first = [tuple(ln.get_ydata()) for ln in _pp_lines()]
+    plt.figure()
+    plotting._draw_predictive_trajectories(ages, samples, 10, seed=3)
+    second = [tuple(ln.get_ydata()) for ln in _pp_lines()]
+    assert first == second
+    plt.figure()
+    plotting._draw_predictive_trajectories(ages, samples, 10, seed=4)
+    assert [tuple(ln.get_ydata()) for ln in _pp_lines()] != first
+
+
+def test_a_grid_mismatch_is_refused():
+    plt.figure()
+    with pytest.raises(ValueError, match="must match"):
+        plotting._draw_predictive_trajectories(
+            np.linspace(10, 40, 25), _samples(n_grid=30), 5, seed=0
+        )
+
+
+def test_a_one_dimensional_sample_array_is_refused():
+    plt.figure()
+    with pytest.raises(ValueError, match="n_grid, n_samples"):
+        plotting._draw_predictive_trajectories(
+            np.linspace(10, 40, 25), np.zeros(25), 5, seed=0
+        )
+
+
+def test_the_plot_reports_the_predictive_trajectories_in_its_legend():
+    _median_trend(
+        x_obs=pd.Series([12.0, 18.0, 24.0]),
+        y_obs=pd.Series([10.0, 40.0, 90.0]),
+        trajectory_samples=_samples(),
+        n_trajectories=15,
+    )
+    labels = " | ".join(t.get_text() for t in plt.gca().get_legend().get_texts())
+    assert "Predicted child (15 draws)" in labels
+    assert len(_pp_lines()) == 15
+
+
+def test_the_age_cap_trims_the_predictive_trajectories_with_the_grid():
+    """Trimmed with y_plot, or the curves run past the reported range."""
+    _median_trend(
+        x_obs=pd.Series([12.0, 18.0]),
+        y_obs=pd.Series([10.0, 40.0]),
+        trajectory_samples=_samples(),
+        n_trajectories=5,
+        max_age_months=25.0,
+    )
+    for line in _pp_lines():
+        assert max(line.get_xdata()) <= 25.0
+
+
+def test_both_overlays_coexist():
+    """The observed and predicted trajectories must stay visually separable."""
+    frame = pd.DataFrame(
+        {
+            "subject": ["a"] * 3 + ["b"] * 3,
+            "age": [12.0, 18.0, 24.0] * 2,
+            "count": [10.0, 40.0, 90.0, 20.0, 60.0, 130.0],
+            "form": [810.0] * 6,
+        }
+    )
+    _median_trend(
+        x_obs=frame["age"],
+        y_obs=frame["count"],
+        subject_ids=frame["subject"],
+        form_max=frame["form"],
+        trajectory_samples=_samples(),
+        n_trajectories=8,
+    )
+    assert len(_pp_lines()) == 8
+    assert len(_trajectory_lines()) == 4  # two children, two segments each
+    assert _PP_COLOUR != _COLOUR
+    labels = " | ".join(t.get_text() for t in plt.gca().get_legend().get_texts())
+    assert "Predicted child (8 draws)" in labels
+    assert "Same child (2 with 3+)" in labels
