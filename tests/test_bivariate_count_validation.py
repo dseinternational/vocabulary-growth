@@ -9,6 +9,10 @@ fractional value such as ``810.9`` or ``-0.1`` would become ``810`` or ``0``
 and then pass the post-cast bounds checks (#236). These tests pin that the
 guard fires on the raw values, on both engines, before any model is built.
 Spoken counts were already validated pre-cast by ``nested_outcome_spec``.
+
+Both engines share ``require_valid_counts`` (finite, integral, in range), which
+arrived on the RE engine with the VG11-VG13 review (#240) and is applied here to
+the non-RE engine and to both engines' preparation paths as well.
 """
 
 import os
@@ -94,3 +98,18 @@ def test_build_model_rejects_fractional_understood(tmp_path, monkeypatch):
     context = _context_with_frame(tmp_path, monkeypatch, VG05, understood)
     with pytest.raises(ValueError, match="understood contains 1 non-integral"):
         build_model(context, VG05)
+
+
+def test_both_engines_reject_out_of_range_understood(tmp_path, monkeypatch):
+    """An integral but out-of-range count fails the shared pre-cast contract.
+
+    This one was already caught, but only by the post-cast bounds check further
+    down each build; `require_valid_counts` now rejects it before the cast, so
+    both engines report it the same way.
+    """
+    for definition, build in ((VG07, build_model_re), (VG05, build_model)):
+        understood = np.round(np.linspace(50.0, 400.0, 8))
+        understood[5] = 811.0  # one past the 810-item reference inventory
+        context = _context_with_frame(tmp_path, monkeypatch, definition, understood)
+        with pytest.raises(ValueError, match="between 0 and n_trials"):
+            build(context, definition)

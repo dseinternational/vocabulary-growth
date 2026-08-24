@@ -1528,10 +1528,34 @@ def load_data(
         params.append(list(languages))
         language_clause = f"AND language IN ${len(params)}"
 
+    # The export records some administrations twice, identically (28 exact
+    # full-row copies in the 2026-06-15 download; 22 reached VG11's frame, 3
+    # VG12's and 2 VG13's before this guard existed). A repeated row
+    # double-weights its administration in every likelihood and, in the
+    # random-effect models, makes a single-visit child look like a
+    # repeated-measures one — the same defect `drop_duplicate_administrations`
+    # removes from the DS pool. `SELECT DISTINCT *` runs on the complete
+    # source row *before* the outcome projection below, and must stay there:
+    # after projection, two genuinely distinct same-child, same-age
+    # administrations can collide once the columns that separate them (`sex`,
+    # `caregiver_education`, …) are dropped and WS comprehension is nulled, so
+    # deduplicating the projected frame would delete real observations. The
+    # per-model removal counts are pinned in tests/test_data_utils.py; the
+    # audit is recorded in notes/202608231830-vg11-vg13-immediate-remediation.md.
     with duckdb.connect(VOCABULARY_DATA_PATH, read_only=True) as con:
         td_df = (
             con.execute(
                 f"""
+            WITH admissions AS (
+                SELECT DISTINCT * FROM wordbank_child
+                WHERE typically_developing = true
+                    AND age <= $2
+                    AND age >= $3
+                    AND health_conditions IS NULL
+                    AND dataset_name NOT IN ({_sql_string_list(TD_POOL_EXCLUDED_DATASETS)})
+                    AND form IN $1
+                    {language_clause}
+            )
             SELECT
                 form,
                 language,
@@ -1545,14 +1569,7 @@ def load_data(
                 production                         as spoken,
                 typically_developing,
                 health_conditions
-            FROM wordbank_child
-            WHERE typically_developing = true
-                AND age <= $2
-                AND age >= $3
-                AND health_conditions IS NULL
-                AND dataset_name NOT IN ({_sql_string_list(TD_POOL_EXCLUDED_DATASETS)})
-                AND form IN $1
-                {language_clause}
+            FROM admissions
             """,
                 params,
             )

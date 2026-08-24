@@ -173,6 +173,28 @@ def construct_age_grids(
     )
 
 
+def require_valid_counts(values: np.ndarray, name: str, n_trials: int) -> None:
+    """Fail loudly on a non-finite, fractional or out-of-range count column.
+
+    The nested spoken likelihood gets these three checks from
+    :func:`vocab_growth.models.likelihood_utils.nested_outcome_spec`; this is
+    the same contract for a count column an engine casts and bounds itself.
+    VG13 used to cast ``understood`` to ``int`` *before* any check, so a
+    fractional value would have been silently truncated and an out-of-range
+    one would have surfaced only as a likelihood failure (#240).
+
+    ``values`` must already be free of NaN (callers drop or mask missing
+    counts before casting).
+
+    The non-finite and integrality checks are :func:`require_integral_counts`'s,
+    which names the offending values; this adds the range check on top.
+    """
+    values = np.asarray(values, dtype=float)
+    require_integral_counts(values, name)
+    if not np.all((values >= 0) & (values <= n_trials)):
+        raise ValueError(f"{name} must lie between 0 and n_trials.")
+
+
 def require_integral_counts(values: np.ndarray, name: str) -> None:
     """Fail loudly if a count column carries non-finite or fractional values.
 
