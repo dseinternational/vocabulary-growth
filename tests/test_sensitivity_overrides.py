@@ -198,15 +198,25 @@ def test_registry_counts_and_models():
     # which Gate 1 rejects decisively on residuals (221 on 3 df), so fitting it
     # tests that rejection under the real likelihood. See
     # notes/202608221000-four-by-four-gate1.md SS5.
-    assert len(VARIANTS) == 61
+    #
+    # +6 on 2026-08-24: the spoken-fallback family, three each on VG10 and VG20
+    # (#233, #236). 455 of 1,428 spoken observations cannot condition on an
+    # observed understood count and have always been given a substitute
+    # likelihood that is mean-correct and variance-wrong; `paired-only` bounds
+    # the effect by dropping them, `fallback-dispersion` measures it with one
+    # signed scalar, and `marginal-moments` removes it by matching the paired
+    # model's true first two moments. Registered on both models because the
+    # affected rows inform `q` and the spoken dispersion, which VG10 and VG20
+    # are compared on.
+    assert len(VARIANTS) == 67
     assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
-    assert len(variants_for("vg10")) == 14
+    assert len(variants_for("vg10")) == 17
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 5
     assert len(variants_for("vg13")) == 4
     assert len(variants_for("vg15")) == 27
-    assert len(variants_for("vg20")) == 3
+    assert len(variants_for("vg20")) == 6
 
 
 def test_td_models_account_for_repeated_children_by_default():

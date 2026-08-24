@@ -77,14 +77,51 @@ SIMULATION_FILENAME = "simulation.json"
 # ==========================================================================
 
 
-def recovery_label(definition, replicate: int) -> str:
+def recovery_label(definition, replicate: int, *, truth_definition=None) -> str:
     """Output label for one recovery replicate, e.g. ``VG10-...-recovery-r01``."""
-    return f"{definition.model_id}-{recovery_config_name(definition, replicate)}"
+    return (
+        f"{definition.model_id}-"
+        f"{recovery_config_name(definition, replicate, truth_definition=truth_definition)}"
+    )
 
 
-def recovery_config_name(definition, replicate: int) -> str:
-    """Config name carried by the recovery variant of a definition."""
-    return f"{definition.config_name}-recovery-r{replicate:02d}"
+def truth_source_tag(truth_definition, fit_definition) -> str:
+    """A short name for whose data a cross-definition refit is chasing.
+
+    Config names are hyphen-token paths sharing a base, so the tokens the truth
+    carries beyond the shared base name it: a truth that is the fit definition's
+    own base leaves nothing over and is the ``record``.
+    """
+    truth_tokens = truth_definition.config_name.split("-")
+    fit_tokens = fit_definition.config_name.split("-")
+    shared = 0
+    for left, right in zip(truth_tokens, fit_tokens, strict=False):
+        if left != right:
+            break
+        shared += 1
+    remainder = truth_tokens[shared:]
+    return "-".join(remainder) if remainder else "record"
+
+
+def recovery_config_name(definition, replicate: int, *, truth_definition=None) -> str:
+    """Config name carried by the recovery variant of a definition.
+
+    ``truth_definition`` names the definition the *data* came from, when that is
+    not the definition being fitted (issue #226). Such a run answers a different
+    question from self-recovery -- it asks whether one model's estimator is
+    biased under another's truth, rather than whether a model recovers itself --
+    and it must not be able to land in, or be scored as, a self-recovery
+    directory. The ``-under-<tag>`` marker in the name is what prevents that;
+    passing the same definition twice is not a cross-definition run and adds no
+    marker, so existing output keeps its existing names.
+    """
+    stem = definition.config_name
+    if (
+        truth_definition is not None
+        and truth_definition.config_name != definition.config_name
+    ):
+        stem = f"{stem}-under-{truth_source_tag(truth_definition, definition)}"
+    return f"{stem}-recovery-r{replicate:02d}"
 
 
 def simulation_dir(definition, replicate: int, output_root: str | None = None) -> str:

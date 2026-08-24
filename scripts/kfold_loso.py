@@ -71,7 +71,10 @@ from vocab_growth.models.definitions import (
     VG20,
     BivariateModelDefinition,
 )
-from vocab_growth.models.likelihood_utils import nested_outcome_spec
+from vocab_growth.models.likelihood_utils import (
+    SPOKEN_FALLBACK_PRODUCT,
+    nested_outcome_spec,
+)
 
 # Every model this script can compare. `build_model_re` dispatches on the
 # definition's own fields, so the child-slope (VG19) and correlated-intercept
@@ -92,6 +95,23 @@ assert len(_n_trials_set) == 1, (
     "kfold_loso assumes a single common trial count."
 )
 N_TRIALS = _n_trials_set.pop()
+
+# `holdout_subject_elpds` reimplements the spoken likelihood in NumPy, and it
+# implements one treatment of the fallback branch: the historical
+# `product_marginal`. Scoring a model whose graph uses a different one would
+# silently compare a held-out density the model never fitted, so refuse it here
+# rather than in a code comment (#233, #236).
+_unsupported_fallback = {
+    name: definition.spoken_fallback
+    for name, definition in AVAILABLE.items()
+    if definition.spoken_fallback != SPOKEN_FALLBACK_PRODUCT
+}
+if _unsupported_fallback:
+    raise NotImplementedError(
+        "kfold_loso implements only the "
+        f"{SPOKEN_FALLBACK_PRODUCT!r} spoken fallback; "
+        f"{_unsupported_fallback} would be scored under the wrong likelihood."
+    )
 OUT_DIR = env.comparisons_output_dir()
 KFOLD_TMP_DIR = os.path.join(env.output_root(), "kfold_tmp")
 

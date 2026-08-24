@@ -35,6 +35,11 @@ from vocab_growth.models.definitions import (
     AgeVaryingSubjectScale,
     SubjectFactorPriorParams,
 )
+from vocab_growth.models.likelihood_utils import (
+    SPOKEN_FALLBACK_MOMENT_MATCHED,
+    SPOKEN_FALLBACK_PAIRED_ONLY,
+    SPOKEN_FALLBACK_SEPARATE_DISPERSION,
+)
 from vocab_growth.sensitivity.overrides import make_variant
 
 # A1's subject-scale anchors must be the paired kappa block's own anchors, or the
@@ -343,6 +348,52 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # about the estimator rather than about publishable geometry.
     ("vg12", "free-scales"): {"suffix": "free-scales", "scalar": {
         "subject_variance_partition": None}},
+
+    # -- The spoken fallback branch (#233, #236) --
+    #
+    # 455 of the 1,428 spoken observations cannot condition on an observed
+    # understood count, and have always been given S ~ BB(810, p_U*q, kappa_S) --
+    # mean-correct, but not the paired model's marginal. Those rows are older and
+    # concentrated by study, so the approximation is not ignorable and the two
+    # audits both asked for it to be bounded rather than only disclosed.
+    #
+    # Three variants, each isolating a different thing the default could be
+    # getting wrong, all registered on VG20 (the model of record for child-level
+    # inference) and VG10 (the model everything else is compared against, and the
+    # one whose q and dispersion the fallback rows most directly inform):
+    #
+    #   paired-only          drops the rows. The bound: whatever the
+    #                        approximation is doing, it cannot be doing it here.
+    #                        Expect wider intervals and a q that leans on the
+    #                        younger, paired part of the frame -- read the
+    #                        *direction* of the shift, not its size.
+    #   fallback-dispersion  keeps the rows and lets the branch have its own
+    #                        concentration. Nests the default at zero, so
+    #                        `log_kappa_s_fallback` reads off both how much
+    #                        dispersion the branch wants and which way -- the
+    #                        default is not wrong in a fixed direction (it is
+    #                        under-dispersed exactly when q*kappa_S > kappa_U),
+    #                        so a signed readout is the point.
+    #   marginal-moments     keeps the rows and gives them the concentration that
+    #                        makes the likelihood exact in its first two moments.
+    #                        Not a sensitivity in the usual sense -- it is the
+    #                        better model, and the default's distance from it is
+    #                        the size of the defect.
+    #
+    # `spoken_fallback` is a graph field, so each needs its own fit; none is a
+    # prior tweak that `--render-only` could pick up.
+    ("vg20", "paired-only"): {"suffix": "paired-only", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_PAIRED_ONLY}},
+    ("vg20", "fallback-dispersion"): {"suffix": "fallback-dispersion", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_SEPARATE_DISPERSION}},
+    ("vg20", "marginal-moments"): {"suffix": "marginal-moments", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_MOMENT_MATCHED}},
+    ("vg10", "paired-only"): {"suffix": "paired-only", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_PAIRED_ONLY}},
+    ("vg10", "fallback-dispersion"): {"suffix": "fallback-dispersion", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_SEPARATE_DISPERSION}},
+    ("vg10", "marginal-moments"): {"suffix": "marginal-moments", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_MOMENT_MATCHED}},
 
     # -- VG13 observation window (#228) --
     #
