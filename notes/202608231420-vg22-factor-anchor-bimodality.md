@@ -75,3 +75,29 @@ Why the spoken slope moves is an interpretation rather than a measurement. The r
 Operationally: all three ranks refit from the fixing commit (~45–52 minutes each at `rep` for ranks 2 and 3; rank-1's first attempt suggests longer), so the whole family comes from one clean commit. The two failed fits are retained under `output/failed/` for this note's evidence and can be deleted once it is merged.
 
 The lesson worth keeping: **an identification constraint is only as strong as the parameter it sits on.** Anchoring rotational gauge on a component is an implicit claim that the component has non-negligible scale, and that claim was already contradicted by three independent estimates of `tau_subj_u_1` before the first `rep` chain was drawn. When registering a model with a constrained-gauge block, the anchors should be chosen — and documented — against the evidence for which components are alive, and a multi-chain fit at more than dev scale is the earliest point the failure can show, because two chains agreeing is exactly what a mirror symmetry produces half the time.
+
+## 7. Decision: the registered default moves to rank 3
+
+Study owner, 2026-08-24, on §5. `SubjectFactorPriorParams.rank` on the canonical `VG22` is now 3; the sensitivity family becomes `rank-1` and `rank-2`. The family itself is unchanged — 1, 2 and 3 are all still fitted — and only which of them the registry treats as the default has moved.
+
+Two things in §5 decided it, neither of which Gate 1 could see, because Gate 1 worked from the residual likelihood and both are properties of the fit:
+
+1. **Rank 3 is the better-behaved fit.** It cleared the convergence gate on the plain `rep` configuration with 8 divergences. Rank 2 came in at 178 on the same configuration and needed a hightune (tune 12,000, draws 8,000, target accept 0.99) to reach 18, and that retry bought divergences and nothing else — R-hat and ESS came back marginally worse on a third again as many draws. Choosing the rank that needs a soft-tier remedy over the one that does not, when the two are 2.60 apart on 2 df in the gate that was supposed to separate them, is not a defensible default.
+2. **The rank is not a free choice for the slope reading.** The spoken child-slope scale is 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at rank 3, about 2.8 combined standard errors apart on shared data. A default that halves a reported scale relative to the alternative is making a substantive claim, and §5's reading — that at rank 2 both latent dimensions are spent on the intercept structure and the slope effects are shrunk in the compromise — says the rank-2 value is the compromised one. Rank 3 is also the rank at which the free 4x4's likelihood is reached exactly, so it is the conservative end of the pair rather than the extrapolated one.
+
+What does **not** turn on this: the intercept-level quantities, which agree across both ranks well within a standard error (`rho_uq` 0.340 against 0.321, `tau_subj_u` 0.751 against 0.740, `tau_subj_q` 1.172 against 1.179). Anything resting on the intercept correlation reads the same at either rank. The understood slope scale moves in the same direction as the spoken one (0.049 against 0.105) but is within noise against standard errors of 0.031 and 0.047, and should not be quoted at either rank.
+
+**This is not a promotion of VG22 to model of record for any reported estimand.** VG20 holds that role for the Down syndrome joint understood + spoken estimands and is untouched by this. What changed is which rank the VG22 registry entry means.
+
+### What the change costs
+
+Both stored fits are now stale, and neither can be renamed into its new role. `validate_fit_output` compares the whole recorded definition against the registered one, and the sensitivity machinery writes its suffix into both `config_name` and `banner`:
+
+| stored fit                       | fitted rank | status after the change                          |
+| -------------------------------- | ----------: | ------------------------------------------------ |
+| `VG22-…-factor` (canonical)      |           2 | stale — the registered default is now rank 3     |
+| `VG22-…-factor-rank-3` (variant) |           3 | orphaned — the `rank-3` variant no longer exists |
+
+The rank-3 fit's _graph_ is what the new canonical asks for; it differs only in `config_name` and `banner`, both of which the validation compares. So **the canonical rank-3 fit and the rank-2 variant fit are both outstanding refits.** The precedent is the same one VG21 sits under: promoting a sensitivity variant to a registered identity means fitting it under that identity, not relabelling the variant's output. At the 45–52 minutes each that §6 records, this is cheap as refits go.
+
+Riding along with the change: the canonical banner no longer hard-codes a rank number. It read "a rank-2 factor", and because the sensitivity machinery appends `[sensitivity: rank-N]` to it, the stored rank-3 fit is labelled "a rank-2 factor … [sensitivity: rank-3]". It now reads "a low-rank factor", which is true at every rank.

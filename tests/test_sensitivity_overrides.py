@@ -187,7 +187,8 @@ def test_registry_counts_and_models():
     # attributable to the discarded high-age rows rather than to a re-placed
     # mean function. See notes/202608141900 SS G5b.
     #
-    # +2 on 2026-08-23: VG22's `rank-1` / `rank-3` pair. Every variant above
+    # +2 on 2026-08-23: VG22's rank family, `rank-1` / `rank-2` since the
+    # default moved to rank 3 on 2026-08-24. Every variant above
     # varies a prior, a window or a data rule; these vary the **dimension** of
     # the child covariance, which is a structural choice the data cannot make on
     # its own. Gate 1 puts rank 2 within 2.60 on 2 df of rank 3 and rank 3 within

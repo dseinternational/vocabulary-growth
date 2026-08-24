@@ -3581,17 +3581,33 @@ VG21 = _as_definition_subclass(
 # rather than a benefit, and VG10's anchor recalibrations cannot drift away from
 # this model's. See notes/202608221000-four-by-four-gate1.md.
 #
-# `rank = 2` is the registered default. Gate 1 puts rank 2 within 2.60 on 2 df of
-# rank 3, and rank 3 within 0.0000 of the free 4x4, so 2 is the smallest rank the
-# data do not clearly reject and 4 is excluded outright. The honest settlement is
-# the sensitivity family at 1, 2 and 3, which differ by one column of L.
+# `rank = 3` is the registered default, moved from 2 by the study owner on
+# 2026-08-24. Gate 1 could not choose between them -- rank 2 is within 2.60 on 2 df
+# of rank 3, and rank 3 within 0.0000 of the free 4x4, so 4 is excluded outright and
+# 2 and 3 are both defensible on the residual likelihood. The fits decided it, in
+# two ways Gate 1 could not see. Rank 3 cleared the convergence gate on the plain
+# `rep` configuration with 8 divergences where rank 2 needed a hightune to reach 18
+# (178 without it): the larger factor model is the easier geometry, rank 2 having to
+# press four child effects into a two-dimensional space. And the two disagree on the
+# spoken child-slope scale -- 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at
+# rank 3, about 2.8 combined standard errors on shared data -- so the rank is not a
+# free choice for any reading about how differently children's spoken trajectories
+# steepen. The intercept-level quantities agree closely across both and are not at
+# stake. See notes/202608231420-vg22-factor-anchor-bimodality.md SS5, SS7.
+#
+# The sensitivity family is 1, 2 and 3 throughout; only which of them is the
+# registered default has moved.
 VG22 = _as_definition_subclass(
     VG10,
     BivariateFactorSubjectREModelDefinition,
     model_id="VG22",
     config_name="age-understood-spoken-ds-re-subj-uq-anchored-factor",
+    # No rank in the banner: the sensitivity machinery appends
+    # "[sensitivity: rank-N]" to this string, so a hard-coded number contradicts
+    # every variant that is not the default (the stored rank-3 fit is labelled
+    # "a rank-2 factor ... [sensitivity: rank-3]").
     banner=(
-        "Fitting Model VG22: VG10 + a rank-2 factor over the four child effects"
+        "Fitting Model VG22: VG10 + a low-rank factor over the four child effects"
         " (U and q, level and rate) - Down syndrome"
     ),
     # The two LEVEL scales stay VG10's own 1.5 on both outcomes, inherited
@@ -3604,7 +3620,7 @@ VG22 = _as_definition_subclass(
     # both while keeping mass near zero so a rate the data do not support shrinks
     # away.
     subject_factor=SubjectFactorPriorParams(
-        rank=2,
+        rank=3,
         tau1_u_sigma=0.5,
         tau1_q_sigma=0.5,
         ref_age_months=36.0,
