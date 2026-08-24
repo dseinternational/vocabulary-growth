@@ -31,16 +31,24 @@ Single-layer [uv](https://docs.astral.sh/uv/) environment (shared across DSE res
 ### Lint
 
 ```bash
-uv run ruff check src/ scripts/
+uv run ruff check src/ scripts/ tests/
 ```
 
 ### Test
 
 ```bash
-uv run pytest              # run all tests
-uv run pytest tests/test_foo.py           # single file
-uv run pytest tests/test_foo.py::test_bar # single test
+uv run pytest                                  # the fast set (see below)
+uv run pytest -m "slow or not slow"            # everything, as CI runs it
+uv run pytest -n auto --dist loadfile          # the fast set, in parallel
+uv run pytest tests/test_foo.py                # single file
+uv run pytest tests/test_foo.py::test_bar      # single test
 ```
+
+**A bare `pytest` does not run everything.** `addopts` carries `-m 'not slow'`, so the four modules that do real sampling or real numerical optimisation are deselected — the fast set is about 65 s against seven minutes for the whole suite. The deselected count is printed on every run. CI selects everything with `-m "slow or not slow"`; use the same expression locally before pushing anything that touches an engine. It is spelt out rather than an empty `-m ""` because pwsh drops the empty string before pytest sees it, so the same command works on Windows.
+
+`pytest-xdist` is in the `dev` group, and CI runs `-n auto --dist loadfile`. Use `--dist loadfile` rather than the default: several modules have module-scoped fixtures that are themselves fits, and per-test distribution rebuilds them on every worker that draws one of their tests.
+
+Two suite-wide behaviours live in `tests/conftest.py`: the matplotlib backend is fixed to Agg before anything imports pyplot, and an autouse fixture silences the fit pipeline's prior-distribution figures and its `describe_all` pass. Both were the bulk of the suite's run time and nothing asserted on either. Mark a test `@pytest.mark.emits_reporting_artefacts` to opt back in — `tests/test_pipeline_reporting_artefacts.py` does, and checks that a real build still produces them. See `notes/202608241530-test-suite-performance.md`.
 
 ### Spellcheck (Markdown/Quarto docs)
 
