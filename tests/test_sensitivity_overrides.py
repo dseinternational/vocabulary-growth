@@ -198,12 +198,12 @@ def test_registry_counts_and_models():
     # which Gate 1 rejects decisively on residuals (221 on 3 df), so fitting it
     # tests that rejection under the real likelihood. See
     # notes/202608221000-four-by-four-gate1.md SS5.
-    assert len(VARIANTS) == 60
+    assert len(VARIANTS) == 61
     assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
     assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
-    assert len(variants_for("vg12")) == 4
+    assert len(variants_for("vg12")) == 5
     assert len(variants_for("vg13")) == 4
     assert len(variants_for("vg15")) == 27
     assert len(variants_for("vg20")) == 3
@@ -459,3 +459,95 @@ def test_window_variants_admit_the_rows_the_cap_discards():
     # being a clean prior-sensitivity check and its result cannot be read as one.
     assert rows["window-22-vague-anchors"] == rows["window-22"], rows
     assert studies["window-22-vague-anchors"] == studies["window-22"], studies
+
+
+def test_vg12_free_scales_swaps_the_coordinates_and_nothing_else():
+    """#225 item 3: the pre-partition parameterisation, as a registered variant.
+
+    Recovery returns VG12's `tau_subject` below its truth in three replicates of
+    three while `v_total` recovers well, so the budget is estimated and the
+    *split* is not. Two diagnoses fit that and they call for different fixes --
+    the partition biases the split, or the split is unidentifiable however it is
+    parameterised. This variant is what separates them, so it has to be the
+    partition and nothing else that changes.
+    """
+    (variant,) = build_variant("vg12", "free-scales")
+
+    assert variant.subject_variance_partition is None
+    assert variant.use_subject_re is True, (
+        "unlike `single-admin`, this variant keeps the subject effects -- it "
+        "moves the scale out of the budget rather than removing it"
+    )
+    assert variant.tau_subject_sigma == VG12.tau_subject_sigma, (
+        "the scale's own prior is already on the definition, inert under the "
+        "partition; the variant makes it live rather than changing it"
+    )
+
+    changed = {
+        field.name
+        for field in dataclasses.fields(VG12)
+        if getattr(VG12, field.name) != getattr(variant, field.name)
+    }
+    assert changed == {"subject_variance_partition", "config_name", "banner"}, changed
+
+
+def test_vg12_free_scales_builds_a_real_graph():
+    """A valid definition is not a valid graph, which is the `single-admin` lesson.
+
+    Adopting the partition broke both `single-admin` variants for two days with
+    no test noticing, because `build_variant` only constructs the definition.
+    This builds the model and checks the swap is exactly a change of coordinates
+    on the two scale parameters: `(v_total, subject_variance_share)` out,
+    `(tau_subject, kappa_excess_young)` in, the free-parameter count unchanged,
+    and a finite initial log-probability. Needs the prepared DuckDB.
+    """
+    import contextlib
+    import io as _io
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+    import numpy as np
+
+    import vocab_growth.data_utils as vocab_data_utils
+    import vocab_growth.models.common_univariate_re as engine
+    from vocab_growth.models.common import ModelFitContext
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def build(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.89,
+                interval_kind="eti",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            for name, stage in engine.univariate_re_stages(definition):
+                if name == "Prior predictive checks":
+                    break
+                stage(ctx)
+        return ctx.model
+
+    (variant,) = build_variant("vg12", "free-scales")
+    with tempfile.TemporaryDirectory() as root:
+        record = build(VG12, root)
+        free = build(variant, root)
+
+        record_names = {rv.name for rv in record.free_RVs}
+        variant_names = {rv.name for rv in free.free_RVs}
+        assert record_names - variant_names == {"v_total", "subject_variance_share"}
+        assert variant_names - record_names == {"tau_subject", "kappa_excess_young"}
+        assert len(free.free_RVs) == len(record.free_RVs), (
+            "a change of coordinates must not change the parameter count"
+        )
+
+        logp = free.compile_logp()(free.initial_point())
+        assert np.isfinite(logp), "the variant's graph does not initialise"
