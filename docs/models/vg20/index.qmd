@@ -201,6 +201,18 @@ $\eta = 1$ would be uniform across every correlation from $-1$ to $+1$. The valu
 
 The check to make here is the usual one — that the prior admits the range of vocabularies real children have without concentrating on any part of it — and one specific to this model: because the correlation prior is symmetric about zero and the marginal spreads are unchanged from VG10, the prior predictive distribution of counts should be close to VG10's. A visible difference at this stage would mean the correlated block had changed something it was not meant to change.
 
+### The child effects, which the three figures above do not contain
+
+Those three set every random effect to zero, so they test the mean function and nothing else — which is the right check for the trend and the GP, and useless for the prior this model was added for. The figures below fill that gap (they carry no count noise either; these do). Both are computed from the same prior draws, so nothing is added to the model graph ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233)).
+
+![Individual child trajectories around a fixed population curve, varying only the child effect. Under a constant offset the curves are parallel on the logit scale and never cross — the property VG19 relaxes.](prior_unseen_children.png){#fig-prior-children .lightbox fig-align="left"}
+
+![Nested Beta-Binomial counts for one unseen child per draw: words understood drawn at the child's own $p_U$, then words spoken drawn **conditional on that count**.](prior_unseen_child_counts.png){#fig-prior-child-counts .lightbox fig-align="left"}
+
+![The joint understood/spoken association the prior induces across unseen children, at four ages.](prior_joint_association.png){#fig-prior-association .lightbox fig-align="left"}
+
+The third is the one specific to this model, and it comes with a warning about how to read it. The per-panel correlation is of the **drawn counts**, and it is dominated by the shared age trend — both outcomes rise together draw by draw — so it would be positive under independent child effects too and is *not* evidence that the correlated block is doing anything. The number to read is the **child-deviate correlation** in the figure's title, which is what $\rho_{uq}$ actually controls. What the panels do show is that every child falls below the $y = x$ line, which is the nesting holding: no child says more distinct words than they understand.
+
 ## Data
 
 ```{python}
