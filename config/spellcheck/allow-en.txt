@@ -155,6 +155,7 @@ nohup
 nonlinear
 nonparametric
 nonparametrics
+nonregular
 nonwords
 nonzero
 numba

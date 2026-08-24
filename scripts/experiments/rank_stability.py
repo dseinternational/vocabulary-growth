@@ -340,7 +340,70 @@ def fit_child_structure(blocks, centre, *, slope=True, fix_rho=None):
     return params, float(best.fun)
 
 
-def report_child_structure(population: str, outcome: str) -> None:
+def _block_covariance(a, v, centre, params):
+    """One child's model covariance under a fitted structure."""
+    c = a - centre
+    tau0, tau1, rho01 = params["tau0"], params["tau1"], params["rho01"]
+    return (
+        tau0**2
+        + rho01 * tau0 * tau1 * (c[:, None] + c[None, :])
+        + tau1**2 * np.outer(c, c)
+        + np.diag(v + params["sigma_occ"] ** 2)
+    )
+
+
+def _simulate_under(blocks, centre, params, rng):
+    """Regenerate every child's adjusted scores from a fitted structure.
+
+    The design is kept exactly -- the same children, the same ages, the same
+    known binomial sampling variances -- and only the residuals are redrawn, so
+    the simulated data have the study's own singleton/repeater mix.
+    """
+    simulated = []
+    for a, _r, v in blocks:
+        chol = np.linalg.cholesky(_block_covariance(a, v, centre, params))
+        simulated.append((a, chol @ rng.standard_normal(len(a)), v))
+    return simulated
+
+
+def bootstrap_null(blocks, centre, *, null_kwargs, alt_kwargs, draws, seed):
+    """Parametric-bootstrap null distribution of ``2 * delta logL``.
+
+    **Why this and not a chi-square (issue #233).** Both comparisons this script
+    makes sit on a boundary of the parameter space, where Wilks' theorem does not
+    hold and an ordinary chi-square reference distribution is invalid:
+
+    - ``tau1 = 0`` is a variance component at zero. The usual consequence is a
+      mixture of chi-squares rather than a single one, and here it is worse than
+      that -- at ``tau1 = 0`` the correlation ``rho01`` is not identified at all,
+      so one of the two nominal degrees of freedom does not exist under the null.
+    - ``rho01 = 1`` is a correlation at its own boundary.
+
+    Reporting "2dlogL = 36.05 (2 df)" invited a p-value that could not be
+    computed from it. The bootstrap replaces the reference distribution rather
+    than the statistic: fit the null, simulate from it on the study's own design,
+    refit both structures to each simulation, and read the statistic's null
+    distribution off the replicates. Returns ``(observed, p_value, replicates)``.
+    """
+    null_params, ll_null = fit_child_structure(blocks, centre, **null_kwargs)
+    _, ll_alt = fit_child_structure(blocks, centre, **alt_kwargs)
+    observed = 2.0 * (ll_null - ll_alt)
+
+    rng = np.random.default_rng(seed)
+    replicates = []
+    for _ in range(draws):
+        simulated = _simulate_under(blocks, centre, null_params, rng)
+        _, sim_null = fit_child_structure(simulated, centre, **null_kwargs)
+        _, sim_alt = fit_child_structure(simulated, centre, **alt_kwargs)
+        replicates.append(2.0 * (sim_null - sim_alt))
+    replicates = np.asarray(replicates)
+    # The +1 convention keeps the p-value strictly positive and unbiased for a
+    # finite number of replicates.
+    p_value = float((1 + (replicates >= observed).sum()) / (len(replicates) + 1))
+    return observed, p_value, replicates
+
+
+def report_child_structure(population: str, outcome: str, bootstrap: int = 0) -> None:
     """Which within-child structure the repeated measures actually support.
 
     Reports ``2 * delta logL`` against the constant-intercept baseline the models
@@ -349,21 +412,48 @@ def report_child_structure(population: str, outcome: str) -> None:
     spread and its age dependence, but say nothing about whether a child drifts
     or whether children cross, so a slope that appears only in the first column
     is cross-sectional widening rather than drift.
+
+    ``bootstrap`` replicates give each statistic a **valid** reference
+    distribution; without it the statistics are printed with no p-value at all,
+    because neither comparison admits a chi-square one. See
+    :func:`bootstrap_null`. Start around 200-500 replicates; each is two Gaussian
+    ML fits on a few hundred children, so this is seconds to minutes rather than
+    a sampling job.
     """
     d = adjusted_scores(population, outcome)
     centre = float(np.median(d.age.values.astype(float)))
     print(f"\n{'=' * 72}\n{population.upper()} / {outcome} — within-child structure "
           f"(ages centred at {centre:.0f} mo)\n{'=' * 72}")
+    comparisons = (
+        ("slope vs constant intercept", {"slope": False}, {}),
+        ("free rho vs rho=1 (rank one)", {"fix_rho": 1.0}, {}),
+    )
     for label, min_obs in (("all children", 1), ("repeats only", 2)):
         blocks = _child_blocks(d, min_obs)
-        _, ll_flat = fit_child_structure(blocks, centre, slope=False)
         params, ll_slope = fit_child_structure(blocks, centre)
-        _, ll_rho1 = fit_child_structure(blocks, centre, fix_rho=1.0)
         print(f"  {label:14s} n={len(blocks):4d}   tau0={params['tau0']:.3f}  "
               f"tau1={params['tau1']:.4f}/mo  rho01={params['rho01']:+.3f}  "
               f"sigma_occ={params['sigma_occ']:.3f}")
-        print(f"     slope vs constant intercept  2dlogL = {2 * (ll_flat - ll_slope):7.2f} (2 df)")
-        print(f"     free rho vs rho=1 (A1)       2dlogL = {2 * (ll_rho1 - ll_slope):7.2f} (1 df)")
+        for name, null_kwargs, alt_kwargs in comparisons:
+            _, ll_null = fit_child_structure(blocks, centre, **null_kwargs)
+            statistic = 2.0 * (ll_null - ll_slope)
+            if not bootstrap:
+                # No degrees of freedom are printed: both nulls are on a
+                # boundary, so there is no chi-square this could be referred to.
+                print(f"     {name:28s} 2dlogL = {statistic:7.2f}  "
+                      "(no reference distribution — pass --bootstrap)")
+                continue
+            statistic, p_value, replicates = bootstrap_null(
+                blocks,
+                centre,
+                null_kwargs=null_kwargs,
+                alt_kwargs=alt_kwargs,
+                draws=bootstrap,
+                seed=20260824,
+            )
+            print(f"     {name:28s} 2dlogL = {statistic:7.2f}  "
+                  f"p = {p_value:.4f} ({bootstrap} parametric-bootstrap replicates; "
+                  f"null 95th pct {np.quantile(replicates, 0.95):.2f})")
 
 
 # ----------------------------------------------------------------- reporting
@@ -451,6 +541,16 @@ def report(population: str, outcome: str, n_boot: int, max_age: float | None = N
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--boot", type=int, default=400, help="cluster bootstrap replicates")
+    ap.add_argument(
+        "--bootstrap",
+        type=int,
+        default=0,
+        help=(
+            "Parametric-bootstrap replicates for the within-child structure "
+            "comparisons (0 prints the statistics without a p-value, because "
+            "neither null admits a chi-square reference; see bootstrap_null)."
+        ),
+    )
     args = ap.parse_args()
     for population in ("ds", "td"):
         for outcome in ("spoken", "understood"):
@@ -462,7 +562,7 @@ def main() -> None:
         report("ds", outcome, args.boot, max_age=30)
     # Which within-child structure the repeated measures support (section 10).
     for outcome in ("spoken", "understood"):
-        report_child_structure("ds", outcome)
+        report_child_structure("ds", outcome, args.bootstrap)
 
 
 if __name__ == "__main__":
