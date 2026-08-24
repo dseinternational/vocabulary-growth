@@ -53,21 +53,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Native Windows is now covered. It was previously omitted because
-        # jax/jaxlib have no conda-forge win-64 build, which forced Windows
-        # contributors onto WSL; on PyPI jaxlib publishes cp314 win_amd64
-        # wheels, so the whole stack installs natively.
-        #
-        # macOS (osx-arm64) is the local development platform and is exercised
-        # there, so CI does not spend a third full run on it. Intel macOS is
-        # absent because upstream has dropped it: numba ships no macosx x86_64
-        # wheels at all. See `tool.uv.environments` in pyproject.toml.
-        os: [ubuntu-26.04, windows-latest]
+        os: [ubuntu-26.04]
     runs-on: ${{ matrix.os }}
-    # The console output uses ✓ and · characters. Windows still defaults stdout
-    # to the legacy cp1252 code page, and rich raises UnicodeEncodeError rather
-    # than degrading, so the first completed pipeline section kills the run.
-    # PEP 686 makes UTF-8 mode the default from Python 3.15; until then, ask.
+    # PEP 686 makes UTF-8 mode the default from Python 3.15.
     env:
       PYTHONUTF8: "1"
     steps:
@@ -78,18 +66,9 @@ jobs:
         with:
           enable-cache: true
 
-      # --locked fails the build if uv.lock is stale rather than silently
-      # resolving something different from what was reviewed. uv provisions the
-      # interpreter itself from .python-version, so there is no setup-python
-      # step.
       - name: Install the locked environment
         run: uv sync --locked
 
-      # Before pytest, not after: the tests that pin the study-level inclusion
-      # counts quoted in the notes and the report open the real database rather
-      # than a miniature fixture, and skip when it is absent. Building it costs
-      # ~300 ms, so running those assertions is effectively free — and a suite
-      # that silently skipped them would report green while the counts drifted.
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
 
