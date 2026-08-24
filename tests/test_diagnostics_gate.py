@@ -79,12 +79,19 @@ def test_gate_covers_hsgp_basis_coefficients():
         assert name in gate_names
 
 
-def _payload(rhat_failing=(), ess_failing=(), max_rhat=1.005, min_ess=1200.0):
+def _payload(
+    rhat_failing=(),
+    ess_failing=(),
+    max_rhat=1.005,
+    min_ess=1200.0,
+    unassessable=(),
+):
     return {
         "max_rhat": max_rhat,
         "min_ess": min_ess,
         "rhat_failing": list(rhat_failing),
         "ess_failing": list(ess_failing),
+        "unassessable_parameters": list(unassessable),
         "thresholds": {"rhat_max": 1.01, "ess_threshold": 400},
     }
 
@@ -142,6 +149,41 @@ def test_development_fit_reports_but_does_not_raise(tmp_path):
     )
 
     assert not (tmp_path / "CONVERGENCE_FAILED.txt").exists()
+
+
+def test_unassessable_parameter_fails_the_hard_tier(tmp_path):
+    """A gated parameter whose R-hat/ESS could not be measured must not publish.
+
+    The shared writer's NaN-skipping reductions leave a constant or unsampled
+    parameter out of the extrema and the failing lists, so before
+    dse-research-utils 0.12.0 such a fit reached publication reporting finite
+    diagnostics and an empty failing list. The shared gate now names those
+    parameters; the hard tier fails closed on them.
+    """
+    with pytest.raises(ConvergenceGateError):
+        enforce_convergence_gate(
+            _payload(unassessable=["frozen_term"]),
+            sampling_config_name="rep",
+            output_dir=str(tmp_path),
+        )
+
+    marker = tmp_path / "CONVERGENCE_FAILED.txt"
+    assert marker.exists()
+    assert "could not assess" in marker.read_text()
+    assert "frozen_term" in marker.read_text()
+
+
+def test_measured_failures_take_precedence_in_the_reason(tmp_path):
+    """A measured failure is reported as such even alongside an unassessable one."""
+    with pytest.raises(ConvergenceGateError):
+        enforce_convergence_gate(
+            _payload(rhat_failing=["theta[0]"], max_rhat=1.03, unassessable=["frozen_term"]),
+            sampling_config_name="rep",
+            output_dir=str(tmp_path),
+        )
+
+    text = (tmp_path / "CONVERGENCE_FAILED.txt").read_text()
+    assert "R-hat failure(s)" in text
 
 
 def test_sampling_config_classification_is_explicit():
