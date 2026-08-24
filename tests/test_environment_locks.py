@@ -66,8 +66,21 @@ def test_uv_lock_pins_the_shared_library_to_an_exact_revision():
     assert all(character in "0123456789abcdef" for character in revision)
 
 
-def test_agent_instruction_copies_remain_identical():
-    agents = (ROOT / "AGENTS.md").read_bytes()
+def _instruction_copy(relative_path: str) -> str:
+    """One agent-instruction file, with its line endings normalised.
 
-    assert agents == (ROOT / "CLAUDE.md").read_bytes()
-    assert agents == (ROOT / ".github/copilot-instructions.md").read_bytes()
+    Compared as text rather than bytes. ``.gitattributes`` marks ``*.md`` as
+    ``eol=lf``, so all three are LF in the index, but an editor or an assistant
+    that rewrites one on Windows can leave CRLF in the working tree -- and
+    because git normalises on read, ``git status`` still reports the tree clean.
+    A byte comparison then fails for a reason that reads as content drift and
+    is not, which is exactly the failure this test exists to rule out.
+    """
+    return (ROOT / relative_path).read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def test_agent_instruction_copies_remain_identical():
+    agents = _instruction_copy("AGENTS.md")
+
+    assert agents == _instruction_copy("CLAUDE.md")
+    assert agents == _instruction_copy(".github/copilot-instructions.md")

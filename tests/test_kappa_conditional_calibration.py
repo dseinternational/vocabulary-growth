@@ -28,6 +28,7 @@ import pytest
 _SCRIPT_PATH = (
     Path(__file__).parents[1] / "scripts" / "kappa_conditional_calibration.py"
 )
+
 _SPEC = importlib.util.spec_from_file_location("kappa_conditional_script", _SCRIPT_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)
@@ -37,6 +38,12 @@ _SPEC.loader.exec_module(_MODULE)
 Design = _MODULE.Design
 fit = _MODULE.fit
 simulate = _MODULE.simulate
+
+
+# Twelve optimiser fits over 900 simulated children, most of them repeated
+# across three seeds because robustness across seeds is the claim. Minutes,
+# not seconds, so deselected unless `-m ""` asks for it.
+pytestmark = pytest.mark.slow
 
 ANCHORS = (12.0, 20.0)
 # enough to identify tau, small enough to fit in a couple of seconds

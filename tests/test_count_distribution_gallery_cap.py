@@ -11,10 +11,6 @@ but left the older 90-month file in place, and the gallery -- which globs the
 directory -- kept publishing it. It reached ``docs/report/figures/`` too.
 """
 
-import matplotlib
-
-matplotlib.use("Agg")
-
 import numpy as np
 import pandas as pd
 

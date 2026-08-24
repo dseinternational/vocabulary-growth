@@ -24,11 +24,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import matplotlib
+import matplotlib.pyplot as plt
 import pandas as pd
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402  (backend must be set first)
 
 _SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "compare_ds_td_expressive.py"
 _SPEC = importlib.util.spec_from_file_location("compare_ds_td_expressive_script", _SCRIPT_PATH)
