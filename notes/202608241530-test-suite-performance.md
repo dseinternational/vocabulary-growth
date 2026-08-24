@@ -48,9 +48,24 @@ Not the modelling. Collection is 4 s, so imports were never the problem; the cos
 7. **CI restructured.** The test job and the VG01 fit are now separate jobs: neither needs the other's result, and at 204 s the fit is the longer of the two once pytest is parallelised. A `lint` dependency group holds ruff alone — `uv run ruff` previously synced the whole project environment, 174 packages including PyMC and JAX, to run a self-contained Rust binary; it now installs one. `setup-node` gained its npm cache.
 8. **The CRLF failure fixed.** `test_agent_instruction_copies_remain_identical` compared `read_bytes()`. `.gitattributes` marks `*.md` as `eol=lf`, but a tool that rewrites `CLAUDE.md` on Windows leaves CRLF in the working tree, and because git normalises on read `git status` still calls the tree clean. It now compares normalised text. The suite was red by default on Windows worktrees for this reason alone, which is its own argument.
 
-## Two things to re-measure, not trust
+## What CI actually did, and one thing that did not pay
 
-**The PyTensor compile cache.** CI now redirects `base_compiledir` into the workspace and caches it. This is unverified: the machine these measurements were taken on has no C++ compiler (`pytensor.config.cxx` is empty), so PyTensor used its Python linker throughout and the cache could not do anything. On the Ubuntu runner `g++` is present and every graph is compiled through it. If the cache does not pay for its upload and download, delete the two steps — nothing else depends on them.
+The measurements above are from a workstation. The runner is a different machine, and two of the expectations they set did not survive contact with it. Run 32750160197 on this branch, against runs 32744206912 and 32735578234 on the branch it replaced:
+
+| step (ubuntu-26.04)    | before                       | after                    |
+| ---------------------- | ---------------------------- | ------------------------ |
+| `Run pytest`           | 1212 s, 1047 s               | 616 s, 608 s             |
+| `Fit model VG01 (dev)` | 290 s, 237 s                 | 316 s, 283 s             |
+| job critical path      | ~1390 s (both, sequentially) | ~640 s (concurrent jobs) |
+| `lint` job, total      | 13 s                         | 10 s                     |
+
+So CI improves by about **2.2× on the critical path**, not the 3.3× measured locally. Two reasons: the runner has four slower cores, and the run is bounded by its slowest module rather than by worker count, so a slower core lengthens the floor directly.
+
+**The PyTensor compile cache did not pay, and has been removed.** It was the one speculative item — unmeasurable here, because this machine has no C++ compiler and PyTensor used its Python linker throughout. On the runner `g++` is present and every graph is compiled through it, so the cache should have helped. It did not: with the `compiledir` cached and restored (12 MB, restore and save about a second each), `Run pytest` went 616 s cold to 608 s warm, which is inside the run-to-run noise. The `model-fit` job went 316 s to 283 s, which is one sample and equally consistent with noise. Carrying a cache step that does nothing is worse than not having one, because it reads as load-bearing, so both steps and the `base_compiledir` redirection are gone.
+
+**The lint job's saving is seconds, not minutes.** `uv run ruff check` really did install 174 packages to run a Rust binary — but with setup-uv's cache warm that took 287 ms, and the whole job 13 s. Splitting ruff into its own dependency group takes it to 10 s. The change is still worth having: the job no longer depends on that cache being warm, and it now lints `tests/`, which nothing was checking. It is not a minutes-scale win, and the first version of this note implied it was.
+
+## One thing to keep an eye on
 
 **The default deselection.** `addopts` carries `-m 'not slow'`, so a bare `pytest` no longer runs everything. The deselected count is printed on every run and CI is explicit, but it is a real change in what "the tests pass" means locally. If it causes a surprise, the honest fix is to drop it from `addopts` and put `-m "not slow"` in the documented fast command instead.
 
