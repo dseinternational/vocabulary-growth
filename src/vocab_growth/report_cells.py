@@ -728,17 +728,35 @@ def render_headline_quantities(directory: str = ".") -> None:
             )
         )
 
+    # "Between administrations", not "between children": the Beta-Binomial
+    # kappa is count dispersion at an age. Where the outcome's mean carries no
+    # child effect it is marginal — it mixes between-child, between-study and
+    # occasion variation; where the mean is fully conditioned on child effects
+    # it is the residual within-child spread, and labelling it as the spread
+    # across (different children's) administrations would hand it tau_subject's
+    # job. Neither is a between-child quantity (#234, #240). The check is per
+    # outcome because the conditioning is: the nested spoken mean is p_u * q,
+    # so its kappa is within-child only when both sides carry a child effect
+    # (VG08 carries one on understood alone, and its kappa_s keeps the
+    # marginal-style label as the conservative reading).
+    present = fitted_parameters(directory)
+    child_scales_for_suffix = {
+        None: {"tau_subject"},
+        "u": {"tau_subj_u"},
+        "s": {"tau_subj_u", "tau_subj_q"},
+        "sign": {"tau_subj_sign"},
+    }
     for suffix in (None, "u", "s", "sign"):
         stem = "posterior_kappa" if suffix is None else f"posterior_kappa_{suffix}"
         kappa = _read(directory, stem)
         if kappa is None or "vif_median" not in kappa:
             continue
-        # "Between administrations", not "between children": the Beta-Binomial
-        # kappa is marginal count dispersion at an age. In models without child
-        # effects it mixes between-child, between-study and occasion variation;
-        # in models with them it is the residual within-child spread. Neither is
-        # a between-child quantity (#234).
-        label = f"Spread across same-age administrations, {_OUTCOME_LABELS[suffix]}"
+        label_stem = (
+            "Within-child spread between same-age administrations"
+            if child_scales_for_suffix[suffix] <= present
+            else "Spread across same-age administrations"
+        )
+        label = f"{label_stem}, {_OUTCOME_LABELS[suffix]}"
         trend = _read(directory, f"{stem}_trend")
         if trend is not None and "p_widens" in trend:
             info = trend.iloc[0]

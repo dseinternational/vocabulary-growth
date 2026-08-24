@@ -12,8 +12,12 @@ that need the prepared database skip. They pin the statistical contracts of the
 
 * the anchored GP is orthogonalised against its mean's basis using coefficients
   fitted on the observed rows only (so the plot/query reporting grid cannot leak
-  into the observed-row latent), and it is pinned to zero at the reference-age
-  anchor row (the ``anchor_g*_at_ref`` contract); and
+  into the observed-row latent), then pinned to zero at the reference-age
+  anchor row (the ``anchor_g*_at_ref`` contract). The pinning shift restores a
+  constant component, so the composite is point-anchored and *centred*-orthogonal
+  to the basis — not orthogonal to it in the raw sense (#240); the assertions
+  below therefore use centred covariances, which the anchor shift cannot move;
+  and
 * ``ZeroSumNormal`` rescaled by ``sqrt(K / (K - 1))`` restores each group's
   marginal prior variance to that of the original independent ``Normal(0, 1)``
   offsets, so only the group-mean degree of freedom is removed.
@@ -110,8 +114,10 @@ def test_intercept_only_basis_preserves_a_linear_trend():
 
 
 def test_tent_basis_removes_all_three_anchor_directions():
-    # The peak ("tent") mean spans three hats, a larger space than [1, z]; the GP
-    # must be orthogonal to every column over the observed rows.
+    # The peak ("tent") mean spans three hats, a larger space than [1, z]; after
+    # the projection the GP has no component along any column over the observed
+    # rows *up to a constant* — the anchor shift restores a shared constant, so
+    # the recoverable invariant is centred covariance, not the raw inner product.
     z, n_obs, anchor_idx, rng = _grid(anchor_z=1.0)
     z_low, z_mid, z_hi = -1.0, 0.0, 1.5
     phi_low = np.clip((z_mid - z) / (z_mid - z_low), 0.0, 1.0)

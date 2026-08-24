@@ -319,15 +319,9 @@ Several deliberate one-change variants of this model are registered and can be r
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first is the average child in the average study and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
 
-::: {.callout-warning title="The last rows of this table are beyond the data"}
-
-The query ages this table reports run past the oldest comprehension observation in the fitted pool. Compare the `age` row of the descriptive-statistics table in the Data section with the ages listed here: the rows above that value are **extrapolation**, carried by the model's smoothness assumptions and its anchor priors rather than by any observation.
-
-The extrapolated rows are not marked as such, so the difference is only visible in their widths — the intervals broaden sharply once the observations stop, and that broadening is the clearest signal in the table of where evidence ends. The monthly table further down this report stops at the last observed month, because its grid is built from the observed age range, so it is the safer of the two to quote from. Quantities read off the extrapolated rows should be treated as model output rather than as findings.
-
-:::
+This table stops at 25 months. The typically-developing pool has no comprehension observations above that age, so the model's reported comprehension ages are capped there (`report_max_age_understood = 25`, #228) and no row below is extrapolation beyond the observed support. An earlier version of this fit reported query rows to 30 months, which *were* extrapolation; the cap removed them.
 
 ```{python}
 posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
@@ -350,7 +344,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions")
 
 ### Median trend
 
-![Median predicted understood vocabulary with uncertainty intervals, against the observed data. The band is uncertainty in the average study's average child, not the range children occupy; where the plotted observations stop, the curve is extrapolating.](plot_posterior_predictive_median_trend.png){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
+![Median predicted understood vocabulary with predictive intervals, against the observed data. The band is **predictive**: each draw adds a newly sampled child effect and administration-level noise to the fitted trajectory, so it approximates the range individual children's counts occupy — it is far wider than an uncertainty band on the population mean would be, and must not be read as one.](plot_posterior_predictive_median_trend.png){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
 
 ![The same trend, smoothed for presentation. The underlying numbers are unchanged — the exported table behind this figure is identical to the one behind the figure above.](plot_posterior_predictive_median_trend_smoothed.png){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
 
