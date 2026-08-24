@@ -83,6 +83,7 @@ YARC
 Zampini
 approximator
 apraxia
+argmax
 argmin
 arrowsize
 asis
@@ -132,6 +133,7 @@ idxmin
 iloc
 incl
 indep
+isfile
 isna
 iterrows
 judgments
@@ -209,6 +211,7 @@ unconverged
 underdisperse
 underdispersion
 unidimensionality
+unimodality
 univariates
 unmigrated
 unmodelled
