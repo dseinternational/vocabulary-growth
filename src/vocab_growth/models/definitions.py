@@ -714,10 +714,11 @@ class BivariateModelDefinition:
 
     # -- Within-child cross-lag (VG16, issue #113) --
     use_cross_lag: bool = False
-    """If True, add a within-child cross-lag: the child's prior-wave understood
-    residual predicts their current production ratio q (earlier receptive ->
-    later expressive). Uses the subject understood intercept, so requires
-    use_subject_re_u=True for the 'within' baseline."""
+    """If True, add a cross-lag: the child's prior-wave understood residual
+    predicts their current production ratio q (earlier receptive -> later
+    expressive). The lag source is assigned per complete (subject, age)
+    administration wave (issue #242). Uses the subject understood intercept,
+    so requires use_subject_re_u=True for the 'within' baseline."""
     lag_baseline: str = "within"
     """Baseline for the lag residual. 'within' subtracts the child's own understood
     intercept (RI-CLPM within-child effect); 'population' subtracts only the
@@ -3087,7 +3088,7 @@ VG16 = BivariateModelDefinition(
     config_name="age-understood-spoken-ds-re-subj-uq-crosslag",
     banner=(
         "Fitting Model VG16: VG09 + cross-lag (prior understood -> current q;"
-        " bias-robust population-relative baseline) - Down syndrome"
+        " population-relative baseline) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
     n_trials=810,
@@ -3144,11 +3145,18 @@ VG16 = BivariateModelDefinition(
     use_subject_re_q=True,
     tau_subj_q_sigma=1.5,
     use_cross_lag=True,
-    # Headline uses the population-relative baseline: with 2-wave-dominated data the
-    # pure within-child (own-intercept) baseline is biased by the short-T / Nickell
-    # / errors-in-variables mechanics (dev: beta -0.60 [-0.85,-0.35], an artifact),
-    # while the population-relative estimate is null (dev: +0.05 [-0.07,0.17]). The
-    # within-child variant is reported as a cautionary contrast. See the scoping note.
+    # Headline uses the population-relative baseline. The original "bias-robust"
+    # rationale — that the within-child baseline carries a short-T / Nickell /
+    # errors-in-variables bias (dev: beta -0.60 [-0.85,-0.35]) — was withdrawn:
+    # the negative figure was dev-tier non-convergence, and simulation from this
+    # model's own posterior found no such mechanism
+    # (notes/202608151500-within-child-crosslag-feasibility.md §§6-7). What
+    # survives: the population-relative predictor conditions on no estimated
+    # per-child quantity, and it deliberately retains persistent between-child
+    # standing — so beta_lag is a history-dependent mixture of between- and
+    # within-child association, not an isolated within-child dynamic
+    # (notes/202608231714-vg16-statistical-model-review.md §4.1, issue #242).
+    # The within-child variant remains an off-record cautionary contrast.
     lag_baseline="population",
     beta_lag_mu=0.0,
     beta_lag_sigma=0.5,
@@ -3251,9 +3259,10 @@ VG20 = _as_definition_subclass(
     # evidenced. The quantity this model exists to estimate is already known to be
     # positive and small from two independent directions -- VG16's realised
     # intercepts still correlate at +0.135 [0.087, 0.180] with its cross-lag
-    # fitted, and VG10's own fitted deviations at +0.152 [0.105, 0.195] with no
-    # cross-lag at all -- so a prior that made a large correlation cheap would be
-    # assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
+    # fitted (measured on the pre-#242 fit, whose lag construction was later
+    # corrected), and VG10's own fitted deviations at +0.152 [0.105, 0.195] with
+    # no cross-lag at all -- so a prior that made a large correlation cheap would
+    # be assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
     subject_re_correlation_eta=2.0,
 )
 

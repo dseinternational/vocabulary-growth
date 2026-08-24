@@ -74,6 +74,7 @@ from vocab_growth.posterior_analysis import (
     extract_posterior_predictive as _extract_posterior_predictive,
 )
 from vocab_growth.reporting import (
+    console,
     dataframe_table,
     heading,
     key_value_table,
@@ -340,6 +341,19 @@ def configure_bivariate_priors(
         alpha=definition.p_slope_hi_q_alpha, beta=definition.p_slope_hi_q_beta
     )
     _plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
+
+    # --- Cross-lag coefficient prior (VG16) ---
+    # Emitted as its own artefact so the report can put a prior figure beside
+    # the beta_lag posterior — the shared trajectory prior predictives cannot
+    # isolate this term (issue #242). A full effect-scale prior predictive
+    # (the prior translated into q shifts over the empirical x_lag range)
+    # remains registered follow-up work in #242.
+    if getattr(definition, "use_cross_lag", False):
+        heading("Cross-lag coefficient prior", style="bold cyan")
+        beta_lag_dist = pz.Normal(
+            mu=definition.beta_lag_mu, sigma=definition.beta_lag_sigma
+        )
+        _plot_and_print_dist(context, beta_lag_dist, "beta_lag_dist")
 
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
@@ -933,20 +947,74 @@ def prior_predictive_checks(context: BivariateContext):
 sample = _shared_sample
 
 
-def diagnostics(context: BivariateContext):
+def diagnostics(context: BivariateContext, definition=None):
     """Run diagnostics on the posterior samples.
 
     Thin wrapper over the shared engine (common.py): bivariate adds
     ``kappa_u_obs``/``kappa_s_obs`` to the trace plot and reports per-outcome
     LOO-CV for the spoken/understood likelihoods.
+
+    A cross-lag definition (VG16, issue #242) changes two things:
+
+    * **Understood LOO is suppressed.** The lag predictor embeds earlier
+      observed understood counts as fixed covariates, so leaving one
+      understood likelihood term out does not remove that count from the later
+      spoken terms it predicts — the "held-out" score still conditions on the
+      held-out outcome, and Pareto-k cannot detect the leak. Spoken LOO is
+      retained but labelled for what it estimates: prediction of a spoken
+      count conditional on the child's observed understood history, not
+      unconditional new-observation prediction.
+    * **The pair plot is reordered** so ``beta_lag`` and the child/study
+      scales it competes with fill the capped grid, instead of falling off
+      the end of model order.
     """
+    extra_trace_var_names = ("kappa_u_obs", "kappa_s_obs")
+    if not getattr(definition, "use_cross_lag", False):
+        _shared_diagnostics(
+            context,
+            extra_trace_var_names=extra_trace_var_names,
+            loo_var_names=(
+                ("y_s_obs", "words spoken"),
+                ("y_u_obs", "words understood"),
+            ),
+        )
+        return
+
+    posterior_vars = set(context.trace.posterior.data_vars)
+
+    def _prioritise_cross_lag(
+        names: list[str],
+        priority: tuple[str, ...] = (
+            "beta_lag",
+            "tau_subj_u",
+            "tau_subj_q",
+            "tau_u",
+            "tau_q",
+        ),
+    ) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in (*priority, *names):
+            if name in posterior_vars and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+        return ordered
+
+    console.print(
+        "[yellow]Understood LOO is not computed for this model: the cross-lag "
+        "predictor embeds earlier observed understood counts, so a pointwise "
+        "leave-one-understood-out score would still condition on the held-out "
+        "count through later spoken terms (issue #242). The spoken score below "
+        "is prediction conditional on the child's observed understood "
+        "history.[/yellow]"
+    )
     _shared_diagnostics(
         context,
-        extra_trace_var_names=("kappa_u_obs", "kappa_s_obs"),
+        extra_trace_var_names=extra_trace_var_names,
         loo_var_names=(
-            ("y_s_obs", "words spoken"),
-            ("y_u_obs", "words understood"),
+            ("y_s_obs", "words spoken (conditional on observed understood history)"),
         ),
+        var_names_fn=_prioritise_cross_lag,
     )
 
 

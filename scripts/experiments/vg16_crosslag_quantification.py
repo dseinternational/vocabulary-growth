@@ -48,6 +48,7 @@ import numpy as np
 import xarray as xr
 
 from vocab_growth import environment as env
+from vocab_growth.models.common_bivariate_re import compute_prev_wave_lag
 
 VG10_DIR = "VG10-age-understood-spoken-ds-re-subj-uq-anchored"
 VG16_DIR = "VG16-age-understood-spoken-ds-re-subj-uq-crosslag"
@@ -76,23 +77,14 @@ def flat(post, name):
 
 
 def prev_wave_lag(age, subj, und):
-    """Replicate ``_compute_prev_wave_lag`` from the model engine on trace data."""
-    n = len(age)
-    prev_idx = np.zeros(n, dtype=int)
-    has = np.zeros(n)
-    row_order = np.arange(n)
-    prev_subj, last, last_age = -1, -1, np.nan
-    for pos in np.lexsort((row_order, age, subj)):
-        if subj[pos] != prev_subj:
-            prev_subj, last, last_age = subj[pos], -1, np.nan
-        if last >= 0 and age[pos] > last_age:
-            prev_idx[pos] = last
-            has[pos] = 1.0
-        if not np.isnan(und[pos]):
-            last, last_age = pos, age[pos]
-    p_prev = np.clip(np.where(has > 0, und[prev_idx], N_TRIALS * 0.5) / N_TRIALS, 1e-4, 1 - 1e-4)
-    y_logit = np.where(has > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0)
-    return prev_idx, has, y_logit
+    """The engine's own wave-grouped lag construction, on trace data.
+
+    Imported rather than copied (issue #242): an earlier copy of the engine's
+    row-by-row walk reproduced its row-order-dependent lag-assignment defect
+    here, so this script's identification-base figures inherited the bug they
+    should have been able to detect.
+    """
+    return compute_prev_wave_lag(subj, age, und, N_TRIALS)
 
 
 def age_equivalent(target_logit, grid_logit, grid_age):
