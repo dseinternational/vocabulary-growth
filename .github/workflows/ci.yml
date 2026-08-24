@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   spellcheck:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -40,7 +40,7 @@ jobs:
         run: npm run format:check
 
   lint:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04]
+        os: [ubuntu-26.04-arm]
     runs-on: ${{ matrix.os }}
     # PEP 686 makes UTF-8 mode the default from Python 3.15.
     env:
@@ -100,7 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04]
+        os: [ubuntu-26.04-arm]
     runs-on: ${{ matrix.os }}
     env:
       PYTHONUTF8: "1"
