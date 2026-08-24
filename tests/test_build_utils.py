@@ -232,6 +232,18 @@ def test_require_integral_counts_rejects_fractions_with_examples():
         require_integral_counts(np.array([1.0, 2.5, 3.0, 4.25]), "spoken")
 
 
+def test_require_integral_counts_rejects_infinities():
+    # np.floor(inf) == inf, so an infinity slips past the integrality check and
+    # would cast to an arbitrary integer; it must be rejected explicitly (#236).
+    with pytest.raises(ValueError, match="understood contains 1 non-finite"):
+        require_integral_counts(np.array([1.0, np.inf, 3.0]), "understood")
+
+
+def test_require_integral_counts_reports_nan_as_non_finite():
+    with pytest.raises(ValueError, match="spoken contains 1 non-finite"):
+        require_integral_counts(np.array([1.0, np.nan]), "spoken")
+
+
 # --- require_valid_counts ----------------------------------------------------
 #
 # The contract the nested spoken likelihood already gets from
@@ -259,3 +271,11 @@ def test_require_valid_counts_rejects_out_of_range():
         require_valid_counts(np.array([1.0, 811.0]), "understood", 810)
     with pytest.raises(ValueError, match="between 0 and n_trials"):
         require_valid_counts(np.array([-1.0, 3.0]), "understood", 810)
+
+
+def test_require_valid_counts_delegates_the_non_finite_message():
+    # require_valid_counts defers finiteness and integrality to
+    # require_integral_counts, so the failure names the offending values rather
+    # than reporting a bare "non-finite observed count(s)" (#236).
+    with pytest.raises(ValueError, match="understood contains 1 non-finite"):
+        require_valid_counts(np.array([1.0, np.inf]), "understood", 810)

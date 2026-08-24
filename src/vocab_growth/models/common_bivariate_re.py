@@ -234,6 +234,9 @@ def prepare_bivariate_re_data(
     # Create a BinomialModelData for the context interface
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_valid = analysis_df.loc[analysis_df["understood"].notna(), "understood"]
+    require_valid_counts(
+        y_u_valid.to_numpy(dtype=float), "understood", definition.n_trials
+    )
     y_obs_placeholder = np.zeros(n, dtype=int)
     y_obs_placeholder[analysis_df["understood"].notna().values] = (
         y_u_valid.values.astype(int)
@@ -565,8 +568,9 @@ def build_model_re(
     )
     # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
     # fractional or out-of-range understood count would corrupt the likelihood
-    # without a trace. The spoken side gets the same finite/integral/range
-    # checks from nested_outcome_spec below (#240).
+    # without a trace — the post-cast bounds checks below cannot catch 810.9 or
+    # -0.1, which truncate into range. The spoken side gets the same
+    # finite/integral/range checks from nested_outcome_spec below (#240, #236).
     require_valid_counts(y_u_values, "understood", n_trials)
     y_u_observed = y_u_values.astype(int)
     study_codes = np.asarray(analysis_df["study_code"], dtype=int)

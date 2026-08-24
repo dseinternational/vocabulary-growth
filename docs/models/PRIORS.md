@@ -242,24 +242,29 @@ would quote a median and an 89% interval at 90 months from a handful of administ
 past the high anchor where the mean is now a levelled-off extrapolation rather than an
 estimate.
 
-**Implemented 2026-08-04, raised 72 → 84 on 2026-08-13:** `report_max_age_understood = 84`
-on VG02, VG05, VG07-VG10 and VG14-VG16. The original 72 was set against the pre-`uk_07`
-pool (905 understood rows, 95th percentile 64, only 15 at or above 72). Rebuilding
-`us_01` from the Edgin item-level files and integrating `uk_07` — together with the
-reinstated `uk_06` signing rows — rebuilt the older tail, and the 72-84 band now carries
-25 rows from 20 children across five studies (`ie_01`, `uk_01`, `uk_06`, `uk_07`,
-`us_02`), so reporting it is no longer extrapolation. 84 and no further, for two reasons
-that coincide: above it only 13 rows from 11 children remain, and 84 is the high trend
-anchor. That is the same test, and the same threshold, applied when
-`report_max_age_signed` was raised from 60 to 84 in #212.
+**Implemented 2026-08-04, raised 72 → 84 on 2026-08-13, lowered back to 72 on
+2026-08-22:** `report_max_age_understood = 72` on VG02, VG05, VG07-VG10 and VG14-VG16.
+The original 72 was set against the pre-`uk_07` pool (905 understood rows, 95th
+percentile 64, only 15 at or above 72). Rebuilding `us_01` from the Edgin item-level
+files and integrating `uk_07` — together with the reinstated `uk_06` signing rows —
+rebuilt the older tail, and the 72-84 band now carries 25 rows from 20 children across
+five studies (`ie_01`, `uk_01`, `uk_06`, `uk_07`, `us_02`), which is what justified the
+raise to 84. The 2026-08-22 lowering rests on a different test: the band is populated,
+but the Down syndrome child structures disagree there, so a comprehension number in the
+72-84 band depends on which model produced it. Raise the cap again when new older-child
+comprehension data let the band _distinguish_ the structures, not merely populate it —
+see [`notes/202608221200-reporting-source-by-quantity.md`](../../notes/202608221200-reporting-source-by-quantity.md).
+(When the cap did sit at 84, the coinciding arguments were that only 13 rows from 11
+children remain above it and that 84 is the high trend anchor — the same test applied
+when `report_max_age_signed` was raised from 60 to 84 in #212.)
 
 It trims the understood and `q` summary tables and the production-ratio figure; spoken
 keeps the full grid at 90. **Signed is not covered by this field** — it has its own
 `report_max_age_signed`, added to the trivariate definition on 2026-08-13 so that VG14's
 sign-derived figures stop borrowing the comprehension cap. Note the two caps rest on
-different arguments: comprehension stops at 84 because the data do, whereas signed is
-observed on 56 rows from 48 children at or above 84 and stops there only because 84 is
-the trend anchor.
+different arguments: comprehension stops at 72 because the models disagree beyond it,
+whereas signed is observed on 56 rows from 48 children at or above 84 and stops there
+only because 84 is the trend anchor.
 
 Both caps are post-processing of a fitted trace — the query grid, the model graph and the
 `query_id` dimension are unchanged, so they cannot move a number that is still reported,

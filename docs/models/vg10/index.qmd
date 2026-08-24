@@ -23,7 +23,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
 
 ```{python}
@@ -119,7 +119,7 @@ render_glossary([
 
 Two different predictions run through this report, and confusing them is the easiest way to misread it.
 
-- A **population-level** curve sets every random effect to zero. It is the average child in the average study, and its interval is uncertainty about that average. In the summary tables these are the `p_population_*` and `Ey_population_*` columns.
+- A **population-level** curve sets every random effect to zero. It is a conditional zero-effect trajectory — approximately the **median** child in the average study, not the average of children's curves, because the inverse-logit link is nonlinear — and its interval is uncertainty about that reference trajectory. In the summary tables these are the `p_population_*` and `Ey_population_*` columns.
 - A **subject-marginal** prediction draws a new child's random effects as well. It answers _where would one more child fall?_, and it is much the wider of the two. In the summary tables these are the `p_subject_marginal_*` / `Ey_subject_marginal_*` columns, and the `Y_*` and `P(Y<=k)` columns, which are predictive counts for an unseen child.
 
 Every figure below is labelled with which of the two it draws. In particular the **joint-trajectory figures are subject-marginal**: their bands are the range individual children occupy, not uncertainty in the average trajectory. The historical `p_*` and `Ey_*` columns keep their population-level meaning; the explicit `p_population_*` columns restate it so that no column's estimand has to be inferred.
@@ -139,7 +139,7 @@ $$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + \tilde g_q(a) + \
 
 where $a_z$ is age standardised, $\delta[s]$ is the offset of study $s$, $\delta^{\text{subj}}[i]$ the offset of child $i$, and $\tilde g$ the anchored Gaussian process described below. The likelihood's $q$ is the _child's_ ratio, $\operatorname{logit}^{-1} h(a, s, i)$, including both random effects — not the population curve plotted later in this report.
 
-Neither straight line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero.
+Neither straight line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. One caution on reading them: the anchors parameterise the straight-line component only. The anchored Gaussian process below is pinned to zero at the reference age and orthogonalised against the trend on the observed rows, but it is not zero at the anchor ages themselves, so the fitted curve there is the anchor plus the process's contribution — the anchors are coordinates of the trend, not exact values of the fitted curve.
 
 Children of the same age differ far more than a Binomial count would allow, so both likelihoods are Beta-Binomial with a dispersion that is itself allowed to change with age.
 
@@ -163,13 +163,13 @@ The reference age is a deliberate model choice — see the glance box above for 
 
 Above the high age anchor the production ratio's mean is held level rather than being extrapolated along its straight line; the understood mean is not. The reason is asymmetric behaviour past the data: continued upward on the logit scale, the $q$ line runs to near-saturation at the top of the modelled age range, and the flexible term then spends its budget correcting that asymptote instead of describing the ages where the observations are. The understood mean shows the same defect far more mildly and does not saturate, so it is left free.
 
-The corner is rounded rather than sharp, so the fitted curve stays smooth and monotone. What this means for a reader is confined to the oldest reported ages: at the very top of the reported range the production ratio — and the spoken curve, which is understood multiplied by it — is a levelled-off mean moved only by the Gaussian process, not a trend still being fitted. Below the high anchor the clamp does nothing at all. A registered sensitivity variant that clamps both means as well is fitted and reported under [Robustness](#sec-robustness).
+The corner is rounded rather than sharp, so the mean's transition is smooth and differentiable; the Gaussian process term remains unconstrained there, so the fitted curve itself is not guaranteed monotone. What this means for a reader is confined to the oldest reported ages: at the very top of the reported range the production ratio — and the spoken curve, which is understood multiplied by it — is a levelled-off mean moved only by the Gaussian process, not a trend still being fitted. Below the high anchor the clamp does nothing at all. A registered sensitivity variant that clamps both means as well is fitted and reported under [Robustness](#sec-robustness).
 
 ### Why the curves stop at different ages {#sec-caps}
 
 The glance box lists two different reporting caps, and the figures honour them: the words-understood curve and every ratio built from understood — the production ratio, the comprehension-production gap, expected spoken given understood — stop earlier than the words-spoken curve, so the joint-trajectory figures show one line ending before the other.
 
-There are three reasons, and they coincide. Comprehension is recorded on substantially fewer rows than production, and its rows thin out earlier in age, so the evidence runs out sooner. The understood cap is set at the high trend anchor, above which the production ratio's mean is levelled off (@sec-clamp) — anything quoted beyond it would be a flat extrapolation moved only by the flexible term. And any quantity that divides spoken by understood inherits the narrower of the two caps by construction. Production has observations well past that point, so it is reported further. The exact ages are in the glance box; they are properties of this fit and are read from it rather than written here.
+There are three reasons, and they coincide. Comprehension is recorded on substantially fewer rows than production, and its rows thin out earlier in age, so the evidence runs out sooner. The understood cap is set at 72 months — below the 84-month high trend anchor — because the 72–84 band, while populated, cannot distinguish the Down syndrome child structures, so a comprehension number there depends on which model produced it (see the reporting-ages policy in `docs/models/README.md`). And any quantity that divides spoken by understood inherits the narrower of the two caps by construction. Production has observations well past that point, so it is reported further. The exact ages are in the glance box; they are properties of this fit and are read from it rather than written here.
 
 ## Priors
 
@@ -185,7 +185,7 @@ The anchors deserve a word about their provenance, because they are not all the 
 
 Stabilisation of the $q$ decomposition comes from the **GP anchor** (@sec-gp-anchor), not from a tight amplitude prior and not from a narrow anchor. The amplitude prior for the production ratio has since been widened from an earlier, tighter setting that was mis-scoped; the table above states what this fit actually used, and the marginal posterior figures in [Diagnostics](#sec-diagnostics) show where the fitted amplitude landed inside it.
 
-Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ at two reference ages rather than as an intercept and a slope, so each prior is directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. These $\kappa$ are _conditional_ quantities: this model carries study and child random intercepts, so $\kappa$ describes what is left once a child's own level is known, not the total spread between children at an age. The prior scales are deliberately wide, because the Down syndrome joint frame is the thinnest the calibration exercise covers and the estimator used there recovers a known $\kappa$ with a one-directional downward bias. What is not in doubt is that the _previous_ prior was wrong in shape: it forced dispersion to fall with age, and this model's posterior sat at the far edge of that constraint. See `docs/models/PRIORS.md`.
+Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ at two reference ages rather than as an intercept and a slope, so each prior is directly comparable with a per-age dispersion estimate and neither shifts meaning if the pool's age distribution changes. These $\kappa$ are _conditional_ quantities: this model carries study and child random intercepts, so $\kappa$ describes what is left once a child's own level is known, not the total spread between children at an age. The prior scales are deliberately wide, because the Down syndrome joint frame is the thinnest the calibration exercise covers and the estimator used there recovers a known $\kappa$ with a one-directional downward bias (the prior medians use the uncorrected calibration — the earlier a-priori bias correction was dropped, as a stated position). What is not in doubt is that the _previous_ prior was wrong in scale: its half-normal slope prior was far too narrow for the fitted concentration trend, leaving the posterior about four standard deviations into its tail with negative contraction. See `docs/models/PRIORS.md`.
 
 ### Understood trajectory
 
@@ -225,15 +225,15 @@ Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ a
 
 ## Prior predictive checks
 
-These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with four criteria: young children should usually sit near the floor on both outcomes; older trajectories should not be forced towards the ceiling; the simulated comprehension-production gap should be able to open and to close again; and the simulated production ratio should be able to reach both low and high values across the age range. A prior that failed any of these would be shaping the answer rather than permitting it. The falsifier to watch for is the opposite of the usual one: if the prior spoken curves were _too narrow_, the stabilising priors would be doing substantive work that belongs to the data.
+These simulate trajectories from the priors alone, before the data are seen. The figures below are **population mean functions** — study and child effects at zero, no Beta-Binomial counts — so they test the mean structure's priors only and cannot validate the random-effect scales or the dispersion priors. Read them as a plausibility test with four criteria: young children should usually sit near the floor on both outcomes; older trajectories should not be forced towards the ceiling; the simulated comprehension-production gap should be able to open and to close again; and the simulated production ratio should be able to reach both low and high values across the age range. A prior that failed any of these would be shaping the answer rather than permitting it. The falsifier to watch for is the opposite of the usual one: if the prior spoken curves were _too narrow_, the stabilising priors would be doing substantive work that belongs to the data.
 
 The figures below satisfy those criteria — the prior envelopes are wide at every age, and neither outcome is pinned to a floor or a ceiling anywhere in the range.
 
-![Trajectories for words understood drawn from the priors alone.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
+![Population mean-function trajectories for words understood, drawn from the priors alone.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
 
-![Trajectories for words spoken drawn from the priors alone.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
+![Population mean-function trajectories for words spoken, drawn from the priors alone.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
 
-![Trajectories for the production ratio $q(a)$ drawn from the priors alone.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
+![Population mean-function trajectories for the production ratio $q(a)$, drawn from the priors alone.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
 
 ## Data
 
@@ -303,11 +303,11 @@ render_headline_quantities()
 
 Four things in that table carry the substance of the model.
 
-**Comprehension leads production, and the lead is measurable in both time and words.** The fastest growth in words understood arrives well before the fastest growth in words spoken, and the gap between what the average child understands and what they say opens, peaks, and then closes again over the reported range. That rise-and-fall shape is the model's central descriptive result: expressive vocabulary is not simply a smaller copy of receptive vocabulary, it is a delayed one.
+**Comprehension leads production, and the lead is measurable in both time and words.** The fastest growth in words understood arrives well before the fastest growth in words spoken, and the gap between what the reference (zero-effect) child understands and what they say opens, peaks, and then closes again over the reported range. That rise-and-fall shape is the model's central descriptive result: expressive vocabulary is not simply a smaller copy of receptive vocabulary, it is a delayed one.
 
 **The production ratio is the mechanism.** $q$ rises across the whole reported range — the fraction of understood words that a child also says grows with age — and the table gives the age at which it reaches one half. That single crossing is the most quotable number the model produces, and it is read off the median curve rather than being the posterior median of the crossing itself.
 
-**Dispersion increases with age on both outcomes.** The variance-inflation readings in the last two rows grow, meaning that by school age an observation carries a small fraction of the information a Binomial count of the same size would. This is the quantitative reason the predictive bands widen so much at the top of the range, and it vindicates the prior change described under [Priors](#priors): the earlier prior forced dispersion to _fall_ with age.
+**Dispersion increases with age on both outcomes.** The variance-inflation readings in the last two rows grow, meaning that by school age an observation carries a small fraction of the information a Binomial count of the same size would. This is the quantitative reason the predictive bands widen so much at the top of the range, and it vindicates the prior change described under [Priors](#priors): the legacy slope prior was far too narrow for a concentration trend this steep, and the two-anchor form lets the data set both its direction and its size.
 
 **Children differ more than studies do, and they differ most in conversion.**
 
@@ -372,7 +372,7 @@ $$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \app
 
 Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — **not** evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. Most of these data are cross-sectional, and the comparison is between different children of different ages, not within one child over time.
 
-The figure below reads the fitted association directly, and is the most practitioner-facing thing this model produces: for children with Down syndrome at several ages, it maps words understood on the x axis to expected words spoken on the y axis, with the shaded band the 89% interval on $q(a)$ and the dashed line the ceiling that no child can exceed. Each fan line is straight because its slope is a single number — the **population** production ratio at that age. It is therefore an expectation for the average child in the average study at that age and comprehension level, not a prediction for a named child, whose own conversion rate carries the child random effect reported in the [Findings](#findings) variation table. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
+The figure below reads the fitted association directly, and is the most practitioner-facing thing this model produces: for children with Down syndrome at several ages, it maps words understood on the x axis to expected words spoken on the y axis, with the shaded band the 89% interval on $q(a)$ and the dashed line the ceiling that no child can exceed. Each fan line is straight because its slope is a single number — the **population** production ratio at that age. It is therefore an expectation for the zero-effect reference child in the average study at that age and comprehension level, not a prediction for a named child, whose own conversion rate carries the child random effect reported in the [Findings](#findings) variation table. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
 
 ![Predicted words spoken given words understood, at several ages. The fan opens with age: the same comprehension converts to more speech in an older child.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
 
@@ -380,7 +380,7 @@ The figure below reads the fitted association directly, and is the most practiti
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$. $Y$ is a draw from the posterior predictive distribution. Read the `*_population_*` columns for the average child in the average study, and the `*_subject_marginal_*` and `Y_*` columns for where a single unseen child might fall; the latter are much the wider, and are the ones to quote about an individual.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$. $Y$ is a draw from the posterior predictive distribution. Read the `*_population_*` columns for the zero-effect reference child in the average study (approximately the median child, not the mean of children), and the `*_subject_marginal_*` and `Y_*` columns for where a single unseen child might fall; the latter are much the wider, and are the ones to quote about an individual.
 
 ```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
@@ -610,6 +610,7 @@ render_loo_section()
 - **Age is not a mechanism.** Everything reported here is an association with age, not an effect of it, and the production ratio is a conversion proportion rather than a causal pathway from comprehension to speech.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat. The registered `dse-native-only` variant probes that assumption, and the [Robustness](#sec-robustness) table reports what it found.
 - **Beyond the high anchor the production ratio does not extrapolate — it is held level** (@sec-clamp). Quantities quoted at the very top of the reported range are a levelled-off mean moved by the flexible term alone.
-- **Repeated measurement is modelled as a per-child offset only.** Children are not given their own slopes, so this model describes how children of different ages differ, not how one child changes. VG16 adds a within-child cross-lag; this model has none.
+- **Repeated measurement is modelled as a per-child offset only.** Children are not given their own slopes: every child's latent trajectory is parallel, relative standing is fixed at every age, and rank changes are impossible by construction — stability of developmental tracking is an assumption here, not an estimate. VG16 adds a within-child cross-lag and VG19 a child slope; this model has neither.
+- **For spoken-only children, mainly the product of the two child effects is identified.** Children contributing spoken observations but no understood observation at any wave — over 150 children in the current frame — chiefly inform the product of their comprehension and production-ratio effects, so the individual split for them is driven by the hierarchy and the priors. This compounds the superseded independence assumption disclosed at the top of this report.
 - **Where the data thin out, the curve is the model.** The `n_obs` column in the monthly tables shows where that begins, and it begins well before the top of both reported ranges.
 - **The Down syndrome pool masks several documented defect classes by default.** Reinstating the masked implausible-production rows is a registered variant; see [Robustness](#sec-robustness) for its current status.

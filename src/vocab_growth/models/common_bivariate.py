@@ -36,7 +36,7 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
-    require_integral_counts,
+    require_valid_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     validate_ell_bounds,
@@ -270,7 +270,9 @@ def prepare_bivariate_data(
     # Create a BinomialModelData for the context interface (using understood as primary)
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_valid = analysis_df.loc[analysis_df["understood"].notna(), "understood"]
-    require_integral_counts(y_u_valid.to_numpy(dtype=float), "understood")
+    require_valid_counts(
+        y_u_valid.to_numpy(dtype=float), "understood", definition.n_trials
+    )
     y_obs_placeholder = np.zeros(n, dtype=int)
     y_obs_placeholder[analysis_df["understood"].notna().values] = (
         y_u_valid.values.astype(int)
@@ -408,13 +410,18 @@ def build_model(
     has_s = analysis_df["spoken"].notna().values
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
+    n_trials = context.model_data.n_trials
+    y_u_values = np.asarray(analysis_df.loc[has_u, "understood"], dtype=float)
+    # Validate BEFORE the integer cast, exactly as the RE engine does: the cast
+    # truncates silently, so the post-cast bounds checks below cannot catch
+    # 810.9 or -0.1, which truncate into range (#236, #240).
+    require_valid_counts(y_u_values, "understood", n_trials)
+    y_u_observed = y_u_values.astype(int)
 
     idx_u = np.where(has_u)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_trials = context.model_data.n_trials
     spoken_spec = nested_outcome_spec(
         analysis_df,
         parent_col="understood",

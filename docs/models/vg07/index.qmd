@@ -23,7 +23,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
+Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
 
 ```{python}
@@ -125,7 +125,7 @@ Only the scales $\tau_U$ and $\tau_q$ are summarised in this report. The individ
 
 ::: {.callout-important title="What this model does not do"}
 
-VG07 has study effects but **no repeated-child effects**. The pool contains children observed more than once, and this model treats those observations as independent. It is a development step in the lineage towards VG10, which carries both kinds of structure and is the preferred account of comprehension and production in Down syndrome. **The numbers on this page should not be quoted as results.**
+VG07 has study effects but **no repeated-child effects**. The pool contains children observed more than once, and this model treats those observations as independent — so within the average-study frame its estimand is still administration-weighted: children influence the curve in proportion to how many administrations they contribute. It is a development step in the lineage towards VG20, which carries both kinds of structure and is the preferred account of comprehension and production in Down syndrome. **The numbers on this page should not be quoted as results.**
 
 The reported curves are population-level: they set the study offsets to zero and therefore describe the average study, with intervals reflecting uncertainty about that average. They are not predictions for a new child, and this model produces no subject-marginal prediction because it carries no child-level random effect.
 
@@ -141,11 +141,11 @@ from vocab_growth.report_cells import render_priors_table
 render_priors_table()
 ```
 
-The trajectory and dispersion priors are the same as VG05's, so the two models differ in structure and not in what they assume about development. The understood trajectory's low anchor encodes a floor expectation and its high anchor is deliberately broad. The production-ratio anchors are not merely broad regularisation: the high anchor was recalibrated against directly observed spoken/understood pairs, so it carries real information about the conversion rate and is a named sensitivity target in `docs/models/PRIORS.md`.
+The trajectory and dispersion priors are the same as VG05's, so the two models differ in structure and not in what they assume about development. The understood trajectory's low anchor encodes a floor expectation and its high anchor is deliberately broad. The production-ratio anchors are not merely broad regularisation: the high anchor was recalibrated against directly observed spoken/understood pairs, so it carries real information about the conversion rate and is a named sensitivity target in `docs/models/PRIORS.md`. Two cautions on reading the anchors. They parameterise the straight-line component only — the Gaussian process is unconstrained at the anchor ages, so they are coordinates of the trend, not exact values of the fitted curve there. And, as in VG05, the understood anchors and the high production-ratio anchor are calibrated against this project's own frame rather than independent Down syndrome norms — data-informed regularisation, not external evidence — so posterior agreement with them is partly by construction.
 
 The two between-study scales are new. Each is a half-normal prior on the standard deviation of the study offsets on the logit scale, and the priors table above gives the odds-multiplier reading: how much the odds that a word is understood, or that an understood word is spoken, shift for a study one standard deviation above the average. The prior is weak enough to let the data say the studies differ a great deal, and it also pulls weakly informed studies towards the average rather than letting a study with few children set its own level outright — the partial pooling that makes a hierarchical model worth fitting.
 
-The length-scale and amplitude priors control the flexible part of each trend, and the two dispersion blocks are separate so that comprehension and production may differ in how much observations vary around the same mean. Dispersion follows `kappa(age) = kappa_min + exp(a_kappa - b_kappa_mag * z)`, one curve per outcome, with priors placed at two reference ages rather than as an intercept and slope. See `docs/models/PRIORS.md`.
+The length-scale and amplitude priors control the flexible part of each trend, and the two dispersion blocks are separate so that comprehension and production may differ in how much observations vary around the same mean. Dispersion follows `kappa(age) = kappa_min + exp(a_kappa - b_kappa_mag * z)`, one curve per outcome — the **legacy** parameterisation, whose priors sit directly on the floor `kappa_min`, on the level `a_kappa` at the pool's mean age, and on the slope magnitude `b_kappa_mag`, constrained non-negative so the concentration cannot rise with age. It is kept for lineage comparability with VG05 and VG08; later models state their dispersion priors at two reference ages instead. As in VG05, the recorded fits put the spoken slope magnitude around four standard deviations into the tail of its half-normal prior with the posterior wider than the prior — severe prior-scale conflict on a weakly identified parameter — so this model's concentration trends and any variance reading derived from them should not be quoted as estimates. See `docs/models/PRIORS.md`.
 
 Above the high age anchor the straight-line part of the production ratio's trend is held level rather than allowed to keep climbing — the glance block above records which means are clamped this way. The Gaussian process term is still free to move there, so the fitted $q$ curve is not flat at the oldest ages, but it is not being carried upward by a line extrapolating past the last anchor either. The understood trajectory is not clamped, so the two are treated differently above the high anchor.
 
@@ -293,9 +293,9 @@ Everything in this section is population-level: the study offsets are set to zer
 
 The two curves stop at different ages, and that is deliberate rather than an artefact. Comprehension and every ratio derived from it are reported only up to the comprehension reporting cap, while production runs on to the top of the query grid; the glance block at the top of this report records both caps. The reason is that the evidence for comprehension thins out earlier than the evidence for production, so the model declines to publish an understood curve where it would be carried almost entirely by the trend's smoothness.
 
-![Median expected words understood and words spoken against age for the average study, with the observed data.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+![Median **posterior-predictive** words understood and words spoken against age for the average study, with the observed data. The curves are medians of predictive count draws, not the expected trajectory.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the average study's trajectory, not on where a single child, or a single study, would fall.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+![The same predictive medians with 50% inner and 89% outer equal-tailed intervals. The bands summarise posterior-predictive count draws for the average study, so they are intervals on where a single new fully-paired administration would fall — carrying between-administration dispersion as well as trajectory uncertainty — not the far narrower intervals on the mean trajectory, and not a prediction for a new study.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ### Production ratio
 
@@ -397,7 +397,7 @@ Lower $\kappa$ means **greater** variability between observations relative to th
 
 ### Summary at selected ages
 
-The columns mean the same as in the understood table above, with two differences worth knowing. This table runs to a later age, because production is reported past the comprehension cap. And the predictive draws behind $Y$ are nested: for the paired records each spoken count is drawn out of a _drawn_ understood count, not out of the full reference inventory, so at young ages a large share of the probability at zero comes from small drawn comprehension rather than from the production ratio alone.
+The columns mean the same as in the understood table above, with two differences worth knowing. This table runs to a later age, because production is reported past the comprehension cap. And the predictive draws behind $Y$ are nested: each spoken count is drawn out of a _drawn_ understood count, not out of the full reference inventory, so at young ages a large share of the probability at zero comes from small drawn comprehension rather than from the production ratio alone. These predictions therefore describe a hypothetical **fully paired** administration; roughly a third of the fitted spoken records instead used the marginal fallback described under Statistical model, whose observation process the nested generator does not reproduce.
 
 ```{python}
 posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
