@@ -960,19 +960,22 @@ def diagnostics(context: BivariateContext, definition=None):
     observation-sized variable never fitted under ArviZ's subplot cap, so they
     never rendered, and since 2026-08-23 the sampler does not store them.)
 
-    A cross-lag definition (VG16, issue #242) changes two things:
+    **The pair plot is reordered** for any definition carrying a distinguishing
+    child structure, so the parameters the model was added for fill the capped
+    grid instead of falling off the end of model order (issue #233). The
+    ordering comes from :func:`pair_plot_priority`, which returns an empty tuple
+    for a model without one -- and then the reordering is not installed at all,
+    so those pair plots are unchanged. This began as VG16's own reordering for
+    ``beta_lag`` (#242) and is now general.
 
-    * **Understood LOO is suppressed.** The lag predictor embeds earlier
-      observed understood counts as fixed covariates, so leaving one
-      understood likelihood term out does not remove that count from the later
-      spoken terms it predicts -- the "held-out" score still conditions on the
-      held-out outcome, and Pareto-k cannot detect the leak. Spoken LOO is
-      retained but labelled for what it estimates: prediction of a spoken
-      count conditional on the child's observed understood history, not
-      unconditional new-observation prediction.
-    * **The pair plot is reordered** so ``beta_lag`` and the child/study
-      scales it competes with fill the capped grid, instead of falling off
-      the end of model order.
+    A cross-lag definition (VG16, issue #242) additionally **suppresses
+    understood LOO**. The lag predictor embeds earlier observed understood
+    counts as fixed covariates, so leaving one understood likelihood term out
+    does not remove that count from the later spoken terms it predicts -- the
+    "held-out" score still conditions on the held-out outcome, and Pareto-k
+    cannot detect the leak. Spoken LOO is retained but labelled for what it
+    estimates: prediction of a spoken count conditional on the child's observed
+    understood history, not unconditional new-observation prediction.
     """
     posterior_vars = set(context.trace.posterior.data_vars)
     priority = pair_plot_priority(definition)
