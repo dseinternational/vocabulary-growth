@@ -960,42 +960,27 @@ def diagnostics(context: BivariateContext, definition=None):
     observation-sized variable never fitted under ArviZ's subplot cap, so they
     never rendered, and since 2026-08-23 the sampler does not store them.)
 
-    A cross-lag definition (VG16, issue #242) changes two things:
+    **The pair plot is reordered** for any definition carrying a distinguishing
+    child structure, so the parameters the model was added for fill the capped
+    grid instead of falling off the end of model order (issue #233). The
+    ordering comes from :func:`pair_plot_priority`, which returns an empty tuple
+    for a model without one -- and then the reordering is not installed at all,
+    so those pair plots are unchanged. This began as VG16's own reordering for
+    ``beta_lag`` (#242) and is now general.
 
-    * **Understood LOO is suppressed.** The lag predictor embeds earlier
-      observed understood counts as fixed covariates, so leaving one
-      understood likelihood term out does not remove that count from the later
-      spoken terms it predicts -- the "held-out" score still conditions on the
-      held-out outcome, and Pareto-k cannot detect the leak. Spoken LOO is
-      retained but labelled for what it estimates: prediction of a spoken
-      count conditional on the child's observed understood history, not
-      unconditional new-observation prediction.
-    * **The pair plot is reordered** so ``beta_lag`` and the child/study
-      scales it competes with fill the capped grid, instead of falling off
-      the end of model order.
+    A cross-lag definition (VG16, issue #242) additionally **suppresses
+    understood LOO**. The lag predictor embeds earlier observed understood
+    counts as fixed covariates, so leaving one understood likelihood term out
+    does not remove that count from the later spoken terms it predicts -- the
+    "held-out" score still conditions on the held-out outcome, and Pareto-k
+    cannot detect the leak. Spoken LOO is retained but labelled for what it
+    estimates: prediction of a spoken count conditional on the child's observed
+    understood history, not unconditional new-observation prediction.
     """
-    if not getattr(definition, "use_cross_lag", False):
-        _shared_diagnostics(
-            context,
-            loo_var_names=(
-                ("y_s_obs", "words spoken"),
-                ("y_u_obs", "words understood"),
-            ),
-        )
-        return
-
     posterior_vars = set(context.trace.posterior.data_vars)
+    priority = pair_plot_priority(definition)
 
-    def _prioritise_cross_lag(
-        names: list[str],
-        priority: tuple[str, ...] = (
-            "beta_lag",
-            "tau_subj_u",
-            "tau_subj_q",
-            "tau_u",
-            "tau_q",
-        ),
-    ) -> list[str]:
+    def _prioritise(names: list[str]) -> list[str]:
         seen: set[str] = set()
         ordered: list[str] = []
         for name in (*priority, *names):
@@ -1003,6 +988,17 @@ def diagnostics(context: BivariateContext, definition=None):
                 ordered.append(name)
                 seen.add(name)
         return ordered
+
+    if not getattr(definition, "use_cross_lag", False):
+        _shared_diagnostics(
+            context,
+            loo_var_names=(
+                ("y_s_obs", "words spoken"),
+                ("y_u_obs", "words understood"),
+            ),
+            var_names_fn=_prioritise if priority else None,
+        )
+        return
 
     console.print(
         "[yellow]Understood LOO is not computed for this model: the cross-lag "
@@ -1017,7 +1013,7 @@ def diagnostics(context: BivariateContext, definition=None):
         loo_var_names=(
             ("y_s_obs", "words spoken (conditional on observed understood history)"),
         ),
-        var_names_fn=_prioritise_cross_lag,
+        var_names_fn=_prioritise,
     )
 
 
@@ -1073,6 +1069,52 @@ def _child_slope_offsets(context: BivariateContext, definition):
     )
 
 
+def pair_plot_priority(definition) -> tuple[str, ...]:
+    """The variables the pair plot must show for ``definition``, most important first.
+
+    ArviZ caps a pair plot at ``floor(sqrt(plot.max_subplots))`` variables, so a
+    grid built in model order fits about six -- and model order is the build
+    order, which puts the mean-function and GP parameters first. Every parameter
+    a child-effect model was *added for* therefore fell off the end: VG19's
+    slope block, VG20's ``rho_uq``, VG22's factor scales. The captions in those
+    reports tell the reader to inspect exactly those ridges, so the plot
+    contradicted the text it was captioned with (#233).
+
+    Ordering rather than filtering, so nothing is hidden -- the cap simply
+    consumes the list from a different end. An empty tuple means "model order",
+    which is what every model without a distinguishing child structure gets, and
+    those pair plots are byte-identical to before.
+
+    The names are read from the definition rather than the trace so the intent
+    is declared by the model, not inferred from what happened to be sampled.
+    """
+    priority: list[str] = []
+
+    if getattr(definition, "use_cross_lag", False):
+        priority.append("beta_lag")
+
+    # VG20: the single parameter the model exists to estimate.
+    if getattr(definition, "subject_re_correlation_eta", None) is not None:
+        priority.append("rho_uq")
+
+    # VG22: the factor form emits rho_uq as a deterministic and carries a rate
+    # scale per outcome. `subject_factor_corr` is deliberately absent -- a 4x4
+    # matrix is 16 plot items and would consume the whole grid on its own.
+    if getattr(definition, "subject_factor", None) is not None:
+        priority += ["rho_uq", "tau_subj_u_1", "tau_subj_q_1"]
+
+    # VG19: the intercept-and-rate block, whose two correlations are the part a
+    # reader can actually test from an interval.
+    for name in ("tau_subj_u", "tau_subj_q"):
+        spec = getattr(definition, f"{name}_sigma", None)
+        if getattr(spec, "tau1_sigma", None) is not None:
+            priority += [f"{name}_1", f"{name}_rho", f"{name}_0"]
+
+    if priority:
+        priority += ["tau_subj_u", "tau_subj_q", "tau_u", "tau_q"]
+    return tuple(dict.fromkeys(priority))
+
+
 def _child_factor_block(context: BivariateContext):
     """VG22's loading matrix, or ``None``.
 
@@ -1084,6 +1126,28 @@ def _child_factor_block(context: BivariateContext):
     2x2 draw nor a scaled deviate.
     """
     return context.model_variables.get("subject_factor_loadings")
+
+
+def unseen_child_correlated_delta_q(delta_u_query, *, tau_subj_u, tau_subj_q, rho):
+    """VG20's unseen child: the q deviate that goes with an already-drawn u one.
+
+    Extracted from :func:`sample_posterior_predictive` so the correlated branch
+    can be executed by a test rather than only reached (#233). The two branches
+    beside it -- VG19's slope and VG22's factor -- were already functions; this
+    one was inline, and the only automated check on it was that ``rho_uq`` is
+    visible from the predictive path, which is a precondition rather than the
+    behaviour.
+
+    The construction is unchanged, ops and names included, so the graph is
+    identical: ``z_u`` is recovered by dividing the existing logit-scale deviate
+    by its own scale rather than introducing a standardised RV, and the single
+    new variable keeps the name ``_z_subj_q_marg``.
+
+    Each deviate keeps its own marginal SD; only their joint behaviour changes.
+    """
+    z_u_marg = delta_u_query / tau_subj_u
+    z_q_marg = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
+    return tau_subj_q * (rho * z_u_marg + pm.math.sqrt(1.0 - rho**2) * z_q_marg)
 
 
 def _unseen_child_factor_deltas(context, definition, outcome: str):
@@ -1241,11 +1305,11 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
                 )
             elif plot_scale is None:
                 if correlated:
-                    z_u_marg = delta_u_query / context.model_variables["tau_subj_u"]
-                    z_q_marg = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
-                    delta_q_marg = tau_subj_q * (
-                        rho_marg * z_u_marg
-                        + pm.math.sqrt(1.0 - rho_marg**2) * z_q_marg
+                    delta_q_marg = unseen_child_correlated_delta_q(
+                        delta_u_query,
+                        tau_subj_u=context.model_variables["tau_subj_u"],
+                        tau_subj_q=tau_subj_q,
+                        rho=rho_marg,
                     )
                 else:
                     delta_q_marg = pm.Normal(
@@ -1630,7 +1694,25 @@ def plot_production_rate_by_understood(
     filename: str | None = None,
     max_age_months: float | None = None,
 ):
-    """Plot production ratio q against expected words understood (median p_U * n_trials).
+    """Plot population production ratio q against population expected words understood.
+
+    **What this is, and what it is not (issue #233).** Both axes are read off the
+    *population* curves at zero study and zero child effects: ``p_u_plot`` and
+    ``q_plot``. The x value at a plotted point is the population median expected
+    comprehension AT SOME AGE, and the y value is the population conversion ratio
+    AT THAT SAME AGE. The curve therefore describes how the two population
+    trajectories move together as children get older -- a developmental-stage
+    relationship -- and NOT the conditional quantity ``E[q | understood = U]``
+    for a child who happens to understand U words.
+
+    The two differ whenever children vary, and here they differ in a known
+    direction. A child observed above the population comprehension curve carries
+    a positive understood child effect, and under VG20's ``rho_uq`` = +0.368 a
+    positive conversion effect with it, so the genuine conditional expectation
+    rises with U more steeply than this curve does. Nothing here conditions the
+    child effects on observed comprehension or uses ``rho_uq`` at all. Computing
+    the conditional version means integrating the joint child-effect posterior
+    through the understood Beta-Binomial likelihood, which is a separate output.
 
     ``max_age_months`` is essential here rather than cosmetic. The x axis is age
     *reparameterised* by expected comprehension, so without the cap the curve
@@ -1673,11 +1755,11 @@ def plot_production_rate_by_understood(
     )
     ax.plot(x_words, q_median, lw=3, label="Median q")
 
-    ax.set_xlabel("Expected words understood")
+    ax.set_xlabel("Population expected words understood (by age)")
     ax.set_ylabel("q = p_S / p_U")
     ax.set_ylim(0, 1)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Production ratio by words understood")
+    ax.set_title("Population production ratio by developmental stage")
 
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
@@ -1905,15 +1987,28 @@ def plot_spoken_given_understood(
     filename: str | None = None,
     max_age_months: float | None = None,
 ):
-    """Predicted words spoken given words understood, by age (issue #112, Q1).
+    """Words spoken implied by the POPULATION conversion ratio, by age (issue #112, Q1).
 
-    The bivariate model implies E[spoken | understood = U, age a] = U * q(a),
-    where q(a) = P(speak | understood). This plots that structural read-out as a
-    fan of lines (one per representative age), each shaded by the posterior HDI of
-    q(a), so a reader can answer directly: "given a child understands N words at
-    age a, how many words are they expected to say?". The slope of each line is
-    q(a); the dashed y = x line is the ceiling (a child cannot say more distinct
-    words than they understand).
+    A fan of lines, one per representative age, each with slope the population
+    ``q(a)`` from ``q_query`` and shaded by that ratio's posterior interval. The
+    dashed y = x line is the ceiling: a child cannot say more distinct words than
+    they understand.
+
+    **The estimand is population-level, and the line is not a conditional
+    expectation (issue #233).** ``q_query`` is evaluated at zero study and zero
+    child effects, so ``U * q(a)`` is "U words converted at the rate a typical
+    child of age a converts at" -- not ``E[spoken | understood = U, age a]``.
+    The nested likelihood does give ``E[S | U, a, child] = U * q(a, child)``
+    exactly, but the child's own conversion effect is missing from ``q(a)``, and
+    it is not independent of U: a child understanding more words than typical for
+    their age has a positive understood child effect, which under VG20's
+    ``rho_uq`` = +0.368 comes with a positive conversion effect. So the genuine
+    conditional line is steeper than this one at high U and shallower at low U,
+    and this plot understates the spread besides, showing only the uncertainty in
+    ``q(a)`` and none of the between-child variation in it.
+
+    Read a line as "what the population rate implies at this comprehension
+    level", and read the caveat with it wherever it is published.
     """
     q_query = samples.q_query  # (n_query, n_samples)
     ages = np.asarray(samples.X_query)  # (n_query,)
@@ -1963,10 +2058,10 @@ def plot_spoken_given_understood(
     )
 
     ax.set_xlabel("Words understood")
-    ax.set_ylabel("Predicted words spoken")
+    ax.set_ylabel("Words spoken at the population rate")
     ax.set_xlim(0, n_trials)
     ax.set_ylim(0, n_trials)
-    ax.set_title("Predicted words spoken given words understood")
+    ax.set_title("Words spoken implied by the population conversion ratio")
     ax.legend(loc="upper left", frameon=True, title="Age")
 
     if output_dir is not None and filename is not None:

@@ -343,7 +343,7 @@ Each of these should be read as VG10's answer, because it is. They are reproduce
 
 ## Expected vocabulary by month
 
-The monthly tables and figures carry the same content as VG10's, at the same reporting age caps: comprehension is reported to 84 months and production to 90, each stopping where its own evidence stops.
+The monthly tables and figures carry the same content as VG10's, at the same per-quantity reporting caps: comprehension and the quantities derived from it to 72 months, production to 90. Production stops where its own evidence stops; comprehension stops earlier than that, at the age above which the 25 remaining observations can no longer distinguish one child-effect structure from another — see `notes/202608221200-reporting-source-by-quantity.md`.
 
 ## Predictive calibration
 

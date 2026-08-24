@@ -3484,10 +3484,22 @@ def _as_definition_subclass(base, cls, **overrides):
 
 
 # Derived from VG10 so the two differ in exactly one thing, which is what makes
-# the comparison in #224 readable: VG10 is nested at rho_uq = 0, and any movement
-# in the reported trajectories is a red flag rather than a benefit. Deriving
-# rather than restating the priors also means VG10's anchor recalibrations cannot
-# drift away from VG20's.
+# the comparison in #224 readable: VG10 is nested at rho_uq = 0, so the reported
+# population trajectories should sit close to VG10's.
+#
+# That closeness is an empirical stability check, NOT a mathematical correctness
+# invariant, and #233 was right to flag the earlier wording here as too strong.
+# Two reasons it cannot be one. The population curves are evaluated at zero child
+# effects, so they are not the quantity the correlation acts on -- while every
+# subject-MARGINAL expectation is a nonlinear function of those effects and
+# therefore moves with rho_uq by construction, as it should. And a refit is a
+# refit: when the child block's geometry changes, the fixed effects and the
+# marginal scales can legitimately reallocate between themselves. Read movement
+# in a population trajectory as something to explain against the interval widths
+# and the predictive scores, not as proof of a defect.
+#
+# Deriving rather than restating the priors also means VG10's anchor
+# recalibrations cannot drift away from VG20's.
 VG20 = _as_definition_subclass(
     VG10,
     BivariateCorrelatedSubjectREModelDefinition,

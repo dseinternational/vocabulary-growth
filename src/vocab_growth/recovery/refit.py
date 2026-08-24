@@ -138,7 +138,7 @@ def fit_recovery_replicate(
             f"No simulated data at {directory}. Run the simulate step for "
             f"{model_key} replicate {replicate} first."
         )
-    frame, _truth, record = load_simulation(directory)
+    frame, _truth, record = load_simulation(directory, expected_definition=definition)
 
     recovery_definition = make_recovery_definition(definition, replicate)
     stages = target.resolve_stages(recovery_definition)
