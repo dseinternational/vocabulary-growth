@@ -300,3 +300,124 @@ def test_render_calibration_section_explains_a_legacy_table(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "predates the calibrated discrete reference" in out
     assert "Calibrated coverage" not in out
+
+
+# --------------------------------------------------------------------------
+# Branch stratification (issue #236)
+# --------------------------------------------------------------------------
+
+
+def _stratifiable_trace(n_rows: int, n_conditional: int):
+    """A minimal trace carrying one outcome and a branch indicator."""
+    import xarray as xr
+
+    rng = np.random.default_rng(20260824)
+    predictive = rng.integers(0, 20, size=(2, 50, n_rows))
+    observed = rng.integers(0, 20, size=n_rows)
+    is_conditional = np.zeros(n_rows, dtype=int)
+    is_conditional[:n_conditional] = 1
+    return xr.DataTree.from_dict(
+        {
+            "posterior_predictive": xr.Dataset(
+                {"y_s_obs": (("chain", "draw", "obs_s_id"), predictive)}
+            ),
+            "observed_data": xr.Dataset({"y_s_obs": (("obs_s_id",), observed)}),
+            "constant_data": xr.Dataset(
+                {
+                    "obs_s_mask": (("obs_id",), np.ones(n_rows, dtype=int)),
+                    "s_is_conditional": (("obs_s_id",), is_conditional),
+                }
+            ),
+        }
+    )
+
+
+def test_calibration_splits_an_outcome_by_its_likelihood_branch(tmp_path):
+    """The spoken outcome's two branches are fitted by different distributions.
+
+    A pooled row can be well behaved while one branch is not, and the branches
+    differ systematically in age and study, so pooling is the wrong summary.
+    Read from the trace's own constant data, so it needs no refit.
+    """
+    from vocab_growth.models.calibration import write_trace_calibration
+
+    n_rows = 40
+    trace = _stratifiable_trace(n_rows, n_conditional=25)
+    analysis_df = pd.DataFrame({"age": np.linspace(10, 60, n_rows)})
+
+    table = write_trace_calibration(
+        trace,
+        analysis_df,
+        str(tmp_path),
+        (("spoken", "y_s_obs", "obs_s_mask"),),
+        strata={
+            "spoken": (
+                "s_is_conditional",
+                "spoken (conditional)",
+                "spoken (fallback)",
+            )
+        },
+    )
+
+    labels = set(table["outcome"])
+    assert labels == {"spoken", "spoken (conditional)", "spoken (fallback)"}
+
+    pooled = table[(table["outcome"] == "spoken") & (table["age_band_months"] == "all")]
+    branches = table[
+        table["outcome"].str.startswith("spoken (")
+        & (table["age_band_months"] == "all")
+    ]
+    assert int(pooled["n_observations"].iloc[0]) == n_rows
+    assert branches.groupby("outcome")["n_observations"].first().sum() == n_rows
+
+
+def test_calibration_skips_a_branch_with_no_rows(tmp_path):
+    """Which is what the ``paired_only`` treatment leaves behind."""
+    from vocab_growth.models.calibration import write_trace_calibration
+
+    n_rows = 12
+    trace = _stratifiable_trace(n_rows, n_conditional=n_rows)
+    analysis_df = pd.DataFrame({"age": np.linspace(10, 60, n_rows)})
+
+    table = write_trace_calibration(
+        trace,
+        analysis_df,
+        str(tmp_path),
+        (("spoken", "y_s_obs", "obs_s_mask"),),
+        strata={
+            "spoken": (
+                "s_is_conditional",
+                "spoken (conditional)",
+                "spoken (fallback)",
+            )
+        },
+    )
+    assert set(table["outcome"]) == {"spoken", "spoken (conditional)"}
+
+
+def test_calibration_rejects_a_stratum_that_is_not_row_aligned(tmp_path):
+    """A silently misaligned split would score the wrong rows as the wrong branch."""
+    import xarray as xr
+
+    from vocab_growth.models.calibration import write_trace_calibration
+
+    trace = _stratifiable_trace(20, n_conditional=10)
+    trace["constant_data"] = xr.Dataset(
+        {
+            **{
+                name: array
+                for name, array in trace.constant_data.data_vars.items()
+            },
+            "short": (("short_dim",), np.ones(3, dtype=int)),
+        }
+    )
+    analysis_df = pd.DataFrame({"age": np.linspace(10, 60, 20)})
+
+    with pytest.raises(ValueError, match="must be defined over the outcome"):
+        write_trace_calibration(
+            trace,
+            analysis_df,
+            str(tmp_path),
+            (("spoken", "y_s_obs", "obs_s_mask"),),
+            strata={"spoken": ("short", "a", "b")},
+        )

@@ -77,7 +77,12 @@ from vocab_growth.models.gp_utils import (
     build_subject_scale_of_z,
     trend_and_gp,
 )
-from vocab_growth.models.likelihood_utils import nested_outcome_spec
+from vocab_growth.models.likelihood_utils import (
+    SPOKEN_FALLBACK_PAIRED_ONLY,
+    nested_outcome_alpha_beta,
+    nested_outcome_spec,
+    resolve_fallback_treatment,
+)
 from vocab_growth.reporting import (
     dataframe_table,
     key_value_table,
@@ -606,6 +611,13 @@ def build_model_re(
     )
     if not np.array_equal(spoken_spec.indices, np.flatnonzero(has_s_train)):
         raise ValueError("Spoken likelihood rows do not match the training-data mask.")
+    # The mask check above runs against the unfiltered spec, so it still tests
+    # what it was written to test under every treatment.
+    spoken_fallback = resolve_fallback_treatment(definition)
+    n_fallback_dropped = 0
+    if spoken_fallback == SPOKEN_FALLBACK_PAIRED_ONLY:
+        n_fallback_dropped = spoken_spec.n_marginal
+        spoken_spec = spoken_spec.conditional_only()
     y_s_observed = spoken_spec.observed
     idx_s = spoken_spec.indices
     n_s = spoken_spec.n_observed
@@ -669,6 +681,8 @@ def build_model_re(
         ("Spoken observed", n_s),
         ("Spoken conditional on understood", spoken_spec.n_conditional),
         ("Spoken marginal fallback", spoken_spec.n_marginal),
+        ("Spoken fallback treatment", spoken_fallback),
+        ("Spoken fallback rows dropped", n_fallback_dropped),
         ("Spoken > understood violations", spoken_spec.n_parent_violations),
         ("n_trials", n_trials),
         ("n_studies", n_studies),
@@ -1272,15 +1286,20 @@ def build_model_re(
             dims=("obs_u_id",),
         )
 
-        # Spoken likelihood (only where observed)
-        p_s_likelihood = pm.math.switch(
-            s_is_conditional,
-            q_obs[idx_s],
-            p_s_obs[idx_s],
+        # Spoken likelihood (only where observed). Both bivariate engines route
+        # through the one helper so their graphs cannot drift apart.
+        alpha_s, beta_s = nested_outcome_alpha_beta(
+            treatment=spoken_fallback,
+            is_conditional=s_is_conditional,
+            conditional_p=q_obs[idx_s],
+            marginal_p=p_s_obs[idx_s],
+            parent_p=p_u_obs[idx_s],
+            parent_kappa=kappa_u_obs[idx_s],
+            kappa=kappa_s_obs[idx_s],
+            epsilon=EPSILON,
+            outcome="s",
+            fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        p_s_likelihood = pm.math.clip(p_s_likelihood, EPSILON, 1 - EPSILON)
-        alpha_s = p_s_likelihood * kappa_s_obs[idx_s]
-        beta_s = (1 - p_s_likelihood) * kappa_s_obs[idx_s]
 
         _ = pm.BetaBinomial(
             "y_s_obs",

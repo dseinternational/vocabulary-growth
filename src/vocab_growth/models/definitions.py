@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 
+from vocab_growth.models.likelihood_utils import SPOKEN_FALLBACK_PRODUCT
+
 ENGLISH_LANGUAGES = (
     "English (American)",
     "English (Australian)",
@@ -886,6 +888,34 @@ class BivariateModelDefinition:
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     provides a cheap sensitivity analysis for repeated-measures dependence."""
+
+    # -- Spoken rows with no usable understood count (issues #233, #236) --
+    spoken_fallback: str = SPOKEN_FALLBACK_PRODUCT
+    """How spoken rows that cannot condition on an observed understood count are
+    modelled.
+
+    The paired model is ``U ~ BB(810, p_U, kappa_U)`` then
+    ``S | U ~ BB(U, q, kappa_S)``. 455 of the current frame's 1,428 spoken
+    observations cannot take the second line -- 444 have no understood count and
+    11 record ``spoken > understood`` -- and have always been given
+    ``S ~ BB(810, p_U*q, kappa_S)`` instead, which is mean-correct but is not the
+    paired model's marginal: it misses the variance, and by a signed amount that
+    depends on the fitted concentrations (see
+    :data:`~vocab_growth.models.likelihood_utils.SPOKEN_FALLBACK_PRODUCT`). Those
+    rows are older and concentrated by study, so the approximation is not
+    ignorable.
+
+    One of :data:`~vocab_growth.models.likelihood_utils.SPOKEN_FALLBACK_TREATMENTS`,
+    documented individually there. Part of the model graph: changing it requires
+    a refit."""
+    spoken_fallback_kappa_sigma: float = 0.5
+    """Normal SD for the fallback branch's log concentration offset.
+
+    Read only under ``spoken_fallback="separate_dispersion"``. 0.5 on the log
+    scale puts an 89% prior interval of roughly [0.45, 2.2] on the multiplier,
+    which spans the range a branch-specific dispersion could plausibly want
+    without letting 455 rows drive it to a boundary."""
+
     td_languages: tuple[str, ...] = ENGLISH_LANGUAGES
     """Wordbank ``language`` values the typically-developing pool draws on.
 
