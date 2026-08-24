@@ -45,6 +45,8 @@ record.
 | `vg16_within_lag_bias.py`           | Does VG16's within-child cross-lag baseline carry the short-T bias the report attributes to it?    | [`202608151500`](../../notes/202608151500-within-child-crosslag-feasibility.md) §6 — **no**; the −0.60 does not reproduce at any truth, and an oracle-intercept variant rules out errors-in-variables          |
 | `vg16_crosslag_quantification.py`   | What does VG16's cross-lag say in interpretable units, and does it belong in the models of record? | [`202608151120`](../../notes/202608151120-vg16-cross-lag-quantified.md), [`202608151140`](../../notes/202608151140-cross-lag-not-for-models-of-record.md) — reliably positive, between-child, not for adoption |
 
+The three `vg16_*` harnesses' recorded answers were measured against fits made **before** the 2026-08-23 lag-construction correction ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)): the scripts then carried copies of the engine's row-order-dependent lag walk, and they now import the corrected wave-grouped construction from the engine instead. Their recorded findings stand as historical records of those runs; rerun the scripts against a corrected fit before quoting any of their numbers as current.
+
 ## Running one
 
 Arms take an output root that is **not** the project's, so a failed or misleading
