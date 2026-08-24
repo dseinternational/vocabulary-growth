@@ -29,18 +29,23 @@ import dse_research_utils.math.constants as math_constants
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
+import dse_research_utils.statistics.models.reporting as reporting
+import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
+import pandas as pd
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_valid_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
+    ModelFitContext,
     build_kappa_for_config,
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
@@ -61,11 +66,13 @@ from vocab_growth.models.common_bivariate import (
 from vocab_growth.models.definitions import (
     BivariateModelDefinition,
     clamp_targets,
+    subject_factor_spec,
     subject_scale_spec,
     subject_slope_spec,
 )
 from vocab_growth.models.gp_utils import (
     GPGrid,
+    build_child_factor,
     build_child_slope,
     build_subject_scale_of_z,
     trend_and_gp,
@@ -99,7 +106,28 @@ def prepare_bivariate_re_data(
     )
     if use_subject_codes:
         columns = columns + ["subject_id"]
-    if definition.exclude_us01_spoken_ceiling or definition.dse_native_only:
+    # `survey_vocab_max` is kept for the whole Down syndrome pool, not just the
+    # defect rules and the cross-lag audit that used to be its only callers: the
+    # observed-trajectory overlay on the median-trend plots cannot tell a real
+    # reversal from a change of recording form without it. Safe there because
+    # `load_data` returns `df[columns]` for this population -- a pure projection
+    # -- the column has no missing values, and the only row filter here is
+    # `dropna(subset=["age"])`, so asking for it changes no fit.
+    #
+    # **Down syndrome only.** The typically-developing frame is built from a
+    # Wordbank query that never produces this column, so requesting it there
+    # raises `KeyError`. The other three flags are DS-only in practice; the
+    # population test is what actually makes this safe for VG11-VG13 and VG21.
+    if (
+        definition.exclude_us01_spoken_ceiling
+        or definition.dse_native_only
+        # The cross-lag audit records checklist-form transitions between the
+        # source and current waves (issue #242); the ceiling column is the
+        # form identity the frame carries. Loading it changes no likelihood
+        # input and no raw-data fingerprint.
+        or definition.use_cross_lag
+        or definition.population is vocab_data_utils.Population.DOWN_SYNDROME
+    ):
         columns = columns + ["survey_vocab_max"]
 
     df = vocab_data_utils.load_data(
@@ -224,6 +252,9 @@ def prepare_bivariate_re_data(
     # Create a BinomialModelData for the context interface
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_valid = analysis_df.loc[analysis_df["understood"].notna(), "understood"]
+    require_valid_counts(
+        y_u_valid.to_numpy(dtype=float), "understood", definition.n_trials
+    )
     y_obs_placeholder = np.zeros(n, dtype=int)
     y_obs_placeholder[analysis_df["understood"].notna().values] = (
         y_u_valid.values.astype(int)
@@ -329,38 +360,199 @@ def _resolve_subject_re_correlation(
     return float(eta)
 
 
-def _compute_prev_wave_lag(analysis_df, n_trials: int):
+def iter_subject_age_waves(subject, age):
+    """Yield each ``(subject, recorded age)`` administration wave as one group.
+
+    A wave is every row a child carries at one recorded age, taken complete:
+    the indices are yielded together so a caller can assign one prior-wave
+    state to all of them before any of them advances that state. Children are
+    walked in code order and each child's waves in increasing age. The set of
+    indices in each yielded wave is invariant to the input row order; only
+    their order inside the wave follows it.
+    """
+    order = np.lexsort((age, subject))
+    n = len(order)
+    start = 0
+    while start < n:
+        stop = start
+        s, a = subject[order[start]], age[order[start]]
+        while stop < n and subject[order[stop]] == s and age[order[stop]] == a:
+            stop += 1
+        yield order[start:stop]
+        start = stop
+
+
+def compute_prev_wave_lag(subject, age, understood, n_trials):
     """Per-observation prior-wave understood lag source for the VG16 cross-lag.
 
-    For each observation, locate the child's immediately-earlier age wave
-    that carries an understood measure (the lag source). Returns
-    ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation arrays:
-    ``has_lag_f`` is 1.0 where such a prior wave exists and 0.0 otherwise (a
-    child's first wave, or when every earlier wave lacks comprehension);
-    ``prev_idx`` points at that prior wave (0 where absent, gated by
-    ``has_lag_f``); ``y_u_prev_logit`` is the logit of the prior-wave understood
+    The unit is an **administration wave**: every row a child carries at one
+    recorded age, processed as a complete group (issue #242).
+
+    * Every row in a wave receives the same source — the child's most recent
+      strictly earlier wave with at least one usable understood count,
+      skipping earlier waves without one.
+    * The source state advances only after a whole wave is assigned, so a row
+      can never receive a same-age source and the result is invariant to the
+      input row order. The row-by-row walk this replaced advanced state
+      immediately after each row, so which of two same-recorded-age rows
+      (two checklist forms) carried the lag depended on arbitrary tie order —
+      66 spoken observations from 46 children lost their lag to it on the
+      2026-08 frame.
+    * Where a source wave carries several understood measurements (two forms
+      at one recorded age), the largest count is selected: every count is
+      scored against the same ``n_trials`` inventory under the project's
+      difficulty-ordering harmonisation, and a shorter form right-truncates
+      it, so the largest observed count is the least-truncated measurement
+      available. On the current frame no source wave carries more than one
+      understood measurement, so the rule is registered ahead of need. Rows
+      of one wave share child, study and recorded age, so which *row* the
+      source index points at cannot move the likelihood — only the selected
+      count can.
+
+    Returns ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation
+    arrays: ``has_lag_f`` is 1.0 where a source wave exists and 0.0 otherwise
+    (a child's first wave, or when every earlier wave lacks comprehension);
+    ``prev_idx`` points at the selected source row (0 where absent, gated by
+    ``has_lag_f``); ``y_u_prev_logit`` is the logit of the source understood
     proportion (clipped away from 0/1), and 0.0 where there is no lag source.
     """
-    n = len(analysis_df)
+    subject = np.asarray(subject, dtype=int)
+    age = np.asarray(age, dtype=float)
+    understood = np.asarray(understood, dtype=float)
+    n = len(subject)
     prev_idx = np.zeros(n, dtype=int)
     has_lag_f = np.zeros(n, dtype=float)
-    subj = np.asarray(analysis_df["subject_code"], dtype=int)
-    age = np.asarray(analysis_df["age"], dtype=float)
-    und = analysis_df["understood"].to_numpy(dtype=float)
-    row_order = np.arange(n)
-    prev_subj, last, last_age = -1, -1, np.nan
-    for pos in np.lexsort((row_order, age, subj)):  # walk each child in age order
-        if subj[pos] != prev_subj:
-            prev_subj, last, last_age = subj[pos], -1, np.nan
-        if last >= 0 and age[pos] > last_age:
-            prev_idx[pos] = last
-            has_lag_f[pos] = 1.0
-        if not np.isnan(und[pos]):
-            last, last_age = pos, age[pos]
-    und_prev = np.where(has_lag_f > 0, und[prev_idx], n_trials * 0.5)
+    current_subject, source = -1, -1
+    for wave in iter_subject_age_waves(subject, age):
+        s = subject[wave[0]]
+        if s != current_subject:
+            current_subject, source = s, -1
+        if source >= 0:
+            prev_idx[wave] = source
+            has_lag_f[wave] = 1.0
+        with_u = wave[~np.isnan(understood[wave])]
+        if with_u.size:
+            source = int(with_u[np.argmax(understood[with_u])])
+    und_prev = np.where(has_lag_f > 0, understood[prev_idx], n_trials * 0.5)
     p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
     y_u_prev_logit = np.where(has_lag_f > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0)
     return prev_idx, has_lag_f, y_u_prev_logit
+
+
+def _compute_prev_wave_lag(analysis_df, n_trials: int):
+    """DataFrame adapter for :func:`compute_prev_wave_lag`."""
+    return compute_prev_wave_lag(
+        np.asarray(analysis_df["subject_code"], dtype=int),
+        np.asarray(analysis_df["age"], dtype=float),
+        analysis_df["understood"].to_numpy(dtype=float),
+        n_trials,
+    )
+
+
+def cross_lag_audit_frame(
+    analysis_df,
+    prev_idx,
+    has_lag_f,
+    spoken_indices,
+    spoken_is_conditional,
+):
+    """One row per observation with a prior-wave understood source (issue #242).
+
+    Persists the cross-lag coefficient's support as a fit artefact so reports
+    read the counts from a file instead of restating them: the source wave and
+    its gap, the selected source count (flagging clipped zeros and waves where
+    the largest-count selection had more than one measurement to choose from),
+    whether the row enters the spoken likelihood and on which branch, and —
+    where the frame carries form ceilings — the checklist transition between
+    the source and current waves.
+    """
+    n = len(analysis_df)
+    branch = np.full(n, "", dtype=object)
+    branch[np.asarray(spoken_indices, dtype=int)] = np.where(
+        np.asarray(spoken_is_conditional, dtype=bool), "conditional", "marginal"
+    )
+    lagged = np.flatnonzero(np.asarray(has_lag_f, dtype=float) > 0)
+    src = np.asarray(prev_idx, dtype=int)[lagged]
+    subj = np.asarray(analysis_df["subject_code"], dtype=int)
+    age = np.asarray(analysis_df["age"], dtype=float)
+    und = analysis_df["understood"].to_numpy(dtype=float)
+    # Understood measurements available at each child-age wave, keyed so the
+    # audit can say how often the largest-count source selection actually had
+    # a choice to make.
+    wave_u_counts = (
+        analysis_df.assign(_subj=subj, _age=age)
+        .groupby(["_subj", "_age"])["understood"]
+        .count()
+    )
+    src_keys = list(zip(subj[src], age[src], strict=True))
+    frame = pd.DataFrame(
+        {
+            "row": lagged,
+            "subject_code": subj[lagged],
+            "age_months": age[lagged],
+            "source_row": src,
+            "source_age_months": age[src],
+            "gap_months": age[lagged] - age[src],
+            "source_understood": und[src],
+            "source_understood_zero": und[src] == 0,
+            "source_wave_understood_measurements": [
+                int(wave_u_counts.loc[k]) for k in src_keys
+            ],
+            # "" = the row carries no spoken observation in the likelihood, so
+            # its lag cannot inform beta_lag.
+            "spoken_branch": branch[lagged],
+        }
+    )
+    if "study" in analysis_df.columns:
+        frame.insert(2, "study", np.asarray(analysis_df["study"])[lagged])
+    if "survey_vocab_max" in analysis_df.columns:
+        ceilings = analysis_df["survey_vocab_max"].to_numpy(dtype=float)
+        frame["source_form_ceiling"] = ceilings[src]
+        frame["form_ceiling"] = ceilings[lagged]
+        frame["form_ceiling_changed"] = (
+            (ceilings[lagged] != ceilings[src])
+            & ~np.isnan(ceilings[lagged])
+            & ~np.isnan(ceilings[src])
+        )
+    return frame
+
+
+def _report_cross_lag_support(context, audit: pd.DataFrame, n_obs: int) -> None:
+    """Write ``cross_lag_audit.csv`` and print the support summary (issue #242)."""
+    audit.to_csv(
+        os.path.join(context.reporting.output_dir, "cross_lag_audit.csv"),
+        index=False,
+    )
+    supporting = audit[audit["spoken_branch"] != ""]
+    gaps = supporting["gap_months"]
+    rows: list[tuple[str, object]] = [
+        ("Observations with a prior-wave understood source", len(audit)),
+        ("... of them entering the spoken likelihood", len(supporting)),
+        ("Children contributing a supporting observation", supporting["subject_code"].nunique()),
+        ("Supporting rows on the conditional S|U branch", int((supporting["spoken_branch"] == "conditional").sum())),
+        ("Supporting rows on the marginal fallback branch", int((supporting["spoken_branch"] == "marginal").sum())),
+        (
+            "Gap to source (months): median (IQR) [range]",
+            f"{gaps.median():.1f} ({gaps.quantile(0.25):.1f}-{gaps.quantile(0.75):.1f}) "
+            f"[{gaps.min():.0f}-{gaps.max():.0f}]"
+            if len(supporting)
+            else "n/a",
+        ),
+        ("Zero-count sources (clipped logit)", int(supporting["source_understood_zero"].sum())),
+        (
+            "Source waves offering >1 understood measurement",
+            int((supporting["source_wave_understood_measurements"] > 1).sum()),
+        ),
+    ]
+    if "form_ceiling_changed" in supporting.columns:
+        rows.append(
+            (
+                "Supporting rows changing form ceiling source -> target",
+                int(supporting["form_ceiling_changed"].sum()),
+            )
+        )
+    rows.append(("Observations in the frame", n_obs))
+    key_value_table("Cross-lag support (cross_lag_audit.csv)", rows)
 
 
 def build_model_re(
@@ -388,16 +580,23 @@ def build_model_re(
     has_s_train = has_s & ~holdout
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(
-        analysis_df.loc[has_u_train, "understood"], dtype=int
+    n_trials = context.model_data.n_trials
+    y_u_values = np.asarray(
+        analysis_df.loc[has_u_train, "understood"], dtype=float
     )
+    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
+    # fractional or out-of-range understood count would corrupt the likelihood
+    # without a trace — the post-cast bounds checks below cannot catch 810.9 or
+    # -0.1, which truncate into range. The spoken side gets the same
+    # finite/integral/range checks from nested_outcome_spec below (#240, #236).
+    require_valid_counts(y_u_values, "understood", n_trials)
+    y_u_observed = y_u_values.astype(int)
     study_codes = np.asarray(analysis_df["study_code"], dtype=int)
 
     idx_u = np.where(has_u_train)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_trials = context.model_data.n_trials
     spoken_spec = nested_outcome_spec(
         analysis_df,
         parent_col="understood",
@@ -422,12 +621,12 @@ def build_model_re(
         subject_codes = None
         n_subjects = 0
 
-    # Cross-lag (VG16, issue #113): for each observation, the child's
-    # immediately-earlier age wave with understood data is the lag source;
-    # x_lag = 0 where there is no such prior wave (first wave, same-age
-    # duplicates, or every earlier wave lacks comprehension).
-    # prev_idx/has_lag_f/y_u_prev_logit are consumed below when injecting
-    # beta_lag * x_lag into the q logit.
+    # Cross-lag (VG16, issue #113): the child's most recent strictly earlier
+    # administration wave with understood data is the lag source, computed
+    # over complete (subject, age) wave groups (issue #242); x_lag = 0 where
+    # there is no such prior wave (a child's first wave, or every earlier wave
+    # lacks comprehension). prev_idx/has_lag_f/y_u_prev_logit are consumed
+    # below when injecting beta_lag * x_lag into the q logit.
     use_cross_lag = bool(definition.use_cross_lag)
     prev_idx = np.zeros(n, dtype=int)
     has_lag_f = np.zeros(n, dtype=float)
@@ -438,6 +637,17 @@ def build_model_re(
         print(
             f"Cross-lag ({definition.lag_baseline}): "
             f"{int(has_lag_f.sum())} of {n} observations have a prior-wave understood source."
+        )
+        _report_cross_lag_support(
+            context,
+            cross_lag_audit_frame(
+                analysis_df,
+                prev_idx,
+                has_lag_f,
+                spoken_spec.indices,
+                spoken_spec.is_conditional,
+            ),
+            n_obs=n,
         )
 
     # Validate
@@ -559,6 +769,17 @@ def build_model_re(
     # and making it conditional would put a `subject_slope_spec` call ahead of
     # the model context for no benefit.
     coords["child_effect"] = np.array(["intercept", "slope"])
+    # VG22: the four effects the low-rank factor spans, and its latent
+    # dimensions. `child_effect4_b` is the second axis of the 4x4 correlation --
+    # ArviZ needs two distinct dim names for a square matrix.
+    coords["child_effect4"] = np.array(
+        ["u_intercept", "u_slope", "q_intercept", "q_slope"]
+    )
+    coords["child_effect4_b"] = np.array(
+        ["u_intercept", "u_slope", "q_intercept", "q_slope"]
+    )
+    _factor_spec = subject_factor_spec(getattr(definition, "subject_factor", None))
+    coords["factor"] = np.arange(_factor_spec.rank if _factor_spec else 1)
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -700,6 +921,52 @@ def build_model_re(
             slope_u=slope_u,
             slope_q=slope_q,
         )
+        # VG22: a low-rank factor over all four child effects. Built once, ahead
+        # of the per-outcome branches, because unlike every other subject
+        # structure here it spans both outcomes -- the whole point of the form is
+        # that one child's comprehension standing and production-ratio rate are
+        # driven by shared latent dimensions. The per-outcome branches below then
+        # consume the shifts it returns rather than building their own.
+        factor = subject_factor_spec(getattr(definition, "subject_factor", None))
+        if factor is not None:
+            if not (use_subject_re_u and use_subject_re_q):
+                raise ValueError(
+                    "subject_factor requires use_subject_re_u and "
+                    "use_subject_re_q: the form is a joint covariance over both "
+                    "outcomes' child effects and is undefined when only one "
+                    "outcome carries a child effect."
+                )
+            if spec_u is not None or spec_q is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with an age-varying "
+                    "subject scale (A1): both claim the same seam, and A1's "
+                    "rank-one scaling is a special case of the factor form."
+                )
+            if slope_u is not None or slope_q is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with a child slope "
+                    "(VG19): the factor already carries a rate per outcome, and "
+                    "supplying both would give a child two of each effect."
+                )
+            if corr_eta is not None:
+                raise ValueError(
+                    "subject_factor cannot be combined with "
+                    "subject_re_correlation_eta (VG20): the level-level "
+                    "correlation that field creates is an element of the "
+                    "factor's own covariance, emitted as `rho_uq`."
+                )
+            factor_shift_u, factor_shift_q, factor_tau_u, factor_tau_q = (
+                build_child_factor(
+                    factor,
+                    tau0_u_sigma=definition.tau_subj_u_sigma,
+                    tau0_q_sigma=definition.tau_subj_q_sigma,
+                    age_obs_months=X_obs.flatten(),
+                    subject_obs=subject_obs,
+                )
+            )
+        else:
+            factor_shift_u = factor_shift_q = None
+
         tau_u_of_z = tau_q_of_z = None
         # Built here rather than reusing the named `z_obs` Deterministic, which is
         # created further down: reordering that would change every model's graph.
@@ -710,7 +977,9 @@ def build_model_re(
         )
 
         if use_subject_re_u:
-            if slope_u is not None:
+            if factor_shift_u is not None:
+                subject_shift_u, tau_subj_u = factor_shift_u, factor_tau_u
+            elif slope_u is not None:
                 subject_shift_u, tau_subj_u = build_child_slope(
                     slope_u,
                     age_obs_months=X_obs.flatten(),
@@ -755,7 +1024,9 @@ def build_model_re(
             subject_shift_u = 0.0
 
         if use_subject_re_q:
-            if slope_q is not None:
+            if factor_shift_q is not None:
+                subject_shift_q, tau_subj_q = factor_shift_q, factor_tau_q
+            elif slope_q is not None:
                 # `corr_eta` is guaranteed None here: the resolver refuses the
                 # combination, so no branch on it is needed or wanted.
                 subject_shift_q, tau_subj_q = build_child_slope(
@@ -1060,7 +1331,10 @@ def bivariate_re_stages(
         ),
         ("Prior predictive checks", prior_predictive_checks),
         ("Posterior sampling", sample),
-        ("Diagnostics", diagnostics),
+        # The definition travels with the stage so the cross-lag models can
+        # reorder the pair plot and suppress the leaking understood LOO
+        # (issue #242); every other model takes the default path unchanged.
+        ("Diagnostics", lambda ctx: diagnostics(ctx, definition)),
         (
             "Posterior predictions",
             lambda ctx: sample_posterior_predictive(ctx, definition),
@@ -1082,3 +1356,43 @@ def fit_bivariate_re_model(
     Fit pipeline for bivariate model with study random intercepts (VG07).
     """
     return run_fit_pipeline(config, definition, stages=bivariate_re_stages(definition))
+
+
+def rebuild_model_context(
+    definition: BivariateModelDefinition,
+    *,
+    output_dir: str,
+    sampling_config: str = "dev",
+) -> BivariateREContext:
+    """Build ``definition``'s model graph without sampling it.
+
+    For readers of a stored fit that must recompute a posterior quantity the
+    trace does not carry -- since 2026-08-23 the observation-sized
+    deterministics are not sampled (``fit_artifacts.sampled_variable_names``),
+    and ``vocab_growth.posterior_recompute.with_deterministics`` rebuilds them
+    from the stored free parameters given the graph. It runs the engine's own
+    data preparation and build, so the observation order and every data rule
+    are exactly those of a fit of ``definition``; the caller still has to check
+    that the fit *was* of this definition on the current data
+    (``fit_artifacts.validate_fit_output``) before aligning anything by row.
+
+    ``output_dir`` receives the preparation stage's descriptive-statistics CSV
+    and should be scratch. ``sampling_config`` only fills the context's
+    sampling configuration, which the build does not read.
+    """
+    context: BivariateREContext = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name=definition.model_id,
+            config_name=definition.config_name,
+            output_root_dir=output_dir,
+            ci_prob=0.89,
+            interval_kind="eti",
+        ),
+        sampling=sampling.get_sampling_configuration(sampling_config),
+        sampling_config_name=sampling_config,
+    )
+    os.makedirs(context.reporting.output_dir, exist_ok=True)
+    prepare_bivariate_re_data(context, definition)
+    configure_bivariate_priors(context, definition)
+    build_model_re(context, definition)
+    return context

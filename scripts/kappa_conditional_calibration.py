@@ -475,7 +475,13 @@ def _subject_key(df):
 
 
 def univariate_frame(definition, **basis):
-    """VG11 / VG12: one outcome out of 810, study + subject random intercepts."""
+    """VG11 / VG12: one outcome out of 810, study + subject random intercepts.
+
+    Mirrors ``prepare_univariate_re_data`` — same columns and, crucially, the
+    same registered language scope. This used to omit ``td_languages`` and so
+    calibrated on the loader's English-only default: 16,235 rows against
+    VG11's registered 18,500 and 5,997 against VG12's 7,049 (#240 §3.6).
+    """
     y_col = definition.outcome.value
     columns = ["age", y_col, "study", "subject_id"]
     df = du.load_data(
@@ -483,6 +489,8 @@ def univariate_frame(definition, **basis):
         columns=columns,
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
+        # TD language scope is part of the model graph; DS ignores it.
+        languages=getattr(definition, "td_languages", du.ENGLISH_LANGUAGES),
     )
     df = df[columns].dropna(subset=["age", y_col]).reset_index(drop=True)
     df, _ = du.filter_studies_by_min_obs(df, definition.min_study_observations)
@@ -499,8 +507,10 @@ def univariate_frame(definition, **basis):
 def bivariate_frames(definition, **basis):
     """Joint models: understood out of 810, and spoken out of understood (q).
 
-    Mirrors ``prepare_bivariate_re_data`` -- same columns, age bound, us_01
-    ceiling exclusion and study minimum. The spoken design is the *nested* scale
+    Mirrors ``prepare_bivariate_re_data`` -- same columns, age bound, language
+    scope, us_01 ceiling exclusion and study minimum. (The language scope used
+    to be omitted, so VG13 calibrated on the English-only default: 5,406 rows
+    against its registered 6,356 — #240 §3.6.) The spoken design is the *nested* scale
     of ``nested_outcome_spec``: spoken successes out of that child's observed
     understood count, with mean q. Rows the engine falls back to the marginal
     (spoken-out-of-810) likelihood for are excluded and counted in
@@ -516,6 +526,8 @@ def bivariate_frames(definition, **basis):
         columns=load_columns,
         sample_fraction=definition.sample_fraction,
         random_seed=definition.random_seed,
+        # TD language scope is part of the model graph; DS ignores it.
+        languages=getattr(definition, "td_languages", du.ENGLISH_LANGUAGES),
         max_age_months=definition.max_age_months,
         include_implausible_production=definition.include_implausible_production,
     )

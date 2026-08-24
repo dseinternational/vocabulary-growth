@@ -5,7 +5,8 @@
 > [!NOTE]
 > Drafted by LLM-based AI tools (OpenAI Codex/GPT-5; "Evidence base" section and
 > prior–norm comparison by Claude Code/Opus 4.8; dispersion and random-effect
-> scale sections by Claude Code/Opus 5).
+> scale sections by Claude Code/Opus 5; anchor-binding note by Claude
+> Code/Fable 5).
 
 > [!WARNING]
 > This is a working document for issue 89, last reviewed on 2026-07-01. It
@@ -122,6 +123,18 @@ by 810 gives the expected number of words out of the common reference inventory.
 For `q`, the anchor is a fraction of understood words, so it should not be read
 as a direct word count without also considering `p_U(a)`.
 
+How exactly the anchors bind differs by engine. In every model they
+parameterise the logit-linear **trend**; the fitted trajectory adds a GP
+deviation on top. The random-effects and joint engines orthogonalise the GP
+against the trend's basis and pin it to zero at a reference age, so their
+anchors also fix the full trajectory's level there. The plain univariate
+engine (VG01-VG04) does neither: its GP is unconstrained at the anchor ages,
+so `p_slope_low` and `p_slope_hi` are coordinates of the trend component only,
+and the induced prior on the full trajectory at a reference age is the anchor
+prior widened by the GP's prior deviation. The observable interpretations
+below are therefore exact for the trend, and approximate for the fitted curve
+in those four models.
+
 | Prior use                             | Models                     | Distribution     | Observable interpretation                                              |
 | ------------------------------------- | -------------------------- | ---------------- | ---------------------------------------------------------------------- |
 | Low-age DS spoken anchor              | VG01                       | `Beta(1, 25)`    | Median 0.027, 5-95% 0.002-0.113, or about 22 words median out of 810.  |
@@ -229,24 +242,29 @@ would quote a median and an 89% interval at 90 months from a handful of administ
 past the high anchor where the mean is now a levelled-off extrapolation rather than an
 estimate.
 
-**Implemented 2026-08-04, raised 72 → 84 on 2026-08-13:** `report_max_age_understood = 84`
-on VG02, VG05, VG07-VG10 and VG14-VG16. The original 72 was set against the pre-`uk_07`
-pool (905 understood rows, 95th percentile 64, only 15 at or above 72). Rebuilding
-`us_01` from the Edgin item-level files and integrating `uk_07` — together with the
-reinstated `uk_06` signing rows — rebuilt the older tail, and the 72-84 band now carries
-25 rows from 20 children across five studies (`ie_01`, `uk_01`, `uk_06`, `uk_07`,
-`us_02`), so reporting it is no longer extrapolation. 84 and no further, for two reasons
-that coincide: above it only 13 rows from 11 children remain, and 84 is the high trend
-anchor. That is the same test, and the same threshold, applied when
-`report_max_age_signed` was raised from 60 to 84 in #212.
+**Implemented 2026-08-04, raised 72 → 84 on 2026-08-13, lowered back to 72 on
+2026-08-22:** `report_max_age_understood = 72` on VG02, VG05, VG07-VG10 and VG14-VG16.
+The original 72 was set against the pre-`uk_07` pool (905 understood rows, 95th
+percentile 64, only 15 at or above 72). Rebuilding `us_01` from the Edgin item-level
+files and integrating `uk_07` — together with the reinstated `uk_06` signing rows —
+rebuilt the older tail, and the 72-84 band now carries 25 rows from 20 children across
+five studies (`ie_01`, `uk_01`, `uk_06`, `uk_07`, `us_02`), which is what justified the
+raise to 84. The 2026-08-22 lowering rests on a different test: the band is populated,
+but the Down syndrome child structures disagree there, so a comprehension number in the
+72-84 band depends on which model produced it. Raise the cap again when new older-child
+comprehension data let the band _distinguish_ the structures, not merely populate it —
+see [`notes/202608221200-reporting-source-by-quantity.md`](../../notes/202608221200-reporting-source-by-quantity.md).
+(When the cap did sit at 84, the coinciding arguments were that only 13 rows from 11
+children remain above it and that 84 is the high trend anchor — the same test applied
+when `report_max_age_signed` was raised from 60 to 84 in #212.)
 
 It trims the understood and `q` summary tables and the production-ratio figure; spoken
 keeps the full grid at 90. **Signed is not covered by this field** — it has its own
 `report_max_age_signed`, added to the trivariate definition on 2026-08-13 so that VG14's
 sign-derived figures stop borrowing the comprehension cap. Note the two caps rest on
-different arguments: comprehension stops at 84 because the data do, whereas signed is
-observed on 56 rows from 48 children at or above 84 and stops there only because 84 is
-the trend anchor.
+different arguments: comprehension stops at 72 because the models disagree beyond it,
+whereas signed is observed on 56 rows from 48 children at or above 84 and stops there
+only because 84 is the trend anchor.
 
 Both caps are post-processing of a fitted trace — the query grid, the model graph and the
 `query_id` dimension are unchanged, so they cannot move a number that is still reported,
@@ -427,6 +445,9 @@ a_kappa =  log kappa_excess_young - b_kappa * z_young
 | VG12           | understood            | 12, 20           |       3 |        40 |      63 | 0.9 | conditional |
 | VG13 `kappa_u` | understood            | 12, 17           |      30 |        10 |      90 | 0.9 | conditional |
 | VG13 `kappa_s` | q = spoken/understood | 12, 17           |       3 |        33 |      27 | 0.7 | conditional |
+
+> [!IMPORTANT]
+> **Provenance correction, 2026-08-23 ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)).** The VG11-VG13 conditional calibrations in this section — the anchor magnitudes above and the loading diagnostics below — were computed on the calibration tooling's then-default **English-only** frames (16,235 / 5,997 / 5,406 rows), not the registered English-plus-Romance frames those models fit (18,500 / 7,049 / 6,356 after source deduplication). The tooling now derives its frames from the complete model definition and is pinned to the registered frames by test. The priors are broad and the recorded posteriors moved toward the recalibrated magnitudes, so the practical effect appears limited — the review measured VG11's young-age calibrated `kappa` moving from about 318 to 289 under the scope change ([202608231537](../../notes/202608231537-vg11-vg12-vg13-statistical-review.md) §3.6) — but the magnitudes quoted here describe the English-only frames until the evidence is regenerated on the registered scopes, which #240 tracks. See `notes/202608231830-vg11-vg13-immediate-remediation.md`.
 
 **The two calibrations answer different questions and are not interchangeable.** A _marginal_ calibration estimates how much counts vary at an age, full stop; it is the right target only for a model with no grouping structure, which is why VG01-VG04 use it. A model with study and subject random intercepts has already removed most of that variation before its likelihood runs, so its `kappa` describes what is left once a child's own level is known — a much smaller residual. Substituting one for the other is a large error, not a rounding one: on VG11 the marginal number was 30 at 12 months where the conditional estimate is 317, and the fit went to 312 with the prior at CDF 1.000.
 

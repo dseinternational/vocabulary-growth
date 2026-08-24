@@ -416,3 +416,123 @@ def monthly_summary_table(
         rows.append(row)
 
     return pd.DataFrame(rows).sort_values("age_months").reset_index(drop=True)
+
+
+def signing_milestone_table(
+    ages: np.ndarray,
+    sign_only: np.ndarray,
+    both: np.ndarray,
+    speak_only: np.ndarray,
+    *,
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    min_words: float = 1.0,
+) -> pd.DataFrame:
+    """Per-draw ages for the sign-to-speech hand-over, with honest censoring.
+
+    Arrays are ``(n_age, n_draw)`` word counts. Each milestone is found **in
+    every draw and then summarised**, never read off the median curve: the
+    median of crossings is not the crossing of the median, and for a peak the
+    difference is not subtle — averaging curves whose peaks sit at different
+    ages flattens the peak and drags it towards the middle of the grid.
+
+    This is the single implementation the fit pipeline
+    (:mod:`vocab_growth.models.common_joint_modality`) and the DS/TD comparison
+    script (``scripts/compare_ds_td_expressive.py``) both use. They previously
+    carried duplicate copies with two defects the VG14/VG15 statistical review
+    (#238) confirmed:
+
+    * **Crossings must be transitions.** The old rule reported the *first age at
+      which a condition held*, so a draw in which speech-only exceeded sign-only
+      from the first eligible age was labelled an "overtake", and a draw that
+      was never majority sign-only was labelled as "falling below half". A
+      crossing here now requires a genuine false-to-true transition inside the
+      established region; a state already true at the youngest established age
+      is counted in ``draws_censored`` instead (left-censored: the transition,
+      if there was one, happened before the grid or before the child had a
+      vocabulary to divide up).
+    * **A grid-boundary maximum is censored, not reached.** The old rule
+      reported the grid ``argmax`` as a peak even when it sat on the last
+      reported age, where the true peak may lie beyond the grid. A draw whose
+      maximum falls on either end of the grid now counts toward
+      ``draws_censored`` and contributes no age.
+
+    A milestone is only read once the draw's child has at least ``min_words``
+    of expressive vocabulary: below that the three cells are fractions of a
+    word and their ordering is arithmetic noise. The gate is on a word count
+    rather than a grid-point count so it cannot silently depend on the grid
+    step.
+
+    Intervals are highest-density (:data:`vocab_growth.intervals.HDI_ESTIMANDS`
+    lists ``milestone_age``/``peak_age``): milestone ages are typically skewed,
+    and this is the same policy the DS/TD peak-growth ages already follow.
+
+    Columns: ``quantity``, ``median``, ``ci_lo``, ``ci_hi`` (over the draws
+    that genuinely reach the milestone), ``draws_reaching`` (fraction reaching
+    it), and ``draws_censored`` (fraction where it is censored rather than
+    absent — already true at the youngest established age for a crossing, or a
+    maximum on a grid edge for a peak). The remainder to 1 never satisfies the
+    condition at all.
+    """
+    ages = np.asarray(ages, dtype=float)
+    sign_only = np.asarray(sign_only, dtype=float)
+    both = np.asarray(both, dtype=float)
+    speak_only = np.asarray(speak_only, dtype=float)
+    total = np.maximum(sign_only + both + speak_only, 1e-9)
+    established = total >= min_words
+
+    def _transition_ages(condition: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """(per-draw first false->true transition age or NaN, initially-true mask)."""
+        n_age, n_draw = condition.shape
+        est = established
+        # A transition needs both its endpoints established, and the condition
+        # false at the earlier one.
+        trans = np.zeros_like(condition, dtype=bool)
+        trans[1:] = condition[1:] & ~condition[:-1] & est[1:] & est[:-1]
+        has_trans = trans.any(axis=0)
+        idx = trans.argmax(axis=0)
+        out = np.full(n_draw, np.nan)
+        out[has_trans] = ages[idx[has_trans]]
+        # Initially true: the condition already holds at the draw's first
+        # established age. Only meaningful for draws with an established region.
+        any_est = est.any(axis=0)
+        first_est = est.argmax(axis=0)
+        cols = np.arange(n_draw)
+        initially = np.zeros(n_draw, dtype=bool)
+        initially[any_est] = condition[first_est[any_est], cols[any_est]]
+        # A draw with a genuine later transition is reported as reaching it even
+        # if the state also held initially (true -> false -> true again).
+        return out, initially & ~has_trans
+
+    def _peak_ages(values: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(per-draw interior peak age or NaN, peak words or NaN, censored mask)."""
+        idx = np.argmax(values, axis=0)
+        censored = (idx == 0) | (idx == len(ages) - 1)
+        peak_age = np.where(censored, np.nan, ages[idx])
+        cols = np.arange(values.shape[1])
+        peak_words = np.where(censored, np.nan, values[idx, cols])
+        return peak_age, peak_words, censored
+
+    peak_age, peak_words, peak_censored = _peak_ages(sign_only)
+    below_half, below_half_initial = _transition_ages((sign_only / total) < 0.5)
+    overtake, overtake_initial = _transition_ages(speak_only >= sign_only)
+
+    rows = [
+        ("sign_only_peak_age", peak_age, peak_censored),
+        ("sign_only_peak_words", peak_words, peak_censored),
+        ("sign_only_share_below_half_age", below_half, below_half_initial),
+        ("speech_only_overtakes_sign_only_age", overtake, overtake_initial),
+    ]
+    out = []
+    for name, draws, censored in rows:
+        ok = np.isfinite(draws)
+        vals = draws[ok]
+        lo, hi = intervals.interval_1d(vals, ci_prob, "hdi")
+        out.append({
+            "quantity": name,
+            "median": float(np.median(vals)) if vals.size else np.nan,
+            "ci_lo": float(lo),
+            "ci_hi": float(hi),
+            "draws_reaching": float(ok.mean()),
+            "draws_censored": float(np.asarray(censored, dtype=bool).mean()),
+        })
+    return pd.DataFrame(out)

@@ -6,15 +6,17 @@
 
 When a model anchors its HSGP deviation (``anchor_g*_at_ref``), the deviation is
 orthogonalised against its mean's basis (``[1, z]`` for the logit-linear trend)
-using coefficients fitted on the *observed* rows only, so it carries only
-nonlinear curvature there and cannot alias with ``slope`` — and it is pinned to
-zero at the reference-age anchor row. (The previous single-point anchor
+using coefficients fitted on the *observed* rows only, so it carries no linear
+component there and cannot alias with ``slope`` — and it is then pinned to zero
+at the reference-age anchor row, which restores a constant component and fixes
+the level by the anchor rather than by orthogonality to ``[1]`` (#240; see
+``_orthogonalise_and_anchor``). (The previous single-point anchor
 ``g_unit - g_unit[idx]`` removed only the level trade-off, leaving a trend-vs-GP
 R-hat ridge that heavier tuning did not fix; an intermediate whole-grid
 orthogonalisation additionally let the plot/query grid leak into inference.)
 
 This builds the real anchored VG11 model (no sampling) and checks that prior
-draws of ``g`` pass through zero at the anchor and are orthogonal to ``[1, z]``
+draws of ``g`` pass through zero at the anchor and carry no linear component
 over the observed rows; it skips cleanly when the prepared DuckDB is not present.
 """
 

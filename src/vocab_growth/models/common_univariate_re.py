@@ -33,6 +33,7 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     validate_ell_bounds,
@@ -62,6 +63,12 @@ from vocab_growth.models.gp_utils import (
     GPGrid,
     build_variance_partition,
     trend_and_gp,
+)
+from vocab_growth.models.subject_marginal import (
+    partition_subject_rows,
+    singleton_first_order,
+    subject_marginal_betabinomial,
+    zero_padded_subject_shift,
 )
 from vocab_growth.reporting import (
     dataframe_table,
@@ -143,6 +150,17 @@ def prepare_univariate_re_data(
         n_repeated_subjects = int(
             (analysis_df.groupby("subject_code").size() > 1).sum()
         )
+        if getattr(definition, "singleton_marginalisation", None) is not None:
+            # The marginalised likelihood reads its two blocks as slices, so the
+            # rows whose child effect it integrates out come first. Stable, and
+            # applied here so every downstream array -- ages, counts, the
+            # calibration table -- carries the same order.
+            analysis_df = (
+                analysis_df.iloc[
+                    singleton_first_order(analysis_df["subject_code"].to_numpy())
+                ]
+                .reset_index(drop=True)
+            )
 
     desc = descriptive_stats.describe_all(analysis_df[["age", y_col]], alpha=0.05)
 
@@ -187,7 +205,9 @@ def prepare_univariate_re_data(
     dataframe_table(desc, title="Descriptive statistics")
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_obs = np.asarray(analysis_df[y_col], dtype=int)
+    y_values = np.asarray(analysis_df[y_col], dtype=float)
+    require_integral_counts(y_values, y_col)
+    y_obs = y_values.astype(int)
 
     bmd = model_data.BinomialModelData(
         X_obs=X_obs, y_obs=y_obs, n_trials=definition.n_trials
@@ -248,6 +268,20 @@ def build_univariate_re_model(
         subject_codes = None
         n_subjects = 0
 
+    # A child seen once contributes its effect to one likelihood term, so that
+    # effect can be integrated out exactly instead of sampled. `partition` is
+    # None unless the definition asks for it, and every branch below reads that
+    # rather than the flag, so the sampled graph is untouched when it is off.
+    # See models.subject_marginal.
+    marginalisation = (
+        getattr(definition, "singleton_marginalisation", None)
+        if use_subject_re
+        else None
+    )
+    partition = (
+        partition_subject_rows(subject_codes) if marginalisation is not None else None
+    )
+
     # Validate
     if not np.all(y_obs >= 0):
         raise ValueError("y_obs contains negative counts.")
@@ -276,6 +310,9 @@ def build_univariate_re_model(
                 ("Number of subjects", n_subjects),
             ]
         )
+    if partition is not None:
+        build_rows.extend(partition.summary_rows())
+        build_rows.append(("Quadrature nodes", marginalisation.n_nodes))
     key_value_table("Build configuration", build_rows)
 
     # Plot / query grids (standardised), with the optional reference-age anchor
@@ -342,7 +379,13 @@ def build_univariate_re_model(
         "x_dim": np.arange(1),
     }
     if use_subject_re:
-        coords["subject_id"] = np.arange(n_subjects)
+        # Marginalisation leaves explicit effects for the repeat-measured
+        # children only, labelled by the child codes they keep, so a reader can
+        # still say which child each effect belongs to.
+        if partition is not None:
+            coords["repeat_subject_id"] = partition.repeat_labels
+        else:
+            coords["subject_id"] = np.arange(n_subjects)
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -446,15 +489,22 @@ def build_univariate_re_model(
                 tau_subject = pm.HalfNormal(
                     "tau_subject", sigma=definition.tau_subject_sigma
                 )
+            subject_dim = "subject_id" if partition is None else "repeat_subject_id"
             delta_subject_raw = pm.Normal(
-                "delta_subject_raw", mu=0.0, sigma=1.0, dims="subject_id"
+                "delta_subject_raw", mu=0.0, sigma=1.0, dims=subject_dim
             )
             delta_subject = pm.Deterministic(
                 "delta_subject",
                 tau_subject * delta_subject_raw,
-                dims="subject_id",
+                dims=subject_dim,
             )
-            subject_shift = delta_subject[subject_obs]
+            if partition is None:
+                subject_shift = delta_subject[subject_obs]
+            else:
+                # An exact zero on the rows whose effect the likelihood
+                # integrates out, so f_obs there is the population-and-study
+                # prediction rather than a child-specific one.
+                subject_shift = zero_padded_subject_shift(delta_subject, partition)
         else:
             subject_shift = 0.0
 
@@ -516,18 +566,38 @@ def build_univariate_re_model(
         # Beta-Binomial likelihood
         # ============================================================
 
-        p_obs_clip = pm.math.clip(p_obs, EPSILON, 1 - EPSILON)
-        alpha_obs = p_obs_clip * kappa_obs
-        beta_obs = (1 - p_obs_clip) * kappa_obs
+        if partition is None:
+            p_obs_clip = pm.math.clip(p_obs, EPSILON, 1 - EPSILON)
+            alpha_obs = p_obs_clip * kappa_obs
+            beta_obs = (1 - p_obs_clip) * kappa_obs
 
-        _ = pm.BetaBinomial(
-            "y_obs",
-            n=n_trials,
-            alpha=alpha_obs,
-            beta=beta_obs,
-            observed=y_obs,
-            dims=("obs_id",),
-        )
+            _ = pm.BetaBinomial(
+                "y_obs",
+                n=n_trials,
+                alpha=alpha_obs,
+                beta=beta_obs,
+                observed=y_obs,
+                dims=("obs_id",),
+            )
+        else:
+            # One observed variable over every row either way: a repeat-measured
+            # row keeps the identical conditional Beta-Binomial density, and a
+            # marginalised row carries the quadrature integral of it over the
+            # child effect. The pointwise log_likelihood keeps its name, shape
+            # and row order; what changes is what a marginalised row's entry
+            # means (marginal, not conditional).
+            _ = subject_marginal_betabinomial(
+                "y_obs",
+                mu=f_obs,
+                kappa=kappa_obs,
+                tau_subject=tau_subject,
+                observed=y_obs,
+                n_trials=n_trials,
+                partition=partition,
+                n_nodes=marginalisation.n_nodes,
+                dims=("obs_id",),
+                epsilon=EPSILON,
+            )
 
     variables = pymc_utils.get_variables_dict(model_pm)
 

@@ -682,8 +682,22 @@ def retain_failed_fit(staged_output_dir: str, output_root: str) -> str | None:
 # free parameters evaluated at every observation. On a reporting fit of VG03
 # (10.94 GB, 4,075 observations, 6 x 6,000 draws) `f_obs`/`p_obs`/`kappa_obs`
 # and the concatenated `f_all`/`g`/`g_unit` grids account for ~7 GB, while the
-# free parameters and `sample_stats` together come to ~0.1 GB. Dropping the
-# recomputable half is a storage policy and nothing more: it is applied when
+# free parameters and `sample_stats` together come to ~0.1 GB.
+#
+# Since 2026-08-23 those observation-sized deterministics are not sampled at
+# all: `sampled_variable_names` below decides what the sampler stores, and the
+# engines' `sample` stage passes it to `pm.sample(var_names=...)`, which nutpie
+# honours by never evaluating the rest. The graph is unchanged — the
+# deterministics still exist in the model, so `pm.compute_deterministics` can
+# rebuild any of them from the stored free parameters — and so are the draws.
+# Nothing in the fit pipeline read them (see
+# `notes/202608231410-td-geometry-remaining-levers.md` §2), and storing them
+# was what made fit memory scale as `n_obs x draws`
+# (`notes/202608050900-td-hierarchical-geometry.md` §10).
+#
+# The persistence tiers remain the storage policy for what *is* sampled:
+# `COMPACT` still drops the duplicated scaled random effects, `MINIMAL` the
+# `log_likelihood` and `posterior_predictive` groups. Both are applied when
 # writing, to a copy, never to the in-memory trace that the rest of the fit
 # pipeline goes on to use.
 #
@@ -697,9 +711,11 @@ class TracePersistence(StrEnum):
     """Store everything. The default, and what every fit before this did."""
 
     COMPACT = "compact"
-    """Drop observation-sized posterior deterministics and the duplicated scaled
-    random effects. ``log_likelihood`` and ``posterior_predictive`` are kept, so
-    LOO and predictive checks can still be recomputed from the file."""
+    """Drop the duplicated scaled random effects (and any observation-sized
+    posterior deterministics, which fits made since 2026-08-23 no longer carry
+    at any tier — see :func:`sampled_variable_names`). ``log_likelihood`` and
+    ``posterior_predictive`` are kept, so LOO and predictive checks can still be
+    recomputed from the file."""
 
     MINIMAL = "minimal"
     """Additionally drop the observation-sized ``log_likelihood`` and
@@ -830,6 +846,64 @@ def _droppable_variables(dataset: Any, *, drop_derived_effects: bool) -> list[st
     return sorted(dropped)
 
 
+#: Attribute on ``trace.posterior`` naming, as a JSON list, the deterministics
+#: the sampler was told not to store. Written by the engines' ``sample`` stage
+#: so the trace describes itself: a reader finding no ``f_obs`` can tell "never
+#: sampled" from "truncated" without the manifest. A trace without the attribute
+#: predates the setting and stored everything.
+NOT_SAMPLED_ATTR = "not_sampled_deterministics"
+
+#: Attribute on ``trace.posterior`` naming, as a JSON list, the model's free
+#: random variables -- the parameters the sampler actually moved, as opposed to
+#: the deterministics computed from them. Written by the ``sample`` stage so a
+#: reader of the stored trace can tell the two apart without rebuilding the
+#: model, which is what pinning PSIS-LOO's relative efficiency to the sampled
+#: parameters needs (:mod:`vocab_growth.loo_reff`). Absent from traces written
+#: before 2026-08-23.
+SAMPLED_PARAMETERS_ATTR = "sampled_parameters"
+
+
+def unsampled_deterministic_names(model: Any) -> list[str]:
+    """Names of ``model``'s deterministics the sampler should not store.
+
+    The observation-dimensioned ones and the concatenated ``all_id`` grids: the
+    same rule :func:`plan_trace_persistence` applies when writing a ``compact``
+    trace, applied before sampling instead. Every free random variable is
+    stored regardless of its dimensions, and so is every deterministic on the
+    plot and query grids, which is what the reporting stages read.
+
+    Duck-typed on ``pm.Model`` (``deterministics`` and ``named_vars_to_dims``)
+    so this module stays free of a PyMC import.
+    """
+    dims_of = getattr(model, "named_vars_to_dims", {})
+    names = []
+    for deterministic in model.deterministics:
+        dims = dims_of.get(deterministic.name) or ()
+        if any(_is_recomputable_dim(str(dim)) for dim in dims):
+            names.append(deterministic.name)
+    return sorted(names)
+
+
+def sampled_variable_names(model: Any) -> list[str]:
+    """What ``pm.sample(var_names=...)`` should store for ``model``.
+
+    Every free random variable followed by every deterministic that
+    :func:`unsampled_deterministic_names` does not exclude. nutpie always
+    stores the free variables' unconstrained values and treats ``var_names`` as
+    the filter on everything else — the constrained forms of transformed
+    variables and the deterministics — so the free variables must be named here
+    for their constrained forms to be kept.
+    """
+    excluded = set(unsampled_deterministic_names(model))
+    names = [rv.name for rv in model.free_RVs]
+    names.extend(
+        deterministic.name
+        for deterministic in model.deterministics
+        if deterministic.name not in excluded
+    )
+    return names
+
+
 def plan_trace_persistence(
     trace: Any, persistence: TracePersistence | str = TracePersistence.FULL
 ) -> dict[str, list[str]]:
@@ -932,9 +1006,12 @@ def save_trace(
     explicitly to pin a particular save regardless of configuration.
 
     The record is written into ``fit_manifest.json`` as well as returned, so a
-    later reader finding no ``f_obs`` can tell "dropped by policy" from
-    "truncated or corrupt" — not a distinction to leave to guesswork, given a
-    truncated trace is a failure this project has actually seen.
+    later reader finding no ``f_obs`` can tell "dropped by policy" or "never
+    sampled" from "truncated or corrupt" — not a distinction to leave to
+    guesswork, given a truncated trace is a failure this project has actually
+    seen. ``not_sampled`` carries what the ``sample`` stage told the sampler not
+    to store (read from the trace's own :data:`NOT_SAMPLED_ATTR`); it is absent
+    from the record of a trace that predates the setting.
 
     ``trace`` is never modified — a non-``FULL`` tier filters a copy, because the
     fit pipeline goes on to read the in-memory trace after this returns.
@@ -947,13 +1024,50 @@ def save_trace(
     plan = plan_trace_persistence(trace, persistence)
     path = os.path.join(output_dir, filename)
     (_filtered_trace(trace, plan) if plan else trace).to_netcdf(path)
-    record = {
+    record: dict[str, Any] = {
         "persistence": persistence.value,
         "dropped": plan,
         "dropped_count": sum(len(names) for names in plan.values()),
     }
+    not_sampled = read_not_sampled_attr(trace)
+    if not_sampled is not None:
+        record["not_sampled"] = not_sampled
+    sampled = read_sampled_parameters_attr(trace)
+    if sampled is not None:
+        record["sampled_parameters"] = sampled
     record_trace_persistence(output_dir, record)
     return record
+
+
+def _read_name_list_attr(trace: Any, attr: str) -> list[str] | None:
+    """A JSON-list-of-names attribute of the posterior group, or ``None``."""
+    posterior = _group_dataset(trace, "posterior")
+    if posterior is None:
+        return None
+    raw = posterior.attrs.get(attr)
+    if raw is None:
+        return None
+    names = json.loads(raw) if isinstance(raw, str) else list(raw)
+    return [str(name) for name in names]
+
+
+def read_not_sampled_attr(trace: Any) -> list[str] | None:
+    """The deterministics ``trace``'s posterior records as never sampled.
+
+    ``None`` when the posterior carries no :data:`NOT_SAMPLED_ATTR` — a trace
+    from before the setting existed, which stored everything — or when the
+    posterior cannot be read at all.
+    """
+    return _read_name_list_attr(trace, NOT_SAMPLED_ATTR)
+
+
+def read_sampled_parameters_attr(trace: Any) -> list[str] | None:
+    """The free random variables ``trace``'s posterior records as sampled.
+
+    ``None`` when the posterior carries no :data:`SAMPLED_PARAMETERS_ATTR` — a
+    trace written before 2026-08-23 — or cannot be read at all.
+    """
+    return _read_name_list_attr(trace, SAMPLED_PARAMETERS_ATTR)
 
 
 def read_trace_persistence_record(output_dir: str) -> dict[str, Any] | None:
@@ -972,11 +1086,17 @@ def read_trace_persistence_record(output_dir: str) -> dict[str, Any] | None:
 def require_full_trace(output_dir: str, *, purpose: str) -> None:
     """Raise unless this fit's trace was persisted in full.
 
-    For the consumers that need the observation-sized posterior or the stored
-    log-likelihood — the cross-validation tools — which a ``compact`` or
-    ``minimal`` fit does not carry. Checked from the manifest *before* the trace
-    is opened, so a reporting-quality read of tens of gigabytes is not spent to
-    arrive at a ``KeyError`` on a variable that was never going to be there.
+    For the consumers that need the stored ``log_likelihood`` or the scaled
+    random effects — the cross-validation tools and the recovery scorer — which
+    a ``compact`` or ``minimal`` fit does not carry. Checked from the manifest
+    *before* the trace is opened, so a reporting-quality read of tens of
+    gigabytes is not spent to arrive at a ``KeyError`` on a variable that was
+    never going to be there.
+
+    This does **not** promise the observation-sized posterior deterministics:
+    since 2026-08-23 they are not sampled at any tier (see
+    :func:`sampled_variable_names`), and a reader that needs one rebuilds the
+    model and recomputes it (:mod:`vocab_growth.posterior_recompute`).
 
     A fit with no persistence record predates the setting and was written in
     full, so it passes.

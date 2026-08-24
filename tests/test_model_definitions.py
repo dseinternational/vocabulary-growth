@@ -125,6 +125,11 @@ _ANCHORED_OUTCOMES = {
     # VG19 and VG20 both derive from VG10, so both inherit the two-anchor form.
     "vg19": {"kappa_u", "kappa_s"},
     "vg20": {"kappa_u", "kappa_s"},
+    # VG21 derives from VG13 and VG22 from VG10, so both inherit the
+    # two-anchor form. VG21 moves its anchor AGES to (12, 20) to sit inside
+    # the wider window; the form is unchanged.
+    "vg21": {"kappa_u", "kappa_s"},
+    "vg22": {"kappa_u", "kappa_s"},
 }
 
 

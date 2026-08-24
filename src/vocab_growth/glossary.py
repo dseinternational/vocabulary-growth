@@ -84,9 +84,12 @@ GLOSSARY: dict[str, str] = {
         "mean. **Larger $\\kappa$ means *less* variability** (approaching an "
         "ordinary Binomial); smaller $\\kappa$ allows more. The direction is "
         "counter-intuitive, so read the $\\kappa$ figures as *falling $\\kappa$ = "
-        "children becoming more spread out*. In models with subject random "
-        "intercepts it is an observation-level residual, not a measure of how "
-        "much children differ."
+        "same-age administrations becoming more spread out*. It is marginal "
+        "count dispersion, not a between-child quantity: in models without "
+        "child or study effects it mixes between-child, between-source and "
+        "repeat-visit variation, and in models with subject random intercepts "
+        "it is an observation-level residual — in neither case a measure of "
+        "how much children differ."
     ),
     "Overdispersion and variance inflation": (
         "How much more variable the observed counts are than an ordinary "
@@ -108,7 +111,10 @@ GLOSSARY: dict[str, str] = {
     "Age anchor": (
         "A reference age at which a prior is placed on an expected vocabulary "
         "proportion. Two anchors define the broad linear trend on the logit "
-        "scale in a more interpretable way than an intercept at age zero."
+        "scale in a more interpretable way than an intercept at age zero. The "
+        "anchors parameterise the linear component: unless the model pins its "
+        "GP at a reference age, the fitted trajectory at an anchor age is the "
+        "anchor plus the GP's deviation there."
     ),
     # -- The flexible part of the trend --
     "Gaussian process (GP)": (
@@ -182,11 +188,14 @@ GLOSSARY: dict[str, str] = {
     ),
     "Population-level and subject-marginal": (
         "Two different predictions. A **population-level** curve sets all random "
-        "effects to zero: it is the average child in the average study, and its "
-        "interval reflects uncertainty in that average. A **subject-marginal** "
-        "prediction draws a new child's random effect too: it answers *where "
-        "would one more child fall?* and is much wider. Confusing them is the "
-        "single easiest way to misread these reports."
+        "effects to zero. Because the effects are symmetric around zero on the "
+        "logit scale, that is the *typical* (median) child in the typical study "
+        "-- not the arithmetic average of children's counts, which the nonlinear "
+        "link shifts away from the median wherever children differ. Its interval "
+        "reflects uncertainty in that curve. A **subject-marginal** prediction "
+        "draws a new child's random effect too: it answers *where would one more "
+        "child fall?* and is much wider. Confusing them is the single easiest "
+        "way to misread these reports."
     ),
     # -- Reading the numbers --
     "Credible interval": (

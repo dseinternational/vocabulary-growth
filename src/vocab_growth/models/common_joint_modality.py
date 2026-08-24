@@ -7,11 +7,15 @@ model (VG15): issue #49 Option 3.
 
 VG15 extends the trivariate VG14 with two things VG14 assumed away:
 
-1.  A within-understood sign-speech ASSOCIATION (a single scalar Plackett odds
-    ratio ``psi``), identified from the uk_02, uk_07 and es_01 four-cell cross-tabulations
-    (sign-only / sign+speech / speech-only / understood-only). This replaces
-    VG14's independence-based ``p_any`` upper bound with a *data-identified*
-    total expressive vocabulary.
+1.  A within-understood sign-speech ASSOCIATION (a Plackett odds ratio ``psi``
+    with a study-level random intercept ``delta_psi``), identified from four
+    cross-tabulation sources: the uk_02, uk_07 and es_01 four-cell
+    within-understood cross-tabs (sign-only / sign+speech / speech-only /
+    understood-only) and nz_01's three-cell within-produced cross-tab. This
+    replaces VG14's independence-based ``p_any`` upper bound with a
+    *data-identified* total expressive vocabulary. The reported population
+    ``psi`` is a shrunk centre over sources that disagree; the per-study values
+    are the primary read.
 2.  STUDY random intercepts on each latent trajectory (the VG07-VG10 pattern),
     so the age curve is separated from study composition (which made VG14's
     signed peak unidentifiable).
@@ -38,6 +42,9 @@ instead of duplicate spoken and signed likelihood contributions:
     - signed | understood ~ BetaBinomial(understood, r)
     - uk_02 / uk_07 / es_01 four cells ~ DirichletMultinomial(total, conc * [pi_*])
       (the within-understood joint term; identifies psi)
+    - nz_01 three produced cells ~ DirichletMultinomial(produced, conc * [pi_*])
+      (the within-produced term; also identifies psi, with no comprehension
+      denominator — p_U cancels, so nz_01 carries no understood information)
 
 This is a self-contained module (like common_trivariate.py); it does not import
 from or modify the bivariate / trivariate engines. The full-grid intermediates
@@ -71,6 +78,7 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     validate_ell_bounds,
@@ -162,62 +170,24 @@ def _signing_milestones(
     both: np.ndarray,
     speak_only: np.ndarray,
     ci_prob: float,
-    ci_kind: str,
 ) -> pd.DataFrame:
-    """Per-draw ages for the sign-to-speech hand-over.
+    """Per-draw ages for the sign-to-speech hand-over (shared implementation).
 
-    Arrays are ``(n_age, n_draw)``. Each milestone is found **in every draw and
-    then summarised**, never read off the median curve: the median of crossings
-    is not the crossing of the median, and for a peak the difference is not
-    subtle — averaging curves whose peaks sit at different ages flattens the
-    peak and drags it towards the middle of the grid.
-
-    ``draws_reaching`` is the reader's warning. A milestone reached in only part
-    of the posterior is weakly identified and should be read as a bound, the same
-    convention the comparison report's boundary-censored peak-growth ages use.
+    Thin wrapper over :func:`vocab_growth.posterior_analysis.signing_milestone_table`,
+    which the DS/TD comparison script also uses — the two used to carry duplicate
+    copies whose crossing rule reported *first age true* rather than a genuine
+    false-to-true transition, and whose peak rule reported a grid-boundary
+    maximum as reached (#238). See the shared helper for the corrected
+    semantics, the censoring columns, and the HDI interval policy.
     """
-    ages = np.asarray(ages, dtype=float)
-    total = np.maximum(sign_only + both + speak_only, 1e-9)
-
-    # A "crossing" is only meaningful once there is a vocabulary to divide up. At
-    # the youngest modelled ages all three cells are fractions of a word, so which
-    # is larger is arithmetic noise and every condition below is satisfied by
-    # accident. Gate on the child having at least one expressive word, per draw,
-    # rather than on a fixed number of grid points -- a point count silently
-    # depends on the grid step, and this function is called with a finer grid
-    # than the one it was first written against.
-    established = total >= MIN_WORDS_FOR_MILESTONE
-
-    def _first_age(condition: np.ndarray) -> np.ndarray:
-        out = np.full(condition.shape[1], np.nan)
-        for d in range(condition.shape[1]):
-            idx = np.flatnonzero(condition[:, d] & established[:, d])
-            if idx.size:
-                out[d] = ages[idx[0]]
-        return out
-
-    rows = [
-        ("sign_only_peak_age", ages[np.argmax(sign_only, axis=0)]),
-        ("sign_only_peak_words", np.max(sign_only, axis=0)),
-        ("sign_only_share_below_half_age", _first_age((sign_only / total) < 0.5)),
-        ("speech_only_overtakes_sign_only_age", _first_age(speak_only >= sign_only)),
-    ]
-    out = []
-    for name, draws in rows:
-        ok = np.isfinite(draws)
-        vals = draws[ok]
-        band = (
-            intervals.bands(vals[:, None], ci_prob, ci_kind, sample_axis=0)[0]
-            if vals.size
-            else (np.nan, np.nan)
-        )
-        out.append({
-            "quantity": name,
-            "median": float(np.median(vals)) if vals.size else np.nan,
-            "ci_lo": float(band[0]), "ci_hi": float(band[1]),
-            "draws_reaching": float(ok.mean()),
-        })
-    return pd.DataFrame(out)
+    return posterior_analysis.signing_milestone_table(
+        ages,
+        sign_only,
+        both,
+        speak_only,
+        ci_prob=ci_prob,
+        min_words=MIN_WORDS_FOR_MILESTONE,
+    )
 
 
 @dataclass
@@ -321,10 +291,11 @@ class JointModelSamples:
     psi_study_names: list
     tau_psi: np.ndarray | None
 
-    # uk_02 four-cell posterior predictive (counts) and observed
+    # Four-cell posterior predictive (counts) and observed, all sources
     cell_obs: np.ndarray  # (n_cells_obs, 4) observed
     cell_pred: np.ndarray  # (n_cells_obs, 4, n_samples) predicted
     cell_ages: np.ndarray  # (n_cells_obs,)
+    cell_studies: np.ndarray  # (n_cells_obs,) source study of each row
 
     # nz_01 produced-cell posterior predictive (counts) and observed
     prod_cell_obs: np.ndarray  # (n_prod_obs, 3) observed
@@ -952,7 +923,9 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     idx_u = np.where(has_u_t)[0]
     idx_cells = np.where(has_cells_t)[0]
 
-    y_u = np.asarray(df.loc[has_u_t, "understood"], dtype=int)
+    y_u_values = np.asarray(df.loc[has_u_t, "understood"], dtype=float)
+    require_integral_counts(y_u_values, "understood")
+    y_u = y_u_values.astype(int)
     marginal_outcome_eligible = ~holdout & ~has_cells
     spoken_spec = nested_outcome_spec(
         df,
@@ -983,11 +956,17 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     has_s_likelihood[idx_s] = True
     has_sign_likelihood[idx_sign] = True
 
-    cell_counts = np.asarray(
+    # Validate integrality before the int casts: NumPy truncates silently, and
+    # a NaN cell would cast to a large negative integer (#238).
+    cell_values = np.asarray(
         df.loc[has_cells_t, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
-        dtype=int,
+        dtype=float,
     )
-    cell_total = np.asarray(df.loc[has_cells_t, "cell_total"], dtype=int)
+    require_integral_counts(cell_values.ravel(), "four-cell counts")
+    cell_counts = cell_values.astype(int)
+    cell_total_values = np.asarray(df.loc[has_cells_t, "cell_total"], dtype=float)
+    require_integral_counts(cell_total_values, "cell_total")
+    cell_total = cell_total_values.astype(int)
 
     # Validate
     for arr, nm in [(y_u, "understood"), (y_s, "spoken"), (y_sign, "signed")]:
@@ -1011,11 +990,12 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     has_prod_t = has_prod & ~holdout
     idx_prod = np.where(has_prod_t)[0]
     if idx_prod.size:
-        prod_counts = np.asarray(
-            df.loc[has_prod_t, PROD_CELL_COLUMNS],
-            dtype=int,
-        )
-        prod_total = np.asarray(df.loc[has_prod_t, "prod_total"], dtype=int)
+        prod_values = np.asarray(df.loc[has_prod_t, PROD_CELL_COLUMNS], dtype=float)
+        require_integral_counts(prod_values.ravel(), "produced-cell counts")
+        prod_counts = prod_values.astype(int)
+        prod_total_values = np.asarray(df.loc[has_prod_t, "prod_total"], dtype=float)
+        require_integral_counts(prod_total_values, "prod_total")
+        prod_total = prod_total_values.astype(int)
         if prod_counts.min() < 0:
             raise ValueError("negative produced-cell count.")
         if not np.array_equal(prod_counts.sum(axis=1), prod_total):
@@ -1266,44 +1246,68 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # constraint), where K is the number of studies the *outcome* actually
         # constrains.
         #
-        # The zero-sum must be taken over only the studies that inform each outcome
-        # (P1-D). delta_u/delta_q are informed by every retained study — U enters its
-        # own likelihood and the spoken/sign nested terms for all studies, and q
-        # enters the spoken likelihood and the cross-tab cells — so a global zero-sum
-        # over study_id is correct for them. But signing is observed by only a
-        # subset (the y_sign rows and the uk_02/nz_01 cross-tabs); a global zero-sum
-        # would let the uninformed studies' z_sign counterbalance a common shift
-        # among the informed ones, so it need not remove the sign-intercept ridge and
-        # it couples the informed effects through nuisance ones. delta_sign is
-        # therefore zero-summed over the sign-informed studies only, and fixed to 0
-        # for studies with no signing information (they never enter a sign term).
+        # The zero-sum must be taken over only the studies that inform each
+        # latent (P1-D). A study with no likelihood term touching a latent
+        # carries a prior-only offset; putting that offset inside the zero-sum
+        # lets it counterbalance a common shift among the informed studies, so
+        # the constraint need not remove the intercept ridge and it couples the
+        # informed effects through a nuisance coordinate. Every offset is
+        # therefore zero-summed over its informed studies only and fixed to 0
+        # elsewhere.
+        #
+        # Which studies inform which latent is not the same question for the
+        # three: understood is informed by a study's own U rows and by its
+        # marginal-fallback spoken/signed rows (whose likelihood mean is
+        # p_U * q or p_U * r), but NOT by conditional nested rows (mean q or r
+        # alone) and NOT by cross-tab cells — the within-understood composition
+        # is a function of (r, q, psi) only, and nz_01's within-produced
+        # three-cell renormalisation cancels p_U exactly. Until #238 delta_u was
+        # zero-summed globally on the incorrect assertion that every retained
+        # study informs understood; nz_01 (production-only) does not, so its
+        # prior-only coordinate entered the constraint and the population
+        # understood level partly depended on an unobserved component.
         tau_u = pm.HalfNormal("tau_u", sigma=config.tau_u_sigma)
         tau_q = pm.HalfNormal("tau_q", sigma=config.tau_q_sigma)
         tau_sign = pm.HalfNormal("tau_sign", sigma=config.tau_sign_sigma)
-        zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
-        delta_u = pm.Deterministic(
-            "delta_u", tau_u * pm.ZeroSumNormal("z_u", sigma=zsn_sigma, dims="study_id"), dims="study_id"
-        )
-        delta_q = pm.Deterministic(
-            "delta_q", tau_q * pm.ZeroSumNormal("z_q", sigma=zsn_sigma, dims="study_id"), dims="study_id"
-        )
 
+        def informed_studies(*index_arrays: np.ndarray) -> np.ndarray:
+            present = [study_codes[idx] for idx in index_arrays if len(idx)]
+            if not present:
+                return np.zeros(0, dtype=int)
+            return np.unique(np.concatenate(present).astype(int))
+
+        def informed_study_zero_sum(suffix: str, tau, informed: np.ndarray):
+            """Sum-to-zero offsets over the informed studies; exactly 0 elsewhere.
+
+            The ZeroSumNormal sigma is rescaled by sqrt(K/(K-1)) so the marginal
+            per-study prior variance stays tau^2 under the constraint, where K
+            counts the informed studies only. With fewer than two informed
+            studies there is no between-study contrast to estimate and a
+            zero-sum is degenerate, so the offsets are all zero.
+            """
+            k = int(informed.size)
+            if k < 2:
+                return pm.Deterministic(
+                    f"delta_{suffix}", pt.zeros(n_studies), dims="study_id"
+                )
+            zsn = float(np.sqrt(k / (k - 1)))
+            z = pm.ZeroSumNormal(f"z_{suffix}", sigma=zsn, shape=k)
+            full = pt.set_subtensor(pt.zeros(n_studies)[informed], tau * z)
+            return pm.Deterministic(f"delta_{suffix}", full, dims="study_id")
+
+        u_informed = informed_studies(
+            idx_u,
+            idx_s[~spoken_spec.is_conditional],
+            idx_sign[~signed_spec.is_conditional],
+        )
+        q_informed = informed_studies(idx_s, idx_cells, idx_prod)
         # Sign-informed studies: those contributing a signing marginal (idx_sign) or
         # a within-understood/produced cross-tab (idx_cells / idx_prod).
-        sign_informed = np.unique(
-            np.concatenate([
-                study_codes[idx_sign],
-                study_codes[idx_cells],
-                study_codes[idx_prod],
-            ]).astype(int)
-        )
-        n_sign_studies = int(sign_informed.size)
-        zsn_sigma_sign = float(np.sqrt(n_sign_studies / (n_sign_studies - 1)))
-        z_sign = pm.ZeroSumNormal("z_sign", sigma=zsn_sigma_sign, shape=n_sign_studies)
-        delta_sign_full = pt.set_subtensor(
-            pt.zeros(n_studies)[sign_informed], tau_sign * z_sign
-        )
-        delta_sign = pm.Deterministic("delta_sign", delta_sign_full, dims="study_id")
+        sign_informed = informed_studies(idx_sign, idx_cells, idx_prod)
+
+        delta_u = informed_study_zero_sum("u", tau_u, u_informed)
+        delta_q = informed_study_zero_sum("q", tau_q, q_informed)
+        delta_sign = informed_study_zero_sum("sign", tau_sign, sign_informed)
 
         # Subject random intercepts (non-centred), applied at obs level only. Each
         # is gated by its flag so the sign-RE can be dropped via config alone.
@@ -1330,16 +1334,28 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         q_obs = pm.math.sigmoid(h_obs)
         r_obs = pm.math.sigmoid(g_obs)
 
-        # --- population+study marginals (NO subject shift) for the four-cell DM ---
-        # psi is identified from the ~62 uk_02 cross-tab rows (34 children, ~2 rows
-        # each). The per-child sign offset is co-identified with psi from those same
-        # rows, so letting it into the four-cell composition makes psi pivot on a
-        # thinly-identified RE (psi 1.78 -> ~2.8; the move is driven almost entirely
-        # by the sign subject RE — see notes/202606171200-vg15-subject-re-stabilisation).
-        # We therefore keep psi a *population-conditioned* within-understood
-        # association (comparable to the study-RE-only VG15) by feeding the DM the
-        # study-level marginals only; subject REs still enter every marginal
-        # likelihood. When subject REs are off these equal r_obs/q_obs exactly.
+        # --- population+study marginals (NO subject shift) for the cell DMs ---
+        # psi is identified from the cross-tab rows (uk_02/uk_07/es_01 four-cell
+        # and nz_01 three-cell). The per-child sign offset is co-identified with
+        # psi from those same rows, so letting it into the composition makes psi
+        # pivot on a thinly-identified RE (measured when uk_02 was the only
+        # source: psi 1.78 -> ~2.8, driven almost entirely by the sign subject
+        # RE — see notes/202606171200-vg15-subject-re-stabilisation). We
+        # therefore keep psi a *population-conditioned* within-understood
+        # association by feeding the DMs the study-level marginals only; subject
+        # REs still enter every marginal likelihood. When subject REs are off
+        # these equal r_obs/q_obs exactly.
+        #
+        # Two honest consequences, not incidental details (#238). First, this
+        # DECOUPLES psi from the child effects rather than empirically
+        # separating the two: the cell likelihood is built so they cannot
+        # compete, so a sharp child-sign scale posterior is evidence from the
+        # marginal rows, not evidence that the cells distinguish association
+        # from child heterogeneity. Second, repeated cross-tab visits by one
+        # child are conditionally independent in the cell likelihood — no term
+        # here carries within-child dependence — so psi's uncertainty may be
+        # understated and children with more visits weigh more. The
+        # repeated-child sensitivity is tracked in #238.
         q_obs_pop = pm.math.sigmoid(h_all[i_obs0:i_obs1] + delta_q[study_obs])
         r_obs_pop = pm.math.sigmoid(g_all[i_obs0:i_obs1] + delta_sign[study_obs])
 
@@ -1676,6 +1692,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         dtype=int,
     )
     cell_ages = np.asarray(df.loc[has_cells, "age"], dtype=float)
+    cell_studies = np.asarray(df.loc[has_cells, "study"], dtype=str)
     cell_pred = np.array(
         trace.posterior_predictive["cells_obs"]
         .stack(sample=("chain", "draw"))
@@ -1737,6 +1754,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         cell_obs=cell_counts,
         cell_pred=cell_pred,
         cell_ages=cell_ages,
+        cell_studies=cell_studies,
         prod_cell_obs=prod_counts,
         prod_cell_pred=prod_pred,
         prod_cell_ages=prod_ages,
@@ -1751,10 +1769,22 @@ def posterior_summary(context: JointContext):
     ci_kind = context.reporting.interval_kind
     inner = intervals.INNER_CI_PROB
     od = context.reporting.output_dir
-    # Comprehension and production are not observed over the same age range, so
-    # understood and q may report a shorter grid than spoken and signed.
-    report_max_u = context.model_config.report_max_age_understood
-    report_max_sign = context.model_config.report_max_age_signed
+    # Per-quantity reporting caps (vocab_growth.reporting_ages). r and p_any are
+    # ratios of understood built from the signed ratio, so the tighter of the
+    # comprehension and signing caps binds; until #238 both tables carried the
+    # signing cap alone, so they ran to 84 months beside figures that (correctly)
+    # stopped at 72.
+    config = context.model_config
+    understood_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.UNDERSTOOD
+    )
+    signed_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.SIGNED
+    )
+    ratio_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD
+    )
+    sign_ratio_cap = reporting_ages.max_age_for_sign_ratio(config)
 
     def probability_summary(X, draws, prefix, label, max_age=None):
         Ey = draws * n_trials
@@ -1796,13 +1826,13 @@ def posterior_summary(context: JointContext):
         d.to_csv(os.path.join(od, f"posterior_summary_{prefix}.csv"), index=False)
         return d
 
-    probability_summary(s.X_query, s.p_u_query, "u", "Words understood", report_max_u)
+    probability_summary(s.X_query, s.p_u_query, "u", "Words understood", understood_cap)
     probability_summary(s.X_query, s.p_u_query * s.q_query, "s", "Words spoken")
     probability_summary(
-        s.X_query, s.p_u_query * s.r_query, "sign", "Words signed", report_max_sign
+        s.X_query, s.p_u_query * s.r_query, "sign", "Words signed", signed_cap
     )
-    ratio_summary(s.X_query, s.r_query, "r", report_max_sign)
-    ratio_summary(s.X_query, s.q_query, "q", report_max_u)
+    ratio_summary(s.X_query, s.r_query, "r", sign_ratio_cap)
+    ratio_summary(s.X_query, s.q_query, "q", ratio_cap)
 
     # Whole-month companions to the tables above. This engine draws no predictive
     # counts on the plot grid, so these carry the expected count only — matching
@@ -1865,9 +1895,10 @@ def posterior_summary(context: JointContext):
         "p_any_indep_median": np.median(s.p_any_indep_query, axis=1),
         "Ey_any_indep_median": np.median(Ey_i, axis=1),
     })
-    # Total expressive is a function of the signed ratio, so it can only be
-    # reported where signed evidence reaches -- the tighter of the two caps.
-    pany = posterior_analysis.trim_reported_ages(pany, report_max_sign)
+    # Total expressive is conditioned on understood and a function of the
+    # signed ratio, so the tighter of those two caps binds
+    # (reporting_ages.max_age_for_sign_ratio).
+    pany = posterior_analysis.trim_reported_ages(pany, sign_ratio_cap)
     pany.to_csv(os.path.join(od, "posterior_summary_p_any.csv"), index=False)
     dataframe_table(pany.round(3), title="Total expressive p_any (identified vs independence)", show_index=False)
 
@@ -1943,11 +1974,14 @@ def _run_joint_plots(context: JointContext):
 
     # Every curve below is a function of comprehension, and the sign-bearing ones
     # are functions of the signed ratio too, so each inherits the reporting age of
-    # its narrowest input. Without this the tables stop at the cap while the
-    # figures beside them run to the end of the plot grid, and the pair disagree
-    # in print about where the evidence ends.
-    report_max_u = context.model_config.report_max_age_understood
-    report_max_sign = context.model_config.report_max_age_signed
+    # its narrowest input (vocab_growth.reporting_ages). Without this the tables
+    # stop at the cap while the figures beside them run to the end of the plot
+    # grid, and the pair disagree in print about where the evidence ends.
+    config = context.model_config
+    ratio_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD
+    )
+    sign_ratio_cap = reporting_ages.max_age_for_sign_ratio(config)
 
     def _keep(max_age):
         if max_age is None:
@@ -1955,10 +1989,9 @@ def _run_joint_plots(context: JointContext):
         return np.asarray(X) <= max_age
 
     # p_any, the four-cell composition and r(a) all involve the signed ratio, so
-    # they stop at the earlier of the two caps.
-    sign_caps = [c for c in (report_max_u, report_max_sign) if c is not None]
-    keep_sign = _keep(min(sign_caps) if sign_caps else None)
-    keep_u = _keep(report_max_u)
+    # they stop at the tighter of the comprehension and signing caps.
+    keep_sign = _keep(sign_ratio_cap)
+    keep_u = _keep(ratio_cap)
     X_sign = np.asarray(X)[keep_sign]
     X_u = np.asarray(X)[keep_u]
 
@@ -2080,7 +2113,7 @@ def _run_joint_plots(context: JointContext):
         "sign_only_share_ci_lo": sh_ci[:, 0], "sign_only_share_ci_hi": sh_ci[:, 1],
     }), od, "signing_profile")
 
-    _signing_milestones(X_sign, sign_only_w, both_w, speak_only_w, ci_prob, ci_kind).to_csv(
+    _signing_milestones(X_sign, sign_only_w, both_w, speak_only_w, ci_prob).to_csv(
         os.path.join(od, "signing_milestones.csv"), index=False)
 
     # 3) psi posterior
@@ -2115,28 +2148,69 @@ def _run_joint_plots(context: JointContext):
     context.plots["signed_vs_spoken_rate"] = fig
     plt.close(fig)
 
-    # 5) uk_02 four-cell PPC (observed vs predicted cell totals)
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_MD)
-    obs_tot = s.cell_obs.sum(axis=0)  # (4,)
-    pred_tot = s.cell_pred.sum(axis=0)  # (4, n_samples)
-    pred_med = np.median(pred_tot, axis=1)
+    # 4b) Per-draw peak of the FULL fitted signed-ratio curve r(a) over the
+    # reported grid. `peak_unit_sign` locates the tent's movable middle knot;
+    # the three anchor heights are sampled independently and a GP departure is
+    # then added, so the knot need not be the maximum of the fitted curve
+    # (#238). This table is the quantity to quote as "the age at which the
+    # signed ratio peaks"; the knot position is a parameter, reported as such.
+    # Schema matches expected_learning_rate_peak.csv (#234): median + HDI over
+    # the draws whose maximum is interior, and the boundary share as the
+    # censoring disclosure. multi_peak_draw_share flags GP-induced multimodality
+    # (more than one local maximum), which would make "the" peak ill-defined.
+    r_grid = s.r_plot[keep_sign, :]
+    peak_idx = np.argmax(r_grid, axis=0)
+    boundary = (peak_idx == 0) | (peak_idx == r_grid.shape[0] - 1)
+    peak_ages = np.where(boundary, np.nan, np.asarray(X_sign)[peak_idx])
+    interior = peak_ages[np.isfinite(peak_ages)]
+    peak_lo, peak_hi = intervals.interval_1d(interior, ci_prob, "hdi")
+    local_max = (r_grid[1:-1, :] > r_grid[:-2, :]) & (r_grid[1:-1, :] > r_grid[2:, :])
+    pd.DataFrame({
+        "peak_age_median_months": [float(np.median(interior)) if interior.size else np.nan],
+        "peak_age_ci_lo_months": [float(peak_lo)],
+        "peak_age_ci_hi_months": [float(peak_hi)],
+        "boundary_draw_share": [float(boundary.mean())],
+        "multi_peak_draw_share": [float((local_max.sum(axis=0) > 1).mean())],
+        "support_lo_months": [float(np.asarray(X_sign)[0])],
+        "support_hi_months": [float(np.asarray(X_sign)[-1])],
+    }).to_csv(os.path.join(od, "signed_ratio_peak.csv"), index=False)
+
+    # 5) Four-cell PPC (observed vs predicted cell totals), one panel per
+    # source. This was a single figure named and titled uk_02 until #238, while
+    # its bars aggregated every within-understood four-cell source; the per-study
+    # associations differ severalfold, so an aggregate can hide offsetting
+    # source-specific errors as well as mislabelling what is shown.
     lo, hi = 100 * (1 - ci_prob) / 2, 100 * (1 + ci_prob) / 2
-    pred_lo = np.percentile(pred_tot, lo, axis=1)
-    pred_hi = np.percentile(pred_tot, hi, axis=1)
-    yerr = np.vstack([pred_med - pred_lo, pred_hi - pred_med])
-    xpos = np.arange(4)
-    ax.bar(xpos - 0.18, obs_tot, width=0.36, color="C0", label="observed")
-    ax.bar(xpos + 0.18, pred_med, width=0.36, color="C3", alpha=0.7, label="predicted (median)",
-           yerr=yerr, capsize=4)
-    ax.set_xticks(xpos)
-    ax.set_xticklabels(CELL_NAMES)
-    ax.set_ylabel("Total cell count (uk_02)")
-    ax.legend(frameon=True)
-    ax.set_title("uk_02 four-cell posterior predictive check")
-    fig.savefig(os.path.join(od, "uk02_cell_ppc.png"), dpi=300)
-    fig.savefig(os.path.join(od, "uk02_cell_ppc.svg"))
-    context.plots["uk02_cell_ppc"] = fig
-    plt.close(fig)
+    sources = sorted(set(np.asarray(s.cell_studies, dtype=str).tolist()))
+    if sources:
+        fig, axes = plt.subplots(
+            1, len(sources), figsize=plot_styles.FIGSIZE_XL, sharey=False
+        )
+        for panel, source in zip(np.atleast_1d(axes), sources, strict=True):
+            rows = np.asarray(s.cell_studies, dtype=str) == source
+            obs_tot = s.cell_obs[rows].sum(axis=0)  # (4,)
+            pred_tot = s.cell_pred[rows].sum(axis=0)  # (4, n_samples)
+            pred_med = np.median(pred_tot, axis=1)
+            pred_lo = np.percentile(pred_tot, lo, axis=1)
+            pred_hi = np.percentile(pred_tot, hi, axis=1)
+            yerr = np.vstack([pred_med - pred_lo, pred_hi - pred_med])
+            xpos = np.arange(4)
+            panel.bar(xpos - 0.18, obs_tot, width=0.36, color="C0", label="observed")
+            panel.bar(
+                xpos + 0.18, pred_med, width=0.36, color="C3", alpha=0.7,
+                label="predicted (median)", yerr=yerr, capsize=4,
+            )
+            panel.set_xticks(xpos)
+            panel.set_xticklabels(CELL_NAMES, rotation=30, ha="right")
+            panel.set_title(source)
+        np.atleast_1d(axes)[0].set_ylabel("Total cell count")
+        np.atleast_1d(axes)[0].legend(frameon=True)
+        fig.suptitle("Four-cell posterior predictive check, by source")
+        fig.tight_layout()
+        fig.savefig(os.path.join(od, "four_cell_ppc_by_source.png"), dpi=300)
+        fig.savefig(os.path.join(od, "four_cell_ppc_by_source.svg"))
+        context.plots["four_cell_ppc_by_source"] = fig
+        plt.close(fig)
 
     # 6) nz_01 produced-cell PPC (observed vs predicted produced-cell totals)
     if s.prod_cell_obs.size and s.prod_cell_pred.size:
@@ -2144,7 +2218,6 @@ def _run_joint_plots(context: JointContext):
         obs_tot = s.prod_cell_obs.sum(axis=0)  # (3,)
         pred_tot = s.prod_cell_pred.sum(axis=0)  # (3, n_samples)
         pred_med = np.median(pred_tot, axis=1)
-        lo, hi = 100 * (1 - ci_prob) / 2, 100 * (1 + ci_prob) / 2
         pred_lo = np.percentile(pred_tot, lo, axis=1)
         pred_hi = np.percentile(pred_tot, hi, axis=1)
         yerr = np.vstack([pred_med - pred_lo, pred_hi - pred_med])

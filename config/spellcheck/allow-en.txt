@@ -83,9 +83,11 @@ YARC
 Zampini
 approximator
 apraxia
+argmax
 argmin
 arrowsize
 asis
+autodiff
 azcopy
 baselining
 bimodality
@@ -132,14 +134,17 @@ idxmin
 iloc
 incl
 indep
+isfile
 isna
 iterrows
+jittered
 judgments
 lengthscale
 logind
 logit
 logits
 matplotlib
+microbenchmark
 miscalibrated
 miscited
 missingness
@@ -158,6 +163,7 @@ nutpie
 orcid
 orthant
 overclaiming
+overfits
 overfitting
 parameterisation
 parameterisations
@@ -200,6 +206,7 @@ swapon
 tanh
 timepoint
 toddlerhood
+trigamma
 unassessable
 unbiasedness
 unbuildable
@@ -209,6 +216,7 @@ unconverged
 underdisperse
 underdispersion
 unidimensionality
+unimodality
 univariates
 unmigrated
 unmodelled

@@ -50,6 +50,7 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     validate_ell_bounds,
@@ -164,7 +165,12 @@ class TrivariateModelConfiguration(BaseModelConfiguration):
 
 @dataclass
 class TrivariateModelSamples:
-    """Posterior and predictive samples from the trivariate model."""
+    """Posterior and predictive samples from the trivariate model.
+
+    Plot- and query-grid quantities only; the observation-level posterior is no
+    longer extracted (nothing read it) or stored by the sampler -- see
+    :class:`vocab_growth.models.common_bivariate.BivariateModelSamples`.
+    """
 
     # Shared age grids
     X_obs: np.ndarray
@@ -174,18 +180,14 @@ class TrivariateModelSamples:
     X_query: np.ndarray
     """Ages in months for the query points, shape (n_query,)."""
 
-    X_obs_z: np.ndarray
-    """Standardized observed ages, shape (n, n_samples)."""
     X_plot_z: np.ndarray
     """Standardized ages for the plot points, shape (n_plot, n_samples)."""
     X_query_z: np.ndarray
     """Standardized ages for the query points, shape (n_query, n_samples)."""
 
     # Understood (U) samples
-    f_u_obs: np.ndarray
     f_u_plot: np.ndarray
     f_u_query: np.ndarray
-    p_u_obs: np.ndarray
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
     y_u_obs: np.ndarray
@@ -195,18 +197,14 @@ class TrivariateModelSamples:
     kappa_u_query: np.ndarray
 
     # Production rate (q) samples
-    h_obs: np.ndarray
     h_plot: np.ndarray
     h_query: np.ndarray
-    q_obs: np.ndarray
     q_plot: np.ndarray
     q_query: np.ndarray
 
     # Spoken (S) samples (derived)
-    f_s_obs: np.ndarray
     f_s_plot: np.ndarray
     f_s_query: np.ndarray
-    p_s_obs: np.ndarray
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
     y_s_obs: np.ndarray
@@ -224,10 +222,8 @@ class TrivariateModelSamples:
     r_query: np.ndarray
 
     # Signed (Sign) samples (derived)
-    f_sign_obs: np.ndarray
     f_sign_plot: np.ndarray
     f_sign_query: np.ndarray
-    p_sign_obs: np.ndarray
     p_sign_plot: np.ndarray
     p_sign_query: np.ndarray
     y_sign_obs: np.ndarray
@@ -487,7 +483,9 @@ def build_model(
     has_sign = analysis_df["signed"].notna().values
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
+    y_u_values = np.asarray(analysis_df.loc[has_u, "understood"], dtype=float)
+    require_integral_counts(y_u_values, "understood")
+    y_u_observed = y_u_values.astype(int)
 
     idx_u = np.where(has_u)[0]
 
@@ -964,11 +962,9 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     """Extract model samples into a structured format for plotting and reporting."""
 
     # Understood
-    f_u_obs = _extract_posterior(trace, "f_u_obs", "obs_id")
     f_u_plot = _extract_posterior(trace, "f_u_plot", "plot_id")
     f_u_query = _extract_posterior(trace, "f_u_query", "query_id")
 
-    p_u_obs = _extract_posterior(trace, "p_u_obs", "obs_id")
     p_u_plot = _extract_posterior(trace, "p_u_plot", "plot_id")
     p_u_query = _extract_posterior(trace, "p_u_query", "query_id")
 
@@ -976,20 +972,16 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     kappa_u_query = _extract_posterior(trace, "kappa_u_query", "query_id")
 
     # Production rate
-    h_obs = _extract_posterior(trace, "h_obs", "obs_id")
     h_plot = _extract_posterior(trace, "h_plot", "plot_id")
     h_query = _extract_posterior(trace, "h_query", "query_id")
 
-    q_obs = _extract_posterior(trace, "q_obs", "obs_id")
     q_plot = _extract_posterior(trace, "q_plot", "plot_id")
     q_query = _extract_posterior(trace, "q_query", "query_id")
 
     # Spoken (derived)
-    f_s_obs = _extract_posterior(trace, "f_s_obs", "obs_id")
     f_s_plot = _extract_posterior(trace, "f_s_plot", "plot_id")
     f_s_query = _extract_posterior(trace, "f_s_query", "query_id")
 
-    p_s_obs = _extract_posterior(trace, "p_s_obs", "obs_id")
     p_s_plot = _extract_posterior(trace, "p_s_plot", "plot_id")
     p_s_query = _extract_posterior(trace, "p_s_query", "query_id")
 
@@ -1006,11 +998,9 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     r_query = _extract_posterior(trace, "r_query", "query_id")
 
     # Signed (derived)
-    f_sign_obs = _extract_posterior(trace, "f_sign_obs", "obs_id")
     f_sign_plot = _extract_posterior(trace, "f_sign_plot", "plot_id")
     f_sign_query = _extract_posterior(trace, "f_sign_query", "query_id")
 
-    p_sign_obs = _extract_posterior(trace, "p_sign_obs", "obs_id")
     p_sign_plot = _extract_posterior(trace, "p_sign_plot", "plot_id")
     p_sign_query = _extract_posterior(trace, "p_sign_query", "query_id")
 
@@ -1071,7 +1061,6 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     X_query = np.array(trace.constant_data["X_query"].values)
 
     # Standardised ages
-    X_obs_z = _extract_posterior(trace, "z_obs", "obs_id")
     X_plot_z = _extract_posterior(trace, "z_plot", "plot_id")
     X_query_z = _extract_posterior(trace, "z_query", "query_id")
 
@@ -1079,13 +1068,10 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         X_obs=X_obs,
         X_plot=X_plot,
         X_query=X_query,
-        X_obs_z=X_obs_z,
         X_plot_z=X_plot_z,
         X_query_z=X_query_z,
-        f_u_obs=f_u_obs,
         f_u_plot=f_u_plot,
         f_u_query=f_u_query,
-        p_u_obs=p_u_obs,
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
         y_u_obs=y_u_obs,
@@ -1093,16 +1079,12 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         y_u_query=y_u_query,
         kappa_u_plot=kappa_u_plot,
         kappa_u_query=kappa_u_query,
-        h_obs=h_obs,
         h_plot=h_plot,
         h_query=h_query,
-        q_obs=q_obs,
         q_plot=q_plot,
         q_query=q_query,
-        f_s_obs=f_s_obs,
         f_s_plot=f_s_plot,
         f_s_query=f_s_query,
-        p_s_obs=p_s_obs,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
         y_s_obs=y_s_obs,
@@ -1116,10 +1098,8 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         r_obs=r_obs,
         r_plot=r_plot,
         r_query=r_query,
-        f_sign_obs=f_sign_obs,
         f_sign_plot=f_sign_plot,
         f_sign_query=f_sign_query,
-        p_sign_obs=p_sign_obs,
         p_sign_plot=p_sign_plot,
         p_sign_query=p_sign_query,
         y_sign_obs=y_sign_obs,
@@ -1248,13 +1228,14 @@ sample = _shared_sample
 def diagnostics(context: TrivariateContext):
     """Run diagnostics on the posterior samples.
 
-    Thin wrapper over the shared engine (common.py): trivariate adds the
-    three per-outcome kappas to the trace plot and reports per-outcome LOO-CV
-    for understood/spoken/signed.
+    Thin wrapper over the shared engine (common.py): trivariate reports
+    per-outcome LOO-CV for understood/spoken/signed. (It used to name the three
+    observation-level kappas for the trace plot as well; an observation-sized
+    variable never fitted under ArviZ's subplot cap, so they never rendered, and
+    since 2026-08-23 the sampler does not store them.)
     """
     _shared_diagnostics(
         context,
-        extra_trace_var_names=("kappa_u_obs", "kappa_s_obs", "kappa_sign_obs"),
         loo_var_names=(
             ("y_u_obs", "words understood"),
             ("y_s_obs", "words spoken"),
@@ -1395,11 +1376,23 @@ def posterior_summary(context: TrivariateContext):
     n_trials = context.model_data.n_trials
     ci_prob = context.reporting.ci_prob
     ci_kind = context.reporting.interval_kind
-    # Comprehension, production and signing are not observed over the same age
-    # range, so understood/q and signed each report their own grid; spoken keeps
-    # the full one.
-    report_max_u = context.model_config.report_max_age_understood
-    report_max_sign = context.model_config.report_max_age_signed
+    # Per-quantity reporting caps, named by quantity rather than read off a cap
+    # attribute (see vocab_growth.reporting_ages). r and p_any are ratios of
+    # understood built from the signed ratio, so they take the tighter of the
+    # comprehension and signing caps; until #238 they were trimmed with the
+    # signing cap alone, which stopped being the tighter one when the
+    # comprehension cap moved to 72 on 2026-08-22.
+    config = context.model_config
+    understood_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.UNDERSTOOD
+    )
+    signed_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.SIGNED
+    )
+    ratio_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD
+    )
+    sign_ratio_cap = reporting_ages.max_age_for_sign_ratio(config)
 
     # Understood summary
     summary_u = posterior_analysis.posterior_summary_table(
@@ -1410,7 +1403,7 @@ def posterior_summary(context: TrivariateContext):
         ci_prob=ci_prob,
         interval_kind=ci_kind,
     )
-    summary_u = posterior_analysis.trim_reported_ages(summary_u, report_max_u)
+    summary_u = posterior_analysis.trim_reported_ages(summary_u, understood_cap)
     dataframe_table(
         summary_u, title="Posterior summary — words understood", show_index=False
     )
@@ -1447,8 +1440,8 @@ def posterior_summary(context: TrivariateContext):
         ci_prob=ci_prob,
         interval_kind=ci_kind,
     )
-    # Signed reporting stops where signing evidence stops, like the r(a) table.
-    summary_sign = posterior_analysis.trim_reported_ages(summary_sign, report_max_sign)
+    # Signed COUNTS stop where signing evidence stops (their own cap).
+    summary_sign = posterior_analysis.trim_reported_ages(summary_sign, signed_cap)
     dataframe_table(
         summary_sign, title="Posterior summary — words signed", show_index=False
     )
@@ -1469,7 +1462,7 @@ def posterior_summary(context: TrivariateContext):
             "ci_hi": "q_ci_hi",
         }
     )
-    summary_q = posterior_analysis.trim_reported_ages(summary_q, report_max_u)
+    summary_q = posterior_analysis.trim_reported_ages(summary_q, ratio_cap)
     dataframe_table(
         summary_q, title="Posterior summary — production rate q(a)", show_index=False
     )
@@ -1490,7 +1483,8 @@ def posterior_summary(context: TrivariateContext):
             "ci_hi": "r_ci_hi",
         }
     )
-    summary_r = posterior_analysis.trim_reported_ages(summary_r, report_max_sign)
+    # r is a ratio of understood built from signing: tighter of the two caps.
+    summary_r = posterior_analysis.trim_reported_ages(summary_r, sign_ratio_cap)
     dataframe_table(
         summary_r, title="Posterior summary — signed rate r(a)", show_index=False
     )
@@ -1523,9 +1517,10 @@ def posterior_summary(context: TrivariateContext):
             "Ey_any_ci_hi": Ey_any_out[:, 1],
         }
     )
-    # p_any is p_U * (1 - (1 - r)(1 - q)) -- conditioned on understood, so it
-    # inherits the narrower signed/comprehension cap rather than spoken's.
-    summary_p_any = posterior_analysis.trim_reported_ages(summary_p_any, report_max_sign)
+    # p_any is p_U * (1 - (1 - r)(1 - q)) -- conditioned on understood and a
+    # function of the signed ratio, so the tighter of those two caps binds
+    # (see reporting_ages.max_age_for_sign_ratio).
+    summary_p_any = posterior_analysis.trim_reported_ages(summary_p_any, sign_ratio_cap)
     dataframe_table(
         summary_p_any,
         title="Posterior summary — total expressive vocabulary p_any(a)",
@@ -1833,6 +1828,7 @@ def plot_modality_trajectories(
     max_age_months_understood: float | None = None,
     max_age_months_spoken: float | None = None,
     max_age_months_signed: float | None = None,
+    max_age_months_any: float | None = None,
 ):
     """Plot expected p_U, p_S, p_Sign and p_any trajectories (in word counts).
 
@@ -1843,10 +1839,12 @@ def plot_modality_trajectories(
     to 84. The policy test could not see it: ``modality_trajectories`` has no
     outcome suffix, so it matched no entry in the test's stem map.
 
-    ``p_any`` is a union over speaking and signing, so it takes the tighter of
-    those two caps: past the signing cap one of its two components is no longer
-    reported, and a union of a reported and an unreported quantity is not a
-    quantity this project publishes.
+    ``p_any`` takes its own explicit cap, computed at the call site by
+    :func:`vocab_growth.reporting_ages.max_age_for_sign_ratio`: it is a ratio of
+    understood built from the signed ratio, so the tighter of the comprehension
+    and signing caps binds. This function used to derive the cap itself as
+    ``min(spoken, signed)`` -- the components rule alone -- which stopped being
+    the tighter rule when the comprehension cap moved to 72 on 2026-08-22 (#238).
     """
     X_plot = samples.X_plot
 
@@ -1873,10 +1871,7 @@ def plot_modality_trajectories(
             return values
         return np.where(X_plot <= cap, values, np.nan)
 
-    any_cap = None
-    caps = [c for c in (max_age_months_spoken, max_age_months_signed) if c is not None]
-    if caps:
-        any_cap = min(caps)
+    any_cap = max_age_months_any
 
     E_u_full = np.median(samples.p_u_plot, axis=1) * n_trials
     E_s_full = np.median(samples.p_s_plot, axis=1) * n_trials
@@ -1979,8 +1974,7 @@ def _run_trivariate_outcome_plots(
 
     plotting.plot_posterior_predictive_pmf(
         samples.X_query,
-        samples.X_plot,
-        y_plot,
+        y_query,
         n_trials,
         output_dir=output_dir,
         filename=f"posterior_predictive_pmf_{suffix}",
@@ -1990,8 +1984,7 @@ def _run_trivariate_outcome_plots(
 
     plotting.plot_posterior_predictive_cdf(
         samples.X_query,
-        samples.X_plot,
-        y_plot,
+        y_query,
         n_trials,
         output_dir=output_dir,
         filename=f"posterior_predictive_cdf_{suffix}",
@@ -2073,12 +2066,24 @@ def plot_p_any_validation(
     """Validate the independence-based p_any against uk_02's observed union.
 
     p_any assumes sign and speech are conditionally independent given age. uk_02
-    is the only source with the four-cell breakdown (sign-only / sign+speech /
+    was the first source with the four-cell breakdown (sign-only / sign+speech /
     speech-only / understood-only), so we can compute the *observed* fraction of
     understood words produced in any modality and compare it with the model's
     union p_any / p_U over the overlap window. The model union systematically
     exceeds the observed union: the sign-speech association is positive, so
-    independence over-states the total. VG15 (uk_02 multinomial) identifies it.
+    independence over-states the total.
+
+    This is a **uk_02-specific check, not a general validation** of conditional
+    independence: uk_07, es_01 and nz_01 also carry cross-tabulations, with
+    materially different descriptive associations by source (#238). VG15
+    identifies the association from all four and is the model of record for it.
+
+    The model side of ``model_gap_pp`` is evaluated per posterior draw **at
+    uk_02's observed ages** and averaged over those same rows, so observed and
+    modelled unions share one empirical age distribution and the gap carries a
+    posterior interval. It previously averaged the pointwise median over an
+    equally spaced grid, so part of any reported gap was age weighting rather
+    than model behaviour, and no interval was supplied (#238).
     """
     csv_path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_02.csv")
     if not os.path.exists(csv_path):
@@ -2145,13 +2150,22 @@ def plot_p_any_validation(
 
     obs_mean = float(raw["union_obs"].mean())
     indep_mean = float(raw["indep_union"].mean())
-    mod_mean = float(np.mean(union_med))
     # Pure independence bias, computed within uk_02 (its own r,q): isolates the
     # positive sign-speech association from model fit.
     indep_bias_pp = 100.0 * (indep_mean - obs_mean)
     # Model check: VG14's independence union vs the observed union (conflates the
     # association with the model's r,q differing from uk_02's in-sample r,q).
-    model_gap_pp = 100.0 * (mod_mean - obs_mean)
+    # Per draw, at the observed ages, so the two sides share one age
+    # distribution and the gap has an interval -- see the docstring.
+    obs_ages = raw["age"].to_numpy(dtype=float)
+    union_at_obs = np.empty((len(obs_ages), union_draws.shape[1]))
+    for d in range(union_draws.shape[1]):
+        union_at_obs[:, d] = np.interp(obs_ages, Xw, union_draws[:, d])
+    model_mean_draws = union_at_obs.mean(axis=0)
+    gap_draws = 100.0 * (model_mean_draws - obs_mean)
+    gap_lo, gap_hi = intervals.interval_1d(gap_draws, intervals.DEFAULT_CI_PROB, "eti")
+    mod_mean = float(np.median(model_mean_draws))
+    model_gap_pp = float(np.median(gap_draws))
 
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
@@ -2178,6 +2192,8 @@ def plot_p_any_validation(
                     "independence_bias_pp": [indep_bias_pp],
                     "model_union_mean": [mod_mean],
                     "model_gap_pp": [model_gap_pp],
+                    "model_gap_pp_ci_lo": [gap_lo],
+                    "model_gap_pp_ci_hi": [gap_hi],
                 }
             ),
             output_dir,
@@ -2191,8 +2207,11 @@ def plot_p_any_validation(
             ("uk_02 observed union (mean)", round(obs_mean, 3)),
             ("uk_02 independence union (mean)", round(indep_mean, 3)),
             ("Independence bias within uk_02 (pp)", round(indep_bias_pp, 1)),
-            ("VG14 p_any / p_U (mean)", round(mod_mean, 3)),
-            ("VG14 vs observed union (pp)", round(model_gap_pp, 1)),
+            ("VG14 p_any / p_U at observed ages (median)", round(mod_mean, 3)),
+            (
+                "VG14 vs observed union (pp, median [89% ETI])",
+                f"{model_gap_pp:.1f} [{gap_lo:.1f}, {gap_hi:.1f}]",
+            ),
         ],
     )
 
@@ -2216,21 +2235,36 @@ def _run_trivariate_plots(context: TrivariateContext):
     ci_prob = context.reporting.ci_prob
     output_dir = context.reporting.output_dir
 
+    # Per-quantity reporting caps (vocab_growth.reporting_ages). Named locals,
+    # one per quantity, so each call below visibly carries the cap for the
+    # quantity it draws -- tests/test_reporting_age_caps.py asserts exactly this
+    # by AST. r(a), the crossover and p_any are ratios of understood built from
+    # the signed ratio, so they take the tighter of the comprehension and
+    # signing caps; until #238 they carried the signing cap alone.
+    config = context.model_config
+    understood_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.UNDERSTOOD
+    )
+    spoken_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.SPOKEN
+    )
+    signed_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.SIGNED
+    )
+    ratio_cap = reporting_ages.max_age_for(
+        config, reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD
+    )
+    sign_ratio_cap = reporting_ages.max_age_for_sign_ratio(config)
+
     # ---- Joint trajectory (understood, spoken, signed) ----
     fig = plot_understood_spoken_signed_trajectory(
         samples,
         n_trials=n_trials,
         output_dir=output_dir,
         filename="joint_trajectory",
-        max_age_months_understood=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
-        ),
-        max_age_months_spoken=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
-        ),
-        max_age_months_signed=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.SIGNED
-        ),
+        max_age_months_understood=understood_cap,
+        max_age_months_spoken=spoken_cap,
+        max_age_months_signed=signed_cap,
     )
     context.plots["joint_trajectory"] = fig
     plt.close(fig)
@@ -2242,15 +2276,10 @@ def _run_trivariate_plots(context: TrivariateContext):
         ci_prob=ci_prob,
         output_dir=output_dir,
         filename="modality_trajectories",
-        max_age_months_understood=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
-        ),
-        max_age_months_spoken=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
-        ),
-        max_age_months_signed=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.SIGNED
-        ),
+        max_age_months_understood=understood_cap,
+        max_age_months_spoken=spoken_cap,
+        max_age_months_signed=signed_cap,
+        max_age_months_any=sign_ratio_cap,
     )
     context.plots["modality_trajectories"] = fig
     plt.close(fig)
@@ -2261,7 +2290,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         ci_prob=ci_prob,
         output_dir=output_dir,
         filename="production_rate",
-        max_age_months=context.model_config.report_max_age_understood,
+        max_age_months=ratio_cap,
     )
     context.plots["production_rate"] = fig
     plt.close(fig)
@@ -2273,7 +2302,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         output_dir=output_dir,
         filename="signed_rate",
         support_range=signing_support_range,
-        max_age_months=context.model_config.report_max_age_signed,
+        max_age_months=sign_ratio_cap,
     )
     context.plots["signed_rate"] = fig
     plt.close(fig)
@@ -2285,7 +2314,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         output_dir=output_dir,
         filename="sign_speech_crossover",
         support_range=signing_support_range,
-        max_age_months=context.model_config.report_max_age_signed,
+        max_age_months=sign_ratio_cap,
     )
     context.plots["sign_speech_crossover"] = fig
     plt.close(fig)
@@ -2305,7 +2334,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         ci_prob=ci_prob,
         output_dir=output_dir,
         filename="comprehension_production_gap",
-        max_age_months=context.model_config.report_max_age_understood,
+        max_age_months=ratio_cap,
     )
     context.plots["comprehension_production_gap"] = fig
     plt.close(fig)
@@ -2327,9 +2356,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         suffix="u",
         outcome_label="Words understood",
         y_label="Predicted words understood",
-        max_age_months=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
-        ),
+        max_age_months=understood_cap,
     )
 
     # ---- Per-outcome plots: spoken ----
@@ -2349,9 +2376,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         suffix="s",
         outcome_label="Words spoken",
         y_label="Predicted words spoken",
-        max_age_months=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
-        ),
+        max_age_months=spoken_cap,
     )
 
     # ---- Per-outcome plots: signed ----
@@ -2371,9 +2396,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         suffix="sign",
         outcome_label="Words signed",
         y_label="Predicted words signed",
-        max_age_months=reporting_ages.max_age_for(
-            context.model_config, reporting_ages.ReportedQuantity.SIGNED
-        ),
+        max_age_months=signed_cap,
     )
 
 

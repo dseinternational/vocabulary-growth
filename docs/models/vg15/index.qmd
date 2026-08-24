@@ -134,9 +134,9 @@ $$
 
 which sits _below_ VG14's independence upper bound $p_U\bigl(1-(1-r)(1-q)\bigr)$ whenever $\psi>1$, because more overlap means fewer distinct words.
 
-**Study random intercepts** sit on all three trajectories at the observation level, so the reported age curves are separated from study composition — which is what made VG14's signed peak uninterpretable. **Subject random intercepts** are added on all three as well, non-centred, so repeated measurements of the same child are not treated as independent observations. With a third level term on each predictor, each Gaussian process is additionally **anchored to pass through zero at the reference age for every draw** (the age is in the model-at-a-glance box), which removes the redundancy that otherwise lets the linear term, the Gaussian process and the random effects all encode the same overall level. The reported population-level curves set every random effect to zero.
+**Study random intercepts** sit on all three trajectories at the observation level, so the reported age curves are separated from study composition — which is what made VG14's signed peak uninterpretable. **Subject random intercepts** are added on all three as well, non-centred, so repeated measurements of the same child are not treated as independent observations **in the three marginal likelihoods**. The composition likelihood is the deliberate exception, described two paragraphs below: repeated cross-tabulation visits by the same child enter it as conditionally independent rows. With a third level term on each predictor, each Gaussian process is additionally **anchored to pass through zero at the reference age for every draw** (the age is in the model-at-a-glance box), which removes the redundancy that otherwise lets the linear term, the Gaussian process and the random effects all encode the same overall level. The reported population-level curves set every random effect to zero.
 
-The association $\psi$ is deliberately **decoupled** from the subject random effects: the four-cell likelihood is fed the population-plus-study marginals only. $\psi$ is identified from the cross-tabulation rows, and the per-child sign offset is co-identified with $\psi$ from those same rows; letting it into the four-cell composition would make the headline association pivot on a thinly identified random effect. $\psi$ is therefore a **population-conditioned** within-understood odds ratio — the association for the average child in a given study, not an average of within-child associations.
+The association $\psi$ is deliberately **decoupled** from the subject random effects: the four-cell likelihood is fed the population-plus-study marginals only. $\psi$ is identified from the cross-tabulation rows, and the per-child sign offset is co-identified with $\psi$ from those same rows; letting it into the four-cell composition would make the headline association pivot on a thinly identified random effect. $\psi$ is therefore a **population-plus-study composition association** — the within-understood odds ratio for a reference child of a given study (random effects at zero), not an average of within-child associations, and not an association adjusted for child modality propensities. Two consequences follow and are stated rather than implied. Repeated cross-tabulation visits by the same child are conditionally independent in this likelihood — 249 of the 434 cross-tab administrations come from 91 longitudinal children — so children with more visits carry more weight and the uncertainty on $\psi$ may be understated; the Dirichlet-Multinomial concentration absorbs extra variation *within* an administration, not serial correlation *between* a child's visits. And because odds ratios are non-collapsible, a population-level odds ratio can differ from a child-conditioned one even without confounding. A child-shifted composition sensitivity is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 
 ### Likelihoods
 
@@ -145,7 +145,7 @@ The association $\psi$ is deliberately **decoupled** from the subject random eff
 - **Four-cell cross-tabulation rows** (`uk_02`, `uk_07`, `es_01`): a Dirichlet-Multinomial over the four states above — a multinomial that permits extra variation. Rows with complete four-cell data use this composition term _instead of_ separate spoken and signed contributions, so nothing is counted twice, and the four-cell sum is treated as the authoritative understood total for that occasion. **This is what identifies $\psi$.**
 - **Three-cell produced rows** (`nz_01`): this source records no comprehension total at all, so the unobservable "neither" cell is dropped and the composition is renormalised over the remaining three. It identifies $\psi$ through the sign/speak overlap alone, with no comprehension denominator involved.
 
-The Dirichlet-Multinomial terms are excluded from LOO-CV by design: they are not per-observation Beta-Binomials like the three word-count components, so LOO-CV is reported for words understood, spoken and signed only, matching every other model's scope, and the spoken and signed LOO components exclude rows already represented by a composition term. LOO-CV is printed to the fit log rather than persisted as an artefact, so it does not appear on this page.
+The Dirichlet-Multinomial terms are excluded from LOO-CV by design: they are not per-observation Beta-Binomials like the three word-count components, so LOO-CV is reported for words understood, spoken and signed only, matching every other model's scope, and the spoken and signed LOO components exclude rows already represented by a composition term. The consequence should be stated rather than left to be inferred: **the quantitative out-of-sample and calibration machinery on this page covers the marginal count likelihoods only, and therefore does not validate $\psi$, the cell composition, or new-child association performance.** The observations that identify the association enter no LOO, no PIT calibration and no held-out check here; the composition is checked only by the posterior predictive panels below. Pointwise cell-likelihood calibration, per-source age-banded checks and child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 
 ::: {.callout-important title="psi is heterogeneous across studies — descriptive / exploratory"}
 
@@ -377,9 +377,9 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the sampled and derived parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
-::: {.callout-note title="The question the sparse four-cell data raise, and its answer"}
+::: {.callout-note title="The question the sparse four-cell data raise, and how this model handles it"}
 
-With only four sources informing the association, the worry is that association strength could be traded against child-level signing heterogeneity: a model can explain the same cross-tabulation either by saying signing and speaking co-occur or by saying children differ a lot in how much they sign. **They separate here.** The child-level signing scale is sharply identified — compare its posterior standard deviation in the diagnostics table above with its half-normal prior in the priors table, which is wider by most of an order of magnitude. The reader does not need to check this; it has been checked, and the answer is that the child-level scale is a data-driven estimate rather than a restatement of its prior.
+With only four sources informing the association, the worry is that association strength could be traded against child-level signing heterogeneity: a model can explain the same cross-tabulation either by saying signing and speaking co-occur or by saying children differ a lot in how much they sign. **This model prevents the two from competing rather than separating them empirically**: the cell likelihood is deliberately fed the population-plus-study marginals with no child term (see the decoupling note under [Statistical model](#statistical-model)), so the composition rows cannot pull $\psi$ against the child effects at all. The child-level signing scale is sharply identified — its posterior is far narrower than its half-normal prior — but that identification comes from the *marginal* signed counts, not from the cells, so it is not evidence that the cross-tabulations themselves distinguish association from child heterogeneity. A model that let child modality propensities into the composition could report a different association; that sensitivity is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 
 The parameters still worth watching are the association and the concentration together (a ridge between them in the pair plot would mean the four-cell counts constrain only their combination), and the signed Gaussian-process hyperparameters, which are the flexible part of the sparsest trajectory.
 
@@ -409,32 +409,60 @@ Two things in that table matter more than anything else on this page. **Children
 
 ### Where the signed ratio peaks
 
+Two related but distinct ages live here, and only one of them is "the age at which the signed ratio peaks". The **fitted-curve peak** is the per-draw maximum of the complete $r(a)$ — tent plus Gaussian-process departure — over the reported ages. The **tent-knot age** is a *parameter*: the sampled position of the tent's middle anchor. The three anchor heights are sampled independently and the Gaussian process then adds departures, so nothing forces the fitted curve's maximum to sit at the knot; quoting the knot as the peak reports a parameter as if it were the estimand (#238).
+
 ```{python}
 #| label: signed-peak
 #| echo: false
 #| output: asis
-# The estimated peak age of the signed-ratio tent, mapped from the sampled unit
-# position onto months using this fit's own signed anchor ages. Standardising age
-# is affine, so a unit position between the outer anchors is the same fraction of
-# the months between them.
 import json
+import os
 
 try:
-    _definition = json.loads(open("fit_manifest.json", encoding="utf-8").read())["model"]["definition"]
-    _lo, _, _hi = _definition["sign_anchor_ages"]
-    _peak = pd.read_csv("diagnostics.csv", index_col=0).loc["peak_unit_sign"]
-    print("| Quantity | Posterior mean | 89% interval |")
-    print("| --- | --- | --- |")
-    print(
-        f"| Age at which the signed ratio peaks | {_lo + _peak['mean'] * (_hi - _lo):.1f} months | "
-        f"{_lo + _peak['eti89_lb'] * (_hi - _lo):.1f} – {_lo + _peak['eti89_ub'] * (_hi - _lo):.1f} |"
-    )
-    print()
-    print(
-        ": Computed at render time from the sampled peak position in `diagnostics.csv` "
-        f"and this fit's outer signed anchors ({_lo:g} and {_hi:g} months). "
-        "In VG14 this age is fixed by construction; here it is estimated."
-    )
+    if os.path.isfile("signed_ratio_peak.csv"):
+        _peak = pd.read_csv("signed_ratio_peak.csv").iloc[0]
+        print("| Quantity | Posterior median | 89% HDI |")
+        print("| --- | --- | --- |")
+        print(
+            f"| Age at which the fitted signed ratio peaks | {_peak['peak_age_median_months']:.1f} months | "
+            f"{_peak['peak_age_ci_lo_months']:.1f} – {_peak['peak_age_ci_hi_months']:.1f} |"
+        )
+        print()
+        _notes = [
+            f"Per-draw maximum of the complete fitted $r(a)$ over "
+            f"{_peak['support_lo_months']:.0f}–{_peak['support_hi_months']:.0f} months."
+        ]
+        if _peak["boundary_draw_share"] >= 0.005:
+            _notes.append(
+                f"{_peak['boundary_draw_share']:.1%} of draws peak on a grid edge and are "
+                "censored rather than located; the summary covers the interior draws."
+            )
+        if _peak["multi_peak_draw_share"] >= 0.05:
+            _notes.append(
+                f"{_peak['multi_peak_draw_share']:.0%} of draws carry more than one local "
+                "maximum, so read the interval as locating the largest of several bumps."
+            )
+        print(": " + " ".join(_notes))
+    else:
+        # A fit predating signed_ratio_peak.csv: only the knot position exists on
+        # disk. Report it as what it is — the tent's movable knot, not the
+        # maximum of the full fitted curve.
+        _definition = json.loads(open("fit_manifest.json", encoding="utf-8").read())["model"]["definition"]
+        _lo, _, _hi = _definition["sign_anchor_ages"]
+        _knot = pd.read_csv("diagnostics.csv", index_col=0).loc["peak_unit_sign"]
+        print("| Quantity | Posterior mean | 89% interval |")
+        print("| --- | --- | --- |")
+        print(
+            f"| Age of the signed tent's peak anchor (knot) | {_lo + _knot['mean'] * (_hi - _lo):.1f} months | "
+            f"{_lo + _knot['eti89_lb'] * (_hi - _lo):.1f} – {_lo + _knot['eti89_ub'] * (_hi - _lo):.1f} |"
+        )
+        print()
+        print(
+            ": The sampled knot position mapped onto months between this fit's outer signed "
+            f"anchors ({_lo:g} and {_hi:g}). This is a parameter of the tent mean, **not** the "
+            "maximum of the full fitted curve, which adds a Gaussian-process departure — "
+            "refit for the per-draw curve peak (`signed_ratio_peak.csv`)."
+        )
 except Exception as _exc:  # pragma: no cover - report robustness, not model logic
     print(f"_The signed peak age could not be read here (`{type(_exc).__name__}`)._")
 ```
@@ -443,7 +471,7 @@ The remaining findings are stated where the quantity they belong to is reported:
 
 ## Posterior vocabulary summaries
 
-These tables report **population-level** query-age summaries, with study and child random effects set to zero: the average child in the average study. They are not the predictive distribution for a new child, which — given the child-level scales in the variation table above — is much wider. Intervals are 89% outer and 50% inner equal-tailed intervals.
+These tables report **population-level** query-age summaries, with study and child random effects set to zero. Because those effects are symmetric around zero on the logit scale, that is the *typical* (median) child in the typical study — **not** the arithmetic average of children's counts, which the nonlinear link shifts away from the median wherever children differ. They are also not the predictive distribution for a new child, which — given the child-level scales in the variation table above — is much wider. Intervals are 89% outer and 50% inner equal-tailed intervals.
 
 ### Words understood
 
@@ -572,12 +600,22 @@ sp = pd.read_csv("signing_profile.csv")
 
 
 def _at(df, age, prefix, dec=1):
-    r = df.iloc[(df["age_months"] - age).abs().argmin()]
+    # Exact-age lookup, not nearest-row: a nearest match would silently print
+    # the last reported row under a label past the reporting cap (#238) — an
+    # age missing from the file must fail loudly at render time instead.
+    match = df.index[(df["age_months"] - age).abs() <= 0.5]
+    if len(match) == 0:
+        raise KeyError(f"age {age} is not in signing_profile.csv")
+    r = df.loc[match[0]]
     if f"{prefix}_ci_lo" in df.columns:
         return f"{r[f'{prefix}_median']:.{dec}f} [{r[f'{prefix}_ci_lo']:.{dec}f}, {r[f'{prefix}_ci_hi']:.{dec}f}]"
     return f"{r[f'{prefix}_median']:.{dec}f}"
 
 
+# Only ages the file reports: the profile stops at the sign-ratio reporting cap
+# (the tighter of the comprehension and signing caps), so the age list is
+# filtered against it rather than fixed.
+_ages = [a for a in [18, 24, 30, 36, 48, 60, 72, 84] if a <= sp["age_months"].max() + 0.5]
 pd.DataFrame([
     {
         "Age (mo)": a,
@@ -587,7 +625,7 @@ pd.DataFrame([
         "Sign-only words": _at(sp, a, "sign_only", 0),
         "Share of expressive that is sign-only": _at(sp, a, "sign_only_share", 2),
     }
-    for a in [18, 24, 30, 36, 48, 60, 72, 84]
+    for a in _ages
 ]).set_index("Age (mo)")
 ```
 
@@ -609,17 +647,24 @@ labels = {
     "sign_only_share_below_half_age": "Sign-only falls below half of expressive vocabulary (mo)",
     "speech_only_overtakes_sign_only_age": "Speech-only overtakes sign-only (mo)",
 }
-pd.DataFrame([
-    {
+_rows = []
+for k, lab in labels.items():
+    row = {
         "Milestone": lab,
         "Estimate": f"{ms.loc[k, 'median']:.1f} [{ms.loc[k, 'ci_lo']:.1f}, {ms.loc[k, 'ci_hi']:.1f}]",
         "Draws reaching it": f"{ms.loc[k, 'draws_reaching']:.0%}",
     }
-    for k, lab in labels.items()
-]).set_index("Milestone")
+    # Fits made before the transition-and-censoring correction (#238) carry no
+    # draws_censored column; show the column only when the fit wrote it.
+    if "draws_censored" in ms.columns:
+        row["Draws censored"] = f"{ms.loc[k, 'draws_censored']:.0%}"
+    _rows.append(row)
+pd.DataFrame(_rows).set_index("Milestone")
 ```
 
-Each milestone is found **in every posterior draw and then summarised**, not read off the median curve — the median of crossings is not the crossing of the median, and for a peak the difference is not subtle, since averaging curves whose peaks sit at different ages flattens the peak and drags it toward the middle of the grid. The `Draws reaching it` column is the identification warning: a milestone reached in only part of the posterior is a bound, not an estimate. A milestone is also only read once a draw's child has at least one expressive word, which matters at the youngest ages.
+Each milestone is found **in every posterior draw and then summarised**, not read off the median curve — the median of crossings is not the crossing of the median, and for a peak the difference is not subtle, since averaging curves whose peaks sit at different ages flattens the peak and drags it toward the middle of the grid. Intervals on milestone ages are highest-density intervals, the same policy the association uses.
+
+Two disclosure columns qualify every row. A crossing is only counted when it is a genuine **transition** — the state flips from false to true inside the grid; a draw in which the state already holds at the youngest established age (for instance, speech-only ahead of sign-only from the start) is **censored**, not an early crossing, and a peak whose maximum falls on a grid edge is likewise censored rather than located. `Draws reaching it` is the fraction with a genuine transition or interior peak; `Draws censored` is the fraction where the milestone's state is censored; the remainder never satisfy the condition at all. A milestone reached in only part of the posterior is a bound, not an estimate. A milestone is also only read once a draw's child has at least one expressive word, which matters at the youngest ages.
 
 **The spacing between these ages is the substantive result.** Sign-only vocabulary stops _growing_ well before it stops being the majority of everything the child can express, and it stays larger than speech-only for a further stretch beyond that. Across that whole span sign-only declines only gently while speech-only grows quickly — the two curves in the composition figure above show it directly. **Signing is overtaken because speech grows, not because signing stops**, which is a different picture from children dropping signs as they learn to talk.
 
@@ -657,9 +702,9 @@ The two curves cross once: early on a child can sign a larger fraction of what t
 
 Do the observed cross-tabulation counts look like counts the fitted model would produce? These are the checks on the composition that identifies $\psi$.
 
-![Observed against predicted totals for the four within-understood cells, with predictive intervals.](uk02_cell_ppc.png){#fig-ppc .lightbox fig-align="left"}
+![Observed against predicted totals for the four within-understood cells, one panel per source, with predictive intervals.](four_cell_ppc_by_source.png){#fig-ppc .lightbox fig-align="left"}
 
-The figure's own title names `uk_02`, which is now inaccurate and is being corrected upstream: the bars aggregate **every** within-understood four-cell row in the fit, from all three of those sources, not `uk_02` alone. Read it as a check on the _shape_ of the composition, which it passes — the four cells come out in the right order and the right rough proportions. It is a demanding check in one respect: because the bars total hundreds of administrations, the predictive intervals are narrow in proportional terms, so a few per cent of misfit in one cell puts an observed bar outside its interval, as happens here for two of the three expressive cells. That is a statement about how precisely the composition is reproduced, not about whether the association exists.
+Each within-understood source gets its own panel. An earlier version of this figure aggregated all three sources under a `uk_02` label, and with per-study associations that differ severalfold an aggregate can hide offsetting source-specific errors — a source over-predicting the `both` cell can cancel another under-predicting it and read as fit (#238). Read each panel as a check on the _shape_ of that source's composition: the four cells should come out in the right order and the right rough proportions. It is a demanding check in one respect: where a panel's bars total many administrations, the predictive intervals are narrow in proportional terms, so a few per cent of misfit in one cell puts an observed bar outside its interval. That is a statement about how precisely the composition is reproduced, not about whether the association exists. These panels compare totals; per-source **age-banded** checks, which would catch a misfit that averages out over age, are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 
 ![Observed against predicted totals for `nz_01`'s three within-produced cells, with predictive intervals.](nz01_produced_cell_ppc.png){#fig-ppc-nz01 .lightbox fig-align="left"}
 
@@ -708,7 +753,9 @@ render_loo_section()
 - **The association is heterogeneous, and everything downstream uses its pooled value.** The per-study table is the primary read; the composition, the total, the uplift and the milestones are all computed at the shrunk centre.
 - **Four sources identify the association, and they differ in construct.** One measures spontaneous gesture rather than taught signing, which is a plausible explanation for the disagreement and is not tested here.
 - **The association is assumed constant with age.** That was tested against a study-level explanation and survives, but it is an assumption, not a measurement at every age.
-- **Population-level, not subject-marginal.** The reported curves set every random effect to zero. Given the child-level scales in the variation table, the range a single child might fall in is much wider than any interval on this page.
+- **Repeated children are not clustered in the composition likelihood.** The cell rows deliberately carry no child term (that is what keeps $\psi$ decoupled from the thinly identified child sign effect), so a child's repeated cross-tabulation visits enter as independent rows: 249 of the 434 cross-tab administrations come from 91 longitudinal children. $\psi$'s intervals may therefore be too narrow, and frequently measured children weigh more. The child-shifted sensitivity that would size this is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
+- **The quantitative validation does not cover the association.** LOO, PIT calibration and the parameter-recovery harness's convergence gates run on the marginal count likelihoods; the composition rows that identify $\psi$ are checked only by the posterior predictive panels. Cell-likelihood calibration, per-source age-banded checks and honest child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
+- **Population-level, not subject-marginal.** The reported curves set every random effect to zero — the typical (median) child in the typical study, which the nonlinear link separates from the arithmetic average of children's counts. Given the child-level scales in the variation table, the range a single child might fall in is much wider than any interval on this page.
 - **Signing is nearly a study-level property in these data.** Nothing here supports a causal reading of signing on later speech.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat.

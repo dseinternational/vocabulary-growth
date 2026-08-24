@@ -13,7 +13,16 @@ import dataclasses
 
 import pytest
 
-from vocab_growth.models.definitions import VG10, VG11, VG12, VG13, VG15, VG19, VG20
+from vocab_growth.models.definitions import (
+    VG10,
+    VG11,
+    VG12,
+    VG13,
+    VG15,
+    VG19,
+    VG20,
+    VG22,
+)
 from vocab_growth.sensitivity.overrides import make_variant, replace_kappa
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
@@ -177,7 +186,20 @@ def test_registry_counts_and_models():
     # data at 84 months and changes nothing else, so any movement in `tau1` is
     # attributable to the discarded high-age rows rather than to a re-placed
     # mean function. See notes/202608141900 SS G5b.
-    assert len(VARIANTS) == 58
+    #
+    # +2 on 2026-08-23: VG22's rank family, `rank-1` / `rank-2` since the
+    # default moved to rank 3 on 2026-08-24. Every variant above
+    # varies a prior, a window or a data rule; these vary the **dimension** of
+    # the child covariance, which is a structural choice the data cannot make on
+    # its own. Gate 1 puts rank 2 within 2.60 on 2 df of rank 3 and rank 3 within
+    # 0.0000 of the free 4x4, so registering the family is how `k` gets settled
+    # rather than assumed -- and it is cheap, the three differing by one column
+    # of L. Rank 1 is not filler: it is the rank-one case Proposal A1 assumes,
+    # which Gate 1 rejects decisively on residuals (221 on 3 df), so fitting it
+    # tests that rejection under the real likelihood. See
+    # notes/202608221000-four-by-four-gate1.md SS5.
+    assert len(VARIANTS) == 60
+    assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
     assert len(variants_for("vg10")) == 14
     assert len(variants_for("vg11")) == 5
@@ -308,6 +330,7 @@ def test_variants_are_single_factor_or_documented_pairs():
             "vg15": VG15,
             "vg19": VG19,
             "vg20": VG20,
+            "vg22": VG22,
         }[model_key]
         assert v.model_type == base.model_type
         assert dataclasses.asdict(v) != dataclasses.asdict(base)

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from scipy.signal import savgol_filter
 
 import vocab_growth.intervals as intervals
@@ -37,6 +38,154 @@ def _save_png_svg(
     fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=dpi)
     if svg:
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+
+
+#: A child needs at least this many administrations before their observations are
+#: joined into a trajectory. Two points are a segment, not a trajectory: they say
+#: nothing about shape, and drawing them costs the ink that makes the children who
+#: do have a shape readable.
+MIN_ADMINISTRATIONS_FOR_TRAJECTORY = 3
+
+#: An observation at or above this share of its **own** form's item count is
+#: marked. Its value is compressed by the instrument rather than by the child, and
+#: it is the usual explanation for an apparent plateau or reversal.
+NEAR_CEILING_SHARE = 0.90
+
+#: Neutral grey for the observed trajectories. They are data, not another modelled
+#: series, and must not read as a category beside the predictive bands.
+_TRAJECTORY_COLOUR = "0.30"
+
+#: How many unseen-child trajectories to draw. Enough to read the spread, few
+#: enough to see through to the bands and the observed lines underneath.
+DEFAULT_PREDICTIVE_TRAJECTORIES = 60
+
+#: The predictive trajectories take the median's own colour, thin and
+#: translucent, because that is what they are: draws of the quantity the median
+#: line summarises, not a separate series.
+_PREDICTIVE_TRAJECTORY_COLOUR = plot_styles.COLOUR_DARK_BLUE
+
+
+def _draw_subject_trajectories(
+    x_obs,
+    y_obs,
+    subject_ids,
+    form_max=None,
+    min_administrations: int = MIN_ADMINISTRATIONS_FOR_TRAJECTORY,
+) -> dict[str, int]:
+    """Join each child's observations into a trajectory, on the current axes.
+
+    Segments are drawn **solid within one recording form and dashed across a
+    change of form**, because a change of form makes consecutive counts
+    incomparable. The Down syndrome pool spans item counts from 396 to 810, and
+    roughly half the children with three or more administrations are recorded on
+    more than one form; a child near the ceiling of a short form can record
+    *fewer* words on a longer form a month later. One real child in this pool
+    scores 393 understood on a 416-item form at 47 months and 347 on an 810-item
+    form at 48. Joining that with a plain line draws a developmental reversal
+    that did not happen, which is the whole hazard of turning a scatter into a
+    set of trajectories.
+
+    Returns the counts the caller needs for the legend, so the figure states its
+    own composition rather than relying on a caption written elsewhere.
+    """
+    frame = pd.DataFrame(
+        {
+            "subject": np.asarray(subject_ids),
+            "age": np.asarray(x_obs, dtype=float),
+            "count": np.asarray(y_obs, dtype=float),
+        }
+    )
+    have_forms = form_max is not None
+    frame["form"] = np.asarray(form_max, dtype=float) if have_forms else np.nan
+    frame = frame.dropna(subset=["age", "count"])
+
+    sizes = frame.groupby("subject")["age"].transform("size")
+    frame = frame.loc[sizes >= min_administrations].sort_values(["subject", "age"])
+    empty = {"children": 0, "form_changes": 0, "near_ceiling": 0}
+    if frame.empty:
+        return empty
+
+    form_changes = 0
+    for _, rows in frame.groupby("subject", sort=False):
+        ages = rows["age"].to_numpy()
+        counts = rows["count"].to_numpy()
+        forms = rows["form"].to_numpy()
+        for i in range(ages.size - 1):
+            same_form = (not have_forms) or forms[i] == forms[i + 1]
+            if not same_form:
+                form_changes += 1
+            plt.plot(
+                ages[i : i + 2],
+                counts[i : i + 2],
+                color=_TRAJECTORY_COLOUR,
+                lw=0.7,
+                alpha=0.55 if same_form else 0.5,
+                ls="-" if same_form else (0, (2, 2)),
+                zorder=2.5,
+            )
+
+    near_ceiling = 0
+    if have_forms:
+        compressed = frame["count"] >= NEAR_CEILING_SHARE * frame["form"]
+        near_ceiling = int(compressed.sum())
+        if near_ceiling:
+            plt.scatter(
+                frame.loc[compressed, "age"],
+                frame.loc[compressed, "count"],
+                s=28,
+                facecolors="none",
+                edgecolors=_TRAJECTORY_COLOUR,
+                linewidths=0.9,
+                zorder=2.6,
+            )
+
+    return {
+        "children": int(frame["subject"].nunique()),
+        "form_changes": form_changes,
+        "near_ceiling": near_ceiling,
+    }
+
+
+def _draw_predictive_trajectories(
+    X_plot: np.ndarray,
+    trajectory_samples: np.ndarray,
+    n_trajectories: int,
+    seed: int,
+) -> int:
+    """Draw a sample of unseen-child trajectories on the current axes.
+
+    Each column of ``trajectory_samples`` is one posterior draw's expected curve
+    for a child the model has not seen, built by the engine from a single child
+    effect reused across the whole age grid. That coherence is the point: the
+    predictive bands are pointwise quantiles, and a set of pointwise intervals
+    does not tell you what a trajectory looks like -- it cannot say whether the
+    spread comes from children differing in level, in rate, or in shape.
+
+    Returns how many were drawn, for the legend.
+    """
+    samples = np.asarray(trajectory_samples)
+    if samples.ndim != 2:
+        raise ValueError("trajectory_samples must have shape (n_grid, n_samples).")
+    if samples.shape[0] != X_plot.size:
+        raise ValueError(
+            f"trajectory_samples grid ({samples.shape[0]}) must match "
+            f"X_plot ({X_plot.size})."
+        )
+    if samples.shape[1] == 0:
+        return 0
+
+    take = min(int(n_trajectories), samples.shape[1])
+    columns = np.random.default_rng(seed).choice(samples.shape[1], take, replace=False)
+    for column in columns:
+        plt.plot(
+            X_plot,
+            samples[:, column],
+            color=_PREDICTIVE_TRAJECTORY_COLOUR,
+            lw=0.7,
+            alpha=0.45,
+            zorder=2.2,
+        )
+    return take
 
 
 def _interval_by_sample(
@@ -435,8 +584,7 @@ def ppc_count_distribution_gallery(
 
 def plot_posterior_predictive_pmf(
     X_query: np.ndarray,
-    X_plot: np.ndarray,
-    y_plot: np.ndarray,
+    y_query: np.ndarray,
     n_trials: int,
     log_scale: bool = False,
     output_dir: str | None = None,
@@ -447,21 +595,29 @@ def plot_posterior_predictive_pmf(
     """
     For each query age, plot the posterior predictive distribution of counts as a PMF on a common support.
 
+    ``y_query`` carries the exact posterior-predictive draws at the query ages,
+    shape ``(n_query, n_samples)`` — previously the nearest point on the plot
+    grid was substituted, so each panel showed the distribution at an age up to
+    half a grid step away from the one in its label (#234).
+
     ``max_age_months`` drops query ages past the outcome's reporting cap. Age
     lives in the *column names* here (``pmf_84m``), not in a column, so this
     table is easy to miss when auditing which artefacts are capped — it was.
     """
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    y_query = np.asarray(y_query)
+    if y_query.shape[0] != X_query.shape[0]:
+        raise ValueError(
+            f"y_query has {y_query.shape[0]} rows but X_query has "
+            f"{X_query.shape[0]} ages."
+        )
     if max_age_months is not None:
-        X_query = X_query[X_query <= max_age_months]
+        keep = X_query <= max_age_months
+        X_query = X_query[keep]
+        y_query = y_query[keep, :]
 
-    all_draws = []
-    idxs = []
-    for a in X_query:
-        j = int(np.argmin(np.abs(X_plot - a)))
-        idxs.append(j)
-        all_draws.append(y_plot[j, :].astype(int))
-    all_draws = np.concatenate(all_draws)
+    draws_by_age = [y_query[i, :].astype(int) for i in range(X_query.size)]
+    all_draws = np.concatenate(draws_by_age)
     x_lo, x_hi = np.quantile(all_draws, [0.01, 0.99])
     x_lo = int(max(0, np.floor(x_lo)))
     x_hi = int(min(n_trials, np.ceil(x_hi)))
@@ -469,15 +625,13 @@ def plot_posterior_predictive_pmf(
     k = np.arange(x_lo, x_hi + 1)
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
-    for _a, j in zip(X_query, idxs, strict=True):
-        draws = y_plot[j, :].astype(int)
-
+    for a, draws in zip(X_query, draws_by_age, strict=True):
         # Empirical PMF on common support
         in_support = (draws >= x_lo) & (draws <= x_hi)
         counts = np.bincount(draws[in_support] - x_lo, minlength=len(k))
         pmf = counts[: len(k)] / draws.size
         # Step line (discrete PMF)
-        plt.step(k, pmf, where="mid", lw=2, label=f"{X_plot[j]:.0f}m")
+        plt.step(k, pmf, where="mid", lw=2, label=f"{a:.0f}m")
 
     plt.xlabel(x_label)
     plt.ylabel("Posterior predictive probability")
@@ -492,12 +646,11 @@ def plot_posterior_predictive_pmf(
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
         csv_data = {"word_count": k}
-        for _a, j in zip(X_query, idxs, strict=True):
-            draws = y_plot[j, :].astype(int)
+        for a, draws in zip(X_query, draws_by_age, strict=True):
             in_support = (draws >= x_lo) & (draws <= x_hi)
             counts = np.bincount(draws[in_support] - x_lo, minlength=len(k))
             pmf = counts[: len(k)] / draws.size
-            csv_data[f"pmf_{X_plot[j]:.0f}m"] = pmf
+            csv_data[f"pmf_{a:.0f}m"] = pmf
         _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
     return plt.gcf()
@@ -506,8 +659,7 @@ def plot_posterior_predictive_pmf(
 
 def plot_posterior_predictive_cdf(
     X_query: np.ndarray,
-    X_plot: np.ndarray,
-    y_plot: np.ndarray,
+    y_query: np.ndarray,
     n_trials: int,
     output_dir: str | None = None,
     filename: str | None = None,
@@ -516,20 +668,25 @@ def plot_posterior_predictive_cdf(
 ) -> Figure:
     """For each query age, plot the posterior predictive CDF of counts.
 
-    ``max_age_months`` drops query ages past the outcome's reporting cap; as in
-    :func:`plot_posterior_predictive_pmf`, age is carried in the column names.
+    ``y_query`` carries the exact posterior-predictive draws at the query ages,
+    shape ``(n_query, n_samples)`` (see :func:`plot_posterior_predictive_pmf`
+    for why the nearest-plot-grid substitution was retired). ``max_age_months``
+    drops query ages past the outcome's reporting cap; age is carried in the
+    column names.
     """
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    y_query = np.asarray(y_query)
+    if y_query.shape[0] != X_query.shape[0]:
+        raise ValueError(
+            f"y_query has {y_query.shape[0]} rows but X_query has "
+            f"{X_query.shape[0]} ages."
+        )
     if max_age_months is not None:
-        X_query = X_query[X_query <= max_age_months]
+        keep = X_query <= max_age_months
+        X_query = X_query[keep]
+        y_query = y_query[keep, :]
 
-    draws_by_age = []
-    plot_idx_by_age = []
-
-    for a in X_query:
-        j = int(np.argmin(np.abs(X_plot - a)))
-        plot_idx_by_age.append(j)
-        draws_by_age.append(y_plot[j, :].astype(int))
+    draws_by_age = [y_query[i, :].astype(int) for i in range(X_query.size)]
 
     # Choose a common x-range so curves are comparable (central 99% over all selected ages)
     all_draws = np.concatenate(draws_by_age)
@@ -540,12 +697,12 @@ def plot_posterior_predictive_cdf(
 
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
-    for _a, j, draws in zip(X_query, plot_idx_by_age, draws_by_age, strict=True):
+    for a, draws in zip(X_query, draws_by_age, strict=True):
         # Empirical CDF on common support: F(k) = mean(draws <= k)
         # Vectorised computation:
         draws_sorted = np.sort(draws)
         cdf = np.searchsorted(draws_sorted, k, side="right") / draws_sorted.size
-        plt.step(k, cdf, where="post", lw=2, label=f"{X_plot[j]:.0f}m")
+        plt.step(k, cdf, where="post", lw=2, label=f"{a:.0f}m")
 
     plt.xlabel(x_label)
     plt.ylabel("Posterior predictive CDF  P(Y ≤ k)")
@@ -557,10 +714,10 @@ def plot_posterior_predictive_cdf(
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
         csv_data = {"word_count": k}
-        for _a, j, draws in zip(X_query, plot_idx_by_age, draws_by_age, strict=True):
+        for a, draws in zip(X_query, draws_by_age, strict=True):
             draws_sorted = np.sort(draws)
             cdf = np.searchsorted(draws_sorted, k, side="right") / draws_sorted.size
-            csv_data[f"cdf_{X_plot[j]:.0f}m"] = cdf
+            csv_data[f"cdf_{a:.0f}m"] = cdf
         _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
     return plt.gcf()
@@ -653,10 +810,23 @@ def plot_posterior_predictive_median_trend(
     filename: str | None = None,
     y_label: str = "Predicted word count",
     max_age_months: float | None = None,
+    subject_ids=None,
+    form_max=None,
+    min_administrations: int = MIN_ADMINISTRATIONS_FOR_TRAJECTORY,
+    trajectory_samples=None,
+    n_trajectories: int = DEFAULT_PREDICTIVE_TRAJECTORIES,
+    trajectory_seed: int = 0,
 ):
     """
     Plot the posterior predictive distribution of counts as a function of age,
     showing the predictive median and multiple predictive percentile intervals.
+
+    When ``subject_ids`` is given, the observed points belonging to one child are
+    joined, so the figure contrasts individual growth with the population median
+    rather than showing an undifferentiated cloud. ``form_max`` supplies each
+    observation's recording-form item count and should be passed whenever it is
+    available: see :func:`_draw_subject_trajectories` for why a trajectory drawn
+    without it can show a reversal that is an artefact of the instrument.
 
     Parameters
     ----------
@@ -668,6 +838,31 @@ def plot_posterior_predictive_median_trend(
         Observed ages.
     y_obs
         Observed counts.
+    subject_ids
+        Per-observation child identifier. ``None`` (the default) draws the
+        observations as a scatter only, which is the behaviour every caller had
+        before trajectories existed.
+    form_max
+        Per-observation item count of the recording form.
+    min_administrations
+        A child is drawn as a trajectory only with at least this many
+        observations.
+    trajectory_samples
+        Posterior predictive **expected counts for an unseen child**, shape
+        ``(n_grid, n_samples)``. A sample of its columns is drawn as curves, so
+        the figure shows the trajectories the predictive bands summarise rather
+        than only their pointwise quantiles -- a band of pointwise intervals and
+        a set of coherent trajectories are different objects, and only the second
+        answers how much children differ.
+
+        Pass the *expected* curve, not the predictive counts: the counts carry
+        observation noise drawn independently at each grid point, which on a
+        500-point grid swamps the trajectory it is scattered around.
+    n_trajectories
+        How many columns to draw.
+    trajectory_seed
+        Seed for choosing them, so a figure redrawn from the same trace is the
+        same figure.
     output_dir
         Output directory for saved figure.
     filename
@@ -698,9 +893,18 @@ def plot_posterior_predictive_median_trend(
         keep = X_plot <= max_age_months
         X_plot = X_plot[keep]
         y_plot = y_plot[keep, :] if y_plot.ndim == 2 else y_plot[keep]
+        if trajectory_samples is not None:
+            # Grid-indexed like y_plot, and must be cut with it.
+            trajectory_samples = np.asarray(trajectory_samples)[keep, :]
         keep_obs = x_obs <= max_age_months
         x_obs = x_obs[keep_obs]
         y_obs = y_obs[keep_obs]
+        # The trajectory inputs are per-observation and must be cut with the same
+        # mask, or a child's points are joined to another child's.
+        if subject_ids is not None:
+            subject_ids = subject_ids[keep_obs]
+        if form_max is not None:
+            form_max = form_max[keep_obs]
 
     if y_plot.ndim != 2:
         raise ValueError("y_plot must have shape (n_grid, n_samples).")
@@ -766,6 +970,22 @@ def plot_posterior_predictive_median_trend(
         lw=3,
         label="Posterior median (predictive)",
     )
+    predictive_trajectories = 0
+    if trajectory_samples is not None:
+        predictive_trajectories = _draw_predictive_trajectories(
+            X_plot, trajectory_samples, n_trajectories, trajectory_seed
+        )
+
+    trajectories = None
+    if subject_ids is not None:
+        trajectories = _draw_subject_trajectories(
+            x_obs,
+            y_obs,
+            subject_ids,
+            form_max=form_max,
+            min_administrations=min_administrations,
+        )
+
     plt.scatter(
         x_obs,
         y_obs,
@@ -776,7 +996,48 @@ def plot_posterior_predictive_median_trend(
 
     plt.xlabel("Age (months)")
     plt.ylabel(y_label)
-    plt.legend(loc="upper left", frameon=True)
+    handles, labels = plt.gca().get_legend_handles_labels()
+    if predictive_trajectories:
+        handles.append(
+            Line2D([], [], color=_PREDICTIVE_TRAJECTORY_COLOUR, lw=0.7, alpha=0.45)
+        )
+        labels.append(f"Predicted child ({predictive_trajectories} draws)")
+    if trajectories and trajectories["children"]:
+        handles.append(
+            Line2D([], [], color=_TRAJECTORY_COLOUR, lw=0.7, alpha=0.55)
+        )
+        labels.append(
+            f"Same child ({trajectories['children']} with {min_administrations}+)"
+        )
+        if trajectories["form_changes"]:
+            handles.append(
+                Line2D(
+                    [], [], color=_TRAJECTORY_COLOUR, lw=0.7, alpha=0.5,
+                    ls=(0, (2, 2)),
+                )
+            )
+            labels.append(
+                f"Form changed - not comparable ({trajectories['form_changes']})"
+            )
+        if trajectories["near_ceiling"]:
+            handles.append(
+                Line2D(
+                    [], [], ls="none", marker="o", markerfacecolor="none",
+                    markeredgecolor=_TRAJECTORY_COLOUR, markeredgewidth=0.9,
+                )
+            )
+            labels.append(
+                f"Near that form's ceiling ({trajectories['near_ceiling']})"
+            )
+    if len(labels) > 4:
+        # More than the four the plain figure carries: shrink, or the box covers
+        # a quarter of the axes.
+        plt.legend(
+            handles=handles, labels=labels, loc="upper left",
+            frameon=True, fontsize="small",
+        )
+    else:
+        plt.legend(handles=handles, labels=labels, loc="upper left", frameon=True)
     plt.ylim(-20, np.max(y_plot) + 50)
 
     if filename is not None and output_dir is not None:
@@ -967,6 +1228,46 @@ def plot_expected_learning_rate(
             "ci_lo": ci_rate_plot[:, 0],
             "ci_hi": ci_rate_plot[:, 1],
         }), output_dir, filename)
+        if not smooth:
+            # Draw-wise peak location over the (capped) grid, so the headline
+            # "fastest growth" row can carry uncertainty in *where* the peak is
+            # rather than only in the rate at one selected age (#234). A draw
+            # whose maximum lands on the first or last grid age is
+            # boundary-censored — its true peak lies at or beyond the edge of
+            # the reported range — so the censored share is recorded alongside.
+            # The unsmoothed draws are used; the smoothed call writes no
+            # companion because it would duplicate this file byte for byte.
+            peak_idx = np.argmax(rate, axis=1)
+            peak_ages = x_plot_values[peak_idx]
+            n_grid = rate.shape[1]
+            boundary_share = float(
+                np.mean((peak_idx == 0) | (peak_idx == n_grid - 1))
+            )
+            peak_lo, peak_hi = intervals.interval_1d(
+                peak_ages, ci_prob, interval_kind
+            )
+            median_idx = int(np.argmax(median_rate))
+            _save_csv(
+                pd.DataFrame(
+                    {
+                        "age_min_months": [float(x_plot_values[0])],
+                        "age_max_months": [float(x_plot_values[-1])],
+                        "median_curve_peak_age_months": [
+                            float(x_plot_values[median_idx])
+                        ],
+                        "median_curve_peak_at_boundary": [
+                            bool(median_idx in (0, n_grid - 1))
+                        ],
+                        "peak_age_median_months": [float(np.median(peak_ages))],
+                        "peak_age_ci_lo_months": [float(peak_lo)],
+                        "peak_age_ci_hi_months": [float(peak_hi)],
+                        "boundary_draw_share": [boundary_share],
+                        "ci_prob": [float(ci_prob)],
+                    }
+                ),
+                output_dir,
+                f"{filename}_peak",
+            )
 
     return plt.gcf()
 
@@ -1110,6 +1411,36 @@ def plot_posterior_kappa(
     if filename is not None and output_dir is not None:
         _save_png_svg(fig, output_dir, filename)
         _save_csv(df_kappa_plot, output_dir, filename)
+        # Draw-wise endpoint contrast, so the headline "spread widens/narrows"
+        # claim carries a posterior sign probability and an interval instead of
+        # a comparison of two plug-in medians (#234). The variance-inflation
+        # factor is computed per draw at the youngest and oldest (capped) grid
+        # ages, and the ratio old/young summarised across draws.
+        vif_young = (n_trials + kappa_plot_samps[0, :]) / (
+            1.0 + kappa_plot_samps[0, :]
+        )
+        vif_old = (n_trials + kappa_plot_samps[-1, :]) / (
+            1.0 + kappa_plot_samps[-1, :]
+        )
+        vif_ratio = vif_old / vif_young
+        ratio_lo, ratio_hi = intervals.interval_1d(vif_ratio, ci_prob, interval_kind)
+        _save_csv(
+            pd.DataFrame(
+                {
+                    "age_young_months": [float(X_plot[0])],
+                    "age_old_months": [float(X_plot[-1])],
+                    "vif_young_median": [float(np.median(vif_young))],
+                    "vif_old_median": [float(np.median(vif_old))],
+                    "vif_ratio_median": [float(np.median(vif_ratio))],
+                    "vif_ratio_ci_lo": [float(ratio_lo)],
+                    "vif_ratio_ci_hi": [float(ratio_hi)],
+                    "p_widens": [float(np.mean(vif_ratio > 1.0))],
+                    "ci_prob": [float(ci_prob)],
+                }
+            ),
+            output_dir,
+            f"{filename}_trend",
+        )
 
     return fig, df_kappa_plot, df_kappa_query
 

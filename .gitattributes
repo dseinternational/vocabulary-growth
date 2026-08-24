@@ -4,6 +4,9 @@
 
 # Source and config — always LF
 *.py        text eol=lf
+# LF matters for .ps1 here specifically: these carry a `#!/usr/bin/env pwsh`
+# shebang, and CRLF makes it fail on Linux as `pwsh\r: No such file or directory`.
+*.ps1       text eol=lf
 *.qmd       text eol=lf
 *.md        text eol=lf
 *.bib       text eol=lf
