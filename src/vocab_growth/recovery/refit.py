@@ -42,19 +42,35 @@ from vocab_growth.reporting import key_value_table
 RECOVERY_SOURCE_FILENAME = "recovery_source.json"
 
 
-def make_recovery_definition(definition, replicate: int):
+def make_recovery_definition(definition, replicate: int, *, truth_definition=None):
     """Return a copy of ``definition`` whose output lands in a recovery directory.
 
     Only the identity fields change. Every prior, every hyperparameter and every
-    structural flag is the model of record's, because the question being asked is
-    whether *this* model recovers its own parameters.
+    structural flag is ``definition``'s, because ``definition`` is the model
+    being asked to do the recovering.
+
+    ``truth_definition`` is the definition the data came from, when that differs
+    (issue #226). It changes nothing about the model built -- it only marks the
+    output, and the banner, as a cross-definition run.
     """
     if replicate < 1:
         raise ValueError("replicate is 1-based.")
+    cross = (
+        truth_definition is not None
+        and truth_definition.config_name != definition.config_name
+    )
+    provenance = f"parameter recovery: replicate {replicate:02d}"
+    if cross:
+        provenance = (
+            f"{provenance}, under {truth_definition.model_id} "
+            f"[{truth_definition.config_name}]"
+        )
     return dataclasses.replace(
         definition,
-        config_name=recovery_config_name(definition, replicate),
-        banner=f"{definition.banner} [parameter recovery: replicate {replicate:02d}]",
+        config_name=recovery_config_name(
+            definition, replicate, truth_definition=truth_definition
+        ),
+        banner=f"{definition.banner} [{provenance}]",
     )
 
 
@@ -119,6 +135,7 @@ def fit_recovery_replicate(
     replicate: int = 1,
     output_root: str | None = None,
     definition=None,
+    fit_definition=None,
 ) -> ModelFitContext:
     """Refit ``model_key`` to replicate ``replicate``'s simulated data.
 
@@ -128,9 +145,23 @@ def fit_recovery_replicate(
     record's. The engine plumbing still resolves from ``model_key``: a variant
     shares its base model's engine by construction, and reading the spec off the
     variant would let a mis-registered override quietly select a different one.
+
+    ``fit_definition`` separates the two roles ``definition`` otherwise plays
+    (issue #226). ``definition`` is where the *data* came from; ``fit_definition``
+    is what is fitted to it. They are the same by default, and while they are the
+    same the harness can only ask whether a model recovers itself — so it cannot
+    answer whether a prior *causes* an observed recovery bias, because moving the
+    prior moves the truth with it. Simulating under one definition and refitting
+    under another is what makes that a controlled comparison.
+
+    The simulation's own provenance guard is deliberately still checked against
+    ``definition``: the recorded definition must match the one that produced the
+    frame, and the seam does not weaken that. It only stops requiring the fitted
+    model to be that same definition.
     """
     target = recovery_target(model_key)
     definition = MODEL_REGISTRY[model_key] if definition is None else definition
+    fit_definition = definition if fit_definition is None else fit_definition
     root = output_root if output_root is not None else env.output_root()
     directory = simulation_dir(definition, replicate, root)
     if not os.path.isdir(directory):
@@ -140,7 +171,9 @@ def fit_recovery_replicate(
         )
     frame, _truth, record = load_simulation(directory, expected_definition=definition)
 
-    recovery_definition = make_recovery_definition(definition, replicate)
+    recovery_definition = make_recovery_definition(
+        fit_definition, replicate, truth_definition=definition
+    )
     stages = target.resolve_stages(recovery_definition)
     if stages[0][0] != PREPARE_STAGE_NAME:
         raise RuntimeError(
@@ -159,15 +192,22 @@ def recovery_fit_dir(
     replicate: int,
     output_root: str | None = None,
     definition=None,
+    truth_definition=None,
 ) -> str:
-    """Directory a recovery replicate's fit is promoted to."""
+    """Directory a recovery replicate's fit is promoted to.
+
+    ``definition`` is the model that was fitted and ``truth_definition`` the one
+    the data came from, matching :func:`fit_recovery_replicate`'s two arguments.
+    """
     import dse_research_utils.statistics.models.reporting as model_reporting
 
     definition = MODEL_REGISTRY[model_key] if definition is None else definition
     root = output_root if output_root is not None else env.output_root()
     return model_reporting.ReportingConfiguration(
         model_name=definition.model_id,
-        config_name=recovery_config_name(definition, replicate),
+        config_name=recovery_config_name(
+            definition, replicate, truth_definition=truth_definition
+        ),
         output_root_dir=root,
         ci_prob=0.89,
         interval_kind="eti",

@@ -43,6 +43,7 @@ from vocab_growth.recovery.simulate import (
     load_simulation,
     simulate_replicate,
     simulation_dir,
+    truth_source_tag,
 )
 from vocab_growth.recovery.spec import HEADLINE_MODELS, supported_models
 from vocab_growth.reporting import (
@@ -71,22 +72,50 @@ def _comparison_dir() -> str:
     return path
 
 
+RECORD_VARIANT = "record"
+"""``--fit-variant record`` names the model of record rather than a variant."""
+
+
 def _resolve_definition(model_key: str, variant: str | None):
     """The definition to recover: the model of record, or a registered variant."""
-    if variant is None:
+    if variant is None or variant == RECORD_VARIANT:
         return MODEL_REGISTRY[model_key], model_key
     definition = build_variant(model_key, variant)[0]
     return definition, f"{model_key}-{variant}"
 
 
-def _score(model_key: str, definition, label: str) -> None:
+def _resolve_pair(model_key: str, variant: str | None, fit_variant: str | None):
+    """The (simulating, fitted) definitions and the label the pair is scored under.
+
+    While these are the same definition the harness can only ask whether a model
+    recovers itself, which cannot attribute a recovery bias to a prior: moving
+    the prior moves the truth with it (issue #226). Separating them makes the
+    comparison controlled, and gives the run its own label so it can never be
+    read as, or overwrite, a self-recovery result.
+    """
+    truth, truth_label = _resolve_definition(model_key, variant)
+    if fit_variant is None:
+        return truth, truth, truth_label
+    fitted, fitted_label = _resolve_definition(model_key, fit_variant)
+    if fitted.config_name == truth.config_name:
+        raise ValueError(
+            f"--fit-variant {fit_variant!r} resolves to the same definition as the "
+            "simulating one; that is a self-recovery run, so omit it."
+        )
+    tag = truth_source_tag(truth, fitted)
+    return truth, fitted, f"{fitted_label}-under-{tag}"
+
+
+def _score(model_key: str, definition, label: str, fit_definition=None) -> None:
     """Score every simulated replicate of one model and write its recovery matrix.
 
     Deliberately scores every replicate that exists rather than only the ones the
     current invocation ran: the matrix is the model's whole recovery record, and
     re-scoring a single replicate of a staged run must not drop the others.
     """
-    query_ages = pd.Series(definition.ages_query).to_numpy()
+    fit_definition = definition if fit_definition is None else fit_definition
+    # The trace's own grid, which is the fitted definition's.
+    query_ages = pd.Series(fit_definition.ages_query).to_numpy()
     out_dir = _comparison_dir()
     summaries: list[dict] = []
     replicates = available_replicates(definition)
@@ -96,7 +125,12 @@ def _score(model_key: str, definition, label: str) -> None:
 
     for replicate in replicates:
         sim_dir = simulation_dir(definition, replicate)
-        fit_dir = recovery_fit_dir(model_key, replicate, definition=definition)
+        fit_dir = recovery_fit_dir(
+            model_key,
+            replicate,
+            definition=fit_definition,
+            truth_definition=definition,
+        )
         if not os.path.isdir(sim_dir):
             console.print(f"[yellow]skip r{replicate:02d}: no simulation at {sim_dir}[/yellow]")
             continue
@@ -155,7 +189,7 @@ def _score(model_key: str, definition, label: str) -> None:
                 "verdict",
             ]
         ],
-        title=f"Parameter recovery — {definition.model_id} [{label}]",
+        title=f"Parameter recovery — {fit_definition.model_id} [{label}]",
     )
     console.print(f"[dim]Recovery matrix: {matrix_path}[/dim]")
 
@@ -176,6 +210,18 @@ if __name__ == "__main__":
             "Recover a registered sensitivity variant instead of the model of "
             "record (e.g. a1-tau-age-varying). Requires a single model, and with "
             "--truth posterior requires that variant to have been fitted."
+        ),
+    )
+    parser.add_argument(
+        "--fit-variant",
+        default=None,
+        help=(
+            "Refit a DIFFERENT registered variant from the one simulated, or "
+            f"'{RECORD_VARIANT}' for the model of record. Without it the harness "
+            "can only ask whether a model recovers itself, which cannot attribute "
+            "a bias to a prior — moving the prior moves the truth with it (#226). "
+            "Requires a single model, and --truth posterior then requires the "
+            "SIMULATING definition to have been fitted."
         ),
     )
     parser.add_argument(
@@ -246,14 +292,19 @@ if __name__ == "__main__":
         console.print(f"[bold red]{exc}[/bold red]")
         sys.exit(1)
 
-    if args.variant is not None and args.model in {"headline", "all"}:
+    if (
+        args.variant is not None or args.fit_variant is not None
+    ) and args.model in {"headline", "all"}:
         console.print(
-            "[bold red]--variant applies to one model; name it explicitly.[/bold red]"
+            "[bold red]--variant and --fit-variant apply to one model; name it "
+            "explicitly.[/bold red]"
         )
         sys.exit(1)
     try:
-        definitions = {key: _resolve_definition(key, args.variant) for key in models}
-    except KeyError as exc:
+        definitions = {
+            key: _resolve_pair(key, args.variant, args.fit_variant) for key in models
+        }
+    except (KeyError, ValueError) as exc:
         console.print(f"[bold red]{exc}[/bold red]")
         sys.exit(1)
 
@@ -267,9 +318,21 @@ if __name__ == "__main__":
     key_value_table(
         "Parameter-recovery run plan",
         [
-            ("Models", ", ".join(label for _, label in definitions.values())),
+            ("Models", ", ".join(label for _, _, label in definitions.values())),
             ("Replicates", ", ".join(f"r{r:02d}" for r in replicates)),
             ("Truth source", args.truth),
+            (
+                "Simulated from",
+                ", ".join(
+                    truth.config_name for truth, _, _ in definitions.values()
+                ),
+            ),
+            (
+                "Fitted with",
+                ", ".join(
+                    fitted.config_name for _, fitted, _ in definitions.values()
+                ),
+            ),
             ("Sampling config", args.config),
             ("Stages", ", ".join(
                 name
@@ -295,7 +358,7 @@ if __name__ == "__main__":
     failures: dict[str, str] = {}
 
     for model_key in models:
-        definition, model_label = definitions[model_key]
+        definition, fit_definition, model_label = definitions[model_key]
         for replicate in replicates:
             label = f"{model_label} r{replicate:02d}"
             started = time.perf_counter()
@@ -316,6 +379,7 @@ if __name__ == "__main__":
                         args.config,
                         replicate=replicate,
                         definition=definition,
+                        fit_definition=fit_definition,
                     )
             except Exception as exc:  # one replicate must not sink the run
                 failures[label] = f"{type(exc).__name__}: {exc}"
@@ -324,7 +388,7 @@ if __name__ == "__main__":
 
         if do_compare:
             try:
-                _score(model_key, definition, model_label)
+                _score(model_key, definition, model_label, fit_definition)
             except Exception as exc:
                 failures[f"{model_label} compare"] = f"{type(exc).__name__}: {exc}"
                 console.print(f"[bold red]{model_label} scoring failed:[/bold red] {exc}")
