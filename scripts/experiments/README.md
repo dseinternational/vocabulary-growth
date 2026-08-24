@@ -49,6 +49,8 @@ record.
 | `vg20_vg19_age_at_word_count.py`    | Does the child-slope structure change those ages?                                                  | [`202608231056`](../../notes/202608231056-age-at-word-count.md) §4 — the medians agree to within a month; the 75th/90th **spoken** percentiles do not, and VG20's are the optimistic ones                      |
 | `marginal_arm.py`                   | Does integrating out the singleton child effects fix VG12's geometry, and at what cost?            | [`202608231745`](../../notes/202608231745-singleton-marginalisation.md) §7 — the bench is not yet run; the arms are `explicit`, `marginal`, and `marginal --nodes 40`                                          |
 
+The three `vg16_*` harnesses' recorded answers were measured against fits made **before** the 2026-08-23 lag-construction correction ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)): the scripts then carried copies of the engine's row-order-dependent lag walk, and they now import the corrected wave-grouped construction from the engine instead. Their recorded findings stand as historical records of those runs; rerun the scripts against a corrected fit before quoting any of their numbers as current.
+
 ## Running one
 
 Arms take an output root that is **not** the project's, so a failed or misleading

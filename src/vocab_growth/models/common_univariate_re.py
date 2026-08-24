@@ -33,6 +33,7 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     validate_ell_bounds,
@@ -204,7 +205,9 @@ def prepare_univariate_re_data(
     dataframe_table(desc, title="Descriptive statistics")
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_obs = np.asarray(analysis_df[y_col], dtype=int)
+    y_values = np.asarray(analysis_df[y_col], dtype=float)
+    require_integral_counts(y_values, y_col)
+    y_obs = y_values.astype(int)
 
     bmd = model_data.BinomialModelData(
         X_obs=X_obs, y_obs=y_obs, n_trials=definition.n_trials

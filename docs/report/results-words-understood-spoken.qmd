@@ -446,7 +446,7 @@ else:
 
 Because a child's spoken vocabulary is the product of what they understand and the share they say, a positive correlation means the old independence assumption **understated** how much children with Down syndrome differ from one another in speech — by about 15% on the logit scale, at every age. Correcting it widens the Down syndrome side of an already-wider-than-typical contrast, so the earlier finding was conservative and is strengthened rather than reversed. The spoken and comprehension rows can now be read against each other, which the old bias did not permit.
 
-One caveat survives the fix, and it points the other way. Of the 767 children, 432 are seen once, and 342 of those contribute to the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where a parent who over-reports over-reports both. Shared reporter bias is not separable from shared child ability in that design, so **+0.368 should be read as leaning high**. The independent check that does not share an administration, VG16's cross-lag between an earlier comprehension record and a later production ratio, implies a smaller correlation of about +0.24 (89% interval +0.11 to +0.38) once corrected for the unreliability of its predictor. The two overlap, and the truth is more likely in the lower half of VG20's interval than the upper.
+One caveat survives the fix, and it points the other way. Of the 767 children, 432 are seen once, and 342 of those contribute to the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where a parent who over-reports over-reports both. Shared reporter bias is not separable from shared child ability in that design, so **+0.368 should be read as leaning high**. The independent check that does not share an administration would be VG16's cross-lag between an earlier comprehension record and a later production ratio, but that check is currently unavailable: VG16's estimate is withdrawn pending a corrected refit — its lag construction carried a row-order defect — and the conversion that turned its historical coefficient into a correlation of about +0.24 relied on classical measurement-error assumptions that are not established for its predictor ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)). Until the corrected refit lands, the caution that +0.368 leans high rests on the reporter-bias argument alone, without an independent number to bound it.
 :::
 
 ::: {.callout-important title="And the comprehension comparison carries a measured bias"}
@@ -529,12 +529,12 @@ else:
 
 Model choice in this report is predictive: a model is preferred when it predicts held-out observations better, judged by the expected log pointwise predictive density (ELPD) estimated by leave-one-out cross-validation. Higher (less negative) is better, and a difference should be read against its standard error.
 
-The table lists the development lineage that ends in the model of record, plus VG16, the within-child cross-lag variant. VG16 is not a step in that lineage and supplies no reported number: it exists to ask whether a child's earlier comprehension predicts their later production beyond what age already explains, and its two-wave design cannot separate within-child change from stable between-child differences.
+The table lists the development lineage that ends in the model of record. VG16, the cross-lag variant, is deliberately absent: it is not a step in that lineage and supplies no reported number, and its leave-one-out scores are not comparable with the rows below — the cross-lag makes earlier observed comprehension counts part of later spoken predictors, so leaving an understood observation out does not remove it from the terms that predict later speech, and its spoken score estimates a history-conditioned quantity rather than the unconditional one tabulated here ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)).
 
 ```{python}
 #| label: tbl-loo-us
 #| echo: false
-show_or_pending(loo_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG20", "VG16"]),
+show_or_pending(loo_table(["VG05", "VG07", "VG08", "VG09", "VG10", "VG20"]),
                 "the leave-one-out summaries")
 ```
 

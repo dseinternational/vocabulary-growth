@@ -897,10 +897,11 @@ class BivariateModelDefinition:
 
     # -- Within-child cross-lag (VG16, issue #113) --
     use_cross_lag: bool = False
-    """If True, add a within-child cross-lag: the child's prior-wave understood
-    residual predicts their current production ratio q (earlier receptive ->
-    later expressive). Uses the subject understood intercept, so requires
-    use_subject_re_u=True for the 'within' baseline."""
+    """If True, add a cross-lag: the child's prior-wave understood residual
+    predicts their current production ratio q (earlier receptive -> later
+    expressive). The lag source is assigned per complete (subject, age)
+    administration wave (issue #242). Uses the subject understood intercept,
+    so requires use_subject_re_u=True for the 'within' baseline."""
     lag_baseline: str = "within"
     """Baseline for the lag residual. 'within' subtracts the child's own understood
     intercept (RI-CLPM within-child effect); 'population' subtracts only the
@@ -2302,9 +2303,11 @@ VG03 = UnivariateModelDefinition(
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
     eta_sigma=0.5,
-    # Bumped from 0.1: total TD pool shrank from 16,552 to 6,134
-    # after the WS exclusion; this keeps the effective training set
-    # (~1,500 rows) close to the previous VG03 fit.
+    # Spoken-only loading includes the WS production-only rows (see n_trials
+    # note above), so the 25% subject subsample draws from the full TD spoken
+    # pool and yields a frame of 4,075 rows (the figure the kappa calibration
+    # table above records). An earlier rationale here claimed WS was excluded
+    # and the frame was ~1,500 rows; both halves were stale (#234).
     sample_fraction=0.25,
     kappa=_TD_SPOKEN_KAPPA,
 )
@@ -3116,6 +3119,18 @@ VG14 = TrivariateModelDefinition(
     # `kappa_sign` deliberately stays legacy, matching VG15: the signed block sits
     # comfortably inside its prior (CDF 0.25, contraction 0.49) and has no reason
     # to move. See notes/202608051500-report-critical-review.md section 4a.
+    #
+    # KNOWN MISMATCH, retained deliberately (#238): these components are the
+    # CONDITIONAL calibration — kappa given study and child random effects,
+    # which VG14 does not have. VG14's kappa is marginal dispersion, a different
+    # estimand; the no-effects calibration on VG14's own frame targets totals of
+    # roughly 13.7/3.2 (understood at 18/72 months) against these components'
+    # 92.6/14.0, so the priors favour substantially less unexplained variation
+    # than a calibration matching this graph would. Not recalibrated because
+    # VG14 is superseded by VG15 for every reported number and supplies no
+    # inferential output (docs/models/README.md role table); if VG14 is ever
+    # retained for substantive use, recalibrate these first
+    # (scripts/kappa_conditional_calibration.py without the RE conditioning).
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
     # Understood trajectory: matches VG05, including the 2026-08-04 anchor
@@ -3299,7 +3314,9 @@ VG15 = JointModelDefinition(
     # where the evidence stops -- it hid the pool's only real measurement of the
     # post-peak signing decline. Above 84 stays out: 12 observations from 10
     # children thinning to one source per band, and 84 is the trend's high anchor.
-    # Also caps p_any, a function of the signed ratio.
+    # This caps the signed COUNTS. r and p_any are ratios of understood built
+    # from the signed ratio, so they take the tighter of this cap and the
+    # comprehension one (reporting_ages.max_age_for_sign_ratio) -- currently 72.
     report_max_age_signed=84,
     clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
@@ -3313,7 +3330,7 @@ VG16 = BivariateModelDefinition(
     config_name="age-understood-spoken-ds-re-subj-uq-crosslag",
     banner=(
         "Fitting Model VG16: VG09 + cross-lag (prior understood -> current q;"
-        " bias-robust population-relative baseline) - Down syndrome"
+        " population-relative baseline) - Down syndrome"
     ),
     population=Population.DOWN_SYNDROME,
     n_trials=810,
@@ -3370,11 +3387,18 @@ VG16 = BivariateModelDefinition(
     use_subject_re_q=True,
     tau_subj_q_sigma=1.5,
     use_cross_lag=True,
-    # Headline uses the population-relative baseline: with 2-wave-dominated data the
-    # pure within-child (own-intercept) baseline is biased by the short-T / Nickell
-    # / errors-in-variables mechanics (dev: beta -0.60 [-0.85,-0.35], an artifact),
-    # while the population-relative estimate is null (dev: +0.05 [-0.07,0.17]). The
-    # within-child variant is reported as a cautionary contrast. See the scoping note.
+    # Headline uses the population-relative baseline. The original "bias-robust"
+    # rationale — that the within-child baseline carries a short-T / Nickell /
+    # errors-in-variables bias (dev: beta -0.60 [-0.85,-0.35]) — was withdrawn:
+    # the negative figure was dev-tier non-convergence, and simulation from this
+    # model's own posterior found no such mechanism
+    # (notes/202608151500-within-child-crosslag-feasibility.md §§6-7). What
+    # survives: the population-relative predictor conditions on no estimated
+    # per-child quantity, and it deliberately retains persistent between-child
+    # standing — so beta_lag is a history-dependent mixture of between- and
+    # within-child association, not an isolated within-child dynamic
+    # (notes/202608231714-vg16-statistical-model-review.md §4.1, issue #242).
+    # The within-child variant remains an off-record cautionary contrast.
     lag_baseline="population",
     beta_lag_mu=0.0,
     beta_lag_sigma=0.5,
@@ -3477,9 +3501,10 @@ VG20 = _as_definition_subclass(
     # evidenced. The quantity this model exists to estimate is already known to be
     # positive and small from two independent directions -- VG16's realised
     # intercepts still correlate at +0.135 [0.087, 0.180] with its cross-lag
-    # fitted, and VG10's own fitted deviations at +0.152 [0.105, 0.195] with no
-    # cross-lag at all -- so a prior that made a large correlation cheap would be
-    # assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
+    # fitted (measured on the pre-#242 fit, whose lag construction was later
+    # corrected), and VG10's own fitted deviations at +0.152 [0.105, 0.195] with
+    # no cross-lag at all -- so a prior that made a large correlation cheap would
+    # be assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
     subject_re_correlation_eta=2.0,
 )
 
@@ -3801,9 +3826,28 @@ def validate_model_definition(definition) -> None:
     if sign_anchors is not None and (
         len(sign_anchors) != 3
         or not all(math.isfinite(age) for age in sign_anchors)
-        or tuple(sign_anchors) != tuple(sorted(sign_anchors))
+        # Strictly increasing, not merely sorted: the tent's segment slopes
+        # divide by the anchor gaps, so a duplicated anchor is a division by
+        # zero in the model graph (#238).
+        or not (sign_anchors[0] < sign_anchors[1] < sign_anchors[2])
     ):
-        raise ValueError(f"{prefix}.sign_anchor_ages must be three ordered ages.")
+        raise ValueError(
+            f"{prefix}.sign_anchor_ages must be three strictly increasing ages."
+        )
+    sign_peak_prior = getattr(definition, "sign_peak_prior", None)
+    if sign_peak_prior is not None and (
+        len(sign_peak_prior) != 2
+        or not all(
+            math.isfinite(parameter) and parameter > 0
+            for parameter in sign_peak_prior
+        )
+    ):
+        # The engines index this pair straight into pz.Beta(alpha, beta), which
+        # accepts and then samples garbage from a non-positive parameter (#238).
+        raise ValueError(
+            f"{prefix}.sign_peak_prior must be two finite positive Beta "
+            "parameters (alpha, beta)."
+        )
     if getattr(definition, "lag_baseline", "within") not in {"within", "population"}:
         raise ValueError(f"{prefix}.lag_baseline must be 'within' or 'population'.")
     if getattr(definition, "use_cross_lag", False) and not getattr(

@@ -12,6 +12,8 @@ import pytest
 
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_integral_counts,
+    require_valid_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     standardize_anchor_ages,
@@ -216,3 +218,64 @@ def test_construct_age_grids_anchor_explicit_age():
     X, mean, std, g = _grids(use_gp_anchor=True, gp_anchor_age_months=19.0)
     assert g.anchor_age_months == 19.0
     np.testing.assert_allclose(g.X_all_z[g.i_anchor, 0], (19.0 - mean) / std)
+
+
+# --- require_integral_counts ----------------------------------------------------
+
+
+def test_require_integral_counts_accepts_whole_numbers():
+    require_integral_counts(np.array([0.0, 3.0, 810.0]), "spoken")
+
+
+def test_require_integral_counts_rejects_fractions_with_examples():
+    with pytest.raises(ValueError, match="spoken contains 2 non-integral"):
+        require_integral_counts(np.array([1.0, 2.5, 3.0, 4.25]), "spoken")
+
+
+def test_require_integral_counts_rejects_infinities():
+    # np.floor(inf) == inf, so an infinity slips past the integrality check and
+    # would cast to an arbitrary integer; it must be rejected explicitly (#236).
+    with pytest.raises(ValueError, match="understood contains 1 non-finite"):
+        require_integral_counts(np.array([1.0, np.inf, 3.0]), "understood")
+
+
+def test_require_integral_counts_reports_nan_as_non_finite():
+    with pytest.raises(ValueError, match="spoken contains 1 non-finite"):
+        require_integral_counts(np.array([1.0, np.nan]), "spoken")
+
+
+# --- require_valid_counts ----------------------------------------------------
+#
+# The contract the nested spoken likelihood already gets from
+# nested_outcome_spec, applied to a count column an engine casts itself. VG13
+# cast `understood` to int before any check, so a fractional value would have
+# been silently truncated (#240).
+
+
+def test_require_valid_counts_accepts_integral_in_range():
+    require_valid_counts(np.array([0.0, 3.0, 810.0]), "understood", 810)
+
+
+def test_require_valid_counts_rejects_fractions():
+    with pytest.raises(ValueError, match="understood contains 1 non-integral"):
+        require_valid_counts(np.array([1.0, 2.5]), "understood", 810)
+
+
+def test_require_valid_counts_rejects_non_finite():
+    with pytest.raises(ValueError, match="non-finite"):
+        require_valid_counts(np.array([1.0, np.inf]), "understood", 810)
+
+
+def test_require_valid_counts_rejects_out_of_range():
+    with pytest.raises(ValueError, match="between 0 and n_trials"):
+        require_valid_counts(np.array([1.0, 811.0]), "understood", 810)
+    with pytest.raises(ValueError, match="between 0 and n_trials"):
+        require_valid_counts(np.array([-1.0, 3.0]), "understood", 810)
+
+
+def test_require_valid_counts_delegates_the_non_finite_message():
+    # require_valid_counts defers finiteness and integrality to
+    # require_integral_counts, so the failure names the offending values rather
+    # than reporting a bare "non-finite observed count(s)" (#236).
+    with pytest.raises(ValueError, match="understood contains 1 non-finite"):
+        require_valid_counts(np.array([1.0, np.inf]), "understood", 810)

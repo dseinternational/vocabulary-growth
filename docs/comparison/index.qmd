@@ -684,13 +684,18 @@ labels = {
 pd.DataFrame([
     {"Milestone": lab,
      "Estimate": _hdi(ms.loc[k, "median"], ms.loc[k, "ci_lo"], ms.loc[k, "ci_hi"], 1),
-     "Draws reaching it": f"{ms.loc[k, 'draws_reaching']:.0%}"}
+     "Draws reaching it": f"{ms.loc[k, 'draws_reaching']:.0%}",
+     **({"Draws censored": f"{ms.loc[k, 'draws_censored']:.0%}"}
+        if "draws_censored" in ms.columns else {})}
     for k, lab in labels.items()
 ]).set_index("Milestone")
 ```
 
-Every one is reached in 100% of posterior draws, so unlike the peak-growth ages
-above these are not boundary-censored.
+The `Draws reaching it` column is the identification check: a crossing counts
+only when the state genuinely flips inside the grid (a state already true at the
+youngest established age is censored, not an early crossing, and a peak on a
+grid edge is censored rather than located). Read a milestone reached in less
+than all draws as a bound rather than an estimate.
 
 The three arrive in that order, and the spacing is the substantive part.
 Sign-only vocabulary stops *growing* at ≈34 months, but it is still the majority

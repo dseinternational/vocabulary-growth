@@ -584,8 +584,7 @@ def ppc_count_distribution_gallery(
 
 def plot_posterior_predictive_pmf(
     X_query: np.ndarray,
-    X_plot: np.ndarray,
-    y_plot: np.ndarray,
+    y_query: np.ndarray,
     n_trials: int,
     log_scale: bool = False,
     output_dir: str | None = None,
@@ -596,21 +595,29 @@ def plot_posterior_predictive_pmf(
     """
     For each query age, plot the posterior predictive distribution of counts as a PMF on a common support.
 
+    ``y_query`` carries the exact posterior-predictive draws at the query ages,
+    shape ``(n_query, n_samples)`` — previously the nearest point on the plot
+    grid was substituted, so each panel showed the distribution at an age up to
+    half a grid step away from the one in its label (#234).
+
     ``max_age_months`` drops query ages past the outcome's reporting cap. Age
     lives in the *column names* here (``pmf_84m``), not in a column, so this
     table is easy to miss when auditing which artefacts are capped — it was.
     """
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    y_query = np.asarray(y_query)
+    if y_query.shape[0] != X_query.shape[0]:
+        raise ValueError(
+            f"y_query has {y_query.shape[0]} rows but X_query has "
+            f"{X_query.shape[0]} ages."
+        )
     if max_age_months is not None:
-        X_query = X_query[X_query <= max_age_months]
+        keep = X_query <= max_age_months
+        X_query = X_query[keep]
+        y_query = y_query[keep, :]
 
-    all_draws = []
-    idxs = []
-    for a in X_query:
-        j = int(np.argmin(np.abs(X_plot - a)))
-        idxs.append(j)
-        all_draws.append(y_plot[j, :].astype(int))
-    all_draws = np.concatenate(all_draws)
+    draws_by_age = [y_query[i, :].astype(int) for i in range(X_query.size)]
+    all_draws = np.concatenate(draws_by_age)
     x_lo, x_hi = np.quantile(all_draws, [0.01, 0.99])
     x_lo = int(max(0, np.floor(x_lo)))
     x_hi = int(min(n_trials, np.ceil(x_hi)))
@@ -618,15 +625,13 @@ def plot_posterior_predictive_pmf(
     k = np.arange(x_lo, x_hi + 1)
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
-    for _a, j in zip(X_query, idxs, strict=True):
-        draws = y_plot[j, :].astype(int)
-
+    for a, draws in zip(X_query, draws_by_age, strict=True):
         # Empirical PMF on common support
         in_support = (draws >= x_lo) & (draws <= x_hi)
         counts = np.bincount(draws[in_support] - x_lo, minlength=len(k))
         pmf = counts[: len(k)] / draws.size
         # Step line (discrete PMF)
-        plt.step(k, pmf, where="mid", lw=2, label=f"{X_plot[j]:.0f}m")
+        plt.step(k, pmf, where="mid", lw=2, label=f"{a:.0f}m")
 
     plt.xlabel(x_label)
     plt.ylabel("Posterior predictive probability")
@@ -641,12 +646,11 @@ def plot_posterior_predictive_pmf(
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
         csv_data = {"word_count": k}
-        for _a, j in zip(X_query, idxs, strict=True):
-            draws = y_plot[j, :].astype(int)
+        for a, draws in zip(X_query, draws_by_age, strict=True):
             in_support = (draws >= x_lo) & (draws <= x_hi)
             counts = np.bincount(draws[in_support] - x_lo, minlength=len(k))
             pmf = counts[: len(k)] / draws.size
-            csv_data[f"pmf_{X_plot[j]:.0f}m"] = pmf
+            csv_data[f"pmf_{a:.0f}m"] = pmf
         _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
     return plt.gcf()
@@ -655,8 +659,7 @@ def plot_posterior_predictive_pmf(
 
 def plot_posterior_predictive_cdf(
     X_query: np.ndarray,
-    X_plot: np.ndarray,
-    y_plot: np.ndarray,
+    y_query: np.ndarray,
     n_trials: int,
     output_dir: str | None = None,
     filename: str | None = None,
@@ -665,20 +668,25 @@ def plot_posterior_predictive_cdf(
 ) -> Figure:
     """For each query age, plot the posterior predictive CDF of counts.
 
-    ``max_age_months`` drops query ages past the outcome's reporting cap; as in
-    :func:`plot_posterior_predictive_pmf`, age is carried in the column names.
+    ``y_query`` carries the exact posterior-predictive draws at the query ages,
+    shape ``(n_query, n_samples)`` (see :func:`plot_posterior_predictive_pmf`
+    for why the nearest-plot-grid substitution was retired). ``max_age_months``
+    drops query ages past the outcome's reporting cap; age is carried in the
+    column names.
     """
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
+    y_query = np.asarray(y_query)
+    if y_query.shape[0] != X_query.shape[0]:
+        raise ValueError(
+            f"y_query has {y_query.shape[0]} rows but X_query has "
+            f"{X_query.shape[0]} ages."
+        )
     if max_age_months is not None:
-        X_query = X_query[X_query <= max_age_months]
+        keep = X_query <= max_age_months
+        X_query = X_query[keep]
+        y_query = y_query[keep, :]
 
-    draws_by_age = []
-    plot_idx_by_age = []
-
-    for a in X_query:
-        j = int(np.argmin(np.abs(X_plot - a)))
-        plot_idx_by_age.append(j)
-        draws_by_age.append(y_plot[j, :].astype(int))
+    draws_by_age = [y_query[i, :].astype(int) for i in range(X_query.size)]
 
     # Choose a common x-range so curves are comparable (central 99% over all selected ages)
     all_draws = np.concatenate(draws_by_age)
@@ -689,12 +697,12 @@ def plot_posterior_predictive_cdf(
 
     plt.figure(figsize=plot_styles.FIGSIZE_XL)
 
-    for _a, j, draws in zip(X_query, plot_idx_by_age, draws_by_age, strict=True):
+    for a, draws in zip(X_query, draws_by_age, strict=True):
         # Empirical CDF on common support: F(k) = mean(draws <= k)
         # Vectorised computation:
         draws_sorted = np.sort(draws)
         cdf = np.searchsorted(draws_sorted, k, side="right") / draws_sorted.size
-        plt.step(k, cdf, where="post", lw=2, label=f"{X_plot[j]:.0f}m")
+        plt.step(k, cdf, where="post", lw=2, label=f"{a:.0f}m")
 
     plt.xlabel(x_label)
     plt.ylabel("Posterior predictive CDF  P(Y ≤ k)")
@@ -706,10 +714,10 @@ def plot_posterior_predictive_cdf(
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
         csv_data = {"word_count": k}
-        for _a, j, draws in zip(X_query, plot_idx_by_age, draws_by_age, strict=True):
+        for a, draws in zip(X_query, draws_by_age, strict=True):
             draws_sorted = np.sort(draws)
             cdf = np.searchsorted(draws_sorted, k, side="right") / draws_sorted.size
-            csv_data[f"cdf_{X_plot[j]:.0f}m"] = cdf
+            csv_data[f"cdf_{a:.0f}m"] = cdf
         _save_csv(pd.DataFrame(csv_data), output_dir, filename)
 
     return plt.gcf()
@@ -1220,6 +1228,46 @@ def plot_expected_learning_rate(
             "ci_lo": ci_rate_plot[:, 0],
             "ci_hi": ci_rate_plot[:, 1],
         }), output_dir, filename)
+        if not smooth:
+            # Draw-wise peak location over the (capped) grid, so the headline
+            # "fastest growth" row can carry uncertainty in *where* the peak is
+            # rather than only in the rate at one selected age (#234). A draw
+            # whose maximum lands on the first or last grid age is
+            # boundary-censored — its true peak lies at or beyond the edge of
+            # the reported range — so the censored share is recorded alongside.
+            # The unsmoothed draws are used; the smoothed call writes no
+            # companion because it would duplicate this file byte for byte.
+            peak_idx = np.argmax(rate, axis=1)
+            peak_ages = x_plot_values[peak_idx]
+            n_grid = rate.shape[1]
+            boundary_share = float(
+                np.mean((peak_idx == 0) | (peak_idx == n_grid - 1))
+            )
+            peak_lo, peak_hi = intervals.interval_1d(
+                peak_ages, ci_prob, interval_kind
+            )
+            median_idx = int(np.argmax(median_rate))
+            _save_csv(
+                pd.DataFrame(
+                    {
+                        "age_min_months": [float(x_plot_values[0])],
+                        "age_max_months": [float(x_plot_values[-1])],
+                        "median_curve_peak_age_months": [
+                            float(x_plot_values[median_idx])
+                        ],
+                        "median_curve_peak_at_boundary": [
+                            bool(median_idx in (0, n_grid - 1))
+                        ],
+                        "peak_age_median_months": [float(np.median(peak_ages))],
+                        "peak_age_ci_lo_months": [float(peak_lo)],
+                        "peak_age_ci_hi_months": [float(peak_hi)],
+                        "boundary_draw_share": [boundary_share],
+                        "ci_prob": [float(ci_prob)],
+                    }
+                ),
+                output_dir,
+                f"{filename}_peak",
+            )
 
     return plt.gcf()
 
@@ -1363,6 +1411,36 @@ def plot_posterior_kappa(
     if filename is not None and output_dir is not None:
         _save_png_svg(fig, output_dir, filename)
         _save_csv(df_kappa_plot, output_dir, filename)
+        # Draw-wise endpoint contrast, so the headline "spread widens/narrows"
+        # claim carries a posterior sign probability and an interval instead of
+        # a comparison of two plug-in medians (#234). The variance-inflation
+        # factor is computed per draw at the youngest and oldest (capped) grid
+        # ages, and the ratio old/young summarised across draws.
+        vif_young = (n_trials + kappa_plot_samps[0, :]) / (
+            1.0 + kappa_plot_samps[0, :]
+        )
+        vif_old = (n_trials + kappa_plot_samps[-1, :]) / (
+            1.0 + kappa_plot_samps[-1, :]
+        )
+        vif_ratio = vif_old / vif_young
+        ratio_lo, ratio_hi = intervals.interval_1d(vif_ratio, ci_prob, interval_kind)
+        _save_csv(
+            pd.DataFrame(
+                {
+                    "age_young_months": [float(X_plot[0])],
+                    "age_old_months": [float(X_plot[-1])],
+                    "vif_young_median": [float(np.median(vif_young))],
+                    "vif_old_median": [float(np.median(vif_old))],
+                    "vif_ratio_median": [float(np.median(vif_ratio))],
+                    "vif_ratio_ci_lo": [float(ratio_lo)],
+                    "vif_ratio_ci_hi": [float(ratio_hi)],
+                    "p_widens": [float(np.mean(vif_ratio > 1.0))],
+                    "ci_prob": [float(ci_prob)],
+                }
+            ),
+            output_dir,
+            f"{filename}_trend",
+        )
 
     return fig, df_kappa_plot, df_kappa_query
 

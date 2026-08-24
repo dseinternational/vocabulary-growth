@@ -20,6 +20,14 @@ Pairs compared (joint models contribute their joint likelihood):
 Where the same observed-y vector underlies two models with different
 likelihood shapes (e.g. VG02 univariate-u vs VG05 joint), LOO would not
 be directly comparable, so those are skipped.
+
+The joint likelihood's pointwise unit is the **administration**: for a
+paired row the held-out case is log p(U_i) + log p(S_i | U_i), one PSIS
+weight per administration (#236). Everything here remains
+leave-one-administration-out — repeated administrations of the same child
+are separate cases — so it scores prediction of another administration
+like those in the frame, not generalisation to a new child. For new-child
+questions use grouped leave-one-subject-out (`scripts/kfold_loso.py`).
 """
 
 from __future__ import annotations
@@ -120,26 +128,59 @@ def _loo_summary_row(label: str, loo, reff=None) -> dict:
 
 
 def _attach_joint_log_likelihood(idata: xr.DataTree) -> None:
-    """For bivariate traces with `y_u_obs` and `y_s_obs`, attach a
-    combined `y_joint` log-likelihood whose per-observation entry is the
-    concatenation across the two outcomes. Required so az.loo can treat
-    the joint likelihood as a single coherent quantity."""
+    """For bivariate traces with `y_u_obs` and `y_s_obs`, attach a combined
+    `y_joint` log-likelihood with one entry per administration.
+
+    The coherent pointwise unit of the joint likelihood is the
+    administration: log p(U_i) + log p(S_i | U_i) where both factors exist,
+    and the single observed factor for an understood-only or spoken-only
+    row. The stored `obs_u_mask` / `obs_s_mask` constant data map each
+    outcome's likelihood rows back to administration rows, so paired
+    factors are **summed**, not concatenated. Concatenating them (the
+    pre-#236 behaviour) made every paired administration two held-out cases
+    with two PSIS weights, and when its understood factor was held out the
+    spoken factor still conditioned on the observed understood count —
+    leaking information relative to leave-one-administration-out."""
     ll = idata.log_likelihood
     if "y_joint" in ll.data_vars:
         return
+    if "constant_data" not in [g.rsplit("/", 1)[-1] for g in idata.groups]:
+        raise ValueError(
+            "trace has no constant_data group, so its likelihood rows cannot "
+            "be mapped back to administrations for joint LOO."
+        )
+    const = idata.constant_data
+    u_mask = np.asarray(const["obs_u_mask"].values, dtype=bool)
+    s_mask = np.asarray(const["obs_s_mask"].values, dtype=bool)
     u = ll["y_u_obs"]
     s = ll["y_s_obs"]
     u_dim = [d for d in u.dims if d not in ("chain", "draw")][0]
     s_dim = [d for d in s.dims if d not in ("chain", "draw")][0]
-    # Build a stacked array along a new `obs_joint` dimension.
-    u_renamed = u.rename({u_dim: "obs_joint"}).assign_coords(
-        obs_joint=np.arange(u.sizes[u_dim])
+    if int(u_mask.sum()) != u.sizes[u_dim] or int(s_mask.sum()) != s.sizes[s_dim]:
+        raise ValueError(
+            f"stored masks ({int(u_mask.sum())} understood, "
+            f"{int(s_mask.sum())} spoken) do not match the likelihood rows "
+            f"({u.sizes[u_dim]}, {s.sizes[s_dim]}); factors cannot be mapped "
+            "to administrations."
+        )
+    any_mask = u_mask | s_mask
+    # Position of each administration row among the rows kept in y_joint.
+    joint_pos = np.cumsum(any_mask) - 1
+    u_vals = u.transpose("chain", "draw", u_dim).values
+    s_vals = s.transpose("chain", "draw", s_dim).values
+    joint = np.zeros(u_vals.shape[:2] + (int(any_mask.sum()),), dtype=float)
+    joint[..., joint_pos[u_mask]] += u_vals
+    joint[..., joint_pos[s_mask]] += s_vals
+    joint_da = xr.DataArray(
+        joint,
+        dims=("chain", "draw", "obs_joint"),
+        coords={
+            "chain": u["chain"].values,
+            "draw": u["draw"].values,
+            "obs_joint": np.flatnonzero(any_mask),
+        },
     )
-    s_renamed = s.rename({s_dim: "obs_joint"}).assign_coords(
-        obs_joint=np.arange(u.sizes[u_dim], u.sizes[u_dim] + s.sizes[s_dim])
-    )
-    joint = xr.concat([u_renamed, s_renamed], dim="obs_joint")
-    idata.log_likelihood = ll.assign({"y_joint": joint})
+    idata.log_likelihood = ll.assign({"y_joint": joint_da})
 
 
 def per_model_loo() -> dict[str, list[dict]]:

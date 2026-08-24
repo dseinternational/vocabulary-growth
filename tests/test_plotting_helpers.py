@@ -54,8 +54,7 @@ def test_plot_posterior_predictive_pmf_does_not_fold_tails_into_endpoints(tmp_pa
     draws = np.array([0] * 5 + [1] * 495 + [2] * 495 + [10] * 5)
     plot_posterior_predictive_pmf(
         X_query=np.array([12.0]),
-        X_plot=np.array([12.0]),
-        y_plot=draws.reshape(1, -1),
+        y_query=draws.reshape(1, -1),
         n_trials=10,
         output_dir=str(tmp_path),
         filename="pmf",
@@ -64,6 +63,32 @@ def test_plot_posterior_predictive_pmf_does_not_fold_tails_into_endpoints(tmp_pa
     pmf = pd.read_csv(tmp_path / "pmf.csv")
     assert pmf["word_count"].tolist() == [1, 2]
     np.testing.assert_allclose(pmf["pmf_12m"].to_numpy(), [0.495, 0.495])
+
+
+def test_plot_posterior_predictive_pmf_uses_exact_query_draws(tmp_path):
+    # Two query ages with distinct predictive distributions: each column must
+    # come from its own age's draws, not from a nearest-grid substitute (#234).
+    y_query = np.vstack(
+        [
+            np.array([1] * 500 + [2] * 500),
+            np.array([7] * 500 + [8] * 500),
+        ]
+    )
+    plot_posterior_predictive_pmf(
+        X_query=np.array([12.0, 24.0]),
+        y_query=y_query,
+        n_trials=10,
+        output_dir=str(tmp_path),
+        filename="pmf_exact",
+    )
+    pmf = pd.read_csv(tmp_path / "pmf_exact.csv")
+    assert {"pmf_12m", "pmf_24m"} <= set(pmf.columns)
+    twelve = pmf.set_index("word_count")["pmf_12m"]
+    twenty_four = pmf.set_index("word_count")["pmf_24m"]
+    assert twelve.loc[1] == pytest.approx(0.5)
+    assert twelve.loc[7] == pytest.approx(0.0)
+    assert twenty_four.loc[7] == pytest.approx(0.5)
+    assert twenty_four.loc[1] == pytest.approx(0.0)
 
 
 def test_plot_posterior_kappa_reports_hdi_not_equal_tailed_interval():
@@ -173,3 +198,79 @@ def test_ppc_gallery_falls_back_to_combined_figure(tmp_path, capsys):
 def test_ppc_gallery_prints_nothing_when_no_files(tmp_path, capsys):
     ppc_count_distribution_gallery("ppc", directory=str(tmp_path))
     assert capsys.readouterr().out.strip() == ""
+
+
+def test_expected_learning_rate_writes_a_draw_wise_peak_table(tmp_path):
+    from vocab_growth.plotting import plot_expected_learning_rate
+
+    rng = np.random.default_rng(5)
+    x = np.linspace(12.0, 60.0, 25)
+    # Latent trajectories whose derivative peaks mid-range, with draw-to-draw
+    # jitter in the peak location.
+    centres = rng.normal(36.0, 3.0, size=200)
+    f_plot = np.stack(
+        [4.0 / (1.0 + np.exp(-(x - c) / 6.0)) - 4.0 for c in centres], axis=1
+    )
+    plot_expected_learning_rate(
+        x,
+        f_plot,
+        n_trials=810,
+        output_dir=str(tmp_path),
+        filename="expected_learning_rate",
+    )
+
+    peak = pd.read_csv(tmp_path / "expected_learning_rate_peak.csv")
+    row = peak.iloc[0]
+    assert not row["median_curve_peak_at_boundary"]
+    # The count-scale rate is 810 * p(1-p) * df/dx, which peaks to the right of
+    # the latent midpoint here; interior and near the jittered centres is what
+    # matters, not the latent midpoint itself.
+    assert 30.0 < row["peak_age_median_months"] < 54.0
+    assert row["peak_age_ci_lo_months"] <= row["peak_age_median_months"]
+    assert row["peak_age_ci_hi_months"] >= row["peak_age_median_months"]
+    assert 0.0 <= row["boundary_draw_share"] < 0.2
+
+
+def test_expected_learning_rate_smoothed_writes_no_duplicate_peak_table(tmp_path):
+    from vocab_growth.plotting import plot_expected_learning_rate
+
+    x = np.linspace(12.0, 60.0, 25)
+    f_plot = np.tile((x / 60.0) - 1.0, (50, 1)).T
+    plot_expected_learning_rate(
+        x,
+        f_plot,
+        n_trials=810,
+        smooth=True,
+        output_dir=str(tmp_path),
+        filename="expected_learning_rate_smoothed",
+    )
+    assert not os.path.exists(tmp_path / "expected_learning_rate_smoothed_peak.csv")
+
+
+def test_posterior_kappa_writes_a_draw_wise_endpoint_contrast(tmp_path):
+    # kappa falls with age in every draw, so the variance-inflation factor
+    # rises: P(widens) must be 1 and the ratio interval must sit above 1.
+    rng = np.random.default_rng(9)
+    n_draws = 300
+    kappa_young = rng.uniform(40.0, 60.0, size=n_draws)
+    kappa_old = rng.uniform(4.0, 8.0, size=n_draws)
+    kappa_mid = (kappa_young + kappa_old) / 2.0
+    kappa = np.vstack([kappa_young, kappa_mid, kappa_old])
+
+    plot_posterior_kappa(
+        X_plot=np.array([12.0, 48.0, 84.0]),
+        kappa_plot=kappa,
+        X_query=np.array([12.0, 84.0]),
+        kappa_query=kappa[[0, 2], :],
+        n_trials=810,
+        output_dir=str(tmp_path),
+        filename="posterior_kappa",
+    )
+
+    trend = pd.read_csv(tmp_path / "posterior_kappa_trend.csv")
+    row = trend.iloc[0]
+    assert row["age_young_months"] == 12.0
+    assert row["age_old_months"] == 84.0
+    assert row["p_widens"] == 1.0
+    assert row["vif_ratio_ci_lo"] > 1.0
+    assert row["vif_old_median"] > row["vif_young_median"]

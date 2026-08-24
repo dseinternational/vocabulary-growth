@@ -36,6 +36,7 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
+    require_valid_counts,
     slope_anchor_logit_coeffs,
     standardize_ages,
     validate_ell_bounds,
@@ -73,6 +74,7 @@ from vocab_growth.posterior_analysis import (
     extract_posterior_predictive as _extract_posterior_predictive,
 )
 from vocab_growth.reporting import (
+    console,
     dataframe_table,
     heading,
     key_value_table,
@@ -269,6 +271,9 @@ def prepare_bivariate_data(
     # Create a BinomialModelData for the context interface (using understood as primary)
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_u_valid = analysis_df.loc[analysis_df["understood"].notna(), "understood"]
+    require_valid_counts(
+        y_u_valid.to_numpy(dtype=float), "understood", definition.n_trials
+    )
     y_obs_placeholder = np.zeros(n, dtype=int)
     y_obs_placeholder[analysis_df["understood"].notna().values] = (
         y_u_valid.values.astype(int)
@@ -340,6 +345,19 @@ def configure_bivariate_priors(
     )
     _plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
 
+    # --- Cross-lag coefficient prior (VG16) ---
+    # Emitted as its own artefact so the report can put a prior figure beside
+    # the beta_lag posterior — the shared trajectory prior predictives cannot
+    # isolate this term (issue #242). A full effect-scale prior predictive
+    # (the prior translated into q shifts over the empirical x_lag range)
+    # remains registered follow-up work in #242.
+    if getattr(definition, "use_cross_lag", False):
+        heading("Cross-lag coefficient prior", style="bold cyan")
+        beta_lag_dist = pz.Normal(
+            mu=definition.beta_lag_mu, sigma=definition.beta_lag_sigma
+        )
+        _plot_and_print_dist(context, beta_lag_dist, "beta_lag_dist")
+
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
     kappa_u_fields = _configure_kappa_priors(context, definition.kappa_u, "_u")
@@ -393,13 +411,18 @@ def build_model(
     has_s = analysis_df["spoken"].notna().values
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_u_observed = np.asarray(analysis_df.loc[has_u, "understood"], dtype=int)
+    n_trials = context.model_data.n_trials
+    y_u_values = np.asarray(analysis_df.loc[has_u, "understood"], dtype=float)
+    # Validate BEFORE the integer cast, exactly as the RE engine does: the cast
+    # truncates silently, so the post-cast bounds checks below cannot catch
+    # 810.9 or -0.1, which truncate into range (#236, #240).
+    require_valid_counts(y_u_values, "understood", n_trials)
+    y_u_observed = y_u_values.astype(int)
 
     idx_u = np.where(has_u)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_trials = context.model_data.n_trials
     spoken_spec = nested_outcome_spec(
         analysis_df,
         parent_col="understood",
@@ -928,7 +951,7 @@ def prior_predictive_checks(context: BivariateContext):
 sample = _shared_sample
 
 
-def diagnostics(context: BivariateContext):
+def diagnostics(context: BivariateContext, definition=None):
     """Run diagnostics on the posterior samples.
 
     Thin wrapper over the shared engine (common.py): bivariate reports
@@ -936,13 +959,65 @@ def diagnostics(context: BivariateContext):
     ``kappa_u_obs``/``kappa_s_obs`` for the trace plot as well; an
     observation-sized variable never fitted under ArviZ's subplot cap, so they
     never rendered, and since 2026-08-23 the sampler does not store them.)
+
+    A cross-lag definition (VG16, issue #242) changes two things:
+
+    * **Understood LOO is suppressed.** The lag predictor embeds earlier
+      observed understood counts as fixed covariates, so leaving one
+      understood likelihood term out does not remove that count from the later
+      spoken terms it predicts -- the "held-out" score still conditions on the
+      held-out outcome, and Pareto-k cannot detect the leak. Spoken LOO is
+      retained but labelled for what it estimates: prediction of a spoken
+      count conditional on the child's observed understood history, not
+      unconditional new-observation prediction.
+    * **The pair plot is reordered** so ``beta_lag`` and the child/study
+      scales it competes with fill the capped grid, instead of falling off
+      the end of model order.
     """
+    if not getattr(definition, "use_cross_lag", False):
+        _shared_diagnostics(
+            context,
+            loo_var_names=(
+                ("y_s_obs", "words spoken"),
+                ("y_u_obs", "words understood"),
+            ),
+        )
+        return
+
+    posterior_vars = set(context.trace.posterior.data_vars)
+
+    def _prioritise_cross_lag(
+        names: list[str],
+        priority: tuple[str, ...] = (
+            "beta_lag",
+            "tau_subj_u",
+            "tau_subj_q",
+            "tau_u",
+            "tau_q",
+        ),
+    ) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in (*priority, *names):
+            if name in posterior_vars and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+        return ordered
+
+    console.print(
+        "[yellow]Understood LOO is not computed for this model: the cross-lag "
+        "predictor embeds earlier observed understood counts, so a pointwise "
+        "leave-one-understood-out score would still condition on the held-out "
+        "count through later spoken terms (issue #242). The spoken score below "
+        "is prediction conditional on the child's observed understood "
+        "history.[/yellow]"
+    )
     _shared_diagnostics(
         context,
         loo_var_names=(
-            ("y_s_obs", "words spoken"),
-            ("y_u_obs", "words understood"),
+            ("y_s_obs", "words spoken (conditional on observed understood history)"),
         ),
+        var_names_fn=_prioritise_cross_lag,
     )
 
 
@@ -1997,8 +2072,7 @@ def _run_bivariate_outcome_plots(
 
     plotting.plot_posterior_predictive_pmf(
         samples.X_query,
-        samples.X_plot,
-        y_plot,
+        y_query,
         n_trials,
         output_dir=output_dir,
         filename=f"posterior_predictive_pmf_{suffix}",
@@ -2008,8 +2082,7 @@ def _run_bivariate_outcome_plots(
 
     plotting.plot_posterior_predictive_cdf(
         samples.X_query,
-        samples.X_plot,
-        y_plot,
+        y_query,
         n_trials,
         output_dir=output_dir,
         filename=f"posterior_predictive_cdf_{suffix}",

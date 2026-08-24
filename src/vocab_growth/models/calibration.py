@@ -34,9 +34,15 @@ DEFAULT_INTERVAL_PROBS: tuple[float, ...] = (
     intervals.DEFAULT_CI_PROB,
 )
 
-# Variance of a standard uniform, the value a perfectly calibrated probability
-# integral transform has. Below it the predictive distribution is wider than the
-# data warrant (conservative intervals); above it, too narrow (overconfident).
+# Variance of a standard uniform. For a *continuous* outcome this is the value a
+# perfectly calibrated probability integral transform has. For a discrete count
+# the deterministic mid-PIT is NOT uniform even under perfect calibration: its
+# variance is (1 - E[sum_k p_k^3]) / 12, strictly below 1/12, with the shortfall
+# largest where the predictive mass concentrates on few values (young-age bands
+# full of zero counts). The tables therefore carry a model-implied
+# ``expected_mid_pit_variance`` column computed from the predictive draws
+# themselves, and the reporting compares against that, not against 1/12 (#234).
+# The constant is kept as the continuous limit both references approach.
 UNIFORM_PIT_VARIANCE: float = 1.0 / 12.0
 
 
@@ -53,7 +59,18 @@ def predictive_calibration_table(
 
     ``predictive`` must have shape ``(observation, posterior_sample)``. The
     mid-PIT uses half the replicated probability mass equal to the observation,
-    which is a deterministic diagnostic suitable for a discrete count outcome.
+    which is a deterministic diagnostic suitable for a discrete count outcome —
+    but its calibrated reference is *not* the standard uniform. Under perfect
+    calibration a discrete mid-PIT has mean 1/2 and variance
+    ``(1 - sum_k p_k^3) / 12`` per observation (Bernoulli(0.5): values 0.25/0.75,
+    variance 0.0625, not 1/12), and an equal-tailed discrete interval covers at
+    least its nominal mass because quantiles land on atoms. Each row therefore
+    also carries the model-implied calibrated references, estimated from the
+    predictive draws: ``expected_mid_pit_variance`` (the mean over observations
+    of the per-observation calibrated variance) and ``expected_coverage`` (the
+    mean over observations of the predictive mass inside the tabulated
+    interval). Compare the empirical columns against these, not against 1/12 or
+    the nominal level (#234).
     """
     observed = np.asarray(observed, dtype=float)
     predictive = np.asarray(predictive)
@@ -75,8 +92,12 @@ def predictive_calibration_table(
     predictive_mean = np.empty(n_observations, dtype=float)
     predictive_zero_rate = np.empty(n_observations, dtype=float)
     pit = np.empty(n_observations, dtype=float)
+    expected_pit_variance = np.empty(n_observations, dtype=float)
     coverage_by_prob = {
         prob: np.empty(n_observations, dtype=bool) for prob in interval_probs
+    }
+    expected_coverage_by_prob = {
+        prob: np.empty(n_observations, dtype=float) for prob in interval_probs
     }
     width_by_prob = {
         prob: np.empty(n_observations, dtype=float) for prob in interval_probs
@@ -91,11 +112,24 @@ def predictive_calibration_table(
         pit[start:stop] = np.mean(y_rep < y[:, None], axis=1) + 0.5 * np.mean(
             y_rep == y[:, None], axis=1
         )
+        for offset, row in enumerate(y_rep):
+            _, counts = np.unique(row, return_counts=True)
+            mass = counts / row.size
+            # Var(mid-PIT | calibrated) = (1 - sum p_k^3) / 12 for this
+            # observation's predictive distribution.
+            expected_pit_variance[start + offset] = (
+                1.0 - float(np.sum(mass**3))
+            ) / 12.0
         for prob in interval_probs:
             tail = (1 - prob) / 2
             lower = np.quantile(y_rep, tail, axis=1)
             upper = np.quantile(y_rep, 1 - tail, axis=1)
             coverage_by_prob[prob][start:stop] = (y >= lower) & (y <= upper)
+            # Predictive mass inside the tabulated interval: what coverage a
+            # perfectly calibrated model would show, discreteness included.
+            expected_coverage_by_prob[prob][start:stop] = np.mean(
+                (y_rep >= lower[:, None]) & (y_rep <= upper[:, None]), axis=1
+            )
             width_by_prob[prob][start:stop] = upper - lower
 
     age_starts = np.floor(ages / age_band_months).astype(int) * age_band_months
@@ -122,6 +156,12 @@ def predictive_calibration_table(
             "predictive_zero_rate": float(predictive_zero_rate[mask].mean()),
             "mid_pit_mean": float(pit_group.mean()),
             "mid_pit_variance": float(pit_group.var()),
+            # Pooled calibrated reference: every per-observation mid-PIT has
+            # mean 1/2 under calibration, so the pooled variance is the mean of
+            # the per-observation variances.
+            "expected_mid_pit_variance": float(
+                expected_pit_variance[mask].mean()
+            ),
             "mid_pit_extreme_rate": float(
                 np.mean((pit_group < 0.05) | (pit_group > 0.95))
             ),
@@ -132,6 +172,9 @@ def predictive_calibration_table(
                     **shared,
                     "interval_probability": prob,
                     "empirical_coverage": float(coverage_by_prob[prob][mask].mean()),
+                    "expected_coverage": float(
+                        expected_coverage_by_prob[prob][mask].mean()
+                    ),
                     "mean_interval_width": float(width_by_prob[prob][mask].mean()),
                 }
             )
@@ -206,8 +249,10 @@ _DISPLAY_COLUMNS: dict[str, str] = {
     "predictive_mean": "Predicted mean",
     "mean_error": "Mean error",
     "empirical_coverage": "Coverage",
+    "expected_coverage": "Calibrated coverage",
     "mid_pit_mean": "PIT mean",
     "mid_pit_variance": "PIT variance",
+    "expected_mid_pit_variance": "Calibrated PIT variance",
     "mid_pit_extreme_rate": "PIT extreme rate",
 }
 
@@ -279,8 +324,10 @@ def format_calibration(frame: pd.DataFrame) -> pd.DataFrame:
         ("Predicted mean", 1),
         ("Mean error", 1),
         ("Coverage", 3),
+        ("Calibrated coverage", 3),
         ("PIT mean", 3),
         ("PIT variance", 3),
+        ("Calibrated PIT variance", 3),
         ("PIT extreme rate", 3),
     ):
         if label in out.columns:
@@ -313,14 +360,42 @@ def render_calibration_section(directory: str = ".") -> None:
         return
 
     overall, level = overall_calibration(table)
-    print(
-        f"Predictive coverage is reported at the **{level:.0%}** nominal level, the "
-        "outer interval this fit tabulated. A well-calibrated model has coverage "
-        f"near {level:.0%}, a PIT mean near 0.5, and a PIT variance near "
-        f"{UNIFORM_PIT_VARIANCE:.3f} (the variance of a standard uniform). Coverage "
-        "above nominal with PIT variance below that value means the predictive "
-        "distribution is wider than the data warrant.\n"
-    )
+    has_discrete_reference = "expected_mid_pit_variance" in table.columns
+    if has_discrete_reference:
+        print(
+            f"Predictive coverage is reported at the **{level:.0%}** nominal level, "
+            "the outer interval this fit tabulated. The outcome is a discrete "
+            "count, so a perfectly calibrated model does *not* show coverage "
+            f"exactly {level:.0%} or a PIT variance of "
+            f"{UNIFORM_PIT_VARIANCE:.3f} (the continuous-uniform value): discrete "
+            "intervals cover at least their nominal mass, and the deterministic "
+            "mid-PIT is under-dispersed wherever the predictive mass concentrates "
+            "on few counts (the young-age bands full of zeros). The **calibrated "
+            "coverage** and **calibrated PIT variance** columns give the values a "
+            "perfectly calibrated model would show for these observations, "
+            "computed from this fit's own predictive draws — read the empirical "
+            "columns against those, not against the nominal level or "
+            f"{UNIFORM_PIT_VARIANCE:.3f}. A PIT mean near 0.5 still indicates "
+            "little systematic bias; coverage above its calibrated reference with "
+            "PIT variance below its calibrated reference means the predictive "
+            "distribution is wider than the data warrant.\n"
+        )
+    else:
+        # A table written before the discrete reference existed: state the
+        # continuous benchmark, with the discreteness caveat it needs.
+        print(
+            f"Predictive coverage is reported at the **{level:.0%}** nominal "
+            "level, the outer interval this fit tabulated. A well-calibrated "
+            f"model has coverage near {level:.0%}, a PIT mean near 0.5, and a "
+            f"PIT variance near {UNIFORM_PIT_VARIANCE:.3f} (the variance of a "
+            "standard uniform) — but the outcome is a discrete count, so even a "
+            "perfectly calibrated model shows some over-coverage and a PIT "
+            "variance below that value, most visibly in bands where the "
+            "predictive mass concentrates on few counts. This fit predates the "
+            "calibrated discrete reference columns (refit to produce them), so "
+            "small departures in that direction are not evidence of "
+            "miscalibration.\n"
+        )
     # The caveat travels with the numbers. Without it a reader of this page alone
     # would take over-coverage as evidence that the reported intervals are
     # conservative for a new child, which these in-sample checks cannot support.

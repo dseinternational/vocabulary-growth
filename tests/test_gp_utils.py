@@ -574,3 +574,82 @@ def test_child_factor_rows_carry_tau_and_sigma_has_rank_k(rank):
     assert L.shape == (4, rank)
     assert np.allclose(np.linalg.norm(L, axis=1), taus)
     assert np.linalg.matrix_rank(L @ L.T) == rank
+
+
+# --- HSGP basis centre pinning (GPGrid.x_center_z) -----------------------------
+
+
+def test_hsgp_prior_respects_a_preset_basis_centre():
+    """The locked-PyMC mechanism the pin relies on: a preset centre wins.
+
+    ``pm.gp.HSGP.prior_linearized`` computes ``_X_center`` from the min/max of
+    the X it receives only when the attribute is still None. If an upgrade ever
+    removes that guard, ``GPGrid.x_center_z`` would silently stop pinning and
+    the basis centre would follow the reporting grid again.
+    """
+    with pm.Model():
+        cov = pm.gp.cov.ExpQuad(1, ls=1.0)
+        hsgp = pm.gp.HSGP(cov_func=cov, m=[8], L=[5.0])
+        hsgp._X_center = np.array([2.0])
+        # Lazy midpoint of this X would be 1.0, not the preset 2.0.
+        hsgp.prior("g", X=np.linspace(0.0, 2.0, 7).reshape(-1, 1))
+        np.testing.assert_allclose(hsgp._X_center, [2.0])
+
+
+def _trend_gp_model(X, x_center_z, n_rows):
+    with pm.Model(coords={"all_id": np.arange(n_rows)}) as m:
+        trend_and_gp(
+            cfg_low=pz.Beta(alpha=2.0, beta=8.0),
+            cfg_hi=pz.Beta(alpha=8.0, beta=2.0),
+            cfg_ell=pz.Beta(alpha=2.0, beta=2.0),
+            cfg_eta=pz.HalfNormal(sigma=1.0),
+            suffix="",
+            X_all_z_data=pt.as_tensor_variable(X),
+            grid=GPGrid(
+                sa_z=-1.0,
+                sb_z=1.0,
+                ell_low_z=0.3,
+                ell_high_z=1.5,
+                M=[8],
+                L=[5.0],
+                x_center_z=x_center_z,
+            ),
+            store_deterministic=True,
+            latent_name="f_all",
+        )
+    return m
+
+
+def test_pinning_the_centre_at_the_lazy_value_is_a_noop():
+    """Models of record: pinning where the lazy centre already sits changes nothing."""
+    X = np.linspace(-2.0, 2.0, 9).reshape(-1, 1)  # lazy midpoint = 0.0
+    draw_lazy = pm.draw(_trend_gp_model(X, None, 9)["f_all"], random_seed=7)
+    draw_pinned = pm.draw(_trend_gp_model(X, 0.0, 9)["f_all"], random_seed=7)
+    np.testing.assert_allclose(draw_lazy, draw_pinned)
+    # Sanity that the comparison can fail: a genuinely different centre moves it.
+    draw_moved = pm.draw(_trend_gp_model(X, 0.5, 9)["f_all"], random_seed=7)
+    assert not np.allclose(draw_lazy, draw_moved)
+
+
+def test_pinned_centre_decouples_the_basis_from_appended_query_rows():
+    """Extending the grid past the observed range must not move the shared rows.
+
+    This is the #234 regression: without the pin, appending a reporting query
+    beyond the data (VG04's 27- and 30-month queries) shifts the lazily computed
+    basis centre and with it every basis feature, so the same free-RV draws give
+    a different latent at the *same* ages.
+    """
+    X_base = np.linspace(-2.0, 2.0, 9).reshape(-1, 1)
+    X_extended = np.vstack([X_base, [[3.0]]])  # lazy midpoint would move to 0.5
+    draw_base = pm.draw(_trend_gp_model(X_base, 0.0, 9)["f_all"], random_seed=11)
+    draw_extended = pm.draw(
+        _trend_gp_model(X_extended, 0.0, 10)["f_all"], random_seed=11
+    )
+    np.testing.assert_allclose(draw_base, draw_extended[:9])
+    # Unpinned, the same extension moves the shared rows — the defect the pin fixes.
+    lazy_base = pm.draw(_trend_gp_model(X_base, None, 9)["f_all"], random_seed=11)
+    lazy_extended = pm.draw(
+        _trend_gp_model(X_extended, None, 10)["f_all"], random_seed=11
+    )
+    assert not np.allclose(lazy_base, lazy_extended[:9])
+
