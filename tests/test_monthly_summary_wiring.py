@@ -10,10 +10,6 @@ through review once already in this codebase, so these tests reach into each
 engine's own sample class and call the emitter for real.
 """
 
-import matplotlib
-
-matplotlib.use("Agg")
-
 import inspect
 
 import numpy as np

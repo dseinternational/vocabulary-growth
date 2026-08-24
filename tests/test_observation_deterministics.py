@@ -31,7 +31,6 @@ import pymc as pm
 import pytest
 import xarray as xr
 
-import vocab_growth.models.common_bivariate as common_bivariate
 from vocab_growth.fit_artifacts import (
     NOT_SAMPLED_ATTR,
     plan_trace_persistence,
@@ -52,6 +51,11 @@ from vocab_growth.posterior_recompute import (
     missing_deterministics,
     with_deterministics,
 )
+
+# The module fixture is two real nutpie fits of the same model, which is the
+# only way to show the draws are unchanged. Minutes, not seconds, so
+# deselected unless `-m ""` asks for it.
+pytestmark = pytest.mark.slow
 
 
 class _NoopDigraph:
@@ -116,7 +120,6 @@ def test_sample_structs_carry_no_observation_level_posterior(struct):
 
 
 def _vg07_context(tmp_path, monkeypatch, *, seed=11):
-    monkeypatch.setattr(common_bivariate, "_plot_and_print_dist", lambda *a, **k: None)
     monkeypatch.setattr(
         pymc_utils, "model_to_graphviz", lambda model: _NoopDigraph(), raising=False
     )

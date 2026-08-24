@@ -47,7 +47,7 @@ from vocab_growth.models.definitions import (
 _DEFS = {definition.model_id: definition for definition in MODEL_REGISTRY.values()}
 
 
-def _build(model_id, tmp_path, monkeypatch):
+def _build_uncached(model_id, tmp_path, monkeypatch):
     """Build a representative model for one engine (no sampling)."""
     if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
         pytest.skip("prepared vocabulary DuckDB not available")
@@ -113,10 +113,35 @@ def _build(model_id, tmp_path, monkeypatch):
     return ctx.model
 
 
+@pytest.fixture(scope="session")
+def _built_models():
+    """One built model per registered id, for the whole session.
+
+    Six of the nineteen models are asked for twice -- once by the parametrised
+    build check and again by the dedicated graph test below -- and a build costs
+    seconds. Nothing here mutates a model, only reads its variable names, so the
+    same object serves both. Under ``--dist loadfile`` this file is one worker's
+    work, so the cache is never split across processes.
+    """
+    return {}
+
+
+@pytest.fixture
+def build(_built_models, tmp_path_factory, monkeypatch):
+    def _build_or_reuse(model_id):
+        if model_id not in _built_models:
+            _built_models[model_id] = _build_uncached(
+                model_id, tmp_path_factory.mktemp(model_id), monkeypatch
+            )
+        return _built_models[model_id]
+
+    return _build_or_reuse
+
+
 @pytest.mark.parametrize("model_id", _DEFS)
-def test_every_registered_model_builds(model_id, tmp_path, monkeypatch):
+def test_every_registered_model_builds(model_id, build):
     """Catch registry combinations that definition-only validation cannot see."""
-    model = _build(model_id, tmp_path, monkeypatch)
+    model = build(model_id)
 
     assert model.free_RVs
     assert model.observed_RVs
@@ -130,15 +155,15 @@ def _names(m):
     )
 
 
-def test_common_vg01_graph(tmp_path, monkeypatch):
-    free, det, named = _names(_build("VG01", tmp_path, monkeypatch))
+def test_common_vg01_graph(build):
+    free, det, named = _names(build("VG01"))
     assert {"p_slope_low", "p_slope_hi", "ell_unit", "eta"} <= free
     assert {"slope", "intercept", "ell", "g", "f_all"} <= det
     assert "f_q_all" not in named
 
 
-def test_univariate_re_vg11_graph(tmp_path, monkeypatch):
-    free, det, _ = _names(_build("VG11", tmp_path, monkeypatch))
+def test_univariate_re_vg11_graph(build):
+    free, det, _ = _names(build("VG11"))
     assert {"p_slope_low", "p_slope_hi", "ell_unit", "eta"} <= free
     assert {"delta_subject_raw"} <= free
     assert {"slope", "intercept", "ell", "g", "f_all"} <= det
@@ -153,22 +178,22 @@ def test_univariate_re_vg11_graph(tmp_path, monkeypatch):
     assert "delta_raw" not in free | det
 
 
-def test_bivariate_vg05_graph(tmp_path, monkeypatch):
-    free, det, named = _names(_build("VG05", tmp_path, monkeypatch))
+def test_bivariate_vg05_graph(build):
+    free, det, named = _names(build("VG05"))
     assert {"p_slope_low_u", "p_slope_hi_u", "p_slope_low_q", "p_slope_hi_q"} <= free
     # The q-side latent is `h_all`, never `f_q_all`.
     assert {"g_u", "f_u_all", "g_q", "h_all"} <= det
     assert "f_q_all" not in named
 
 
-def test_bivariate_re_vg10_graph(tmp_path, monkeypatch):
-    _, det, named = _names(_build("VG10", tmp_path, monkeypatch))
+def test_bivariate_re_vg10_graph(build):
+    _, det, named = _names(build("VG10"))
     assert {"g_u", "f_u_all", "g_q", "h_all"} <= det
     assert "f_q_all" not in named
 
 
-def test_trivariate_vg14_graph(tmp_path, monkeypatch):
-    free, det, _ = _names(_build("VG14", tmp_path, monkeypatch))
+def test_trivariate_vg14_graph(build):
+    free, det, _ = _names(build("VG14"))
     # Trace-memory engine: full-grid GP latents are plain tensors, not stored.
     assert {"g_u", "f_u_all", "g_q", "h_all"}.isdisjoint(det)
     # The slope/intercept/ell scalars are still stored.
@@ -181,8 +206,8 @@ def test_trivariate_vg14_graph(tmp_path, monkeypatch):
     assert "slope_sign" not in det
 
 
-def test_joint_vg15_graph(tmp_path, monkeypatch):
-    free, det, _ = _names(_build("VG15", tmp_path, monkeypatch))
+def test_joint_vg15_graph(build):
+    free, det, _ = _names(build("VG15"))
     assert {"g_u", "f_u_all", "g_q", "h_all"}.isdisjoint(det)
     assert {"slope_u", "slope_q", "ell_sign"} <= det
     assert {"p_slope_low_sign", "p_slope_mid_sign", "p_slope_hi_sign"} <= free

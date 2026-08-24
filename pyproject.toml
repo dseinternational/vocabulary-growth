@@ -38,11 +38,23 @@ dependencies = [
 [dependency-groups]
 # Development-only tooling. A PEP 735 group is never written into published
 # package metadata, so none of this reaches anything that depends on us.
+#
+# `lint` is split out so CI's lint job can install ruff alone. Left inside
+# `dev`, `uv run ruff` syncs the whole project environment — 174 packages,
+# PyMC and JAX among them — to run a self-contained Rust binary.
+lint = [
+  "ruff>=0.16.1"
+]
 dev = [
   "ipython>=9.13.0",
   "ipywidgets>=8.1.8",
   "pytest>=9.1.1",
-  "ruff>=0.16.1"
+  # The suite is dominated by a handful of model builds and sampler runs, which
+  # parallelise cleanly: every model build writes under its own `tmp_path`, so
+  # there is no shared state between workers. See
+  # `notes/202608241530-test-suite-performance.md`.
+  "pytest-xdist>=3.8.0",
+  { include-group = "lint" }
 ]
 
 [tool.uv]
@@ -72,7 +84,14 @@ packages = ["src/vocab_growth"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# `not slow` by default, so the inner loop stays short. The deselected count is
+# printed on every run, and CI overrides it with `-m ""` so nothing is skipped
+# where it matters — see the `Test` section of AGENTS.md for both commands.
+addopts = "-q -m 'not slow'"
+markers = [
+    "slow: real sampling, compilation or numerical optimisation — minutes, not seconds. Deselected by default; CI runs them with `-m \"\"`.",
+    "emits_reporting_artefacts: opts out of the conftest fixture that silences the fit pipeline's console and figure output, for the tests that assert those artefacts are still produced.",
+]
 
 [tool.jupytext]
 formats = "ipynb,py:percent"

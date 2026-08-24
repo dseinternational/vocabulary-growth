@@ -19,15 +19,12 @@ observations, since a mask applied to one and not the other joins one child's
 points to another's.
 """
 
-import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-
-from vocab_growth import plotting  # noqa: E402
+from vocab_growth import plotting
 
 _COLOUR = plotting._TRAJECTORY_COLOUR
 _PP_COLOUR = plotting._PREDICTIVE_TRAJECTORY_COLOUR

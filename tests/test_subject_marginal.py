@@ -27,19 +27,13 @@ See ``notes/202608231410-td-geometry-remaining-levers.md`` §3 for the lever and
 """
 
 import dataclasses
-import os
 
-import dse_research_utils.statistics.models.reporting as reporting
-import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pymc as pm
 import pytensor.tensor as pt
 import pytest
 from scipy import special
 
-import vocab_growth.data_utils as vocab_data_utils
-from vocab_growth.models import common_univariate_re as cur
-from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     VG11,
@@ -334,68 +328,25 @@ def test_the_node_count_must_be_a_usable_integer():
 # The engine
 # ============================================================
 
-# A cheap stand-in for VG12: same engine, a twentieth of the children.
-SMALL = dataclasses.replace(VG12, sample_fraction=0.05, min_study_observations=20)
-SMALL_MARGINAL = _as_definition_subclass(
-    SMALL,
-    UnivariateMarginalisedREModelDefinition,
-    singleton_marginalisation=SingletonMarginalisationParams(n_nodes=12),
-    config_name="marg-test",
-)
-
-
-@pytest.fixture(scope="module")
-def _require_data():
-    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
-        pytest.skip("prepared vocabulary DuckDB not available")
-
-
-def _build(definition, tmp_path_factory, monkeypatch_module):
-    monkeypatch_module.setattr(cur, "render_model_graph", lambda *a, **k: None)
-    root = str(tmp_path_factory.mktemp(definition.config_name))
-    context = ModelFitContext(
-        reporting=reporting.ReportingConfiguration(
-            model_name=definition.model_id,
-            config_name=definition.config_name,
-            output_root_dir=root,
-            ci_prob=0.90,
-            interval_kind="hdi",
-        ),
-        sampling=sampling.get_sampling_configuration("dev"),
-    )
-    os.makedirs(context.reporting.output_dir, exist_ok=True)
-    cur.prepare_univariate_re_data(context, definition)
-    cur.configure_univariate_priors(context, definition)
-    cur.build_univariate_re_model(context, definition)
-    return context
-
-
-@pytest.fixture(scope="module")
-def explicit_context(_require_data, tmp_path_factory):
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        yield _build(SMALL, tmp_path_factory, monkeypatch)
-
-
-@pytest.fixture(scope="module")
-def marginal_context(_require_data, tmp_path_factory):
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        yield _build(SMALL_MARGINAL, tmp_path_factory, monkeypatch)
+# ``SMALL``/``SMALL_MARGINAL`` and the ``subject_*_context`` fixtures live in
+# ``tests/conftest.py``: ``test_subject_marginal_sampling.py`` needs the same
+# build, and a fixture shared by two modules belongs in the conftest.
 
 
 def _dimensions(model):
     return {name: np.shape(value) for name, value in model.initial_point().items()}
 
 
-def test_the_flag_off_graph_is_unchanged(explicit_context):
-    model = explicit_context.model
+def test_the_flag_off_graph_is_unchanged(subject_explicit_context):
+    model = subject_explicit_context.model
     assert "subject_id" in model.coords and "repeat_subject_id" not in model.coords
     assert model["delta_subject"].type.shape == model["delta_subject_raw"].type.shape
     assert type(model["y_obs"].owner.op).__name__.startswith("BetaBinomial")
 
 
-def test_only_repeat_measured_children_keep_an_effect(marginal_context):
-    model = marginal_context.model
-    analysis = marginal_context.analysis_df
+def test_only_repeat_measured_children_keep_an_effect(subject_marginal_context):
+    model = subject_marginal_context.model
+    analysis = subject_marginal_context.analysis_df
     codes = np.asarray(analysis["subject_code"], dtype=int)
     partition = partition_subject_rows(codes)
     assert partition.n_singleton_subjects > 0, "the subsample has no singleton child"
@@ -410,27 +361,27 @@ def test_only_repeat_measured_children_keep_an_effect(marginal_context):
     assert "tau_subject" in names
 
 
-def test_data_preparation_orders_marginalised_rows_first(marginal_context):
+def test_data_preparation_orders_marginalised_rows_first(subject_marginal_context):
     """The engine's data preparation is what makes the slices legal."""
-    codes = np.asarray(marginal_context.analysis_df["subject_code"], dtype=int)
+    codes = np.asarray(subject_marginal_context.analysis_df["subject_code"], dtype=int)
     partition = partition_subject_rows(codes)
     assert partition.is_singleton_first
     assert partition.n_singleton_rows > 0
     assert partition.n_repeat_rows > 0
 
 
-def test_the_flag_off_leaves_the_row_order_alone(explicit_context, marginal_context):
+def test_the_flag_off_leaves_the_row_order_alone(subject_explicit_context, subject_marginal_context):
     """Same rows either way; only the marginalised build reorders them."""
-    explicit_ages = list(explicit_context.analysis_df["age"])
-    marginal_ages = list(marginal_context.analysis_df["age"])
+    explicit_ages = list(subject_explicit_context.analysis_df["age"])
+    marginal_ages = list(subject_marginal_context.analysis_df["age"])
     assert sorted(explicit_ages) == sorted(marginal_ages)
     assert explicit_ages != marginal_ages
 
 
-def test_the_marginalised_rows_carry_no_child_effect(marginal_context):
+def test_the_marginalised_rows_carry_no_child_effect(subject_marginal_context):
     """f_obs on those rows is the population-and-study prediction, exactly."""
-    model = marginal_context.model
-    codes = np.asarray(marginal_context.analysis_df["subject_code"], dtype=int)
+    model = subject_marginal_context.model
+    codes = np.asarray(subject_marginal_context.analysis_df["subject_code"], dtype=int)
     partition = partition_subject_rows(codes)
     import pytensor
 
@@ -452,12 +403,12 @@ def test_the_marginalised_rows_carry_no_child_effect(marginal_context):
     )
 
 
-def test_repeat_rows_keep_the_conditional_density(marginal_context):
+def test_repeat_rows_keep_the_conditional_density(subject_marginal_context):
     """Bit for bit: those rows are not approximated, they are untouched."""
     import pytensor
 
-    model = marginal_context.model
-    codes = np.asarray(marginal_context.analysis_df["subject_code"], dtype=int)
+    model = subject_marginal_context.model
+    codes = np.asarray(subject_marginal_context.analysis_df["subject_code"], dtype=int)
     partition = partition_subject_rows(codes)
 
     point = model.initial_point()
@@ -481,12 +432,12 @@ def test_repeat_rows_keep_the_conditional_density(marginal_context):
         model.replace_rvs_by_values([model["f_obs"], model["kappa_obs"]]),
         on_unused_input="ignore",
     )(*arguments)
-    y = np.asarray(marginal_context.model_data.y_obs, dtype=float)
+    y = np.asarray(subject_marginal_context.model_data.y_obs, dtype=float)
 
     rows = partition.repeat_rows
     expected = pm.logp(
         pm.BetaBinomial.dist(
-            n=marginal_context.model_data.n_trials,
+            n=subject_marginal_context.model_data.n_trials,
             alpha=special.expit(f_obs[rows]) * kappa_obs[rows],
             beta=(1 - special.expit(f_obs[rows])) * kappa_obs[rows],
         ),
@@ -495,12 +446,12 @@ def test_repeat_rows_keep_the_conditional_density(marginal_context):
     assert np.allclose(np.asarray(observed)[rows], expected, rtol=0, atol=1e-9)
 
 
-def test_the_marginalised_rows_integrate_their_child_effect(marginal_context):
+def test_the_marginalised_rows_integrate_their_child_effect(subject_marginal_context):
     """And the singleton rows match an independent numerical integration."""
     import pytensor
 
-    model = marginal_context.model
-    codes = np.asarray(marginal_context.analysis_df["subject_code"], dtype=int)
+    model = subject_marginal_context.model
+    codes = np.asarray(subject_marginal_context.analysis_df["subject_code"], dtype=int)
     partition = partition_subject_rows(codes)
     point = model.initial_point()
     value_vars = model.value_vars
@@ -519,7 +470,7 @@ def test_the_marginalised_rows_integrate_their_child_effect(marginal_context):
         ),
         on_unused_input="ignore",
     )(*arguments)
-    y = np.asarray(marginal_context.model_data.y_obs, dtype=float)
+    y = np.asarray(subject_marginal_context.model_data.y_obs, dtype=float)
 
     rows = partition.singleton_rows[:25]
     expected = np.array(
@@ -529,31 +480,3 @@ def test_the_marginalised_rows_integrate_their_child_effect(marginal_context):
         ]
     )
     assert np.allclose(observed[rows], expected, rtol=0, atol=1e-4)
-
-
-def test_the_marginalised_model_samples_and_predicts(marginal_context):
-    """The whole path a fit needs: NUTS, log-likelihood, posterior predictive."""
-    model = marginal_context.model
-    with model:
-        trace = pm.sample(
-            draws=8,
-            tune=8,
-            chains=1,
-            cores=1,
-            progressbar=False,
-            random_seed=17,
-            compute_convergence_checks=False,
-        )
-        pm.compute_log_likelihood(trace, progressbar=False)
-        pm.sample_posterior_predictive(
-            trace, var_names=["y_obs"], progressbar=False, random_seed=17,
-            extend_inferencedata=True,
-        )
-
-    n_rows = len(marginal_context.analysis_df)
-    assert trace.log_likelihood["y_obs"].shape == (1, 8, n_rows)
-    assert trace.posterior_predictive["y_obs"].shape == (1, 8, n_rows)
-    assert np.isfinite(trace.log_likelihood["y_obs"].values).all()
-    codes = np.asarray(marginal_context.analysis_df["subject_code"], dtype=int)
-    partition = partition_subject_rows(codes)
-    assert trace.posterior["delta_subject_raw"].shape[-1] == partition.n_repeat_subjects
