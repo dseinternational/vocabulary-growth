@@ -36,6 +36,7 @@ from __future__ import annotations
 import os
 
 import arviz as az
+import dse_research_utils.statistics.intervals as shared_intervals
 import numpy as np
 import pandas as pd
 
@@ -301,18 +302,13 @@ def evaluate_at_ages(
 
 
 def hdi_from_samples(x: np.ndarray, prob: float) -> tuple[float, float]:
-    """Narrowest-interval HDI of a 1-D sample array, ignoring NaN."""
-    x = x[~np.isnan(x)]
-    if x.size == 0:
-        return np.nan, np.nan
-    xs = np.sort(x)
-    n = xs.size
-    k = int(np.floor(prob * n))
-    if k >= n:
-        return float(xs[0]), float(xs[-1])
-    widths = xs[k:] - xs[: n - k]
-    i = int(np.argmin(widths))
-    return float(xs[i]), float(xs[i + k])
+    """Narrowest-interval HDI of a 1-D sample array, ignoring NaN.
+
+    Delegates to the shared :func:`dse_research_utils.statistics.intervals.hdi_1d`
+    (an identical ``floor(prob * n)`` construction); kept as a local name for the
+    existing call sites.
+    """
+    return shared_intervals.hdi_1d(x, hdi_prob=prob)
 
 
 def summarise_per_N(samples: np.ndarray, grid: np.ndarray) -> pd.DataFrame:
