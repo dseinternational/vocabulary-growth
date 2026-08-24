@@ -319,6 +319,31 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "p_slope_hi_alpha": 1.1, "p_slope_hi_beta": 1.1}},
     ("vg12", "eta-narrow"): {"suffix": "eta-narrow", "scalar": {"eta_sigma": 0.4}},
 
+    # -- VG12 free scales: the pre-partition parameterisation (#225) --
+    #
+    # Item 3 of #225. Recovery returns `tau_subject` below its truth in three
+    # replicates of three, by about 5.8%, with the truth outside the 89%
+    # interval every time, and `v_total` recovers well while
+    # `subject_variance_share` carries the bias -- so the budget is estimated
+    # and the *split* is not. That leaves two candidate diagnoses which call for
+    # different fixes: the partition biases the split, or the split is not
+    # identifiable however it is parameterised. This variant separates them by
+    # reverting to the two free scales VG12 carried before 2026-08-05 and
+    # scoring recovery of `tau_subject` against the record's.
+    #
+    # `None` is the whole override: `tau_subject_sigma = 1.5` is already on the
+    # definition, inert under the partition (which is why `render_priors_table`
+    # suppresses its row), and the engine falls back to sampling
+    # `HalfNormal(tau_subject_sigma)` directly whenever the partition is absent.
+    # `kappa` likewise reverts to its own prior rather than to an allocated
+    # excess. This is a graph change, so it needs its own fit; expect the
+    # sampling pathology the partition was introduced to fix to come back --
+    # 59 divergences against 14, and `corr(tau_subject, kappa_young) = +0.755`.
+    # A variant that samples badly still answers the recovery question, which is
+    # about the estimator rather than about publishable geometry.
+    ("vg12", "free-scales"): {"suffix": "free-scales", "scalar": {
+        "subject_variance_partition": None}},
+
     # -- VG13 observation window (#228) --
     #
     # These two are the widest-scoped variants registered on VG13, and the only

@@ -106,10 +106,17 @@ model it had not come from for two weeks. The numbers in those editions were
 computed from VG10 and are unaffected.
 
 ::: {.callout-important}
-**The TD models only span ~8–30 months.** Several estimands are therefore
-identified only at younger ages or lower vocabulary levels. Each table cell is
-blanked (—) where posterior **coverage** of the comparable region falls below
-0.80; read the supported range only.
+**The TD side is the binding constraint, and its reach differs by
+quantity.** Spoken reaches 30 months, which is where `TD_POOL_AGE_MONTHS` ends.
+**Comprehension stops at 25** — it rides only on the bivariate forms, and VG04
+and VG12 declare `report_max_age_understood = 25` accordingly ([#228](https://github.com/dseinternational/vocabulary-growth/issues/228)),
+so everything derived from comprehension inherits that. The
+comprehension-matched joint model is narrower again: VG13 spans 8–18 months and
+reaches about 221 understood words, and its adopted successor VG21 spans 8–22
+and reaches 328. Several estimands are therefore identified only at younger ages
+or lower vocabulary levels. Each table cell is blanked (—) where posterior
+**coverage** of the comparable region falls below 0.80; read the supported range
+only.
 :::
 
 ## The gap is large and production-specific

@@ -1329,7 +1329,13 @@ def bivariate_re_stages(
             "Model definition and initialisation",
             lambda ctx: build_model_re(ctx, definition),
         ),
-        ("Prior predictive checks", prior_predictive_checks),
+        (
+            "Prior predictive checks",
+            # Passes the definition so the child-level checks can dispatch on
+            # the child-effect structure (#233); the population figures do not
+            # need it.
+            lambda ctx: prior_predictive_checks(ctx, definition),
+        ),
         ("Posterior sampling", sample),
         # The definition travels with the stage so the cross-lag models can
         # reorder the pair plot and suppress the leaking understood LOO

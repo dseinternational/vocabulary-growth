@@ -34,6 +34,7 @@ import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
+from vocab_growth.models import prior_child_checks
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -873,8 +874,24 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
 # ============================================================
 
 
-def prior_predictive_checks(context: BivariateContext):
-    """Run prior predictive checks."""
+def prior_predictive_checks(context: BivariateContext, definition=None):
+    """Run prior predictive checks.
+
+    The three figures below are **population mean functions**: they set every
+    random effect to zero and carry no count noise, so they test the mean and
+    not the counts. That is the right check for the trend and the GP, and until
+    2026-08-24 it was the only check any of these reports had -- which left the
+    gap #233 named, that a child-effect model's prior figures contain no child
+    and so cannot test the prior the model was added for.
+
+    When ``definition`` is supplied and the model carries child effects,
+    :mod:`vocab_growth.models.prior_child_checks` adds the complementary
+    figures: unseen-child trajectories, nested Beta-Binomial counts, and (for a
+    model that couples the two outcomes) the induced joint association. Those
+    are computed in NumPy from these same draws, so they add no node to the
+    graph. ``definition`` is optional because the engines that carry no child
+    effects call this without one.
+    """
     with context.model:
         prior_samples = pm.sample_prior_predictive(
             draws=1000,
@@ -944,6 +961,13 @@ def prior_predictive_checks(context: BivariateContext):
     )
     context.plots["prior_samples_q"] = fig
     plt.close(fig)
+
+    if definition is not None:
+        written = prior_child_checks.run(context, definition)
+        if written:
+            console.print(
+                "[dim]Child-level prior checks: " + ", ".join(written) + "[/dim]"
+            )
 
 
 # ``sample`` is engine-agnostic (identical pm.sample() call in every engine) —

@@ -118,6 +118,18 @@ $\tau_0$ keeps VG10's own prior on both outcomes, so the offset is unchanged and
 
 This is the check that matters most for this model, and it is a stiffer test than for VG10. A linear-in-age rate on the logit scale, extrapolated across an 8-115 month domain, is a strong assumption at the ends. At one prior standard deviation a child at 115 months sits well above the population trajectory **before** the offset is counted at all. What the figures have to show is that the prior admits the range of vocabularies real children have without putting appreciable mass on trajectories no child could follow.
 
+### The child effects, which the three figures above do not contain
+
+Those three set every random effect to zero, so they test the mean function and nothing else — which is the right check for the trend and the GP, and useless for the prior this model was added for. The figures below fill that gap (they carry no count noise either; these do). Both are computed from the same prior draws, so nothing is added to the model graph ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233)).
+
+![Individual child trajectories around a **fixed** population curve, varying only the child effect. Holding the trend fixed is what makes this readable: with a different trend under every child the curves would cross whatever the child block did, and a rate could not be distinguished from a constant offset.](prior_unseen_children.png){#fig-prior-children .lightbox fig-align="left"}
+
+This is the figure that tests $\tau_1$. Under VG10's constant offset the curves are parallel on the logit scale and **can never cross**, however wide $\tau_{subj}$ is; under a rate they fan, converge and cross. So the qualitative claim this model exists to make is visible in its own prior, and the quantitative question — whether $\text{HalfNormal}(0.5)$ per year puts appreciable mass on trajectories no child could follow, such as a child at the floor or the ceiling for the whole domain — is answerable by eye rather than by argument.
+
+![Nested Beta-Binomial counts for one unseen child per draw: words understood drawn at the child's own $p_U$, then words spoken drawn **conditional on that count**.](prior_unseen_child_counts.png){#fig-prior-child-counts .lightbox fig-align="left"}
+
+The nesting is the point of the second figure. A prior can imply a perfectly reasonable expected trajectory and still put a real administration at an impossible count once the child effect and the dispersion are both in play, and only a count figure can show that.
+
 ## Data
 
 ```{python}
