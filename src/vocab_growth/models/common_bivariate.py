@@ -974,28 +974,10 @@ def diagnostics(context: BivariateContext, definition=None):
       scales it competes with fill the capped grid, instead of falling off
       the end of model order.
     """
-    if not getattr(definition, "use_cross_lag", False):
-        _shared_diagnostics(
-            context,
-            loo_var_names=(
-                ("y_s_obs", "words spoken"),
-                ("y_u_obs", "words understood"),
-            ),
-        )
-        return
-
     posterior_vars = set(context.trace.posterior.data_vars)
+    priority = pair_plot_priority(definition)
 
-    def _prioritise_cross_lag(
-        names: list[str],
-        priority: tuple[str, ...] = (
-            "beta_lag",
-            "tau_subj_u",
-            "tau_subj_q",
-            "tau_u",
-            "tau_q",
-        ),
-    ) -> list[str]:
+    def _prioritise(names: list[str]) -> list[str]:
         seen: set[str] = set()
         ordered: list[str] = []
         for name in (*priority, *names):
@@ -1003,6 +985,17 @@ def diagnostics(context: BivariateContext, definition=None):
                 ordered.append(name)
                 seen.add(name)
         return ordered
+
+    if not getattr(definition, "use_cross_lag", False):
+        _shared_diagnostics(
+            context,
+            loo_var_names=(
+                ("y_s_obs", "words spoken"),
+                ("y_u_obs", "words understood"),
+            ),
+            var_names_fn=_prioritise if priority else None,
+        )
+        return
 
     console.print(
         "[yellow]Understood LOO is not computed for this model: the cross-lag "
@@ -1017,7 +1010,7 @@ def diagnostics(context: BivariateContext, definition=None):
         loo_var_names=(
             ("y_s_obs", "words spoken (conditional on observed understood history)"),
         ),
-        var_names_fn=_prioritise_cross_lag,
+        var_names_fn=_prioritise,
     )
 
 
@@ -1073,6 +1066,52 @@ def _child_slope_offsets(context: BivariateContext, definition):
     )
 
 
+def pair_plot_priority(definition) -> tuple[str, ...]:
+    """The variables the pair plot must show for ``definition``, most important first.
+
+    ArviZ caps a pair plot at ``floor(sqrt(plot.max_subplots))`` variables, so a
+    grid built in model order fits about six -- and model order is the build
+    order, which puts the mean-function and GP parameters first. Every parameter
+    a child-effect model was *added for* therefore fell off the end: VG19's
+    slope block, VG20's ``rho_uq``, VG22's factor scales. The captions in those
+    reports tell the reader to inspect exactly those ridges, so the plot
+    contradicted the text it was captioned with (#233).
+
+    Ordering rather than filtering, so nothing is hidden -- the cap simply
+    consumes the list from a different end. An empty tuple means "model order",
+    which is what every model without a distinguishing child structure gets, and
+    those pair plots are byte-identical to before.
+
+    The names are read from the definition rather than the trace so the intent
+    is declared by the model, not inferred from what happened to be sampled.
+    """
+    priority: list[str] = []
+
+    if getattr(definition, "use_cross_lag", False):
+        priority.append("beta_lag")
+
+    # VG20: the single parameter the model exists to estimate.
+    if getattr(definition, "subject_re_correlation_eta", None) is not None:
+        priority.append("rho_uq")
+
+    # VG22: the factor form emits rho_uq as a deterministic and carries a rate
+    # scale per outcome. `subject_factor_corr` is deliberately absent -- a 4x4
+    # matrix is 16 plot items and would consume the whole grid on its own.
+    if getattr(definition, "subject_factor", None) is not None:
+        priority += ["rho_uq", "tau_subj_u_1", "tau_subj_q_1"]
+
+    # VG19: the intercept-and-rate block, whose two correlations are the part a
+    # reader can actually test from an interval.
+    for name in ("tau_subj_u", "tau_subj_q"):
+        spec = getattr(definition, f"{name}_sigma", None)
+        if getattr(spec, "tau1_sigma", None) is not None:
+            priority += [f"{name}_1", f"{name}_rho", f"{name}_0"]
+
+    if priority:
+        priority += ["tau_subj_u", "tau_subj_q", "tau_u", "tau_q"]
+    return tuple(dict.fromkeys(priority))
+
+
 def _child_factor_block(context: BivariateContext):
     """VG22's loading matrix, or ``None``.
 
@@ -1084,6 +1123,28 @@ def _child_factor_block(context: BivariateContext):
     2x2 draw nor a scaled deviate.
     """
     return context.model_variables.get("subject_factor_loadings")
+
+
+def unseen_child_correlated_delta_q(delta_u_query, *, tau_subj_u, tau_subj_q, rho):
+    """VG20's unseen child: the q deviate that goes with an already-drawn u one.
+
+    Extracted from :func:`sample_posterior_predictive` so the correlated branch
+    can be executed by a test rather than only reached (#233). The two branches
+    beside it -- VG19's slope and VG22's factor -- were already functions; this
+    one was inline, and the only automated check on it was that ``rho_uq`` is
+    visible from the predictive path, which is a precondition rather than the
+    behaviour.
+
+    The construction is unchanged, ops and names included, so the graph is
+    identical: ``z_u`` is recovered by dividing the existing logit-scale deviate
+    by its own scale rather than introducing a standardised RV, and the single
+    new variable keeps the name ``_z_subj_q_marg``.
+
+    Each deviate keeps its own marginal SD; only their joint behaviour changes.
+    """
+    z_u_marg = delta_u_query / tau_subj_u
+    z_q_marg = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
+    return tau_subj_q * (rho * z_u_marg + pm.math.sqrt(1.0 - rho**2) * z_q_marg)
 
 
 def _unseen_child_factor_deltas(context, definition, outcome: str):
@@ -1241,11 +1302,11 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
                 )
             elif plot_scale is None:
                 if correlated:
-                    z_u_marg = delta_u_query / context.model_variables["tau_subj_u"]
-                    z_q_marg = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
-                    delta_q_marg = tau_subj_q * (
-                        rho_marg * z_u_marg
-                        + pm.math.sqrt(1.0 - rho_marg**2) * z_q_marg
+                    delta_q_marg = unseen_child_correlated_delta_q(
+                        delta_u_query,
+                        tau_subj_u=context.model_variables["tau_subj_u"],
+                        tau_subj_q=tau_subj_q,
+                        rho=rho_marg,
                     )
                 else:
                     delta_q_marg = pm.Normal(

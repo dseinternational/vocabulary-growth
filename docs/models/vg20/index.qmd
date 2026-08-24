@@ -337,6 +337,18 @@ The reported population trajectories should sit close to VG10's, and gate 3 foun
 
 ![The production ratio $q$ by age: the share of understood words a child says.](production_rate.png){#fig-q .lightbox fig-align="left"}
 
+::: {.callout-note}
+**Every $q$ figure and table here is population-level.** The posterior-predictive
+path persists subject-marginal comprehension and subject-marginal spoken words,
+but not a subject-marginal $q$ — the quantity is computed inside the predictive
+block and then consumed into the spoken product rather than stored. So there is
+no "where would one more child's conversion rate fall?" interval in this report,
+and the intervals shown are uncertainty in the population curve. Persisting it is
+tracked in [#233](https://github.com/dseinternational/vocabulary-growth/issues/233)
+and needs a refit to take effect.
+:::
+
+
 ![Words spoken against words understood, the relationship $q$ describes.](understood_vs_spoken.png){#fig-uvs .lightbox fig-align="left"}
 
 Each of these should be read as VG10's answer, because it is. They are reproduced here so that this report stands on its own and so that the match can be seen rather than asserted.

@@ -176,11 +176,11 @@ Writing `u_i(a)` for child `i`'s departure at age `a`:
 
 Each child's adjusted scores are a multivariate normal with the structure above plus a **known** per-observation binomial sampling variance on the diagonal and a free occasion term. Singletons contribute (they inform the marginal variance and its age dependence); children with repeats carry the within-child structure. Fitted by maximum likelihood, `2 x delta logL` against the constant-intercept baseline:
 
-| structure                               |     spoken, all 767 | spoken, repeats 334 | understood, all 610 | understood, repeats 253 |
-| --------------------------------------- | ------------------: | ------------------: | ------------------: | ----------------------: |
-| **+ random slope** (2 df)               |           **36.05** |           **20.81** |           **27.09** |                    0.82 |
-| **cost of imposing `rho01 = 1`** (1 df) |               −1.49 |           **−6.28** |               −2.56 |                   −0.32 |
-| **+ AR(1) transient**                   | `ell -> 0`, no gain |                   — | `ell -> 0`, no gain |                       — |
+| structure                        |     spoken, all 767 | spoken, repeats 334 | understood, all 610 | understood, repeats 253 |
+| -------------------------------- | ------------------: | ------------------: | ------------------: | ----------------------: |
+| **+ random slope**               |           **36.05** |           **20.81** |           **27.09** |                    0.82 |
+| **cost of imposing `rho01 = 1`** |               −1.49 |           **−6.28** |               −2.56 |                   −0.32 |
+| **+ AR(1) transient**            | `ell -> 0`, no gain |                   — | `ell -> 0`, no gain |                       — |
 
 Fitted parameters on the repeated-measures children — the rows that carry within-child information:
 
@@ -193,9 +193,9 @@ Fitted parameters on the repeated-measures children — the rows that carry with
 
 **The AR(1) is rejected outright, on both outcomes.** The persistence collapses to zero — `2 x delta logL` is −12.9 at `ell = 3` months, −52.2 at 24 and −81.1 at 48 on production — which says the within-child deviation has **no memory beyond the occasion**. A permanent intercept plus independent occasion noise is what fits, and that is what VG08–VG10 already have. Whatever is missing from those models, an autocorrelated child process is not it.
 
-**Random slopes are supported on production, and survive the test that matters.** Restricted to the 334 children with repeated spoken measures — where the estimate cannot be borrowing from cross-sectional widening — the slope gains 20.81 on 2 df and `tau1` _rises_ to 0.0243 logit/month. So this is genuine within-child drift.
+**Random slopes are supported on production, and survive the test that matters.** Restricted to the 334 children with repeated spoken measures — where the estimate cannot be borrowing from cross-sectional widening — the slope gains 20.81 and `tau1` _rises_ to 0.0243 logit/month. So this is genuine within-child drift. (The statistic is a magnitude, not a test: at `tau1 = 0` the variance component is on its boundary **and** `rho01` is unidentified, so neither of the two nominal degrees of freedom supports a chi-square reading. The bootstrap in `rank_stability.py` is the valid reference.)
 
-**A1's no-crossing assumption is rejected by that same within-child evidence.** Freeing `rho01` from 1 to 0.431 buys 6.28 on 1 df (p ≈ 0.012) on the repeats-only production fit. Note where the test has power: on all 767 children the same comparison is worth only 1.49, because singletons say nothing about whether children cross. This is the §8 rank-correlation finding restated inside a likelihood, and it agrees with it.
+**A1's no-crossing assumption is contradicted by that same within-child evidence.** Freeing `rho01` from 1 to 0.431 buys 6.28 on the repeats-only production fit. (**Corrected 2026-08-24, [#233](https://github.com/dseinternational/vocabulary-growth/issues/233):** an earlier version of this sentence quoted "1 df (p ≈ 0.012)". `rho01 = 1` is a correlation on its own boundary, so Wilks' theorem does not apply and no chi-square p-value can be read off this statistic. `scripts/experiments/rank_stability.py --bootstrap N` now supplies a valid reference distribution by simulating under the null on the study's own design; until it has been run, read 6.28 as a magnitude and "rejected" as "contradicted".) Note where the test has power: on all 767 children the same comparison is worth only 1.49, because singletons say nothing about whether children cross. This is the §8 rank-correlation finding restated inside a likelihood, and it agrees with it.
 
 **Comprehension is the opposite case, and the honest reading is a power limit.** The slope is worth 27.09 across all 610 children but **0.82** on the 253 with repeats. So comprehension's widening is, on this evidence, **cross-sectional rather than within-child**: the spread between children grows with age, without any individual child measurably drifting. That is A1's structure, not a random slope. But the comprehension repeats span a median of 11 months and a 90th percentile of 15, so "no detectable drift" here is a statement about the design as much as about the children.
 

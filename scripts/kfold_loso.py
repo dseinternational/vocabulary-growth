@@ -55,6 +55,7 @@ from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
+from vocab_growth.models.build_utils import require_valid_counts
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.common_bivariate import (
     configure_bivariate_priors,
@@ -183,6 +184,14 @@ def fit_fold(
     """Run prepare → priors → build → sample on a holdout-marked analysis frame."""
     n = len(analysis_df_with_holdout)
     has_u = analysis_df_with_holdout["understood"].notna().values
+    # Same contract as the engines' own prepare stage: validate before the cast,
+    # because NumPy truncates toward zero silently and the k-fold path builds
+    # its BinomialModelData here rather than going through the engine (#233).
+    require_valid_counts(
+        np.asarray(analysis_df_with_holdout.loc[has_u, "understood"], dtype=float),
+        "understood",
+        definition.n_trials,
+    )
     bmd = model_data.BinomialModelData(
         X_obs=np.asarray(analysis_df_with_holdout["age"], dtype=float).reshape(-1, 1),
         y_obs=np.where(

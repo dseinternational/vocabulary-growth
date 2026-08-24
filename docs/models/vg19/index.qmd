@@ -86,9 +86,11 @@ The structure was chosen before any of it was written, by fitting three candidat
 
 | structure | spoken, all 767 | spoken, repeats 334 | understood, all 610 | understood, repeats 253 |
 | --- | ---: | ---: | ---: | ---: |
-| random slope (2 df) | 36.05 | 20.81 | 27.09 | 0.82 |
+| random slope | 36.05 | 20.81 | 27.09 | 0.82 |
 | cost of pinning $\rho_{01} = 1$ | −1.49 | −6.28 | −2.56 | −0.32 |
 | AR(1) transient | no gain | — | no gain | — |
+
+: Read as magnitudes. Both comparisons put the null on a boundary — $\tau_1 = 0$ is a variance component at zero, where $\rho_{01}$ is additionally unidentified, and $\rho_{01} = 1$ is a correlation at its own — so no chi-square reference distribution applies and no degrees of freedom are quoted. `scripts/experiments/rank_stability.py --bootstrap N` supplies a valid one by simulating under each null on the study's own design ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233)).
 
 Three readings, and each shaped the specification. The mean-reverting alternative **collapsed to zero persistence** on both outcomes, so what is missing is drift and not an autocorrelated child process. The spoken slope **survives restriction to children with repeated measures**, so it is genuine within-child drift rather than cross-sectional widening. And comprehension shows the opposite pattern — 27.09 across everyone, 0.82 across repeaters — so its widening looks cross-sectional, and the model must be able to represent both cases and let each outcome decide.
 
@@ -250,6 +252,18 @@ The population trajectories should be close to VG10's. This model adds structure
 ![The same trajectories with their credible intervals.](joint_trajectory_intervals.png){#fig-joint-intervals .lightbox fig-align="left"}
 
 ![The production ratio $q$ by age.](production_rate.png){#fig-q .lightbox fig-align="left"}
+
+::: {.callout-note}
+**Every $q$ figure and table here is population-level.** The posterior-predictive
+path persists subject-marginal comprehension and subject-marginal spoken words,
+but not a subject-marginal $q$ — the quantity is computed inside the predictive
+block and then consumed into the spoken product rather than stored. So there is
+no "where would one more child's conversion rate fall?" interval in this report,
+and the intervals shown are uncertainty in the population curve. Persisting it is
+tracked in [#233](https://github.com/dseinternational/vocabulary-growth/issues/233)
+and needs a refit to take effect.
+:::
+
 
 ![Words spoken against words understood.](understood_vs_spoken.png){#fig-uvs .lightbox fig-align="left"}
 
