@@ -39,9 +39,7 @@ import os
 
 import numpy as np
 import pandas as pd
-
-RHAT_MAX = 1.01
-ESS_THRESHOLD = 400
+from dse_research_utils.statistics.diagnostics import ESS_THRESHOLD, RHAT_MAX
 
 #: Definition fields that always differ between a baseline and its variant, and
 #: whose difference carries no information: the variant's directory name and the

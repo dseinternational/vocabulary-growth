@@ -9,10 +9,20 @@ the ``DSE_VOCAB_GROWTH_OUTPUT_DIR`` environment variable > the repository-local
 its ``models`` / ``comparisons`` subdirectories. ``docs/report/figures/``
 (``REPORT_FIGS_DIR``) is the report-facing cache and deliberately stays in the
 checkout, never under this root.
+
+The resolution *policy* and the disk preflight live in
+:mod:`dse_research_utils.environment` (v0.12.0), shared with the other research
+repositories. What stays here is this repository's configuration — the
+environment-variable name, the repo-local default, and the ``models`` /
+``comparisons`` layout — plus ``str``-returning wrappers, since this package's
+call sites feed ``os.path.join``.
 """
 
 import os
-import shutil
+
+from dse_research_utils.environment.disk import free_space_gb as _shared_free_space_gb
+from dse_research_utils.environment.disk import preflight_disk as _shared_preflight_disk
+from dse_research_utils.environment.paths import OutputRoot
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 _SRC_DIR = os.path.dirname(_MODULE_DIR)
@@ -46,11 +56,13 @@ OUTPUT_DIR_ENV_VAR = "DSE_VOCAB_GROWTH_OUTPUT_DIR"
 
 _DEFAULT_OUTPUT_DIR = os.path.join(ROOT_DIR, "output")
 
-_output_root_override: str | None = None
-
-
-def _normalise(path: str) -> str:
-    return os.path.abspath(os.path.expanduser(path))
+# ``resolve_symlinks=False``: ``<repo>/output`` is a symlink to a scratch volume
+# on the fitting VM, and the link path is the stable name recorded in fit
+# manifests and blob-upload prefixes, so a configured root is normalised with
+# ``expanduser`` + ``abspath`` rather than resolved through the link.
+_OUTPUT_ROOT = OutputRoot(
+    OUTPUT_DIR_ENV_VAR, _DEFAULT_OUTPUT_DIR, resolve_symlinks=False
+)
 
 
 def set_output_root(path: str | None) -> None:
@@ -60,18 +72,17 @@ def set_output_root(path: str | None) -> None:
     the override and fall back to the environment variable / default. Call this
     once, early in a script's entry point, before any output path is resolved.
     """
-    global _output_root_override
-    _output_root_override = _normalise(path) if path else None
+    _OUTPUT_ROOT.set(path)
 
 
 def output_root() -> str:
     """Resolve the output root at call time (see module docstring for precedence)."""
-    if _output_root_override is not None:
-        return _output_root_override
-    env_value = os.environ.get(OUTPUT_DIR_ENV_VAR)
-    if env_value:
-        return _normalise(env_value)
-    return _DEFAULT_OUTPUT_DIR
+    return str(_OUTPUT_ROOT.resolve())
+
+
+def describe_output_root() -> str:
+    """One-line description of the resolved root and its source, for run logs."""
+    return _OUTPUT_ROOT.describe()
 
 
 def models_output_dir() -> str:
@@ -99,18 +110,8 @@ def __getattr__(name: str) -> str:
 
 
 def free_space_gb(path: str | None = None) -> float:
-    """Free space (GiB) on the volume backing ``path`` (default: the output root).
-
-    Walks up to the nearest existing parent if ``path`` does not exist yet, so it
-    works for an output directory that is about to be created.
-    """
-    target = _normalise(path or output_root())
-    while not os.path.exists(target):
-        parent = os.path.dirname(target)
-        if parent == target:
-            break
-        target = parent
-    return shutil.disk_usage(target).free / (1024 ** 3)
+    """Free space (GiB) on the volume backing ``path`` (default: the output root)."""
+    return _shared_free_space_gb(path or output_root())
 
 
 def preflight_disk(
@@ -123,18 +124,6 @@ def preflight_disk(
     multi-hour sample. Prints the resolved output location so redirected runs are
     obvious in job logs. Returns the free space in GiB when the check passes.
     """
-    target = _normalise(path or output_root())
-    free = free_space_gb(target)
-    drive = os.path.splitdrive(target)[0] or target
-    # Surface the resolved root only when that is what we are actually checking, so
-    # this line can't disagree with the [disk] target when a caller passes a subdir.
-    if target == _normalise(output_root()):
-        print(f"[output] resolved output root: {output_root()}", flush=True)
-    print(f"[disk] {free:.1f} GiB free on {drive} "
-          f"(need >= {min_gb:.0f} GiB for {label})", flush=True)
-    if free < min_gb:
-        raise RuntimeError(
-            f"Insufficient disk space for {label}: {free:.1f} GiB free on {drive}, "
-            f"need >= {min_gb:.0f} GiB. Free space and retry."
-        )
-    return free
+    return _shared_preflight_disk(
+        min_gb, path or output_root(), label=label, output_root=output_root()
+    )

@@ -24,6 +24,11 @@ way without the model. A trace written before the attribute existed can still be
 pinned when the caller can name the parameters (a rebuilt model); otherwise
 :func:`reff_or_default` falls back to ArviZ's convention and says so.
 
+The computation lives in :mod:`dse_research_utils.statistics.loo` (v0.12.0);
+this module binds it to this repository's trace-attribute reader and keeps the
+project-specific ``LookupError`` message, which names the date the attribute
+was introduced.
+
 See ``notes/202608231530-observation-deterministics-not-sampled.md`` §3 and §7.
 """
 
@@ -32,15 +37,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-import numpy as np
-import xarray as xr
+import dse_research_utils.statistics.loo as shared_loo
 
 from vocab_growth.fit_artifacts import read_sampled_parameters_attr
-
-
-def _posterior(trace: Any) -> xr.Dataset:
-    node = trace["posterior"] if not isinstance(trace, xr.Dataset) else trace
-    return node.to_dataset() if hasattr(node, "to_dataset") else node
 
 
 def sampled_parameter_names(trace: Any, *, names: Sequence[str] | None = None) -> list[str]:
@@ -70,19 +69,9 @@ def sampled_parameter_reff(trace: Any, *, names: Sequence[str] | None = None) ->
     Every named variable must be in the posterior; a compacted trace keeps the
     free random variables, so this holds for every tier.
     """
-    import arviz_stats  # noqa: F401  (registers the ``azstats`` accessor)
-
-    posterior = _posterior(trace)
-    wanted = sampled_parameter_names(trace, names=names)
-    missing = [name for name in wanted if name not in posterior.data_vars]
-    if missing:
-        raise KeyError(f"Sampled parameters absent from the posterior: {missing}")
-    if posterior.sizes.get("chain", 1) == 1:
-        return 1.0
-    n_samples = int(posterior.sizes["chain"] * posterior.sizes["draw"])
-    ess = posterior[wanted].azstats.ess(method="mean")
-    values = np.hstack([ess[name].values.ravel() for name in ess.data_vars])
-    return float(values.mean() / n_samples)
+    return shared_loo.sampled_parameter_reff(
+        trace, names=sampled_parameter_names(trace, names=names)
+    )
 
 
 def reff_or_default(

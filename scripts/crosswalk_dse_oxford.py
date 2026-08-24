@@ -18,6 +18,7 @@ Usage:
 import argparse
 
 import arviz as az
+import dse_research_utils.statistics.intervals as stats_intervals
 import duckdb
 import numpy as np
 import pandas as pd
@@ -101,8 +102,10 @@ def count_ratio(idata, age, age_varying: bool):
     return (LEN_DSE * p_dse) / (LEN_OXF * p_oxf)
 
 
-def _hdi(x):
-    return np.percentile(x, [5, 50, 95])
+def _eti_90(x):
+    # A 90% equal-tailed interval; this was previously (mis)printed as an HDI.
+    lo, hi = stats_intervals.eti_1d(x, eti_prob=0.90)
+    return lo, float(np.median(np.asarray(x)[np.isfinite(x)])), hi
 
 
 def report(df: pd.DataFrame, outcome: str, seed: int, draws: int, tune: int) -> None:
@@ -114,22 +117,22 @@ def report(df: pd.DataFrame, outcome: str, seed: int, draws: int, tune: int) -> 
     print(f"  max r-hat {float(summ['r_hat'].max()):.3f}   "
           f"min ess {float(summ['ess_bulk'].min()):.0f}")
 
-    lo, md, hi = _hdi(idata.posterior["delta"].values.ravel())
-    print(f"  delta (logit offset): median {md:.3f}  90% HDI [{lo:.3f}, {hi:.3f}]  "
+    lo, md, hi = _eti_90(idata.posterior["delta"].values.ravel())
+    print(f"  delta (logit offset): median {md:.3f}  90% ETI [{lo:.3f}, {hi:.3f}]  "
           f"(0 = per-form; {np.log(LEN_DSE / LEN_OXF):.3f} = length-only)")
 
     print("  R = DSE/Oxford count ratio by age (population level):")
     for age in REPORT_AGES:
-        lo, md, hi = _hdi(count_ratio(idata, age, age_varying=False))
-        print(f"    age {age:2d}: median {md:.3f}  90% HDI [{lo:.3f}, {hi:.3f}]")
+        lo, md, hi = _eti_90(count_ratio(idata, age, age_varying=False))
+        print(f"    age {age:2d}: median {md:.3f}  90% ETI [{lo:.3f}, {hi:.3f}]")
     r_mid = count_ratio(idata, float(np.median(d.age)), age_varying=False)
     print(f"  P(R > 1) = {np.mean(r_mid > 1):.3f}   P(R < 1.95) = {np.mean(r_mid < 1.95):.3f}  "
           f"(at median age {np.median(d.age):.0f})")
 
     idata_av, _ = fit(df, outcome, age_varying=True, seed=seed, draws=draws, tune=tune)
-    lo, md, hi = _hdi(idata_av.posterior["delta1"].values.ravel())
+    lo, md, hi = _eti_90(idata_av.posterior["delta1"].values.ravel())
     excludes = "yes" if (lo > 0 or hi < 0) else "no"
-    print(f"  age-varying delta1: median {md:+.3f}  90% HDI [{lo:+.3f}, {hi:+.3f}]  "
+    print(f"  age-varying delta1: median {md:+.3f}  90% ETI [{lo:+.3f}, {hi:+.3f}]  "
           f"(CI excludes 0? {excludes})")
 
 

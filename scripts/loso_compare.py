@@ -34,6 +34,7 @@ import tempfile
 from dataclasses import dataclass
 
 import arviz as az
+import dse_research_utils.statistics.loo as shared_loo
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -363,17 +364,30 @@ def to_marginal_idata(
 
 
 def _summary_row(label: str, loo, reff: float) -> dict:
-    k = loo.pareto_k.values if hasattr(loo, "pareto_k") else loo.diagnostics.values
+    """One row of the subject-level LOO table.
+
+    Built from the shared :func:`dse_research_utils.statistics.loo.loo_summary_row`,
+    with the observation count named ``n_subjects`` because the predictive unit
+    here is a child. ``reff`` is the relative efficiency over the sampled
+    parameters (``loo_reff``), recorded because the Pareto-k column depends on
+    it; the 0.7 threshold is fixed to match the column name.
+    """
+    shared = shared_loo.loo_summary_row(
+        loo,
+        label=label,
+        reff=reff,
+        unit_name="n_subjects",
+        k_threshold=0.7,
+    )
+    # Re-emitted in the published column order (see loo_compare._loo_summary_row).
     return {
-        "label": label,
-        "elpd_loo": float(loo.elpd),
-        "se": float(loo.se),
-        "p_loo": float(loo.p),
-        "pareto_k_gt_0.7": int((k > 0.7).sum()),
-        "n_subjects": int(k.size),
-        # Relative efficiency over the sampled parameters (loo_reff): recorded
-        # because the Pareto-k column depends on it.
-        "reff": float(reff),
+        "label": shared["label"],
+        "elpd_loo": shared["elpd_loo"],
+        "se": shared["se"],
+        "p_loo": shared["p_loo"],
+        "pareto_k_gt_0.7": shared["pareto_k_above"],
+        "n_subjects": shared["n_subjects"],
+        "reff": shared["reff"],
     }
 
 

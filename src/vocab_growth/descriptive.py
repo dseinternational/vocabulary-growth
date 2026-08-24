@@ -9,10 +9,12 @@ measure) and scatter plots with each study drawn in a distinct colour. They are
 used by ``scripts/generate_descriptive_report.py`` to populate the report's
 "Data and measures" chapter.
 
-Note: ``summarise_by_group``, ``scatter_by_group`` and ``categorical_palette``
-are deliberately generic (no vocabulary-growth specifics) and are candidates for
-promotion to ``dse_research_utils`` (``statistics.descriptive`` / ``plot``) so
-other DSE projects can reuse them; kept local here until that shared release.
+Note: ``categorical_palette`` moved to
+``dse_research_utils.plot.styles`` in v0.12.0 (merged with the other repo's
+variant, which also samples continuous colormaps evenly) and is re-exported
+below. ``summarise_by_group`` and ``scatter_by_group`` are also generic (no
+vocabulary-growth specifics apart from the ``MEASURES`` default and the
+save-side-effect convention) and remain candidates for promotion.
 """
 
 from __future__ import annotations
@@ -22,14 +24,9 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from dse_research_utils.plot.styles import categorical_palette
 
 MEASURES = ("understood", "spoken", "signed")
-
-
-def categorical_palette(n: int) -> list:
-    """Return ``n`` distinct colours from a qualitative matplotlib colormap."""
-    cmap = plt.get_cmap("tab20" if n > 10 else "tab10")
-    return [cmap(i % cmap.N) for i in range(n)]
 
 
 def summarise_by_group(

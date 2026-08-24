@@ -1727,10 +1727,6 @@ def _plot_and_print_dist(context, dist, name):
     console.print(f"  [yellow]{name}[/yellow]: {summary}")
 
 
-_RHAT_WARN = 1.01
-_ESS_WARN = 400
-
-
 class ConvergenceGateError(RuntimeError):
     """Raised when a reporting-quality fit fails convergence checks."""
 
@@ -1759,6 +1755,7 @@ def enforce_convergence_gate(
     )
     rhat_failing = gate_summary.get("rhat_failing") or []
     ess_failing = gate_summary.get("ess_failing") or []
+    unassessable = gate_summary.get("unassessable_parameters") or []
 
     # A registered, narrowly-scoped exception can accept an R-hat-only failure
     # where the reported quantities converge and the failing parameter is a
@@ -1776,18 +1773,21 @@ def enforce_convergence_gate(
             "reason": accepted.reason,
             "decided": accepted.decided,
         }
-        summary_path = os.path.join(output_dir, DIAGNOSTICS_SUMMARY_FILENAME)
-        if os.path.isfile(summary_path):
-            with open(summary_path, encoding="utf-8") as handle:
-                payload = json.load(handle)
-            payload[ACCEPTED_EXCEPTION_KEY] = gate_summary[ACCEPTED_EXCEPTION_KEY]
-            write_json_atomic(summary_path, payload)
+        if os.path.isfile(os.path.join(output_dir, DIAGNOSTICS_SUMMARY_FILENAME)):
+            shared_diagnostics.amend_diagnostics_summary(
+                output_dir, {ACCEPTED_EXCEPTION_KEY: gate_summary[ACCEPTED_EXCEPTION_KEY]}
+            )
         rhat_failing = []
         scan_failed = False
 
-    if scan_failed or rhat_failing or ess_failing:
+    if scan_failed or rhat_failing or ess_failing or unassessable:
         if scan_failed:
             reason = "The R-hat/ESS convergence scan did not complete."
+        elif unassessable and not (rhat_failing or ess_failing):
+            reason = (
+                f"The convergence gate could not assess R-hat/ESS for "
+                f"{len(unassessable)} parameter(s): {', '.join(unassessable[:6])}."
+            )
         else:
             reason = (
                 f"The convergence gate found {len(rhat_failing)} R-hat failure(s) "
@@ -1846,8 +1846,8 @@ def _report_diagnostic_warnings(gate_summary: dict) -> None:
     table.
     """
     thresholds = gate_summary.get("thresholds") or {}
-    rhat_max = thresholds.get("rhat_max", _RHAT_WARN)
-    ess_threshold = thresholds.get("ess_threshold", _ESS_WARN)
+    rhat_max = thresholds.get("rhat_max", shared_diagnostics.RHAT_MAX)
+    ess_threshold = thresholds.get("ess_threshold", shared_diagnostics.ESS_THRESHOLD)
     max_rhat = gate_summary.get("max_rhat")
     min_ess = gate_summary.get("min_ess")
 

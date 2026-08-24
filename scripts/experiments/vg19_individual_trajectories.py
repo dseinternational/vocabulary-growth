@@ -27,6 +27,7 @@ Hard-coded to the output root of the machine the 2026-08-22 run happened on.
 Cited by ``notes/202608220748-vg19-individual-trajectories.md``.
 """
 
+import dse_research_utils.statistics.intervals as stats_intervals
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -59,7 +60,8 @@ def sd(t0, t1, r, a):
 
 
 def eti89(x):
-    return np.mean(x), np.quantile(x, 0.055), np.quantile(x, 0.945)
+    lo, hi = stats_intervals.eti_1d(x, eti_prob=stats_intervals.DEFAULT_CI_PROB)
+    return np.mean(x), lo, hi
 
 
 def main():
