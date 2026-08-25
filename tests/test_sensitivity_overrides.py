@@ -14,14 +14,13 @@ import dataclasses
 import pytest
 
 from vocab_growth.models.definitions import (
+    MODEL_REGISTRY,
     VG10,
     VG11,
     VG12,
     VG13,
     VG15,
-    VG19,
-    VG20,
-    VG22,
+    VG21,
 )
 from vocab_growth.sensitivity.overrides import make_variant, replace_kappa
 from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
@@ -208,7 +207,18 @@ def test_registry_counts_and_models():
     # model's true first two moments. Registered on both models because the
     # affected rows inform `q` and the spoken dispersion, which VG10 and VG20
     # are compared on.
-    assert len(VARIANTS) == 67
+    #
+    # +4 on 2026-08-25 (#242, #228, #229): VG16 gains `conditional-only` and
+    # `dse-native-only` -- it had none at all, which #242 records as a defect,
+    # since its coefficient is assumed constant across gaps, studies and form
+    # transitions with nothing registered to check it. VG21 gains
+    # `vague-anchors`, the double-dipping check its in-sample-recentred high
+    # anchors need. VG23 gains `eta-flat`, asking whether its correlation is
+    # evidenced or held up by the eta = 2 prior it shares with VG20.
+    assert len(VARIANTS) == 71
+    assert len(variants_for("vg16")) == 2
+    assert len(variants_for("vg21")) == 1
+    assert len(variants_for("vg23")) == 1
     assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
     assert len(variants_for("vg10")) == 17
@@ -332,16 +342,11 @@ def test_variants_are_single_factor_or_documented_pairs():
     # (sanity that replace preserved the class), and changes at least one field.
     for (model_key, name) in VARIANTS:
         (v,) = build_variant(model_key, name)
-        base = {
-            "vg10": VG10,
-            "vg11": VG11,
-            "vg12": VG12,
-            "vg13": VG13,
-            "vg15": VG15,
-            "vg19": VG19,
-            "vg20": VG20,
-            "vg22": VG22,
-        }[model_key]
+        # Resolved from the registry rather than from a literal map: the map
+        # had to be edited by hand every time a model gained its first variant,
+        # and a missing entry failed as a bare KeyError that reads like a broken
+        # variant rather than a stale test.
+        base = MODEL_REGISTRY[model_key]
         assert v.model_type == base.model_type
         assert dataclasses.asdict(v) != dataclasses.asdict(base)
 
@@ -561,3 +566,130 @@ def test_vg12_free_scales_builds_a_real_graph():
 
         logp = free.compile_logp()(free.initial_point())
         assert np.isfinite(logp), "the variant's graph does not initialise"
+
+
+def _prepared_bivariate(definition, root):
+    """Build a variant's real graph, returning ``(context, analysis frame)``."""
+    import contextlib
+    import io
+    import os
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+
+    ctx = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name=definition.model_id,
+            config_name=definition.config_name,
+            output_root_dir=root,
+            ci_prob=0.90,
+            interval_kind="hdi",
+        ),
+        sampling=sampling.get_sampling_configuration("dev"),
+    )
+    os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+    with contextlib.redirect_stdout(io.StringIO()):
+        cbr.prepare_bivariate_re_data(ctx, definition)
+        cb.configure_bivariate_priors(ctx, definition)
+        cbr.build_model_re(ctx, definition)
+    frame = next(v for v in vars(ctx).values() if hasattr(v, "columns"))
+    return ctx, frame
+
+
+def test_vg16_scope_variants_build_and_actually_narrow_the_data():
+    """VG16's two registered variants (#242), built rather than asserted.
+
+    Both are *scope* changes, so the thing to check is that each really removes
+    the rows it claims to and still produces a graph carrying ``beta_lag`` —
+    a cross-lag variant that silently lost its coefficient would be scored as a
+    robust result rather than as a broken variant.
+    """
+    import os
+    import tempfile
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models.definitions import VG16
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    with tempfile.TemporaryDirectory() as root:
+        base_ctx, base = _prepared_bivariate(VG16, root)
+        seen = {"base": (len(base), set(base["study"].unique()))}
+        for name in ("conditional-only", "dse-native-only"):
+            (variant,) = build_variant("vg16", name)
+            ctx, frame = _prepared_bivariate(variant, root)
+            seen[name] = (len(frame), set(frame["study"].unique()))
+            names = {v.name for v in ctx.model.free_RVs}
+            assert "beta_lag" in names, f"{name} lost the cross-lag coefficient"
+
+    # `dse-native-only` restricts the pool itself, so it drops both rows and
+    # studies. `conditional-only` changes which likelihood branch the spoken
+    # rows take, not which rows are loaded, so the frame is unchanged.
+    assert seen["dse-native-only"][0] < seen["base"][0], seen
+    assert seen["dse-native-only"][1] < seen["base"][1], seen
+    assert seen["conditional-only"][0] == seen["base"][0], seen
+
+
+def test_vg21_vague_anchors_moves_two_priors_and_nothing_structural():
+    """VG21's high anchors were recentred on in-sample medians (#228), so the
+    double-dipping check has to be a pure prior change: same rows, same studies,
+    same graph. If it ever differs structurally it has stopped being one."""
+    import os
+    import tempfile
+
+    import vocab_growth.data_utils as vocab_data_utils
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    (variant,) = build_variant("vg21", "vague-anchors")
+    assert (variant.p_slope_hi_u_alpha, variant.p_slope_hi_u_beta) == (1.2, 2.0)
+    assert (variant.p_slope_hi_q_alpha, variant.p_slope_hi_q_beta) == (1.3, 1.3)
+    # The window and its co-identified settings must be VG21's own, untouched.
+    for field in ("max_age_months", "slope_anchors", "gp_domain_months",
+                  "gp_anchor_age_months", "eta_q_sigma"):
+        assert getattr(variant, field) == getattr(VG21, field), field
+
+    with tempfile.TemporaryDirectory() as root:
+        base_ctx, base = _prepared_bivariate(VG21, root)
+        var_ctx, frame = _prepared_bivariate(variant, root)
+
+    assert len(frame) == len(base)
+    assert set(frame["study"].unique()) == set(base["study"].unique())
+    assert len(var_ctx.model.free_RVs) == len(base_ctx.model.free_RVs)
+
+
+def test_vg23_eta_flat_keeps_the_correlation_and_only_relaxes_its_prior():
+    """`eta = 1` is the flat LKJ. The variant must still estimate `rho_uq` —
+    the check is whether the correlation is evidenced, which needs the parameter
+    to still be there."""
+    import os
+    import tempfile
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models.definitions import (
+        VG23,
+        BivariateCorrelatedSubjectREModelDefinition,
+    )
+
+    (variant,) = build_variant("vg23", "eta-flat")
+    assert isinstance(variant, BivariateCorrelatedSubjectREModelDefinition)
+    assert variant.subject_re_correlation_eta == 1.0
+    assert VG23.subject_re_correlation_eta == 2.0     # base untouched
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    with tempfile.TemporaryDirectory() as root:
+        base_ctx, base = _prepared_bivariate(VG23, root)
+        var_ctx, frame = _prepared_bivariate(variant, root)
+
+    names = {v.name for v in var_ctx.model.free_RVs}
+    assert "rho_uq_raw" in names
+    assert len(frame) == len(base)
+    assert len(var_ctx.model.free_RVs) == len(base_ctx.model.free_RVs)

@@ -631,6 +631,87 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg22", "rank-2"): {"suffix": "rank-2", "scalar": {
         "subject_factor": SubjectFactorPriorParams(
             rank=2, tau1_u_sigma=0.5, tau1_q_sigma=0.5, ref_age_months=36.0)}},
+
+    # -- VG16: what the cross-lag coefficient survives (#242) --
+    #
+    # VG16 had no registered sensitivities at all, which #242 records as a
+    # defect in its own right: `beta_lag` "is assumed constant across gaps of
+    # 1-28 months, multiple studies and checklist-form transitions, without
+    # registered VG16 sensitivities". These are the two of that list expressible
+    # as field overrides; gap, leave-one-study-out and the zero-count boundary
+    # need new fields on `BivariateModelDefinition`, which is shared by all
+    # twelve bivariate models, so adding them re-stales every one and is a
+    # decision rather than a registration.
+    #
+    # Read these against `beta_lag`, not against the trajectories. Until
+    # 2026-08-25 `compare.py` scored only the eight trajectory series, so a
+    # variant could halve the coefficient and still be called robust; the
+    # coefficient is now loaded as a scalar from `diagnostics.csv`
+    # (`compare.load_beta_lag`) alongside VG15's `psi`.
+    #
+    # `conditional-only` is the sharper of the two. VG16's cross-lag is a claim
+    # about children whose earlier comprehension was measured, but 455 of 1,428
+    # spoken rows enter through the fallback branch with no observed
+    # comprehension parent at all -- 444 with no comprehension total and 11
+    # where spoken exceeds understood. Dropping them leaves only rows whose
+    # spoken count is conditioned on an observed understood count, which is the
+    # population the coefficient is supposed to describe. If `beta_lag` moves
+    # materially, the cross-lag is partly an artefact of the substitute
+    # likelihood on rows that never observed the predictor's parent.
+    ("vg16", "conditional-only"): {"suffix": "conditional-only", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_PAIRED_ONLY}},
+    #
+    # `dse-native-only` keeps only administrations recorded natively on the 810
+    # reference, so no count is scored against a denominator its form did not
+    # use. The lag predictor is a logit of a *proportion*, understood / 810, so
+    # a short-form source enters it already deflated -- the harmonisation acts
+    # directly on the regressor here, not only on the outcome. Expect partial
+    # coverage rather than a clean verdict: the same restriction keeps 278 of
+    # VG10's 1,521 rows, and it changes study composition as well as size.
+    ("vg16", "dse-native-only"): {
+        "suffix": "dse-native-only",
+        "scalar": {"dse_native_only": True},
+    },
+
+    # -- VG21: the anchors it was promoted with (#228, #240) --
+    #
+    # VG21 is the window-22 promotion, and its two HIGH anchors were recentred
+    # on **in-sample medians** because no CDI comprehension norm exists above 18
+    # months (#228). Anchors set from the data and then used to fit the data are
+    # double-dipping unless the conclusions are shown not to turn on them --
+    # which is exactly the test Target 8 applied to every other recalibrated
+    # anchor in the project, all of which passed.
+    #
+    # This is `("vg13", "window-22-vague-anchors")` expressed against VG21's own
+    # baseline: VG21 already carries the window, the anchor ages, the GP domain
+    # and `eta_q_sigma`, so only the two high-anchor Betas move, and the widened
+    # values are taken from that entry unchanged so the two remain comparable.
+    # p_slope_hi_q is deliberately Beta(1.3, 1.3) rather than flatter: the note
+    # on the VG13 entry records why a median at 0.5 would sit against the Oxford
+    # CDI's own 418-item ceiling and confound the test rather than sharpen it.
+    #
+    # A gate, not a reporting candidate. If VG21's conclusions survive, the
+    # in-sample anchors are a disclosure; if they do not, they are load-bearing
+    # and must not be published without saying so.
+    ("vg21", "vague-anchors"): {"suffix": "vague-anchors", "scalar": {
+        "p_slope_hi_u_alpha": 1.2, "p_slope_hi_u_beta": 2.0,   # median 0.346
+        "p_slope_hi_q_alpha": 1.3, "p_slope_hi_q_beta": 1.3}},  # median 0.500
+
+    # -- VG23: whether the correlation is evidenced or regularised (#229) --
+    #
+    # VG23 exists to estimate `rho_uq` on the typically-developing pool, and its
+    # LKJ concentration is `eta = 2` -- chosen to match VG20 so the two
+    # populations are comparable, and deliberately a "gentle pull toward
+    # independence, so a correlation has to be evidenced". That is a defensible
+    # choice and an informative prior, which is precisely why it needs a check.
+    #
+    # `eta = 1` is the flat LKJ: uniform over correlation matrices, no pull in
+    # either direction. If `rho_uq` barely moves, the correlation is carried by
+    # the data and the matched-prior comparison with VG20 is sound. If it moves
+    # materially, `eta = 2` is doing the work and the DS-versus-TD contrast is
+    # partly a statement about two priors.
+    ("vg23", "eta-flat"): {"suffix": "eta-flat", "scalar": {
+        "subject_re_correlation_eta": 1.0}},
 }
 
 
