@@ -48,6 +48,22 @@ Four calls by the study owner. Two change the set, one changes the order, one ch
 > [!NOTE]
 > VG23's report template was written from scratch rather than copied from VG13's, and says so at the top. That is the whole lesson of #240: VG21's template _was_ copied, and inherited three claims that had already been withdrawn from its parent. VG23's narrative is written from the specification and will need revisiting once there are numbers — as VG21's still does.
 
+> [!NOTE]
+> **VG23 has been sampled at `dev` and the pipeline runs end to end** (2026-08-25, 8m 11s, every stage including Report, so the new report template resolves). `rho_uq_raw` appears in the NUTS variable list, so the correlation is genuinely sampled rather than silently dropped, and `rho_uq` comes back at 0.126 [0.097, 0.156] — positive, and modest against VG20's ~0.33 on the Down syndrome side.
+>
+> **The convergence problem at this tier is VG13's, not the correlation's.** VG13 was fitted at the same tier as a control (into a scratch output root, so it did not touch its model-of-record directory). Both land on REVIEW, and `tau_u` — the _study_ scale, weakly identified on six studies at 500 tuning steps — is the worst parameter in both:
+>
+> |                | divergences | max R-hat | min ESS | worst parameter       |
+> | -------------- | ----------: | --------: | ------: | --------------------- |
+> | VG13 (control) |           0 |     1.096 |    19.8 | `tau_u`               |
+> | VG23           |           1 |     1.164 |     9.7 | `tau_q`, then `tau_u` |
+>
+> The between-child scales agree closely — `tau_subj_u` 0.734 against 0.732, `tau_subj_q` 1.110 against 1.103 — which is what a model nested at `rho_uq = 0` should give.
+>
+> **Stated against itself: VG23 is worse than VG13 on every summary above, and one `dev` run each at two chains cannot separate "the extra parameter costs something" from run-to-run variation.** VG23 also sits at BFMI 0.291 where the VG13 control clears 0.3. None of this is an estimate — neither model is converged at `dev`, and 0.126 is evidence the parameter is identified enough to move off its prior, not a result. Whether VG23 converges at `rep` is untested, and VG13 carries a recorded BFMI caveat there.
+>
+> The `dev` fit is left in `output/models/VG23-age-understood-spoken-td-re-young-corr/` (414 MB). **It will abort a `rep` `sync_report_figures` run** — the sync validates every directory resolving to a registered model and one failure stops the whole run, the trap this runbook records for VG19. The `rep` refit overwrites it, so this only bites if a sync happens first.
+
 **3. Comprehension below production: a sixth masked defect class.** Ten administrations across `ie_01` (7), `uk_01` (2) and `it_01` (1) record a comprehension count below the child's own production, which an inclusive field cannot do. `understood` is masked on those rows, with `include_comprehension_below_production=True` to reinstate. The Down syndrome pool's comprehension observations go **987 → 977**. Full reasoning, including why the denominator is the recorded `produced` union and not `spoken + signed`, in [202608251500](202608251500-comprehension-below-production.md).
 
 > [!CAUTION]
