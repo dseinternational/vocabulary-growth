@@ -118,18 +118,36 @@ Eleven models, all at `--config rep`:
 
 **VG19 is not optional even though it is not a model of record.** `sync_report_figures` validates every directory that resolves to a registered model and one failure aborts the whole run — the trap recorded at `docs/runbooks/full-refit.md:464`.
 
-## 3. Disk — plan this before starting
+## 3. Disk — no longer the binding constraint
 
-At the time of writing `/scratch2` has **33 G free** against **98 G** of current traces for these eleven. Refitting writes the new trace before the old is replaced, so the peak matters.
+> [!NOTE]
+> **Rewritten 2026-08-25.** This section previously planned around `/scratch2` having 33 G free against 98 G of traces, and recommended `--trace-persistence compact` on that basis. The refit is now provisioned on a VM with a **2 TB attached disk**, which changes the recommendation to its opposite. The original reasoning is in git history; nothing below depends on it.
 
-The clean source of room is the **three VG19 `rep` recovery replicate directories, 35 G in total**, which are fully scored — `recovery_matrix_vg19.csv` and the six per-replicate CSVs were written 2026-08-22 08:03 — and have no remaining consumer. Removing them gives roughly 68 G.
+**Use `full`.** It is the default, so no flag is needed — but check that `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE` is unset on the VM, because the environment variable would silently override it.
 
-Then choose persistence deliberately:
+The whole set at `full`, using current traces as proxies and estimating VG21 and VG23 at VG13's size:
 
-- `--trace-persistence compact` takes the set to roughly 35 G and is **byte-identical for reporting**. It drops the observation-sized deterministics, which are recomputable. It does **block** later recovery scoring, `regenerate_plots.py` and `kfold_loso`-adjacent work on those fits without another refit.
-- `full` needs the 98 G and leaves every downstream option open.
+|                                            |   fits |  at `full` |
+| ------------------------------------------ | -----: | ---------: |
+| Core refit set                             |     15 |     ~178 G |
+| Sensitivity variants (§0 decisions 4b, 4c) |      7 |      ~77 G |
+| Fallback arms on VG10 and VG20             |      6 |      ~66 G |
+| **Total**                                  | **28** | **~320 G** |
 
-Given that recovery, k-fold and the parameter-recovery baselines have all just been run and are unaffected by this change (§5), `compact` is the reasonable default here, with `full` for **VG20** alone if any of its downstream work is expected.
+Roughly 16% of the volume. A fresh VM starts with an empty `output/`, so peak equals total — the "new trace written before the old is replaced" problem that drove the original plan does not arise.
+
+**Why `full` rather than `compact` now that it is affordable.** `compact` is byte-identical for reporting, so it costs nothing _for the report_. What it costs is everything queued behind the report: `loso_compare.py`, `regenerate_plots.py` and parameter-recovery scoring all refuse a compacted fit up front, and the work waiting on these refits is exactly that — [#225](https://github.com/dseinternational/vocabulary-growth/issues/225)'s mirror experiment (VG20 fitted to VG19-simulated data, explicitly gated on this run), [#226](https://github.com/dseinternational/vocabulary-growth/issues/226) item 1's further `rep` psi replicates, and the recovery completion [#233](https://github.com/dseinternational/vocabulary-growth/issues/233) asks for. Choosing `compact` to save 240 G on a 2 TB disk would buy a second refit window.
+
+**Graphviz is on the VM images** as of 2026-08-25, so the model-diagram figure renders. It was the one non-Python tool a fit tolerates missing — `render_model_graph` catches the failure and warns — but all twenty model reports reference `gp_model_graph.svg`, so without it every report renders with a broken figure.
+
+### What is binding instead
+
+**Wall time.** Twenty-eight `rep` fits, several of them multi-hour, and the sensitivity variants are full fits rather than cheap ones. Two consequences:
+
+- The run order that §0 decision 1 fixes is now the main lever rather than a nicety. The fallback arms on VG10 and VG20 must complete and **be read** before the remaining models launch; running everything and reading afterwards forfeits the point of that decision and risks a second window.
+- If the window is tight, the sensitivity variants are the right thing to defer — they are the only fits here whose absence blocks nothing except a robustness claim. Every model in the core set is stale and unpublishable until refitted.
+
+**Memory, not disk, is what has historically killed these runs.** A concurrent memory hog has previously taken out `rep` fits mid-run; the precautions are in the runbook's _Surviving an OOM_ section, not here, and a large disk does nothing for that failure mode.
 
 ## 4. Order of operations, and the traps
 

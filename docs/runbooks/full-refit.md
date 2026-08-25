@@ -33,9 +33,22 @@ naive run hits. Distilled from the 2026-07-12 run
   tell-tale of the old rounding.
 - Data current: `python scripts/prepare_data.py` (confirm the 810 reference scale;
   see `docs/report/methods-data.qmd`).
-- Disk: **set `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact` before you start**, and
+- **Graphviz `dot` on `PATH`.** Present on the DSE VM images since 2026-08-25. It
+  is the one tool a _fit_ tolerates missing — `render_model_graph` catches the
+  failure and prints a warning rather than aborting — but every model report
+  references `gp_model_graph.svg`, so without it all twenty render with a broken
+  figure and nothing fails loudly enough to notice.
+- Disk: **choose the trace tier against the volume you actually have, and set it
+  before you start.** Under about 1 TB use
+  `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact`; at 1 TB or more leave the default
+  `full`, and make sure that variable is _unset_ so it cannot silently override
+  you. `compact` is byte-identical for reporting but blocks recovery scoring,
+  `regenerate_plots.py` and `loso_compare.py` on those fits without a refit, so
+  it is a saving worth making only when the space is genuinely tight. Either way,
   redirect output off the checkout with `--output-dir <scratch>` or
-  `DSE_VOCAB_GROWTH_OUTPUT_DIR`. The report figure cache
+  `DSE_VOCAB_GROWTH_OUTPUT_DIR` — and point it at the **attached** disk rather
+  than at a local temp disk, for the reasons in
+  [Fit straight to the attached disk](#fit-straight-to-the-attached-disk-not-to-local-scratch). The report figure cache
   (`docs/report/figures/`) always stays in the checkout. Sizing and the
   exceptions are in [Surviving a full disk](#surviving-a-full-disk) — read it
   before the first fit, not after. The old advice here ("~20 GB × n_models") was
@@ -152,6 +165,46 @@ memory-heavy. So:
   a batch of small DS sensitivity fits (see below). Run them as a separate
   `-MaxParallel 1` pass; a single pool with a mixed model list cannot express this.
 
+### Fit straight to the attached disk, not to local scratch
+
+Asked when the 2026-08 run was provisioned with a 2 TB premium disk: fit to the
+VM's local SSD and copy the results across afterwards, or write straight to the
+attached disk? **Straight to the attached disk.** Three reasons, in order of
+weight.
+
+**The output root has to be one filesystem.** `create_staging_root` puts
+`.staging` _inside_ the output root, and `promote_staged_fit` publishes with
+`os.replace` — a rename. Across filesystems that raises `EXDEV` rather than
+degrading to a copy, so the pipeline cannot stage on local and publish to the
+attached disk; the rollback path (`.previous`, also under the output root) has
+the same constraint. Fitting to scratch therefore means the _whole_ output root
+lives on scratch, and the copy to the attached disk is a separate manual step
+outside the atomicity machinery — a crash during a 320 GB copy leaves a partial
+fit that nothing guards against. That trades a real protection for a saving the
+next point shows is negligible.
+
+**The saving is noise against the sampling.** Posterior sampling is about 92% of
+a `rep` fit's wall clock (measured on VG12: 3h09m of 3h26m), and the trace is a
+single burst at the end. Writing a 16 GB `trace.nc` costs on the order of a
+minute to premium storage and a fraction of that to local NVMe — call it tens of
+seconds per fit, perhaps 10–25 minutes across the whole run. Copying ~320 GB back
+to the attached disk afterwards costs about the same again, so the round trip
+saves nothing and may lose.
+
+**Local disks are ephemeral, and the fits are long.** An Azure temp disk does not
+survive deallocation or host maintenance. This project has already lost `rep`
+fits to a full disk (2026-08-14) and to a concurrent OOM; losing a fifteen-hour
+VG12 fit to a host migration is not a failure mode worth adding for the numbers
+above. Note also that the `v6` VM generations only carry a local temp disk when
+the SKU name includes `d` — `Epdsv6` has one, `Epsv6` does not — so confirm the
+provisioned SKU actually offers the choice before planning around it.
+
+**Where local disk does help**, if the SKU has one: PyTensor's compile cache
+(`PYTENSOR_FLAGS=base_compiledir=...`). It is many small latency-sensitive files
+and is disposable by design, which is exactly what a temp disk is for. Keep
+expectations low — CI measured the compile cache as noise and dropped it in
+`8b7de41` — but it is the right home for it if you want one.
+
 ### Surviving a full disk
 
 On 2026-08-14 at 16:12 the output volume reached 100% and five in-flight refits died on `[Errno 28] No space left on device` — VG16 and VG14 part-way through writing `trace.nc`, and VG10, VG07 and VG05 before they had started. Nothing warned first: the fits simply failed at the moment they wrote.
@@ -169,6 +222,8 @@ $env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
 **Three models should stay at `full`: VG10, VG12 and VG15.** They are `fit_recovery.py`'s headline set, and recovery scoring refuses a compacted trace up front — as do `regenerate_plots.py` and `loso_compare.py`. Pass `--trace-persistence full` for those three specifically. Everything else can be compacted, at the cost of needing a refit if its plots ever have to be regenerated.
 
 **Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates. At `full` that exceeds 400 GB; at `compact` it is roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB is comfortable at `compact`; 1 TB at `full`.**
+
+The 2026-08 refit is provisioned on a **2 TB attached disk**, so `full` is the tier to use and this section's `compact` advice does not apply to it. Measured against the current traces, its 28 planned fits come to about 320 GB at `full` — lower than the 400 GB above because that figure includes recovery replicates, which this run does not schedule. Either way it is comfortably inside the volume, and a fresh VM starts with an empty `output/`, so the peak equals the total rather than transiently holding both an old and a new trace.
 
 **Recovering a volume that is already full**: `scripts/compact_traces.py` applies the tier to traces already written. It reuses the same policy code the fit pipeline uses, verifies each rewrite carries every free parameter the original had before atomically replacing it, and records the tier in `fit_manifest.json`. It processes smallest-first, which matters — each rewrite needs room for its output beside the original, so the small traces buy the space the large ones need.
 
