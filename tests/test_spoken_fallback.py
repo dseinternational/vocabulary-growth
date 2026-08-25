@@ -231,7 +231,10 @@ def test_every_registered_model_carries_a_known_treatment():
     bivariate = [
         d for d in MODEL_REGISTRY.values() if isinstance(d, BivariateModelDefinition)
     ]
-    assert len(bivariate) == 11
+    # 12 since VG23 joined on 2026-08-25. Pinned rather than derived so a new
+    # bivariate model has to be looked at here rather than silently inheriting
+    # the default treatment.
+    assert len(bivariate) == 12
     for definition in bivariate:
         assert definition.spoken_fallback == SPOKEN_FALLBACK_PRODUCT, (
             f"{definition.model_id} is a model of record; the variants live in "
