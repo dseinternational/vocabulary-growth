@@ -33,6 +33,15 @@ naive run hits. Distilled from the 2026-07-12 run
   tell-tale of the old rounding.
 - Data current: `python scripts/prepare_data.py` (confirm the 810 reference scale;
   see `docs/report/methods-data.qmd`).
+- **On the DSE data-science fleet, most of this list is already on the image.**
+  The stack's cloud-init installs `uv`, the newest stable CPython, Node.js active
+  LTS, Quarto with a per-user TinyTeX (so `quarto render --to pdf` works without
+  a separate LaTeX install), Pandoc, plotting fonts, `gh`, Graphviz, and — on the
+  ARM64 CPU bootstrap — pinned **PowerShell 7.6 LTS exposed as `pwsh`**, which is
+  what `run_replication.ps1` needs. Do not install competing versions by hand.
+  The one thing worth checking rather than assuming is the report book's fonts:
+  the image provides "plotting fonts", which is not the same claim as Source
+  Sans 3 and Monaspace Neon, and those are needed only for the `pdf` format.
 - **Graphviz `dot` on `PATH`.** Present on the DSE VM images since 2026-08-25. It
   is the one tool a _fit_ tolerates missing — `render_model_graph` catches the
   failure and prints a warning rather than aborting — but every model report
@@ -191,19 +200,40 @@ seconds per fit, perhaps 10–25 minutes across the whole run. Copying ~320 GB b
 to the attached disk afterwards costs about the same again, so the round trip
 saves nothing and may lose.
 
-**Local disks are ephemeral, and the fits are long.** An Azure temp disk does not
-survive deallocation or host maintenance. This project has already lost `rep`
-fits to a full disk (2026-08-14) and to a concurrent OOM; losing a fifteen-hour
-VG12 fit to a host migration is not a failure mode worth adding for the numbers
-above. Note also that the `v6` VM generations only carry a local temp disk when
-the SKU name includes `d` — `Epdsv6` has one, `Epsv6` does not — so confirm the
-provisioned SKU actually offers the choice before planning around it.
+**Local disk is disposable by design, and the fits are long.** On the DSE data
+science fleet the two mounts are explicit about this
+([`dsegroup/infrastructure`](https://github.com/dsegroup/infrastructure), the
+data-science stack's cloud-init):
 
-**Where local disk does help**, if the SKU has one: PyTensor's compile cache
-(`PYTENSOR_FLAGS=base_compiledir=...`). It is many small latency-sensitive files
-and is disposable by design, which is exactly what a temp disk is for. Keep
-expectations low — CI measured the compile cache as noise and dropped it in
-`8b7de41` — but it is the right home for it if you want one.
+| mount      | what it is                                 | survives teardown |
+| ---------- | ------------------------------------------ | ----------------- |
+| `/data`    | the persistent disk, mounted when attached | yes               |
+| `/scratch` | every local NVMe the tier carries, striped | **no — wiped**    |
+
+`$TMPDIR` points at `/scratch`. **Fit to `/data`.** The XL tier is
+`Standard_E32pds_v6` — the `d` variants do carry local NVMe, so the choice
+genuinely exists here and is not small: [infrastructure
+#1804](https://github.com/dsegroup/infrastructure/pull/1804) stripes all of it
+into one RAID0 volume, taking XL's `/scratch` from 440 GiB to about 1.3 TiB.
+That PR was still open on 2026-08-25, so a box provisioned before it merges comes
+up with the single-device 440 GiB `/scratch`; either way the size objection is
+not what decides this.
+
+What decides it is that `/scratch` is _meant_ to be lost. It is wiped on
+teardown, and a deallocate/start wipes local NVMe outright even though #1804
+gives the mount an `fstab` entry that survives a plain reboot. The stripe also
+multiplies the device-failure surface across three disks — which that PR
+correctly accepts, on the grounds that the failure "costs a workspace that
+teardown was going to wipe anyway". A fifteen-hour VG12 fit is not that. This
+project has already lost `rep` fits to a full disk (2026-08-14) and to a
+concurrent OOM; host maintenance is not a third failure mode worth buying for
+tens of seconds per fit.
+
+**Where `/scratch` does help**: PyTensor's compile cache
+(`PYTENSOR_FLAGS=base_compiledir=/scratch/...`). Many small latency-sensitive
+files, disposable by design — exactly what the mount is for, and with the stripe
+it has both the room and the throughput. Keep expectations low: CI measured the
+compile cache as noise and dropped it in `8b7de41`.
 
 ### Surviving a full disk
 
