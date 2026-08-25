@@ -36,6 +36,7 @@ from vocab_growth.models.definitions import (
     SubjectFactorPriorParams,
 )
 from vocab_growth.models.likelihood_utils import (
+    LAG_ZERO_CONTINUITY,
     SPOKEN_FALLBACK_MOMENT_MATCHED,
     SPOKEN_FALLBACK_PAIRED_ONLY,
     SPOKEN_FALLBACK_SEPARATE_DISPERSION,
@@ -672,6 +673,41 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "suffix": "dse-native-only",
         "scalar": {"dse_native_only": True},
     },
+
+    #
+    # The three below need the fields added on 2026-08-25. They are registered
+    # in the same change as the fields, because a field with no variant using it
+    # is dead weight in the fingerprint of all twelve bivariate models.
+    #
+    # `lag-gap-12` tests the constancy assumption directly. `beta_lag` is one
+    # number for gaps running 1 to 28 months (median 6), and a prospective
+    # association measured over two years is not the same quantity as one
+    # measured over six months. A ceiling at 12 keeps the bulk and drops the
+    # tail: 41 of 477 lagged rows on the current frame, with 9 above 18 months
+    # and 4 above 24. Dropping a lag does not drop the row -- the observation
+    # still enters both likelihoods, it just stops informing the coefficient.
+    ("vg16", "lag-gap-12"): {"suffix": "lag-gap-12", "scalar": {
+        "lag_max_gap_months": 12.0}},
+    #
+    # `no-us01` is the leave-one-study-out check with the most leverage. `us_01`
+    # supplies 136 of VG16's 477 lagged rows, 28.5% of the evidence for a
+    # coefficient reported as a property of children with Down syndrome rather
+    # than of a study. `it_01` is the next largest at 106 and is one registry
+    # line away; the field takes any tuple of study codes, so a full
+    # leave-one-out sweep over the eight contributing studies needs no code.
+    ("vg16", "no-us01"): {"suffix": "no-us01", "scalar": {
+        "exclude_studies": ("us_01",)}},
+    #
+    # `lag-continuity` replaces the clip on the predictor's boundary. Seven of
+    # the 477 lagged rows have a source of exactly zero understood words, and
+    # the clip puts them at logit(1e-4) = -9.21 -- a value fixed by the floor,
+    # not by the data, and identical whether the source form had 810 items or
+    # 396. The +0.5/+1 correction puts them at -7.39 instead, derived from the
+    # inventory. Seven rows is few, but they sit at the extreme of the
+    # predictor's range, which is where a regression coefficient takes its
+    # leverage; non-boundary sources move by under 0.002 logits.
+    ("vg16", "lag-continuity"): {"suffix": "lag-continuity", "scalar": {
+        "lag_zero_handling": LAG_ZERO_CONTINUITY}},
 
     # -- VG21: the anchors it was promoted with (#228, #240) --
     #

@@ -215,8 +215,13 @@ def test_registry_counts_and_models():
     # `vague-anchors`, the double-dipping check its in-sample-recentred high
     # anchors need. VG23 gains `eta-flat`, asking whether its correlation is
     # evidenced or held up by the eta = 2 prior it shares with VG20.
-    assert len(VARIANTS) == 71
-    assert len(variants_for("vg16")) == 2
+    #
+    # +3 on 2026-08-25, in the same change as the fields they need: VG16's
+    # `lag-gap-12`, `no-us01` and `lag-continuity`. A field with no variant
+    # using it is dead weight in the fingerprint of all twelve bivariate models,
+    # so the fields and their variants land together or not at all.
+    assert len(VARIANTS) == 74
+    assert len(variants_for("vg16")) == 5
     assert len(variants_for("vg21")) == 1
     assert len(variants_for("vg23")) == 1
     assert len(variants_for("vg22")) == 2
@@ -693,3 +698,84 @@ def test_vg23_eta_flat_keeps_the_correlation_and_only_relaxes_its_prior():
     assert "rho_uq_raw" in names
     assert len(frame) == len(base)
     assert len(var_ctx.model.free_RVs) == len(base_ctx.model.free_RVs)
+
+
+def test_vg16_lag_scope_variants_change_what_each_claims():
+    """The three field-backed variants (#242), measured on the real frame.
+
+    Each is registered on the promise of moving one specific thing; this checks
+    it does, and that it leaves the others alone.
+    """
+    import os
+    import tempfile
+
+    import numpy as np
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.definitions import VG16
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def measure(definition, root):
+        _, frame = _prepared_bivariate(definition, root)
+        _, has_lag, logits = cbr.compute_prev_wave_lag(
+            frame["subject_code"].to_numpy(int),
+            frame["age"].to_numpy(float),
+            frame["understood"].to_numpy(float),
+            definition.n_trials,
+            max_gap_months=definition.lag_max_gap_months,
+            zero_handling=definition.lag_zero_handling,
+        )
+        lagged = has_lag > 0
+        return {
+            "rows": len(frame),
+            "lagged": int(lagged.sum()),
+            "studies": len(set(frame["study"])),
+            "min_logit": float(np.min(logits[lagged])),
+        }
+
+    with tempfile.TemporaryDirectory() as root:
+        base = measure(VG16, root)
+        got = {}
+        for name in ("lag-gap-12", "no-us01", "lag-continuity"):
+            (variant,) = build_variant("vg16", name)
+            got[name] = measure(variant, root)
+
+    # A gap ceiling drops lags, not rows or studies.
+    assert got["lag-gap-12"]["lagged"] < base["lagged"]
+    assert got["lag-gap-12"]["rows"] == base["rows"]
+    assert got["lag-gap-12"]["studies"] == base["studies"]
+
+    # Leave-one-study-out drops rows and exactly one study.
+    assert got["no-us01"]["studies"] == base["studies"] - 1
+    assert got["no-us01"]["rows"] < base["rows"]
+    assert got["no-us01"]["lagged"] < base["lagged"]
+
+    # The continuity correction moves the predictor's boundary and nothing else.
+    assert got["lag-continuity"]["rows"] == base["rows"]
+    assert got["lag-continuity"]["lagged"] == base["lagged"]
+    assert got["lag-continuity"]["min_logit"] > base["min_logit"] + 1.5
+
+
+def test_excluding_a_study_that_matches_nothing_is_an_error():
+    """A leave-one-out check that removes nothing cannot fail, which is the
+    failure mode the retired `us01-ceiling-excluded` variants had: a registered
+    check silently reporting robustness about an exclusion it never made."""
+    import dataclasses
+    import os
+    import tempfile
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models.definitions import VG16
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    bogus = dataclasses.replace(
+        VG16, config_name="probe-bogus-study", exclude_studies=("zz_99",)
+    )
+    with tempfile.TemporaryDirectory() as root:
+        with pytest.raises(ValueError, match="matched no rows"):
+            _prepared_bivariate(bogus, root)

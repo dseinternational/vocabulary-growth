@@ -22,6 +22,10 @@ from vocab_growth.models.common_bivariate_re import (
     compute_prev_wave_lag,
     cross_lag_audit_frame,
 )
+from vocab_growth.models.likelihood_utils import (
+    LAG_ZERO_CLIP,
+    LAG_ZERO_CONTINUITY,
+)
 
 N_TRIALS = 800
 
@@ -286,3 +290,118 @@ def test_validate_cross_lag_rejects_unknown_baseline():
 def test_validate_cross_lag_requires_subject_re_u(baseline):
     with pytest.raises(ValueError, match="use_subject_re_u"):
         _validate_cross_lag(baseline, use_subject_re_u=False)
+
+
+# --- Gap ceiling and zero-count handling (issue #242) --------------------------
+
+
+def test_gap_ceiling_drops_the_lag_but_keeps_the_row():
+    """A gap ceiling must not remove observations, only their lag.
+
+    The row still enters both likelihoods; it simply stops informing
+    ``beta_lag``. Removing the row instead would confound the gap question with
+    a sample-size change.
+    """
+    df = _synthetic_df()
+    base_idx, base_lag, _ = _compute_prev_wave_lag(df, N_TRIALS)
+    idx, lag, logits = compute_prev_wave_lag(
+        df["subject_code"].to_numpy(int),
+        df["age"].to_numpy(float),
+        df["understood"].to_numpy(float),
+        N_TRIALS,
+        max_gap_months=12.0,
+    )
+    # Subject 0's waves are 12 months apart and survive; subject 3's row 8 has a
+    # 24-month gap to its source at row 6 and loses its lag.
+    np.testing.assert_array_equal(base_lag, [0, 1, 1, 0, 0, 0, 0, 1, 1])
+    np.testing.assert_array_equal(lag, [0, 1, 1, 0, 0, 0, 0, 1, 0])
+    assert len(lag) == len(base_lag)          # no row removed
+    assert logits[8] == 0.0                   # and its predictor is neutralised
+
+
+def test_gap_ceiling_never_changes_which_wave_is_the_source():
+    """The ceiling gates whether a source is used, not which one is chosen.
+
+    If it were applied while walking the waves, a row just over the ceiling
+    could fall back to an *earlier* source and so acquire a longer gap than the
+    one that was rejected.
+    """
+    df = _synthetic_df()
+    base_idx, base_lag, _ = _compute_prev_wave_lag(df, N_TRIALS)
+    idx, lag, _ = compute_prev_wave_lag(
+        df["subject_code"].to_numpy(int),
+        df["age"].to_numpy(float),
+        df["understood"].to_numpy(float),
+        N_TRIALS,
+        max_gap_months=12.0,
+    )
+    kept = lag > 0
+    np.testing.assert_array_equal(idx[kept], base_idx[kept])
+
+
+def test_no_ceiling_reproduces_the_historical_lag_exactly():
+    df = _synthetic_df()
+    base = _compute_prev_wave_lag(df, N_TRIALS)
+    same = compute_prev_wave_lag(
+        df["subject_code"].to_numpy(int),
+        df["age"].to_numpy(float),
+        df["understood"].to_numpy(float),
+        N_TRIALS,
+        max_gap_months=None,
+        zero_handling=LAG_ZERO_CLIP,
+    )
+    for a, b in zip(base, same, strict=True):
+        np.testing.assert_array_equal(a, b)
+
+
+def test_continuity_correction_moves_a_zero_source_off_the_clip():
+    """A zero source sits at logit(1e-4) under the clip, a value set by the floor
+    rather than by the data — identical whether the form had 810 items or 396."""
+    df = pd.DataFrame({
+        "subject_code": [0, 0],
+        "age": [12, 24],
+        "understood": [0.0, 200.0],
+    })
+    args = (
+        df["subject_code"].to_numpy(int),
+        df["age"].to_numpy(float),
+        df["understood"].to_numpy(float),
+        N_TRIALS,
+    )
+    _, _, clipped = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CLIP)
+    _, _, corrected = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CONTINUITY)
+
+    assert clipped[1] == pytest.approx(logit(1e-4), rel=1e-9)
+    assert corrected[1] == pytest.approx(logit(0.5 / (N_TRIALS + 1)), rel=1e-9)
+    # The correction is a boundary treatment, not a rescaling: it is well inside
+    # the clip, and the two differ by nearly two logits on this row.
+    assert corrected[1] > clipped[1] + 1.5
+
+
+def test_continuity_correction_barely_moves_a_non_boundary_source():
+    df = pd.DataFrame({
+        "subject_code": [0, 0],
+        "age": [12, 24],
+        "understood": [400.0, 500.0],
+    })
+    args = (
+        df["subject_code"].to_numpy(int),
+        df["age"].to_numpy(float),
+        df["understood"].to_numpy(float),
+        N_TRIALS,
+    )
+    _, _, clipped = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CLIP)
+    _, _, corrected = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CONTINUITY)
+    assert abs(corrected[1] - clipped[1]) < 0.01
+
+
+def test_unknown_zero_handling_is_rejected():
+    df = _synthetic_df()
+    with pytest.raises(ValueError, match="lag_zero_handling"):
+        compute_prev_wave_lag(
+            df["subject_code"].to_numpy(int),
+            df["age"].to_numpy(float),
+            df["understood"].to_numpy(float),
+            N_TRIALS,
+            zero_handling="halve-it",
+        )
