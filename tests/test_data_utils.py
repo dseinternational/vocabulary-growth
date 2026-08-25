@@ -187,7 +187,9 @@ def test_dse_native_restriction_on_the_real_pool():
     assert dropped == len(pool) - 278
     assert sorted(native["study"].unique()) == ["ie_01", "ie_02", "uk_02", "uk_06"]
     assert native["subject_id"].nunique() == 194
-    assert int(native["understood"].notna().sum()) == 259
+    # 252, not 259: seven of the ten counts mask_comprehension_below_production
+    # masks are ie_01 rows, and ie_01's 810 wave is inside this subset.
+    assert int(native["understood"].notna().sum()) == 252
     assert int(native["spoken"].notna().sum()) == 264
     assert int(native["signed"].notna().sum()) == 218
 
@@ -977,18 +979,30 @@ def _ie01_db(tmp_path, rows):
 def test_ie01_understood_is_not_repaired_from_production(tmp_path, monkeypatch):
     # A child reported as saying more than it understands at follow-up. The old
     # GREATEST repair turned this into understood == spoken == 366 (an exact
-    # q = 1 observation); understood must now be the parent-reported 13.
+    # q = 1 observation). That must never come back: the value is either the
+    # parent-reported 13 or absent, and never the production count.
     db_path = _ie01_db(tmp_path, [("s1", 30.0, 100, 20, 61.0, 13, 366)])
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
-    ie = data_utils.load_combined_data(include_incomplete_administrations=True)
-    ie = ie[ie["study"] == "ie_01"].sort_values("age")
-
-    follow_up = ie[ie["age"] == 61.0].iloc[0]
+    reinstated = data_utils.load_combined_data(
+        include_incomplete_administrations=True,
+        include_comprehension_below_production=True,
+    )
+    reinstated = reinstated[reinstated["study"] == "ie_01"].sort_values("age")
+    follow_up = reinstated[reinstated["age"] == 61.0].iloc[0]
     assert follow_up["understood"] == 13      # not GREATEST(13, 366)
     assert follow_up["spoken"] == 366
-    # It is now visible as a source-data violation rather than silently repaired.
-    assert (ie["spoken"] > ie["understood"]).sum() == 1
+    # Visible as a source-data violation rather than silently repaired.
+    assert (reinstated["spoken"] > reinstated["understood"]).sum() == 1
+
+    # Masked by default since 2026-08-25: an inclusive comprehension field cannot
+    # be exceeded by production. The production count is untouched, because it is
+    # not the value in question.
+    masked = data_utils.load_combined_data(include_incomplete_administrations=True)
+    masked = masked[masked["study"] == "ie_01"].sort_values("age")
+    follow_up = masked[masked["age"] == 61.0].iloc[0]
+    assert pd.isna(follow_up["understood"])
+    assert follow_up["spoken"] == 366
 
 
 def test_ie01_baseline_wave_carries_its_true_460_item_ceiling(tmp_path, monkeypatch):
@@ -1628,3 +1642,93 @@ def test_td_sample_fraction_preserves_within_child_replication():
     # Subject-wise draw keeps replication; the row-wise draw it replaced scored
     # 1.04 here against a pool value of 1.32.
     assert sampled == pytest.approx(full, rel=0.10)
+
+
+# --- Comprehension below production (issue #190 item C; ruling 2026-08-25) ------
+
+
+def _cbp_frame(rows):
+    return pd.DataFrame(
+        rows,
+        columns=["study", "age", "understood", "spoken", "signed", "produced"],
+    )
+
+
+def test_comprehension_below_production_masks_only_the_comprehension_count():
+    frame = _cbp_frame([("ie_01", 61.0, 13.0, 366.0, 0.0, 366.0)])
+    out, masked = data_utils.mask_comprehension_below_production(frame)
+
+    # Only `understood` goes. The production figure is corroborated by two
+    # columns that agree, and in both diagnosed studies the fault is localised
+    # to comprehension.
+    assert pd.isna(out.loc[0, "understood"])
+    assert out.loc[0, "spoken"] == 366.0
+    assert out.loc[0, "produced"] == 366.0
+    assert len(out) == 1                      # row retained for provenance
+    assert masked == {"ie_01": 1}
+
+    kept, kept_masked = data_utils.mask_comprehension_below_production(
+        frame, include_below_production=True
+    )
+    assert kept_masked == {}
+    assert kept.equals(frame)
+
+
+def test_comprehension_equal_to_production_is_kept():
+    # A child who produces everything they understand is legitimate, and so is a
+    # child who yet knows nothing. Equality is not a violation.
+    frame = _cbp_frame([
+        ("us_01", 24.0, 120.0, 120.0, 0.0, 120.0),
+        ("us_01", 9.0, 0.0, 0.0, 0.0, 0.0),
+    ])
+    out, masked = data_utils.mask_comprehension_below_production(frame)
+    assert out["understood"].tolist() == [120.0, 0.0]
+    assert masked == {}
+
+
+def test_comprehension_rule_uses_produced_not_the_modality_sum():
+    # A bimodal child who says and signs many of the same words: `spoken +
+    # signed` overstates distinct production and would flag this row, but the
+    # recorded union does not. uk_07 has produced < spoken + signed on 77 of 82
+    # rows, so the sum is the wrong denominator, not a conservative one.
+    frame = _cbp_frame([("uk_07", 40.0, 300.0, 200.0, 180.0, 290.0)])
+    out, masked = data_utils.mask_comprehension_below_production(frame)
+    assert out.loc[0, "understood"] == 300.0
+    assert masked == {}
+
+
+def test_comprehension_rule_requires_produced():
+    frame = _cbp_frame([("ie_01", 61.0, 13.0, 366.0, 0.0, 366.0)])
+    with pytest.raises(KeyError, match="produced"):
+        data_utils.mask_comprehension_below_production(frame.drop(columns="produced"))
+
+
+def test_comprehension_rule_counts_per_study():
+    frame = _cbp_frame([
+        ("ie_01", 54.0, 33.0, 160.0, 0.0, 160.0),
+        ("ie_01", 35.0, 18.0, 27.0, 0.0, 27.0),
+        ("uk_01", 38.0, 142.0, 164.0, 0.0, 164.0),
+        ("it_01", 59.0, 58.0, 373.0, 0.0, 373.0),
+        ("us_01", 24.0, 400.0, 100.0, 0.0, 100.0),   # ordinary: kept
+    ])
+    _, masked = data_utils.mask_comprehension_below_production(frame)
+    assert masked == {"ie_01": 2, "it_01": 1, "uk_01": 1}
+
+
+@requires_real_db
+def test_load_combined_data_masks_the_ten_impossible_comprehension_counts():
+    # End-to-end against the real database. Ten administrations across three
+    # studies record a comprehension count below the child's own production.
+    masked = data_utils.load_combined_data()
+    reinstated = data_utils.load_combined_data(
+        include_comprehension_below_production=True
+    )
+    difference = int(
+        reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
+    )
+    assert difference == 10
+    # The flag reinstates comprehension only; nothing else moves, and `produced`
+    # never reaches a caller.
+    assert "produced" not in masked.columns
+    assert len(masked) == len(reinstated)
+    assert masked["spoken"].notna().sum() == reinstated["spoken"].notna().sum()

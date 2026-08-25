@@ -1006,8 +1006,8 @@ class BivariateModelDefinition:
     It is the widest-scoped sensitivity in the registry, and deliberately so: 278
     of the merged view's 1,521 Down syndrome rows survive, from 194 children
     across ie_01 (its 810 wave only), ie_02, uk_02 (DSE form only) and uk_06,
-    spanning 9-115 months. Comprehension is the least affected outcome -- 259 of
-    987 understood observations survive, against 264 of 1,428 spoken -- because
+    spanning 9-115 months. Comprehension is the least affected outcome -- 252 of
+    977 understood observations survive, against 264 of 1,428 spoken -- because
     the short forms are production-heavy, so expect the spoken trajectory to move
     more than the understood one.
     """
@@ -3695,6 +3695,47 @@ VG22 = _as_definition_subclass(
 )
 
 
+
+# Derived from VG13 so the two differ in exactly one thing, which is the whole
+# point: VG13 is nested at rho_uq = 0, so the pair is a one-factor contrast on
+# the typically-developing side of exactly the kind VG20 gives on the Down
+# syndrome side.
+#
+# Why this matters more here than it does on the DS pool. #229 is about a split
+# the typically-developing data barely identify: separating between-child from
+# within-child variance when the average child contributes 1.16 administrations.
+# Only 15.1% of VG13's children have a repeat visit, so the split currently rests
+# on the Beta-Binomial's functional form rather than on replication -- and the
+# between-child scale comes back low in 9 of 9 recovery replicates across three
+# models (#225).
+#
+# The correlation opens a second channel that needs no repeat visit at all. Every
+# VG13 administration yields *two* counts, understood and spoken, from one child
+# on one day; a child's persistent ability moves both, while the Beta-Binomial
+# noise is assumed independent across them, so their agreement identifies the
+# child effect on 100% of rows rather than the 15% with a second visit.
+#
+# The catch is stated rather than discovered later: both counts come from one
+# questionnaire completed by one parent, so shared reporter tendency is
+# indistinguishable from shared child ability and biases rho_uq -- and through it
+# the child scales -- **upward**. The variance partition biases the same quantity
+# **downward**. The two therefore bracket the truth rather than resolving it, and
+# neither is a point estimate to publish unqualified. See #229 option 3.
+#
+# `eta = 2` matches VG20 deliberately, so the two populations' correlations are
+# estimated under the same prior and their comparison is not a prior artefact.
+VG23 = _as_definition_subclass(
+    VG13,
+    BivariateCorrelatedSubjectREModelDefinition,
+    model_id="VG23",
+    config_name="age-understood-spoken-td-re-young-corr",
+    banner=(
+        "Fitting Model VG23: VG13 + correlated subject random effects on U and q"
+        " (rho_uq) - typically developing"
+    ),
+    subject_re_correlation_eta=2.0,
+)
+
 MODEL_REGISTRY: dict[
     str,
     UnivariateModelDefinition
@@ -3721,6 +3762,7 @@ MODEL_REGISTRY: dict[
     "vg20": VG20,
     "vg21": VG21,
     "vg22": VG22,
+    "vg23": VG23,
 }
 
 

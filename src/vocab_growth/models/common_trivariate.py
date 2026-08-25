@@ -1141,10 +1141,12 @@ def _plot_ratio_prior_samples(context, prior_samples, var_name, y_label, filenam
 def prior_predictive_checks(context: TrivariateContext):
     """Run prior predictive checks."""
     with context.model:
+        # No ``mode="FAST_COMPILE"`` -- it makes this fixed-cost stage 20-40x
+        # slower for the same draws. See the note at the same call in
+        # ``common.py`` and notes/202608251100-prior-predictive-compile-mode.md.
         prior_samples = pm.sample_prior_predictive(
             draws=1000,
             random_seed=context.sampling.random_seed,
-            compile_kwargs=dict(mode="FAST_COMPILE"),
         )
 
     context.set_prior_samples(prior_samples)

@@ -279,10 +279,20 @@ Check the reparenting rather than assuming it: `nohup … &` alone leaves the pr
 ### Reporting age caps, and what `regenerate_plots.py` can and cannot fix
 
 Every figure and table stops where its own outcome's evidence stops. The policy
-lives in `src/vocab_growth/reporting_ages.py` — understood **84**, spoken **90**,
+lives in `src/vocab_growth/reporting_ages.py` — understood **72**, spoken **90**,
 signed **84**, and anything conditioned on understood (`q`, `r`, `p_any`,
-comprehension gaps) **84**. Call sites name the _quantity_, not a cap attribute,
-because choosing the wrong attribute is a defect that has already shipped twice.
+comprehension gaps) **72**, because the conditioning rule takes the _lower_ of the
+two components. Call sites name the _quantity_, not a cap attribute, because
+choosing the wrong attribute is a defect that has already shipped twice.
+
+> [!WARNING]
+> Understood was **84** until `ae04e5e` (2026-08-22) returned it to 72, and the
+> sign-ratio helper that makes `r` and `p_any` follow it —
+> `reporting_ages.max_age_for_sign_ratio` — landed a day later in `565a769`.
+> **VG14 and VG15 were fitted in the gap**, on 2026-08-22, so both write
+> `posterior_summary_r` and `posterior_summary_p_any` out to 84. `check_fit.py`
+> passes them, because their manifests record the current definition; only
+> `tests/test_reporting_age_policy.py` sees it. Both need refits — see §2.
 
 > [!IMPORTANT]
 > **`regenerate_plots.py` re-runs the plot stage only.** Artefacts written by the
@@ -292,8 +302,9 @@ because choosing the wrong attribute is a defect that has already shipped twice.
 > stage, so twelve models were brought into line by regeneration alone, but VG14's
 > `posterior_summary_p_any` / `posterior_summary_sign` and VG15's
 > `posterior_summary_monthly_*` / `expected_counts_by_month_*` are summary-stage
-> and stayed stale. They are listed in `KNOWN_STALE` in
-> `tests/test_reporting_age_policy.py`; clear that list when those two are refit.
+> and stayed stale. `KNOWN_STALE` in `tests/test_reporting_age_policy.py` carried
+> them until `fa9f836` emptied it; it is empty now, so any summary-stage artefact
+> left past its cap fails the suite outright rather than being excused.
 
 Check the policy against **output**, not call sites. `tests/test_reporting_age_caps.py`
 walks the AST against a hand-written list of plot functions and so cannot see an

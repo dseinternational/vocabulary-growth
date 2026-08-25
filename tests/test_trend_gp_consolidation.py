@@ -89,6 +89,7 @@ def _build_uncached(model_id, tmp_path, monkeypatch):
         "VG20",
         "VG21",
         "VG22",
+        "VG23",
     }:
         cbr.prepare_bivariate_re_data(ctx, d)
         cb.configure_bivariate_priors(ctx, d)

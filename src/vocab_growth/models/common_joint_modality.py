@@ -1532,9 +1532,11 @@ def build_model(context: JointContext, definition: JointModelDefinition):
 def prior_predictive_checks(context: JointContext):
     """Prior predictive checks for the joint sign/speech model."""
     with context.model:
+        # No ``mode="FAST_COMPILE"`` -- it makes this fixed-cost stage 20-40x
+        # slower for the same draws. See the note at the same call in
+        # ``common.py`` and notes/202608251100-prior-predictive-compile-mode.md.
         prior = pm.sample_prior_predictive(
             draws=500, random_seed=context.sampling.random_seed,
-            compile_kwargs=dict(mode="FAST_COMPILE"),
         )
     context.set_prior_samples(prior)
 

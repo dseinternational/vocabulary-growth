@@ -506,3 +506,93 @@ def test_vg20_takes_the_correlated_branch_and_vg10_does_not():
 
     assert "_z_subj_q_marg" in names20 and "_delta_subj_q_marg" not in names20
     assert "_delta_subj_q_marg" in names10 and "_z_subj_q_marg" not in names10
+
+
+# --- VG23: the same block on the typically-developing side (issue #229) --------
+
+
+def test_vg23_differs_from_vg13_only_in_naming_and_the_correlation():
+    """VG23 must be VG13 plus ``rho_uq``, so the pair is a one-factor contrast.
+
+    The same guarantee ``test_vg20_differs_from_vg10_only_in_naming_and_the
+    _correlation`` gives on the Down syndrome side. #229 reads any movement in a
+    reported quantity as evidence about the correlation, which is only sound if
+    nothing else moved with it.
+    """
+    from dataclasses import fields
+
+    from vocab_growth.models.definitions import VG13, VG23
+
+    differing = {
+        field.name
+        for field in fields(VG13)
+        if getattr(VG13, field.name) != getattr(VG23, field.name)
+    }
+    assert differing == {"model_id", "config_name", "banner"}
+    assert VG23.subject_re_correlation_eta == 2.0
+    # Matched to VG20's, so the DS and TD correlations are estimated under the
+    # same prior and their comparison is not a prior artefact.
+    assert VG23.subject_re_correlation_eta == VG20.subject_re_correlation_eta
+
+
+def test_vg23_is_the_subclass_and_the_resolver_accepts_it():
+    from vocab_growth.models.definitions import VG23
+
+    assert isinstance(VG23, BivariateCorrelatedSubjectREModelDefinition)
+    assert (
+        _resolve_subject_re_correlation(
+            VG23, use_subject_re_u=True, use_subject_re_q=True, spec_u=None, spec_q=None
+        )
+        == 2.0
+    )
+
+
+def test_vg23_built_graph_adds_exactly_one_parameter_over_vg13():
+    """A valid definition is not a valid graph — the `single-admin` lesson.
+
+    Builds both real models (no sampling), so it needs the prepared DuckDB.
+    """
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+    from vocab_growth.models.definitions import VG13, VG23
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def build(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        cbr.prepare_bivariate_re_data(ctx, definition)
+        cb.configure_bivariate_priors(ctx, definition)
+        cbr.build_model_re(ctx, definition)
+        return ctx.model
+
+    with tempfile.TemporaryDirectory() as root:
+        m13 = build(VG13, root)
+        m23 = build(VG23, root)
+
+    def names(model):
+        return {v.name for v in model.free_RVs} | {v.name for v in model.deterministics}
+
+    assert names(m23) - names(m13) == {"rho_uq", "rho_uq_raw"}
+    assert names(m13) - names(m23) == set()
+    assert len(m23.free_RVs) == len(m13.free_RVs) + 1
+    # The graph is samplable, not merely constructible.
+    assert np.isfinite(m23.point_logps()["y_u_obs"])

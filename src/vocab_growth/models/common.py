@@ -947,10 +947,18 @@ def prior_predictive_checks(
     Run prior predictive checks: sample from the prior, and visualise the implied prior predictive distribution.
     """
     with context.model:
+        # Deliberately no ``mode="FAST_COMPILE"``. It compiles quickly and then
+        # executes slowly, across the whole graph, and this stage is a *fixed*
+        # cost that does not scale with the sampling tier -- 16m33s of VG12's
+        # 3h26m hightune, and a third of a short fit. Measured on VG01 at
+        # 20-40x slower than the default optimising mode for the same draws:
+        # free variables agree to 7e-16 and deterministics to 3e-15 at one
+        # seed, which is float association under the graph rewrites rather
+        # than a different distribution. All four engines match; see
+        # notes/202608251100-prior-predictive-compile-mode.md.
         prior_samples = pm.sample_prior_predictive(
             draws=1000,
             random_seed=context.sampling.random_seed,
-            compile_kwargs=dict(mode="FAST_COMPILE"),
         )
 
     # Sample prior functions
