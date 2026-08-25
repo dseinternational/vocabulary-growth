@@ -104,6 +104,40 @@ def load_psi(dirpath: str) -> dict[str, float] | None:
     }
 
 
+def load_beta_lag(dirpath: str) -> dict[str, float] | None:
+    """The VG16 cross-lag coefficient, or ``None`` if the fit carries no lag.
+
+    Read from ``diagnostics.csv`` rather than from a ``posterior_summary_*``
+    file, because no engine persists ``beta_lag`` as a summary series -- it is a
+    scalar on the model, not a curve over ages. Every fit writes
+    ``diagnostics.csv``, so this works on fits made before this function
+    existed.
+
+    Without this, a VG16 sensitivity compares only the eight trajectory series
+    in ``_SERIES`` and returns a verdict that says nothing about the one
+    quantity VG16 exists to estimate: a prior or scope change could halve the
+    cross-lag and still be scored **robust** because the trajectories did not
+    move. The interval is the equal-tailed 89% ``diagnostics.csv`` reports.
+    """
+    df = _read(dirpath, "diagnostics.csv")
+    if df is None or not len(df.columns):
+        return None
+    # ``_read`` does a plain ``read_csv``, so the parameter names arrive as the
+    # first (unnamed) column rather than as the index.
+    df = df.set_index(df.columns[0])
+    for column in ("mean", "eti89_lb", "eti89_ub"):
+        if column not in df.columns:
+            return None
+    if "beta_lag" not in df.index:
+        return None
+    r = df.loc["beta_lag"]
+    return {
+        "beta_lag_median": float(r["mean"]),
+        "beta_lag_ci_lo": float(r["eti89_lb"]),
+        "beta_lag_ci_hi": float(r["eti89_ub"]),
+    }
+
+
 def diagnostics_gate(dirpath: str) -> tuple[bool | None, float | None, float | None]:
     """``(converged, max_rhat, min_ess)`` from ``diagnostics.csv`` (index = params)."""
     df = _read(dirpath, "diagnostics.csv")
@@ -283,6 +317,20 @@ def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
             "delta": pv["P_psi_gt_1"] - pb["P_psi_gt_1"],
             "base_ci_lo": np.nan, "base_ci_hi": np.nan, "within_baseline_ci": None,
             "interval_kind": None,
+        })
+    bb, bv = load_beta_lag(baseline_dir), load_beta_lag(variant_dir)
+    if bb and bv:
+        rows.append({
+            "quantity": "beta_lag", "age_months": -1,
+            "base_median": bb["beta_lag_median"], "var_median": bv["beta_lag_median"],
+            "delta": bv["beta_lag_median"] - bb["beta_lag_median"],
+            "base_ci_lo": bb["beta_lag_ci_lo"], "base_ci_hi": bb["beta_lag_ci_hi"],
+            "within_baseline_ci": bool(
+                bb["beta_lag_ci_lo"]
+                <= bv["beta_lag_median"]
+                <= bb["beta_lag_ci_hi"]
+            ),
+            "interval_kind": _SERIES_INTERVAL_KIND,
         })
     return pd.DataFrame(rows)
 

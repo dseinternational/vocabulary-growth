@@ -71,7 +71,9 @@ Four calls by the study owner. Two change the set, one changes the order, one ch
 
 **4. The `uk_01` imputation branch is not merged.** `origin/claude/flamboyant-tu-e770df` substitutes `max(spoken, signed)` for 41 `uk_01` WG rows with no recorded comprehension. Under the `produced` rule those rows admit nothing — `max(spoken, signed) <= spoken + signed = produced` always — so the branch adds no data and should be left unmerged. It was also the wrong shape of fix: 30 of the 41 would have entered at `q` = 1.000 exactly, by construction, into a stratum whose measured median is 0.110.
 
-**Revised total: fourteen fits** — the thirteen above plus VG02, plus the correlated VG13 (fifteen), plus the six fallback-arm fits on VG10 and VG20 if all three arms are run on both.
+**4b. Four sensitivity variants registered 2026-08-25**, before the window because a variant registered afterwards needs its own fit: `("vg16", "conditional-only")`, `("vg16", "dse-native-only")`, `("vg21", "vague-anchors")` and `("vg23", "eta-flat")`. VG16, VG21 and VG23 previously had none at all. `compare.py` also gained `beta_lag` as a compared scalar — without it a VG16 variant is scored on trajectories only, which is to say not scored, since the coefficient is the only number VG16 reports. Full reasoning in [202608251900](202608251900-vg16-vg21-vg23-sensitivities.md), including why the remaining three variants #242 asks for need new fields on `BivariateModelDefinition` and would re-stale all twelve bivariate models — a decision that is cheap now and expensive after the run.
+
+**Revised total: fourteen fits** — the thirteen above plus VG02, plus the correlated VG13 (fifteen), plus the four sensitivity variants above (nineteen), plus the six fallback-arm fits on VG10 and VG20 if all three arms are run on both (twenty-five).
 
 ### What else moved since this note was written
 
