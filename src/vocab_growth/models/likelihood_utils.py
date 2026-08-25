@@ -73,6 +73,35 @@ SPOKEN_FALLBACK_MOMENT_MATCHED = "moment_matched"
 Same cost as the default, and correct where the default is not: see
 `product_marginal_concentration`."""
 
+# --------------------------------------------------------------------------
+# How the cross-lag predictor handles a zero-count source (issue #242)
+# --------------------------------------------------------------------------
+#
+# The lag predictor is the logit of the source wave's understood proportion.
+# A source of zero has no logit, so the proportion is bounded away from the
+# boundary before the transform -- and *how* it is bounded is a modelling
+# choice that was never registered as one.
+
+LAG_ZERO_CLIP = "clip"
+"""Clip the proportion into ``[1e-4, 1 - 1e-4]``, the historical treatment.
+
+On an 810-item reference a zero source becomes ``logit(1e-4) = -9.21``. That
+value is set by the clip, not by the data: it would be the same on a source of
+zero out of 396. Seven of the 477 rows carrying a lag source have a zero source
+on the current frame, and they sit at the extreme of the predictor's range,
+where a regression coefficient takes its leverage from."""
+
+LAG_ZERO_CONTINUITY = "continuity"
+"""Apply a ``+0.5 / +1`` continuity correction instead of clipping.
+
+``(u + 0.5) / (n + 1)`` is the standard Bayes/Jeffreys-style adjustment for a
+boundary count. It puts a zero source at ``logit(6.17e-4) = -7.39`` rather than
+at -9.21 -- nearly two logit units in, and derived from the inventory size
+rather than from an arbitrary floor. Non-boundary sources move by less than
+0.002 logits, so this is a boundary treatment rather than a rescaling."""
+
+LAG_ZERO_TREATMENTS = (LAG_ZERO_CLIP, LAG_ZERO_CONTINUITY)
+
 SPOKEN_FALLBACK_TREATMENTS = (
     SPOKEN_FALLBACK_PRODUCT,
     SPOKEN_FALLBACK_PAIRED_ONLY,

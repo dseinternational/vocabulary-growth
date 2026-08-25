@@ -19,7 +19,10 @@ import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 
-from vocab_growth.models.likelihood_utils import SPOKEN_FALLBACK_PRODUCT
+from vocab_growth.models.likelihood_utils import (
+    LAG_ZERO_CLIP,
+    SPOKEN_FALLBACK_PRODUCT,
+)
 
 ENGLISH_LANGUAGES = (
     "English (American)",
@@ -940,6 +943,24 @@ class BivariateModelDefinition:
     """Normal mean for the cross-lag coefficient beta_lag (0 = no direction imposed)."""
     beta_lag_sigma: float = 0.5
     """Normal SD for beta_lag (logit scale, weakly-informative)."""
+    lag_max_gap_months: float | None = None
+    """Drop a lag whose source wave is more than this many months earlier.
+
+    ``None`` (the default) imposes no ceiling, which is the historical
+    behaviour and what every fit before 2026-08-25 carries. VG16 assumes
+    ``beta_lag`` is constant across the gaps it actually sees, and on the
+    current frame those run 1 to 28 months (median 6): 41 of 477 lagged rows
+    sit above 12 months, 9 above 18 and 4 above 24. A prospective association
+    measured over two years is a different quantity from one measured over six
+    months, and nothing in the model says so — which is the assumption
+    [#242](https://github.com/dseinternational/vocabulary-growth/issues/242)
+    asks to be checked rather than asserted."""
+    lag_zero_handling: str = LAG_ZERO_CLIP
+    """How a zero-count lag source is kept off the logit boundary.
+
+    ``LAG_ZERO_CLIP`` (the default) reproduces the historical clip exactly.
+    See the constants in ``likelihood_utils`` for what the alternative changes
+    and why seven rows on the current frame make it a live question."""
 
     # -- GP anchor constraint (per-draw zero at reference age) --
     anchor_g_u_at_ref: bool = False
@@ -1011,6 +1032,21 @@ class BivariateModelDefinition:
     the short forms are production-heavy, so expect the spoken trajectory to move
     more than the understood one.
     """
+    exclude_studies: tuple[str, ...] = ()
+    """Study codes to drop before fitting, for leave-one-study-out sensitivity.
+
+    Empty (the default) admits every study the other rules keep, which is the
+    historical behaviour. This exists because a pooled estimate can rest on one
+    source without saying so: on the current frame ``us_01`` alone supplies 136
+    of VG16's 477 lagged rows and ``it_01`` a further 106, so a cross-lag that
+    does not survive dropping either is a statement about that study rather
+    than about children with Down syndrome.
+
+    Applied after the source-admissibility rules and before
+    ``min_study_observations``, so a study removed here cannot change whether a
+    *different* study clears the observation floor — the floor is counted per
+    study, so the two are independent, and the order is fixed for
+    reproducibility rather than because it changes an answer."""
     include_implausible_production: bool = False
     """Reinstate the us_01 production counts masked as implausible by default.
 
