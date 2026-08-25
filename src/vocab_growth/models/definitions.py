@@ -1006,8 +1006,8 @@ class BivariateModelDefinition:
     It is the widest-scoped sensitivity in the registry, and deliberately so: 278
     of the merged view's 1,521 Down syndrome rows survive, from 194 children
     across ie_01 (its 810 wave only), ie_02, uk_02 (DSE form only) and uk_06,
-    spanning 9-115 months. Comprehension is the least affected outcome -- 259 of
-    987 understood observations survive, against 264 of 1,428 spoken -- because
+    spanning 9-115 months. Comprehension is the least affected outcome -- 252 of
+    977 understood observations survive, against 264 of 1,428 spoken -- because
     the short forms are production-heavy, so expect the spoken trajectory to move
     more than the understood one.
     """
@@ -3693,6 +3693,7 @@ VG22 = _as_definition_subclass(
         ref_age_months=36.0,
     ),
 )
+
 
 
 MODEL_REGISTRY: dict[
