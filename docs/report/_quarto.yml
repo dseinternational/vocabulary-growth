@@ -26,7 +26,7 @@ execute:
 date: now
 
 toc: true
-toc-depth: 3
+toc-depth: 2
 
 number-sections: true
 number-depth: 3
@@ -73,24 +73,18 @@ book:
       chapters:
         - intro.qmd
         - intro-language-development.qmd
-        - intro-statistical-modelling.qmd
     - part: "Methods"
       chapters:
         - methods-data.qmd
         - methods-models.qmd
-        - tutorial-model-walkthrough.qmd
-        - methods-workflow.qmd
     - part: "Results"
       chapters:
-        - results-words-understood-spoken.qmd
-        - results-words-signed-total-expressive.qmd
+        - results.qmd
     - part: "Discussion"
       chapters:
         - discussion.qmd
     - part: "Appendices"
       chapters:
-        - appendix-specs.qmd
-        - appendix-reference-tables.qmd
         - appendix-ai.qmd
         - references.qmd
 

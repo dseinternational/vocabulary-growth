@@ -1,19 +1,102 @@
 ---
-title: "Statistical models"
 abstract: "*TODO*"
 ---
 
-::: {.callout-note}
-Drafted by an LLM-based AI tool (Codex/GPT-5; dispersion and random-effect prior sections updated by Claude Code/Opus 5 and Claude Code/Fable 5).
-:::
+# Models {#sec-models}
 
-Our goal is to estimate **age-associated change** in a vocabulary outcome, not to claim that age alone causally determines vocabulary growth. Many factors influence a child's opportunities to learn and produce words, including exposure, explicit teaching and therapy, hearing, and words already learned. Age is a useful ordering variable because these opportunities accumulate over time, but the pooled observational data also vary by study, instrument, recruitment, cohort, and sample selection.
+[TODO: intro]
 
-In the simple organising diagram below, $A$ is age, $O$ collects the unmeasured mediating factors, and $Y$ is the vocabulary outcome. The models therefore estimate descriptive trajectories conditional on age and the model structure. Study and subject effects absorb some systematic differences, but they do not make age randomised or remove every possible cohort, instrument, or selection difference.
-
-![**The shared age-association argument.** $A$: age; $O$: other unmeasured factors; $Y$: the vocabulary outcome. Conditioning on age summarises the modelled age-associated change.](diagrams/fig-core-dag){#fig-core-dag fig-align="left" width="2.5in"}
+Parent-reported vocabulary checklists record a subset of the words a child knows, speaks or signs.
 
 ## The outcome: a Beta-Binomial count {#sec-betabinomial}
+
+We model counts -- the number of checklist words reported for a child. If a checklist contains $N$ words, a score $y_i$ for child $i$ must satisfy:
+
+$$
+0 \leq y_i \leq N.
+$$
+
+The models use a common $N=810$ reference inventory. It is often easier to think first about the expected proportion $p_i$ and then convert it to an expected count:
+
+$$
+E(y_i) = Np_i.
+$$
+
+For observation $i$ at age $x_i$ months we standardise age,
+
+$$
+z_i = \frac{x_i - \bar{x}}{s_x},
+$$
+
+so that a one-unit change in $z$ corresponds to $s_x$ months (this scale differs by population and model).
+
+A straight line for $p_i$ can predict proportions below zero or above one. Therefore, we define a real-valued predictor $f(a_i)$ and transform it with the logistic function:
+
+$$
+p_i = \operatorname{logistic}\{f(a_i)\} = \frac{1}{1+\exp\{-f(a_i)\}}.
+$$
+
+The logistic function always returns a value between zero and one. In the simplest model, $f(a)=\alpha+\beta a$. The project parameterises this line through expected proportions at two meaningful **anchor ages**, rather than asking readers to interpret an intercept at age zero.
+
+Vocabulary development need not follow a straight line on the logit scale. The full model adds a smooth Gaussian-process deviation $g(a)$:
+
+$$
+f(a)=\alpha+\beta a+g(a).
+$$
+
+A **Gaussian process** is a probability distribution over smooth functions. Its amplitude controls how far the curve can depart from the anchor-defined trend; its length-scale controls how rapidly it can bend. The implementation uses a Hilbert-space Gaussian process (HSGP), a finite-basis approximation that makes this calculation practical. The approximation domain is kept separate from the ages selected for reporting, so adding a table column at a new in-domain age does not redefine the fitted model.
+
+
+A binomial model assumes that children of the same age share exactly the same probability $p_i$. Vocabulary scores usually vary more than that assumption allows. The project therefore uses a Beta-Binomial likelihood:
+
+$$
+\begin{aligned}
+\theta_i &\sim \operatorname{Beta}(p_i\kappa_i, (1-p_i)\kappa_i),\\
+y_i &\sim \operatorname{Binomial}(N,\theta_i).
+\end{aligned}
+$$
+
+Here $p_i$ is the population mean and $\theta_i$ is a child-specific probability for that observation. The concentration $\kappa_i$ controls the extra spread: large $\kappa_i$ approaches an ordinary binomial model, while smaller $\kappa_i$ permits more variation. The production model allows $\kappa_i$ to vary with age because heterogeneity may change over development.
+
+The next calculation holds the mean fixed and shows the consequence of changing $\kappa$.
+
+This extra variation describes observations around a population trajectory. It should not be confused with uncertainty about the trajectory itself.
+
+
+Some models include several assessments from the same child and combine several studies. Random intercepts represent stable shifts on the logit scale:
+
+$$
+f_{ijs}=f(a_{ijs})+u_s+v_{is},
+$$
+
+where $u_s$ is the shift for study $s$ and $v_{is}$ is the shift for child $i$ within that study. Their estimated standard deviations describe between-study and between-child heterogeneity. They also stop repeated observations from being treated as if they came from unrelated children.
+
+
+The joint models use the fact that production is logically nested within understanding. They define
+
+$$
+p_S(a)=p_U(a)q(a),
+$$
+
+where $p_U(a)$ is the expected proportion understood and $q(a)=P(\text{spoken}\mid\text{understood},a)$ is the expected fraction of understood words that are spoken. Because both terms lie between zero and one, expected spoken vocabulary cannot exceed expected understood vocabulary.
+
+
+The signing models add an analogous ratio for signed words and, in VG15, estimate the association between speaking and signing rather than assuming conditional independence.
+
+
+
+Bayesian inference combines the prior distributions and likelihood to produce a **posterior distribution**:
+
+$$
+p(\text{parameters}\mid\text{data}) \propto p(\text{data}\mid\text{parameters})p(\text{parameters}).
+$$
+
+The posterior is not a single best curve. It is a distribution over plausible parameter values and curves after conditioning on the model, priors, and observed data. PyMC and the NUTS sampler generate correlated draws from that distribution. Summaries such as a median and an 89% credible interval are calculated from those draws.
+
+An 89% credible interval contains 89% of the posterior probability for the quantity under the fitted model. It is not a claim that 89% of children lie inside the interval, nor is it a repeated-sampling confidence interval.
+
+
+---
 
 We model each vocabulary outcome as a count bounded between $0$ and $N_{\text{trials}}$ words, where $N_{\text{trials}}$ is the number of words on the reference checklist (a common 810-item reference inventory throughout this report; see @sec-data <!-- methods-data -->). For observation $i$ at age $x_i$ months we standardise age,
 
