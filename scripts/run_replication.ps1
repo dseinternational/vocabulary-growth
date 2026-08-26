@@ -43,7 +43,7 @@
 .EXAMPLE
     # Fit the Down syndrome models three at a time, rendering each model report
     # as its own fit completes, and stop before the publication phases.
-    ./scripts/run_replication.ps1 -Config rep -MaxParallel 3 -RenderOnFit -NoDescriptives -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg20,vg10,vg07,vg08,vg09,vg15,vg14,vg16,vg19
+    ./scripts/run_replication.ps1 -Config rep -MaxParallel 3 -RenderOnFit -NoDescriptives -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg20,vg10,vg07,vg08,vg09,vg15,vg14,vg16,vg19,vg22
 #>
 [CmdletBinding()]
 param(

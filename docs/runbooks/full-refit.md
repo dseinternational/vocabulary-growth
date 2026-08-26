@@ -150,11 +150,14 @@ The dirty-checkout refusal is not fussiness, and `-AllowDirty` is a development-
 The DS datasets are small; the full-data TD models (`vg11`, `vg12`) are
 memory-heavy. So:
 
-- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20`): run
+> [!WARNING]
+> **The two lists below must together cover every key in `MODEL_REGISTRY`.** They are an explicit `-Models` split, so the driver's registry-derived default does not apply and a model missing from both is never queued, never validated, and never reported as absent — the run ends `SUCCESS` having fitted a subset. `tests/test_runbook_model_lists.py` checks the split against the registry; if it fails, correct the lists here rather than the test.
+
+- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22`): run
   a pool, `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores):
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22
   ```
 
   `-MaxParallel` above 1 pins `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
@@ -168,11 +171,21 @@ memory-heavy. So:
   itself rather than stacking peaks — the post-sampling assembly step is where
   these fits spike, not the sampling.
 
-- **TD models** (`vg03 vg04 vg13 vg11 vg12`): **strictly one at a time** — the
+- **TD models** (`vg03 vg04 vg11 vg12 vg13 vg21 vg23`): **strictly one at a time** — the
   full-data TD fits can OOM if stacked. `vg03` and `vg04` are the exception and may
-  share the box; `vg11`, `vg12` and `vg13` must not share it with anything, including
-  a batch of small DS sensitivity fits (see below). Run them as a separate
+  share the box; `vg11`, `vg12`, `vg13`, `vg21` and `vg23` must not share it with anything,
+  including a batch of small DS sensitivity fits (see below). Run them as a separate
   `-MaxParallel 1` pass; a single pool with a mixed model list cannot express this.
+
+  ```powershell
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23
+  ```
+
+  `vg21` and `vg23` join this pass because both are VG13 with one thing changed and
+  neither is lighter than it: `vg23` is VG13's frame exactly, plus `rho_uq`, and
+  `vg21` widens VG13's 8–18 month window to 8–22, so it sees strictly more of the
+  TD pool than the model the serial rule was written for. Neither has a `rep` fit
+  yet, so neither has a measured peak — treat them as VG13-class until one exists.
 
 ### Fit straight to the attached disk, not to local scratch
 
