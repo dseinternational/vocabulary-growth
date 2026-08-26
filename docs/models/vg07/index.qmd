@@ -191,13 +191,13 @@ The between-study scales have no prior figure of their own. Their posteriors app
 
 These simulate vocabularies from the priors alone, before the data are seen. They are drawn across the whole modelled age range recorded in the glance block above — wider than the ages the model reports on, so the ends of these figures are the part where the priors, and not the data, do all the work. Read them as a plausibility test with three criteria: young children should usually sit near the floor on both outcomes, older trajectories should not be forced towards the ceiling, and the production ratio should be free to rise across development without being pinned near zero or near one.
 
-These three figures are **population-level**: they set the study offsets to zero, so they show what the priors imply for the average study and contain no between-study variation at all. The prior on how far studies may differ is the two between-study scales in the priors table above; it is not something these figures display.
+These three figures are **population mean functions**: they set the study offsets to zero and carry no count noise, so they show what the priors imply for the average study's expected trajectory and contain neither between-study variation nor the Beta-Binomial spread a real administration would have. The prior on how far studies may differ is the two between-study scales in the priors table above, and the dispersion prior is the $\kappa$ block; neither is something these figures display. Read the plausibility test below on that basis — it is a test of the mean, not of the counts (#236).
 
-![Understood-vocabulary trajectories for the average study, drawn from the priors.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
+![Population mean-function trajectories for words understood in the average study, drawn from the priors alone (study offsets at zero; no count noise).](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
 
-![Spoken-vocabulary trajectories implied by those same prior draws, through $p_S = p_U q$.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
+![Population mean-function trajectories for words spoken implied by those same prior draws, through $p_S = p_U q$.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
 
-![Production-ratio trajectories drawn from the priors: the fraction of understood words that are also spoken.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
+![Population mean-function trajectories for the production ratio, drawn from the priors alone: the fraction of understood words that are also spoken.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
 
 ## Data
 

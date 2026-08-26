@@ -38,11 +38,23 @@ dependencies = [
 [dependency-groups]
 # Development-only tooling. A PEP 735 group is never written into published
 # package metadata, so none of this reaches anything that depends on us.
+#
+# `lint` is split out so CI's lint job can install ruff alone. Left inside
+# `dev`, `uv run ruff` syncs the whole project environment — 174 packages,
+# PyMC and JAX among them — to run a self-contained Rust binary.
+lint = [
+  "ruff>=0.16.1"
+]
 dev = [
   "ipython>=9.13.0",
   "ipywidgets>=8.1.8",
   "pytest>=9.1.1",
-  "ruff>=0.16.1"
+  # The suite is dominated by a handful of model builds and sampler runs, which
+  # parallelise cleanly: every model build writes under its own `tmp_path`, so
+  # there is no shared state between workers. See
+  # `notes/202608241530-test-suite-performance.md`.
+  "pytest-xdist>=3.8.0",
+  { include-group = "lint" }
 ]
 
 [tool.uv]
@@ -62,7 +74,7 @@ environments = [
 # dse-research-utils isn't published to PyPI — resolve it from the public git
 # tag. To develop against a sibling checkout instead, comment this out and use:
 #   dse-research-utils = { path = "../research/src/python", editable = true }
-dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.11.2" }
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.12.0" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"
@@ -72,7 +84,14 @@ packages = ["src/vocab_growth"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# `not slow` by default, so the inner loop stays short. The deselected count is
+# printed on every run, and CI overrides it with `-m ""` so nothing is skipped
+# where it matters — see the `Test` section of AGENTS.md for both commands.
+addopts = "-q -m 'not slow'"
+markers = [
+    "slow: real sampling, compilation or numerical optimisation — minutes, not seconds. Deselected by default; CI runs them with `-m \"\"`.",
+    "emits_reporting_artefacts: opts out of the conftest fixture that silences the fit pipeline's console and figure output, for the tests that assert those artefacts are still produced.",
+]
 
 [tool.jupytext]
 formats = "ipynb,py:percent"

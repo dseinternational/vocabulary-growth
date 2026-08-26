@@ -4,6 +4,7 @@
 import os
 from typing import Protocol
 
+import dse_research_utils.plot.io as plot_io
 import dse_research_utils.plot.predictive as plot_predictive
 import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
@@ -17,8 +18,12 @@ import vocab_growth.intervals as intervals
 
 
 def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
-    """Save a DataFrame as CSV alongside the corresponding plot."""
-    df.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
+    """Save a DataFrame as CSV alongside the corresponding plot.
+
+    Delegates to the shared writer; kept as a local name (and argument order)
+    for this module's call sites.
+    """
+    plot_io.save_plot_data(output_dir, filename, df)
 
 
 # ISO 216 A-series landscape aspect ratio (width : height = √2 : 1), used to size
@@ -32,12 +37,24 @@ def _iso_a_landscape_figsize(width: float = 7.5) -> tuple[float, float]:
 
 
 def _save_png_svg(
-    fig: Figure, output_dir: str, filename: str, *, dpi: int = 300, svg: bool = True
+    fig: Figure, output_dir: str, filename: str, *, dpi: float = plot_styles.DPI_FILE, svg: bool = True
 ) -> None:
-    """Save a figure as PNG (and, unless ``svg=False``, SVG) under one filename stem."""
-    fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=dpi)
-    if svg:
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
+    """Save a figure as PNG (and, unless ``svg=False``, SVG) under one filename stem.
+
+    Delegates to :func:`dse_research_utils.plot.io.save_styled_figure`.
+    ``bbox_inches=None`` and ``close=False`` preserve this project's cropping
+    and its figure-returning plot functions; the shared helper additionally
+    creates ``output_dir`` if it is absent.
+    """
+    plot_io.save_styled_figure(
+        output_dir,
+        filename,
+        fig=fig,
+        dpi=dpi,
+        bbox_inches=None,
+        close=False,
+        svg=svg,
+    )
 
 
 #: A child needs at least this many administrations before their observations are
@@ -212,14 +229,22 @@ def plot_prior_samples(
     x_obs: np.ndarray | pd.Series,
     y_obs: np.ndarray | pd.Series,
     n_trials: int = 810,
-    n_curves = 1000,
+    n_curves: int = 1000,
     x_label: str = "x",
     y_label: str = "y",
     filename: str | None = None,
     output_dir: str | None = None,
+    random_seed: int | None = None,
 ) -> Figure:
+    """Prior-predictive spaghetti plot at this project's checklist size.
 
-    fig = plot_predictive.plot_prior_samples_binomial(
+    A thin wrapper over the shared
+    :func:`dse_research_utils.plot.predictive.plot_prior_samples_binomial` that
+    carries the vocabulary-checklist defaults (``n_trials=810``,
+    ``n_curves=1000``). ``random_seed`` selects which prior draws are drawn;
+    left ``None`` the curve selection is unseeded, as before.
+    """
+    return plot_predictive.plot_prior_samples_binomial(
         x,
         y_samples,
         x_obs,
@@ -229,9 +254,9 @@ def plot_prior_samples(
         x_label,
         y_label,
         filename,
-        output_dir)
-
-    return fig
+        output_dir,
+        random_seed=random_seed,
+    )
 
 
 def plot_prior_samples_ratio(

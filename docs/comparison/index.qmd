@@ -106,10 +106,17 @@ model it had not come from for two weeks. The numbers in those editions were
 computed from VG10 and are unaffected.
 
 ::: {.callout-important}
-**The TD models only span ~8–30 months.** Several estimands are therefore
-identified only at younger ages or lower vocabulary levels. Each table cell is
-blanked (—) where posterior **coverage** of the comparable region falls below
-0.80; read the supported range only.
+**The TD side is the binding constraint, and its reach differs by
+quantity.** Spoken reaches 30 months, which is where `TD_POOL_AGE_MONTHS` ends.
+**Comprehension stops at 25** — it rides only on the bivariate forms, and VG04
+and VG12 declare `report_max_age_understood = 25` accordingly ([#228](https://github.com/dseinternational/vocabulary-growth/issues/228)),
+so everything derived from comprehension inherits that. The
+comprehension-matched joint model is narrower again: VG13 spans 8–18 months and
+reaches about 221 understood words, and its adopted successor VG21 spans 8–22
+and reaches 328. Several estimands are therefore identified only at younger ages
+or lower vocabulary levels. Each table cell is blanked (—) where posterior
+**coverage** of the comparable region falls below 0.80; read the supported range
+only.
 :::
 
 ## The gap is large and production-specific
@@ -513,8 +520,8 @@ The direction is what saved the earlier finding. DS was already the more variabl
 One caveat survives, pointing the other way. 432 of the 767 children are seen once, and 342 of those inform the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where shared reporter bias is not separable from shared child ability. So **+0.368 leans high**. VG16's cross-lag, which reads the child's comprehension from a *different* administration and is therefore immune to that artefact, implies about **+0.24** (89% interval +0.11 to +0.38) once corrected for the unreliability of its predictor. The two overlap; the truth is more likely in the lower half of VG20's interval, which would put the correction at somewhat less than the 15% quoted above.
 :::
 
-::: {.callout-important title="And the comprehension contrast carries a measured bias the spoken one does not"}
-The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate, and parameter recovery finds the bias on this side rather than the other.
+::: {.callout-important title="Both sides of this contrast carry the same measured bias, so the ratio is barely affected"}
+The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate: parameter recovery returns the between-child scale below the value that generated it. **This was first reported here as a typically-developing-side bias, and it is not one** — the same-sized bias is present in the Down syndrome models, which is what the correction below turns on.
 
 ```{python}
 #| echo: false
@@ -549,20 +556,28 @@ print(
 #| echo: false
 #| output: asis
 _r0 = he_u.iloc[0]
-_corr = (_r0["tau_TD_median"] / (1.0 + _bias)) / _r0["tau_DS_median"]
-_word = "overstates" if _corr > _r0["tau_ratio_median"] else "understates"
+# The DS comprehension scale is `tau_subj_u`, which is the parameter recovery
+# measures as biased: -5.81% on VG20 (model of record) and -5.57% on VG10.
+# Neither carries `subject_variance_partition`. See issue #225.
+_ds_bias = -0.0581
+_one_sided = (_r0["tau_TD_median"] / (1.0 + _bias)) / _r0["tau_DS_median"]
+_both_sides = (_r0["tau_TD_median"] / (1.0 + _bias)) / (_r0["tau_DS_median"] / (1.0 + _ds_bias))
 print(
-    f"$\\tau_{{subject}}$ is the typically-developing side of this contrast, so "
-    f"a low bias there **{_word}** the reported difference: the ratio TD/DS of "
-    f"{_r0['tau_ratio_median']:.3f} would sit near {_corr:.2f} if the bias "
-    f"carried over at the size these replicates suggest. The direction is "
-    f"opposite to the independence bias on the spoken side above, so the two "
-    f"outcomes are biased *toward each other* — which inflates any reading of "
-    f"the comprehension and spoken ratios against one another at both ends."
+    f"$\\tau_{{subject}}$ is the typically-developing side of this contrast, and "
+    f"the Down syndrome side is the same quantity in the same engine — which "
+    f"recovery finds low by {_ds_bias:+.1%} on the model of record and -5.6% on "
+    f"its predecessor, against {_bias:+.1%} here. Correcting only the "
+    f"typically-developing side would move the ratio TD/DS from "
+    f"{_r0['tau_ratio_median']:.3f} to {_one_sided:.2f} and make the reported "
+    f"difference look overstated. Correcting **both** leaves it at "
+    f"{_both_sides:.3f}: a proportional bias shared by numerator and denominator "
+    f"cancels, and only the difference between the two sides survives. So the "
+    f"caveat falls on the absolute between-child standard deviations, not on the "
+    f"contrast between them."
 )
 ```
 
-Three `test`-tier replicates, truths drawn from the model's own posterior, so this is a self-consistency check and the magnitude should not be quoted. The direction is consistent and has a mechanism. VG11 carries the same reparameterisation at a very different reference proportion and has not been through recovery. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md`.
+The direction is solid — the between-child scale comes back low in nine of nine replicates across three models, and it survives at the reporting tier, where estimates move by at most 0.19% of the truth. The magnitude is roughly 3–6% and should not be quoted more precisely than that. **The mechanism is not established.** The reparameterisation this was first attributed to is carried by only one of the three models that show it, and the sampling tier, the priors' location, the operating proportion and the dispersion parameterisation have each been tested and eliminated. One limit on the cancellation argument above: it holds for comprehension, where both sides read the same parameter. The spoken Down syndrome scale is derived through the $p_U \times q$ product and has not been measured, so the cross-outcome reading is not established either way. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md` and the issue thread.
 :::
 
 Two further caveats bound how far this contrast can be pushed. First, the priors
@@ -643,13 +658,13 @@ The section above measures signing against typically developing children, where
 it looks marginal. That is the wrong denominator for a parent, a teacher or a
 speech and language therapist, and it is bounded at 30 months by a comparator
 this question does not need. Dropping the comparator changes both: the DS-internal
-quantities run to the comprehension reporting cap at 84 months, and the effect
+quantities run to the comprehension reporting cap at 72 months, and the effect
 stops looking marginal.
 
 ```{python}
 sp = pd.read_csv("ds_signing_profile.csv")
 rows = []
-for a in [18, 24, 30, 36, 48, 60, 72, 84]:
+for a in [18, 24, 30, 36, 48, 60, 72]:
     r = _nearest(sp, "age_months", a)
     rows.append({
         "Age (mo)": a,

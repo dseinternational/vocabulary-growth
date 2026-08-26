@@ -36,6 +36,7 @@ import os
 from dataclasses import dataclass
 
 import arviz as az
+import dse_research_utils.statistics.loo as shared_loo
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -85,6 +86,12 @@ class LooEntry:
 #: reaches so the notice fires before a table looks authoritative.
 HIGH_PARETO_K_UNUSABLE_SHARE = 0.20
 
+#: Pareto-k above which an observation counts as "high k" in the summary tables.
+#: Fixed at 0.7 rather than the fit's own ``good_k`` because the published column
+#: name (``pareto_k_gt_0.7``) states the threshold and ``aggregate_summary.py``
+#: reads it.
+HIGH_PARETO_K_THRESHOLD = 0.7
+
 
 def _warn_if_unusable(label: str, row: dict) -> None:
     """Print a notice when a row's PSIS-LOO has degenerated past use."""
@@ -107,23 +114,35 @@ def _warn_if_unusable(label: str, row: dict) -> None:
 
 
 def _loo_summary_row(label: str, loo, reff=None) -> dict:
-    if hasattr(loo, "pareto_k"):
-        k = loo.pareto_k.values
-    else:
-        k = loo.diagnostics.values
+    """One row of the LOO comparison table.
+
+    Built from the shared :func:`dse_research_utils.statistics.loo.loo_summary_row`.
+    ``reff`` is the relative efficiency this LOO used: pinned to the sampled
+    parameters where the trace records them (``loo_reff``), else ArviZ's
+    posterior-wide default, so a mixed-convention table shows it. The
+    ``pareto_k_gt_0.7`` column keeps its fixed 0.7 threshold (rather than the
+    shared default of the fit's own ``good_k``) because that threshold is part
+    of the published column name and ``aggregate_summary.py`` reads it.
+    """
+    shared = shared_loo.loo_summary_row(
+        loo,
+        label=label,
+        reff=reff,
+        k_threshold=HIGH_PARETO_K_THRESHOLD,
+        include_looic=True,
+    )
+    # Re-emitted in the published column order; the shared builder names the
+    # count column generically and also carries the threshold it used.
     return {
-        "label": label,
-        "elpd_loo": float(loo.elpd),
-        "se": float(loo.se),
-        "p_loo": float(loo.p),
-        # The relative efficiency this LOO used: pinned to the sampled
-        # parameters where the trace records them (loo_reff), else ArviZ's
-        # posterior-wide default, so a mixed-convention table shows it.
-        "reff": None if reff is None else float(reff),
-        "looic": float(-2.0 * loo.elpd),
-        "looic_se": float(2.0 * loo.se),
-        "pareto_k_gt_0.7": int((k > 0.7).sum()),
-        "n_observations": int(k.size),
+        "label": shared["label"],
+        "elpd_loo": shared["elpd_loo"],
+        "se": shared["se"],
+        "p_loo": shared["p_loo"],
+        "reff": shared["reff"],
+        "looic": shared["looic"],
+        "looic_se": shared["looic_se"],
+        "pareto_k_gt_0.7": shared["pareto_k_above"],
+        "n_observations": shared["n_observations"],
     }
 
 

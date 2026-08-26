@@ -1,4 +1,5 @@
 ArviZ
+autouse
 BFGS
 BFMI
 Bello
@@ -12,6 +13,7 @@ COMPREHENSIÓN
 Caselli
 Checa
 Clibbens
+conftest
 Counterintuitively
 D'Souza
 Deckers
@@ -146,6 +148,7 @@ logits
 matplotlib
 microbenchmark
 miscalibrated
+miscalibration
 miscited
 missingness
 modeling
@@ -155,6 +158,7 @@ nohup
 nonlinear
 nonparametric
 nonparametrics
+nonregular
 nonwords
 nonzero
 numba
@@ -225,8 +229,10 @@ unsmoothed
 urlsafe
 vars
 vocab
+Wilk
 worklist
 workstream
 worktree
+worktrees
 xarray
 zygosity

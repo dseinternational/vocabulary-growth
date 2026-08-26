@@ -207,10 +207,15 @@ artefact — only the expressive columns completed at the later visit — but th
 a hypothesis about how the form was filled in, not something the aggregate counts
 can settle.
 
-Withheld rather than retained-and-flagged, which is what ie_01's seven such
-records get. The difference is that ie_01's are a known, stable property of a
-closed source, whereas this one is an open question with a reachable source team,
-so the row is held out until the study owner has an explanation. Removing the
+Withheld here rather than left to the general rule. Since 2026-08-25 the ten
+comparable records in ``ie_01``, ``uk_01`` and ``it_01`` are masked by
+:func:`mask_comprehension_below_production` -- previously they were retained and
+flagged, and this docstring drew the contrast against that. The reason for
+keeping a separate mechanism is unchanged: those ten are a known, stable property
+of closed sources, whereas this one is an open question with a reachable source
+team, so the row is held out of the prepared data entirely until the study owner
+has an explanation, rather than reaching ``vocab_combined`` and being masked with
+a reinstatement flag. Removing the
 entry from this tuple and re-running ``scripts/prepare_data.py`` reinstates it.
 This is the same treatment as the ie_02 subject excluded in ``prepare_data.py``.
 
@@ -393,6 +398,103 @@ def mask_duplicated_outcome_administrations(
         dropped[str(study)] = int(count)
     out.loc[suspect, outcome_columns] = float("nan")
     return out, dropped
+
+
+COMPREHENSION_BELOW_PRODUCTION_STUDIES: tuple[str, ...] = ("ie_01", "it_01", "uk_01")
+"""Studies carrying a comprehension count below the child's own production count.
+
+An inclusive comprehension field cannot be exceeded by production: a word the
+child says is a word the child understands, so ``understood >= produced`` holds
+by construction on any form where comprehension is asked inclusively. Ten
+administrations violate it -- seven in ``ie_01``, two in ``uk_01``, one in
+``it_01`` -- and the violations are not marginal: one ``ie_01`` child records 13
+words understood against 366 spoken, and two record 0 understood against 83
+spoken.
+
+**The comprehension count is what gets masked, not the production count.** The
+production figure is corroborated by two columns that agree (``spoken`` and
+``signed`` sum to the recorded ``produced``), and in both studies with a
+diagnosis the fault has been localised to comprehension: ``uk_01``'s
+``understood`` appears to *exclude* words the child also produces, which is why
+``spoken / understood`` reaches 1.95 there, and ``ie_01``'s seven rows sit in the
+wave whose Checklist 1 comprehension field is already known to be unreliable
+(pooled comprehension *falls* between waves while the mean understood total
+rises). Masking the row wholesale would discard production counts that are not
+in question.
+
+``produced`` is the right denominator and ``spoken + signed`` is not. In the
+signing studies the two columns overlap -- a child who both says and signs a word
+is counted in each -- so their sum overstates distinct words produced, badly:
+``uk_07`` has ``produced < spoken + signed`` on 77 of 82 rows and ``nz_01`` on
+101 of 111. Reconstructing production as the sum would flag 87 administrations
+instead of 10, almost all of them bimodal children penalised for double counting.
+
+Equality is **kept**. ``understood == produced`` is a child who produces
+everything they understand, which is legitimate; 45 administrations meet it, of
+which 18 are ``0 == 0`` and most of the rest sit at the 396-item Words &
+Gestures ceiling, where both counts are censored rather than equal. Those belong
+to the ceiling and administration rules, not to this one.
+
+Related, and deliberately not merged into this rule:
+:data:`UK07_WITHHELD_ADMINISTRATIONS` withholds a single ``uk_07`` row with the
+same signature (191 understood against 489 produced) at CSV load, because that
+one is an open question with a reachable source team rather than a closed
+property of the data. It never reaches ``vocab_combined``, so this rule never
+sees it. Its docstring previously contrasted itself with ``ie_01``'s seven
+"retained-and-flagged" records; as of 2026-08-25 those are masked here instead,
+on the study owner's ruling.
+
+Set ``include_comprehension_below_production=True`` to reinstate the ten
+comprehension counts for sensitivity analysis.
+"""
+
+
+def mask_comprehension_below_production(
+    df: pd.DataFrame,
+    *,
+    include_below_production: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Mask comprehension counts that fall below the child's own production count.
+
+    Applies the rule documented on
+    :data:`COMPREHENSION_BELOW_PRODUCTION_STUDIES`. Only ``understood`` is
+    masked; ``spoken``, ``signed`` and ``produced`` are left as recorded, and the
+    row is retained so age coverage and provenance stay auditable.
+
+    Requires a ``produced`` column. Comparing against ``spoken + signed`` instead
+    is wrong wherever the two modalities overlap, so a frame without ``produced``
+    raises rather than silently substituting a different rule.
+
+    The returned counts report how many comprehension values were masked per
+    study, for the fit log. Pass ``include_below_production=True`` to reinstate
+    them as a sensitivity.
+    """
+    required = {"understood", "produced"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Comprehension-below-production masking requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    out = df.copy()
+    masked: dict[str, int] = {}
+    if include_below_production:
+        return out, masked
+
+    understood = pd.to_numeric(out["understood"], errors="coerce")
+    produced = pd.to_numeric(out["produced"], errors="coerce")
+    suspect = understood.notna() & produced.notna() & (understood < produced)
+    if not suspect.any():
+        return out, masked
+
+    study_labels = (
+        out["study"] if "study" in out.columns else pd.Series("", index=out.index)
+    )
+    for study, count in suspect[suspect].groupby(study_labels[suspect]).size().items():
+        masked[str(study)] = int(count)
+    out.loc[suspect, "understood"] = float("nan")
+    return out, masked
 
 
 IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION = 0.9
@@ -651,8 +753,10 @@ def restrict_to_dse_native_administrations(
     answers what the trajectories look like when no count has been carried onto
     a denominator its form did not use: 278 of the Down syndrome pool's 1,521
     rows survive, from 194 children across ie_01 (its 810 wave only), ie_02,
-    uk_02 (DSE form only) and uk_06 -- 259 understood, 264 spoken and 218 signed
-    observations spanning 9-115 months. Every other source is on a shorter form
+    uk_02 (DSE form only) and uk_06 -- 252 understood, 264 spoken and 218 signed
+    observations spanning 9-115 months. (Understood was 259 before
+    :func:`mask_comprehension_below_production`, whose ten masked counts fall
+    seven inside this subset, all in ie_01.) Every other source is on a shorter form
     and drops out entirely, es_01, nz_01, uk_07 and us_01 among them.
 
     Rows whose ceiling is unrecorded are dropped rather than kept: an unknown
@@ -1287,6 +1391,7 @@ def load_combined_data(
     include_implausible_production=False,
     include_below_form_floor=False,
     include_ceiling_only_children=False,
+    include_comprehension_below_production=False,
 ):
     """
     Load the combined data from the DuckDB database.
@@ -1337,6 +1442,11 @@ def load_combined_data(
                 understood,
                 spoken,
                 signed,
+                -- Selected for mask_comprehension_below_production only, and
+                -- dropped before returning: `produced` is the union of the two
+                -- modalities, which no model consumes, and adding a column to
+                -- the returned frame would change what every caller sees.
+                produced,
                 survey_vocab_max
             FROM vocab_combined
             WHERE age <= $1
@@ -1367,7 +1477,16 @@ def load_combined_data(
     df, _ = mask_implausible_production_administrations(
         df, include_implausible=include_implausible_production
     )
-    return df
+    # Last, and deliberately so: this rule compares two columns of a single row,
+    # so it needs no cross-row context, and running it after the others means it
+    # only fires on comprehension counts that survived every earlier rule. A row
+    # whose `understood` an earlier mask already cleared is not counted twice.
+    df, _ = mask_comprehension_below_production(
+        df, include_below_production=include_comprehension_below_production
+    )
+    # `produced` exists only for the rule above; no model consumes it, and every
+    # caller of this function expects the historical column set.
+    return df.drop(columns=["produced"])
 
 
 def count_reinstated_implausible_production(max_age_months: int | None = None) -> int:

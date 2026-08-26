@@ -19,6 +19,11 @@ import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 
+from vocab_growth.models.likelihood_utils import (
+    LAG_ZERO_CLIP,
+    SPOKEN_FALLBACK_PRODUCT,
+)
+
 ENGLISH_LANGUAGES = (
     "English (American)",
     "English (Australian)",
@@ -886,6 +891,34 @@ class BivariateModelDefinition:
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     provides a cheap sensitivity analysis for repeated-measures dependence."""
+
+    # -- Spoken rows with no usable understood count (issues #233, #236) --
+    spoken_fallback: str = SPOKEN_FALLBACK_PRODUCT
+    """How spoken rows that cannot condition on an observed understood count are
+    modelled.
+
+    The paired model is ``U ~ BB(810, p_U, kappa_U)`` then
+    ``S | U ~ BB(U, q, kappa_S)``. 455 of the current frame's 1,428 spoken
+    observations cannot take the second line -- 444 have no understood count and
+    11 record ``spoken > understood`` -- and have always been given
+    ``S ~ BB(810, p_U*q, kappa_S)`` instead, which is mean-correct but is not the
+    paired model's marginal: it misses the variance, and by a signed amount that
+    depends on the fitted concentrations (see
+    :data:`~vocab_growth.models.likelihood_utils.SPOKEN_FALLBACK_PRODUCT`). Those
+    rows are older and concentrated by study, so the approximation is not
+    ignorable.
+
+    One of :data:`~vocab_growth.models.likelihood_utils.SPOKEN_FALLBACK_TREATMENTS`,
+    documented individually there. Part of the model graph: changing it requires
+    a refit."""
+    spoken_fallback_kappa_sigma: float = 0.5
+    """Normal SD for the fallback branch's log concentration offset.
+
+    Read only under ``spoken_fallback="separate_dispersion"``. 0.5 on the log
+    scale puts an 89% prior interval of roughly [0.45, 2.2] on the multiplier,
+    which spans the range a branch-specific dispersion could plausibly want
+    without letting 455 rows drive it to a boundary."""
+
     td_languages: tuple[str, ...] = ENGLISH_LANGUAGES
     """Wordbank ``language`` values the typically-developing pool draws on.
 
@@ -910,6 +943,24 @@ class BivariateModelDefinition:
     """Normal mean for the cross-lag coefficient beta_lag (0 = no direction imposed)."""
     beta_lag_sigma: float = 0.5
     """Normal SD for beta_lag (logit scale, weakly-informative)."""
+    lag_max_gap_months: float | None = None
+    """Drop a lag whose source wave is more than this many months earlier.
+
+    ``None`` (the default) imposes no ceiling, which is the historical
+    behaviour and what every fit before 2026-08-25 carries. VG16 assumes
+    ``beta_lag`` is constant across the gaps it actually sees, and on the
+    current frame those run 1 to 28 months (median 6): 41 of 477 lagged rows
+    sit above 12 months, 9 above 18 and 4 above 24. A prospective association
+    measured over two years is a different quantity from one measured over six
+    months, and nothing in the model says so — which is the assumption
+    [#242](https://github.com/dseinternational/vocabulary-growth/issues/242)
+    asks to be checked rather than asserted."""
+    lag_zero_handling: str = LAG_ZERO_CLIP
+    """How a zero-count lag source is kept off the logit boundary.
+
+    ``LAG_ZERO_CLIP`` (the default) reproduces the historical clip exactly.
+    See the constants in ``likelihood_utils`` for what the alternative changes
+    and why seven rows on the current frame make it a live question."""
 
     # -- GP anchor constraint (per-draw zero at reference age) --
     anchor_g_u_at_ref: bool = False
@@ -976,11 +1027,26 @@ class BivariateModelDefinition:
     It is the widest-scoped sensitivity in the registry, and deliberately so: 278
     of the merged view's 1,521 Down syndrome rows survive, from 194 children
     across ie_01 (its 810 wave only), ie_02, uk_02 (DSE form only) and uk_06,
-    spanning 9-115 months. Comprehension is the least affected outcome -- 259 of
-    987 understood observations survive, against 264 of 1,428 spoken -- because
+    spanning 9-115 months. Comprehension is the least affected outcome -- 252 of
+    977 understood observations survive, against 264 of 1,428 spoken -- because
     the short forms are production-heavy, so expect the spoken trajectory to move
     more than the understood one.
     """
+    exclude_studies: tuple[str, ...] = ()
+    """Study codes to drop before fitting, for leave-one-study-out sensitivity.
+
+    Empty (the default) admits every study the other rules keep, which is the
+    historical behaviour. This exists because a pooled estimate can rest on one
+    source without saying so: on the current frame ``us_01`` alone supplies 136
+    of VG16's 477 lagged rows and ``it_01`` a further 106, so a cross-lag that
+    does not survive dropping either is a statement about that study rather
+    than about children with Down syndrome.
+
+    Applied after the source-admissibility rules and before
+    ``min_study_observations``, so a study removed here cannot change whether a
+    *different* study clears the observation floor — the floor is counted per
+    study, so the two are independent, and the order is fixed for
+    reproducibility rather than because it changes an answer."""
     include_implausible_production: bool = False
     """Reinstate the us_01 production counts masked as implausible by default.
 
@@ -3484,10 +3550,22 @@ def _as_definition_subclass(base, cls, **overrides):
 
 
 # Derived from VG10 so the two differ in exactly one thing, which is what makes
-# the comparison in #224 readable: VG10 is nested at rho_uq = 0, and any movement
-# in the reported trajectories is a red flag rather than a benefit. Deriving
-# rather than restating the priors also means VG10's anchor recalibrations cannot
-# drift away from VG20's.
+# the comparison in #224 readable: VG10 is nested at rho_uq = 0, so the reported
+# population trajectories should sit close to VG10's.
+#
+# That closeness is an empirical stability check, NOT a mathematical correctness
+# invariant, and #233 was right to flag the earlier wording here as too strong.
+# Two reasons it cannot be one. The population curves are evaluated at zero child
+# effects, so they are not the quantity the correlation acts on -- while every
+# subject-MARGINAL expectation is a nonlinear function of those effects and
+# therefore moves with rho_uq by construction, as it should. And a refit is a
+# refit: when the child block's geometry changes, the fixed effects and the
+# marginal scales can legitimately reallocate between themselves. Read movement
+# in a population trajectory as something to explain against the interval widths
+# and the predictive scores, not as proof of a defect.
+#
+# Deriving rather than restating the priors also means VG10's anchor
+# recalibrations cannot drift away from VG20's.
 VG20 = _as_definition_subclass(
     VG10,
     BivariateCorrelatedSubjectREModelDefinition,
@@ -3653,6 +3731,47 @@ VG22 = _as_definition_subclass(
 )
 
 
+
+# Derived from VG13 so the two differ in exactly one thing, which is the whole
+# point: VG13 is nested at rho_uq = 0, so the pair is a one-factor contrast on
+# the typically-developing side of exactly the kind VG20 gives on the Down
+# syndrome side.
+#
+# Why this matters more here than it does on the DS pool. #229 is about a split
+# the typically-developing data barely identify: separating between-child from
+# within-child variance when the average child contributes 1.16 administrations.
+# Only 15.1% of VG13's children have a repeat visit, so the split currently rests
+# on the Beta-Binomial's functional form rather than on replication -- and the
+# between-child scale comes back low in 9 of 9 recovery replicates across three
+# models (#225).
+#
+# The correlation opens a second channel that needs no repeat visit at all. Every
+# VG13 administration yields *two* counts, understood and spoken, from one child
+# on one day; a child's persistent ability moves both, while the Beta-Binomial
+# noise is assumed independent across them, so their agreement identifies the
+# child effect on 100% of rows rather than the 15% with a second visit.
+#
+# The catch is stated rather than discovered later: both counts come from one
+# questionnaire completed by one parent, so shared reporter tendency is
+# indistinguishable from shared child ability and biases rho_uq -- and through it
+# the child scales -- **upward**. The variance partition biases the same quantity
+# **downward**. The two therefore bracket the truth rather than resolving it, and
+# neither is a point estimate to publish unqualified. See #229 option 3.
+#
+# `eta = 2` matches VG20 deliberately, so the two populations' correlations are
+# estimated under the same prior and their comparison is not a prior artefact.
+VG23 = _as_definition_subclass(
+    VG13,
+    BivariateCorrelatedSubjectREModelDefinition,
+    model_id="VG23",
+    config_name="age-understood-spoken-td-re-young-corr",
+    banner=(
+        "Fitting Model VG23: VG13 + correlated subject random effects on U and q"
+        " (rho_uq) - typically developing"
+    ),
+    subject_re_correlation_eta=2.0,
+)
+
 MODEL_REGISTRY: dict[
     str,
     UnivariateModelDefinition
@@ -3679,6 +3798,7 @@ MODEL_REGISTRY: dict[
     "vg20": VG20,
     "vg21": VG21,
     "vg22": VG22,
+    "vg23": VG23,
 }
 
 

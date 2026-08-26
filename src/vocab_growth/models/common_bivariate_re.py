@@ -77,7 +77,15 @@ from vocab_growth.models.gp_utils import (
     build_subject_scale_of_z,
     trend_and_gp,
 )
-from vocab_growth.models.likelihood_utils import nested_outcome_spec
+from vocab_growth.models.likelihood_utils import (
+    LAG_ZERO_CLIP,
+    LAG_ZERO_CONTINUITY,
+    LAG_ZERO_TREATMENTS,
+    SPOKEN_FALLBACK_PAIRED_ONLY,
+    nested_outcome_alpha_beta,
+    nested_outcome_spec,
+    resolve_fallback_treatment,
+)
 from vocab_growth.reporting import (
     dataframe_table,
     key_value_table,
@@ -152,6 +160,17 @@ def prepare_bivariate_re_data(
         df, non_native_rows_excluded = (
             vocab_data_utils.restrict_to_dse_native_administrations(df)
         )
+    excluded_study_rows = 0
+    if definition.exclude_studies:
+        keep = ~df["study"].isin(definition.exclude_studies)
+        excluded_study_rows = int((~keep).sum())
+        if excluded_study_rows == 0:
+            raise ValueError(
+                f"exclude_studies={definition.exclude_studies!r} matched no rows. "
+                "A leave-one-study-out check that removes nothing cannot fail, "
+                "which is worse than not running it -- check the study codes."
+            )
+        df = df[keep]
     analysis_df = df[columns].copy()
 
     # Keep rows where at least one outcome is observed (and age is present)
@@ -230,6 +249,13 @@ def prepare_bivariate_re_data(
             (
                 "Single-administration sensitivity",
                 f"{n_before_single_administration} -> {len(analysis_df)} rows",
+            )
+        )
+    if definition.exclude_studies:
+        counts.append(
+            (
+                f"Studies excluded ({', '.join(definition.exclude_studies)})",
+                f"{excluded_study_rows} rows",
             )
         )
     if definition.exclude_us01_spoken_ceiling:
@@ -382,7 +408,15 @@ def iter_subject_age_waves(subject, age):
         start = stop
 
 
-def compute_prev_wave_lag(subject, age, understood, n_trials):
+def compute_prev_wave_lag(
+    subject,
+    age,
+    understood,
+    n_trials,
+    *,
+    max_gap_months: float | None = None,
+    zero_handling: str = LAG_ZERO_CLIP,
+):
     """Per-observation prior-wave understood lag source for the VG16 cross-lag.
 
     The unit is an **administration wave**: every row a child carries at one
@@ -433,19 +467,42 @@ def compute_prev_wave_lag(subject, age, understood, n_trials):
         with_u = wave[~np.isnan(understood[wave])]
         if with_u.size:
             source = int(with_u[np.argmax(understood[with_u])])
+    # A gap ceiling drops the lag rather than the row: the observation still
+    # enters both likelihoods, it simply stops informing `beta_lag`. Applied
+    # after the source is chosen, so which wave is the source never depends on
+    # the ceiling -- only whether that source is used.
+    if max_gap_months is not None:
+        too_far = (has_lag_f > 0) & ((age - age[prev_idx]) > max_gap_months)
+        has_lag_f = np.where(too_far, 0.0, has_lag_f)
+        prev_idx = np.where(too_far, 0, prev_idx)
+
     und_prev = np.where(has_lag_f > 0, understood[prev_idx], n_trials * 0.5)
-    p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
+    if zero_handling == LAG_ZERO_CONTINUITY:
+        p_prev = (und_prev + 0.5) / (n_trials + 1.0)
+    elif zero_handling == LAG_ZERO_CLIP:
+        p_prev = np.clip(und_prev / n_trials, 1e-4, 1 - 1e-4)
+    else:
+        raise ValueError(
+            f"Unknown lag_zero_handling {zero_handling!r}; expected one of "
+            + ", ".join(map(repr, LAG_ZERO_TREATMENTS))
+        )
     y_u_prev_logit = np.where(has_lag_f > 0, np.log(p_prev) - np.log(1 - p_prev), 0.0)
     return prev_idx, has_lag_f, y_u_prev_logit
 
 
-def _compute_prev_wave_lag(analysis_df, n_trials: int):
-    """DataFrame adapter for :func:`compute_prev_wave_lag`."""
+def _compute_prev_wave_lag(analysis_df, n_trials: int, definition=None):
+    """DataFrame adapter for :func:`compute_prev_wave_lag`.
+
+    ``definition`` is optional so the experiment scripts, which reconstruct the
+    lag outside a fit, keep working unchanged and get the registered defaults.
+    """
     return compute_prev_wave_lag(
         np.asarray(analysis_df["subject_code"], dtype=int),
         np.asarray(analysis_df["age"], dtype=float),
         analysis_df["understood"].to_numpy(dtype=float),
         n_trials,
+        max_gap_months=getattr(definition, "lag_max_gap_months", None),
+        zero_handling=getattr(definition, "lag_zero_handling", LAG_ZERO_CLIP),
     )
 
 
@@ -606,6 +663,13 @@ def build_model_re(
     )
     if not np.array_equal(spoken_spec.indices, np.flatnonzero(has_s_train)):
         raise ValueError("Spoken likelihood rows do not match the training-data mask.")
+    # The mask check above runs against the unfiltered spec, so it still tests
+    # what it was written to test under every treatment.
+    spoken_fallback = resolve_fallback_treatment(definition)
+    n_fallback_dropped = 0
+    if spoken_fallback == SPOKEN_FALLBACK_PAIRED_ONLY:
+        n_fallback_dropped = spoken_spec.n_marginal
+        spoken_spec = spoken_spec.conditional_only()
     y_s_observed = spoken_spec.observed
     idx_s = spoken_spec.indices
     n_s = spoken_spec.n_observed
@@ -633,7 +697,9 @@ def build_model_re(
     y_u_prev_logit = np.zeros(n, dtype=float)
     if use_cross_lag:
         _validate_cross_lag(definition.lag_baseline, use_subject_re_u)
-        prev_idx, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(analysis_df, n_trials)
+        prev_idx, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(
+            analysis_df, n_trials, definition
+        )
         print(
             f"Cross-lag ({definition.lag_baseline}): "
             f"{int(has_lag_f.sum())} of {n} observations have a prior-wave understood source."
@@ -669,6 +735,8 @@ def build_model_re(
         ("Spoken observed", n_s),
         ("Spoken conditional on understood", spoken_spec.n_conditional),
         ("Spoken marginal fallback", spoken_spec.n_marginal),
+        ("Spoken fallback treatment", spoken_fallback),
+        ("Spoken fallback rows dropped", n_fallback_dropped),
         ("Spoken > understood violations", spoken_spec.n_parent_violations),
         ("n_trials", n_trials),
         ("n_studies", n_studies),
@@ -1272,15 +1340,20 @@ def build_model_re(
             dims=("obs_u_id",),
         )
 
-        # Spoken likelihood (only where observed)
-        p_s_likelihood = pm.math.switch(
-            s_is_conditional,
-            q_obs[idx_s],
-            p_s_obs[idx_s],
+        # Spoken likelihood (only where observed). Both bivariate engines route
+        # through the one helper so their graphs cannot drift apart.
+        alpha_s, beta_s = nested_outcome_alpha_beta(
+            treatment=spoken_fallback,
+            is_conditional=s_is_conditional,
+            conditional_p=q_obs[idx_s],
+            marginal_p=p_s_obs[idx_s],
+            parent_p=p_u_obs[idx_s],
+            parent_kappa=kappa_u_obs[idx_s],
+            kappa=kappa_s_obs[idx_s],
+            epsilon=EPSILON,
+            outcome="s",
+            fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        p_s_likelihood = pm.math.clip(p_s_likelihood, EPSILON, 1 - EPSILON)
-        alpha_s = p_s_likelihood * kappa_s_obs[idx_s]
-        beta_s = (1 - p_s_likelihood) * kappa_s_obs[idx_s]
 
         _ = pm.BetaBinomial(
             "y_s_obs",
@@ -1329,7 +1402,13 @@ def bivariate_re_stages(
             "Model definition and initialisation",
             lambda ctx: build_model_re(ctx, definition),
         ),
-        ("Prior predictive checks", prior_predictive_checks),
+        (
+            "Prior predictive checks",
+            # Passes the definition so the child-level checks can dispatch on
+            # the child-effect structure (#233); the population figures do not
+            # need it.
+            lambda ctx: prior_predictive_checks(ctx, definition),
+        ),
         ("Posterior sampling", sample),
         # The definition travels with the stage so the cross-lag models can
         # reorder the pair plot and suppress the leaking understood LOO

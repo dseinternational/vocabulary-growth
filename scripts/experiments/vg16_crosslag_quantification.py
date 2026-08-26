@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import os
 
+import dse_research_utils.statistics.intervals as stats_intervals
 import numpy as np
 import xarray as xr
 
@@ -65,7 +66,8 @@ def sig(x):
 
 
 def eti(v, label, fmt="{: .4f}"):
-    lo, med, hi = np.percentile(v, [5.5, 50, 94.5])
+    lo, hi = stats_intervals.eti_1d(v, eti_prob=stats_intervals.DEFAULT_CI_PROB)
+    med = float(np.median(v))
     print(f"  {label:58s} {fmt.format(med)}  [{fmt.format(lo).strip()}, {fmt.format(hi).strip()}]")
     return med, lo, hi
 

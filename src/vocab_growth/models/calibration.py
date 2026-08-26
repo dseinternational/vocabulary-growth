@@ -186,12 +186,25 @@ def write_trace_calibration(
     analysis_df: pd.DataFrame,
     output_dir: str,
     outcomes: tuple[tuple[str, str, str | None], ...],
+    strata: dict[str, tuple[str, str, str]] | None = None,
 ) -> pd.DataFrame:
     """Write calibration rows for posterior-predictive variables in a trace.
 
     Each outcome is ``(label, posterior_predictive_variable, mask_variable)``.
     A ``None`` mask means every prepared analysis row is represented.
+
+    ``strata`` splits an outcome into two additional labelled sub-tables, keyed
+    by outcome label and giving ``(constant_data variable, true label, false
+    label)``. It exists for the spoken outcome's two likelihood branches (issue
+    #236): the conditional and marginal-fallback rows are fitted by different
+    distributions and differ systematically in age and study, so a pooled
+    calibration row can be well behaved while one branch is not. The split is
+    read from the fitted trace's own ``constant_data``, so it costs no refit and
+    applies to fits made before it existed. A stratum with no rows is skipped
+    rather than written empty -- which is what the ``paired_only`` treatment
+    leaves behind.
     """
+    strata = strata or {}
     tables: list[pd.DataFrame] = []
     for label, variable, mask_variable in outcomes:
         if variable not in trace.posterior_predictive:
@@ -221,6 +234,30 @@ def write_trace_calibration(
         table = predictive_calibration_table(observed, predictive, ages)
         table.insert(0, "outcome", label)
         tables.append(table)
+
+        stratum = strata.get(label)
+        if stratum is None:
+            continue
+        stratum_variable, true_label, false_label = stratum
+        if stratum_variable not in trace.constant_data:
+            continue
+        selector = np.asarray(
+            trace.constant_data[stratum_variable].values, dtype=bool
+        )
+        if selector.shape != observed.shape:
+            raise ValueError(
+                f"{stratum_variable} has {selector.shape} rows but {variable} has "
+                f"{observed.shape}; a stratum must be defined over the outcome's "
+                "own observed rows."
+            )
+        for rows, sub_label in ((selector, true_label), (~selector, false_label)):
+            if not rows.any():
+                continue
+            sub = predictive_calibration_table(
+                observed[rows], predictive[rows], ages[rows]
+            )
+            sub.insert(0, "outcome", sub_label)
+            tables.append(sub)
 
     result = pd.concat(tables, ignore_index=True) if tables else pd.DataFrame()
     result.to_csv(

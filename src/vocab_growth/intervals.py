@@ -25,29 +25,29 @@ Rethinking* (2020) and Kruschke, *Bayesian Analysis Reporting Guidelines*
 (Nat. Hum. Behav. 2021), and ``docs/models/README.md`` (Interval reporting
 convention).
 
-The outer mass is carried by the shared
-:class:`dse_research_utils.statistics.models.reporting.ReportingConfiguration`
-``ci_prob`` (0.89) and its ``interval_kind`` (``"eti"``); the inner mass is
-:data:`INNER_CI_PROB` (0.50), which the shared config does not yet model.
+The interval *mechanics* — the kind dispatcher, the per-grid bands, and the
+tidy two-band summary — live in :mod:`dse_research_utils.statistics.intervals`
+(v0.12.0) together with the shared masses (:data:`DEFAULT_CI_PROB` 0.89,
+:data:`INNER_CI_PROB` 0.50), re-exported here. What stays local is the
+*policy*: which named estimands report with HDI (:data:`HDI_ESTIMANDS` /
+:func:`interval_kind_for`) and the ``age_months`` grid naming. This project
+passes ``interval_kind="eti"`` explicitly on its
+:class:`~dse_research_utils.statistics.models.reporting.ReportingConfiguration`
+(the shared default is ``"hdi"``).
 """
 
-from typing import Literal
-
-import dse_research_utils.statistics.intervals as stats_intervals
 import numpy as np
 import pandas as pd
-
-IntervalKind = Literal["eti", "hdi"]
-
-# Outer interval mass. Kept in sync with ReportingConfiguration.ci_prob and the
-# shared library default; used as the fallback for free functions that do not
-# carry a reporting context.
-DEFAULT_CI_PROB: float = 0.89
-
-# Inner interval mass. The shared ReportingConfiguration carries only a single
-# ``ci_prob``, so the inner band lives here until a second mass is first-class
-# upstream.
-INNER_CI_PROB: float = 0.50
+from dse_research_utils.statistics.intervals import (
+    DEFAULT_CI_PROB,  # noqa: F401 — re-exported: the outer 89% house mass
+    INNER_CI_PROB,  # noqa: F401 — re-exported: the inner 50% house mass
+    IntervalKind,
+)
+from dse_research_utils.statistics.intervals import bands as _shared_bands
+from dse_research_utils.statistics.intervals import interval_1d as _shared_interval_1d
+from dse_research_utils.statistics.intervals import (
+    summarise_bands as _shared_summarise_bands,
+)
 
 # Estimands reported with HDI rather than the ETI default, because their
 # posteriors are strongly skewed or boundary-censored so an equal-tailed
@@ -78,17 +78,9 @@ def interval_1d(
 ) -> tuple[float, float]:
     """Credible interval of a 1-D sample array, NaN-aware.
 
-    ``kind="eti"`` returns the equal-tailed (percentile) interval; ``"hdi"``
-    the highest-density interval. Both delegate to the shared
-    :mod:`dse_research_utils.statistics.intervals` primitives.
+    Delegates to :func:`dse_research_utils.statistics.intervals.interval_1d`.
     """
-    x = np.asarray(x, dtype=float)
-    x = x[~np.isnan(x)]
-    if x.size == 0:
-        return float("nan"), float("nan")
-    if kind == "hdi":
-        return stats_intervals.hdi_1d(x, hdi_prob=prob)
-    return stats_intervals.eti_1d(x, eti_prob=prob)
+    return _shared_interval_1d(x, prob, kind)
 
 
 def bands(
@@ -98,23 +90,11 @@ def bands(
     *,
     sample_axis: int = 1,
 ) -> np.ndarray:
-    """Per-grid credible interval of a 2-D sample array.
+    """Per-grid credible interval of a 2-D sample array, ``(n_grid, 2)``.
 
-    ``samples`` has one axis of draws (``sample_axis``) and one grid axis; the
-    return is ``(n_grid, 2)`` of ``(lo, hi)`` along the grid, NaN-aware. Use for
-    trajectory / query-age bands where the interval is computed independently at
-    each grid point.
+    Delegates to :func:`dse_research_utils.statistics.intervals.bands`.
     """
-    arr = np.asarray(samples, dtype=float)
-    if arr.ndim != 2:
-        raise ValueError(f"bands expects a 2-D array, got shape {arr.shape}")
-    grid_axis = 1 - sample_axis
-    n_grid = arr.shape[grid_axis]
-    out = np.empty((n_grid, 2), dtype=float)
-    for i in range(n_grid):
-        draws = arr[:, i] if sample_axis == 0 else arr[i, :]
-        out[i, 0], out[i, 1] = interval_1d(draws, prob, kind)
-    return out
+    return _shared_bands(samples, prob, kind, sample_axis=sample_axis)
 
 
 def summarise(
@@ -134,23 +114,16 @@ def summarise(
     ``ci_lo``/``ci_hi`` (outer), ``interval_kind``. The kind defaults to
     :func:`interval_kind_for` applied to ``name`` (so callers can just pass the
     estimand name and get ETI, or HDI for the skewed short-list); pass ``kind``
-    to override.
+    to override. Delegates to
+    :func:`dse_research_utils.statistics.intervals.summarise_bands`.
     """
     resolved_kind = kind if kind is not None else interval_kind_for(name)
-    arr = np.asarray(samples, dtype=float)
-    if arr.ndim == 1:
-        arr = arr[:, None] if sample_axis == 0 else arr[None, :]
-    inner_band = bands(arr, inner, resolved_kind, sample_axis=sample_axis)
-    outer_band = bands(arr, outer, resolved_kind, sample_axis=sample_axis)
-    median = np.nanmedian(arr, axis=sample_axis)
-    return pd.DataFrame(
-        {
-            grid_name: np.asarray(grid, dtype=float),
-            "median": median,
-            "ci50_lo": inner_band[:, 0],
-            "ci50_hi": inner_band[:, 1],
-            "ci_lo": outer_band[:, 0],
-            "ci_hi": outer_band[:, 1],
-            "interval_kind": resolved_kind,
-        }
+    return _shared_summarise_bands(
+        samples,
+        grid,
+        kind=resolved_kind,
+        outer=outer,
+        inner=inner,
+        sample_axis=sample_axis,
+        grid_name=grid_name,
     )

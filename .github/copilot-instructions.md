@@ -31,16 +31,24 @@ Single-layer [uv](https://docs.astral.sh/uv/) environment (shared across DSE res
 ### Lint
 
 ```bash
-uv run ruff check src/ scripts/
+uv run ruff check src/ scripts/ tests/
 ```
 
 ### Test
 
 ```bash
-uv run pytest              # run all tests
-uv run pytest tests/test_foo.py           # single file
-uv run pytest tests/test_foo.py::test_bar # single test
+uv run pytest                                  # the fast set (see below)
+uv run pytest -m "slow or not slow"            # everything, as CI runs it
+uv run pytest -n auto --dist loadfile          # the fast set, in parallel
+uv run pytest tests/test_foo.py                # single file
+uv run pytest tests/test_foo.py::test_bar      # single test
 ```
+
+**A bare `pytest` does not run everything.** `addopts` carries `-m 'not slow'`, so the four modules that do real sampling or real numerical optimisation are deselected — the fast set is about 65 s against seven minutes for the whole suite. The deselected count is printed on every run. CI selects everything with `-m "slow or not slow"`; use the same expression locally before pushing anything that touches an engine. It is spelt out rather than an empty `-m ""` because pwsh drops the empty string before pytest sees it, so the same command works on Windows.
+
+`pytest-xdist` is in the `dev` group, and CI runs `-n auto --dist loadfile`. Use `--dist loadfile` rather than the default: several modules have module-scoped fixtures that are themselves fits, and per-test distribution rebuilds them on every worker that draws one of their tests.
+
+Two suite-wide behaviours live in `tests/conftest.py`: the matplotlib backend is fixed to Agg before anything imports pyplot, and an autouse fixture silences the fit pipeline's prior-distribution figures and its `describe_all` pass. Both were the bulk of the suite's run time and nothing asserted on either. Mark a test `@pytest.mark.emits_reporting_artefacts` to opt back in — `tests/test_pipeline_reporting_artefacts.py` does, and checks that a real build still produces them. See `notes/202608241530-test-suite-performance.md`.
 
 ### Spellcheck (Markdown/Quarto docs)
 
@@ -79,7 +87,7 @@ This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01
 uv run python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>] [--trace-persistence <tier>]
 ```
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, `vg19`, `vg20`, or `all`.
+- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, `vg19`, `vg20`, `vg21`, `vg22`, `vg23`, or `all`. `all` is derived from `MODEL_REGISTRY` rather than from this list, so it always covers every registered model.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after the completed fit is atomically promoted. A rendering failure leaves the fit complete and available for a later `--render-only` retry.
 - `--render-only`: validate and render an existing compatible fit without sampling again.
@@ -113,7 +121,7 @@ Validates the model definition, sampling configuration, raw-data fingerprint, co
 2. `scripts/prepare_data.py` merges and harmonises them into a DuckDB database with a unified `vocab_combined` view.
 3. Model code loads data via `vocab_growth.data_utils.load_combined_data()`.
 
-The Down syndrome pool masks or drops several documented defect classes by default, each with a reinstatement flag for sensitivity analysis: partial administrations, duplicated outcome columns, implausible production (near-ceiling and longitudinal-collapse signatures), administrations given below their form's lowest registered age, and children recorded only at their form's ceiling. Read the governing constant's docstring before reinstating any of them. Two are worth knowing about even if you never touch them: administrations _above_ a form's age window are deliberately **admitted**, because for a Down syndrome cohort an early-vocabulary form given to an older child is developmentally appropriate and those rows are `us_01`'s only comprehension observations between 19 and 27 months; and the ceiling-saturated preparation batch is identified by `CEILING_ONLY_CHILD_STUDIES` on the _provenance_ criterion that the affected children have no non-ceiling record, because age and count together cannot separate it from a legitimately able older child.
+The Down syndrome pool masks or drops several documented defect classes by default, each with a reinstatement flag for sensitivity analysis: partial administrations, duplicated outcome columns, implausible production (near-ceiling and longitudinal-collapse signatures), administrations given below their form's lowest registered age, children recorded only at their form's ceiling, and comprehension counts that fall below the child's own production count. Read the governing constant's docstring before reinstating any of them. Two are worth knowing about even if you never touch them: administrations _above_ a form's age window are deliberately **admitted**, because for a Down syndrome cohort an early-vocabulary form given to an older child is developmentally appropriate and those rows are `us_01`'s only comprehension observations between 19 and 27 months; and the ceiling-saturated preparation batch is identified by `CEILING_ONLY_CHILD_STUDIES` on the _provenance_ criterion that the affected children have no non-ceiling record, because age and count together cannot separate it from a legitimately able older child. A third is worth knowing because its denominator is easy to get wrong: the comprehension-below-production rule compares `understood` against the recorded `produced` **union**, not against `spoken + signed`. The two modalities overlap wherever a child both says and signs a word, so the sum overstates distinct production badly (`uk_07`: 77 of 82 rows) and would flag 87 administrations instead of 10. It masks the comprehension count only, keeps the row, and keeps equality — a child who produces everything they understand is legitimate.
 
 The typically-developing reference pool is drawn from Wordbank and scoped by language. It defaults to `ENGLISH_LANGUAGES`; the hierarchical models (VG11, VG12, VG13) use `ENGLISH_AND_ROMANCE_LANGUAGES`, adding Italian and Spanish (European) so the Down-syndrome-versus-typically-developing comparison spans several languages on both sides — the Down syndrome pool is already a quarter non-English. VG03/VG04 stay English-only: they carry no random effects to absorb between-language variation. The scope is a model-definition field (`td_languages`), so it is part of the model graph and changing it requires a refit. Admission criteria and the two measurement checks are on `ROMANCE_LANGUAGES` in `src/vocab_growth/models/definitions.py`.
 
@@ -129,7 +137,7 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 
 The full, canonical list of models -- each model's population, outcome, structure, and purpose -- is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
 
-There are currently nineteen registered models (`VG01`-`VG16` and `VG19`-`VG22`, with retired `VG06` omitted and `VG17`/`VG18` reserved for the exploratory sign-group modules), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag, correlated-random-effect, child-slope and low-rank-factor structures.
+There are currently twenty registered models (`VG01`-`VG16` and `VG19`-`VG23`, with retired `VG06` omitted and `VG17`/`VG18` reserved for the exploratory sign-group modules), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag, correlated-random-effect, child-slope and low-rank-factor structures.
 
 ### Shared utilities (`dse_research_utils`)
 

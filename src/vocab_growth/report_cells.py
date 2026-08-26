@@ -183,6 +183,16 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ("tau_subj_q", "Between-child SD, production ratio $q$", "tau_subj_q_sigma", "odds"),
     ("tau_subj_sign", "Between-child SD, signing", "tau_subj_sign_sigma", "odds"),
     ("tau_psi", "Between-study SD of the sign–speech association", "tau_psi_sigma", "odds"),
+    # VG20's correlation had no entry here at all, so its priors table omitted
+    # the one prior the model exists to place (#233). It is a top-level scalar
+    # field rather than part of a subject-scale block, so it needs its own kind
+    # -- `_subject_scale_row` never sees it.
+    (
+        "rho_uq",
+        "Correlation between a child's understood and $q$ offsets $\\rho_{uq}$",
+        "subject_re_correlation_eta",
+        "lkj",
+    ),
     ("log_psi", "Sign–speech association $\\psi$ (log scale)", "log_psi", "log_psi"),
     ("beta_lag", "Cross-lag coefficient $\\beta$", "beta_lag", "lag"),
 ]
@@ -335,6 +345,28 @@ def _prior_row(
         else:
             reading = f"median {median:.2f} logits (odds ×{math.exp(median):.2f} at +1 SD)"
         return description, f"HalfNormal({sigma:g})", reading
+
+    if kind == "lkj":
+        # `(rho + 1) / 2 ~ Beta(eta, eta)` is exactly LKJ(eta) for a 2x2, which
+        # is how the build writes it so the correlation stays a named variable.
+        # Named as LKJ here for the same reason `_subject_scale_row` does.
+        eta = definition.get(stem)
+        if eta is None:
+            return None
+        eta = float(eta)
+        lo = float(stats.beta.ppf(0.05, eta, eta)) * 2.0 - 1.0
+        hi = float(stats.beta.ppf(0.95, eta, eta)) * 2.0 - 1.0
+        if eta == 1.0:
+            emphasis = "flat over (-1, 1), so no size of correlation is favoured"
+        elif eta > 1.0:
+            emphasis = "pulled toward zero, so a correlation has to be evidenced"
+        else:
+            emphasis = "pushed toward ±1, which favours a strong correlation"
+        return (
+            description,
+            f"LKJ({eta:g}), i.e. $(\\rho_{{uq}}+1)/2 \\sim$ Beta({eta:g}, {eta:g})",
+            f"centred on zero and {emphasis}; 5–95% {lo:+.2f} to {hi:+.2f}",
+        )
 
     if kind in {"lag", "log_psi"}:
         mu = definition.get(f"{stem}_mu", 0.0)
@@ -818,11 +850,77 @@ def render_headline_quantities(directory: str = ".") -> None:
     )
 
 
+def _child_slope_blocks(frame, manifest: dict) -> list[tuple[str, float, float, float]]:
+    """The (name, tau0, tau1, rho01) of each child intercept-and-rate block present.
+
+    VG19 and VG22 keep the constant-offset names ``tau_subj_u`` / ``tau_subj_q``
+    as deterministic aliases for ``tau0`` -- the between-child scale **at the
+    reference age** -- so that every consumer written against VG10 keeps working
+    (``gp_utils.build_child_slope``, ``build_child_factor``). The cost is that a
+    table which prints the alias under the label "Between children, understood"
+    is describing one age and implying every age, which is what #233 flagged:
+    under a rate the between-child SD is age-varying by construction.
+
+    Only blocks whose within-outcome correlation is a *named scalar* qualify.
+    VG19 emits ``{name}_rho``; VG22's factor form carries the same quantity as
+    an element of the ``subject_factor_corr`` matrix, and its element naming in
+    ``diagnostics.csv`` is not relied on here -- those models get the relabelled
+    alias without the age table rather than a scale computed from a guess.
+    """
+    column = next((c for c in ("mean", "Mean", "median") if c in frame.columns), None)
+    if column is None:
+        return []
+    blocks = []
+    for name in ("tau_subject", "tau_subj_u", "tau_subj_q"):
+        needed = (f"{name}_0", f"{name}_1", f"{name}_rho")
+        if not all(key in frame.index for key in needed):
+            continue
+        blocks.append((
+            name,
+            float(frame.loc[f"{name}_0", column]),
+            float(frame.loc[f"{name}_1", column]),
+            float(frame.loc[f"{name}_rho", column]),
+        ))
+    return blocks
+
+
+def _slope_scale_ages(manifest: dict, ref_age: float) -> list[float]:
+    """Ages to evaluate an age-varying child scale at, inside the reporting cap.
+
+    Both scales here belong to comprehension or to a ratio of it, so both take
+    the comprehension cap; reporting either past it would quote a between-child
+    spread at an age the model declines to report a mean for.
+    """
+    definition = (manifest.get("model") or {}).get("definition") or {}
+    ages = [float(a) for a in (definition.get("ages_query") or [])]
+    if not ages:
+        return []
+    cap = definition.get("report_max_age_understood")
+    if cap is not None:
+        ages = [a for a in ages if a <= float(cap)]
+    if not ages:
+        return []
+    ages = sorted(set(ages))
+    lo, hi = ages[0], ages[-1]
+    # Four evenly spaced grid ages plus the reference age, which is where tau0
+    # is read and so has to appear even when the spacing would miss it.
+    n = len(ages)
+    span = max(n - 1, 1)
+    picked = {ages[round(i * span / 3)] for i in range(4)}
+    if lo <= float(ref_age) <= hi:
+        picked.add(float(ref_age))
+    return sorted(picked)
+
+
 def render_variation_table(directory: str = ".") -> None:
     """Print the fitted random-effect scales, with an odds reading.
 
     Answers the question the hierarchical models exist to answer -- how much do
     children differ, and how much do studies -- which no report currently states.
+
+    Under a child intercept-and-rate block the between-child scale is not one
+    number, so the alias row is labelled with the age it refers to and a second
+    table gives the scale across the reported ages (#233).
     """
     import pandas as pd
 
@@ -849,6 +947,16 @@ def render_variation_table(directory: str = ".") -> None:
     if column is None:
         return
 
+    manifest = read_manifest(directory)
+    definition = (manifest.get("model") or {}).get("definition") or {}
+    ref_age = definition.get("subject_slope_ref_age_months")
+    slope_names = {
+        name for name in labels if f"{name}_1" in frame.index and f"{name}_0" in frame.index
+    }
+    if slope_names and ref_age is not None:
+        for name in slope_names:
+            labels[name] = f"{labels[name]} (at {float(ref_age):g} months)"
+
     rows = [
         (label, float(frame.loc[name, column]))
         for name, label in labels.items()
@@ -862,9 +970,56 @@ def render_variation_table(directory: str = ".") -> None:
     for label, value in sorted(rows, key=lambda r: -r[1]):
         print(f"| {label} | {value:.2f} | ×{math.exp(value):.1f} the odds |")
     print()
-    print(
+    caption = (
         ": Posterior means of the random-effect scales, read from `diagnostics.csv`. "
         "Larger means that group differs more from the population average."
+    )
+    if slope_names:
+        caption += (
+            " This model gives each child a **rate** as well as an offset, so its "
+            "between-child scales are the spread at the reference age only — they "
+            "are aliases for $\\tau_0$, not a single spread that holds at every age. "
+            "The table below gives the rest."
+        )
+    print(caption)
+
+    blocks = _child_slope_blocks(frame, manifest)
+    if not blocks or ref_age is None:
+        if slope_names and not blocks:
+            print()
+            print(
+                "_The age-varying between-child scale is not tabulated for this "
+                "model: it needs the within-outcome offset-rate correlation as a "
+                "named scalar, and this fit records it only inside a correlation "
+                "matrix._"
+            )
+        return
+
+    ages = _slope_scale_ages(manifest, float(ref_age))
+    if not ages:
+        return
+
+    print()
+    print("| Source of variation | " + " | ".join(f"{a:g} mo" for a in ages) + " |")
+    print("| --- |" + " --- |" * len(ages))
+    for name, tau0, tau1, rho01 in blocks:
+        cells = []
+        for age in ages:
+            d = (age - float(ref_age)) / 12.0
+            variance = tau0**2 + 2.0 * rho01 * tau0 * tau1 * d + (tau1 * d) ** 2
+            cells.append(f"{math.sqrt(max(variance, 0.0)):.2f}")
+        label = labels[name].split(" (at ")[0]
+        print(f"| {label} | " + " | ".join(cells) + " |")
+    print()
+    print(
+        ": Between-child SD in logits at each age, as "
+        "$\\sqrt{\\tau_0^2 + 2\\rho_{01}\\tau_0\\tau_1 D + \\tau_1^2 D^2}$ with $D$ the "
+        f"distance from the {float(ref_age):g}-month reference age in years. **Plug-in, "
+        "not a posterior summary**: it is evaluated at the posterior means of "
+        "$\\tau_0$, $\\tau_1$ and $\\rho_{01}$ rather than draw by draw, so it "
+        "carries no interval and is not the posterior mean of the SD. Ages stop at "
+        "the comprehension reporting cap, because both scales belong to "
+        "comprehension or to a ratio of it."
     )
 
 

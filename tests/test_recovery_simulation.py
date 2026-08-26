@@ -414,3 +414,117 @@ def test_frame_round_trip_still_catches_an_id_turning_numeric(tmp_path, monkeypa
     monkeypatch.setattr("vocab_growth.recovery.simulate._read_frame", _coercing_read)
     with pytest.raises(RuntimeError, match="changed dtype on the Parquet round trip"):
         _write_frame(frame, str(path))
+
+
+# --------------------------------------------------------------------------
+# Provenance: a staged run must not mix definitions or fits (#233)
+# --------------------------------------------------------------------------
+
+
+def _written_simulation(tmp_path, definition):
+    """A simulation directory carrying ``definition`` in its record."""
+    import json
+
+    import xarray as xr
+
+    from vocab_growth.fit_artifacts import normalise_for_json
+    from vocab_growth.recovery.simulate import (
+        SIMULATION_FILENAME,
+        SYNTHETIC_FRAME_FILENAME,
+        TRUTH_FILENAME,
+    )
+
+    _write_frame(_bivariate_frame(), str(tmp_path / SYNTHETIC_FRAME_FILENAME))
+    xr.DataTree.from_dict(
+        {"posterior": xr.Dataset({"eta_u": ("draw", np.array([0.5]))})}
+    ).to_netcdf(tmp_path / TRUTH_FILENAME)
+    (tmp_path / SIMULATION_FILENAME).write_text(
+        json.dumps(
+            {"simulation": {"definition": normalise_for_json(definition),
+                            "truth_source": "prior"}}
+        )
+    )
+    return tmp_path
+
+
+def test_load_simulation_rejects_a_definition_that_has_moved(tmp_path):
+    """--simulate-only and --fit-only can be days apart; a definition edit between
+    them silently fits one model's data with another model."""
+    from dataclasses import replace
+
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.simulate import load_simulation
+
+    definition = MODEL_REGISTRY["vg10"]
+    directory = _written_simulation(tmp_path, definition)
+    moved = replace(definition, report_max_age_understood=84)
+
+    with pytest.raises(ValueError, match="different definition"):
+        load_simulation(str(directory), expected_definition=moved)
+
+
+def test_load_simulation_names_the_fields_that_differ(tmp_path):
+    """The error has to be actionable — "it changed" is not a diagnosis."""
+    from dataclasses import replace
+
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.simulate import load_simulation
+
+    definition = MODEL_REGISTRY["vg10"]
+    directory = _written_simulation(tmp_path, definition)
+    moved = replace(definition, report_max_age_understood=84)
+
+    with pytest.raises(ValueError, match="report_max_age_understood"):
+        load_simulation(str(directory), expected_definition=moved)
+
+
+def test_load_simulation_accepts_the_definition_it_was_written_from(tmp_path):
+    """The check must not fire on the ordinary path."""
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.simulate import load_simulation
+
+    definition = MODEL_REGISTRY["vg10"]
+    directory = _written_simulation(tmp_path, definition)
+
+    frame, _truth, record = load_simulation(str(directory), expected_definition=definition)
+    assert len(frame) == 5
+    assert record["simulation"]["truth_source"] == "prior"
+
+
+def test_truth_from_trace_refuses_a_fit_that_is_not_the_current_definition(tmp_path):
+    """Matching free-variable NAMES were the only check, and names survive an
+    anchor recalibration, a prior widening and every reporting-cap change."""
+    import xarray as xr
+
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.simulate import truth_from_trace
+
+    xr.DataTree.from_dict(
+        {"posterior": xr.Dataset(
+            {"eta_u": (("chain", "draw"), np.zeros((2, 4)))}
+        )}
+    ).to_netcdf(tmp_path / "trace.nc")
+
+    with pytest.raises(ValueError, match="cannot supply a truth draw"):
+        truth_from_trace(
+            str(tmp_path / "trace.nc"),
+            ["eta_u"],
+            replicate=1,
+            definition=MODEL_REGISTRY["vg10"],
+        )
+
+
+def test_truth_from_trace_still_reads_a_bare_trace_when_not_asked_to_validate(tmp_path):
+    """The provenance check is opt-in at the reader so the unit tests can drive it."""
+    import xarray as xr
+
+    from vocab_growth.recovery.simulate import truth_from_trace
+
+    xr.DataTree.from_dict(
+        {"posterior": xr.Dataset(
+            {"eta_u": (("chain", "draw"), np.arange(8.0).reshape(2, 4))}
+        )}
+    ).to_netcdf(tmp_path / "trace.nc")
+
+    truth = truth_from_trace(str(tmp_path / "trace.nc"), ["eta_u"], replicate=1)
+    assert truth.source == "posterior"

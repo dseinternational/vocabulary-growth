@@ -268,10 +268,12 @@ def test_subject_marginal_predictive_uses_the_correlation():
     This checks the *precondition* the patched branch keys on -- that ``rho_uq``
     is reachable from the predictive path for VG20 and absent for VG10 -- which
     is what silently failed before. It does not by itself prove the branch is
-    taken; that is established end-to-end by regenerating VG20's plots from its
-    trace and re-running gate 3, and by VG10's regenerated artefacts being
-    unchanged. Kept because the precondition is the cheap half and would catch a
-    refactor that stopped exposing ``rho_uq`` here.
+    taken. That gap is now closed by
+    ``test_vg20_takes_the_correlated_branch_and_vg10_does_not`` and the three
+    hermetic tests beside it (#233); before those, the only end-to-end evidence
+    was regenerating VG20's plots and re-running gate 3. Kept because the
+    precondition is the cheap half and would catch a refactor that stopped
+    exposing ``rho_uq`` here.
     """
     import contextlib
     import io
@@ -359,3 +361,238 @@ def test_the_correlated_marginal_draw_preserves_each_marginal_sd():
     independent = (tau_u * z_u + tau_q * z_q).std()
     correlated = (delta_u + delta_q).std()
     assert correlated > independent
+
+
+def test_the_correlated_branch_executes_and_realises_the_correlation():
+    """Run the branch itself, not the precondition for reaching it (#233).
+
+    `test_subject_marginal_predictive_uses_the_correlation` above says outright
+    that it "does not by itself prove the branch is taken", and until 2026-08-24
+    nothing else did: the correlated construction was inline in
+    `sample_posterior_predictive`, which cannot be called without a fitted trace
+    and a prepared database. This drives the extracted function through PyMC,
+    hermetically, and checks the three properties the construction exists for.
+    """
+    import numpy as np
+    import pymc as pm
+
+    from vocab_growth.models.common_bivariate import unseen_child_correlated_delta_q
+
+    tau_u, tau_q, rho = 0.786, 1.285, 0.368
+
+    with pm.Model():
+        delta_u = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_u)
+        delta_q = unseen_child_correlated_delta_q(
+            delta_u, tau_subj_u=tau_u, tau_subj_q=tau_q, rho=rho
+        )
+        drawn_u, drawn_q = pm.draw(
+            [delta_u, delta_q], draws=200_000, random_seed=20260824
+        )
+
+    assert drawn_u.std() == pytest.approx(tau_u, rel=0.02)
+    assert drawn_q.std() == pytest.approx(tau_q, rel=0.02), (
+        "the whitening term is what keeps the q deviate's spread equal to "
+        "tau_subj_q whatever the correlation"
+    )
+    assert np.corrcoef(drawn_u, drawn_q)[0, 1] == pytest.approx(rho, abs=0.01)
+
+
+def test_the_correlated_branch_reduces_to_independence_at_zero():
+    """VG10 is VG20 at rho = 0, and that must hold of the predictive too."""
+    import numpy as np
+    import pymc as pm
+
+    from vocab_growth.models.common_bivariate import unseen_child_correlated_delta_q
+
+    tau_u, tau_q = 0.786, 1.285
+    with pm.Model():
+        delta_u = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_u)
+        delta_q = unseen_child_correlated_delta_q(
+            delta_u, tau_subj_u=tau_u, tau_subj_q=tau_q, rho=0.0
+        )
+        drawn_u, drawn_q = pm.draw(
+            [delta_u, delta_q], draws=200_000, random_seed=20260824
+        )
+
+    assert np.corrcoef(drawn_u, drawn_q)[0, 1] == pytest.approx(0.0, abs=0.01)
+    assert drawn_q.std() == pytest.approx(tau_q, rel=0.02)
+
+
+def test_the_correlated_branch_creates_exactly_one_named_variable():
+    """The construction promises it renames nothing and adds no node beyond
+    `_z_subj_q_marg`; a refactor that broke that would change every model's
+    graph, not only VG20's."""
+    import pymc as pm
+
+    from vocab_growth.models.common_bivariate import unseen_child_correlated_delta_q
+
+    with pm.Model() as model:
+        delta_u = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=0.8)
+        before = {v.name for v in model.free_RVs}
+        unseen_child_correlated_delta_q(
+            delta_u, tau_subj_u=0.8, tau_subj_q=1.3, rho=0.37
+        )
+        added = {v.name for v in model.free_RVs} - before
+
+    assert added == {"_z_subj_q_marg"}
+
+
+def test_vg20_takes_the_correlated_branch_and_vg10_does_not():
+    """The branch fingerprint on the real graphs, which is what the precondition
+    test could not establish.
+
+    `_z_subj_q_marg` is created only by the correlated construction (VG20) or by
+    the age-varying scale, which the engine refuses alongside a correlation;
+    `_delta_subj_q_marg` only by the independent one. So the pair separates the
+    two branches exactly. Needs the prepared DuckDB, like its neighbours.
+    """
+    import contextlib
+    import io as _io
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+    import pymc as pm
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def predictive_variables(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            cbr.prepare_bivariate_re_data(ctx, definition)
+            cb.configure_bivariate_priors(ctx, definition)
+            cbr.build_model_re(ctx, definition)
+
+        # Rebuild only the unseen-child block, exactly as the predictive does.
+        variables = ctx.model_variables
+        rho = variables.get("rho_uq")
+        with ctx.model:
+            delta_u = pm.Normal(
+                "_delta_subj_u_marg", mu=0.0, sigma=variables["tau_subj_u"]
+            )
+            if rho is not None:
+                cb.unseen_child_correlated_delta_q(
+                    delta_u,
+                    tau_subj_u=variables["tau_subj_u"],
+                    tau_subj_q=variables["tau_subj_q"],
+                    rho=rho,
+                )
+            else:
+                pm.Normal(
+                    "_delta_subj_q_marg", mu=0.0, sigma=variables["tau_subj_q"]
+                )
+        return {v.name for v in ctx.model.free_RVs}
+
+    with tempfile.TemporaryDirectory() as root:
+        names20 = predictive_variables(VG20, root)
+        names10 = predictive_variables(VG10, root)
+
+    assert "_z_subj_q_marg" in names20 and "_delta_subj_q_marg" not in names20
+    assert "_delta_subj_q_marg" in names10 and "_z_subj_q_marg" not in names10
+
+
+# --- VG23: the same block on the typically-developing side (issue #229) --------
+
+
+def test_vg23_differs_from_vg13_only_in_naming_and_the_correlation():
+    """VG23 must be VG13 plus ``rho_uq``, so the pair is a one-factor contrast.
+
+    The same guarantee ``test_vg20_differs_from_vg10_only_in_naming_and_the
+    _correlation`` gives on the Down syndrome side. #229 reads any movement in a
+    reported quantity as evidence about the correlation, which is only sound if
+    nothing else moved with it.
+    """
+    from dataclasses import fields
+
+    from vocab_growth.models.definitions import VG13, VG23
+
+    differing = {
+        field.name
+        for field in fields(VG13)
+        if getattr(VG13, field.name) != getattr(VG23, field.name)
+    }
+    assert differing == {"model_id", "config_name", "banner"}
+    assert VG23.subject_re_correlation_eta == 2.0
+    # Matched to VG20's, so the DS and TD correlations are estimated under the
+    # same prior and their comparison is not a prior artefact.
+    assert VG23.subject_re_correlation_eta == VG20.subject_re_correlation_eta
+
+
+def test_vg23_is_the_subclass_and_the_resolver_accepts_it():
+    from vocab_growth.models.definitions import VG23
+
+    assert isinstance(VG23, BivariateCorrelatedSubjectREModelDefinition)
+    assert (
+        _resolve_subject_re_correlation(
+            VG23, use_subject_re_u=True, use_subject_re_q=True, spec_u=None, spec_q=None
+        )
+        == 2.0
+    )
+
+
+def test_vg23_built_graph_adds_exactly_one_parameter_over_vg13():
+    """A valid definition is not a valid graph — the `single-admin` lesson.
+
+    Builds both real models (no sampling), so it needs the prepared DuckDB.
+    """
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+    from vocab_growth.models.definitions import VG13, VG23
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def build(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        cbr.prepare_bivariate_re_data(ctx, definition)
+        cb.configure_bivariate_priors(ctx, definition)
+        cbr.build_model_re(ctx, definition)
+        return ctx.model
+
+    with tempfile.TemporaryDirectory() as root:
+        m13 = build(VG13, root)
+        m23 = build(VG23, root)
+
+    def names(model):
+        return {v.name for v in model.free_RVs} | {v.name for v in model.deterministics}
+
+    assert names(m23) - names(m13) == {"rho_uq", "rho_uq_raw"}
+    assert names(m13) - names(m23) == set()
+    assert len(m23.free_RVs) == len(m13.free_RVs) + 1
+    # The graph is samplable, not merely constructible.
+    assert np.isfinite(m23.point_logps()["y_u_obs"])

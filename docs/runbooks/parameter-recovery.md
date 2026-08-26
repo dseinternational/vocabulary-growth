@@ -27,19 +27,25 @@ python scripts/fit_recovery.py headline --config test
 
 Useful options:
 
-| Option                     | Effect                                                                   |
-| -------------------------- | ------------------------------------------------------------------------ |
-| `--replicates N`           | Replicates per model (default 3).                                        |
-| `--replicate N`            | Run only replicate N; repeatable.                                        |
-| `--truth posterior\|prior` | Where the truth comes from (default `posterior`).                        |
-| `--config`                 | Sampling configuration; `test` is the honest tier for a recovery claim.  |
-| `--simulate-only`          | Simulate and stop. No MCMC, so this is seconds per replicate.            |
-| `--fit-only`               | Refit existing simulated data.                                           |
-| `--compare-only`           | Re-score existing recovery fits.                                         |
-| `--variant NAME`           | Recover a registered sensitivity variant instead of the model of record. |
-| `--output-dir`             | Output root, as elsewhere in the project.                                |
+| Option                     | Effect                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `--replicates N`           | Replicates per model (default 3).                                                          |
+| `--replicate N`            | Run only replicate N; repeatable.                                                          |
+| `--truth posterior\|prior` | Where the truth comes from (default `posterior`).                                          |
+| `--config`                 | Sampling configuration; `test` is the honest tier for a recovery claim.                    |
+| `--simulate-only`          | Simulate and stop. No MCMC, so this is seconds per replicate.                              |
+| `--fit-only`               | Refit existing simulated data.                                                             |
+| `--compare-only`           | Re-score existing recovery fits.                                                           |
+| `--variant NAME`           | Recover a registered sensitivity variant instead of the model of record.                   |
+| `--fit-variant NAME`       | Refit a _different_ definition from the one simulated; `record` names the model of record. |
+| `--output-dir`             | Output root, as elsewhere in the project.                                                  |
 
-The stages are separable so a long run can be resumed, and so the simulation can be inspected before hours of sampling are committed. A sensible sequence for a real study:
+The stages are separable so a long run can be resumed, and so the simulation can be inspected before hours of sampling are committed. Two provenance checks make the separation safe, both added 2026-08-24 for [#233](https://github.com/dseinternational/vocabulary-growth/issues/233):
+
+- **The source fit is validated before a truth is taken from it.** `--truth posterior` puts the model of record's output directory through `fit_artifacts.validate_fit_output`, comparing the normalised definition and the raw-data fingerprint and requiring a complete fit. Matching free-variable _names_ used to be the only check, and names survive most definition changes — every anchor recalibration, every prior widening, the whole reporting-cap family — so a stale trace passed. That mattered more here than elsewhere, because the deterministics are recomputed from the current graph: a stale trace's free parameters plus today's deterministics is a truth no fit ever held.
+- **The simulation records its definition, and every later stage compares it.** `--fit-only` and `--compare-only` refuse a simulation written from a different definition and name the fields that differ. Nothing else would catch a definition edited between the stages — the frame carries only counts, and the truth carries only parameter values.
+
+Both refuse rather than warn. Re-run the simulate step, or check out the revision the simulation was made under. A sensible sequence for a real study:
 
 ```bash
 python scripts/fit_recovery.py headline --config test --simulate-only
@@ -71,6 +77,33 @@ Two things follow from the variant being a different model, and both are deliber
 Output is labelled `<model>-<variant>` throughout — `recovery_matrix_vg10-a1-tau-age-varying.csv` — so a variant's record cannot be confused with, or overwrite, the model of record's.
 
 **Siting the check where identification is hard.** A recovery whose truth sits where the data are plentiful will succeed and prove nothing. Proposal A1 is the worked example: its claim is about the split between the between-child scale and the dispersion, and [202608141600](../../notes/202608141600-rank-stability-tracking.md) §5 shows that on Down syndrome _production_ below 30 months the binomial measurement bound exceeds the entire within-child variance — the two are not separable there at all. A1's parameterisation puts a named parameter at each end of that range (`tau_subj_q_young` at 24 months against a flat `kappa_s`), so the young-age production question is scored directly, per parameter, on the full design. **A recovery failure on that pair is the informative outcome**, not a blocked one: it would confirm from inside the model what the repeated measures say from outside. Score comprehension and production separately — their measurement shares differ by an order of magnitude.
+
+### Asking whether a prior causes a recovery bias
+
+`--variant` substitutes one definition for **both** the simulation and the refit. That is the right thing for a structural variant — a model should be asked to recover itself — but it means the harness cannot attribute a recovery bias to a prior, because moving the prior moves the truth with it. Both arms are self-recovery, and both can be well calibrated while the estimator under any _fixed_ truth is not.
+
+`--fit-variant` separates the two roles. `--variant` (or its absence) chooses what the data are simulated from; `--fit-variant` chooses what is fitted to them.
+
+```bash
+# Data from VG15's own posterior; refitted with tau_psi ~ HalfNormal(0.3).
+python scripts/fit_recovery.py vg15 --fit-variant tau-psi-narrow --config test
+```
+
+Run that alongside the plain `fit_recovery.py vg15` and the two share a truth, a dataset and a seed, and differ only in the prior — so a difference in the recovered `tau_psi` is attributable to the prior and to nothing else. This is what [#226](https://github.com/dseinternational/vocabulary-growth/issues/226) item 3 asks for: `tau_psi ~ HalfNormal(1.0)` has a prior median of 0.67 against truths of 0.9–1.3, and the question is whether that is what over-shrinks `psi_study`.
+
+The reverse direction is available too, for asking whether a variant's _truth_ is harder than the record's:
+
+```bash
+python scripts/fit_recovery.py vg15 --variant tau-psi-narrow --fit-variant record --config test
+```
+
+Three things hold whichever way round it is run:
+
+- **The simulation directory stays keyed on the simulating definition.** A cross-definition refit reuses the existing simulated data rather than demanding a separately seeded copy, which is what makes the arms comparable.
+- **The provenance guard is unchanged.** `load_simulation` still compares the recorded definition against the one that produced the frame. The seam relaxes _which model is fitted_, not _whether the data are what they claim to be_.
+- **The output carries an `-under-<tag>` marker**, in the fit's config name, its banner and its scored label — `recovery_matrix_vg15-tau-psi-narrow-under-record.csv`. A cross-definition run answers a different question from self-recovery and must not be able to land in, or be read as, a self-recovery result. Scoring takes the intersection of the truth's quantities and the posterior's, so a variant that adds or drops parameters scores what the two share.
+
+The hand-rolled precedent is `scripts/experiments/vg10_under_vg20_truth.py`, which fits VG10 to VG20-simulated data by monkey-patching a `-under-vg20-truth` suffix onto a definition. The seam generalises exactly that, with the same naming convention, inside the supported harness.
 
 ### Choosing the truth source
 

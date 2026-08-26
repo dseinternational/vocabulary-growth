@@ -33,9 +33,31 @@ naive run hits. Distilled from the 2026-07-12 run
   tell-tale of the old rounding.
 - Data current: `python scripts/prepare_data.py` (confirm the 810 reference scale;
   see `docs/report/methods-data.qmd`).
-- Disk: **set `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact` before you start**, and
+- **On the DSE data-science fleet, most of this list is already on the image.**
+  The stack's cloud-init installs `uv`, the newest stable CPython, Node.js active
+  LTS, Quarto with a per-user TinyTeX (so `quarto render --to pdf` works without
+  a separate LaTeX install), Pandoc, plotting fonts, `gh`, Graphviz, and — on the
+  ARM64 CPU bootstrap — pinned **PowerShell 7.6 LTS exposed as `pwsh`**, which is
+  what `run_replication.ps1` needs. Do not install competing versions by hand.
+  The one thing worth checking rather than assuming is the report book's fonts:
+  the image provides "plotting fonts", which is not the same claim as Source
+  Sans 3 and Monaspace Neon, and those are needed only for the `pdf` format.
+- **Graphviz `dot` on `PATH`.** Present on the DSE VM images since 2026-08-25. It
+  is the one tool a _fit_ tolerates missing — `render_model_graph` catches the
+  failure and prints a warning rather than aborting — but every model report
+  references `gp_model_graph.svg`, so without it all twenty render with a broken
+  figure and nothing fails loudly enough to notice.
+- Disk: **choose the trace tier against the volume you actually have, and set it
+  before you start.** Under about 1 TB use
+  `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact`; at 1 TB or more leave the default
+  `full`, and make sure that variable is _unset_ so it cannot silently override
+  you. `compact` is byte-identical for reporting but blocks recovery scoring,
+  `regenerate_plots.py` and `loso_compare.py` on those fits without a refit, so
+  it is a saving worth making only when the space is genuinely tight. Either way,
   redirect output off the checkout with `--output-dir <scratch>` or
-  `DSE_VOCAB_GROWTH_OUTPUT_DIR`. The report figure cache
+  `DSE_VOCAB_GROWTH_OUTPUT_DIR` — and point it at the **attached** disk rather
+  than at a local temp disk, for the reasons in
+  [Fit straight to the attached disk](#fit-straight-to-the-attached-disk-not-to-local-scratch). The report figure cache
   (`docs/report/figures/`) always stays in the checkout. Sizing and the
   exceptions are in [Surviving a full disk](#surviving-a-full-disk) — read it
   before the first fit, not after. The old advice here ("~20 GB × n_models") was
@@ -128,11 +150,14 @@ The dirty-checkout refusal is not fussiness, and `-AllowDirty` is a development-
 The DS datasets are small; the full-data TD models (`vg11`, `vg12`) are
 memory-heavy. So:
 
-- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20`): run
+> [!WARNING]
+> **The two lists below must together cover every key in `MODEL_REGISTRY`.** They are an explicit `-Models` split, so the driver's registry-derived default does not apply and a model missing from both is never queued, never validated, and never reported as absent — the run ends `SUCCESS` having fitted a subset. `tests/test_runbook_model_lists.py` checks the split against the registry; if it fails, correct the lists here rather than the test.
+
+- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22`): run
   a pool, `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores):
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22
   ```
 
   `-MaxParallel` above 1 pins `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
@@ -146,11 +171,82 @@ memory-heavy. So:
   itself rather than stacking peaks — the post-sampling assembly step is where
   these fits spike, not the sampling.
 
-- **TD models** (`vg03 vg04 vg13 vg11 vg12`): **strictly one at a time** — the
+- **TD models** (`vg03 vg04 vg11 vg12 vg13 vg21 vg23`): **strictly one at a time** — the
   full-data TD fits can OOM if stacked. `vg03` and `vg04` are the exception and may
-  share the box; `vg11`, `vg12` and `vg13` must not share it with anything, including
-  a batch of small DS sensitivity fits (see below). Run them as a separate
+  share the box; `vg11`, `vg12`, `vg13`, `vg21` and `vg23` must not share it with anything,
+  including a batch of small DS sensitivity fits (see below). Run them as a separate
   `-MaxParallel 1` pass; a single pool with a mixed model list cannot express this.
+
+  ```powershell
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23
+  ```
+
+  `vg21` and `vg23` join this pass because both are VG13 with one thing changed and
+  neither is lighter than it: `vg23` is VG13's frame exactly, plus `rho_uq`, and
+  `vg21` widens VG13's 8–18 month window to 8–22, so it sees strictly more of the
+  TD pool than the model the serial rule was written for. Neither has a `rep` fit
+  yet, so neither has a measured peak — treat them as VG13-class until one exists.
+
+### Fit straight to the attached disk, not to local scratch
+
+Asked when the 2026-08 run was provisioned with a 2 TB premium disk: fit to the
+VM's local SSD and copy the results across afterwards, or write straight to the
+attached disk? **Straight to the attached disk.** Three reasons, in order of
+weight.
+
+**The output root has to be one filesystem.** `create_staging_root` puts
+`.staging` _inside_ the output root, and `promote_staged_fit` publishes with
+`os.replace` — a rename. Across filesystems that raises `EXDEV` rather than
+degrading to a copy, so the pipeline cannot stage on local and publish to the
+attached disk; the rollback path (`.previous`, also under the output root) has
+the same constraint. Fitting to scratch therefore means the _whole_ output root
+lives on scratch, and the copy to the attached disk is a separate manual step
+outside the atomicity machinery — a crash during a 320 GB copy leaves a partial
+fit that nothing guards against. That trades a real protection for a saving the
+next point shows is negligible.
+
+**The saving is noise against the sampling.** Posterior sampling is about 92% of
+a `rep` fit's wall clock (measured on VG12: 3h09m of 3h26m), and the trace is a
+single burst at the end. Writing a 16 GB `trace.nc` costs on the order of a
+minute to premium storage and a fraction of that to local NVMe — call it tens of
+seconds per fit, perhaps 10–25 minutes across the whole run. Copying ~320 GB back
+to the attached disk afterwards costs about the same again, so the round trip
+saves nothing and may lose.
+
+**Local disk is disposable by design, and the fits are long.** On the DSE data
+science fleet the two mounts are explicit about this
+([`dsegroup/infrastructure`](https://github.com/dsegroup/infrastructure), the
+data-science stack's cloud-init):
+
+| mount      | what it is                                 | survives teardown |
+| ---------- | ------------------------------------------ | ----------------- |
+| `/data`    | the persistent disk, mounted when attached | yes               |
+| `/scratch` | every local NVMe the tier carries, striped | **no — wiped**    |
+
+`$TMPDIR` points at `/scratch`. **Fit to `/data`.** The XL tier is
+`Standard_E32pds_v6` — the `d` variants do carry local NVMe, so the choice
+genuinely exists here and is not small: [infrastructure
+#1804](https://github.com/dsegroup/infrastructure/pull/1804) stripes all of it
+into one RAID0 volume, taking XL's `/scratch` from 440 GiB to about 1.3 TiB.
+That PR was still open on 2026-08-25, so a box provisioned before it merges comes
+up with the single-device 440 GiB `/scratch`; either way the size objection is
+not what decides this.
+
+What decides it is that `/scratch` is _meant_ to be lost. It is wiped on
+teardown, and a deallocate/start wipes local NVMe outright even though #1804
+gives the mount an `fstab` entry that survives a plain reboot. The stripe also
+multiplies the device-failure surface across three disks — which that PR
+correctly accepts, on the grounds that the failure "costs a workspace that
+teardown was going to wipe anyway". A fifteen-hour VG12 fit is not that. This
+project has already lost `rep` fits to a full disk (2026-08-14) and to a
+concurrent OOM; host maintenance is not a third failure mode worth buying for
+tens of seconds per fit.
+
+**Where `/scratch` does help**: PyTensor's compile cache
+(`PYTENSOR_FLAGS=base_compiledir=/scratch/...`). Many small latency-sensitive
+files, disposable by design — exactly what the mount is for, and with the stripe
+it has both the room and the throughput. Keep expectations low: CI measured the
+compile cache as noise and dropped it in `8b7de41`.
 
 ### Surviving a full disk
 
@@ -169,6 +265,8 @@ $env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
 **Three models should stay at `full`: VG10, VG12 and VG15.** They are `fit_recovery.py`'s headline set, and recovery scoring refuses a compacted trace up front — as do `regenerate_plots.py` and `loso_compare.py`. Pass `--trace-persistence full` for those three specifically. Everything else can be compacted, at the cost of needing a refit if its plots ever have to be regenerated.
 
 **Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates. At `full` that exceeds 400 GB; at `compact` it is roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB is comfortable at `compact`; 1 TB at `full`.**
+
+The 2026-08 refit is provisioned on a **2 TB attached disk**, so `full` is the tier to use and this section's `compact` advice does not apply to it. Measured against the current traces, its 28 planned fits come to about 320 GB at `full` — lower than the 400 GB above because that figure includes recovery replicates, which this run does not schedule. Either way it is comfortably inside the volume, and a fresh VM starts with an empty `output/`, so the peak equals the total rather than transiently holding both an old and a new trace.
 
 **Recovering a volume that is already full**: `scripts/compact_traces.py` applies the tier to traces already written. It reuses the same policy code the fit pipeline uses, verifies each rewrite carries every free parameter the original had before atomically replacing it, and records the tier in `fit_manifest.json`. It processes smallest-first, which matters — each rewrite needs room for its output beside the original, so the small traces buy the space the large ones need.
 
@@ -279,10 +377,20 @@ Check the reparenting rather than assuming it: `nohup … &` alone leaves the pr
 ### Reporting age caps, and what `regenerate_plots.py` can and cannot fix
 
 Every figure and table stops where its own outcome's evidence stops. The policy
-lives in `src/vocab_growth/reporting_ages.py` — understood **84**, spoken **90**,
+lives in `src/vocab_growth/reporting_ages.py` — understood **72**, spoken **90**,
 signed **84**, and anything conditioned on understood (`q`, `r`, `p_any`,
-comprehension gaps) **84**. Call sites name the _quantity_, not a cap attribute,
-because choosing the wrong attribute is a defect that has already shipped twice.
+comprehension gaps) **72**, because the conditioning rule takes the _lower_ of the
+two components. Call sites name the _quantity_, not a cap attribute, because
+choosing the wrong attribute is a defect that has already shipped twice.
+
+> [!WARNING]
+> Understood was **84** until `ae04e5e` (2026-08-22) returned it to 72, and the
+> sign-ratio helper that makes `r` and `p_any` follow it —
+> `reporting_ages.max_age_for_sign_ratio` — landed a day later in `565a769`.
+> **VG14 and VG15 were fitted in the gap**, on 2026-08-22, so both write
+> `posterior_summary_r` and `posterior_summary_p_any` out to 84. `check_fit.py`
+> passes them, because their manifests record the current definition; only
+> `tests/test_reporting_age_policy.py` sees it. Both need refits — see §2.
 
 > [!IMPORTANT]
 > **`regenerate_plots.py` re-runs the plot stage only.** Artefacts written by the
@@ -292,8 +400,9 @@ because choosing the wrong attribute is a defect that has already shipped twice.
 > stage, so twelve models were brought into line by regeneration alone, but VG14's
 > `posterior_summary_p_any` / `posterior_summary_sign` and VG15's
 > `posterior_summary_monthly_*` / `expected_counts_by_month_*` are summary-stage
-> and stayed stale. They are listed in `KNOWN_STALE` in
-> `tests/test_reporting_age_policy.py`; clear that list when those two are refit.
+> and stayed stale. `KNOWN_STALE` in `tests/test_reporting_age_policy.py` carried
+> them until `fa9f836` emptied it; it is empty now, so any summary-stage artefact
+> left past its cap fails the suite outright rather than being excused.
 
 Check the policy against **output**, not call sites. `tests/test_reporting_age_caps.py`
 walks the AST against a hand-written list of plot functions and so cannot see an

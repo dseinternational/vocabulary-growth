@@ -1,0 +1,214 @@
+---
+title: "Model VG23: Correlated child effects on comprehension and conversion - typically developing children"
+
+date: now
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      # Explicit href rather than `- repo`; see the note in vg20/index.qmd. The
+      # per-model reports render in the OUTPUT directory, which has no
+      # repository above it, so Quarto's `repo` shorthand is a hard error there.
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/dseinternational/vocabulary-growth/
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+:::
+
+::: {.callout-important}
+## This report has not yet been fitted
+
+VG23 was registered on 2026-08-25 and has no fit behind it. This document is written from the model's specification, not from results: it states what the model is and what it is for, and every section that would carry numbers is rendered from whatever fit is present. **It was deliberately written from scratch rather than derived from VG13's report.** Copying the parent's report is how VG21 inherited three claims that had already been withdrawn from VG13 (see [#240](https://github.com/dseinternational/vocabulary-growth/issues/240)), and the same mistake was available here.
+
+Once VG23 has a fit, this narrative should be revisited rather than assumed to still fit — in particular the sections on what the correlation means and what the between-child scales can be read as.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sampling_banner
+
+render_sampling_banner()
+```
+
+VG23 is VG13 plus one parameter. VG13 gives each typically-developing child two deviations — one on the comprehension trajectory, one on the production ratio $q$ — and draws them independently, which fixes at zero the relationship between how much a child understands relative to their age and how much of it they say. VG23 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer. VG13 is nested exactly at $\rho_{uq} = 0$.
+
+It is the same change VG20 makes to VG10 on the Down syndrome side, and the prior is matched deliberately ($\eta = 2$), so the two populations' correlations are estimated under the same prior and any comparison between them is not an artefact of how each was regularised.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
+```
+
+![The model's structure. VG23 differs from VG13 by one node.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Why this model exists
+
+The correlation is worth estimating in its own right, but it is not the reason VG23 was registered. The reason is identification (issue [#229](https://github.com/dseinternational/vocabulary-growth/issues/229), option 3).
+
+Separating **between-child** from **within-child** variation needs replication — the same child measured more than once. The typically-developing pool has very little: VG13's children average 1.16 administrations, and only 15.1% have a second visit. The split is therefore identified largely by the shape of the likelihood rather than by repeated observation, which means it is only as good as the noise model. That is consistent with the recovery evidence: the between-child scale comes back below its truth in 9 of 9 replicates across three models ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)).
+
+A correlation between the two child effects opens a second channel that needs no repeat visit at all. Every administration yields **two** counts — understood and spoken — from one child on one day. A child's persistent ability moves both, while the Beta-Binomial noise is assumed independent across them, so the agreement between the two counts carries information about that child's standing. Where replication informs the split on 15% of rows, this informs it on 100%.
+
+::: {.callout-warning}
+## The confound, stated up front
+
+Both counts come from **one questionnaire completed by one parent**. A parent who over-reports tends to over-report both, so shared reporting tendency is not merely hard to separate from shared child ability — the model contains no term for it at all, and it loads onto $\rho_{uq}$ by default. That biases the correlation, and through it the child scales, **upward**.
+
+The variance partition that VG11 and VG12 carry biases the same quantity **downward**. The two therefore *bracket* the truth rather than resolving it. Neither is a point estimate to publish unqualified, and any number this report produces for $\rho_{uq}$ or for the between-child scales should be read with that stated.
+:::
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Credible interval",
+    "Estimand",
+    "Reference inventory",
+    "Production ratio ($q$)",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Random intercept",
+    "Between-child heterogeneity ($\\tau$)",
+    "Partial pooling",
+    "Population-level and subject-marginal",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "Posterior predictive check",
+    "BFMI (Bayesian fraction of missing information)",
+])
+```
+
+## Priors
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
+
+render_priors_table()
+```
+
+Every prior is VG13's, unchanged. The one addition is the LKJ concentration on the child-effect correlation, $\eta = 2$ — a gentle pull toward independence, so that a correlation has to be evidenced rather than assumed. A prior that made a large correlation cheap would be assuming the answer to the question the model was built to ask.
+
+![Trajectories for words understood drawn from the priors.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
+
+![Trajectories for words spoken implied by those priors, as the product of the understood trajectory and the production ratio.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
+
+![Trajectories for the production ratio $q(a)$ drawn from the priors.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
+
+## Convergence
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_convergence_caveats
+
+render_convergence_caveats()
+```
+
+::: {.callout-note}
+VG13 carries a recorded energy-BFMI caveat, and VG23 may inherit it. The measured position on the typically-developing models is that the energy pathology is driven by children the data cannot inform and is not reparameterisable away: marginalising the singleton child effects raises minimum BFMI from 0.187 to 0.492 without changing the posterior at all, and pushing the sampler harder does not move it (VG12 at target-accept 0.99 removed every divergence and moved BFMI by 0.001). Whether adding the correlation changes this is an open question, and an informative one — a change would be evidence that the second identification channel supplied information rather than reparameterised what was already there.
+:::
+
+![Energy distribution of the sampler.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+![Marginal posterior distributions for the fitted parameters, including $\rho_{uq}$, the study and child scales, the GP hyperparameters and the dispersion terms.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+## Findings
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
+
+render_headline_quantities()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_variation_table
+
+render_variation_table()
+```
+
+Two comparisons are worth making once there are numbers, and neither is automatic:
+
+- **Against VG13**, which is nested at $\rho_{uq} = 0$. The population trajectories should sit close, but agreement is an empirical stability check rather than a correctness invariant — correlation changes nonlinear subject-marginal expectations, and refitting can legitimately reallocate fixed effects and marginal scales.
+- **Against VG20**, which estimates the same parameter on the Down syndrome pool under the same prior. The reporter confound above applies to both, so a difference between the populations is better founded than either value alone.
+
+## Trajectories
+
+![Expected words understood and words spoken on the same axes, across the modelled window.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+
+![The fitted production ratio against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+
+![The expected difference, in words, between what a child understands and what they say.](comprehension_production_gap.png){#fig-comprehension-production-gap .lightbox fig-align="left"}
+
+![Expected spoken vocabulary against expected understood vocabulary. The curve stays below the diagonal by construction, since a child cannot say more words than they understand.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
+
+## Posterior predictions -- words understood
+
+![Median predicted understood vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+
+![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
+
+## Posterior predictions -- words spoken
+
+![Median predicted spoken vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+
+![How the spoken dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+
+## Predictive calibration
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```
+
+## Out-of-sample prediction
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+## Limits
+
+- **The reporter confound above is the first limit, not a footnote.** The model has no same-administration or informant term, so shared reporting tendency has nowhere to go but $\rho_{uq}$.
+- **The window is VG13's**, 8–18 months. The study owner has adopted the 8–22-month specification as VG13's successor (VG21). VG23 is derived from VG13 rather than VG21 so that it differs from its parent in exactly one thing; carrying the correlation to the wider window is a separate step, and should be taken only once VG21 has a fit of its own.
+- **The reference scale is the 810-item inventory**, as elsewhere in this project, and the source forms are shorter. Counts near a short form's ceiling are effectively right-censored.
+- **Nothing here establishes a causal reading.** A correlation between a child's two deviations says they move together, not that one produces the other.

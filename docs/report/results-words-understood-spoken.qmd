@@ -66,7 +66,7 @@ show_or_pending(_gap, "the comprehension–production gap in words")
 The gap above is in words, and it widens with age for most of the range even as the *ratio* $q(a)$ rises: a child who understands many more words can be behind on a larger absolute number of them while saying a larger share of them. The two views are reported separately for that reason.
 
 ::: {.callout-important title="Where these numbers stop resting on data"}
-Comprehension observations thin out above about 60 months and spoken observations above about 72. The tables above are capped at the reporting ages the project applies to each quantity — 84 months for words understood and quantities derived from it, 90 for words spoken — and the monthly reference tables in Appendix C carry an `n_obs` column showing how many observations sit near each age. Rows with no nearby observations are the model's smoothness assumption, not evidence.
+Comprehension observations thin out above about 60 months and spoken observations above about 72. The tables above are capped at the reporting ages the project applies to each quantity — 72 months for words understood and quantities derived from it, 90 for words spoken — and the monthly reference tables in Appendix C carry an `n_obs` column showing how many observations sit near each age. Rows with no nearby observations are the model's smoothness assumption, not evidence.
 :::
 
 ## How fast vocabulary grows {#sec-ds-growth-rate}
@@ -155,9 +155,9 @@ _qds
 
 This reproduces, in a large pooled sample, the long-standing observation that expressive vocabulary lags behind receptive vocabulary in Down syndrome.
 
-The same ratio can be plotted against comprehension level rather than age, which removes the timescale from the picture and asks what a child who understands $N$ words typically says:
+The same ratio can be plotted against comprehension level rather than age, which removes the timescale from the picture. Read it as a statement about **developmental stage**, not about an individual: both axes are population curves, so a point says "at the age when children typically understand $N$ words, they typically say this share of them". It is not $E[q \mid \text{understood} = N]$ for a particular child who understands $N$ words. The two come apart because children differ, and in a known direction — a child ahead of the population comprehension curve for their age carries a positive comprehension offset, and the fitted correlation between those two offsets is positive (@sec-ds-td-variation) — so the genuine conditional relationship rises with $N$ more steeply than this curve. Computing it means integrating the joint child-effect posterior through the comprehension likelihood, which this figure does not do (see [#233](https://github.com/dseinternational/vocabulary-growth/issues/233)).
 
-![The production ratio against words understood rather than age (VG20).](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/production_rate_by_understood.png){#fig-ds-q-by-u}
+![The population production ratio against population expected words understood rather than age (VG20). A developmental-stage relationship between two population curves, not a conditional expectation for a child at a given comprehension level.](figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/production_rate_by_understood.png){#fig-ds-q-by-u}
 
 ## Comparison with typically developing children {#sec-ds-td}
 
@@ -449,8 +449,8 @@ Because a child's spoken vocabulary is the product of what they understand and t
 One caveat survives the fix, and it points the other way. Of the 767 children, 432 are seen once, and 342 of those contribute to the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where a parent who over-reports over-reports both. Shared reporter bias is not separable from shared child ability in that design, so **+0.368 should be read as leaning high**. The independent check that does not share an administration would be VG16's cross-lag between an earlier comprehension record and a later production ratio, but that check is currently unavailable: VG16's estimate is withdrawn pending a corrected refit — its lag construction carried a row-order defect — and the conversion that turned its historical coefficient into a correlation of about +0.24 relied on classical measurement-error assumptions that are not established for its predictor ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)). Until the corrected refit lands, the caution that +0.368 leans high rests on the reporter-bias argument alone, without an independent number to bound it.
 :::
 
-::: {.callout-important title="And the comprehension comparison carries a measured bias"}
-The comprehension row is the structurally clean one, but structural symmetry is not the same as an accurate number, and the bias that has actually been measured is on this side.
+::: {.callout-important title="Both sides of the comprehension comparison carry the same measured bias, so the ratio is little affected"}
+The comprehension row is the structurally clean one, but structural symmetry is not the same as an accurate number. Refitting to data simulated from the model's own posterior returns the between-child scale below the value that generated it — **on both sides of this comparison, not only the typically-developing one**, which is what keeps the ratio close to right.
 
 ```{python}
 #| label: subject-tau-recovery-finding
@@ -479,17 +479,23 @@ else:
         f"per child."
     )
     if _ratio is not None:
+        # The Down syndrome side is the same quantity in the same engine, and
+        # recovery finds it low by a similar amount. See issue #225.
+        _ds_bias = -0.0581
         _print += (
-            f" Because that scale is the typically-developing side of the "
-            f"ratio, a low bias there **overstates** the difference: the "
-            f"reported ratio of {_ratio:.2f} would sit nearer "
-            f"{(_ratio / (1.0 + _bias)):.2f} if the bias carried over at this "
-            f"size."
+            f" That scale is the typically-developing side of the ratio, but the "
+            f"Down syndrome side is the same quantity measured the same way, and "
+            f"it comes back low by a similar amount ({_ds_bias:+.1%}). Correcting "
+            f"only one side would move the reported ratio of {_ratio:.2f} to "
+            f"{(_ratio / (1.0 + _bias)):.2f} and make the difference look "
+            f"overstated; correcting both leaves it at "
+            f"{(_ratio / (1.0 + _bias) * (1.0 + _ds_bias)):.2f}, because a bias "
+            f"shared by both sides cancels in a ratio."
         )
     print(_print)
 ```
 
-The direction is the opposite of the spoken bias above, so the two rows are pulled toward one another and the contrast *between* the outcomes is the reading that suffers most. Three replicates at a development sampling tier, scored against the model's own posterior, establish a direction and a mechanism rather than a magnitude; the equivalent check has not been run on the model behind the spoken row. Tracked as issue #225.
+The direction is solid — the scale comes back low in nine of nine replicates across three models, and it holds at a reporting sampling tier. The magnitude is roughly 3–6% and should not be quoted more precisely. **The mechanism is not established**, and the reparameterisation once blamed for it is carried by only one of the three models that show it. Because both sides of this comparison carry the bias, it falls on the absolute between-child numbers rather than on the comparison itself; the spoken row is derived differently and has not been checked the same way. Tracked as issue #225.
 :::
 
 ![Between-child variation $\tau$ for words spoken, in each population.](figures/comparisons/ds_td_spoken_re_subject_tau.png){#fig-tau-spoken}
