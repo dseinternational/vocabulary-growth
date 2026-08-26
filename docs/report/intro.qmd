@@ -1,18 +1,20 @@
 ---
 title: "Introduction"
-abstract: "*All children with Down syndrome experience delays in language development. By quantifying typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 7 years. Here, we discuss the rationale for the study, our goals, and our empirical and statistical modelling approaches.*"
+abstract: "*All children with Down syndrome experience delays in language development. By estimating typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 6 years.*"
 ---
 
 Children with Down syndrome experience difficulties learning language [@naessLanguageVerbalShortterm2011; @abbedutoLanguageDevelopmentSyndrome2020] and this adversely impacts many aspect of their lives. They learn the meanings of words and learn to say words more slowly than most other children [@naessDifferencesSimilaritiesPredictors2021]. Learning vocabulary is a foundational skill: it is important for learning broader language skills, including grammar, and for learning to read [@naessReadingSkillsChildren2012; @hulmeGrowthReadingSkills2012].
 
-Parents and practitioners working with people with Down syndrome report that past research has not focussed enough on practical issues that might make meaningful differences to their lives [@cristescuShapeResearchChange2024]. This has led to calls for researchers to makes it easier for families and educators to access evidence-based information to inform decisions related to real life issues [@cristescuShapeResearchChange2024].
-
-In our experience, families and educators are interested in information about vocabulary development in children with Down syndrome, including the range of words understood or spoken at different ages, rates of word learning, and the range of ages at which a minimum number of words may be learned. Answers to questions about vocabulary development are of relevance to everyday teaching practice and early intervention. They may alleviate unwarranted concerns about slow progress and may also help to identify children experiencing additional or more complex difficulties. They can also inform teaching recommendations – for example, by estimating the range of ages within which most children are expected to attain specific skills.
+Parents and practitioners working with people with Down syndrome report that past research has not focussed enough on practical issues that might make meaningful differences to their lives, leading to calls for researchers to makes it easier for families and educators to access evidence-based information to inform decisions related to real life issues [@cristescuShapeResearchChange2024]. In our experience, families and educators are interested in information about vocabulary development in children with Down syndrome, including the range of words understood or spoken at different ages, rates of word learning, and the range of ages at which a minimum number of words may be learned. Answers to questions about vocabulary development are of relevance to everyday teaching practice and early intervention. They may alleviate unwarranted concerns about slow progress and may also help to identify children experiencing additional or more complex difficulties. They can also inform teaching recommendations – for example, by estimating the range of ages within which most children are expected to attain specific skills.
 
 This study therefore aims to describe the development of vocabulary knowledge in children with Down syndrome with a focus on interpretable statistics that can inform teaching and support.
 
-
 ## Study aims
 
-[**TODO**]
+This study aims to:
+
+- Characterise trajectories of word learning, and spoken and signed production among children with Down syndrome aged 12 months to 6 years
+- Estimate the ranges of words understood, signed or spoken at 6-monthly intervals from 12 to 72 months.
+- Identify the proportions of children reaching specific vocabulary milestones at different ages
+
 

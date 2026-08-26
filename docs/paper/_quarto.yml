@@ -1,0 +1,48 @@
+project:
+  type: default
+
+  render:
+    - index.qmd
+
+  output-dir: ../../output/paper
+
+  preview:
+    port: 4201
+    browser: true
+    watch-inputs: true
+
+jupyter: python3
+
+execute:
+  freeze: auto
+
+date: now
+
+default-image-extension: png
+
+bibliography: references.bib
+csl: frontiers.csl
+
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: default
+  docx:
+    reference-doc: ../template.docx
+  pdf:
+    documentclass: article
+    papersize: a4
+    colorlinks: true
+    link-citations: true
+    fontsize: 11pt
+    mainfont: "Source Sans 3"
+    sansfont: "Source Sans 3"
+    monofont: "Monaspace Neon"
+    monofontoptions: "Scale=0.8125"
+    linestretch: 1.25
+    geometry:
+      - top=25mm
+      - left=25mm
+      - right=25mm
+      - bottom=25mm

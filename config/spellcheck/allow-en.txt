@@ -23,6 +23,7 @@ EOWPVT
 ESRC
 Edgin
 Fenson
+Figshare
 Floccia
 GLMM
 Galeote
@@ -52,6 +53,7 @@ McElreath
 Mervis
 Miniforge
 Monaspace
+NIEHS
 NZCDI
 Næss
 Odorico

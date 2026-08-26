@@ -1,0 +1,134 @@
+<!--
+Data-access helpers for the paper, mirroring the report's `_report_data.qmd`
+over the same curated figure + summary store (docs/report/figures/, synced by
+scripts/sync_report_figures.py). Included via {{< include _paper_data.qmd >}}
+so no number in the manuscript is ever hand-entered.
+
+This is deliberately a small subset of the report's layer: the shared reader
+comes from dse_research_utils, and only the helpers the paper actually uses
+are exposed here. When the paper needs one of the report-only helpers
+(dq_facts, loo_table, caveats_table, …), lift it into the `vocab_growth`
+package (or dse_research_utils) and use it from both documents rather than
+copying it a second time.
+-->
+
+```{python}
+#| label: paper-data-setup
+#| echo: false
+from pathlib import Path
+
+import pandas as pd
+from dse_research_utils.report.data import ReportData
+from dse_research_utils.report.data import num as _num
+from dse_research_utils.report.data import show_or_pending as _show_or_pending
+from vocab_growth.models.definitions import MODEL_REGISTRY
+
+# The paper reads the SAME store as the report — docs/report/figures/ — so the
+# two documents can never quote different fits. Paths are keyed by
+# <MODEL_ID>-<config_name> derived from definitions.py so they cannot drift.
+FIG_ROOT = Path("../report/figures")
+_DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
+
+_report = ReportData(lambda model_id, _config: FIG_ROOT / _DIR_BY_ID[model_id])
+
+
+def load_summary(model_id, name):
+    """Posterior-summary / data CSV for a model, or None if not present."""
+    return _report.load_summary(model_id, name)
+
+
+def load_json(model_id, name):
+    """Parsed JSON artefact for a model (e.g. the convergence gate), or None."""
+    return _report.load_json(model_id, name)
+
+
+def fig(model_id, filename):
+    """Relative path to a figure for embedding."""
+    return _report.fig(model_id, filename)
+
+
+def val(model_id, summary, age_months, column):
+    """Single value from a summary at (or nearest to) an age, or None."""
+    return _report.value_at(model_id, summary, column, at=age_months, key="age_months")
+
+
+def words(model_id, summary, age_months, column="Ey_median"):
+    """Expected word count at an age, rounded to a whole word (str for prose)."""
+    v = val(model_id, summary, age_months, column)
+    return "—" if v is None else f"{round(v):d}"
+
+
+def num(value, fmt="{:.0f}"):
+    """Format a value for prose, or an em dash when it is missing."""
+    return _num(value, fmt)
+
+
+def show_or_pending(df, what):
+    return _show_or_pending(
+        df, what, hint="its output is present under `docs/report/figures/`"
+    )
+
+
+# Cross-model DS/TD comparison artefacts (docs/report/figures/comparisons/,
+# synced from output/comparisons/). Schemas vary per file.
+COMP_ROOT = FIG_ROOT / "comparisons"
+
+
+def comp_load(name):
+    p = COMP_ROOT / f"{name}.csv"
+    return pd.read_csv(p) if p.exists() else None
+
+
+def comp_row(name, grid_col, grid_val, *, prefix="d"):
+    """Row of a comparison table nearest a grid value, or None."""
+    df = comp_load(name)
+    if df is None or grid_col not in df.columns:
+        return None
+    return df.iloc[int((df[grid_col] - grid_val).abs().argmin())]
+
+
+def band(row, prefix="d", fmt="{:.1f}", unit=""):
+    """A median with its 89% interval, for prose: `13.2 months (89% 12.2 to 14.2)`."""
+    if row is None:
+        return "—"
+    keys = [f"{prefix}_median", f"{prefix}_ci_lo", f"{prefix}_ci_hi"]
+    if any(k not in row or pd.isna(row[k]) for k in keys):
+        return "—"
+    mid, lo, hi = (float(row[k]) for k in keys)
+    tail = f" {unit}" if unit else ""
+    return f"{fmt.format(mid)}{tail} (89% interval {fmt.format(lo)} to {fmt.format(hi)})"
+
+
+def comp_band(name, grid_col, grid_val, prefix="d", fmt="{:.1f}", unit=""):
+    """`band` for the row of a comparison table nearest a grid value."""
+    return band(comp_row(name, grid_col, grid_val, prefix=prefix), prefix, fmt, unit)
+
+
+# Posterior-summary column subset for count tables (schema as in the report:
+# Ey_* = expected count for the mean trajectory, Y_* = predictive count for an
+# individual child; ci50_* inner 50%, ci_* outer 89% equal-tailed intervals).
+_COUNT_COLS = {
+    "age_months": "Age (mo)",
+    "Ey_median": "Expected",
+    "Ey_ci50_lo": "Expected 50% lo",
+    "Ey_ci50_hi": "Expected 50% hi",
+    "Ey_ci_lo": "Expected 89% lo",
+    "Ey_ci_hi": "Expected 89% hi",
+    "Y_ci_lo": "Individual 89% lo",
+    "Y_ci_hi": "Individual 89% hi",
+}
+
+
+def counts_at(model_id, summary, ages, key="age_months"):
+    """A posterior summary reduced to selected ages, with reporting column names."""
+    df = load_summary(model_id, summary)
+    if df is None or key not in df.columns:
+        return None
+    rows = sorted({int((df[key] - a).abs().argmin()) for a in ages})
+    out = df.iloc[rows]
+    cols = [c for c in _COUNT_COLS if c in out.columns]
+    out = out[cols].rename(columns=_COUNT_COLS)
+    numeric = out.select_dtypes("number").columns
+    out[numeric] = out[numeric].round(0).astype("Int64", errors="ignore")
+    return out
+```

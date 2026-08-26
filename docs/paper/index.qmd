@@ -1,0 +1,146 @@
+---
+# Working title. Frontiers advises specific, keyword-bearing titles and
+# discourages vague constructions ("Towards…", bare "Role of…"); revisit once
+# the headline findings are settled.
+title: "Vocabulary growth in children with Down syndrome: Bayesian trajectories of words understood, spoken and signed from pooled international studies"
+author:
+  - name: Frank Buckley
+    orcid: 0000-0002-9708-2705
+    affiliations:
+      - name: Down Syndrome Education International
+        state: Cumbria
+        country: UK
+    corresponding: true
+  - name: Sue Buckley
+    orcid: 0000-0002-9044-3088
+    affiliations:
+      - name: Down Syndrome Education International
+        state: Cumbria
+        country: UK
+      - name: University of Portsmouth
+        city: Portsmouth
+        state: Hampshire
+        country: UK
+abstract: |
+  TODO — one paragraph, at most 350 words, structured (background, methods,
+  results, conclusion) with no citations, figures or abbreviations where
+  avoidable. Draft it last, from the settled Results section.
+keywords:
+  - Down syndrome
+  - vocabulary development
+  - language development
+  - Bayesian modelling
+  - TODO (5–8 keywords required; mix generic and specific)
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Fable 5). This callout is the project's in-draft attribution; at submission it is removed from the manuscript body and the disclosure moves to the generative AI statement below.
+:::
+
+::: {.callout-important}
+Scaffold, 2026-08-26. Target: **Frontiers in Psychology, Original Research** (12,000-word limit excluding abstract, captions, tables, statements and references; mandated Abstract → Introduction → Materials and methods → Results → Discussion structure). The full technical report (`docs/report/`) is this paper's supplementary material. Every number in this document is read live from the curated figure store via `_paper_data.qmd` — never hand-typed — and renders as "pending" until `scripts/sync_report_figures.py` has populated `docs/report/figures/`. See `README.md` in this directory for the plan and constraints.
+:::
+
+{{< include _paper_data.qmd >}}
+
+# Introduction
+
+<!-- Frontiers: no subheadings in the Introduction. Condense from the report's
+intro.qmd, intro-language-development.qmd and intro-statistical-modelling.qmd:
+why vocabulary trajectories in Down syndrome matter for expectations and
+teaching practice; what existing single-study estimates cannot provide; the
+contribution — pooled international data, a common 810-item scale, and joint
+Bayesian models of comprehension, speech and signing. -->
+
+TODO.
+
+# Materials and methods
+
+<!-- Condense from methods-data.qmd, methods-models.qmd and
+methods-workflow.qmd. Detail lives in the supplementary technical report;
+this section must still stand alone at the level Frontiers requires. -->
+
+## Participants and data sources
+
+TODO — the pooled Down syndrome studies and the Wordbank-derived typically-developing reference pool; admission criteria and the documented defect classes masked by default.
+
+## Vocabulary measures and the common scale
+
+TODO — the checklists (MB-CDI Words & Gestures / Words & Sentences, Oxford CDI, DSE checklists), and the 810-item common reference inventory that puts all estimates on one scale.
+
+## Statistical models
+
+TODO — the shared skeleton (logit-scale trend plus HSGP, Beta-Binomial with age-varying dispersion), the `q(a)`/`r(a)` decomposition, study and child random effects with the estimated child-effect correlation, and the sign–speech association. Name the models of record (VG20, VG15, VG11/VG12, VG13) and cite the supplementary report for the full family.
+
+## Inference, validation and reporting
+
+TODO — PyMC/nutpie, the iterative Bayesian workflow [@gelmanBayesianWorkflow2020], convergence gates, parameter recovery, leave-one-subject-out assessment, and the median + 50%/89% interval reporting convention. Disclose generative AI use in the workflow here as well as in the statement below, per Frontiers policy.
+
+# Results
+
+<!-- Placeholder wiring check: this table reads the model of record's summary
+from the shared figure store and renders as "pending" when the store is not
+populated. Replace with the settled selection of findings. -->
+
+## Words understood and spoken
+
+TODO — headline trajectories from VG20.
+
+```{python}
+#| label: tbl-understood-counts
+#| echo: false
+#| tbl-cap: "Expected words understood at selected ages (VG20; placeholder selection)."
+show_or_pending(
+    counts_at("VG20", "posterior_summary_u", [24, 36, 48, 60, 72]),
+    "the VG20 understood summary",
+)
+```
+
+## Comparison with typical development
+
+TODO — the DS-versus-TD contrasts (VG20 against VG11/VG12, and the matched-comprehension production-ratio contrast against VG13).
+
+## Words signed and total expressive vocabulary
+
+TODO — the signing ratio, the sign–speech association and total expressive vocabulary from VG15.
+
+# Discussion
+
+TODO — interpretation for expectations, intervention and teaching practice; limitations (measurement, pooling, identifiability); relation to prior estimates.
+
+# Data availability statement {.unnumbered}
+
+TODO — repository link (https://github.com/dseinternational/vocabulary-growth), what is public (code, models, derived artefacts) and under what constraints the source study data are available.
+
+# Ethics statement {.unnumbered}
+
+TODO — secondary analysis of existing datasets; state the approvals and consent basis of the contributing studies.
+
+# Author contributions {.unnumbered}
+
+TODO — CRediT roles per author.
+
+# Funding {.unnumbered}
+
+TODO.
+
+# Acknowledgments {.unnumbered}
+
+TODO — contributing research groups and charities (align with the report's acknowledgements chapter).
+
+# Conflict of interest {.unnumbered}
+
+TODO.
+
+# Generative AI statement {.unnumbered}
+
+TODO — disclose the use of LLM-based AI tools in the analysis code and drafting, consistent with the repository's attribution policy and the report's AI appendix (`docs/report/appendix-ai.qmd`), in the form the journal's current template requires.
+
+# Supplementary material {.unnumbered}
+
+TODO — the full technical report (rendered from `docs/report/`) as the supplementary PDF: complete model specifications, priors, diagnostics, sensitivity analyses and reference tables.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
