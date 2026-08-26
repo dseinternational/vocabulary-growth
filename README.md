@@ -93,12 +93,12 @@ On Windows, run in UTF-8 mode — `$env:PYTHONUTF8 = "1"` in PowerShell, `set PY
 
 Four things are not Python packages, so `uv sync` cannot supply them:
 
-| Tool                                               | Needed for                                                                       | Install                                                                               |
-| -------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [Graphviz](https://graphviz.org/download/) (`dot`) | the model-diagram figure (`gp_model_graph.svg`) each fit writes                  | `brew install graphviz` / `apt install graphviz` / `winget install Graphviz.Graphviz` |
-| [Quarto](https://quarto.org/docs/get-started/)     | rendering the per-model reports and the report book                              | platform installer                                                                    |
+| Tool                                               | Needed for                                                                  | Install                                                                               |
+| -------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Graphviz](https://graphviz.org/download/) (`dot`) | the model-diagram figure (`gp_model_graph.svg`) each fit writes             | `brew install graphviz` / `apt install graphviz` / `winget install Graphviz.Graphviz` |
+| [Quarto](https://quarto.org/docs/get-started/)     | rendering the per-model reports and the report book                         | platform installer                                                                    |
 | LaTeX                                              | the report's PDF format only — its HTML and DOCX formats need nothing extra | `quarto install tinytex`                                                              |
-| [Node.js](https://nodejs.org/en)                   | spellcheck (CSpell) and Markdown formatting (Prettier)                           | platform installer, then `npm install` in the repository root                         |
+| [Node.js](https://nodejs.org/en)                   | spellcheck (CSpell) and Markdown formatting (Prettier)                      | platform installer, then `npm install` in the repository root                         |
 
 The PDF format additionally expects the Source Sans 3 and Monaspace Neon fonts.
 
