@@ -34,6 +34,8 @@ import argparse
 import os
 import sys
 
+import psutil
+
 from vocab_growth import environment as env
 from vocab_growth.fit_artifacts import (
     TRACE_FILENAME,
@@ -75,12 +77,19 @@ def _is_live(staging_entry: str) -> bool:
     fit leaves its directory behind, and this script exists precisely for the
     aftermath of such a run — so "staging exists" cannot mean "a fit is running".
     An unreadable or unparseable name is treated as live: the conservative
-    direction is to refuse.
+    direction is to refuse. The probe is ``psutil.pid_exists`` because it works
+    on every platform this project supports — ``os.kill(pid, 0)`` is not a
+    portable liveness check, since CPython's ``os.kill`` on Windows calls
+    ``TerminateProcess`` — and a probe that fails for any reason is likewise
+    treated as live.
     """
     parts = staging_entry.rsplit("-", 3)
     if len(parts) < 4 or not parts[2].isdigit():
         return True
-    return os.path.isdir(f"/proc/{parts[2]}")
+    try:
+        return psutil.pid_exists(int(parts[2]))
+    except Exception:
+        return True
 
 
 def _current_tier(directory: str) -> str:

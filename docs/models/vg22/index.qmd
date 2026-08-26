@@ -34,7 +34,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks one question, and adds one parameter to ask it: among children with Down syndrome, do the children who understand **more words than expected for their age** also say a **larger share** of what they understand? Every model from VG05 to VG16 gives each child two separate deviations — one on comprehension, one on the production ratio $q$ — and draws them independently, which fixes the answer at "no relationship" before any data are seen. VG22 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer (issue [#224](https://github.com/dseinternational/vocabulary-growth/issues/224)).
+This model asks how children with Down syndrome differ from one another on four dimensions at once. Every child in the joint model carries four persistent effects: how far their comprehension sits from the expectation for their age (a level, $b^{0u}$), how quickly that gap widens or narrows (a rate, $b^{1u}$), and the same pair on the production ratio $q$ ($b^{0q}$, $b^{1q}$). VG19 gave children rates but drew the two outcomes' effects independently; VG20 correlated the two levels but froze each child's standing in age. VG22 is the successor to both: it draws all four effects from one low-rank factor, $\mathbf{b} = L\mathbf{z}$ with covariance $\Sigma = LL^\top$, so the cross-correlations the data can identify are estimated in one block. It is deliberately **not** a free $4 \times 4$ covariance: Gate 1 found the free form unidentified on these data — the residual maximum-likelihood correlation matrix is singular, and rank 3 reaches the identical likelihood — and the rate-to-rate coupling that first motivated a free form is the weakest of the six cross terms, while the strongest is one no other model estimates: a child's comprehension **level** predicting their production-ratio **rate** at nearly twice the strength of $\rho_{uq}$. See `notes/202608221000-four-by-four-gate1.md`.
 
 ```{python}
 #| echo: false
@@ -44,7 +44,7 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
-![The model graph. VG22 differs from VG10 by one node.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
+![The model graph. VG22 replaces VG10's two independent child intercepts with a rank-3 factor over four child effects — a level and a rate on each outcome.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
 
 ## How to read this report
 
@@ -101,53 +101,57 @@ render_glossary([
 
 ::: {.callout-note collapse="true" title="Terms specific to this model"}
 
-**Correlation between random effects ($\rho_{uq}$)**
+**Low-rank factor**
 
-: Each child carries two persistent offsets: how far their comprehension sits from the population-and-study expectation for their age, and how far their conversion rate sits from the expectation for their age. $\rho_{uq}$ is the correlation between those two offsets **across children**. Positive means the children who are ahead on comprehension also tend to convert more of it; negative means the two run in opposite directions; zero is the assumption every earlier model makes.
+: A way of drawing several correlated quantities from fewer underlying dimensions. Each child gets $k$ independent standard-normal scores $\mathbf{z}$, and their four effects are built as $\mathbf{b} = L\mathbf{z}$, so the covariance $\Sigma = LL^\top$ is positive semi-definite by construction and needs no boundary handling.
+
+**Loading matrix and rank ($L$, $k$)**
+
+: $L$ is the $(4, k)$ matrix that maps a child's $k$ factor scores onto their four effects; the rank $k$ is how many independent dimensions of between-child variation the model allows. $k$ is a definition field, fixed before fitting, because the residual likelihood cannot choose it.
+
+**Implied correlation ($\rho_{uq}$)**
+
+: With a factor form the individual correlations are **derived, not sampled**: $\rho_{uq}$ is a deterministic function of the loadings — the element of the implied correlation matrix linking the two level effects, read at the 36-month reference age. Positive means the children who are ahead on comprehension also tend to convert more of it. Because it is derived, its prior is whatever the loading priors induce — see the known limitation under Priors.
+
+**Identification anchor (gauge)**
+
+: $L$ and $LQ$ give the same covariance for any orthogonal $Q$, so without a constraint the loadings sit on a rotational ridge. Taking $k$ anchor rows and making their $k \times k$ block lower-triangular with a positive diagonal pins the rotation and the sign of each factor. Which rows anchor is a gauge choice for the likelihood — it changes neither $\Sigma$ nor the fitted counts — but **not** for the induced priors on the implied correlations, which is part of the known limitation under Priors.
 
 **Independence assumption**
 
-: Drawing the two offsets from separate distributions with no correlation between them. It is an assumption, not a finding — no earlier model estimated the correlation and found it small, they all set it to zero by construction.
-
-**Nested model**
-
-: A model that is a special case of a larger one at particular parameter values. VG10 is VG22 at $\rho_{uq} = 0$: the two model graphs are otherwise identical, node for node, which is what makes the comparison between them readable.
-
-**Cholesky parameterisation**
-
-: The arithmetic used to give two draws a chosen correlation while leaving each one's spread unchanged. The child's comprehension offset is drawn first; their conversion offset is then built as $\rho_{uq}$ times that draw plus $\sqrt{1 - \rho_{uq}^2}$ times an independent second draw. The second term is what keeps the conversion offsets' spread equal to $\tau_{subj,q}$ whatever the correlation, so a change in $\rho_{uq}$ does not silently rescale anything else.
+: Drawing child effects from separate distributions with no correlation between them. Every model from VG05 to VG16 does this for its two child offsets; it is an assumption, not a finding.
 
 :::
 
 ## Statistical model
 
-The mean structure, the priors, the anchors, the dispersion blocks and the data are **VG10's**, unchanged. Words understood are a bounded count out of the reference inventory with a Beta-Binomial likelihood; on the logit scale the expected proportion understood is a straight-line trend in age plus an anchored Gaussian process, plus a study offset and a child offset. Words spoken are modelled as a fraction $q$ of words understood, with its own trend, GP, study offset and child offset.
+The mean structure, the priors on it, the anchors, the dispersion blocks and the data are **VG10's**, unchanged. Words understood are a bounded count out of the reference inventory with a Beta-Binomial likelihood; on the logit scale the expected proportion understood is a straight-line trend in age plus an anchored Gaussian process, plus a study offset and a child contribution. Words spoken are modelled as a fraction $q$ of words understood, with its own trend, GP, study offset and child contribution.
 
-The single difference is in how the two **child** offsets are drawn.
+The difference is the **child block**: where VG10 gives each child two constant offsets drawn independently, VG22 gives each child four effects drawn jointly from a low-rank factor.
 
-### The correlated child block {#sec-rho-def}
+### The low-rank child factor {#sec-factor-def}
 
-Every model from VG05 to VG16 draws the two offsets independently:
-
-$$
-\delta^{u}_{i} \sim \mathrm{Normal}(0, \tau_{subj,u}), \qquad
-\delta^{q}_{i} \sim \mathrm{Normal}(0, \tau_{subj,q})
-$$
-
-VG22 draws them jointly, with one free correlation:
+The four effects, in this order throughout, are $(b^{0u}, b^{1u}, b^{0q}, b^{1q})$ — comprehension level and rate, then production-ratio level and rate, the rates per year of age. They are drawn as
 
 $$
-\begin{pmatrix} \delta^{u}_{i} \\ \delta^{q}_{i} \end{pmatrix}
-\sim \mathrm{Normal}\left(
-\begin{pmatrix} 0 \\ 0 \end{pmatrix},
-\begin{pmatrix}
-\tau_{subj,u}^{2} & \rho_{uq}\,\tau_{subj,u}\tau_{subj,q} \\
-\rho_{uq}\,\tau_{subj,u}\tau_{subj,q} & \tau_{subj,q}^{2}
-\end{pmatrix}
-\right)
+\mathbf{b}_i = L\,\mathbf{z}_i, \qquad \mathbf{z}_i \sim \mathrm{Normal}(0, I_k), \qquad \Sigma = LL^\top
 $$
 
-Both marginal spreads keep their meaning and their priors. **At $\rho_{uq} = 0$ this is the pair of independent draws above**, which is the sense in which VG10 is nested inside VG22 exactly rather than approximately: the two model graphs differ by $\rho_{uq}$ and by nothing else, a property pinned by a test that builds both models and differences their variables.
+with $k = 3$ the registered rank. Each row of $L$ is a scale times a unit direction,
+
+$$
+L_{j\cdot} = \tau_j\,\frac{\mathbf{w}_j}{\lVert\mathbf{w}_j\rVert}
+$$
+
+where the four scales are $\tau_{subj,u,0}$, $\tau_{subj,u,1}$, $\tau_{subj,q,0}$ and $\tau_{subj,q,1}$, and the $\mathbf{w}_j$ are sampled loading directions. Unit-normalising the rows makes $\Sigma_{jj} = \tau_j^2$ exactly, which is what keeps $\tau_{subj,u,0}$ meaning the same between-child spread it means in VG10, VG19 and VG20 rather than something rank-dependent. The raw loading matrix $W$ is constrained to be lower-triangular with a positive diagonal when its rows are taken in the anchor order $(b^{0u}, b^{0q}, b^{1q}, b^{1u})$ — the two levels, then the production-ratio rate, with the comprehension rate last, because a diagonal only pins its factor's sign if the row it sits on has real between-child variance and $b^{1u}$'s is near zero in every fit of this family. Anchoring a factor on it is what split the first `rep` fit into mirror modes; see `notes/202608231420-vg22-factor-anchor-bimodality.md`. A child's contribution to an observation at age $a$ months is then $b^{0u} + b^{1u}(a - 36)/12$ on the understood logit and $b^{0q} + b^{1q}(a - 36)/12$ on the $q$ logit, so **36 months is the reference age** at which the levels — and the implied correlations between them — are read.
+
+$\rho_{uq}$ is emitted as a deterministic: the element of the implied correlation matrix linking $b^{0u}$ and $b^{0q}$, which is the quantity VG20 estimates directly, so the two models' comparators read the same named number. The full $4 \times 4$ implied correlation matrix is emitted as `subject_factor_corr`.
+
+### What is nested here, and what is not
+
+**VG20 is the special case of this model with both rate loadings at zero.** **Neither VG10 nor VG19 is nested here at any rank below 4**: two independent per-outcome blocks are a full-rank $4 \times 4$ with cross terms at zero, and a factor form reaches zero cross-correlation only by giving the two outcomes orthogonal directions, which at $k < 4$ it cannot do for all four effects at once. The comparisons with VG10 and VG19 are therefore between models rather than within one.
+
+**The rank is a definition field because the data cannot choose it.** Gate 1 puts rank 2 within 2.60 on 2 df of rank 3, and rank 3 within 0.0000 of the free $4 \times 4$, so rank 4 is excluded outright and 2 and 3 are both defensible on the residual likelihood. Ranks 1, 2 and 3 are fitted as a registered sensitivity family. Rank 1 forces $\lvert\rho_{uq}\rvert = 1$ by construction — one factor cannot express anything else — and its fit failed the hard convergence gate (838 parameters over the R-hat threshold, max 2.305, min ESS 7); it is retained under `output/failed/` as the record of that. The registered default moved from 2 to 3 on 2026-08-24, decided by the fits rather than the gate: rank 3 cleared the convergence gate on the plain `rep` configuration with 8 divergences where rank 2 needed a hightune to reach 18 (178 without one) — the larger factor model is the easier geometry, rank 2 having to press four child effects into a two-dimensional space — and the two disagree on the spoken child-slope scale, 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at rank 3, about 2.8 combined standard errors on shared data, so the rank is not a free choice for any reading about how differently children's spoken trajectories steepen.
 
 ### Why the assumption was worth replacing
 
@@ -171,9 +175,21 @@ from vocab_growth.report_cells import render_priors_table
 render_priors_table()
 ```
 
-The only prior that is new here is the one on the correlation. It is placed as $(\rho_{uq} + 1)/2 \sim \mathrm{Beta}(\eta, \eta)$, which for a two-by-two correlation matrix is exactly the LKJ($\eta$) prior, written in the form that keeps $\rho_{uq}$ a named parameter the summaries and the recovery scorer can read directly.
+The factor block replaces VG10's two child-intercept priors with four scale priors, nine loading-direction priors and the per-child factor scores. The two **level** scales, $\tau_{subj,u,0}$ and $\tau_{subj,q,0}$, inherit VG10's own $\mathrm{HalfNormal}(1.5)$ priors, so the intercept spreads keep the model of record's priors exactly. The two **rate** scales, $\tau_{subj,u,1}$ and $\tau_{subj,q,1}$, are $\mathrm{HalfNormal}(0.5)$ per year of age — VG19's choice, for the reason recorded there: in logit per month the maximum-likelihood values are unreadable as a prior, per year they are 0.12–0.29, and $\mathrm{HalfNormal}(0.5)$ has median 0.34, covering both while keeping mass near zero so a rate the data do not support shrinks away. The nine sampled entries of the raw loading matrix $W$ carry $\mathrm{HalfNormal}(1)$ on the three anchor diagonals (`subject_factor_w_00`, `subject_factor_w_21`, `subject_factor_w_32`) and $\mathrm{Normal}(0, 1)$ everywhere else, and each child's factor scores are $\mathrm{Normal}(0, I_3)$.
 
-$\eta = 1$ would be uniform across every correlation from $-1$ to $+1$. The value used here is larger, which places more mass near zero — a deliberate choice, because the two independent measurements motivating the model both put the correlation small and positive, and a prior that made a large correlation cheap would be assuming the answer the model exists to test. The prior is symmetric about zero, so it favours no direction.
+**The rendered priors table above omits every prior this block adds.** The table looks the correlation prior up through a definition field (`subject_re_correlation_eta`) this model does not carry, and it has no rows for the factor scales or the loading entries — a table-rendering gap, flagged here rather than hidden. The priors in force are the ones stated in the previous paragraph. There is **no** LKJ prior on $\rho_{uq}$ in this model: the prior on every implied correlation is whatever the loading priors induce, which is the subject of the next subsection.
+
+### Known limitation: the prior on the implied correlations is induced, not designed
+
+Because the correlations are derived from the loadings rather than sampled, their priors were never chosen — they are whatever the loading priors happen to induce, and what they induce is not neutral.
+
+At the registered anchor order, $\rho_{uq} = w_{20}/\sqrt{w_{20}^2 + w_{21}^2}$ with $w_{20} \sim \mathrm{Normal}(0, 1)$ and $w_{21} \sim \mathrm{HalfNormal}(1)$, which makes the induced prior on $\rho_{uq}$ **exactly the arcsine distribution** on $(-1, 1)$, density $1/(\pi\sqrt{1 - \rho^2})$ — a prior that piles its mass at the extremes. Under it, $P(\lvert\rho_{uq}\rvert > 0.8) = 0.410$ (in closed form, $2\arccos(0.8)/\pi = 0.4097$) and the 89% equal-tailed prior interval is $[-0.985, +0.985]$. VG20's $\mathrm{LKJ}(2)$ prior on the same quantity gives $P(\lvert\rho_{uq}\rvert > 0.8) = 0.056$ and $[-0.715, +0.715]$. **VG22's $\rho_{uq}$ posterior is therefore not prior-comparable with VG20's**: the two models put radically different prior mass on large correlations, and a difference between their posteriors is partly a difference between their priors. The other five correlations of the $4 \times 4$ carry an induced $\mathrm{Uniform}(-1, 1)$ — the $\mathrm{LKJ}(1)$ marginal, $P(\lvert\rho\rvert > 0.8) = 0.20$ — flatter than the arcsine but still flatter than anything this project has deliberately chosen for a correlation.
+
+The induced prior also **depends on the anchor order**. At the registered order it is arcsine; permutations that move $b^{0q}$ to a wider row make it uniform. The 2026-08-23 anchor-order change was documented as a pure gauge change — and for the likelihood it is — but it moved this prior.
+
+Two further consequences. Four of the nine sampled loading entries are radial magnitudes that the unit-normalisation removes before anything reaches the likelihood — including the whole of `subject_factor_w_00`, whose row has a single entry — so their posteriors equal their $\mathrm{HalfNormal}(1)$ priors by construction, and they inflate the convergence-gate parameter set with quantities the data cannot inform. And because the arcsine prior is symmetric about zero it does not bias the sign of $\rho_{uq}$, but it does favour large magnitudes relative to both the uniform and VG20's $\mathrm{LKJ}(2)$.
+
+Correcting this requires an explicit prior design for the implied correlations and a full refit of the rank family, plus parameter recovery and a whole-child predictive comparison before the default rank is re-selected. That work is tracked in [#266](https://github.com/dseinternational/vocabulary-growth/issues/266) and is **not** done in this change: every number on this page was fitted under the induced prior and must be read with that caveat.
 
 ### Understood trajectory
 
@@ -199,7 +215,7 @@ $\eta = 1$ would be uniform across every correlation from $-1$ to $+1$. The valu
 
 ![The production ratio drawn from the prior alone.](prior_samples_q.png){#fig-prior-q .lightbox fig-align="left"}
 
-The check to make here is the usual one — that the prior admits the range of vocabularies real children have without concentrating on any part of it — and one specific to this model: because the correlation prior is symmetric about zero and the marginal spreads are unchanged from VG10, the prior predictive distribution of counts should be close to VG10's. A visible difference at this stage would mean the correlated block had changed something it was not meant to change.
+The check to make here is the usual one — that the prior admits the range of vocabularies real children have without concentrating on any part of it — and one specific to this model: the level scales are VG10's, but the child block reduces to a pair of level offsets **only at the 36-month reference age**. Away from it, the rate loadings widen the child spread with distance from 36 months, so the prior predictive should sit close to VG10's near the reference age and wider than VG10's at the age extremes — by design rather than by defect.
 
 ## Data
 
@@ -243,11 +259,11 @@ The table reports, for each parameter, whether the chains agree with one another
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges indicate parameters the data cannot separate — and this is where a trade-off between the correlation and the two child scales would show.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges indicate parameters the data cannot separate — and this is where a trade-off between the loading directions and the four child scales would show.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-![Marginal posterior distributions for the fitted parameters, including the correlation. Compare each with its prior figure above: a posterior indistinguishable from its prior has not been informed by the data.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure above: a posterior indistinguishable from its prior has not been informed by the data — which for the four never-identified loading magnitudes (see Priors) is the expected result rather than a warning.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
-Adding a correlation to a pair of random-effect blocks is a change to the posterior geometry, not only to its dimension, so the diagnostics deserve reading against VG10's rather than only against the thresholds. A correlation parameter that is poorly identified typically shows itself as a low effective sample size on $\rho_{uq}$ specifically while the rest of the model looks healthy.
+Replacing two independent child intercepts with a rank-3 factor is a change to the posterior geometry, not only to its dimension, so the diagnostics deserve reading against VG10's rather than only against the thresholds. Two behaviours are specific to the factor form. A weakly identified loading direction shows itself as a low effective sample size on `subject_factor_w_*` entries while the rest of the model looks healthy. And four of the sampled loading magnitudes never reach the likelihood at all (see Priors), so those chains explore pure prior — they clear R-hat and ESS easily when the sampler is healthy, but they enlarge the parameter set the convergence gate must clear without adding information.
 
 ## Findings
 
@@ -295,13 +311,13 @@ else:
     print("_This fit's `diagnostics.csv` carries no `rho_uq` row._")
 ```
 
-**This is the number the model exists to produce.** Under every earlier model in the family it is exactly zero by construction.
+**This is the implied level–level correlation, read at the 36-month reference age.** Under VG10 it is exactly zero by construction; VG20 estimates it directly under a deliberately chosen $\mathrm{LKJ}(2)$ prior; here it is derived from the factor loadings, under the induced arcsine prior described in the Priors section — so it may be compared with VG20's estimate as a number, but not as a like-for-like posterior: the two sit on very different priors.
 
 Three qualifications belong with it.
 
 **It is an association, not an effect.** A positive correlation does not say that understanding more words causes a child to say a larger share of them. Expressive-language ability, articulation, hearing, teaching and reporting tendency can each move both offsets together, and nothing in this design separates them.
 
-**It describes children, not occasions.** Both offsets are persistent, per-child quantities. The correlation says something about how children differ from one another, and nothing about what happens within a child over time — a distinction VG16 was built to probe from the other side.
+**It describes children, not occasions.** Both level effects are persistent, per-child quantities. The correlation says something about how children differ from one another, and nothing about what happens within a child over time — a distinction VG16 was built to probe from the other side.
 
 **A correlation is not a mechanism, and the marginal spreads carry more of the story.** The variation table below is the comparison to make: how far children differ from one another on each dimension separately is a larger fact about this population than how those differences line up.
 
@@ -315,7 +331,7 @@ from vocab_growth.report_cells import render_variation_table
 render_variation_table()
 ```
 
-The two $\tau$ values should be close to VG10's. They are the marginal spreads, and the Cholesky construction is designed to leave them alone while the correlation changes — so a shift here would indicate the correlation is absorbing spread rather than describing its alignment.
+The two **level** scales should be close to VG10's. Unit-normalising the loading rows makes each effect's marginal variance exactly its own $\tau^2$, whatever the loadings do — so a shift here would indicate the factor is absorbing spread rather than describing its alignment. The two **rate** scales have no VG10 counterpart; VG19 is the model to read them against, remembering that VG19 draws the two outcomes' effects independently and is not nested here.
 
 ### Did anything else move?
 
@@ -327,7 +343,7 @@ from vocab_growth.report_cells import render_headline_quantities
 render_headline_quantities()
 ```
 
-The reported trajectories should match VG10's. In a model whose only structural difference is one correlation between child-level offsets, **movement in a population-level trajectory is a red flag rather than a benefit** — it would mean the added parameter is doing something other than what it was added for. The comparison against VG10 is the check, and it is made in the comparison report rather than here.
+The reported trajectories should match VG10's. In a model whose structural difference is confined to the child-effect block, **movement in a population-level trajectory is a red flag rather than a benefit** — it would mean the added structure is doing something other than what it was added for. The comparison against VG10 is the check, and it is made in the comparison report rather than here.
 
 ## Posterior predictions
 
@@ -357,13 +373,13 @@ render_calibration_section()
 
 ## Limits
 
-- **This is not a causal claim.** The correlation describes how two persistent child-level quantities line up in this pool. It licenses no statement about what would happen if a child's comprehension were raised.
-- **It is one number for the whole age range.** The correlation is constant in age. If the alignment between comprehension standing and conversion standing changes as children get older, this model reports an average over that change and gives no warning that it has done so.
-- **It is one number for the whole pool.** No study-level or subgroup variation in the correlation is estimated, and the pool spans several countries and languages.
-- **The reported population trajectories are VG10's.** Nothing in this model is intended to supersede them, and gate 3 of #224 confirmed it does not: expected words on both outcomes and the production ratio sit inside VG10's own 89% interval at every reported age (382 of 382 checks). A difference here would be a defect to investigate, not a new estimate to prefer. What this model does change is the **child-level** intervals, which is what it was built for.
-- **Role: model of record** for the Down syndrome joint understood + spoken estimands from **2026-08-19**, replacing VG10 on the study owner's instruction. VG10 becomes a development step and supplies no reported number.
-- **`rho_uq` recovers; the calibration around it is below nominal, and that is the engine's rather than this model's.** The correlation's truth falls inside the 89% interval in 3 of 3 replicates, with alternating sign (z = +0.36, −0.87, +1.49) and a posterior SD matching this fit's. But two of those replicates were not assessable — their own fits did not converge — and the one that was covers 0.779 of its 131 targets at the 89% level against a nominal 0.89. Read against VG10 at the same tier and replicate count (0.723 and 0.308, also 2 of 3 non-converged), **this model is the better of the two on every recovery figure available**, so the shortfall belongs to the engine and the `test` tier rather than to the correlation. Gate 2 of [#224](https://github.com/dseinternational/vocabulary-growth/issues/224) is nonetheless recorded as **not passed**: it asked for a clean recovery run and did not get one.
-- **`tau_subj_u` comes back below its truth in every replicate here (z = −1.94, −1.24, −1.58) and in every VG10 replicate too.** Six of six across two models, neither of which carries `subject_variance_partition` — which is the mechanism the same bias was attributed to on VG12 ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)). The partition cannot be the whole cause. This is a lead for #225, not a finding of this model's, and six replicates cannot settle it.
-- **The correlation leans high.** 432 of the 767 children are seen once, and 342 of those inform `rho_uq` only through the agreement between two counts on a single questionnaire completed by one parent, where shared reporter bias cannot be separated from shared child ability. VG16's cross-lag reads the child's comprehension from a *different* administration and so avoids that artefact; disattenuated and converted to the correlation scale it implies about +0.24 [0.11, 0.38] against this model's +0.368 [0.287, 0.447]. The two overlap, but the estimate that is immune to reporter bias is the lower one.
+- **This is not a causal claim.** The factor describes how four persistent child-level quantities line up in this pool. It licenses no statement about what would happen if a child's comprehension were raised.
+- **The child block varies with age; the headline correlation is read at one age.** Each child's effects include rates, so the between-child covariance — and every implied correlation — changes with age by construction. $\rho_{uq}$ as reported is the level–level correlation **at the 36-month reference age**, not a constant of the model and not an average over ages.
+- **It is one structure for the whole pool.** No study-level or subgroup variation in the loadings is estimated, and the pool spans several countries and languages.
+- **The implied correlations sit on an induced arcsine prior, not a chosen one** — see the known limitation under Priors. VG22's $\rho_{uq}$ is 0.340 at rank 3 and 0.322 at rank 2 under that prior; VG20's +0.368, 89% ETI [0.287, 0.447], sits on an $\mathrm{LKJ}(2)$ prior, so any comparison between them is between priors as well as between models. Four sampled loading magnitudes — including the whole of `subject_factor_w_00` — never enter the likelihood, so their posteriors equal their priors and they inflate the convergence-gate parameter set. Correcting this requires an explicit prior design and a full refit of the rank family, with parameter recovery and a whole-child predictive comparison before the default rank is re-selected; tracked in [#266](https://github.com/dseinternational/vocabulary-growth/issues/266), and not done in the change that corrected this page.
+- **The rank is declared, not inferred.** The data cannot choose between ranks 2 and 3, and the two disagree on the spoken child-slope scale — 0.348 (sd 0.047) against 0.576 (sd 0.066), about 2.8 combined standard errors — so any reading about how differently children's spoken trajectories steepen is rank-conditional. Intercept-level quantities agree closely across both.
+- **The reported population trajectories are VG10's to check against, not to supersede.** VG22 is gated against VG10: any movement in the reported population trajectories is a red flag rather than a benefit, and what this model changes is the child-level structure.
+- **Provenance.** Registered 2026-08-23; refitted under the current identities at `rep` on 2026-08-24 — the canonical rank 3 on the plain configuration (11 divergences, max R-hat 1.0072, min ESS 887) and the rank-2 sensitivity variant at its recorded hightune (18 divergences, max R-hat 1.0064, min ESS 1,913), both validating field-for-field against the registered definitions. **The model of record for the Down syndrome joint understood + spoken estimands remains VG20**; this model supplies no reported headline number.
+- **No VG22-specific parameter-recovery run exists yet.** Recovery evidence quoted in an earlier version of this page belonged to VG20 and has been removed. Nothing here is backed by a recovery check of this model's own structure, and the induced-prior issue above means a recovery run should follow the prior redesign rather than precede it.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common 810-word scale; it is a unit of measurement, not an instrument any child sat.

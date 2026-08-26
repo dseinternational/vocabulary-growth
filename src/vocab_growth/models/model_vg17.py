@@ -6,13 +6,18 @@ Model VG17: study-adjusted contrast of DS *spoken* vocabulary by sign-group.
 
 A single-outcome (words spoken) DS model on the logit scale:
 
-    f(a, s, g) = mean_trend(a) + gp(a) + delta[s] + beta_sign[g]
-    delta[s]     ~ Normal(0, tau)        study (dataset) random intercepts
+    f(a, s, c, g) = mean_trend(a) + gp(a) + delta[s] + delta_subj[c] + beta_sign[g]
+    delta[s]      ~ Normal(0, tau)       study (dataset) random intercepts
+    delta_subj[c] ~ Normal(0, tau_subj)  child random intercepts
     beta_sign[g] : g in {unknown (ref, 0), non-signer, signer}
 
-restricted to ages 12-66 months (the dense window). The study random intercepts
-absorb between-cohort level differences, so `beta_sign` estimates the *residual*
-sign-group difference after cohort adjustment. Because sign data was collected
+restricted to ages 12-66 months (the dense window). Data is loaded through the
+canonical `load_combined_data`, so the DS pool's cleaning rules all apply; see
+`_prepare`. The study random intercepts absorb between-cohort level differences
+and the child intercepts absorb the repeated-measures correlation (most
+observations come from children with more than one visit, and some change sign
+group between visits), so `beta_sign` estimates the *residual* sign-group
+difference after cohort and child adjustment. Because sign data was collected
 almost entirely at the study level (only uk_02 has both sign and no-sign rows),
 the **recorded-vs-unknown** contrast is largely confounded with study and is only
 weakly identified once study REs are present; the **signer-vs-non-signer**
@@ -20,8 +25,8 @@ contrast varies *within* the sign-recorded studies and is the cleanly identified
 one. Both are reported.
 
 Reuses the family's HSGP trend + age-varying Beta-Binomial machinery
-(`gp_utils`, `build_utils`); the sign-group covariate is the only structural
-addition. Exploratory: self-contained (not routed through the generic engine and
+(`gp_utils`, `build_utils`); the sign-group covariate and the study/child
+intercepts are the structural additions. Exploratory: self-contained (not routed through the generic engine and
 not yet in `MODEL_REGISTRY` / the model inventory) so it cannot perturb the model
 family. Folding the covariate into `common_univariate_re` would be the
 productionisation step.
@@ -60,26 +65,31 @@ EPS = 1e-6
 N_TRIALS = 810
 AGE_LO, AGE_HI = 12.0, 66.0
 SIGN_GROUPS = ["unknown", "non_signer", "signer"]  # index 0 is the reference
+# Child random-intercept scale. HalfNormal(1.5) is the family's convention for
+# child scales (`tau_subj_u_sigma` / `tau_subject_sigma` in models/definitions.py).
+TAU_SUBJECT_SIGMA = 1.5
 
 
 def _prepare(outcome="spoken", studies=None):
-    """Load DS `outcome` data, 12-66 mo, with study and 3-level sign-group codes.
+    """Load DS `outcome` data, 12-66 mo, with study, child and sign-group codes.
+
+    Data comes from the canonical loader, so every DS-pool cleaning rule the rest
+    of the family applies is applied here too (ceiling-only children, below-form-
+    floor administrations, duplicate administrations, partial administrations,
+    duplicated outcome columns, implausible production, comprehension below
+    production). ``include_produced=True`` retains the ``produced`` union column
+    that VG18 uses as its outcome; it is the only reason this module ever read the
+    view directly, and reading it directly silently skipped five of the seven
+    rules (issue #266 finding 6).
+
+    :func:`~vocab_growth.data_utils.mask_incomparable_signed_outcomes` is applied
+    on top, and deliberately here rather than in the loader: it is specific to the
+    signing models, and the canonical loader leaves ``signed`` alone.
 
     ``studies`` (optional) restricts to a subset, e.g. ("uk_02", "nz_01", "es_01")
     for the de-duplicated-union total-expressive analysis (see model_vg18 docstring).
     """
-    import duckdb
-
-    with duckdb.connect(vocab_data_utils.VOCABULARY_DATA_PATH, read_only=True) as con:
-        df = con.execute(
-            "SELECT study, subject_id, age, spoken, signed, produced, survey_vocab_max "
-            "FROM vocab_combined"
-        ).df()
-    # This module reads the view directly rather than through load_combined_data
-    # (it needs `produced`), so it must apply the same partial-administration mask
-    # the shared loader applies — otherwise an exploratory comparison would use
-    # counts that are not on the 810-item reference scale.
-    df, _ = vocab_data_utils.mask_incomplete_administrations(df)
+    df = vocab_data_utils.load_combined_data(include_produced=True)
     df = df[df[outcome].notna() & df["age"].between(AGE_LO, AGE_HI)].copy()
     if studies is not None:
         df = df[df["study"].isin(list(studies))].copy()
@@ -93,7 +103,14 @@ def _prepare(outcome="spoken", studies=None):
     studies = sorted(df["study"].unique())
     study_map = {s: i for i, s in enumerate(studies)}
     df["study_code"] = df["study"].map(study_map).astype(int)
-    return df.reset_index(drop=True), studies
+    # Child codes, on the family's `subject_key` convention: `subject_id` is only
+    # unique within a study.
+    subject_keys = df["study"].astype(str) + "::" + df["subject_id"].astype(str)
+    df["subject_key"] = subject_keys
+    subjects = sorted(subject_keys.unique())
+    subject_map = {s: i for i, s in enumerate(subjects)}
+    df["subject_code"] = subject_keys.map(subject_map).astype(int)
+    return df.reset_index(drop=True), studies, subjects
 
 
 def _config() -> ModelConfiguration:
@@ -132,13 +149,16 @@ def _config() -> ModelConfiguration:
     )
 
 
-def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_sigma=1.0):
+def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_sigma=1.0,
+           subjects=None, tau_subject_sigma=TAU_SUBJECT_SIGMA):
     X_obs = np.asarray(df["age"], dtype=float).reshape(-1, 1)
     y_obs = np.asarray(df[y_col], dtype=int)
     study_codes = np.asarray(df["study_code"], dtype=int)
     sign_codes = np.asarray(df["sign_group"], dtype=int)
+    subject_codes = np.asarray(df["subject_code"], dtype=int)
     n = len(X_obs)
     n_studies = len(studies)
+    n_subjects = len(subjects) if subjects is not None else int(subject_codes.max()) + 1
 
     X_mean, X_std, X_z = standardize_ages(X_obs)
     grids = construct_age_grids(
@@ -163,12 +183,14 @@ def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_s
         "all_id": np.arange(n_all), "obs_id": np.arange(n),
         "plot_id": np.arange(n_plot), "query_id": np.arange(n_query),
         "study_id": np.arange(n_studies), "x_dim": np.arange(1),
+        "subject_id": np.arange(n_subjects),
         "sign_id": SIGN_GROUPS, "sign_free": SIGN_GROUPS[1:],
     }
 
     with pm.Model(coords=coords) as model:
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
+        subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
         sign_obs = pm.Data("sign_obs", sign_codes, dims=("obs_id",))
         pm.Data("age_query", X_query.flatten(), dims=("query_id",))
         pm.Data("age_plot", X_plot.flatten(), dims=("plot_id",))
@@ -184,6 +206,18 @@ def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_s
         tau = pm.HalfNormal("tau", sigma=tau_study_sigma)
         delta = pm.Deterministic("delta", tau * pm.Normal("delta_raw", 0.0, 1.0, dims="study_id"), dims="study_id")
 
+        # Child random intercepts. Most observations come from children with more
+        # than one visit, and sign group itself changes across visits for some of
+        # them, so without this the repeated measurements are treated as
+        # independent and `beta_sign` borrows their within-child correlation
+        # (issue #266 finding 6).
+        tau_subj = pm.HalfNormal("tau_subj", sigma=tau_subject_sigma)
+        delta_subj = pm.Deterministic(
+            "delta_subj",
+            tau_subj * pm.Normal("delta_subj_raw", 0.0, 1.0, dims="subject_id"),
+            dims="subject_id",
+        )
+
         # sign-group offsets, unknown = reference (0)
         beta_free = pm.Normal("beta_sign_free", 0.0, beta_sign_sigma, dims="sign_free")
         beta_sign = pm.Deterministic("beta_sign", pt.concatenate([pt.zeros(1), beta_free]), dims="sign_id")
@@ -193,13 +227,13 @@ def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_s
         pm.Deterministic("signer_vs_unknown", beta_free[1])
         pm.Deterministic("signer_vs_nonsigner", beta_free[1] - beta_free[0])
 
-        f_obs = f_all[i_o0:i_o1] + delta[study_obs] + beta_sign[sign_obs]
+        f_obs = f_all[i_o0:i_o1] + delta[study_obs] + delta_subj[subject_obs] + beta_sign[sign_obs]
         p_obs = pm.math.sigmoid(f_obs)
 
         kappa_of_z = build_kappa_for_config(config, X_obs_mean=X_mean, X_obs_std=X_std)
         kappa_obs = kappa_of_z(X_all_z_data[i_o0:i_o1, 0])
 
-        # population trajectory (delta=0) per sign group, at plot + query ages
+        # population trajectory (delta=0, delta_subj=0) per sign group, at plot + query ages
         f_pop_plot = f_all[i_p0:i_p1]
         f_pop_query = f_all[i_q0:i_q1]
         pm.Deterministic("p_plot_by_group",
@@ -215,16 +249,26 @@ def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_s
 
 
 def fit(config: str = "test", outcome="spoken", label="VG17", subdir="VG17-age-spoken-ds-signgroup",
-        studies=None):
+        studies=None, caution=None):
     sc = sampling.get_sampling_configuration(config)
-    df, studies_list = _prepare(outcome, studies=studies)
+    df, studies_list, subjects = _prepare(outcome, studies=studies)
     studies = studies_list
+    if caution:
+        print(f"\n[{label}] {caution}\n", flush=True)
     n_by = df.groupby("sign_group").size().reindex(range(3), fill_value=0)
-    print(f"[{label}] DS {outcome}, {AGE_LO:.0f}-{AGE_HI:.0f} mo: n={len(df)} obs, {df.subject_id.nunique()} children, "
+    per_child = df.groupby("subject_code").size()
+    n_repeated = int((per_child > 1).sum())
+    n_repeated_rows = int(per_child[per_child > 1].sum())
+    print(f"[{label}] DS {outcome}, {AGE_LO:.0f}-{AGE_HI:.0f} mo: n={len(df)} obs, {len(subjects)} children, "
           f"{len(studies)} studies; sign-group n = unknown {n_by[0]}, non-signer {n_by[1]}, signer {n_by[2]}",
           flush=True)
+    print(f"[{label}] repeated measures: {n_repeated} of {len(subjects)} children contribute "
+          f"more than one observation ({n_repeated_rows} of {len(df)} rows); "
+          f"child random intercepts tau_subj ~ HalfNormal({TAU_SUBJECT_SIGMA})", flush=True)
+    print(f"[{label}] rows are from the canonical loader (all DS-pool cleaning rules) "
+          f"plus the signing-source mask", flush=True)
 
-    model, plot_ages = _build(df, studies, _config(), y_col=outcome)
+    model, plot_ages = _build(df, studies, _config(), y_col=outcome, subjects=subjects)
     with model:
         idata = pm.sample(draws=sc.draws, tune=sc.tune, chains=sc.chains, cores=sc.cores,
                           target_accept=sc.target_accept, random_seed=sc.random_seed,
@@ -253,6 +297,8 @@ def fit(config: str = "test", outcome="spoken", label="VG17", subdir="VG17-age-s
     tab.to_csv(os.path.join(out_dir, "sign_group_contrasts.csv"), index=False)
     print(f"\n[{label}] sign-group contrasts (logit; +ve = more {outcome} than unknown reference):")
     print(tab.to_string(index=False), flush=True)
+    if caution:
+        print(f"\n[{label}] {caution}", flush=True)
 
     # implied expected count (x810) by group at query ages
     pq = post["p_query_by_group"].mean(dim=("chain", "draw")).values * N_TRIALS  # (3, n_query)

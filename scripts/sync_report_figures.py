@@ -43,6 +43,11 @@ from typing import Any
 import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
+from vocab_growth.comparisons_provenance import (
+    COMPARISON_MANIFEST_FILENAME,
+    validate_comparison_manifest,
+)
 from vocab_growth.fit_artifacts import (
     DIAGNOSTICS_SUMMARY_FILENAME,
     FitValidationError,
@@ -257,6 +262,16 @@ def main() -> None:
                 if definition is None:
                     print(f"[skip] unregistered model output: {name}")
                     continue
+                # Rebuilt per definition: catches loader-rule drift the raw-CSV
+                # fingerprint cannot (issue #266 finding 1). Skipped for
+                # provisional syncs, whose kwargs profile carries no data checks.
+                current_frame_hash = (
+                    None
+                    if args.allow_provisional
+                    else expected_analysis_frame_hash(
+                        definition.model_id.lower(), definition
+                    )
+                )
                 errors = validate_fit_output(
                     src,
                     **fit_validation_kwargs(
@@ -267,6 +282,7 @@ def main() -> None:
                         expected_sampling_config_name=args.config,
                         expected_sampling_parameters=asdict(expected_sampling),
                         current_source_data_hash=current_source_hash,
+                        current_analysis_frame_hash=current_frame_hash,
                     ),
                 )
                 if errors:
@@ -295,6 +311,27 @@ def main() -> None:
 
     if not args.models_only:
         if os.path.isdir(comparisons_dir):
+            # Comparison outputs are derived from fitted output but carried no
+            # provenance of their own, so a comparison generated from a
+            # since-replaced fit synced as though it were current (issue #266
+            # finding 1). Unclaimed files are reported rather than rejected:
+            # the manifest is being adopted script by script, and a warning
+            # names what is still unrecorded without blocking the rest.
+            comparison_errors, comparison_warnings = validate_comparison_manifest(
+                comparisons_dir, models_dir
+            )
+            for warning in comparison_warnings:
+                print(f"[warn] {warning}")
+            if comparison_errors and not args.allow_provisional:
+                for error in comparison_errors:
+                    print(f"[invalid] {error}")
+                raise FitValidationError(
+                    "Comparison outputs failed provenance validation; "
+                    f"regenerate them, or see {COMPARISON_MANIFEST_FILENAME}."
+                )
+            for error in comparison_errors:
+                print(f"[provisional] {error}")
+
             n = _sync_dir(
                 comparisons_dir, os.path.join(env.REPORT_FIGS_DIR, "comparisons")
             )

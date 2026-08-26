@@ -47,6 +47,14 @@ manufactures positive correlation. Anything that reduces the outcome to a ratio
 inherits this. The beta-binomial likelihood below handles a zero count as a
 zero count, which is why it is used.
 
+The stored VG16 fit is validated for ``render`` (the same check
+``scripts/regenerate_plots.py`` applies) before its trace is opened: a fit whose
+recorded model definition, sampling configuration or raw-data fingerprint no
+longer matches the current registration is refused rather than read. That
+refusal is intended — simulating from a trace fitted before the wave-grouped
+lag correction (issue #242) would put a superseded posterior under the
+corrected wave walk; refit the model of record first.
+
 Usage::
 
     python scripts/experiments/vg16_within_lag_bias.py [--replicates 200] [--seed 20260815]
@@ -56,17 +64,25 @@ from __future__ import annotations
 
 import argparse
 import os
+from dataclasses import asdict
 
+import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import xarray as xr
 from scipy.optimize import minimize_scalar
 from scipy.special import gammaln
 
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import (
+    fit_validation_kwargs,
+    require_valid_fit,
+    source_data_hash,
+)
 from vocab_growth.models.common_bivariate_re import (
     compute_prev_wave_lag,
     iter_subject_age_waves,
 )
+from vocab_growth.models.definitions import VG16
 
 VG16_DIR = "VG16-age-understood-spoken-ds-re-subj-uq-crosslag"
 N_TRIALS = 810
@@ -93,9 +109,36 @@ def rbetabinom(rng, n, p, kappa):
     return rng.binomial(np.maximum(n.astype(int), 0), theta)
 
 
+def require_valid_rep_fit(dirpath: str, definition) -> None:
+    """Refuse a stored fit that no longer matches the current registration.
+
+    Mirrors the validation ``scripts/regenerate_plots.py`` performs before it
+    reads a promoted trace: the fit must be valid for ``render`` against the
+    model's registered definition, the ``rep`` sampling configuration and the
+    current raw-data fingerprint. Raises ``FitValidationError`` otherwise.
+    """
+    require_valid_fit(
+        dirpath,
+        **fit_validation_kwargs(
+            "render",
+            expected_definition=definition,
+            expected_sampling_config_name="rep",
+            expected_sampling_parameters=asdict(
+                sampling.get_sampling_configuration("rep")
+            ),
+            current_source_data_hash=source_data_hash(env.DATA_DIR),
+        ),
+    )
+
+
 def load_truth(root):
     """Population trajectory, study effects and dispersion at VG16's posterior mean."""
-    t = xr.open_datatree(os.path.join(root, "models", VG16_DIR, "trace.nc"))
+    fit_dir = os.path.join(root, "models", VG16_DIR)
+    # Validate before opening: simulating from a pre-correction posterior under
+    # the corrected wave walk is the mismatch this guard refuses (issue #266,
+    # finding 7a).
+    require_valid_rep_fit(fit_dir, VG16)
+    t = xr.open_datatree(os.path.join(fit_dir, "trace.nc"))
     post, cd = t["posterior"].to_dataset(), t["constant_data"].to_dataset()
 
     def m(name):

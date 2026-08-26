@@ -32,6 +32,7 @@ def _write_manifest(
     *,
     sampling_name: str = "rep",
     dirty: bool = False,
+    frame_hash: str = "sha256:frame",
 ) -> None:
     payload = {
         "model": {
@@ -43,7 +44,10 @@ def _write_manifest(
             "configuration_name": sampling_name,
             "parameters": asdict(sampling.get_sampling_configuration(sampling_name)),
         },
-        "data": {"source_data_hash": "sha256:data"},
+        "data": {
+            "source_data_hash": "sha256:data",
+            "analysis_frame_hash": frame_hash,
+        },
         "code": {"commit": "abc123", "dirty": dirty},
     }
     (output_dir / "fit_manifest.json").write_text(
@@ -85,6 +89,88 @@ def test_publish_validation_accepts_complete_compatible_reporting_fit(tmp_path):
     )
 
     assert errors == []
+
+
+def test_a_changed_prepared_frame_invalidates_a_fit(tmp_path):
+    """The defect issue #266 finding 1 names: loader-rule drift went unseen.
+
+    The raw-CSV fingerprint cannot see it, because the masking and exclusion
+    rules run in Python *after* the CSVs are read — so a rule change leaves the
+    raw hash equal while the frame the model was fitted to no longer exists.
+    """
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+
+    unchanged = validate_fit_output(
+        str(output_dir),
+        expected_source_data_hash="sha256:data",
+        expected_analysis_frame_hash="sha256:frame",
+    )
+    assert unchanged == []
+
+    drifted = validate_fit_output(
+        str(output_dir),
+        # The raw data is untouched; only the prepared frame moved.
+        expected_source_data_hash="sha256:data",
+        expected_analysis_frame_hash="sha256:frame-after-a-rule-change",
+    )
+    assert len(drifted) == 1
+    assert "prepared analysis frame differs" in drifted[0]
+
+
+def test_frame_hash_validation_is_opt_in_for_callers_without_the_registry(tmp_path):
+    """Computing the expected hash rebuilds the frame, so it is not free.
+
+    A caller that cannot afford it (or has no definition in hand) omits it and
+    keeps the previous checks; it must not silently pass a `None` comparison.
+    """
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+
+    assert (
+        validate_fit_output(
+            str(output_dir), expected_source_data_hash="sha256:data"
+        )
+        == []
+    )
+
+    kwargs = fit_validation_kwargs(
+        "sync",
+        expected_definition=VG01,
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("rep")
+        ),
+        current_source_data_hash="sha256:data",
+        current_analysis_frame_hash="sha256:frame",
+    )
+    assert kwargs["expected_analysis_frame_hash"] == "sha256:frame"
+
+    without = fit_validation_kwargs(
+        "sync",
+        expected_definition=VG01,
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("rep")
+        ),
+        current_source_data_hash="sha256:data",
+    )
+    assert "expected_analysis_frame_hash" not in without
+
+    # A provisional sync deliberately carries no data checks at all, so it must
+    # not acquire one through this argument.
+    provisional = fit_validation_kwargs(
+        "provisional-sync",
+        expected_definition=VG01,
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(
+            sampling.get_sampling_configuration("rep")
+        ),
+        current_source_data_hash="sha256:data",
+        current_analysis_frame_hash="sha256:frame",
+    )
+    assert "expected_analysis_frame_hash" not in provisional
+    assert "expected_source_data_hash" not in provisional
 
 
 def test_sampling_compatibility_ignores_cores_and_accepts_stronger_tuning(tmp_path):

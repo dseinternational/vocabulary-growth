@@ -26,6 +26,7 @@ import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
 import numpy as np
+import pandas as pd
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
@@ -86,16 +87,14 @@ UnivariateREContext = ModelFitContext
 # ============================================================
 
 
-def prepare_univariate_re_data(
-    context: UnivariateREContext,
+def build_univariate_re_analysis_frame(
     definition: UnivariateModelDefinition,
-) -> None:
-    """Load and prepare data for a univariate model with study random effects.
+) -> tuple[pd.DataFrame, dict]:
+    """The exact prepared frame the univariate-RE engine fits, no side effects.
 
-    For DS data the ``study`` column comes directly from ``vocab_combined``.
-    For TD data the ``dataset_name`` column from Wordbank is used as the study
-    grouping, since it captures genuine between-lab variation that is more
-    meaningful than CDI form (WG / WS).
+    Split out of :func:`prepare_univariate_re_data` so fitted-output validation
+    can recompute the frame (and its exact hash) without a fit context — see
+    :mod:`vocab_growth.analysis_frames` (issue #266 finding 1).
     """
     y_col = definition.outcome.value
     use_subject_codes = (
@@ -132,7 +131,6 @@ def prepare_univariate_re_data(
     unique_studies = sorted(analysis_df["study"].unique())
     study_map = {s: i for i, s in enumerate(unique_studies)}
     analysis_df["study_code"] = analysis_df["study"].map(study_map).astype(int)
-    n_studies = len(unique_studies)
 
     n_subjects: int | None = None
     n_repeated_subjects: int | None = None
@@ -161,6 +159,36 @@ def prepare_univariate_re_data(
                 ]
                 .reset_index(drop=True)
             )
+
+    return analysis_df, {
+        "use_subject_codes": use_subject_codes,
+        "dropped_studies": dropped_studies,
+        "n_before_single_administration": n_before_single_administration,
+        "unique_studies": unique_studies,
+        "n_subjects": n_subjects,
+        "n_repeated_subjects": n_repeated_subjects,
+    }
+
+
+def prepare_univariate_re_data(
+    context: UnivariateREContext,
+    definition: UnivariateModelDefinition,
+) -> None:
+    """Load and prepare data for a univariate model with study random effects.
+
+    For DS data the ``study`` column comes directly from ``vocab_combined``.
+    For TD data the ``dataset_name`` column from Wordbank is used as the study
+    grouping, since it captures genuine between-lab variation that is more
+    meaningful than CDI form (WG / WS).
+    """
+    y_col = definition.outcome.value
+    analysis_df, info = build_univariate_re_analysis_frame(definition)
+    dropped_studies = info["dropped_studies"]
+    n_before_single_administration = info["n_before_single_administration"]
+    unique_studies = info["unique_studies"]
+    n_studies = len(unique_studies)
+    n_subjects = info["n_subjects"]
+    n_repeated_subjects = info["n_repeated_subjects"]
 
     desc = descriptive_stats.describe_all(analysis_df[["age", y_col]], alpha=0.05)
 

@@ -162,6 +162,42 @@ def test_holdout_masks_round_trip_through_extract_model_samples(tmp_path, monkey
     np.testing.assert_array_equal(samples.y_s_obs[has_s_train], spoken[has_s_train])
 
 
+def test_paired_only_masks_mark_the_likelihood_rows(tmp_path, monkeypatch):
+    """Under paired-only the marginal spoken rows leave the likelihood, so the
+    stored ``obs_s_mask`` must shrink with them (issue #266 finding 3).
+
+    Calibration and extraction both read ``obs_s_mask`` as "the rows
+    ``y_s_obs`` covers"; storing the unfiltered mask made every paired-only
+    fit fail inside ``sample_posterior_predictive`` — after sampling, before
+    the trace was saved. This runs the same real pipeline step the fits do.
+    """
+    from vocab_growth.models.likelihood_utils import SPOKEN_FALLBACK_PAIRED_ONLY
+
+    definition = replace(VG07, spoken_fallback=SPOKEN_FALLBACK_PAIRED_ONLY)
+    context, understood, spoken, holdout = _build_holdout_model(
+        tmp_path, monkeypatch, definition
+    )
+
+    has_u = ~np.isnan(understood)
+    has_s = ~np.isnan(spoken)
+    # Paired-only keeps only the conditional rows: spoken observed, understood
+    # observed, and not held out.
+    has_s_likelihood = has_s & has_u & ~holdout
+
+    context.set_trace(_prior_as_posterior_trace(context))
+    sample_posterior_predictive(context, definition)
+    samples = context.model_samples
+
+    np.testing.assert_array_equal(samples.obs_s_mask, has_s_likelihood)
+    # The synthetic frame carries a spoken-only row outside the holdout, so the
+    # treatment genuinely dropped something here.
+    assert int(samples.obs_s_mask.sum()) < int((has_s & ~holdout).sum())
+    np.testing.assert_array_equal(np.isnan(samples.y_s_obs), ~has_s_likelihood)
+    np.testing.assert_array_equal(
+        samples.y_s_obs[has_s_likelihood], spoken[has_s_likelihood]
+    )
+
+
 def test_subject_marginal_predictive_uses_one_new_subject_per_draw(tmp_path, monkeypatch):
     definition = replace(VG07, use_subject_re_u=True, use_subject_re_q=True)
     context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)

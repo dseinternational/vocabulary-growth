@@ -63,6 +63,18 @@ def _flat(prior, name):
     return values.reshape((-1,) + values.shape[2:])
 
 
+def _flat_or_zeros(prior, name, n_draws):
+    """A child-effect scale the definition may not carry, as an exact zero.
+
+    A one-sided definition (VG08: a child effect on U and none on q) makes the
+    missing outcome's shift exactly 0.0 in the graph — ``common_bivariate_re``
+    sets ``subject_shift_q = 0.0``, and ``sample_posterior_predictive`` has an
+    explicit ``elif use_subject_re_u`` branch. Returning zeros here states the
+    same structure at the same shape, so every consumer keeps its two arrays.
+    """
+    return _flat(prior, name) if name in prior else np.zeros(n_draws)
+
+
 def _logit(p):
     p = np.clip(np.asarray(p, dtype=float), 1e-12, 1 - 1e-12)
     return np.log(p / (1.0 - p))
@@ -119,6 +131,10 @@ def unseen_child_deltas(prior, definition, ages_months, rng):
     if structure == "slope":
         # VG19: an intercept and a rate per outcome, correlated within outcome.
         def block(name):
+            if f"{name}_0" not in prior:
+                # One-sided slope definition: the missing outcome's offset is
+                # identically zero, exactly as in the graph.
+                return np.zeros((n_draws, ages.size))
             tau0 = _flat(prior, f"{name}_0")
             tau1 = _flat(prior, f"{name}_1")
             rho = _flat(prior, f"{name}_rho")
@@ -129,8 +145,8 @@ def unseen_child_deltas(prior, definition, ages_months, rng):
 
         return block("tau_subj_u"), block("tau_subj_q")
 
-    tau_u = _flat(prior, "tau_subj_u")
-    tau_q = _flat(prior, "tau_subj_q")
+    tau_u = _flat_or_zeros(prior, "tau_subj_u", n_draws)
+    tau_q = _flat_or_zeros(prior, "tau_subj_q", n_draws)
     z_u, z_q = rng.standard_normal((2, n_draws))
     delta_u = tau_u * z_u
 
@@ -241,10 +257,23 @@ def plot_unseen_child_trajectories(curves, definition, *, output_dir=None):
         scale = n_trials if delta_key == "delta_u" else 1.0
         base = _logit(np.median(curves[pop_key], axis=0))
         deltas = curves[delta_key]
-        values = _sigmoid(base[None, :] + deltas) * scale
-        for row in values[: min(200, values.shape[0])]:
-            ax.plot(ages, row, color=plot_styles.COLOUR_ORANGE, alpha=0.12, lw=1.0)
-        ax.plot(ages, _sigmoid(base) * scale, lw=3, color="black", label="Zero effect")
+        if np.allclose(deltas, 0.0):
+            # A one-sided definition (VG08: a child effect on U, none on q)
+            # gives this outcome a zero offset for every child. Say so rather
+            # than drawing 200 identical curves under the zero-effect line,
+            # which reads as a bug.
+            ax.plot(
+                ages,
+                _sigmoid(base) * scale,
+                lw=3,
+                color="black",
+                label="Zero effect (no child effect on this outcome)",
+            )
+        else:
+            values = _sigmoid(base[None, :] + deltas) * scale
+            for row in values[: min(200, values.shape[0])]:
+                ax.plot(ages, row, color=plot_styles.COLOUR_ORANGE, alpha=0.12, lw=1.0)
+            ax.plot(ages, _sigmoid(base) * scale, lw=3, color="black", label="Zero effect")
         ax.set_xlabel("Age (months)")
         ax.set_ylabel(label)
         ax.legend(loc="upper left", frameon=True)

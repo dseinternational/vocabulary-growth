@@ -1383,6 +1383,24 @@ def vocab_combined_view_sql() -> str:
     """
 
 
+def _deterministic_row_order(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` in a canonical row order independent of scan order.
+
+    The loader queries carry no ``ORDER BY``, so row order otherwise follows
+    the DuckDB scan, which is not contractual and can change across versions
+    and platforms. Everything statistical is order-invariant, but the fit
+    manifest records an exact hash of the prepared frame — schema, values and
+    row order — precisely so a stale posterior can be told from a current one,
+    and a hash over a nondeterministic order cannot be recomputed for
+    validation (issue #266 finding 1). Sorting on every column, stably and
+    with NaNs last, gives a total order up to exact duplicate rows, whose
+    relative order cannot change the hash.
+    """
+    return df.sort_values(
+        list(df.columns), kind="stable", na_position="last"
+    ).reset_index(drop=True)
+
+
 def load_combined_data(
     max_age_months=None,
     *,
@@ -1392,6 +1410,7 @@ def load_combined_data(
     include_below_form_floor=False,
     include_ceiling_only_children=False,
     include_comprehension_below_production=False,
+    include_produced=False,
 ):
     """
     Load the combined data from the DuckDB database.
@@ -1424,6 +1443,13 @@ def load_combined_data(
             Defaults to False. Read :data:`CEILING_ONLY_CHILD_STUDIES` first — this puts
             back 64 children and 98 administrations that carry a documented
             preparation-batch signature.
+        include_comprehension_below_production (bool): Reintroduce comprehension
+            counts that fall below the child's recorded ``produced`` union, for
+            sensitivity analysis. Defaults to False.
+        include_produced (bool): Keep the ``produced`` column in the returned
+            frame. Defaults to False, preserving the historical column set every
+            existing caller expects. The exploratory produced-outcome models
+            (VG17/VG18) are the intended consumers.
 
     Returns:
     --------
@@ -1442,10 +1468,11 @@ def load_combined_data(
                 understood,
                 spoken,
                 signed,
-                -- Selected for mask_comprehension_below_production only, and
-                -- dropped before returning: `produced` is the union of the two
-                -- modalities, which no model consumes, and adding a column to
-                -- the returned frame would change what every caller sees.
+                -- Selected for mask_comprehension_below_production, and by
+                -- default dropped before returning: `produced` is the union of
+                -- the two modalities, which no registered model consumes, and
+                -- adding a column to the returned frame would change what
+                -- every caller sees. `include_produced` retains it on request.
                 produced,
                 survey_vocab_max
             FROM vocab_combined
@@ -1453,6 +1480,7 @@ def load_combined_data(
             """,
             [age_limit],
         ).df()
+    df = _deterministic_row_order(df)
 
     # Both source-admissibility rules run before de-duplication and before any rule
     # that compares a child's records against each other. A ceiling-saturated row would
@@ -1484,8 +1512,12 @@ def load_combined_data(
     df, _ = mask_comprehension_below_production(
         df, include_below_production=include_comprehension_below_production
     )
-    # `produced` exists only for the rule above; no model consumes it, and every
-    # caller of this function expects the historical column set.
+    # By default `produced` exists only for the rule above: no registered model
+    # consumes it, and every caller of this function expects the historical
+    # column set. The exploratory produced-outcome models opt in instead of
+    # bypassing the loader (issue #266 finding 6).
+    if include_produced:
+        return df
     return df.drop(columns=["produced"])
 
 
@@ -1569,6 +1601,7 @@ def load_data(
     include_implausible_production: bool = False,
     include_below_form_floor: bool = False,
     include_ceiling_only_children: bool = False,
+    include_comprehension_below_production: bool = False,
 ) -> pd.DataFrame:
     """
     Load vocabulary data for the specified population.
@@ -1597,7 +1630,7 @@ def load_data(
         :data:`ENGLISH_LANGUAGES`. Pass a wider tuple to broaden the scope, or
         ``None`` to include all languages. Ignored for DS (the DS subset is
         fixed to English when the database is built).
-    include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production, include_below_form_floor, include_ceiling_only_children : bool
+    include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production, include_below_form_floor, include_ceiling_only_children, include_comprehension_below_production : bool
         Reinstate records that :func:`load_combined_data` masks or drops by default,
         for sensitivity analysis. **DS only** — each names a specific documented
         defect class in the DS pool, so passing one for the TD population is a
@@ -1614,6 +1647,9 @@ def load_data(
         "include_implausible_production": include_implausible_production,
         "include_below_form_floor": include_below_form_floor,
         "include_ceiling_only_children": include_ceiling_only_children,
+        "include_comprehension_below_production": (
+            include_comprehension_below_production
+        ),
     }
     if population == Population.DOWN_SYNDROME:
         df = load_combined_data(max_age_months=max_age_months, **reinstatements)
@@ -1694,6 +1730,7 @@ def load_data(
             )
             .df()
         )
+    td_df = _deterministic_row_order(td_df)
 
     if sample_fraction < 1.0:
         td_df = _subsample_subjects(td_df, sample_fraction, random_seed)

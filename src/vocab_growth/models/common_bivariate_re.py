@@ -101,11 +101,15 @@ BivariateREContext = BivariateContext
 # ============================================================
 
 
-def prepare_bivariate_re_data(
-    context: BivariateREContext,
+def build_bivariate_re_analysis_frame(
     definition: BivariateModelDefinition,
-):
-    """Load and prepare data for a bivariate model with study random effects."""
+) -> tuple[pd.DataFrame, dict]:
+    """The exact prepared frame the bivariate-RE engine fits, no side effects.
+
+    Split out of :func:`prepare_bivariate_re_data` so fitted-output validation
+    can recompute the frame (and its exact hash) without a fit context — see
+    :mod:`vocab_growth.analysis_frames` (issue #266 finding 1).
+    """
     columns = ["age", "understood", "spoken", "study"]
     use_subject_codes = (
         definition.use_subject_re_u
@@ -208,6 +212,32 @@ def prepare_bivariate_re_data(
         subject_map = {s: i for i, s in enumerate(unique_subjects)}
         analysis_df["subject_code"] = subj_keys.map(subject_map).astype(int)
         n_subjects = len(unique_subjects)
+
+    return analysis_df, {
+        "use_subject_codes": use_subject_codes,
+        "ceiling_rows_excluded": ceiling_rows_excluded,
+        "non_native_rows_excluded": non_native_rows_excluded,
+        "excluded_study_rows": excluded_study_rows,
+        "dropped_studies": dropped_studies,
+        "n_before_single_administration": n_before_single_administration,
+        "unique_studies": unique_studies,
+        "n_subjects": n_subjects,
+    }
+
+
+def prepare_bivariate_re_data(
+    context: BivariateREContext,
+    definition: BivariateModelDefinition,
+):
+    """Load and prepare data for a bivariate model with study random effects."""
+    analysis_df, info = build_bivariate_re_analysis_frame(definition)
+    ceiling_rows_excluded = info["ceiling_rows_excluded"]
+    non_native_rows_excluded = info["non_native_rows_excluded"]
+    excluded_study_rows = info["excluded_study_rows"]
+    dropped_studies = info["dropped_studies"]
+    n_before_single_administration = info["n_before_single_administration"]
+    unique_studies = info["unique_studies"]
+    n_subjects = info["n_subjects"]
 
     desc = descriptive_stats.describe_all(
         analysis_df[["age", "understood", "spoken"]], alpha=0.05
@@ -673,6 +703,17 @@ def build_model_re(
     y_s_observed = spoken_spec.observed
     idx_s = spoken_spec.indices
     n_s = spoken_spec.n_observed
+    # The stored spoken mask must mark the LIKELIHOOD rows, not every row with
+    # a spoken observation: the paired-only treatment above drops the marginal
+    # fallback rows from the spoken likelihood, and every downstream consumer
+    # of ``obs_s_mask`` — calibration's age alignment, extraction's scatter,
+    # LOO's per-administration alignment, the recovery harness's row masks —
+    # needs the rows the likelihood actually carries. Storing the unfiltered
+    # mask made every paired-only fit fail at calibration, after sampling and
+    # before the trace was saved (issue #266 finding 3). Under the other
+    # treatments no rows are dropped, so this equals ``has_s_train`` exactly.
+    has_s_likelihood = np.zeros(n, dtype=bool)
+    has_s_likelihood[idx_s] = True
     n_studies = int(study_codes.max()) + 1
 
     use_subject_re_u = bool(definition.use_subject_re_u)
@@ -860,12 +901,14 @@ def build_model_re(
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
 
         # Store masks and indices as constant data for extraction.
-        # Use the *training* masks (full observed mask minus any holdout rows)
-        # so the stored masks align with the likelihood rows / observed_data
-        # consumed by extract_model_samples (issue #67). With no holdout column
-        # has_*_train == has_*, so standard fits are unchanged.
+        # Use the *likelihood* masks (full observed mask minus any holdout
+        # rows, minus any rows the fallback treatment removed from the spoken
+        # likelihood) so the stored masks align with the likelihood rows /
+        # observed_data consumed by extract_model_samples (issues #67, #266).
+        # With no holdout column and a non-dropping fallback treatment these
+        # equal has_u / has_s, so standard fits are unchanged.
         _ = pm.Data("obs_u_mask", has_u_train.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_s_mask", has_s_train.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_s_mask", has_s_likelihood.astype(int), dims=("obs_id",))
         s_likelihood_n = pm.Data(
             "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
         )

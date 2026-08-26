@@ -10,6 +10,8 @@ truth sitting outside the posterior of an unconverged fit is sampler noise, not
 evidence about identifiability.
 """
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -56,6 +58,32 @@ def _write_diagnostics(dirpath, max_rhat, min_ess):
         {"r_hat": [1.0, max_rhat], "ess_bulk": [5000.0, min_ess]},
         index=["intercept", "slope"],
     ).to_csv(dirpath / "diagnostics.csv")
+
+
+def _write_gate_payload(dirpath, **overrides):
+    """A ``diagnostics_summary.json`` in the shape the fit pipeline writes."""
+    payload = {
+        "passed": True,
+        "checks": {
+            "rhat": True,
+            "ess": True,
+            "divergences": True,
+            "bfmi": True,
+            "diagnostics_assessable": True,
+        },
+        "divergences": 0,
+        "max_rhat": 1.004,
+        "min_ess": 1500.0,
+        "bfmi_per_chain": [0.9, 0.85],
+        "rhat_failing": [],
+        "ess_failing": [],
+        "unassessable_parameters": [],
+        "thresholds": {"rhat_max": 1.01, "ess_threshold": 400, "bfmi_threshold": 0.3},
+    }
+    payload.update(overrides)
+    (dirpath / "diagnostics_summary.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
 
 
 def test_score_places_a_central_truth_inside_both_intervals():
@@ -198,7 +226,7 @@ def test_missing_diagnostics_are_reported_as_unverified(tmp_path):
 
 
 def test_converged_fit_reports_the_quantities_that_missed(tmp_path):
-    _write_diagnostics(tmp_path, max_rhat=1.005, min_ess=2000.0)
+    _write_gate_payload(tmp_path)
     table = pd.DataFrame(
         [
             {"quantity": "slope", "index": "", "z": 0.3, "within_ci50": True, "within_ci89": True},
@@ -209,6 +237,7 @@ def test_converged_fit_reports_the_quantities_that_missed(tmp_path):
 
     row = summarise(table, str(tmp_path), label="r02", truth_source="posterior")
     assert row["converged"] is True
+    assert row["caveats"] == ""
     assert row["verdict"] == "not recovered: q_query"
     assert row["n_targets"] == 3
     assert row["n_within_ci89"] == 2
@@ -216,12 +245,57 @@ def test_converged_fit_reports_the_quantities_that_missed(tmp_path):
 
 
 def test_converged_fit_with_large_z_but_full_coverage_is_flagged(tmp_path):
-    _write_diagnostics(tmp_path, max_rhat=1.005, min_ess=2000.0)
+    _write_gate_payload(tmp_path)
     table = pd.DataFrame(
         [{"quantity": "kappa_u_query", "index": "24", "z": 6.0, "within_ci50": True, "within_ci89": True}]
     )
     row = summarise(table, str(tmp_path), label="r03", truth_source="posterior")
     assert row["verdict"].startswith("recovered, but |z| up to")
+
+
+def test_clean_payload_is_required_for_a_recovered_verdict(tmp_path):
+    _write_gate_payload(tmp_path)
+    table = pd.DataFrame(
+        [{"quantity": "slope", "index": "", "z": 0.1, "within_ci50": True, "within_ci89": True}]
+    )
+    row = summarise(table, str(tmp_path), label="r04", truth_source="posterior")
+    assert row["converged"] is True
+    assert row["caveats"] == ""
+    assert row["verdict"] == "recovered (every target within its 89% interval)"
+
+
+def test_caveated_payload_is_never_scored_recovered(tmp_path):
+    # Hard tier passed, but the sampler recorded divergent transitions: the
+    # soft tier failed and "recovered" is reserved for a clean payload.
+    _write_gate_payload(
+        tmp_path,
+        passed=False,
+        checks={
+            "rhat": True, "ess": True, "divergences": False, "bfmi": True,
+            "diagnostics_assessable": True,
+        },
+        divergences=5,
+    )
+    table = pd.DataFrame(
+        [{"quantity": "slope", "index": "", "z": 0.1, "within_ci50": True, "within_ci89": True}]
+    )
+    row = summarise(table, str(tmp_path), label="r05", truth_source="posterior")
+    assert row["converged"] is True
+    assert row["verdict"].startswith("converged with caveats")
+    assert "divergent" in row["caveats"]
+
+
+def test_csv_fallback_is_flagged_and_never_scored_recovered(tmp_path):
+    # A pre-payload fit has only the rounded, scalars-only diagnostics.csv; the
+    # fallback verdict is caveated so the replicate cannot read as clean.
+    _write_diagnostics(tmp_path, max_rhat=1.005, min_ess=2000.0)
+    table = pd.DataFrame(
+        [{"quantity": "slope", "index": "", "z": 0.1, "within_ci50": True, "within_ci89": True}]
+    )
+    row = summarise(table, str(tmp_path), label="r06", truth_source="posterior")
+    assert row["converged"] is True
+    assert row["verdict"].startswith("converged with caveats")
+    assert "diagnostics.csv" in row["caveats"]
 
 
 def test_pooled_row_counts_only_confirmed_converged_replicates():

@@ -1031,6 +1031,18 @@ def render_loo_section(directory: str = ".") -> None:
     leave-one-out is the out-of-sample counterpart to its in-sample checks. The
     number they were sent to find was not in the output directory at all.
 
+    The wording above the table branches on how many rows it has, because the
+    unit being held out is not the same in the two cases (issue #266, finding
+    4). A univariate fit has one unnamed likelihood over administration rows, so
+    the estimate really is leave-one-administration-out. A multi-outcome fit has
+    one likelihood term per outcome and the engines compute a separate LOO for
+    each, so a row holds out one *term*, not an administration -- and because
+    the expressive likelihoods take the same administration's observed
+    comprehension count as their trial count, neither the held-out spoken score
+    nor the held-out understood score is free of that row's observed
+    comprehension. Printing the administration wording over such a table told
+    the reader the estimate was something it is not.
+
     Prints an explanatory line rather than failing when the fit predates the
     table, so the section is never silently empty -- the same contract
     :func:`vocab_growth.models.calibration.render_calibration_section` keeps.
@@ -1054,20 +1066,69 @@ def render_loo_section(directory: str = ".") -> None:
         print("_The leave-one-out summary for this fit is empty._")
         return
 
-    print(
-        "Leave-one-out cross-validation estimates how well this model would "
-        "predict an observation it had not seen. An observation here is a single "
-        "**administration** of a checklist — repeated administrations of the "
-        "same child are separate observations — so this is "
-        "leave-one-administration-out: it scores prediction of another "
-        "administration like those in the frame, possibly from a child or study "
-        "the model has already seen, not generalisation to a new child or "
-        "study. `elpd_loo` is that estimate on "
-        "the log scale: **higher is better**, and it is only meaningful when "
-        "compared with another model fitted to the same observations — it has no "
-        "absolute interpretation on its own. `p_loo` is the effective number of "
-        "parameters, a measure of how much flexibility the fit is using.\n"
+    parameters = fitted_parameters(directory)
+    # One row means one unnamed likelihood over administration rows; more than
+    # one means the engine computed a separate LOO per outcome likelihood, which
+    # is a different held-out unit and has to be described as one.
+    scale_sentences = (
+        "`elpd_loo` is that estimate on the log scale: **higher is better**, "
+        "and it is only meaningful when compared with another model fitted to "
+        "the same observations — it has no absolute interpretation on its own. "
+        "`p_loo` is the effective number of parameters, a measure of how much "
+        "flexibility the fit is using.\n"
     )
+    if len(table) <= 1:
+        print(
+            "Leave-one-out cross-validation estimates how well this model would "
+            "predict an observation it had not seen. An observation here is a single "
+            "**administration** of a checklist — repeated administrations of the "
+            "same child are separate observations — so this is "
+            "leave-one-administration-out: it scores prediction of another "
+            "administration like those in the frame, possibly from a child or study "
+            "the model has already seen, not generalisation to a new child or "
+            "study. " + scale_sentences
+        )
+    else:
+        print(
+            "Leave-one-out cross-validation estimates how well this model would "
+            "predict an observation it had not seen. This model carries a separate "
+            "likelihood term for each outcome, and the table below reports a "
+            "separate estimate for each of them, so **each row is "
+            "leave-one-likelihood-term-out for that outcome, not "
+            "leave-one-administration-out**. The difference is not a technicality "
+            "here, because the expressive outcomes are nested inside "
+            "comprehension: the trial count of the spoken (and, where present, "
+            "signed) likelihood on a row *is* that administration's observed "
+            "words-understood count. Holding out a spoken term therefore scores "
+            "prediction of the spoken count **conditional on the same "
+            "administration's observed comprehension**, which is a conditional "
+            "estimand rather than the prediction of a withheld administration. "
+            "And on a paired row, holding out the understood term leaves that "
+            "same observed comprehension count in the spoken term's denominator, "
+            "so the held-out value has not left the conditioning set and the two "
+            "rows are not independent held-out units. Comparing models on these "
+            "numbers is still sound — every model is scored on the same "
+            "conditional units, computed the same way — but they must not be read "
+            "as whole-administration predictive accuracy. " + scale_sentences
+        )
+        if {"psi", "conc"} <= parameters:
+            # The joint sign/speech engine is the only one that adds
+            # Dirichlet-Multinomial composition terms, and `psi` (the Plackett
+            # odds ratio) with `conc` (the composition concentration) is the
+            # pair only it samples, so their presence identifies the model
+            # without the report cell having to be told which model it is in.
+            print(
+                "Two further likelihood terms — the within-understood four-cell "
+                "composition and the within-produced three-cell composition — are "
+                "excluded from every row above, because a Dirichlet-Multinomial "
+                "over cells is not the per-observation Beta-Binomial the other "
+                "terms are. Those are precisely the terms that identify the "
+                "sign–speech association $\\psi$, so **$\\psi$ is not scored by "
+                "leave-one-out at all**. A cross-tabulation row does still "
+                "contribute its words-understood term, so the words-understood "
+                "row holds out one of that row's two factors while leaving its "
+                "composition factor in the conditioning set.\n"
+            )
 
     display = table.copy()
     for column in ("elpd_loo", "se", "p_loo", "good_k_threshold"):
@@ -1106,7 +1167,7 @@ def render_loo_section(directory: str = ".") -> None:
         # signature of leaving out one *observation* from a model carrying
         # per-child effects, not evidence that the model fits badly -- and the
         # distinction decides what the reader should do about it.
-        if fitted_parameters(directory) & {
+        if parameters & {
             "tau_subject",
             "tau_subj_u",
             "tau_subj_q",

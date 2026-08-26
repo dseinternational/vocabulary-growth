@@ -5,7 +5,6 @@
 Shared dataclasses and pipeline functions for the vocabulary growth model family.
 """
 
-import hashlib
 import json
 import os
 import platform
@@ -48,6 +47,7 @@ import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
 import vocab_growth.reporting_ages as reporting_ages
+from vocab_growth.analysis_frames import analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     ACCEPTED_EXCEPTION_KEY,
     CONVERGENCE_CAVEATS_FILENAME,
@@ -1887,11 +1887,15 @@ def _report_diagnostic_warnings(gate_summary: dict) -> None:
     # write_diagnostics_summary has already reported it; claim nothing here.
 
 
-def prepare_univariate_data(
-    context: ModelFitContext,
+def build_univariate_analysis_frame(
     definition: UnivariateModelDefinition,
-):
-    """Load and prepare data for a univariate model from its definition."""
+) -> tuple[pd.DataFrame, dict]:
+    """The exact prepared frame the univariate engine fits, with no side effects.
+
+    Split out of :func:`prepare_univariate_data` so fitted-output validation can
+    recompute the frame (and its exact hash) without a fit context — see
+    :mod:`vocab_growth.analysis_frames` (issue #266 finding 1).
+    """
     y_col = definition.outcome.value
     df = vocab_data_utils.load_data(
         population=definition.population,
@@ -1910,6 +1914,16 @@ def prepare_univariate_data(
     analysis_df = df[["age", y_col, "study", "subject_id"]].dropna(
         subset=["age", y_col]
     )
+    return analysis_df, {}
+
+
+def prepare_univariate_data(
+    context: ModelFitContext,
+    definition: UnivariateModelDefinition,
+):
+    """Load and prepare data for a univariate model from its definition."""
+    y_col = definition.outcome.value
+    analysis_df, _ = build_univariate_analysis_frame(definition)
 
     desc = descriptive_stats.describe_all(analysis_df[["age", y_col]], alpha=0.05)
 
@@ -2053,14 +2067,10 @@ def _configure_kappa_priors(context: ModelFitContext, kp, suffix: str = "") -> d
     }
 
 
-def _analysis_data_hash(df: pd.DataFrame) -> str:
-    """Hash the exact prepared analysis frame, including schema and row order."""
-    digest = hashlib.sha256()
-    schema = [(str(column), str(dtype)) for column, dtype in df.dtypes.items()]
-    digest.update(json.dumps(schema, separators=(",", ":")).encode("utf-8"))
-    row_hashes = pd.util.hash_pandas_object(df, index=True, categorize=True)
-    digest.update(row_hashes.to_numpy(dtype=np.uint64).tobytes())
-    return f"sha256:{digest.hexdigest()}"
+# The exact-frame hash lives in ``vocab_growth.analysis_frames`` so validators
+# can recompute it without importing the engines; kept under its historical
+# name here for the manifest writer below.
+_analysis_data_hash = analysis_frame_hash
 
 
 def write_fit_manifest(context: ModelFitContext, definition) -> None:

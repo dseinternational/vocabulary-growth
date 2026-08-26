@@ -31,6 +31,15 @@ Sections printed, all from the fitted ``rep`` traces of VG16 and VG10:
    the lag is off), so this isolates the term's effect on everything the
    models of record report.
 
+Both stored fits are validated for ``render`` (the same check
+``scripts/regenerate_plots.py`` applies) before either trace is opened: a fit
+whose recorded model definition, sampling configuration or raw-data fingerprint
+no longer matches the current registration is refused rather than read. That
+refusal is intended — a VG16 ``rep`` trace fitted before the wave-grouped lag
+correction (issue #242) must not have today's corrected lag construction
+multiplied by its pre-correction ``beta_lag`` draws; refit the models of record
+first.
+
 Usage::
 
     python scripts/experiments/vg16_crosslag_quantification.py [--output-dir <dir>] [--step 8]
@@ -43,13 +52,21 @@ from __future__ import annotations
 
 import argparse
 import os
+from dataclasses import asdict
 
 import dse_research_utils.statistics.intervals as stats_intervals
+import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import xarray as xr
 
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import (
+    fit_validation_kwargs,
+    require_valid_fit,
+    source_data_hash,
+)
 from vocab_growth.models.common_bivariate_re import compute_prev_wave_lag
+from vocab_growth.models.definitions import VG10, VG16
 
 VG10_DIR = "VG10-age-understood-spoken-ds-re-subj-uq-anchored"
 VG16_DIR = "VG16-age-understood-spoken-ds-re-subj-uq-crosslag"
@@ -59,6 +76,28 @@ AGES = [24, 30, 36, 42, 48, 54, 60, 72]
 #: Quartiles of a normal: Q3 sits ``PHI_75`` SDs above the median. Hard-coded
 #: rather than imported so the script has no scipy dependency.
 PHI_75 = 0.6744897501960817
+
+
+def require_valid_rep_fit(dirpath: str, definition) -> None:
+    """Refuse a stored fit that no longer matches the current registration.
+
+    Mirrors the validation ``scripts/regenerate_plots.py`` performs before it
+    reads a promoted trace: the fit must be valid for ``render`` against the
+    model's registered definition, the ``rep`` sampling configuration and the
+    current raw-data fingerprint. Raises ``FitValidationError`` otherwise.
+    """
+    require_valid_fit(
+        dirpath,
+        **fit_validation_kwargs(
+            "render",
+            expected_definition=definition,
+            expected_sampling_config_name="rep",
+            expected_sampling_parameters=asdict(
+                sampling.get_sampling_configuration("rep")
+            ),
+            current_source_data_hash=source_data_hash(env.DATA_DIR),
+        ),
+    )
 
 
 def sig(x):
@@ -143,8 +182,16 @@ def main() -> int:
     env.set_output_root(args.output_dir)
     models = os.path.join(env.output_root(), "models")
 
-    t16 = xr.open_datatree(os.path.join(models, VG16_DIR, "trace.nc"))
-    t10 = xr.open_datatree(os.path.join(models, VG10_DIR, "trace.nc"))
+    # Validate each fit against its own registered definition before opening
+    # anything: mixing a recomputed lag with pre-correction beta_lag draws is
+    # exactly the defect this guard exists to refuse (issue #266, finding 7a).
+    vg16_dir = os.path.join(models, VG16_DIR)
+    vg10_dir = os.path.join(models, VG10_DIR)
+    require_valid_rep_fit(vg16_dir, VG16)
+    require_valid_rep_fit(vg10_dir, VG10)
+
+    t16 = xr.open_datatree(os.path.join(vg16_dir, "trace.nc"))
+    t10 = xr.open_datatree(os.path.join(vg10_dir, "trace.nc"))
     post, cd, od = (
         t16["posterior"].to_dataset(),
         t16["constant_data"].to_dataset(),

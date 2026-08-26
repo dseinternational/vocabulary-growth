@@ -255,11 +255,15 @@ TrivariateContext = ModelFitContext[
 # ============================================================
 
 
-def prepare_trivariate_data(
-    context: TrivariateContext,
+def build_trivariate_analysis_frame(
     definition: TrivariateModelDefinition,
-):
-    """Load and prepare data for the trivariate model from its definition."""
+) -> tuple[pd.DataFrame, dict]:
+    """The exact prepared frame the trivariate engine fits, with no side effects.
+
+    Split out of :func:`prepare_trivariate_data` so fitted-output validation can
+    recompute the frame (and its exact hash) without a fit context — see
+    :mod:`vocab_growth.analysis_frames` (issue #266 finding 1).
+    """
     df = vocab_data_utils.load_data(
         population=definition.population,
         columns=["study", "age", "understood", "spoken", "signed"],
@@ -279,6 +283,16 @@ def prepare_trivariate_data(
     has_s = analysis_df["spoken"].notna()
     has_sign = analysis_df["signed"].notna()
     analysis_df = analysis_df[has_u | has_s | has_sign].reset_index(drop=True)
+    return analysis_df, {"sign_source_dropped": sign_source_dropped}
+
+
+def prepare_trivariate_data(
+    context: TrivariateContext,
+    definition: TrivariateModelDefinition,
+):
+    """Load and prepare data for the trivariate model from its definition."""
+    analysis_df, info = build_trivariate_analysis_frame(definition)
+    sign_source_dropped = info["sign_source_dropped"]
 
     desc = descriptive_stats.describe_all(analysis_df, alpha=0.05)
 
@@ -1235,6 +1249,13 @@ def diagnostics(context: TrivariateContext):
     observation-level kappas for the trace plot as well; an observation-sized
     variable never fitted under ArviZ's subplot cap, so they never rendered, and
     since 2026-08-23 the sampler does not store them.)
+
+    Each per-outcome score is leave-one-likelihood-term-out rather than
+    leave-one-administration-out: the spoken and signed likelihoods take the
+    same administration's observed understood count as their trial count, so a
+    held-out expressive term is scored conditional on that observed
+    comprehension, and a held-out understood term leaves its own observed value
+    in the expressive terms' denominators (#266).
     """
     _shared_diagnostics(
         context,

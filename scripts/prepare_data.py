@@ -244,18 +244,26 @@ console.print(
 )
 
 # NB: vocab_data_merged.csv is written further down FROM the vocab_combined view
-# — i.e. the analysis-ready data the models actually read (post form-ceiling
-# guard and us_01 WS-comprehension guard), not this raw pre-guard concat. This
-# keeps the CSV from diverging from what load_combined_data returns (issue #131).
+# (post form-ceiling guard and us_01 WS-comprehension guard), not this raw
+# pre-guard concat (issue #131). The view is still not what the models read:
+# load_combined_data applies further exclusion/masking rules on top of it — see
+# the note at the export below.
 
 console.print("[green]Creating DuckDB database and tables…[/green]")
 
 db_path = "./data/vocabulary.duckdb"
 
-if os.path.exists(db_path):
-    os.remove(db_path)
+# Build into a temporary file beside the target and swap it in only once the
+# build has completed, so a failure partway through (a malformed source CSV, the
+# large Wordbank read) cannot leave the existing database destroyed. Clear any
+# stale temporary file — and DuckDB's write-ahead log beside it — from a
+# previous failed run first.
+db_tmp = db_path + ".tmp"
+for _stale in (db_tmp, db_tmp + ".wal"):
+    if os.path.exists(_stale):
+        os.remove(_stale)
 
-con = duckdb.connect(db_path)
+con = duckdb.connect(db_tmp)
 
 con.execute(
     """
@@ -396,13 +404,25 @@ con.execute(
 # and regression-tested alongside load_combined_data.
 con.execute(vocab_combined_view_sql())
 
-# Export the analysis-ready data (exactly what the models read via
-# load_combined_data) so vocab_data_merged.csv reflects the guarded view rather
-# than the raw pre-guard concat (issue #131 §3).
+# Export the guarded vocab_combined view so vocab_data_merged.csv reflects the
+# view rather than the raw pre-guard concat (issue #131 §3). This is NOT what
+# the models consume: load_combined_data applies a further seven
+# exclusion/masking rules in Python on top of the view (ceiling-only children,
+# below-form-floor, duplicate administrations, and the four masking rules) and
+# drops the `produced` column, so the CSV is a superset of the modelled data
+# with outcome values the loader masks.
 analysis_df = con.execute("SELECT * FROM vocab_combined").df()
-analysis_df.to_csv("./data/vocab_data_merged.csv", index=False)
+
+# Same write-to-temporary-then-replace pattern as the database, so a failed
+# export cannot truncate the existing CSV.
+csv_path = "./data/vocab_data_merged.csv"
+csv_tmp = csv_path + ".tmp"
+analysis_df.to_csv(csv_tmp, index=False)
+os.replace(csv_tmp, csv_path)
 
 con.close()
+
+os.replace(db_tmp, db_path)
 
 key_value_table(
     "Data preparation complete",

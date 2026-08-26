@@ -140,15 +140,46 @@ def test_collapsed_coverage_is_not_assessed():
     assert "sensitive" not in row["verdict"]
 
 
-def test_full_coverage_reaches_a_real_verdict():
+def _write_clean_gate_payload(dirpath):
+    """A cleanly passing ``diagnostics_summary.json`` — what "robust" needs."""
+    (dirpath / "diagnostics_summary.json").write_text(
+        json.dumps({
+            "passed": True,
+            "checks": {
+                "rhat": True, "ess": True, "divergences": True, "bfmi": True,
+                "diagnostics_assessable": True,
+            },
+            "divergences": 0,
+            "max_rhat": 1.004,
+            "min_ess": 1500.0,
+            "bfmi_per_chain": [0.9, 0.85],
+            "rhat_failing": [],
+            "ess_failing": [],
+            "unassessable_parameters": [],
+            "thresholds": {
+                "rhat_max": 1.01, "ess_threshold": 400, "bfmi_threshold": 0.3,
+            },
+        }),
+        encoding="utf-8",
+    )
+
+
+def test_full_coverage_reaches_a_real_verdict(tmp_path):
     comparison = pd.DataFrame([{
         "quantity": "Ey", "age_months": 12, "base_median": 10.0,
         "var_median": 10.0, "delta": 0.0, "base_ci_lo": 9.0, "base_ci_hi": 11.0,
         "within_baseline_ci": True, "interval_kind": "eti",
     }])
-    row = summarise(comparison, "/nonexistent", "v", mismatch=[], coverage=(1, 1, []))
+    _write_clean_gate_payload(tmp_path)
+    row = summarise(comparison, str(tmp_path), "v", mismatch=[], coverage=(1, 1, []))
     assert row["status"] == "compared"
     assert row["verdict"].startswith("robust")
+
+    # Without any recorded convergence gate the containment is still reported,
+    # but "robust" is reserved for a fit with a cleanly passing payload.
+    row = summarise(comparison, "/nonexistent", "v", mismatch=[], coverage=(1, 1, []))
+    assert row["status"] == "compared"
+    assert "not scored robust" in row["verdict"]
 
 
 # -------------------------------------------------------- variants that vanish

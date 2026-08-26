@@ -54,7 +54,7 @@ VG14 memory discipline.
 
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import dse_research_utils.math.constants as math_constants
@@ -115,6 +115,7 @@ from vocab_growth.plotting import (
 )
 from vocab_growth.posterior_analysis import extract_posterior as _extract
 from vocab_growth.reporting import (
+    console,
     dataframe_table,
     heading,
     key_value_table,
@@ -289,6 +290,14 @@ class JointModelSamples:
     # `tau_psi` is None when fewer than two studies inform psi (nothing to estimate).
     psi_study: np.ndarray
     psi_study_names: list
+    # Which of `psi_study_names` actually contribute a cross-tabulation term, as
+    # an explicit record rather than something inferred afterwards. Equality
+    # between a study's draws and the population value cannot stand in for this:
+    # with a single informed study the model takes its degenerate branch and
+    # pins every delta_psi to zero, so the one study that does inform psi also
+    # sits at exactly the population value and an equality test discards it
+    # (#266). Down syndrome native-only is precisely that configuration.
+    psi_informed_studies: tuple[str, ...]
     tau_psi: np.ndarray | None
 
     # Four-cell posterior predictive (counts) and observed, all sources
@@ -472,20 +481,14 @@ def _load_nz01_produced_cells():
     return out[out["prod_total"] > 0].reset_index(drop=True)
 
 
-def prepare_joint_data(
-    context: JointContext,
+def build_joint_analysis_frame(
     definition: JointModelDefinition,
-):
-    """Load and prepare data for the joint model.
+) -> tuple[pd.DataFrame, dict]:
+    """The exact prepared frame the joint engine fits, with no side effects.
 
-    Studies without a cross-tab contribute understood/spoken/signed marginals
-    (from the merged view). uk_02, uk_07 and es_01 are taken from their raw CSVs and
-    each split into four-cell rows (Dirichlet-Multinomial) and marginal-only rows
-    (marginal likelihoods); nz_01 contributes a within-produced three-cell DM.
-
-    es_01's non-vocal modality is called gestural by its source but is scored per
-    lexical item on an adapted CDI, so it is the same construct as the other
-    sources' signed counts -- see ``JointModelDefinition.include_es01_cells``.
+    Split out of :func:`prepare_joint_data` so fitted-output validation can
+    recompute the frame (and its exact hash) without a fit context — see
+    :mod:`vocab_growth.analysis_frames` (issue #266 finding 1).
     """
     # Subject random intercepts (issue #59) need a per-child identifier in both
     # data sources (the merged view and the raw uk_02 cross-tab CSV).
@@ -641,10 +644,20 @@ def prepare_joint_data(
         frames.append(pd.DataFrame(four_es_cols))
         frames.append(pd.DataFrame(marg_es_cols))
 
-    # nz_01's (real-key) CSV is committed separately; tolerate its absence (CI,
-    # unit tests, or a checkout predating the data) so the model still builds.
-    nz01_csv = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
-    if use_nz01_cells and os.path.exists(nz01_csv):
+    # Fail closed on a missing nz_01 source: this block used to tolerate an
+    # absent CSV so the model "still builds", which silently fitted VG15
+    # without all 111 nz_01 composition observations while the build banner
+    # reported include_nz01_cells=True (issue #266). The file has been
+    # committed since `abfcc3b`, and tests that need a fixture pool write
+    # their own CSV, so absence now means a broken checkout, not a supported
+    # configuration.
+    if use_nz01_cells:
+        nz01_csv = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
+        if not os.path.exists(nz01_csv):
+            raise FileNotFoundError(
+                f"include_nz01_cells is set but {nz01_csv} is absent; set "
+                "include_nz01_cells=False to fit without nz_01's cross-tab."
+            )
         frames.append(_load_nz01_produced_cells())
     analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
@@ -693,6 +706,46 @@ def prepare_joint_data(
         subject_map = {s: i for i, s in enumerate(unique_subjects)}
         analysis_df["subject_code"] = subj_keys.map(subject_map).astype(int)
         n_subjects = len(unique_subjects)
+
+    return analysis_df, {
+        "use_subject_codes": use_subject_codes,
+        "native_only": native_only,
+        "non_native_rows_excluded": non_native_rows_excluded,
+        "ceiling_rows_excluded": ceiling_rows_excluded,
+        "sign_source_dropped": sign_source_dropped,
+        "use_uk07_cells": use_uk07_cells,
+        "use_es01_cells": use_es01_cells,
+        "use_nz01_cells": use_nz01_cells,
+        "unique_studies": unique_studies,
+        "n_subjects": n_subjects,
+    }
+
+
+def prepare_joint_data(
+    context: JointContext,
+    definition: JointModelDefinition,
+):
+    """Load and prepare data for the joint model.
+
+    Studies without a cross-tab contribute understood/spoken/signed marginals
+    (from the merged view). uk_02, uk_07 and es_01 are taken from their raw CSVs and
+    each split into four-cell rows (Dirichlet-Multinomial) and marginal-only rows
+    (marginal likelihoods); nz_01 contributes a within-produced three-cell DM.
+
+    es_01's non-vocal modality is called gestural by its source but is scored per
+    lexical item on an adapted CDI, so it is the same construct as the other
+    sources' signed counts -- see ``JointModelDefinition.include_es01_cells``.
+    """
+    analysis_df, info = build_joint_analysis_frame(definition)
+    native_only = info["native_only"]
+    non_native_rows_excluded = info["non_native_rows_excluded"]
+    ceiling_rows_excluded = info["ceiling_rows_excluded"]
+    sign_source_dropped = info["sign_source_dropped"]
+    use_uk07_cells = info["use_uk07_cells"]
+    use_es01_cells = info["use_es01_cells"]
+    use_nz01_cells = info["use_nz01_cells"]
+    unique_studies = info["unique_studies"]
+    n_subjects = info["n_subjects"]
 
     n = len(analysis_df)
     n_u = int(analysis_df["understood"].notna().sum())
@@ -1606,6 +1659,15 @@ def diagnostics(context: JointContext):
     LOO-CV for the three marginal likelihoods (the four-cell
     Dirichlet-Multinomial ``cells_obs`` is not a per-observation Beta-Binomial
     and is left out of LOO-CV, matching every other engine's scope).
+
+    Each per-outcome score is leave-one-likelihood-term-out, not
+    leave-one-administration-out: the spoken and signed likelihoods take the
+    same administration's observed understood count as their trial count, so a
+    held-out expressive term is scored conditional on that observed
+    comprehension and a held-out understood term leaves its own observed value
+    in the expressive terms' denominators. Excluding ``cells_obs`` and
+    ``nz_prod_cells_obs`` also means the association ``psi`` -- which only those
+    two terms identify -- is not scored by LOO-CV at all (#266).
     """
     posterior_vars = set(context.trace.posterior.data_vars)
 
@@ -1726,6 +1788,15 @@ def sample_posterior_predictive(context: JointContext, definition=None):
     else:
         prod_pred = np.zeros((0, len(PROD_CELL_NAMES), 0), dtype=int)
 
+    # The studies that identify psi, mirroring `psi_informed` in build_model:
+    # the within-understood four-cell rows plus nz_01's within-produced
+    # three-cell rows. `obs_cells_mask` and `obs_prod_mask` are the very masks
+    # that produced `idx_cells`/`idx_prod` there, so this cannot drift from the
+    # likelihood, and it respects a K-fold holdout for the same reason.
+    psi_informed_studies = tuple(
+        sorted(set(df.loc[has_cells | has_prod, "study"].astype(str)))
+    )
+
     samples = JointModelSamples(
         X_plot=np.array(trace.constant_data["X_plot"].values),
         X_query=np.array(trace.constant_data["X_query"].values),
@@ -1748,6 +1819,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
             trace.posterior["psi_study"].stack(sample=("chain", "draw")).values
         ),
         psi_study_names=sorted(context.analysis_df["study"].unique()),
+        psi_informed_studies=psi_informed_studies,
         tau_psi=(
             np.array(trace.posterior["tau_psi"].stack(sample=("chain", "draw")).values)
             if "tau_psi" in trace.posterior
@@ -1762,6 +1834,47 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         prod_cell_ages=prod_ages,
     )
     context.set_model_samples(samples)
+
+
+def summarise_psi_by_study(
+    psi_study: np.ndarray,
+    psi_study_names: Sequence[str],
+    psi_informed_studies: Sequence[str],
+    *,
+    ci_prob: float,
+    inner: float,
+) -> pd.DataFrame:
+    """Per-study association rows, for the studies that actually inform psi.
+
+    Membership of ``psi_informed_studies`` is the criterion, and it has to be:
+    a study with no cross-tabulation carries ``delta_psi == 0`` and therefore
+    sits at exactly the population value, but so does *every* study when only
+    one of them is informed, because the model then takes its degenerate branch
+    and pins the offsets to zero rather than estimating a contrast. Testing
+    ``psi_study == psi`` as a proxy for "uninformed" therefore discarded the one
+    row worth printing under a single-source pool -- Down syndrome native-only
+    -- so no per-study table was written for the only study that informs the
+    association (#266).
+
+    Returns an empty frame when no study informs the association, so the caller
+    writes no file rather than an empty one.
+    """
+    informed = set(psi_informed_studies)
+    rows = []
+    for i, name in enumerate(psi_study_names):
+        if name not in informed:
+            continue
+        draws = np.asarray(psi_study[i])
+        lo50, hi50 = intervals.interval_1d(draws, inner, "hdi")
+        lo, hi = intervals.interval_1d(draws, ci_prob, "hdi")
+        rows.append({
+            "study": name,
+            "psi_median": float(np.median(draws)),
+            "psi_ci50_lo": float(lo50), "psi_ci50_hi": float(hi50),
+            "psi_ci_lo": float(lo), "psi_ci_hi": float(hi),
+            "P_psi_gt_1": float((draws > 1).mean()),
+        })
+    return pd.DataFrame(rows)
 
 
 def posterior_summary(context: JointContext):
@@ -1926,25 +2039,14 @@ def posterior_summary(context: JointContext):
 
     # Per-study association. This is the primary read on a parameter the sources
     # disagree about: the population value is a shrunk centre, not a consensus.
-    # Studies with no cross-tab sit at exactly the population value (delta_psi = 0)
-    # and are omitted -- they carry no information about the association.
-    psi_study = s.psi_study
-    rows = []
-    for i, name in enumerate(s.psi_study_names):
-        draws = psi_study[i]
-        if np.allclose(draws, psi):
-            continue                      # uninformed: delta_psi pinned to 0
-        lo50, hi50 = intervals.interval_1d(draws, inner, "hdi")
-        lo, hi = intervals.interval_1d(draws, ci_prob, "hdi")
-        rows.append({
-            "study": name,
-            "psi_median": float(np.median(draws)),
-            "psi_ci50_lo": float(lo50), "psi_ci50_hi": float(hi50),
-            "psi_ci_lo": float(lo), "psi_ci_hi": float(hi),
-            "P_psi_gt_1": float((draws > 1).mean()),
-        })
-    if rows:
-        psi_study_df = pd.DataFrame(rows)
+    psi_study_df = summarise_psi_by_study(
+        s.psi_study,
+        s.psi_study_names,
+        s.psi_informed_studies,
+        ci_prob=ci_prob,
+        inner=inner,
+    )
+    if not psi_study_df.empty:
         psi_study_df.to_csv(
             os.path.join(od, "posterior_summary_psi_study.csv"), index=False
         )
@@ -1959,6 +2061,17 @@ def posterior_summary(context: JointContext):
             ("tau_psi median", round(float(np.median(s.tau_psi)), 3)),
             (f"tau_psi {pct}% HDI", (round(float(tau_lo), 3), round(float(tau_hi), 3))),
         ])
+    elif not psi_study_df.empty:
+        # No tau_psi means fewer than two informed studies, so the model took its
+        # degenerate branch and pinned every delta_psi to zero. The row above is
+        # then the population value repeated, not an independently estimated
+        # per-study one, and saying so is the difference between reporting a
+        # single source's association and appearing to report heterogeneity.
+        console.print(
+            "Only one study informs the association, so there is no between-study "
+            "contrast to estimate: delta_psi is pinned to zero and the per-study "
+            "value above equals the population value by construction."
+        )
 
 
 # ============================================================

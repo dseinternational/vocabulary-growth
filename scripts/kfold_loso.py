@@ -29,11 +29,23 @@ when the observed counts are logically nested, and the marginal spoken
 likelihood otherwise. The outer logsumexp marginalises over the joint posterior
 over hyperparameters and held-out REs.
 
+Every fold fit is screened by the canonical diagnostics scan
+(``write_diagnostics_summary`` over every free RV, element-wise — the same
+construction the fit pipeline's diagnostics stage uses), and the per-fold
+verdict travels with the outputs: `kfold_loso_fits.csv` carries ``passed``,
+``max_rhat``, ``min_ess``, ``divergences`` and ``bfmi_ok`` per (model, fold),
+and the summary and pairwise tables carry ``all_folds_converged``. A model with
+any failed fold is flagged rather than dropped, and its elpd must not be
+interpreted. The hard-stop ``enforce_convergence_gate`` is deliberately not
+called here: it is a no-op below the reporting tier, and a comparison wants the
+verdict recorded, not the run aborted.
+
 Outputs:
 
 - `output/comparisons/kfold_loso_subject_elpds.csv`
 - `output/comparisons/kfold_loso_summary.csv`
 - `output/comparisons/kfold_loso_compare.csv`
+- `output/comparisons/kfold_loso_fits.csv`
 """
 
 from __future__ import annotations
@@ -44,6 +56,7 @@ import shutil
 import time
 from dataclasses import dataclass
 
+import dse_research_utils.statistics.diagnostics as shared_diagnostics
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
@@ -56,7 +69,7 @@ from scipy.stats import betabinom
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
 from vocab_growth.models.build_utils import require_valid_counts
-from vocab_growth.models.common import ModelFitContext
+from vocab_growth.models.common import ModelFitContext, diagnostics_var_names
 from vocab_growth.models.common_bivariate import (
     configure_bivariate_priors,
     sample,
@@ -124,6 +137,44 @@ class FoldFitRecord:
     n_holdout_obs_u: int
     n_holdout_obs_s: int
     wall_seconds: float
+    # Convergence verdict for this fold's fit, from the canonical diagnostics
+    # scan. A fold that failed the gate poisons its model's pooled elpd, so the
+    # verdict must travel with the timing record into kfold_loso_fits.csv.
+    passed: bool
+    max_rhat: float | None
+    min_ess: float | None
+    divergences: int | None
+    bfmi_ok: bool | None
+
+
+def fold_gate_fields(gate: dict) -> dict:
+    """``FoldFitRecord`` convergence fields from a diagnostics-gate payload.
+
+    ``gate`` is the dict returned by
+    ``shared_diagnostics.write_diagnostics_summary``.
+    """
+    checks = gate.get("checks") or {}
+    return {
+        "passed": bool(gate.get("passed")),
+        "max_rhat": gate.get("max_rhat"),
+        "min_ess": gate.get("min_ess"),
+        "divergences": gate.get("divergences"),
+        "bfmi_ok": checks.get("bfmi"),
+    }
+
+
+def model_convergence_flags(fit_records: list[FoldFitRecord]) -> dict[str, bool]:
+    """Per-model AND over every fold's convergence gate.
+
+    A model's pooled elpd sums over all folds, so one non-converged fold makes
+    the total uninterpretable — the flag is per model, not per fold.
+    """
+    flags: dict[str, bool] = {}
+    for record in fit_records:
+        flags[record.model_short] = flags.get(record.model_short, True) and bool(
+            record.passed
+        )
+    return flags
 
 
 # ============================================================
@@ -200,8 +251,13 @@ def fit_fold(
     analysis_df_with_holdout: pd.DataFrame,
     sampling_cfg: sampling.SamplingConfiguration,
     label: str,
-) -> tuple[xr.DataTree, int]:
-    """Run prepare → priors → build → sample on a holdout-marked analysis frame."""
+) -> tuple[xr.DataTree, int, dict]:
+    """Run prepare → priors → build → sample → diagnostics scan on a
+    holdout-marked analysis frame.
+
+    Returns ``(trace, n_obs, gate)``, where ``gate`` is the payload of the
+    canonical convergence scan (``write_diagnostics_summary``).
+    """
     n = len(analysis_df_with_holdout)
     has_u = analysis_df_with_holdout["understood"].notna().values
     # Same contract as the engines' own prepare stage: validate before the cast,
@@ -246,7 +302,20 @@ def fit_fold(
     # memory as recomputing them afterwards and saves the second pass.
     sample(context, store_observation_deterministics=True)
 
-    return context.trace, n
+    # The canonical convergence scan, with var_names built exactly as the fit
+    # pipeline's diagnostics stage builds them: the scalar summary set plus
+    # every free RV element-wise, so the study/subject random intercepts and
+    # HSGP basis coefficients are screened too. The returned payload must be
+    # captured here because the fold's output directory is deleted when the
+    # next fold reuses it, so the JSON written into it is transient.
+    # enforce_convergence_gate is deliberately not called: it is a no-op below
+    # the reporting tier, and a failed fold should be recorded, not aborted.
+    _summary_names, gate_var_names = diagnostics_var_names(context.model)
+    gate = shared_diagnostics.write_diagnostics_summary(
+        context.trace, reporting_cfg.output_dir, var_names=gate_var_names
+    )
+
+    return context.trace, n, gate
 
 
 # ============================================================
@@ -313,6 +382,64 @@ def holdout_subject_elpds(
 # ============================================================
 
 
+def summarise_models(
+    elpd_df: pd.DataFrame, models: tuple[str, ...], flags: dict[str, bool]
+) -> pd.DataFrame:
+    """Per-model elpd totals, with the fold-convergence flag attached."""
+    summary_rows = []
+    for short in models:
+        e = elpd_df[short].dropna().to_numpy()
+        n = len(e)
+        # SE of total elpd = sqrt(n * var of per-subject elpd).
+        se = float(np.sqrt(n) * np.std(e, ddof=1))
+        summary_rows.append(
+            {
+                "model": short,
+                "elpd_loso": float(e.sum()),
+                "se": se,
+                "n_subjects": n,
+                "mean_elpd_per_subject": float(e.mean()),
+                "all_folds_converged": bool(flags.get(short, False)),
+            }
+        )
+    return pd.DataFrame(summary_rows)
+
+
+def pairwise_compare(
+    elpd_df: pd.DataFrame, models: tuple[str, ...], flags: dict[str, bool]
+) -> pd.DataFrame:
+    """Pairwise elpd differences with paired SE, flagged for convergence.
+
+    A row involving any model with a non-converged fold carries
+    ``all_folds_converged`` False. It is flagged rather than dropped so the row
+    stays visible for what it is, but its elpd difference must not be
+    interpreted.
+    """
+    pair_rows = []
+    for i, sa in enumerate(models):
+        for j, sb in enumerate(models):
+            if i >= j:
+                continue
+            common = elpd_df[[sa, sb]].dropna()
+            diff = common[sb] - common[sa]
+            elpd_diff = float(diff.sum())
+            dse = float(np.sqrt(len(diff)) * np.std(diff, ddof=1))
+            pair_rows.append(
+                {
+                    "model_a": sa,
+                    "model_b": sb,
+                    "elpd_diff_b_minus_a": elpd_diff,
+                    "dse_paired": dse,
+                    "diff_over_dse": elpd_diff / dse if dse > 0 else float("nan"),
+                    "n_subjects": len(diff),
+                    "all_folds_converged": bool(
+                        flags.get(sa, False) and flags.get(sb, False)
+                    ),
+                }
+            )
+    return pd.DataFrame(pair_rows)
+
+
 def main(
     K: int = 5,
     sampling_config_name: str = "test",
@@ -355,7 +482,7 @@ def main(
             df_with_holdout["holdout"] = (
                 df_with_holdout["subject_code"].isin(fold_subjects)
             )
-            trace, _ = fit_fold(definition, df_with_holdout, sampling_cfg, label)
+            trace, _, gate = fit_fold(definition, df_with_holdout, sampling_cfg, label)
             elpds = holdout_subject_elpds(df_with_holdout, trace, fold_subjects)
             elpd_per_model[short].update(elpds)
 
@@ -367,19 +494,20 @@ def main(
                 ((df_with_holdout["spoken"].notna()) & holdout_mask).sum()
             )
             elapsed = time.perf_counter() - started
-            fit_records.append(
-                FoldFitRecord(
-                    model_short=short,
-                    fold=k,
-                    n_holdout_subjects=len(fold_subjects),
-                    n_holdout_obs_u=n_u_holdout,
-                    n_holdout_obs_s=n_s_holdout,
-                    wall_seconds=elapsed,
-                )
+            record = FoldFitRecord(
+                model_short=short,
+                fold=k,
+                n_holdout_subjects=len(fold_subjects),
+                n_holdout_obs_u=n_u_holdout,
+                n_holdout_obs_s=n_s_holdout,
+                wall_seconds=elapsed,
+                **fold_gate_fields(gate),
             )
+            fit_records.append(record)
             print(
                 f"    fold {k} / {short} done in {elapsed:.1f}s — "
-                f"{len(elpds)} holdout subjects evaluated"
+                f"{len(elpds)} holdout subjects evaluated; convergence gate "
+                f"{'PASS' if record.passed else 'FAIL'}"
             )
 
     # Build a per-subject elpd table.
@@ -394,24 +522,30 @@ def main(
     )
     elpd_df.to_csv(os.path.join(OUT_DIR, f"kfold_loso_subject_elpds{suffix}.csv"))
 
+    # Convergence flags across folds. A model with any failed fold has its rows
+    # flagged, never silently dropped: the numbers stay visible for what they
+    # are, but they must not be read as a model comparison.
+    flags = model_convergence_flags(fit_records)
+    unconverged = sorted(m for m, ok in flags.items() if not ok)
+    if unconverged:
+        print("\n" + "!" * 74)
+        print(
+            "!!! CONVERGENCE WARNING: at least one fold fit failed the "
+            "diagnostics gate"
+        )
+        print(f"!!! for: {', '.join(unconverged)}.")
+        print(
+            "!!! Their elpd totals and every pairwise comparison involving them"
+        )
+        print(
+            "!!! must not be interpreted (all_folds_converged=False in the CSVs;"
+        )
+        print("!!! per-fold detail in kfold_loso_fits.csv).")
+        print("!" * 74)
+
     # Per-model totals + paired SE.
     print("\n=== K-fold LOSO summary ===")
-    summary_rows = []
-    for short, _ in SPECS:
-        e = elpd_df[short].dropna().to_numpy()
-        n = len(e)
-        # SE of total elpd = sqrt(n * var of per-subject elpd).
-        se = float(np.sqrt(n) * np.std(e, ddof=1))
-        summary_rows.append(
-            {
-                "model": short,
-                "elpd_loso": float(e.sum()),
-                "se": se,
-                "n_subjects": n,
-                "mean_elpd_per_subject": float(e.mean()),
-            }
-        )
-    summary_df = pd.DataFrame(summary_rows)
+    summary_df = summarise_models(elpd_df, models, flags)
     summary_df.to_csv(
         os.path.join(OUT_DIR, f"kfold_loso_summary{suffix}.csv"), index=False
     )
@@ -419,26 +553,7 @@ def main(
 
     # Pairwise comparison with paired SE.
     print("\n=== Pairwise comparisons (paired-difference SE) ===")
-    pair_rows = []
-    for i, (sa, _) in enumerate(SPECS):
-        for j, (sb, _) in enumerate(SPECS):
-            if i >= j:
-                continue
-            common = elpd_df[[sa, sb]].dropna()
-            diff = common[sb] - common[sa]
-            elpd_diff = float(diff.sum())
-            dse = float(np.sqrt(len(diff)) * np.std(diff, ddof=1))
-            pair_rows.append(
-                {
-                    "model_a": sa,
-                    "model_b": sb,
-                    "elpd_diff_b_minus_a": elpd_diff,
-                    "dse_paired": dse,
-                    "diff_over_dse": elpd_diff / dse if dse > 0 else float("nan"),
-                    "n_subjects": len(diff),
-                }
-            )
-    pair_df = pd.DataFrame(pair_rows)
+    pair_df = pairwise_compare(elpd_df, models, flags)
     pair_df.to_csv(
         os.path.join(OUT_DIR, f"kfold_loso_compare{suffix}.csv"), index=False
     )
@@ -446,7 +561,7 @@ def main(
 
     fit_df = pd.DataFrame([r.__dict__ for r in fit_records])
     fit_df.to_csv(os.path.join(OUT_DIR, f"kfold_loso_fits{suffix}.csv"), index=False)
-    print("\n=== Fit timings ===")
+    print("\n=== Fit timings and convergence ===")
     print(fit_df.to_string(index=False))
 
     total_wall = fit_df["wall_seconds"].sum()

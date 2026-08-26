@@ -9,9 +9,14 @@ default; see :mod:`vocab_growth.intervals`)? The loader is
 spec-driven and tolerant of absent files, so it handles both CSV dialects with no
 special-casing — the bivariate/univariate engines write ``Ey``/``q``/``gap``
 series, the joint engine writes ``q``/``r``/``p_any``/``psi`` + the four-cell
-composition. A variant whose fit did not converge (``r_hat > 1.01`` or ESS below
-threshold) is never reported as "robust": a shifted estimate from a bad fit is
-sampler noise, not prior sensitivity.
+composition. A variant whose fit did not converge is never reported as "robust":
+a shifted estimate from a bad fit is sampler noise, not prior sensitivity. The
+verdict comes from the fit's own gate payload (``diagnostics_summary.json``),
+which also carries the soft tier — divergences, energy BFMI and unassessable
+parameters — so "robust" is reserved for a cleanly passing payload and a
+caveated fit is reported as ``converged-with-caveats``; only a fit that predates
+the payload falls back to the rounded, scalars-only ``diagnostics.csv``, and the
+fallback is itself recorded as a caveat.
 
 Three ways a comparison can be worthless while still producing numbers, each
 detected here rather than left for a reader to notice:
@@ -36,10 +41,17 @@ from __future__ import annotations
 import glob
 import json
 import os
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from dse_research_utils.statistics.diagnostics import ESS_THRESHOLD, RHAT_MAX
+
+from vocab_growth.fit_artifacts import (
+    ACCEPTED_EXCEPTION_KEY,
+    DIAGNOSTICS_SUMMARY_FILENAME,
+    convergence_caveats,
+)
 
 #: Definition fields that always differ between a baseline and its variant, and
 #: whose difference carries no information: the variant's directory name and the
@@ -138,18 +150,119 @@ def load_beta_lag(dirpath: str) -> dict[str, float] | None:
     }
 
 
-def diagnostics_gate(dirpath: str) -> tuple[bool | None, float | None, float | None]:
-    """``(converged, max_rhat, min_ess)`` from ``diagnostics.csv`` (index = params)."""
+#: Separator for the ``caveats`` column. Not ``"; "`` because the caveat strings
+#: themselves may contain semicolons (the accepted-exception ``decided`` field).
+CAVEATS_SEPARATOR = " | "
+
+#: Caveat recorded when a fit predates ``diagnostics_summary.json`` and the
+#: verdict had to fall back to ``diagnostics.csv``.
+CSV_FALLBACK_CAVEAT = (
+    "convergence assessed from diagnostics.csv only (pre-payload fit): rounded, "
+    "scalars-only R-hat/ESS; divergences, energy BFMI and unassessable "
+    "parameters were never checked"
+)
+
+
+@dataclass(frozen=True)
+class DiagnosticsGate:
+    """Convergence verdict for one fit directory (:func:`diagnostics_gate`).
+
+    ``converged`` is the hard R-hat/ESS verdict (``None`` when nothing is
+    recorded at all). ``clean`` is the gate payload's ``passed`` — every check,
+    hard and soft, together — and is what the "robust"/"recovered" verdicts are
+    reserved for; it is ``None`` when no payload exists. ``caveats`` carries the
+    soft-tier problems (divergent transitions, low energy BFMI, unassessable
+    parameters, a recorded R-hat exception) and, for a pre-payload fit, the
+    fallback note itself. Iterating yields ``(converged, max_rhat, min_ess)``
+    so existing triple-unpacking callers keep working.
+    """
+
+    converged: bool | None
+    max_rhat: float | None
+    min_ess: float | None
+    caveats: tuple[str, ...] = ()
+    source: str | None = None
+    clean: bool | None = None
+
+    def __iter__(self):
+        return iter((self.converged, self.max_rhat, self.min_ess))
+
+    @property
+    def caveats_text(self) -> str:
+        return CAVEATS_SEPARATOR.join(self.caveats)
+
+
+def _diagnostics_payload(dirpath: str) -> dict | None:
+    path = os.path.join(dirpath, DIAGNOSTICS_SUMMARY_FILENAME)
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def diagnostics_gate(dirpath: str) -> DiagnosticsGate:
+    """Convergence verdict for the fit in ``dirpath``.
+
+    Reads the canonical gate payload (``diagnostics_summary.json``) when it is
+    present: the per-check booleans supply the hard R-hat/ESS verdict (a
+    recorded, accepted R-hat exception is treated as caveated rather than
+    failed, matching the fit pipeline's own gate), ``passed`` supplies
+    :attr:`DiagnosticsGate.clean`, and
+    :func:`vocab_growth.fit_artifacts.convergence_caveats` plus the
+    unassessable-parameter list supply the soft tier. Only when the payload is
+    absent — a fit made before it existed — does this fall back to scanning
+    ``diagnostics.csv``, whose values are rounded and scalars-only and which
+    records nothing about divergences, BFMI or unassessable parameters; the
+    fallback is recorded as a caveat in the returned record, so such a fit can
+    never be scored as cleanly converged.
+    """
+    payload = _diagnostics_payload(dirpath)
+    if payload is not None:
+        checks = payload.get("checks") or {}
+        rhat_ok = bool(checks.get("rhat"))
+        if not rhat_ok and payload.get(ACCEPTED_EXCEPTION_KEY) is not None:
+            # A registered exception accepts a narrowly-scoped R-hat failure;
+            # convergence_caveats reports it, so it belongs to the soft tier.
+            rhat_ok = True
+        converged = rhat_ok and bool(checks.get("ess"))
+        caveats = list(convergence_caveats(payload))
+        unassessable = payload.get("unassessable_parameters") or []
+        if unassessable:
+            shown = ", ".join(unassessable[:6])
+            if len(unassessable) > 6:
+                shown += f", ... ({len(unassessable)} in total)"
+            caveats.append(
+                f"R-hat/ESS could not be assessed for {shown}: an unmeasured "
+                "parameter is not a passing one"
+            )
+        max_rhat = payload.get("max_rhat")
+        min_ess = payload.get("min_ess")
+        return DiagnosticsGate(
+            converged=converged,
+            max_rhat=None if max_rhat is None else float(max_rhat),
+            min_ess=None if min_ess is None else float(min_ess),
+            caveats=tuple(caveats),
+            source=DIAGNOSTICS_SUMMARY_FILENAME,
+            clean=bool(payload.get("passed")),
+        )
+
     df = _read(dirpath, "diagnostics.csv")
     if df is None or "r_hat" not in df.columns:
-        return (None, None, None)
+        return DiagnosticsGate(converged=None, max_rhat=None, min_ess=None)
     max_rhat = float(np.nanmax(df["r_hat"].values))
     ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
     min_ess = float(np.nanmin(df[ess_cols].min(axis=1).values)) if ess_cols else None
     converged = bool(
         max_rhat <= RHAT_MAX and min_ess is not None and min_ess >= ESS_THRESHOLD
     )
-    return (converged, max_rhat, min_ess)
+    return DiagnosticsGate(
+        converged=converged,
+        max_rhat=max_rhat,
+        min_ess=min_ess,
+        caveats=(CSV_FALLBACK_CAVEAT,),
+        source="diagnostics.csv",
+        clean=None,
+    )
 
 
 def _manifest(dirpath: str) -> dict | None:
@@ -265,13 +378,15 @@ def summarise_absent(label: str, status: str, reason: str, variant_dir: str | No
         "coverage": None,
         "quantities_outside_ci": "",
         "max_abs_delta": None,
+        "caveats": "",
         "verdict": reason,
     }
     if variant_dir:
-        converged, max_rhat, min_ess = diagnostics_gate(variant_dir)
-        row["converged"] = converged
-        row["max_rhat"] = max_rhat
-        row["min_ess"] = min_ess
+        gate = diagnostics_gate(variant_dir)
+        row["converged"] = gate.converged
+        row["max_rhat"] = gate.max_rhat
+        row["min_ess"] = gate.min_ess
+        row["caveats"] = gate.caveats_text
     return row
 
 
@@ -352,8 +467,15 @@ def summarise(
     warranted. ``mismatch`` and ``coverage`` come from
     :func:`definition_mismatch` and :func:`coverage_report`; both default to "not
     checked" so an older caller keeps its behaviour.
+
+    "robust" is reserved for a variant whose gate payload passed cleanly. A fit
+    that cleared the hard R-hat/ESS tier but recorded soft-tier caveats
+    (divergences, low BFMI, unassessable parameters) — or one so old that only
+    ``diagnostics.csv`` exists — is assessed, but reported under the
+    ``converged-with-caveats`` status with the caveats spelled out.
     """
-    converged, max_rhat, min_ess = diagnostics_gate(variant_dir)
+    gate = diagnostics_gate(variant_dir)
+    converged, max_rhat, min_ess = gate
     checked = comparison.dropna(subset=["within_baseline_ci"])
     # The column mixes Python bools with None (P_psi_gt_1 / four-cell rows), so it
     # is object dtype even after dropna; ~ on object bools yields -2/-1, not a
@@ -369,6 +491,7 @@ def summarise(
         baseline_rows, shared_rows, missing = coverage
         coverage_frac = (shared_rows / baseline_rows) if baseline_rows else None
 
+    caveated = converged is True and bool(gate.caveats)
     status = "compared"
     if mismatch:
         status = "stale-pairing"
@@ -389,10 +512,27 @@ def summarise(
             f"PARTIAL COVERAGE (not assessed): only {coverage[1]} of "
             f"{coverage[0]} baseline rows are shared{missing_note}"
         )
-    elif not outside:
-        verdict = "robust (all within baseline 89% interval)"
     else:
-        verdict = "sensitive: " + ", ".join(outside)
+        if caveated:
+            status = "converged-with-caveats"
+        if outside:
+            verdict = "sensitive: " + ", ".join(outside)
+            if caveated:
+                verdict += " (converged with caveats)"
+        elif gate.clean is True:
+            verdict = "robust (all within baseline 89% interval)"
+        elif caveated:
+            verdict = (
+                "within baseline 89% interval, but converged with caveats — "
+                "not scored robust (see caveats)"
+            )
+        else:
+            # Convergence was never recorded at all. The containment holds, but
+            # a robustness claim needs a clean gate payload behind it.
+            verdict = (
+                "within baseline 89% interval, but no recorded convergence "
+                "gate — not scored robust"
+            )
     return {
         "variant": label,
         "status": status,
@@ -404,5 +544,6 @@ def summarise(
         "coverage": coverage_frac,
         "quantities_outside_ci": ", ".join(outside),
         "max_abs_delta": max_abs_delta,
+        "caveats": gate.caveats_text,
         "verdict": verdict,
     }

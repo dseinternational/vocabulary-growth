@@ -462,9 +462,9 @@ def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
 
     _save_single(
         pre + "q_at_U",
-        dict(ylim=(0, 1.05), xlabel="Words understood N",
-             ylabel="q(U=N) = spoken / understood",
-             title="Proportion spoken given understood"),
+        dict(ylim=(0, 1.05), xlabel="Population words understood N",
+             ylabel="q = S(a_U(N)) / N (population curves)",
+             title="Population production ratio at matched comprehension"),
         q_at_U,
     )
 
@@ -546,12 +546,14 @@ def _print_summary(outcome, ew, lr, ad, disp, het, disp_ds_lab) -> None:
 # ----------------------------------------------------------------------------
 def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
                               td_key: str = JOINT_TD_KEY) -> None:
-    """Contrast the production ratio q = S/U *given words understood*.
+    """Contrast the population production ratio q = S/U at matched comprehension.
 
     Matching on comprehension N (rather than age) strips out the TD/DS timescale
-    difference: it asks "when a child understands N words, what fraction does
-    she speak, and how much sooner does TD say them?". Requires JOINT models so
-    U and S are coupled per draw (VG20 DS vs VG13 TD).
+    difference: the statistic is the population production ratio read at the age
+    each population's comprehension trajectory reaches N words. It is a
+    population-curve contrast, not a child-level conditional — it uses no
+    subject effects and no rho_uq, so it is not E[q_i | U_i = N]. Requires JOINT
+    models so U and S are coupled per draw (VG20 DS vs VG13 TD).
     """
     ds_trace, ds_n, ds_lab = resolve_joint(ds_key)
     td_trace, td_n, td_lab = resolve_joint(td_key)
@@ -564,7 +566,8 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
           flush=True)
     ia, ib = C.align_draws(U_ds.shape[0], U_td.shape[0], seed=SEED)
 
-    # q at matched comprehension U = N (the headline: spoken fraction given U).
+    # The population production ratio read at the age each population's
+    # comprehension trajectory reaches N words (the headline contrast).
     qU_ds = C.compute_q_at_U(ages_ds, U_ds, S_ds, N_GRID_Q)[ia]
     qU_td = C.compute_q_at_U(ages_td, U_td, S_td, N_GRID_Q)[ib]
     q_ds_s = C.summarise_draws(qU_ds, N_GRID_Q, "words")
@@ -589,7 +592,8 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
 
     _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s, da_td, da_ds, qa_td, qa_ds)
 
-    print("  Spoken fraction given understood q(U=N) (coverage-filtered):")
+    print("  Population production ratio at matched comprehension q(U=N) "
+          "(coverage-filtered):")
     qtab = _merge(N_GRID_Q, "words", q_TD=q_td_s, q_DS=q_ds_s, dq=dq_s)
     for _, r in qtab[qtab["dq_coverage"] >= MIN_COVERAGE].iterrows():
         print(f"    U={int(r['words']):>3}: TD q={r['q_TD_median']:.2f}  "

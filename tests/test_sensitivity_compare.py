@@ -12,9 +12,37 @@ raises ``KeyError``, aborting ``scripts/compare_sensitivity.py`` for vg15.
 VG10/VG11 frames are pure bool and never hit this.
 """
 
+import json
+
 import pandas as pd
 
-from vocab_growth.sensitivity.compare import compare_dirs, summarise
+from vocab_growth.sensitivity.compare import compare_dirs, diagnostics_gate, summarise
+
+
+def _write_gate_payload(dirpath, **overrides):
+    """A ``diagnostics_summary.json`` in the shape the fit pipeline writes."""
+    payload = {
+        "passed": True,
+        "checks": {
+            "rhat": True,
+            "ess": True,
+            "divergences": True,
+            "bfmi": True,
+            "diagnostics_assessable": True,
+        },
+        "divergences": 0,
+        "max_rhat": 1.004,
+        "min_ess": 1500.0,
+        "bfmi_per_chain": [0.9, 0.85],
+        "rhat_failing": [],
+        "ess_failing": [],
+        "unassessable_parameters": [],
+        "thresholds": {"rhat_max": 1.01, "ess_threshold": 400, "bfmi_threshold": 0.3},
+    }
+    payload.update(overrides)
+    (dirpath / "diagnostics_summary.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
 
 
 def test_summarise_tolerates_mixed_bool_none_ci_column(tmp_path):
@@ -63,9 +91,7 @@ def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
     # (base Ey_any interval is [90, 150]; the variant median 120 sits inside it).
     _write_vg15_outputs(var_dir, q_median=0.7, p_any_median=0.35,
                         ey_any_median=120.0, psi_median=1.6, p_psi_gt_1=0.98)
-    pd.DataFrame({
-        "r_hat": [1.005], "ess_bulk": [1000.0], "ess_tail": [900.0],
-    }).to_csv(var_dir / "diagnostics.csv", index=False)
+    _write_gate_payload(var_dir)
 
     comparison = compare_dirs(str(base_dir), str(var_dir))
     by_qty = comparison.set_index("quantity")["within_baseline_ci"]
@@ -79,6 +105,8 @@ def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
 
     row = summarise(comparison, str(var_dir), label="vg15-variant")
     assert row["converged"] is True
+    assert row["status"] == "compared"
+    assert row["caveats"] == ""
     assert row["n_checked"] == 4
     assert row["n_within_ci"] == 3
     assert row["quantities_outside_ci"] == "q"
@@ -165,3 +193,116 @@ def test_beta_lag_within_the_baseline_interval_scores_robust(tmp_path):
 
     comparison = compare_dirs(str(base_dir), str(var_dir))
     assert comparison.set_index("quantity")["within_baseline_ci"]["beta_lag"] is True
+
+
+# --- The diagnostics gate reads the canonical payload (issue #266, finding 7d) --
+
+
+def test_diagnostics_gate_prefers_the_payload_and_reports_soft_caveats(tmp_path):
+    _write_gate_payload(
+        tmp_path,
+        passed=False,
+        checks={
+            "rhat": True, "ess": True, "divergences": False, "bfmi": False,
+            "diagnostics_assessable": True,
+        },
+        divergences=12,
+        bfmi_per_chain=[0.2, 0.9],
+    )
+    # A contradictory diagnostics.csv proves the payload, not the CSV, is read.
+    pd.DataFrame({"r_hat": [1.2], "ess_bulk": [10.0], "ess_tail": [10.0]}).to_csv(
+        tmp_path / "diagnostics.csv", index=False
+    )
+
+    gate = diagnostics_gate(str(tmp_path))
+    converged, max_rhat, min_ess = gate  # triple unpacking stays supported
+    assert converged is True             # the hard R-hat/ESS tier passed
+    assert gate.clean is False           # but the payload is not clean
+    assert max_rhat == 1.004
+    assert min_ess == 1500.0
+    assert any("divergent" in caveat for caveat in gate.caveats)
+    assert any("BFMI" in caveat for caveat in gate.caveats)
+
+
+def test_diagnostics_gate_hard_failure_in_the_payload_is_non_converged(tmp_path):
+    _write_gate_payload(
+        tmp_path,
+        passed=False,
+        checks={
+            "rhat": False, "ess": True, "divergences": True, "bfmi": True,
+            "diagnostics_assessable": True,
+        },
+        max_rhat=1.08,
+        rhat_failing=["eta"],
+    )
+    gate = diagnostics_gate(str(tmp_path))
+    assert gate.converged is False
+    assert gate.clean is False
+
+
+def test_diagnostics_gate_flags_unassessable_parameters_as_a_caveat(tmp_path):
+    _write_gate_payload(
+        tmp_path,
+        passed=False,
+        checks={
+            "rhat": True, "ess": True, "divergences": True, "bfmi": True,
+            "diagnostics_assessable": False,
+        },
+        unassessable_parameters=["tau_subj_q"],
+    )
+    gate = diagnostics_gate(str(tmp_path))
+    assert gate.converged is True
+    assert gate.clean is False
+    assert any("could not be assessed" in caveat for caveat in gate.caveats)
+
+
+def test_diagnostics_gate_falls_back_to_the_csv_and_says_so(tmp_path):
+    pd.DataFrame({"r_hat": [1.005], "ess_bulk": [1000.0], "ess_tail": [900.0]}).to_csv(
+        tmp_path / "diagnostics.csv", index=False
+    )
+    gate = diagnostics_gate(str(tmp_path))
+    assert gate.converged is True
+    assert gate.clean is None
+    assert gate.source == "diagnostics.csv"
+    assert any("diagnostics.csv" in caveat for caveat in gate.caveats)
+
+
+def test_summarise_reports_converged_with_caveats_rather_than_robust(tmp_path):
+    base_dir, var_dir = tmp_path / "base", tmp_path / "var"
+    base_dir.mkdir(), var_dir.mkdir()
+    _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
+                        ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
+    _write_vg15_outputs(var_dir, q_median=0.5, p_any_median=0.3,
+                        ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
+    _write_gate_payload(
+        var_dir,
+        passed=False,
+        checks={
+            "rhat": True, "ess": True, "divergences": False, "bfmi": True,
+            "diagnostics_assessable": True,
+        },
+        divergences=3,
+    )
+
+    comparison = compare_dirs(str(base_dir), str(var_dir))
+    row = summarise(comparison, str(var_dir), label="vg15-variant")
+    assert row["converged"] is True
+    assert row["status"] == "converged-with-caveats"
+    assert "not scored robust" in row["verdict"]
+    assert "divergent" in row["caveats"]
+
+
+def test_summarise_keeps_robust_for_a_clean_payload(tmp_path):
+    base_dir, var_dir = tmp_path / "base", tmp_path / "var"
+    base_dir.mkdir(), var_dir.mkdir()
+    _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
+                        ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
+    _write_vg15_outputs(var_dir, q_median=0.5, p_any_median=0.3,
+                        ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
+    _write_gate_payload(var_dir)
+
+    comparison = compare_dirs(str(base_dir), str(var_dir))
+    row = summarise(comparison, str(var_dir), label="vg15-variant")
+    assert row["status"] == "compared"
+    assert row["caveats"] == ""
+    assert row["verdict"] == "robust (all within baseline 89% interval)"

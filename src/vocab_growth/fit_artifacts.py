@@ -270,6 +270,7 @@ def fit_validation_kwargs(
     expected_sampling_parameters: Any,
     current_git: dict[str, object] | None = None,
     current_source_data_hash: str | None = None,
+    current_analysis_frame_hash: str | None = None,
 ) -> dict[str, Any]:
     """Build one documented validation policy for each artefact consumer.
 
@@ -319,6 +320,12 @@ def fit_validation_kwargs(
     if current_source_data_hash is None:
         raise ValueError(f"{purpose} validation requires the current source-data hash.")
     kwargs["expected_source_data_hash"] = current_source_data_hash
+    # The exact prepared-frame hash catches loader-rule drift the raw-CSV
+    # fingerprint cannot (issue #266 finding 1). Optional because computing it
+    # rebuilds the frame per definition; callers with the registry in hand
+    # pass it via ``vocab_growth.analysis_frames.expected_analysis_frame_hash``.
+    if current_analysis_frame_hash is not None:
+        kwargs["expected_analysis_frame_hash"] = current_analysis_frame_hash
 
     if purpose == "resume":
         if current_git is None:
@@ -507,6 +514,7 @@ def validate_fit_output(
     expected_sampling_parameters: Any | None = None,
     expected_git: dict[str, object] | None = None,
     expected_source_data_hash: str | None = None,
+    expected_analysis_frame_hash: str | None = None,
     require_reporting_quality: bool = False,
     require_rendered_report: bool = False,
     require_clean_fit: bool = False,
@@ -587,6 +595,18 @@ def validate_fit_output(
         and data_payload.get("source_data_hash") != expected_source_data_hash
     ):
         errors.append("Raw data inputs differ from those used for this fit.")
+    if (
+        expected_analysis_frame_hash is not None
+        and data_payload.get("analysis_frame_hash") != expected_analysis_frame_hash
+    ):
+        # The raw-CSV fingerprint above cannot see loader-rule changes: masking
+        # and exclusion rules run in Python after the CSVs are read, so a rule
+        # change leaves the raw hash equal while the fitted frame drifts from
+        # the current one (issue #266 finding 1).
+        errors.append(
+            "The prepared analysis frame differs from the one used for this "
+            "fit: the loader's rules or ordering changed since it was fitted."
+        )
 
     code_payload = manifest.get("code", {})
     if expected_git is not None:

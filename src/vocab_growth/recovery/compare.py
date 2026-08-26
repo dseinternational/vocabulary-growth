@@ -39,7 +39,7 @@ import xarray as xr
 
 from vocab_growth import intervals
 from vocab_growth.fit_artifacts import require_full_trace
-from vocab_growth.sensitivity.compare import diagnostics_gate
+from vocab_growth.sensitivity.compare import CAVEATS_SEPARATOR, diagnostics_gate
 
 # Dimensions whose elements are reported individually. Observation-level
 # quantities are excluded: they are per-row latents, not estimands, and there are
@@ -296,8 +296,14 @@ def summarise(
 
     A non-converged fit is never reported as recovered: a truth outside the
     posterior of a fit that did not converge says nothing about identifiability.
+    "recovered" is likewise reserved for a fit whose gate payload passed
+    cleanly; a fit that cleared the hard R-hat/ESS tier but recorded soft-tier
+    caveats (divergences, low BFMI, unassessable parameters) — or a pre-payload
+    fit assessed only from ``diagnostics.csv`` — is scored, but its verdict says
+    "converged with caveats" and the caveats travel in their own column.
     """
-    converged, max_rhat, min_ess = diagnostics_gate(fit_dir)
+    gate = diagnostics_gate(fit_dir)
+    converged, max_rhat, min_ess = gate
     checked = table.dropna(subset=["within_ci89"])
     within = checked["within_ci89"].astype(bool) if len(checked) else pd.Series(dtype=bool)
     outside = checked.loc[~within] if len(checked) else checked
@@ -315,16 +321,29 @@ def summarise(
     # reported as unverified rather than quietly assessed: the sampling
     # configurations used for recovery work (dev, test) are below the reporting
     # tier, and the pipeline's hard convergence gate applies only at that tier.
+    clean_pass = gate.clean is True
     if converged is None:
         verdict = "UNVERIFIED (no recorded diagnostics; not assessed)"
     elif converged is False:
         verdict = "NON-CONVERGED (not assessed)"
-    elif not outside_quantities and max_abs_z <= z_threshold:
-        verdict = "recovered (every target within its 89% interval)"
-    elif not outside_quantities:
-        verdict = f"recovered, but |z| up to {max_abs_z:.1f}"
-    else:
+    elif outside_quantities:
         verdict = "not recovered: " + ", ".join(outside_quantities)
+        if not clean_pass:
+            verdict += " (converged with caveats)"
+    elif clean_pass and max_abs_z <= z_threshold:
+        verdict = "recovered (every target within its 89% interval)"
+    elif clean_pass:
+        verdict = f"recovered, but |z| up to {max_abs_z:.1f}"
+    elif max_abs_z <= z_threshold:
+        verdict = (
+            "converged with caveats: every target within its 89% interval, "
+            "but not scored recovered"
+        )
+    else:
+        verdict = (
+            "converged with caveats: targets within interval but |z| up to "
+            f"{max_abs_z:.1f}; not scored recovered"
+        )
 
     return {
         "replicate": label,
@@ -332,6 +351,7 @@ def summarise(
         "converged": converged,
         "max_rhat": max_rhat,
         "min_ess": min_ess,
+        "caveats": gate.caveats_text,
         "n_targets": int(len(checked)),
         "n_within_ci89": int(within.sum()) if len(checked) else 0,
         "coverage_ci89": float(within.mean()) if len(checked) else float("nan"),
@@ -356,12 +376,21 @@ def pooled_row(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     assessed = [s for s in summaries if s.get("converged") is True]
     n_targets = sum(s["n_targets"] for s in assessed)
     n_within = sum(s["n_within_ci89"] for s in assessed)
+    pooled_caveats = sorted(
+        {
+            caveat
+            for s in assessed
+            for caveat in (s.get("caveats") or "").split(CAVEATS_SEPARATOR)
+            if caveat
+        }
+    )
     return {
         "replicate": f"POOLED ({len(assessed)} of {len(summaries)} replicates assessed)",
         "truth_source": ", ".join(sorted({s["truth_source"] for s in summaries})),
         "converged": all(s.get("converged") for s in assessed) if assessed else None,
         "max_rhat": max((s["max_rhat"] for s in assessed if s["max_rhat"]), default=None),
         "min_ess": min((s["min_ess"] for s in assessed if s["min_ess"]), default=None),
+        "caveats": CAVEATS_SEPARATOR.join(pooled_caveats),
         "n_targets": n_targets,
         "n_within_ci89": n_within,
         "coverage_ci89": (n_within / n_targets) if n_targets else float("nan"),
