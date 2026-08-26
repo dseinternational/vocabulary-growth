@@ -56,8 +56,16 @@ OUTCOME_LABELS = {
 SINGLE_OUTCOME = "y_obs"
 
 # VG15 additionally stores four-cell and produced-cell likelihoods. The engine
-# does not include them in its LOO reporting -- they are a different estimand on
-# a different set of rows -- so neither do we.
+# does not include them in its LOO reporting -- a Dirichlet-Multinomial over
+# cells is a different estimand on a different set of rows, not the
+# per-observation Beta-Binomial the marginal terms are -- so neither do we.
+#
+# State the consequence rather than leaving it to be inferred (#266): these two
+# terms are the ones that identify the sign-speech association psi, so psi is
+# not scored by leave-one-out at all, in a refitted table or a backfilled one.
+# A cross-tabulation row still contributes its `y_u_obs` term, so the "words
+# understood" row holds out one of that row's two factors while its composition
+# factor stays in the conditioning set.
 EXCLUDED = {"cells_obs", "nz_prod_cells_obs"}
 
 

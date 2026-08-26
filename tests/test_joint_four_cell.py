@@ -22,6 +22,15 @@ from vocab_growth.models import common_joint_modality as cjm
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.definitions import VG15
 
+# The fixture pools below carry uk_02, uk_07 and es_01 sources but no nz_01
+# CSV, so they say so rather than relying on a loader that tolerates the file's
+# absence. That tolerance was the fail-open VG15 carried until issue #266: a
+# missing source silently dropped all 111 nz_01 composition observations while
+# the build banner still reported the source as included. Tests that need the
+# nz_01 block write their own CSV (see tests/test_nz01_produced_cells.py), and
+# the registered default staying True is pinned separately below.
+_FIXTURE_VG15 = dataclasses.replace(VG15, include_nz01_cells=False)
+
 
 def _write_uk02_csv(path):
     rows = [
@@ -141,7 +150,7 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
         ),
         sampling=sampling.get_sampling_configuration("test"),
     )
-    cjm.prepare_joint_data(context, VG15)
+    cjm.prepare_joint_data(context, _FIXTURE_VG15)
     analysis_df = context.analysis_df
 
     assert "empty_child" not in set(analysis_df["subject_id"])
@@ -245,7 +254,7 @@ def test_uk07_cells_join_uk02_in_the_psi_likelihood(tmp_path, monkeypatch):
         cjm.prepare_joint_data(context, definition)
         return context.analysis_df
 
-    on = _prepared(VG15)
+    on = _prepared(_FIXTURE_VG15)
     uk07_on = on[on["study"] == "uk_07"]
     assert len(uk07_on) == 1
     assert uk07_on.iloc[0]["signed_spoken"] == 4          # a four-cell row
@@ -255,7 +264,7 @@ def test_uk07_cells_join_uk02_in_the_psi_likelihood(tmp_path, monkeypatch):
     cell_studies = set(on.loc[on["signed_spoken"].notna(), "study"])
     assert cell_studies == {"uk_02", "uk_07", "es_01"}
 
-    off = _prepared(dataclasses.replace(VG15, include_uk07_cells=False))
+    off = _prepared(dataclasses.replace(_FIXTURE_VG15, include_uk07_cells=False))
     uk07_off = off[off["study"] == "uk_07"]
     assert len(uk07_off) == 1
     assert pd.isna(uk07_off.iloc[0]["signed_spoken"])     # no cross-tab term
@@ -383,14 +392,14 @@ def test_es01_cells_join_the_psi_likelihood_and_fall_back_when_off(
         cjm.prepare_joint_data(context, definition)
         return context.analysis_df
 
-    on = _prepared(VG15)                       # default: cells on
+    on = _prepared(_FIXTURE_VG15)                       # default: cells on
     es_on = on[on["study"] == "es_01"]
     assert len(es_on) == 1
     assert es_on.iloc[0]["signed_spoken"] == 5           # a four-cell row
     assert pd.isna(es_on.iloc[0]["spoken"])              # marginals suppressed
     assert pd.isna(es_on.iloc[0]["signed"])
 
-    off = _prepared(dataclasses.replace(VG15, include_es01_cells=False))
+    off = _prepared(dataclasses.replace(_FIXTURE_VG15, include_es01_cells=False))
     es_off = off[off["study"] == "es_01"]
     assert len(es_off) == 1
     assert pd.isna(es_off.iloc[0]["signed_spoken"])      # no cross-tab term
@@ -436,7 +445,7 @@ def test_es01_defective_row_keeps_its_marginals_but_not_its_gestural_total(
         ),
         sampling=sampling.get_sampling_configuration("test"),
     )
-    cjm.prepare_joint_data(context, VG15)
+    cjm.prepare_joint_data(context, _FIXTURE_VG15)
     row = context.analysis_df.query("study == 'es_01'").iloc[0]
 
     assert pd.isna(row["signed_spoken"])   # no composition
@@ -538,6 +547,54 @@ def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02():
     # question at once and cannot separate them — which is why it is documented as
     # a trajectory-shape check rather than a psi check.
     assert cells["study"].nunique() == 1
+
+
+def test_single_informed_study_still_gets_a_per_study_psi_row():
+    """The one study that informs psi must not be filtered out for informing it.
+
+    With a single cross-tab source the model takes its degenerate branch and
+    pins every ``delta_psi`` to zero, so ``psi_study`` equals the population
+    ``psi`` for every study -- including the informed one. The summary used
+    ``np.allclose(draws, psi)`` as a proxy for "uninformed", which under
+    ``dse_native_only`` (uk_02's DSE arm is the only cross-tab left) discarded
+    every row, wrote no ``posterior_summary_psi_study.csv`` and printed no
+    table for the only study that identifies the association (#266). The
+    indicator is now carried explicitly by the samples object.
+    """
+    rng = np.random.default_rng(266)
+    psi_draws = np.exp(rng.normal(0.6, 0.2, size=500))
+    names = ["ie_01", "ie_02", "uk_02", "uk_06"]
+    # The degenerate branch: every study sits at exactly the population value.
+    psi_study = np.tile(psi_draws, (len(names), 1))
+
+    summary = cjm.summarise_psi_by_study(
+        psi_study, names, ("uk_02",), ci_prob=0.90, inner=0.5
+    )
+
+    assert list(summary["study"]) == ["uk_02"]
+    assert summary.loc[0, "psi_median"] == float(np.median(psi_draws))
+
+    # And the uninformed studies are still dropped when more than one source is
+    # present, which is what the equality proxy got right.
+    informed_two = cjm.summarise_psi_by_study(
+        psi_study, names, ("uk_02", "ie_01"), ci_prob=0.90, inner=0.5
+    )
+    assert list(informed_two["study"]) == ["ie_01", "uk_02"]
+
+    # No cross-tab at all -> no file, rather than an empty one.
+    assert cjm.summarise_psi_by_study(
+        psi_study, names, (), ci_prob=0.90, inner=0.5
+    ).empty
+
+
+def test_psi_informed_studies_is_a_field_of_the_samples_object():
+    """The indicator has to travel with the samples, not be re-derived by the
+    summary: the summary sees only draws, and draws cannot distinguish "pinned
+    to the population value because uninformed" from "pinned to the population
+    value because it is the sole informed study"."""
+    assert "psi_informed_studies" in {
+        f.name for f in dataclasses.fields(cjm.JointModelSamples)
+    }
 
 
 # ------------------------------------------------- sign-to-speech milestones

@@ -12,6 +12,7 @@ import dse_research_utils.statistics.models.sampling as sampling
 from rich import print
 
 from vocab_growth import environment as local_env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     fit_validation_kwargs,
     source_data_hash,
@@ -99,6 +100,9 @@ if __name__ == "__main__":
             expected_sampling_config_name=args.config,
             expected_sampling_parameters=asdict(expected_sampling),
             current_source_data_hash=current_source_hash,
+            current_analysis_frame_hash=expected_analysis_frame_hash(
+                model_id, definition
+            ),
         )
         validated_output = validate_fit_for_upload(output_dir, validation_kwargs)
         upload_plan.append((validated_output, model_label))

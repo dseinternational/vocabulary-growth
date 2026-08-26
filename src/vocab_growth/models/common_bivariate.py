@@ -210,11 +210,15 @@ BivariateContext = ModelFitContext[BivariateModelConfiguration, BivariateModelSa
 # ============================================================
 
 
-def prepare_bivariate_data(
-    context: BivariateContext,
+def build_bivariate_analysis_frame(
     definition: BivariateModelDefinition,
-):
-    """Load and prepare data for a bivariate model from its definition."""
+) -> tuple[pd.DataFrame, dict]:
+    """The exact prepared frame the bivariate engine fits, with no side effects.
+
+    Split out of :func:`prepare_bivariate_data` so fitted-output validation can
+    recompute the frame (and its exact hash) without a fit context — see
+    :mod:`vocab_growth.analysis_frames` (issue #266 finding 1).
+    """
     columns = ["age", "understood", "spoken"]
     if definition.exclude_us01_spoken_ceiling:
         columns.extend(["study", "survey_vocab_max"])
@@ -241,6 +245,16 @@ def prepare_bivariate_data(
     has_u = analysis_df["understood"].notna()
     has_s = analysis_df["spoken"].notna()
     analysis_df = analysis_df[has_u | has_s].reset_index(drop=True)
+    return analysis_df, {"ceiling_rows_excluded": ceiling_rows_excluded}
+
+
+def prepare_bivariate_data(
+    context: BivariateContext,
+    definition: BivariateModelDefinition,
+):
+    """Load and prepare data for a bivariate model from its definition."""
+    analysis_df, info = build_bivariate_analysis_frame(definition)
+    ceiling_rows_excluded = info["ceiling_rows_excluded"]
 
     desc = descriptive_stats.describe_all(
         analysis_df[["age", "understood", "spoken"]], alpha=0.05
@@ -447,6 +461,12 @@ def build_model(
     y_s_observed = spoken_spec.observed
     idx_s = spoken_spec.indices
     n_s = spoken_spec.n_observed
+    # The stored spoken mask must mark the LIKELIHOOD rows: paired-only drops
+    # the marginal fallback rows above, and calibration / extraction / LOO all
+    # read ``obs_s_mask`` as "the rows y_s_obs covers" (issue #266 finding 3).
+    # Under every other treatment this equals ``has_s`` exactly.
+    has_s_likelihood = np.zeros(n, dtype=bool)
+    has_s_likelihood[idx_s] = True
 
     # Validate
     if not np.all(y_u_observed >= 0):
@@ -554,9 +574,11 @@ def build_model(
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
 
-        # Store masks and indices as constant data for extraction
+        # Store masks and indices as constant data for extraction. The spoken
+        # mask marks the likelihood rows (paired-only drops fallback rows), not
+        # every observed-spoken row — see the derivation above (issue #266).
         _ = pm.Data("obs_u_mask", has_u.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_s_mask", has_s.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_s_mask", has_s_likelihood.astype(int), dims=("obs_id",))
         s_likelihood_n = pm.Data(
             "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
         )
@@ -1004,6 +1026,13 @@ def diagnostics(context: BivariateContext, definition=None):
     ``kappa_u_obs``/``kappa_s_obs`` for the trace plot as well; an
     observation-sized variable never fitted under ArviZ's subplot cap, so they
     never rendered, and since 2026-08-23 the sampler does not store them.)
+
+    Both per-outcome scores are leave-one-likelihood-term-out rather than
+    leave-one-administration-out: the spoken likelihood's trial count is the
+    same administration's observed understood count, so a held-out spoken term
+    is scored conditional on that observed comprehension, and a held-out
+    understood term leaves its own observed value in the spoken term's
+    denominator (#266).
 
     **The pair plot is reordered** for any definition carrying a distinguishing
     child structure, so the parameters the model was added for fill the capped

@@ -43,6 +43,7 @@ from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     read_sampled_parameters_attr,
     require_full_trace,
@@ -99,6 +100,12 @@ def rebuilt_model_for(spec: ModelSpec, fit_dir: str, scratch_dir: str):
         fit_dir,
         expected_definition=definition,
         expected_source_data_hash=source_data_hash(env.DATA_DIR),
+        # "The same rows in the same order" above is exactly what the exact
+        # prepared-frame hash checks and the raw-data fingerprint cannot
+        # (issue #266 finding 1).
+        expected_analysis_frame_hash=expected_analysis_frame_hash(
+            spec.short.lower(), definition
+        ),
     )
     if errors:
         raise RuntimeError(

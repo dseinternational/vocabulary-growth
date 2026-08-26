@@ -43,6 +43,7 @@ import dse_research_utils.statistics.models.sampling as sampling
 
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     FitValidationError,
     fit_validation_kwargs,
@@ -216,6 +217,12 @@ def regenerate(model_id: str, config: str, dry_run: bool = False) -> bool:
                     sampling.get_sampling_configuration(config)
                 ),
                 current_source_data_hash=source_data_hash(env.DATA_DIR),
+                # Loader-rule drift is invisible to the raw-CSV fingerprint, and
+                # replotting a fit whose frame has moved would put current-data
+                # labels on a stale posterior's figures (issue #266 finding 1).
+                current_analysis_frame_hash=expected_analysis_frame_hash(
+                    model_id, definition
+                ),
             ),
         )
     except FitValidationError as exc:

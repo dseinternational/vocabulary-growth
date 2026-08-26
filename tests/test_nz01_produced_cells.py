@@ -173,6 +173,38 @@ def test_prepare_joint_data_excludes_nz01_when_flag_false(tmp_path, monkeypatch)
     assert "nz_marginal_only" not in set(analysis_df["subject_id"])
 
 
+def test_a_requested_but_missing_nz01_source_fails_closed(tmp_path, monkeypatch):
+    """Asking for the nz_01 cross-tab and not getting it must be an error.
+
+    This block used to tolerate the file's absence so the model "still builds",
+    which silently fitted VG15 without all of nz_01's composition observations
+    while the build banner still reported `include_nz01_cells` as True — a
+    missing data source that looked exactly like a successful fit (issue #266).
+    """
+    monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    # Every other source the joint prep reads, but no nz_01 CSV.
+    pd.DataFrame(
+        [
+            dict(
+                subject_id="uk_c", age=30.0, comprehension=19, signed=6, spoken=7,
+                understood_only=10, signed_only=2, spoken_only=3, signed_spoken=4,
+            )
+        ]
+    ).to_csv(tmp_path / "vocab_data_uk_02.csv", index=False)
+    _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+    _write_es01_csv(tmp_path / "vocab_data_es_01.csv")
+
+    with pytest.raises(FileNotFoundError, match="include_nz01_cells"):
+        cjm.build_joint_analysis_frame(VG15)
+
+    # And the documented way to fit without it still works.
+    frame, info = cjm.build_joint_analysis_frame(
+        dataclasses.replace(VG15, include_nz01_cells=False)
+    )
+    assert info["use_nz01_cells"] is False
+    assert "prod_signed_spoken" not in frame.columns
+
+
 def test_produced_cell_observation_extraction_tolerates_empty_mask_without_columns():
     df = pd.DataFrame({"age": [30.0, 48.0]})
     counts, ages = cjm._extract_produced_cell_observations(

@@ -44,6 +44,7 @@ import pymc as pm
 import xarray as xr
 
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     normalise_for_json,
     source_data_hash,
@@ -300,6 +301,12 @@ def truth_from_trace(
             os.path.dirname(trace_path),
             expected_definition=definition,
             expected_source_data_hash=source_data_hash,
+            # A truth draw is only a truth draw for the data the fit saw. The
+            # raw-CSV fingerprint cannot see loader-rule changes, because the
+            # rules run after the CSVs are read (issue #266 finding 1).
+            expected_analysis_frame_hash=expected_analysis_frame_hash(
+                definition.model_id.lower(), definition
+            ),
         )
         if errors:
             raise ValueError(

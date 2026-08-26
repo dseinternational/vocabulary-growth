@@ -284,14 +284,9 @@ for N in [50, 100, 150]:
 pd.DataFrame(rows).set_index("Understood N (words)")
 ```
 
-At equal comprehension, DS speaks a smaller fraction of the words it understands
-(Δq > 0, P ≈ 1.00 from N ≈ 50 to ≈ 150, converging by N ≈ 200). The TD comparator
-(VG13, 8–18 mo) already understands ~40 words at its youngest supported age, so q
-is **not identified below N ≈ 50 for TD** — those points are dropped by the
-coverage filter, and the curves begin where both populations genuinely reach that
-comprehension level within support.
+At equal population comprehension, the DS population curve produces a smaller fraction of the words the population trajectory understands (Δq > 0, P ≈ 1.00 from N ≈ 50 to ≈ 150, converging by N ≈ 200). This q is the population production ratio read at the age each population's comprehension trajectory reaches N words — a population-curve contrast, not E[q_i | U_i = N]; a child-level "given a child understands N words" statement would need the subject random effects and (in VG20) their correlation rho_uq, which this transformation does not use. The TD comparator (VG13, 8–18 mo) already understands ~40 words at its youngest supported age, so q is **not identified below N ≈ 50 for TD** — those points are dropped by the coverage filter, and the curves begin where both populations genuinely reach that comprehension level within support.
 
-![Production ratio at matched comprehension q(U=N)](ds_td_comprehension_q_at_U.png){#fig-qatu .lightbox fig-align="left"}
+![Population production ratio at matched comprehension q(U=N)](ds_td_comprehension_q_at_U.png){#fig-qatu .lightbox fig-align="left"}
 
 ![Spoken-fraction gap at matched comprehension](ds_td_comprehension_dq.png){#fig-dq .lightbox fig-align="left"}
 

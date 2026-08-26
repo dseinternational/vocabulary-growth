@@ -1732,3 +1732,71 @@ def test_load_combined_data_masks_the_ten_impossible_comprehension_counts():
     assert "produced" not in masked.columns
     assert len(masked) == len(reinstated)
     assert masked["spoken"].notna().sum() == reinstated["spoken"].notna().sum()
+
+
+def test_the_comprehension_reinstatement_reaches_the_supported_fit_interface():
+    """Every documented reinstatement flag must be reachable through `load_data`.
+
+    This one was implemented on `load_combined_data` alone, so the interface
+    every model and sensitivity variant actually uses could not request it —
+    a documented sensitivity that could not be run (issue #266).
+    """
+    columns = ["age", "understood", "spoken"]
+    masked = data_utils.load_data(
+        population=data_utils.Population.DOWN_SYNDROME, columns=columns
+    )
+    reinstated = data_utils.load_data(
+        population=data_utils.Population.DOWN_SYNDROME,
+        columns=columns,
+        include_comprehension_below_production=True,
+    )
+    difference = int(
+        reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
+    )
+    assert difference == 10
+
+    # It is a Down-syndrome-pool defect class, so asking for it on the
+    # typically-developing pool is a caller error rather than a silent no-op.
+    with pytest.raises(ValueError, match="Down syndrome pool only"):
+        data_utils.load_data(
+            population=data_utils.Population.TYPICALLY_DEVELOPING,
+            columns=columns,
+            include_comprehension_below_production=True,
+        )
+
+
+def test_produced_is_returned_only_on_request():
+    """`produced` is the modality union; no registered model consumes it.
+
+    It is kept out of the default column set so every existing caller sees the
+    historical frame, and offered on request so the exploratory produced-outcome
+    models can use the canonical loader instead of bypassing it (issue #266).
+    """
+    default = data_utils.load_combined_data()
+    with_produced = data_utils.load_combined_data(include_produced=True)
+
+    assert "produced" not in default.columns
+    assert "produced" in with_produced.columns
+    assert len(default) == len(with_produced)
+    pd.testing.assert_frame_equal(
+        with_produced.drop(columns=["produced"]), default
+    )
+
+
+def test_the_prepared_frame_has_a_deterministic_row_order():
+    """The loader queries carry no ORDER BY, so the order was the scan order.
+
+    Everything statistical is order-invariant, but the fit manifest records an
+    exact hash of the prepared frame precisely so a stale posterior can be told
+    from a current one — and a hash over a nondeterministic order cannot be
+    recomputed for validation (issue #266 finding 1).
+    """
+    first = data_utils.load_combined_data()
+    second = data_utils.load_combined_data()
+    pd.testing.assert_frame_equal(first, second)
+
+    # Canonical, not merely repeatable: a shuffled frame sorts back to it.
+    shuffled = first.sample(frac=1.0, random_state=11)
+    pd.testing.assert_frame_equal(
+        data_utils._deterministic_row_order(shuffled), first
+    )

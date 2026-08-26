@@ -20,6 +20,7 @@ import dse_research_utils.statistics.models.reporting as model_reporting
 import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     FitValidationError,
     TracePersistence,
@@ -140,6 +141,11 @@ def _existing_contexts(selected, config: str):
                     expected_sampling_config_name=config,
                     expected_sampling_parameters=asdict(expected_sampling),
                     current_source_data_hash=current_source_hash,
+                    # Rebuilt per definition: catches loader-rule drift the
+                    # raw-CSV fingerprint cannot (issue #266 finding 1).
+                    current_analysis_frame_hash=expected_analysis_frame_hash(
+                        name, definition
+                    ),
                 ),
             )
         except FitValidationError as exc:
@@ -164,6 +170,9 @@ def _publication_plan(contexts, config: str):
             expected_sampling_config_name=config,
             expected_sampling_parameters=asdict(expected_sampling),
             current_source_data_hash=current_source_hash,
+            current_analysis_frame_hash=expected_analysis_frame_hash(
+                name, definition
+            ),
         )
         try:
             validated_output = validate_fit_for_upload(

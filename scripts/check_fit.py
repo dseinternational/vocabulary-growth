@@ -12,6 +12,7 @@ from dataclasses import asdict
 import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     fit_validation_kwargs,
     git_metadata,
@@ -73,6 +74,11 @@ def main() -> int:
                 expected_sampling_parameters=asdict(expected_sampling),
                 current_git=current_git,
                 current_source_data_hash=current_source_hash,
+                # Both purposes this script offers carry the data checks, so the
+                # prepared-frame hash is always computed (issue #266 finding 1).
+                current_analysis_frame_hash=expected_analysis_frame_hash(
+                    key, definition
+                ),
             ),
         )
         if errors:

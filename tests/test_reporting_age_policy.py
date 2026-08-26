@@ -115,7 +115,25 @@ def _cap_for(config, quantity):
 # Emptied on 2026-08-18 when VG14 was refitted, exactly as the note above said it
 # should be. Keep the mechanism: it is what distinguishes "this artefact is stale
 # and we know it" from "this artefact violates the policy".
-KNOWN_STALE: dict[str, set[str]] = {}
+#
+# Refilled on 2026-08-26 for the same reason and with the same expiry. The
+# sign-ratio cap tightened to 72 months after VG14's and VG15's current fits were
+# written (22 August), so both models' `posterior_summary_r` and
+# `posterior_summary_p_any` on disk still run to 84 months. This is stale output,
+# not a live defect: both writers apply `trim_reported_ages(..., sign_ratio_cap)`
+# before the CSV is written (`common_trivariate.py` and `common_joint_modality.py`),
+# so a fresh fit cannot produce these rows. Clearing them needs a reporting-quality
+# refit of VG14 and VG15, which is the refit run recorded in
+# `notes/202608261000-models-review.md` and is out of scope for the issue #266
+# remediation; writing the artefacts by hand instead would break the provenance the
+# publication gate checks. Nothing can publish from them in the meantime — since
+# #266 the publication path also compares the exact prepared-frame hash, and both
+# fits fail it. `test_known_stale_entries_are_still_needed` deletes these entries
+# for us: the first refit makes them fail as unnecessary.
+KNOWN_STALE: dict[str, set[str]] = {
+    "vg14": {"posterior_summary_r", "posterior_summary_p_any"},
+    "vg15": {"posterior_summary_r", "posterior_summary_p_any"},
+}
 
 # Not age-indexed reports: descriptive frames, diagnostics, provenance.
 IGNORE_STEMS = {

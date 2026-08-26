@@ -345,7 +345,15 @@ def compute_latency(
 def compute_q_at_U(
     ages: np.ndarray, U: np.ndarray, S: np.ndarray, N_grid: np.ndarray
 ) -> np.ndarray:
-    """Per-draw production ratio q at matched comprehension U=N: q = S(a_U(N)) / N."""
+    """Per-draw population production ratio at the age the population comprehension
+    trajectory reaches N: q = S(a_U(N)) / N.
+
+    This is the population q(age) re-indexed by population comprehension, not
+    E[q_i | U_i = N]: it uses no child effects and no rho_uq. A child-level
+    "given a child understands N words" statement would condition on the subject
+    random effects (and, in VG20, their correlation), which this transformation
+    does not touch.
+    """
     q = np.full((U.shape[0], len(N_grid)), np.nan)
     for i, N in enumerate(N_grid):
         a_U = first_crossing_age(U, ages, N)

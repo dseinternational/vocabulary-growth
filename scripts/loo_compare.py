@@ -21,13 +21,28 @@ Where the same observed-y vector underlies two models with different
 likelihood shapes (e.g. VG02 univariate-u vs VG05 joint), LOO would not
 be directly comparable, so those are skipped.
 
-The joint likelihood's pointwise unit is the **administration**: for a
-paired row the held-out case is log p(U_i) + log p(S_i | U_i), one PSIS
-weight per administration (#236). Everything here remains
-leave-one-administration-out — repeated administrations of the same child
-are separate cases — so it scores prediction of another administration
-like those in the frame, not generalisation to a new child. For new-child
-questions use grouped leave-one-subject-out (`scripts/kfold_loso.py`).
+Which outputs are leave-one-administration-out, and which are not (#266):
+
+- The `y_joint` rows and the `..._joint` comparison ARE. `_attach_joint_log_likelihood`
+  sums a paired row's two factors into one pointwise entry, so the held-out
+  case is log p(U_i) + log p(S_i | U_i) — one PSIS weight per administration
+  (#236). Repeated administrations of the same child are separate cases, so it
+  scores prediction of another administration like those in the frame, not
+  generalisation to a new child.
+- The univariate models' single row IS: those traces carry one likelihood over
+  administration rows, so the term and the administration are the same thing.
+- The per-outcome `y_u_obs` / `y_s_obs` rows written by `per_model_loo`, and the
+  `..._understood` / `..._spoken` comparisons run by `main`, are NOT. Each holds
+  out one likelihood **term**, not an administration. The spoken likelihood's
+  trial count is the same row's observed understood count, so a held-out spoken
+  term is scored conditional on that observed comprehension, and a held-out
+  understood term leaves its own observed value in the spoken term's
+  denominator. They are comparable across models — every model is scored on the
+  same conditional units — but they are not whole-administration predictive
+  accuracy, and that is exactly why `y_joint` exists alongside them.
+
+For new-child questions use grouped leave-one-subject-out
+(`scripts/kfold_loso.py`).
 """
 
 from __future__ import annotations

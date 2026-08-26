@@ -49,6 +49,11 @@ MATRIX_COLUMNS = [
     "variant",
     "status",
     "converged",
+    # The soft tier: divergences, low energy BFMI, unassessable parameters and
+    # any accepted R-hat exception. `converged` alone reported only the hard
+    # tier, so a variant that had not sampled cleanly could still read as
+    # robust in this matrix (issue #266 finding 7).
+    "caveats",
     "max_rhat",
     "min_ess",
     "n_within_ci",

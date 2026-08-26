@@ -238,3 +238,75 @@ def test_no_child_effects_means_no_child_figures():
     prior = prior.assign(X_plot=xr.DataArray(np.array([12.0]), dims="plot_dim"))
     rng = np.random.default_rng(5)
     assert pcc.unseen_child_curves(prior, _Definition(), rng) is None
+
+
+@pytest.mark.parametrize(
+    ("carried", "missing"),
+    [("tau_subj_u", "tau_subj_q"), ("tau_subj_q", "tau_subj_u")],
+)
+def test_a_one_sided_child_effect_gives_a_zero_offset_on_the_other_outcome(
+    carried, missing
+):
+    """VG08 has a child effect on U and none on q (issue #266 finding 2).
+
+    The graph sets the missing outcome's shift to exactly zero, so the check
+    must produce a zero offset at the expected shape rather than a KeyError
+    before posterior sampling ever starts.
+    """
+    n = 300
+    prior = _prior(
+        f_u_plot=np.zeros((n, 2)),
+        h_plot=np.zeros((n, 2)),
+        kappa_u_plot=np.full((n, 2), 20.0),
+        kappa_s_plot=np.full((n, 2), 20.0),
+        **{carried: np.full(n, 0.8)},
+    )
+    prior = prior.assign(X_plot=xr.DataArray(np.array([12.0, 36.0]), dims="plot_dim"))
+    rng = np.random.default_rng(6)
+
+    deltas = dict(
+        zip(
+            ("tau_subj_u", "tau_subj_q"),
+            pcc.unseen_child_deltas(prior, _Definition(), [12.0, 36.0], rng),
+            strict=True,
+        )
+    )
+    assert deltas[carried].shape == (n, 2)
+    assert deltas[missing].shape == (n, 2)
+    assert np.allclose(deltas[missing], 0.0)
+    assert deltas[carried][:, 0].std() == pytest.approx(0.8, rel=0.15)
+
+    curves = pcc.unseen_child_curves(prior, _Definition(), rng, n_children=n)
+    assert curves is not None
+    assert curves["structure"] == "independent"
+
+
+@pytest.mark.parametrize(
+    ("carried_prefix", "missing_prefix"),
+    [("tau_subj_u", "tau_subj_q"), ("tau_subj_q", "tau_subj_u")],
+)
+def test_a_one_sided_slope_gives_a_zero_offset_on_the_other_outcome(
+    carried_prefix, missing_prefix
+):
+    """The slope branch reads both blocks too; no registered model is one-sided
+    with a slope today, but the same defect was latent there (issue #266)."""
+    n = 500
+    prior = _prior(
+        f_u_plot=np.zeros(n),
+        **{
+            f"{carried_prefix}_0": np.full(n, 0.75),
+            f"{carried_prefix}_1": np.full(n, 0.4),
+            f"{carried_prefix}_rho": np.zeros(n),
+        },
+    )
+    rng = np.random.default_rng(7)
+    deltas = dict(
+        zip(
+            ("tau_subj_u", "tau_subj_q"),
+            pcc.unseen_child_deltas(prior, _Definition(), [12.0, 36.0, 84.0], rng),
+            strict=True,
+        )
+    )
+    assert deltas[missing_prefix].shape == (n, 3)
+    assert np.allclose(deltas[missing_prefix], 0.0)
+    assert not np.allclose(deltas[carried_prefix], 0.0)

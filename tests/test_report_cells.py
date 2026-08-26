@@ -424,6 +424,70 @@ def test_dropped_degenerate_observations_are_disclosed(tmp_path, capsys):
     assert "12 observation(s) were excluded as degenerate" in capsys.readouterr().out
 
 
+# A three-outcome table, as every joint/trivariate engine writes: one row per
+# likelihood term, not one row per administration.
+_MULTI_OUTCOME_ROWS = [
+    {**_CLEAN_ROW, "outcome": "words understood"},
+    {**_CLEAN_ROW, "outcome": "words spoken"},
+    {**_CLEAN_ROW, "outcome": "words signed"},
+]
+
+
+def test_single_outcome_loo_keeps_the_administration_label(tmp_path, capsys):
+    """A univariate fit has one likelihood over administration rows, so the
+    administration wording is correct there and must survive the branch."""
+    report_cells.render_loo_section(str(_loo_fit(tmp_path, [_CLEAN_ROW])))
+    out = capsys.readouterr().out
+    assert "so this is leave-one-administration-out" in out
+    assert "leave-one-likelihood-term-out" not in out
+
+
+def test_multi_outcome_loo_is_not_labelled_leave_one_administration_out(
+    tmp_path, capsys
+):
+    """The label was wrong for every multi-outcome model (issue #266, finding 4).
+
+    A per-outcome row holds out one likelihood term. The spoken likelihood's
+    trial count is the same administration's observed understood count, so
+    neither direction is a clean held-out administration: the spoken score is
+    conditional on that observed comprehension, and the understood score leaves
+    its own observed value in the spoken denominator.
+    """
+    fit = _loo_fit(tmp_path, _MULTI_OUTCOME_ROWS, parameters=("eta_u", "eta_s"))
+    report_cells.render_loo_section(str(fit))
+    out = capsys.readouterr().out
+    assert (
+        "each row is leave-one-likelihood-term-out for that outcome, not "
+        "leave-one-administration-out" in out
+    )
+    assert "conditional on the same administration's observed comprehension" in out
+    assert "not independent held-out units" in out
+    # Still usable for model comparison -- the finding is about the label, not
+    # about the number, and a reader must not be sent away from a valid check.
+    assert "Comparing models on these numbers is still sound" in out
+    assert "must not be read as whole-administration predictive accuracy" in out
+
+
+def test_joint_composition_fits_say_psi_is_unscored(tmp_path, capsys):
+    """VG15 excludes both Dirichlet-Multinomial terms from every LOO row, and
+    those are the only terms that identify psi."""
+    fit = _loo_fit(tmp_path, _MULTI_OUTCOME_ROWS, parameters=("psi", "conc", "eta_u"))
+    report_cells.render_loo_section(str(fit))
+    out = capsys.readouterr().out
+    assert "$\\psi$ is not scored by leave-one-out at all" in out
+    assert "composition factor in the conditioning set" in out
+
+
+def test_multi_outcome_fits_without_composition_terms_omit_the_psi_note(
+    tmp_path, capsys
+):
+    """VG14 and the bivariate engines have no composition likelihood, so the
+    exclusion note would be false there."""
+    fit = _loo_fit(tmp_path, _MULTI_OUTCOME_ROWS, parameters=("eta_u", "eta_s"))
+    report_cells.render_loo_section(str(fit))
+    assert "psi" not in capsys.readouterr().out
+
+
 def test_priors_table_survives_an_overloaded_subject_scale_field():
     """A subject-scale field holding a block, not a float, must not break render.
 

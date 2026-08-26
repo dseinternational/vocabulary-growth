@@ -23,16 +23,34 @@ resolution (``model_dir``) come from ``vocab_growth.comparison``.
 from __future__ import annotations
 
 import os
+from dataclasses import asdict
 
 import dse_research_utils.plot.styles as plot_styles
+import dse_research_utils.statistics.models.sampling as sampling
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.comparison import first_crossing, model_dir, overlay_age_curves
+from vocab_growth.comparisons_provenance import write_comparison_manifest
+from vocab_growth.fit_artifacts import (
+    fit_validation_kwargs,
+    require_valid_fit,
+    source_data_hash,
+)
+from vocab_growth.models.definitions import MODEL_REGISTRY
 
 OUT_DIR = env.comparisons_output_dir()
+
+#: Fits this script reads, validated once before anything is plotted and
+#: recorded in the comparison manifest afterwards. Reading a model's summary
+#: CSV without validating its fit was how a stale posterior reached a published
+#: overlay (issue #266 finding 1).
+CONTRIBUTING_MODELS = (
+    "vg01", "vg02", "vg03", "vg04", "vg05", "vg07", "vg09", "vg10", "vg13", "vg20",
+)
 
 DS_COLOUR = plot_styles.COLOUR_BLUE
 TD_COLOUR = plot_styles.COLOUR_ORANGE
@@ -42,6 +60,34 @@ RE_COLOUR = plot_styles.COLOUR_GREEN
 
 def _read(key: str, filename: str) -> pd.DataFrame:
     return pd.read_csv(os.path.join(model_dir(key), filename))
+
+
+def _validate_contributing_fits(config: str = "rep") -> dict[str, str]:
+    """Fail closed unless every fit this script reads is current and publishable.
+
+    Returns the ``{label: output_dir}`` mapping the comparison manifest records.
+    """
+    expected_sampling = sampling.get_sampling_configuration(config)
+    current_source_hash = source_data_hash(env.DATA_DIR)
+    contributing: dict[str, str] = {}
+    for key in CONTRIBUTING_MODELS:
+        definition = MODEL_REGISTRY[key]
+        output_dir = model_dir(key)
+        require_valid_fit(
+            output_dir,
+            **fit_validation_kwargs(
+                "render",
+                expected_definition=definition,
+                expected_sampling_config_name=config,
+                expected_sampling_parameters=asdict(expected_sampling),
+                current_source_data_hash=current_source_hash,
+                current_analysis_frame_hash=expected_analysis_frame_hash(
+                    key, definition
+                ),
+            ),
+        )
+        contributing[f"{definition.model_id}-{definition.config_name}"] = output_dir
+    return contributing
 
 
 def ds_td_spoken_by_age() -> None:
@@ -328,9 +374,31 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     merged.to_csv(os.path.join(OUT_DIR, "ds_td_spoken_vs_understood_vg20.csv"), index=False)
 
 
+#: Files this script writes into the comparisons directory, recorded in the
+#: manifest so the report sync can tell a comparison whose provenance is known
+#: from one whose is not.
+OUTPUTS = tuple(
+    f"{stem}{ext}"
+    for stem, extensions in (
+        ("ds_td_spoken_by_age", (".png", ".svg")),
+        ("ds_td_understood_by_age", (".png", ".svg")),
+        ("vg05_vs_vg07_understood", (".png", ".svg")),
+        ("vg05_vs_vg07_spoken", (".png", ".svg")),
+        ("ds_td_q_vs_understood", (".png", ".svg")),
+        ("ds_td_q_crossings", (".csv",)),
+        ("vg07_vg09_vg10_q_by_age", (".png", ".svg", ".csv")),
+        ("ds_td_q_by_age_vg20", (".png", ".svg", ".csv")),
+        ("ds_td_q_vs_understood_vg20", (".png", ".svg")),
+        ("ds_td_spoken_vs_understood_vg20", (".png", ".svg", ".csv")),
+    )
+    for ext in extensions
+)
+
+
 def main() -> None:
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
+    contributing = _validate_contributing_fits()
     ds_td_spoken_by_age()
     ds_td_understood_by_age()
     vg05_vs_vg07()
@@ -339,6 +407,12 @@ def main() -> None:
     ds_td_q_by_age_vg20()
     ds_td_q_vs_understood_vg20()
     ds_td_spoken_vs_understood_vg20()
+    write_comparison_manifest(
+        OUT_DIR,
+        script="compare_models.py",
+        contributing=contributing,
+        outputs=list(OUTPUTS),
+    )
     print(f"Comparisons written to: {OUT_DIR}")
 
 
