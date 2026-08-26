@@ -1,0 +1,27 @@
+﻿Down syndrome
+Paper,Participants,Scores,CDI
+Authors,Year,Population,Sample size,Mean age [in months],Age range [in months],Mean score,Min score,Max score,Percentile,SD,CDI version,Language
+"Bello A, Onofrio D, Caselli MC",2014,DS,14,54.00,34-73,230.60,58,407,,99.80,W&G,Italian
+"Bird EK, Cleave P, Trudeau N, Thordardottir E, Sutton A, Thorpe A.",2005,DS monoling,14,73.90,31-101,262.10,n.r.,n.r.,n.r.,72.40,n.r. + sign,"English, French"
+,,DS biling,8,85.50,55-137,265.00,n.r.,n.r.,n.r.,121.70,n.r. + sign,"English, French"
+"Caselli MC, Vicari S, Longobardi E, Lami L, Pizzoli C, Stella G.",1998,DS,40,28.30,10-49,26.50,0,302,n.r.,55.50,W&G,Italian
+"Deckers SR, Van Zaalen Y, Mens EJ, Van Balkom H, Verhoeven L.",2016,DS,25,55.00,29-87,155.50,0,697,n.r.,203.30,modified W&S (added extra column for signed words),Dutch
+,,DS,25,55.00,29-87,91.90,0,301,n.r.,85.90,modified W&S (added extra column for signed words),Dutch
+,,DS,25,73.00,47-105,304.90,0,623,n.r.,196.00,modified W&S (added extra column for signed words),Dutch
+,,DS,25,73.00,47-105,84.10,0,351,n.r.,118.00,modified W&S (added extra column for signed words),Dutch
+"Dulin MS, Loveall SJ, Mattie LJ.",2023,DS,13,17.92,11-29,6.08,0,25,n.r.,7.54,W&G,English
+,,DS,10,24.30,16-48,15.10,0,66,n.r.,21.02,W&G,English
+"Foster-Cohen S, Macrae T, Newbury J.",2023,,35,49.15,30-66,172.63,n.r.,n.r.,n.r.,126.21,W&S + sign,English
+"Foster-Cohen S, Newbury J, Macrae T, van Bysterveldt A.",2022,DS,35,49.68,36-66,179.07,6,595,n.r.,122.68,W&S + sign,English
+"Galeote M, Checa E, Sánchez-Palacios C, Sebastián E, Soto P.",2016,DS,29,52.12,"26,4-72,19",275.59,18,640,n.r.,181.92,CDI-Down,Spanish
+"Harris NGS, Bellugi U, Bates E, Jones W, Rossen M",1997,DS,39,39.00,12-76,150.00,n.r.,n.r.,n.r.,172.00,W&G + W&S,English
+"Joyce A, Dimitriou D.",2017,DS,22,36.57,"24,38-56,48",18.55,n.r.,n.r.,n.r.,1.16,W&G,English
+"Mervis CB, Robinson BF.",2000,DS,28,30.00,24-35.4,66.35,0,324,n.r.,79.24,W&S,English
+"Schafer G, Williams TI, Smith PT",2013,DS,28,51.40,23.7-133,249.00,20,699,n.r.,210.00,W&S - modified,English
+"Singh SJ, Gan B, Chu SY",2021,DS,25,25.60,12-36,138.52,6,315,n.r.,111.04,W&G,"English, Bahasa Melayu, Mandarin Chinese"
+"Zampini L, D'Odorico L.",2009,DS,20,36.00,"35,93-38,03",n.r.,0,243,n.r.,,n.r.,Italian
+,,DS,20,42.00,"41,93-44,03",n.r.,0,499,n.r.,,n.r.,Italian
+"Zampini L, Salvi A, D'Odorico L.",2015,DS,18,24.00,24-26,8.83,0,21,n.r.,5.31,W&G,Italian
+,,DS,18,30.00,30-32,22.44,2,85,n.r.,18.67,W&G,Italian
+"Vicari, S., Caselli, M. C., Gagliardi, C., Tonucci, F., & Volterra, V.",2002,DS,12,67.20,n.r.,457.00,n.r.,n.r.,n.r.,125.40,W&S,Italian
+"Volterra, V., Caselli, M. C., Capirci, O., Tonucci, F., & Vicari, S.",2003,DS,6,58.00,n.r.,428.00,298,521,n.r.,80.80,W&S (670 words),Italian
