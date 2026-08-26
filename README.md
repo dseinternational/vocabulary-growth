@@ -7,7 +7,7 @@
 
 ## About this study
 
-All children with Down syndrome experience delays in language development. By quantifying typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 8 years.
+All children with Down syndrome experience delays in language development. By estimating typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 6 years.
 
 The project draws together parent-reported vocabulary checklist data - from the MacArthur-Bates CDI and similar instruments - to characterise how comprehension and spoken vocabulary progress with age, and how the two relate over the course of development. By pooling data across studies and languages and analysing it with modern Bayesian methods, we aim to produce clear, interpretable estimates of typical trajectories and the variation around them.
 
@@ -75,12 +75,6 @@ In the same directory (perhaps `dseinternational`):
 git clone https://github.com/dseinternational/vocabulary-growth.git
 ```
 
-The shared library, `dse-research-utils`, is resolved from a public Git tag, so no second clone is needed to run anything here. Clone it as a sibling only to develop against it (see the override noted in `pyproject.toml`):
-
-```bash
-git clone https://github.com/dseinternational/research.git
-```
-
 ### Prerequisites
 
 #### Fitting models
@@ -99,16 +93,14 @@ On Windows, run in UTF-8 mode — `$env:PYTHONUTF8 = "1"` in PowerShell, `set PY
 
 Four things are not Python packages, so `uv sync` cannot supply them:
 
-| Tool                                               | Needed for                                                                       | Install                                                                               |
-| -------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [Graphviz](https://graphviz.org/download/) (`dot`) | the model-diagram figure (`gp_model_graph.svg`) each fit writes                  | `brew install graphviz` / `apt install graphviz` / `winget install Graphviz.Graphviz` |
-| [Quarto](https://quarto.org/docs/get-started/)     | rendering the per-model reports and the report book                              | platform installer                                                                    |
-| LaTeX                                              | the report book's PDF format only — its HTML and DOCX formats need nothing extra | `quarto install tinytex`                                                              |
-| [Node.js](https://nodejs.org/en)                   | spellcheck (CSpell) and Markdown formatting (Prettier)                           | platform installer, then `npm install` in the repository root                         |
+| Tool                                               | Needed for                                                                  | Install                                                                               |
+| -------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Graphviz](https://graphviz.org/download/) (`dot`) | the model-diagram figure (`gp_model_graph.svg`) each fit writes             | `brew install graphviz` / `apt install graphviz` / `winget install Graphviz.Graphviz` |
+| [Quarto](https://quarto.org/docs/get-started/)     | rendering the per-model reports and the report book                         | platform installer                                                                    |
+| LaTeX                                              | the report's PDF format only — its HTML and DOCX formats need nothing extra | `quarto install tinytex`                                                              |
+| [Node.js](https://nodejs.org/en)                   | spellcheck (CSpell) and Markdown formatting (Prettier)                      | platform installer, then `npm install` in the repository root                         |
 
-**Pandoc is not a separate requirement.** Quarto bundles its own copy — Pandoc 3.8.3 in Quarto 1.9.36 — alongside Dart Sass, Deno and Typst, and uses those in preference to anything on `PATH`. Run `quarto check` to see the bundled versions, and the LaTeX, Python and Jupyter it has resolved.
-
-Only Graphviz is optional: a missing `dot` is caught and the figure skipped with a warning rather than failing the fit, so the symptom is a broken image in the model report rather than a lost run. The PDF format additionally expects the Source Sans 3 and Monaspace Neon fonts.
+The PDF format additionally expects the Source Sans 3 and Monaspace Neon fonts.
 
 ### Preparing data
 

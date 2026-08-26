@@ -4,7 +4,9 @@ BFGS
 BFMI
 Bello
 Berglund
+Bergmann
 Birnbaum
+Borjon
 Buckley
 Burgoyne
 CLEX
@@ -18,11 +20,13 @@ Counterintuitively
 D'Souza
 Deckers
 Duffen
+Dulin
 ENOSPC
 EOWPVT
 ESRC
 Edgin
 Fenson
+Figshare
 Floccia
 GLMM
 Galeote
@@ -32,6 +36,7 @@ HSGP
 Haenszel
 Haldane
 Hermite
+Holzinger
 Hutchins
 Jupytext
 Kaat
@@ -48,10 +53,12 @@ Lézine
 MCMC
 MCSE
 Marchman
+Marschik
 McElreath
 Mervis
 Miniforge
 Monaspace
+NIEHS
 NZCDI
 Næss
 Odorico
@@ -61,10 +68,13 @@ Pagnamenta
 Palacios
 Pandoc
 Plunkett
+Poustka
+Preis
 Psychometrika
 PyMC
 Rasch
 Reparameterise
+Schaaf
 Soto
 Spiegelhalter
 Stojanovik
@@ -78,6 +88,8 @@ Typst
 UKRI
 Uhlenbeck
 Vehtari
+Venne
+Wainer
 Walle
 Wilcoxon
 Wordbank
@@ -123,6 +135,7 @@ elpd
 empiricalmodelling
 estimand
 estimands
+etiologically
 exceedance
 exceedances
 fallocate
