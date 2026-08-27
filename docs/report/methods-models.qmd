@@ -44,7 +44,7 @@ From the posterior we can also predict unobserved outcomes. Drawing parameter va
 
 ### Computation
 
-Bayesian inference is centuries old [@bayesLIIEssaySolving1763; @LaplaceMemoireProbabilite; @laplaceTheorieAnalytiqueProbabilites1820]. For a while, the calculations required were prohibitve for all but the simplest models. However, this is no longer the case:
+Bayesian inference is centuries old [@bayesLIIEssaySolving1763; @LaplaceMemoireProbabilite; @laplaceTheorieAnalytiqueProbabilites1820]. For a while, the calculations required were prohibitive for all but the simplest models. However, this is no longer the case:
 
 > "...this was solved in 1990 through the introduction of Markov chain Monte Carlo to use computational power rather than brute analytical derivation. We now exist in an era where there are no intellectual or analytical impediments to specifying and estimating Bayesian models." [@gillBayesianSocialScience2024]
 

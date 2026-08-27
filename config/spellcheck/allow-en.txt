@@ -172,6 +172,7 @@ nonlinear
 nonparametric
 nonparametrics
 nonregular
+nonverbal
 nonwords
 nonzero
 numba
