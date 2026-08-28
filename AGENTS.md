@@ -38,13 +38,13 @@ uv run ruff check src/ scripts/ tests/
 
 ```bash
 uv run pytest                                  # the fast set (see below)
-uv run pytest -m "slow or not slow"            # everything, as CI runs it
+uv run pytest -m "slow or not slow"            # everything (the union CI's two test jobs cover)
 uv run pytest -n auto --dist loadfile          # the fast set, in parallel
 uv run pytest tests/test_foo.py                # single file
 uv run pytest tests/test_foo.py::test_bar      # single test
 ```
 
-**A bare `pytest` does not run everything.** `addopts` carries `-m 'not slow'`, so the four modules that do real sampling or real numerical optimisation are deselected — the fast set is about 65 s against seven minutes for the whole suite. The deselected count is printed on every run. CI selects everything with `-m "slow or not slow"`; use the same expression locally before pushing anything that touches an engine. It is spelt out rather than an empty `-m ""` because pwsh drops the empty string before pytest sees it, so the same command works on Windows.
+**A bare `pytest` does not run everything.** `addopts` carries `-m 'not slow'`, so the four modules that do real sampling or real numerical optimisation are deselected — the fast set is about 65 s against seven minutes for the whole suite. The deselected count is printed on every run. CI covers everything as two parallel jobs — `tests-fast` (`-m "not slow"`) and `tests-slow` (`-m slow`), whose union is the whole suite — and skips both, plus the VG01 smoke fit, when a change touches only documentation (notes, report chapters, Markdown), with two carve-outs that always run everything: the three agent-instruction copies, whose agreement a test compares, and `docs/models/**`, which the fit pipeline copies. Locally, `-m "slow or not slow"` selects everything in one run; use it before pushing anything that touches an engine. It is spelt out rather than an empty `-m ""` because pwsh drops the empty string before pytest sees it, so the same command works on Windows.
 
 `pytest-xdist` is in the `dev` group, and CI runs `-n auto --dist loadfile`. Use `--dist loadfile` rather than the default: several modules have module-scoped fixtures that are themselves fits, and per-test distribution rebuilds them on every worker that draws one of their tests.
 
