@@ -95,6 +95,7 @@ Wilcoxon
 Wordbank
 YARC
 Zampini
+Zotero
 approximator
 apraxia
 argmax
@@ -172,6 +173,7 @@ nonlinear
 nonparametric
 nonparametrics
 nonregular
+nonverbal
 nonwords
 nonzero
 numba

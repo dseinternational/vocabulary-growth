@@ -2,8 +2,37 @@
 abstract: "**TODO**"
 ---
 
-# Data and measures {#sec-data}
+# Data {#sec-data}
 
 Parent-reported vocabulary checklists record a subset of the words a child knows, speaks or signs.
 
-[TODO]
+Lexical items - a subset of total words known.
+
+## Measures
+
+Different measures - MacArthur-Bates Communicative Development Inventories (WG, WS), Oxford CDI, DSE Checklists, etc.
+
+\[TODO\]
+
+## Studies
+
+We pool data from a variety of sources, including data collected by charities and research groups across multiple countries.
+
+### A study of vocabulary, signing and grammatical complexity in 218 children with Down syndrome (uk_01)
+
+This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Communicative Development Inventory (CDI), using both the Words and Gestures and Words and Sentences forms [@marchmanMacArthurBatesCommunicativeDevelopment2023; @fensonMacArthurCommunicativeDevelopment1993].  The data were collected through several research projects at The Sarah Duffen Centre, a joint initiative of the University of Portsmouth and Down Syndrome Education International (then the Portsmouth Down's Syndrome Trust). Parents were provided with the form appropriate for their child's age. In many instances, adapted versions were used. In addition to the standard "understands" and "understands and says" options, the adapted Words and Gestures forms added an option to indicate if the child "signs" the word. The adapted Words and Sentences forms (which usually only include "says") added "understands" and "signs" as options. Participants were 218 children with Down syndrome between 1 and 9 years of age, including 102 girls and 116 boys. Words and Sentences was completed by 154 participants and Words and Gestures was completed by 64 participants. The families participating lived in the five closest counties to Portsmouth -- Hampshire, West Sussex, Surrey, Dorset and Wiltshire.
+
+### The development of vocabulary in Spanish children with Down syndrome: comprehension, production, and gestures (es_01)
+
+This data was collected as part of a study on the development of vocabulary in Spanish children with Down syndrome [@galeoteDevelopmentVocabularySpanish2011]. The participants included 186 children with Down syndrome aged 11 to 71 months. All children had a monolingual Spanish background. The participating families were contacted through early intervention units and Down syndrome parent associations from different cities in Spain (mainly in the South). The study used an adapted CDI form consisting of 651 words organised into 21 categories, with options to record "understands" and "understands and says". In addition, the form included a third column to assess the comprehension and production of gestures representing specific lexical items Symbolic gestures were defined as those gestures that, when properly taught or spontaneously learnt, substitute specific lexical items (e.g., closing the hand with tight fingers and moving it towards the mouth to simulate "to eat"). [TODO: lexical signs or not?]
+
+### See and Learn, Down Syndrome Ireland (ie_01)
+
+This data was collected by Down Syndrome Ireland as part of a project from 2019 to 2020.
+
+### Vocabulary development in Italian children with Down syndrome (it_01)
+
+This data was collected as part of two studies investigating longitudinal trends in vocabulary development and cross-sectional data for Italian children with Down syndrome [@zampiniVocabularyDevelopmentChildren2013].
+
+In the first study, 18 children with Down syndrome were studied longitudinally, including 10 children who were 2 years old and were followed for a 2-year period until they reached the age of 4 years. Moreover, eight other 3-year-old children were followed for a 1-year period until they reached the age of 4 years. For the second study, 27 children were selected from the sample of 60 toddlers attending our monitoring program on language development. The inclusion criteria for these children were a developmental age of approximately 18 (M = 18.22, range: 16–20), 24 (M = 24.11, range: 23–25), and 30 (M = 29.22, range: 28–30) months. Nine children were included in each group.
+
