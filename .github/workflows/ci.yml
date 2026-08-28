@@ -61,12 +61,70 @@ jobs:
       - name: Lint
         run: uv run --no-sync ruff check src/ scripts/ tests/
 
-  tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-26.04-arm]
-    runs-on: ${{ matrix.os }}
+  # Classifies the change so the heavy jobs can skip documentation-only work:
+  # 8 of the 19 main commits before this job existed touched only notes, report
+  # chapters or Markdown, and each paid the full test-and-fit pipeline for it
+  # (notes/202608281312-ci-critical-path.md). Two carve-outs stay "code"
+  # deliberately: the three agent-instruction copies, whose byte-for-byte
+  # agreement a test compares (tests/test_environment_locks.py), and
+  # docs/models/**, which the fit pipeline's report stage copies. Anything
+  # unrecognised counts as code, so a new file class fails toward running the
+  # tests rather than silently skipping them. Skipped jobs satisfy required
+  # status checks, so this gate cannot block a merge.
+  changes:
+    runs-on: ubuntu-26.04-arm
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Classify changed paths
+        id: classify
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # The checkout is the merge commit (base + this PR), so a plain
+            # two-endpoint diff against the base head is exactly the PR's
+            # changes, and it works on a depth-1 clone.
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git fetch --no-tags --depth=1 origin "$base"; then
+            # New branch, force push, or an unfetchable base: run everything.
+            echo "No usable base commit; treating the change as code."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" HEAD)
+          printf 'Changed files:\n%s\n' "$changed"
+          code=false
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              CLAUDE.md|AGENTS.md|.github/copilot-instructions.md) code=true ;;
+              docs/models/*) code=true ;;
+              notes/*|docs/*) ;;
+              *.md) ;;
+              *) code=true ;;
+            esac
+          done <<< "$changed"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  # The suite in two halves whose union is everything `-m "slow or not slow"`
+  # selects. The split buys feedback latency, not total wall time: the slow
+  # half is bounded by two compile-heavy serial units that no rebalancing can
+  # shrink (notes/202608281312-ci-critical-path.md §2), so most failures now
+  # surface from the fast half in a couple of minutes instead of waiting behind
+  # them. `--dist loadfile` keeps each module's fixtures on one worker, which
+  # matters for the modules whose fixture is itself a fit; `--durations=25`
+  # keeps the slowest tests visible so growth in the floor is noticed rather
+  # than discovered (the suite grew 20% in the four days after the 2026-08-24
+  # timing pass).
+  tests-fast:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-26.04-arm
     # PEP 686 makes UTF-8 mode the default from Python 3.15.
     env:
       PYTHONUTF8: "1"
@@ -84,24 +142,40 @@ jobs:
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
 
-      # `slow or not slow` selects everything, overriding the `not slow` default
-      # in pyproject.toml: locally the sampler and optimiser tests are
-      # deselected to keep the inner loop short, but CI is where they have to
-      # run. Spelt out rather than an empty `-m ""`, which pwsh drops before
-      # pytest sees it, so a Windows contributor can paste the same command.
-      # `--dist loadfile` keeps each module's fixtures on one worker, which
-      # matters for the modules whose fixture is itself a fit.
-      - name: Run pytest
-        run: uv run --no-sync pytest -n auto --dist loadfile -m "slow or not slow"
+      - name: Run pytest (fast set)
+        run: uv run --no-sync pytest -n auto --dist loadfile -m "not slow" --durations=25
 
-  # Split from the test job: neither needs the other's result, and once pytest
-  # is parallelised this fit is the longer of the two.
+  tests-slow:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-26.04-arm
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      - name: Prepare data
+        run: uv run --no-sync python scripts/prepare_data.py
+
+      # The four `slow` modules do real sampling, compilation or numerical
+      # optimisation; on four workers each gets a core to itself.
+      - name: Run pytest (slow set)
+        run: uv run --no-sync pytest -n auto --dist loadfile -m "slow" --durations=25
+
+  # Split from the test jobs: none needs another's result, and the fit is an
+  # end-to-end smoke of the whole pipeline that pytest does not replace.
   model-fit:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-26.04-arm]
-    runs-on: ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-26.04-arm
     env:
       PYTHONUTF8: "1"
     steps:
