@@ -78,10 +78,10 @@ The internal TD control reads naturally under the construct account. The identic
 
 ## 5. Recommended actions
 
-- [ ] Append the correction block to 202608121030 §2.
-- [ ] Revise `data/vocab_data_es_01.md` (construct wording; add the 11-category elimination to Known issues).
-- [ ] Revise the `include_es01_cells` docstring; keep the default `True` with the corrected rationale.
-- [ ] Revise the report: `methods-data.qmd` es_01 description, and a construct sentence in `_caveats-signing.qmd` beside "No source records how its children were taught to sign".
+- [x] Append the correction block to 202608121030 §2. _(Done 2026-08-28.)_
+- [x] Revise `data/vocab_data_es_01.md` (construct wording; add the 11-category elimination to Known issues). _(Done 2026-08-28.)_
+- [x] Revise the `include_es01_cells` docstring; keep the default `True` with the corrected rationale. _(Done 2026-08-28; also records that `False` returns the gestured totals to the signed marginal, so the flag does not express a gesture-is-not-sign scenario.)_
+- [x] Revise the report: `methods-data.qmd` es_01 description, and a construct sentence in `_caveats-signing.qmd` beside "No source records how its children were taught to sign". _(Done 2026-08-28. No chapter yet includes `_caveats-signing.qmd` — the signing findings chapter is unwritten — so its freeze caveat has no live target.)_
 - [ ] Ask Galeote directly — the route that settled `uk_06`'s construct (issue #211): (a) confirm parents did not distinguish taught signs from spontaneous gestures; (b) confirm whether the supplied totals reflect the 11-category elimination; (c) confirm the supplied TOTAL GESTURES column counts gesture _production_ only, given the instrument's third column assessed "the comprehension and production" of gestures; (d) ask whether item-level or category-level data survive.
 - [ ] Optional: cite an `include_es01_cells = False` sensitivity fit if the report wants to show the population $\psi$ is robust to excluding the gesture source.
 
