@@ -10,7 +10,8 @@ after the uk_07 integration and the psi heterogeneity investigation
 (notes/202608120030, notes/202608121030). The Type-M paragraph was extended by
 Claude Code/Opus 5 to state the recovery shrinkage alongside it
 (notes/202608161700, issue #226) — the two biases run in opposite directions and
-only one of them was stated.
+only one of them was stated. The es_01 construct sentences (symbolic gesture, not
+taught signing) were added by Claude Code/Fable 5 per notes/202608271551.
 
 FREEZE: `execute.freeze` is `auto`, which invalidates a chapter when its OWN
 source changes and NOT when an included file like this one does. Editing this
@@ -20,9 +21,9 @@ Same applies to `_report_data.qmd`, which nearly every chapter includes.
 -->
 
 ::: {.callout-important title="The association is descriptive and exploratory"}
-The within-understood sign–speech association $\psi$ — and therefore the data-identified total expressive vocabulary $p_{\text{any}}$ — is identified from the four sources that record, per word, whether a child signs it, says it, or both: `uk_02`, `uk_07`, `es_01` and `nz_01` (@sec-association). It is **descriptive / exploratory**, not a test of a hypothesis, and no causal reading is licensed: $\psi > 1$ says that a word a child understands is more often both signed and spoken than independence predicts, not that signing causes, accelerates or delays speech.
+The within-understood sign–speech association $\psi$ — and therefore the data-identified total expressive vocabulary $p_{\text{any}}$ — is identified from the four sources that record, per word, whether a child signs it (gestures it, in the Spanish source), says it, or both: `uk_02`, `uk_07`, `es_01` and `nz_01` (@sec-association). It is **descriptive / exploratory**, not a test of a hypothesis, and no causal reading is licensed: $\psi > 1$ says that a word a child understands is more often both signed and spoken than independence predicts, not that signing causes, accelerates or delays speech.
 
-**The sources disagree, and the model says so.** $\psi$ carries a study-level term; the per-study values are the primary read, and the population value is a shrunk centre, not a consensus. The Spanish source sits close to independence where the UK and New Zealand sources do not. No source records how its children were taught to sign, so the difference should not be read as evidence about teaching or compensation. An age-varying association was investigated and rejected — the between-source spread is not an age effect — but with four informing sources the spread itself is weakly identified and the prior does real work.
+**The sources disagree, and the model says so.** $\psi$ carries a study-level term; the per-study values are the primary read, and the population value is a shrunk centre, not a consensus. The Spanish source sits close to independence where the UK and New Zealand sources do not — and its non-vocal column also measures a broader construct: symbolic gestures, whether taught or spontaneously learnt, rather than the taught signing the UK and New Zealand sources record, so part of the between-source spread is a difference in what was counted, not only in the children counted. No source records how its children were taught to sign, so the residual difference among the sign sources should not be read as evidence about teaching or compensation. An age-varying association was investigated and rejected — the between-source spread is not an age effect — but with four informing sources the spread itself is weakly identified and the prior does real work.
 
 **Signing coverage thins with age.** Signed observations are dense from about 12 to 60 months and sparse beyond: two small sources above 72 months and one above 84, so $r(a)$ and $p_{\text{any}}$ at older ages lean on the model's smoothness rather than on many children. The peak age of $r(a)$ is fixed by construction rather than estimated, and its length-scale is not identified, so the signed trajectory is parametric in practice. Signing data exist only for the Down syndrome sources; there is no typically-developing comparison.
 

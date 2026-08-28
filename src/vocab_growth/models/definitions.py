@@ -1715,11 +1715,18 @@ class JointModelDefinition:
     11-71 months. They more than double the rows identifying psi and anchor it at
     the young end, where uk_02 is otherwise alone.
 
-    It defaulted False for the nine days before that, and the reason was never the
-    construct. es_01's third column scores "gestures representing specific lexical
-    items", each tied to one of the 651 checklist words — a per-word lexical marker
-    on an adapted CDI, structurally the same coding uk_02 and uk_07 use. It is the
-    same measurement.
+    It defaulted False for the nine days before that, and the reason recorded then
+    was never the construct — it was the heterogeneity handled below. On the
+    construct itself the position has moved twice, and now rests on a full reading
+    of the source (notes/202608271551-es01-gesture-construct.md): es_01's third
+    column scores "gestures representing specific lexical items", each tied to one
+    of the 651 checklist words — a per-word lexical marker on an adapted CDI,
+    structurally the same coding uk_02 and uk_07 use — but what that coding marks
+    is the child's symbolic-gesture repertoire, "properly taught or spontaneously
+    learnt", undifferentiated. That is a related but broader construct than the
+    taught signing the sign sources record, proved by the source's own typically
+    developing group: 23.6 gestured words on average with no sign instruction.
+    Same coding, different construct.
 
     The reason was that the sources already informing ``psi`` disagree about it
     substantially, and ``psi`` had nowhere to put that. Mantel-Haenszel odds ratios
@@ -1750,12 +1757,16 @@ class JointModelDefinition:
     expressive vocabulary (30-300 words) it is 1.05 against 4.80 and 9.68. On the
     conditioning-free share-also-spoken measure it is the low end of a continuous
     gradient rather than categorically apart. Either way the spread across sources
-    is large and its cause is not identified. Signing instruction is the obvious
+    is large. Its most economical first-order component is the construct: a
+    spontaneous gesture repertoire is deployed for words the child cannot yet say,
+    where taught key-word signing is sign-and-say by construction — which is
+    exactly the es_01-versus-sign-sources split. The residual spread among the
+    three sign sources is not identified. Signing instruction is the obvious
     candidate, but no source records whether its children were taught to sign, so
     that contrast is background assumption rather than measurement; and uk_07, the
     one source with experimental variation in instruction, carries the *higher*
     association in its control arm (17.93 against 11.65), which cuts against the
-    mechanism rather than for it. Treat the spread as unexplained.
+    mechanism rather than for it. Treat the residual spread as unexplained.
 
     That heterogeneity was disqualifying only because **``psi`` was the only latent
     in this model with no study-level term.** ``delta_u``, ``delta_q`` and ``delta_sign``
@@ -1771,9 +1782,16 @@ class JointModelDefinition:
     population value is a shrunk centre with ``tau_psi`` quantifying the spread. With
     the heterogeneity modelled rather than averaged away, pooling these cells adds
     evidence instead of moving the headline by composition, and the flag defaults
-    True. Setting it False isolates es_01's contribution. See
-    data/vocab_data_es_01.md and
-    notes/202608120030-uk07-pactds-integration-and-ds-refit.md."""
+    True — under the corrected construct reading, es_01 stays in as its own study
+    measuring a related but broader construct, not because it is the same
+    measurement (see notes/202608281147-study-term-pooling-licence.md for what the
+    study terms do and do not guarantee). Setting it False isolates es_01's
+    contribution to the association only: the rows fall back to the merged view,
+    where the gestured totals re-enter the signed *marginal* and keep informing r,
+    so this flag does not express a gesture-is-not-sign scenario. See
+    data/vocab_data_es_01.md,
+    notes/202608120030-uk07-pactds-integration-and-ds-refit.md and
+    notes/202608271551-es01-gesture-construct.md."""
 
     @property
     def model_type(self) -> ModelType:
