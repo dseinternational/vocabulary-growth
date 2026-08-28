@@ -36,3 +36,4 @@ This data was collected as part of two studies investigating longitudinal trends
 
 In the first study, 18 children with Down syndrome were studied longitudinally, including 10 children who were 2 years old and were followed for a 2-year period until they reached the age of 4 years. Moreover, eight other 3-year-old children were followed for a 1-year period until they reached the age of 4 years. For the second study, 27 children were selected from the sample of 60 toddlers attending our monitoring program on language development. The inclusion criteria for these children were a developmental age of approximately 18 (M = 18.22, range: 16–20), 24 (M = 24.11, range: 23–25), and 30 (M = 29.22, range: 28–30) months. Nine children were included in each group.
 
+\[TODO\]
