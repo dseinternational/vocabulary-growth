@@ -190,7 +190,7 @@ from vocab_growth.report_cells import render_priors_table
 render_priors_table()
 ```
 
-The understood and production-ratio priors follow the baseline Down syndrome joint structure: a strong floor expectation at the low age anchor, a deliberately broad high anchor so the data set the later level, and Gaussian-process priors permitting smooth departures from the anchor-defined trend.
+The understood and production-ratio priors follow the baseline Down syndrome joint structure: a strong floor expectation at the low age anchor, a deliberately broad high anchor so the dataset the later level, and Gaussian-process priors permitting smooth departures from the anchor-defined trend.
 
 Dispersion is handled in two different ways in this one model, which the table above records. Understood and spoken take the **two-anchor** form, where the prior is placed on $\kappa$ at two reference ages rather than as an intercept and slope, so each prior is directly comparable with a per-age dispersion estimate. The signed block stays on the earlier **intercept-and-slope** form, deliberately: nothing in the calibration exercise estimates a signing dispersion on this frame, so there is no anchored prior to move to. See `docs/models/PRIORS.md`.
 

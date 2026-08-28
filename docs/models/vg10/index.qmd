@@ -307,7 +307,7 @@ Four things in that table carry the substance of the model.
 
 **The production ratio is the mechanism.** $q$ rises across the whole reported range — the fraction of understood words that a child also says grows with age — and the table gives the age at which it reaches one half. That single crossing is the most quotable number the model produces, and it is read off the median curve rather than being the posterior median of the crossing itself.
 
-**Dispersion increases with age on both outcomes.** The variance-inflation readings in the last two rows grow, meaning that by school age an observation carries a small fraction of the information a Binomial count of the same size would. This is the quantitative reason the predictive bands widen so much at the top of the range, and it vindicates the prior change described under [Priors](#priors): the legacy slope prior was far too narrow for a concentration trend this steep, and the two-anchor form lets the data set both its direction and its size.
+**Dispersion increases with age on both outcomes.** The variance-inflation readings in the last two rows grow, meaning that by school age an observation carries a small fraction of the information a Binomial count of the same size would. This is the quantitative reason the predictive bands widen so much at the top of the range, and it vindicates the prior change described under [Priors](#priors): the legacy slope prior was far too narrow for a concentration trend this steep, and the two-anchor form lets the dataset both its direction and its size.
 
 **Children differ more than studies do, and they differ most in conversion.**
 

@@ -55,7 +55,7 @@ We are developing, evaluating and iterating our models openly in this repository
 
 ### Future directions
 
-We welcome partners interested in deepening our understanding of language development for children with Down syndrome. Over time, we may extend this project to explore further data sets and modelling techniques and welcome input from interested partners on how the project might evolve.
+We welcome partners interested in deepening our understanding of language development for children with Down syndrome. Over time, we may extend this project to explore further datasets and modelling techniques and welcome input from interested partners on how the project might evolve.
 
 When Down Syndrome Education International launches its [LearningTracker app and services](https://www.learningtracker.app/) we expect to make additional parent-reported vocabulary data available to extend this project in the future.
 

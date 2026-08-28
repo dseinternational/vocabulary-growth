@@ -167,7 +167,7 @@ Review notes:
   developmental direction (few understood words spoken early, a majority by school
   age). `q_low` is centred at the independent TD `q(~12mo) ≈ 0.12`; `q_high` has no
   independent DS source, so it is deliberately broad (5-95% ~0.25-0.90) and lets
-  the data set the 84-month level.
+  the dataset the 84-month level.
 - These replace the earlier `Beta(3, 22)` / `Beta(20, 4)` anchors, which were read
   off the VG07 posterior and then propagated across the DS-joint family — using a
   model's own posterior (fit to the same DS data) to set its prior. That
@@ -669,7 +669,7 @@ not a value read from the fitted DS data. VG13 uses lower `Beta(1, 10)` / `Beta(
 
 The high-age DS `q` anchor has no independent source — there is no normative DS
 production ratio — and was `Beta(3, 2)` (median 0.614) on the reasoning that a broad
-prior would let the DS data set the 84-month level. It did not: VG10 put the fitted
+prior would let the DS dataset the 84-month level. It did not: VG10 put the fitted
 trend anchor at 0.929, above `Beta(3, 2)`'s own 95th percentile of 0.902, at prior
 CDF 0.972. **Recalibrated 2026-08-04 to `Beta(4, 1.2)`** (median 0.805, 5-95%
 0.438-0.978). The evidence is the DS frame's own **directly observed** production
