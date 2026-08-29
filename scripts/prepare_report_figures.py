@@ -93,6 +93,60 @@ def plot_bayes_update(n, rng, true_p, alpha0, beta0, filename):
     }).to_csv(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.csv"), index=False)
 
 
+def plot_count_dispersion(rng, n, p, kappa, n_draws, filename):
+    """Simulated counts under a Binomial and a mean-matched Beta-Binomial.
+
+    Both panels share the mean np; the Beta-Binomial splits the concentration
+    kappa as alpha = p * kappa, beta = (1 - p) * kappa, the parameterisation the
+    models use, so the only difference on display is the dispersion.
+    """
+    alpha_bb = p * kappa
+    beta_bb = (1.0 - p) * kappa
+
+    y_binom = rng.binomial(n=n, p=p, size=n_draws)
+    p_obs = rng.beta(alpha_bb, beta_bb, size=n_draws)
+    y_betabinom = rng.binomial(n=n, p=p_obs)
+
+    print(
+        f"Binomial(n={n}, p={p}): mean {y_binom.mean():.1f}, sd {y_binom.std():.1f}; "
+        f"Beta-Binomial(alpha={alpha_bb:g}, beta={beta_bb:g}): "
+        f"mean {y_betabinom.mean():.1f}, sd {y_betabinom.std():.1f}"
+    )
+
+    bins = np.arange(0, n + 16, 15)
+    fig, axes = plt.subplots(2, 1, figsize=(7, 5), sharex=True)
+
+    for ax, draws, label, colour in (
+        (axes[0], y_binom, f"Binomial($n = {n}$, $p = {p}$)", "#0080e0"),
+        (
+            axes[1],
+            y_betabinom,
+            f"Beta-Binomial($n = {n}$, $p = {p}$, $\\kappa = {kappa:g}$)",
+            "#ff7800",
+        ),
+    ):
+        ax.hist(draws, bins=bins, color=colour, label=label)
+        ax.axvline(
+            n * p,
+            linestyle="--",
+            linewidth=1,
+            c="#555555",
+            label=f"Mean $np = {n * p:.0f}$",
+        )
+        ax.set_ylabel(f"Draws (of {n_draws})")
+        ax.legend()
+
+    axes[1].set_xlabel(f"Count of words checked (out of $n = {n}$)")
+    axes[1].set_xlim(0, n)
+
+    fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.png"), dpi=300)
+    fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.svg"))
+    pd.DataFrame({
+        "binomial": y_binom,
+        "beta_binomial": y_betabinom,
+    }).to_csv(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.csv"), index=False)
+
+
 def prepare_report_figures():
     rng = np.random.default_rng(RANDOM_SEED)
     true_p = 0.65
@@ -103,6 +157,11 @@ def prepare_report_figures():
     plot_bayes_update(100, rng, true_p, alpha0, beta0, "bayes_update_2")
 
     plot_bayes_update(250, rng, true_p, alpha0, beta0, "bayes_update_3")
+
+    plot_count_dispersion(
+        rng, n=810, p=0.3, kappa=4.0, n_draws=1000,
+        filename="binomial_betabinomial_draws",
+    )
 
 
 def _figure_path_for_ref(ref: str) -> Path:

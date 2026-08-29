@@ -56,107 +56,112 @@ Bayesian inference is centuries old [@bayesLIIEssaySolving1763; @LaplaceMemoireP
 
 Today, modern sampling algorithms [@metropolisEquationStateCalculations1953; @hastingsMonteCarloSampling1970; @hoffmanNoUTurnSamplerAdaptively2014], are packaged in freely accessible open-source tools such as Stan and PyMC with interfaces to R and Python [@standevelopmentteamStanLanguageReference2026; @abril-plaPyMCModernComprehensive2023]. Bayesian analysis is consequently now used across economics, political science, ecology, biology, neuroscience, medicine, psychology and education research [@gillBayesianModelingInference2020; @mcelreathStatisticalRethinkingBayesian2020; @bonBeingBayesian2020s2023; @pfadtMethodologicalMetamorphosisRapid2025].
 
-## The core model
+## Outcomes {#sec-outcomes}
 
-### The outcome: a count of lexical items {#sec-betabinomial}
+Vocabulary checklists record a subset of the words a child understands, speaks or signs (@sec-data) at a point in time. Each item is a true or false (checked or not checked) option. A child's score is a count of true responses out of $n$ checklist items. One completion of a checklist (an *administration*) yields up to one count per *outcome* (understood, spoken, signed) for a child of a given age. Each such count (one child, one age, one outcome) is an *observation*. Our statistical models must consider how observations of each outcome are distributed.
 
-Parent-reported vocabulary checklists record a subset of the words a child understands, speaks or signs (@sec-data). Every outcome we model is a count: the total number of checklist words reported understood, spoken or signed.
+### A single reference inventory {#sec-reference-inventory}
 
-Each checklist item is answered 'yes' or 'no', so a child's score is a count of 'yes' responses out of $N$ words. Our pooled data include multiple forms with varying numbers of items: the DSE checklists together contain 810 words, while other forms contain between roughly 400 and 700 words (@sec-data). Checklists are designed to sample the words children learn most frequently, and shorter forms are typically given to younger children, so for a child well below a form's maximum, the words a shorter form omits are mostly words the child does not yet know — and the count it records is close to the count a longer inventory would have recorded. Consistent with this, where different forms cover the same ages, median counts correspond more closely on the raw scale than as proportions of their own form. We therefore score every count against a single reference inventory of $N = 810$ words, whichever form recorded it, so that every estimate in this report is on the same scale.
+Our pooled data include multiple forms with varying numbers of items: the DSE checklists together contain 810 words, while other forms contain between roughly 400 and 700 words (@sec-data). Checklists are designed to sample the words children learn earliest, and shorter forms are typically given to younger children. Therefore, for a child with a word count well below a form's maximum, the words a shorter form omits are mostly words the child does not yet know. Given this, a count recorded on a shorter form will be close to the count a longer checklist would have recorded. We therefore score every count against a single reference inventory of $n = 810$ words, whichever form recorded it, so that every estimate is on the same scale.
 
-This approximation is less accurate for children near the maximum of a shorter form, who may know words their form does not ask about. Such observations are uncommon among the children with Down syndrome.
+This approximation is less accurate for children near the maximum of a shorter form, who may know words their form does not ask about but that would have been identified on a longer form. Such observations are uncommon among the data we have pooled for children with Down syndrome.
 
-[**TODO**: quantify for both pools; cross-reference the raw-vs-proportion check and the native-810 sensitivity refit.]
+[**TODO**: quantify for DS/TD pools -- raw-vs-proportion check and the native-810 sensitivity refit]
 
-#### The Beta-Binomial model
+### A Beta-Binomial distribution {#sec-betabinomial}
 
-Our models describe parent-reported word counts -- understood, spoken or signed. One completion of a checklist (an *administration*) yields up to one count per *outcome* for a child of a given age. Each such count (one child, one age, one outcome) is an *observation*, the unit whose distribution we now describe.
+The words on a checklist are fixed. Therefore, a count can take only integer values from $0$ up to the number of items on the form, and the corresponding proportion is bounded accordingly. Our outcome model should respect these constraints: counts are discrete, non-negative and bounded above. Since every count in our data is scored against the reference inventory (@sec-reference-inventory), we write $n = 810$ for that bound throughout.
 
-Each model separates two questions: how the probability that a word is reported *changes* with age (the *growth trajectory*) and how observed counts are spread around the expected count that the probability implies (i.e. out of $N = 810$ words, a probability of $0.5$ implies an expected count $W = 405$). For words understood, for example, the model describes the distribution of the count $W_\text{und}$ at each age in months $A$: $P(W_\text{und} \mid A)$.
+A count of true responses out of $n$ items follows a Binomial distribution when two assumptions hold. These apply within an administration: that (a) given the probability of a true response $p$, the item responses (words checked) are independent; and that (b) every item carries that same probability. This gives a mean of $np$ and a variance (fixed by the mean) of $np(1-p)$. We then assume the same distribution holds across administrations: that (c) the probability is the same for every observation of a given outcome at the same age.
 
-A count of 'yes' responses out of $N$ items at a given age follows a Binomial distribution when three assumptions hold. The first two assumptions apply *within* an administration: that (a) given the probability of a 'yes', the item responses (words checked) are independent; and that (b) every item carries that same probability. The third assumption applies *across* administrations: that (c) the probability is the same for every observation at the same age. Vocabulary scores vary far more between same-age children than one shared probability allows, and the Binomial cannot absorb the excess -- its variance is fixed by its mean [@gelmanBayesianDataAnalysis2013, sec. 17.2]. The Beta-Binomial distribution relaxes (c), and only (c): each observation's probability is itself drawn from a Beta distribution whose mean is the trajectory value at that age, so individual children's scores are distributed above and below the curve, while (a) and (b) continue to hold within each observation.
+Under the Binomial model, given our inventory of $n = 810$ words with $p = 0.3$, the expected count is $np = 243$ with a variance of $np(1-p) = 170.1$, a standard deviation of about 13 words. Vocabulary scores vary far more *between* children of the same age than a common probability allows [@galeoteAcquisitionProductiveVocabulary2008; @zampiniVocabularyDevelopmentChildren2013]. A Beta-Binomial model relaxes assumption (c): rather than one probability shared by all children of an age, each observation's probability is drawn from a Beta distribution [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025].
 
-The Binomial distribution describes the number of 'yes' responses out of a fixed number of items when, given a success probability, (i) the item responses are independent and (ii) every item shares that same probability. Applying a single Binomial across children would add a third assumption: that (iii) every observation at a given age *shares* one probability. Vocabulary scores vary far more *between* children than a common probability allows. We therefore assume a Beta-Binomial distribution where each observation's probability is itself drawn from a Beta distribution, while (a) and (b) continue to hold within each observation.
+A Beta-Binomial model also covers departures from assumption (a). Within an administration, responses are unlikely to be truly independent. If one parent completes the whole form, then anything that sways their judgement (for example, a generous or a cautious reading of what counts as "says") sways all the items together. The Beta-Binomial makes no distinction between the two failures: exactly the same distribution of counts arises whether each administration has its own probability or the items within an administration move together, so the two stories cannot be told apart from counts alone. Both are absorbed into the same fitted dispersion.
 
----
+### The sufficiency of counts
 
-The Binomial distribution describes the expected distribution of the number of 'yes' responses for a fixed number of items, assuming that (a) the probability of a 'yes' for each item is independent of the others (i.e., the items are exchangeable) and (b) that the probability is the same for each item. Clearly, it is unlikely that every child of the same age is equally likely to know each word on a checklist. 
+For vocabulary checklists, assumption (b) is false: words differ in difficulty, and some are learned earlier than others. We rely on this ordering to justify our single reference inventory (@sec-reference-inventory), and a hypergeometric test against the three DSE checklists rejects equal item probabilities decisively (TODO: ref/appendix). Nonetheless, under an item-response model in which words differ in difficulty but separate children equally well, the total score carries all the information in the item responses about the child's underlying vocabulary ability. Two children with the same count are indistinguishable on ability, whichever words make it up, and on a given set of items a higher count always implies a higher estimate of ability. Modelling counts rather than individual words therefore discards nothing about the quantity we care about. Checklist items will not separate children exactly equally well, so this argument is an approximation; its cost cannot be measured from counts alone -- a count that carries all the information about ability carries none about the items.
 
- , so we relax the second assumption by allowing the probability itself to vary from observation to observation. This gives the counts a Beta-Binomial distribution, which is a Binomial distribution mixed over a Beta distribution for the success probability [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025].
+Moreover, unequal difficulty makes little difference to the distribution of the count. For a single observation -- one child's count on one occasion -- unequal difficulty lowers the variance rather than raising it. A child's count has the Binomial variance computed at their average item probability, minus $n$ times the variance of their item probabilities around that average. On its own scale this reduction is not small. It matters little, however, because the within-observation component is the minor share of the total variance: at every age, most of the variation in counts lies between children, so even a large error in the smaller component moves the total standard deviation by no more than a few per cent, largest at the youngest ages (TODO: pin the variance shares and worst case; appendix). In any case, the Beta-Binomial cannot express a variance below the Binomial's -- the Binomial is its floor -- so the reduction is absorbed into the fitted dispersion, one reason we later read dispersion as a property of the count distribution rather than a measurement of children (@sec-kappa).
 
-The item-exchangeability assumption is *not* relaxed by this construction: it survives inside the Binomial step, and it is false — words differ markedly in difficulty, which the checklist structure demonstrates directly (a model-free hypergeometric test against the three DSE checklists rejects it decisively). Two considerations establish that this does not threaten the estimates. First, under an item-response model with heterogeneous difficulties but equal discrimination, the total score is a *sufficient statistic* for a child's ability: the likelihood depends on the responses only through their sum, so modelling counts rather than individual words discards no information about ability, and difficulty heterogeneity can reach the model only through the distribution of the total. Second, that distributional effect is small where it matters. Heterogeneous difficulty makes the true count variance *lower* than Binomial — the opposite of the usual intuition — by an exact identity, $\sum_j p_j(1-p_j) = N\bar p(1-\bar p) - N\operatorname{Var}_j(p)$; but the Binomial kernel carries under 6% of total variance at every age in the fitted models, because between-child dispersion dominates it by one to two orders of magnitude, so even a 40% error in the kernel moves the total standard deviation by about 1%.
+However, there are limits to what any count can tell us. A count is not an interval measure: equal differences in words do not reflect equal differences in underlying ability -- a child's second hundred words may come more easily or less easily than the first -- and the scale is compressed near the floor and ceiling of the reference inventory, where large differences between children produce small differences in counts. Change measured in raw words is therefore not comparable across ages or between children at different levels. Progress is better read as position relative to peers -- the centile curves reported in the results chapters -- than as a number of words gained; centiles too are a ranking rather than a unit, locating a child within the distribution rather than measuring an amount of growth.
 
+### The outcome model
 
-
-If every child of the same age were equally likely to know each word on the checklist, these counts would follow a Binomial distribution. Vocabulary scores vary more between children than that allows, so we let the chance itself vary from observation to observation, which gives the counts a Beta-Binomial distribution.
-
-A Binomial likelihood would make two distinct assumptions, and it is worth separating them because the Beta-Binomial relaxes only one. The first is that, *given* an observation's success probability, the words of the inventory are exchangeable Bernoulli trials — every word equally likely to be known, so that the item list could be reordered without effect. The second is that there is no unmodelled heterogeneity between children, which fixes the variance at its mean and tends to *underdisperse* relative to real vocabulary data. To accommodate that extra-binomial variation we use a **Beta-Binomial** likelihood, in which the per-observation success probability is itself Beta-distributed [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025]. With latent mean $p_i = p(z_i)$ and concentration $\kappa_i > 0$,
+For the reasons discussed in the preceding sections, we model each count as Beta-Binomial with mean proportion $p$ and concentration $\kappa$:
 
 $$
-y_i \sim \mathrm{BetaBinomial}\!\left(N_{\text{trials}},\,\alpha_i,\,\beta_i\right),
+y \sim \mathrm{BetaBinomial}(n,\,p,\,\kappa),
 \qquad
-\alpha_i = p_i\,\kappa_i,
+\alpha = p\,\kappa,
 \qquad
-\beta_i = (1-p_i)\,\kappa_i .
+\beta = (1 - p)\,\kappa,
 $$
 
----
+where $\alpha$ and $\beta$ are the Beta distribution's conventional shape parameters, related to ours by $p = \alpha/(\alpha+\beta)$ and $\kappa = \alpha+\beta$.
+
+Here $p$ is the expected proportion of the inventory checked, so the expected count is $\mathrm{E}[y] = np$. The concentration $\kappa$ controls the extra spread: as $\kappa$ grows large the Beta-Binomial approaches the Binomial; as it shrinks, counts spread more widely around the same mean $np$. This extra variation describes observations around a population trajectory. It should not be confused with uncertainty about the trajectory itself.
+
+### Age-varying dispersion {#sec-kappa}
 
 For observation $i$ at age $x_i$ months we standardise age,
 
 $$
-z_i = \frac{x_i - \bar{x}}{s_x},
+z_i = \frac{x_i - \bar{x}}{\sigma_x},
 $$
 
-so that a one-unit change in $z$ corresponds to $s_x$ months (this scale differs by population and model — see the relevant appendix).
+so that a one-unit change in $z$ corresponds to $\sigma_x$ months (this scale differs by population and model).
 
-Smaller $\kappa_i$ implies greater dispersion of the observed counts at a given age; larger $\kappa_i$ approaches the Binomial. It is tempting to gloss this as "more between-child heterogeneity", and we avoid doing so: on a bounded inventory $\kappa$ is a property of the count distribution rather than a measurement of latent spread between children, and @sec-kappa sets out why the two do not track each other. Observations are assumed conditionally independent given the latent mean $p(z)$, the dispersion $\kappa(z)$, and the model parameters.
-
-The item-exchangeability assumption is *not* relaxed by this construction: it survives inside the Binomial step, and it is false — words differ markedly in difficulty, which the checklist structure demonstrates directly (a model-free hypergeometric test against the three DSE checklists rejects it decisively). Two considerations establish that this does not threaten the estimates. First, under an item-response model with heterogeneous difficulties but equal discrimination, the total score is a *sufficient statistic* for a child's ability: the likelihood depends on the responses only through their sum, so modelling counts rather than individual words discards no information about ability, and difficulty heterogeneity can reach the model only through the distribution of the total. Second, that distributional effect is small where it matters. Heterogeneous difficulty makes the true count variance *lower* than Binomial — the opposite of the usual intuition — by an exact identity, $\sum_j p_j(1-p_j) = N\bar p(1-\bar p) - N\operatorname{Var}_j(p)$; but the Binomial kernel carries under 6% of total variance at every age in the fitted models, because between-child dispersion dominates it by one to two orders of magnitude, so even a 40% error in the kernel moves the total standard deviation by about 1%.
-
-Sufficiency carries two conditions worth making explicit. It holds *given the administered item set*, because the ability-dependent term of the likelihood runs over the items actually put to the child; that is the principle behind the form-pooling and partial-administration rules in @sec-data, which is also why an administration missing a whole subscale is masked rather than rescaled onto the reference inventory. And it requires *equal discrimination* across items, exactly, which CDI items do not satisfy. Unequal discrimination leaves the variance budget above unchanged, since the identity holds for any set of per-item probabilities; but it means the count is not strictly sufficient, and the residual loss cannot be quantified from counts, because a statistic sufficient for ability is by construction uninformative about item parameters. It is an acknowledged approximation, bounded on the distributional axis and unmeasured on the other.
-
-What item difficulty *does* affect is the interpretation of the production ratio $q$, which is a composition-weighted average over the words each child happens to know rather than an item-level probability (@sec-ratios), and the reading of $\kappa$ itself, discussed next.
-
-### Age-varying dispersion {#sec-kappa}
-
-Spoken vocabulary counts are more dispersed at older ages than at younger ones, and both experience and existing research lead us to expect that. We therefore let the conditional dispersion vary with age by modelling the concentration as a log-linear function of age above an asymptote,
+Spoken vocabulary counts are more dispersed at older ages than at younger ones [@berglundParentalReportsSpoken2001; @galeoteDevelopmentVocabularySpanish2011; @marchmanMacArthurBatesCommunicativeDevelopment2023; @zampiniLexicalSyntacticDevelopment2011]. We therefore let the conditional dispersion vary smoothly with age:
 
 $$
 \kappa(z) = \kappa_{\min} + \exp\!\left(a_\kappa + b_\kappa z\right).
 $$
 
-The sign of $b_\kappa$ is **not constrained** in most current models. Every model with an empirically calibrated dispersion prior (VG01--VG04, VG09--VG13, VG15 and VG16) states the age term at two reference ages and derives $a_\kappa$ and $b_\kappa$ from them (see below), so the slope's sign is whatever the two anchors imply -- necessary because the fitted comprehension dispersion *rises* with age, which a negative-slope constraint cannot represent. Where the slope is negative, $\exp(a_\kappa + b_\kappa z)$ decreases, $\kappa(z)$ falls toward $\kappa_{\min}$, and dispersion increases with age before levelling off. The legacy parameterisation retained by VG05, VG07, VG08 and VG14 does impose that monotone decline, by setting $b_\kappa = -b_{\mathrm{mag}}$ with $b_{\mathrm{mag}} > 0$.
+The two terms do separate jobs. The exponential term rises or falls smoothly with age -- by a constant multiple for each $\sigma_x$ months, rather than a constant amount -- and can approach zero but never turn negative. The constant $\kappa_{\min}$ is therefore a floor: however extreme the age, the concentration never drops below it. Together they let the dispersion of counts grow with age and then level off, rather than growing without limit.
 
-These are assumptions about the model's concentration parameter, and it is worth being explicit about what they are not. On a bounded inventory $\kappa$ **cannot** be read as latent between-child heterogeneity: a fitted decline in $\kappa$ is quantitatively consistent with latent spread that does not grow at all, and this is true even under perfect item exchangeability, so it is not a defect of the item model. Nor do these data yield a corrected estimate of how far children really diverge — a total score sufficient for ability carries no information about the item structure that separating the two would require. What the fitted $\kappa(z)$ licenses is a statement about the dispersion of observed counts at a given age, not a measurement of underlying heterogeneity.
+## Trends {#sec-trends}
 
-## The mean trajectory {#sec-mean}
+The outcome models (@sec-outcomes) give each observation an expected proportion $p$. To investigate how that proportion changes with age, we model a central (mean) trajectory.
 
-The latent mean trajectory is defined on the logit scale as a linear trend plus a zero-mean Gaussian process (GP) [@rasmussenGaussianProcessesMachine2008; @schulzTutorialGaussianProcess2018]:
+Proportions must lie between zero and one, and relating them to age with a straight line ($p = \beta_0 + \beta_1 z$, say) will eventually stray outside those bounds. We therefore build the trajectory on an unconstrained scale: a predictor $f(z)$ of standardised age (@sec-kappa), free to take any value, transformed by the logistic function,
+
+$$
+p(z) = \operatorname{logistic}\!\left(f(z)\right) = \frac{1}{1 + \exp\!\left(-f(z)\right)}.
+$$
+
+The logistic function returns a value between zero and one whatever the value of $f$. The inverse of this transformation is the *logit*, $\operatorname{logit}(p) = \log\{p/(1-p)\}$.
+
+Vocabulary development may not follow a straight line on the logit scale -- put another way, it is unlikely to perfectly match the S-shaped curve of the logistic function. We therefore give $f$ two parts -- a linear trend, which carries the overall rise with age, and a smooth departure $g$, which captures variations from that trend:
 
 $$
 \begin{aligned}
-f(z) &= \beta_0 + \beta_1 z + g(z), \qquad
-p(z) = \sigma\!\left(f(z)\right) = \frac{1}{1 + e^{-f(z)}},\\
+f(z) &= \beta_0 + \beta_1 z + g(z),\\
 g(z) &= \eta\, g_{\mathrm{unit}}(z), \qquad
 g_{\mathrm{unit}} \sim \mathcal{GP}\!\left(0,\, k(\cdot,\cdot)\right).
 \end{aligned}
 $$
 
-The linear trend $\beta_0 + \beta_1 z$ carries the expected population trajectory; the GP $g$ captures smooth deviations from it. We use a zero mean function for $g$ because any non-zero mean would be confounded with the linear parameters — so positive $g(z)$ indicates faster-than-expected growth and negative $g(z)$ a slowdown or plateau, and under the posterior $g$ shrinks toward zero where data are sparse.
+### Flexible departures from the central trajectory
 
-We use a unit-variance radial basis function (exponentiated-quadratic) kernel,
+The departure $g$ is a Gaussian process (GP): a probability distribution over smooth functions [@rasmussenGaussianProcessesMachine2008; @schulzTutorialGaussianProcess2018]. We give it a mean of zero because any non-zero mean would be indistinguishable from the linear trend itself. Positive $g(z)$ therefore means the population mean at that age sits above the line, and negative $g(z)$ that it sits below; where data are sparse, the posterior pulls $g$ back toward zero and the straight line does the work alone.
+
+A GP is specified by its kernel $k(z, z')$, which sets how strongly the departure at one age resembles the departure at another: ages close together take similar values, ages far apart are nearly unrelated. We use the radial basis function (exponentiated-quadratic) kernel with its variance fixed at one,
 
 $$
 k(z,z') = \exp\!\left(-\frac{(z-z')^2}{2\ell^2}\right),
 \qquad k(z,z) = 1,
 $$
 
-and factor out a separate amplitude $\eta > 0$. This cleanly separates two roles: the length-scale $\ell$ governs how quickly deviations vary with age (smoothness), while $\eta$ governs how large they are. The kernel is stationary (local smoothness is similar at, say, 36 and 72 months) and a universal approximator, which suits developmental trajectories whose precise shape is unknown.
+and carry the size of the departures in a separate amplitude $\eta > 0$. The two parameters then have separate jobs: the length-scale $\ell$ governs how quickly the curve can bend with age (large $\ell$, long slow bends; small $\ell$, rapid wiggles), while $\eta$ governs how far it can sit from the line. The kernel treats all ages alike -- the curve is permitted the same local smoothness at 36 months as at 72 -- and is flexible enough to approximate any smooth trajectory given enough data, which suits developmental curves whose precise shape is not known in advance.
 
-### Interpretable slope anchors {#sec-anchors}
+#### HSGP approximation {#sec-hsgp}
 
-Rather than placing weakly interpretable priors directly on $\beta_0$ and $\beta_1$, we parameterise the linear trend through the expected proportion of words at **two reference ages** $x_a < x_b$. With $z_a = (x_a - \bar{x})/s_x$ and $z_b = (x_b - \bar{x})/s_x$, and priors placed on $p_{x_a}$ and $p_{x_b}$,
+Exact GP inference requires an $O(n^3)$ Cholesky factorisation. With several hundred observations per model this is feasible but costly inside MCMC, so we use the **Hilbert-space GP (HSGP)** approximation [@solinHilbertSpaceMethods2020; @riutort-mayolPracticalHilbertSpace2022], a finite basis-function representation that generates $g_{\mathrm{unit}}$ from a unit-variance kernel and then rescales by $\eta$. Approximation quality depends on the basis size $m$ (accuracy vs cost), the boundary factor $c$ (the approximation domain, $c$ times the half-range of the standardised evaluation grid about its midpoint, must cover every point the basis is evaluated at), and the length-scale $\ell$ (shorter scales need more basis functions). We select $m$ and $c$ following PyMC's `approx_hsgp_hyperparams` recommendations for the specified range of $\ell$ [@abril-plaPyMCModernComprehensive2023; @riutort-mayolPracticalHilbertSpace2022].
+
+### Slope anchors {#sec-anchors}
+
+Rather than placing weakly interpretable priors directly on $\beta_0$ and $\beta_1$, we parameterise the linear trend through the expected proportion of words at two reference ages $x_a < x_b$. With $z_a = (x_a - \bar{x})/\sigma_x$ and $z_b = (x_b - \bar{x})/\sigma_x$, and priors placed on $p_{x_a}$ and $p_{x_b}$,
 
 $$
 \beta_1 = \frac{\operatorname{logit}(p_{x_b}) - \operatorname{logit}(p_{x_a})}{z_b - z_a},
@@ -164,60 +169,25 @@ $$
 \beta_0 = \operatorname{logit}(p_{x_a}) - \beta_1 z_a .
 $$
 
-This gives an interpretable baseline on the logit scale while the GP captures smooth departures. The reference ages and the priors on $p_{x_a}, p_{x_b}$ are **model-specific** (e.g. 24 and 84 months for the Down syndrome models; 12 and 26 months for the typically developing models) and are tabulated in each model's appendix.
+This gives an interpretable baseline on the logit scale while the GP captures smooth departures.
 
-### Levelling the trend above the high anchor {#sec-clamp}
+The reference ages and the priors on $p_{x_a}, p_{x_b}$ are model-specific (e.g. 24 and 84 months for the Down syndrome models; 12 and 26 months for the typically developing models) [**TODO**: cross-reference].
 
-The Down syndrome joint models evaluate the trajectory over 8–115 months while their anchors sit at 24 and 84, so about a quarter of the domain lies above the high anchor, where no prior constrains the trend. On the logit scale a line steep enough to climb between the anchors saturates over that distance. Extrapolated to 115 months, VG10's production-ratio mean alone reaches 0.993 — $P(\text{mean} > 0.99) = 0.90$ across the posterior — against a realised 0.842. The GP is then spent hauling the mean back, $-3.3$ logits at the top of the range, while sitting idle ($+0.08$) at 48 months where the data are.
+## Joint outcomes {#sec-joint-outcomes}
 
-We therefore level the trend off above the high anchor, replacing $z$ in the linear term with
+The core structure described in the preceding section was our starting point for our base models with single outcomes: VG01 (words spoken) and VG02 (words understood) for Down syndrome, and VG03 (words spoken) and VG04 (words understood) for typically developing children. 
 
-$$
-z_{\text{eff}} = z_b - \frac{1}{\beta}\operatorname{softplus}\!\big(\beta\,(z_b - z)\big),
-\qquad \beta = \frac{50}{z_b - z_a},
-$$
-
-so the mean rises linearly below $z_b$ and flattens above it, leaving the GP free to carry departures rather than correct an asymptote. The same coordinate is used for the projection basis in @sec-gpanchor, so the two constraints stay consistent.
-
-Three properties are deliberate. **The clamp is one-sided:** below the low anchor the line extrapolates accurately — VG10's production ratio at 12 months is 0.019 by extrapolation against 0.022 fitted — and clamping there would instead pin young-age values at the 24-month level, which is much worse. **The transition is smooth rather than a hard minimum:** $\min(z, z_b)$ is continuous but its derivative jumps at the anchor and the fitted curve inherits a visible elbow, which in the first VG10 refit made the spoken trajectory briefly non-monotone, falling from 428.6 words at 84.3 months to 426.6 at 85.6. **The softness is scale-free:** setting $\beta$ from the anchor span makes the largest departure from the hard-clamped form $\beta_1 \log 2 / \beta$, or 1.4% of the anchor span — about 0.8 months of age for the Down syndrome models — whatever the age standardisation.
-
-The cost is that $p_{x_b}$ is no longer exactly the mean at the high anchor age, falling short by that same amount. Between the anchors the mean is untouched, so both anchor priors carry over unchanged.
-
-This applies to the Down syndrome joint and signing models (VG05, VG07–VG10, VG14–VG16 and VG20, which inherits VG10's setting), set by `clamp_mean_above_hi_anchor` in each model definition. The typically developing models do not use it: their evaluation domains extend barely beyond their high anchors. The univariate Down syndrome baselines, VG01 and VG02, extrapolate the line across the full domain.
-
-### HSGP approximation {#sec-hsgp}
-
-Exact GP inference requires an $O(n^3)$ Cholesky factorisation. With several hundred observations per model this is feasible but costly inside MCMC, so we use the **Hilbert-space GP (HSGP)** approximation [@solinHilbertSpaceMethods2020; @riutort-mayolPracticalHilbertSpace2022], a finite basis-function representation that generates $g_{\mathrm{unit}}$ from a unit-variance kernel and then rescales by $\eta$. Approximation quality depends on the basis size $m$ (accuracy vs cost), the boundary factor $c$ (the approximation domain, $c$ times the half-range of the standardised evaluation grid about its midpoint, must cover every point the basis is evaluated at), and the length-scale $\ell$ (shorter scales need more basis functions). We select $m$ and $c$ following PyMC's `approx_hsgp_hyperparams` recommendations for the specified range of $\ell$ [@abril-plaPyMCModernComprehensive2023; @riutort-mayolPracticalHilbertSpace2022].
-
-## Shared default priors {#sec-core-priors}
-
-The following priors are held **constant across all models** (they are the shared defaults in `definitions.py`). Model-specific priors — the slope anchors $p_{x_a}, p_{x_b}$, and any random-effect, GP-anchor or association settings — are given in each appendix as deltas from this table.
-
-| Parameter | Description | Prior |
-|----|----------------|------------|
-| $\ell_\text{unit}$ | Unit length-scale, mapped linearly to 6–18 months | $\mathrm{Beta}(3, 3)$ |
-| $\eta$ | GP amplitude (logit scale) | $\mathrm{HalfNormal}(\sigma = 0.4)$ |
-| $\kappa_{\min}$ | Minimum concentration (dispersion floor) | $\mathrm{LogNormal}(\mu = \log 5,\ \sigma = 0.6)$ |
-| $a_\kappa$ | Log-scale intercept of $\kappa(z)$ | $\mathrm{Normal}(\mu = \log 8,\ \sigma = 1.0)$ |
-| $b_{\mathrm{mag}}$ | Magnitude of the $\kappa$ decline rate ($b_\kappa = -b_{\mathrm{mag}}$) | $\mathrm{HalfNormal}(\sigma = 0.3)$ |
-
-: Shared default prior distributions. {#tbl-core-priors}
-
-**The three dispersion rows are the legacy parameterisation, and most models no longer use it.** Every model with an empirical dispersion calibration — VG01–VG04, VG09–VG13, VG15 and VG16 — states its dispersion prior at two reference *ages* instead, as a floor plus the age term at each anchor, from which $a_\kappa$ and $b_\kappa$ are derived:
+The joint models use the fact that production is logically nested within understanding. They define
 
 $$
-\kappa(a) = \kappa_{\min} + \exp\!\Big(\log e_{\text{young}} + \tfrac{a - a_{\text{young}}}{a_{\text{old}} - a_{\text{young}}}\,\big(\log e_{\text{old}} - \log e_{\text{young}}\big)\Big).
+p_S(a)=p_U(a)q(a),
 $$
 
-Two things motivate it. A prior on $a_\kappa$ describes dispersion at the pool's *mean age*, so it silently changes meaning when the pool is resampled or filtered, where a prior at 24 months always means 24 months. And $b_{\mathrm{mag}} \ge 0$ forces dispersion to fall with age, which the comprehension outcomes reject — under the anchored form the sign is a consequence of the two anchors rather than a constraint. Anchor ages and medians are per model and are given in each appendix; the derivation and the calibration behind the numbers are in `docs/models/PRIORS.md`. The four that keep the table above — VG05, VG07, VG08 and VG14 — do so because their grouping structure differs from the pools the calibration covers, not because they were overlooked.
+where $p_U(a)$ is the expected proportion understood and $q(a)=P(\text{spoken}\mid\text{understood},a)$ is the expected fraction of understood words that are spoken. Because both terms lie between zero and one, expected spoken vocabulary cannot exceed expected understood vocabulary.
 
-The length-scale is mapped from the unit interval onto a 6–18 month range, $\ell = \ell_{\min} + (\ell_{\max} - \ell_{\min})\,\ell_\text{unit}$, which favours changes over 6–18 month periods and offers better sampling geometry than a direct prior on the positive reals. The amplitude $\eta$ is constant on the logit scale but, through the logistic link, has its largest effect on counts near $p \approx 0.5$ (about 405 of 810 words) and least effect near the floor or ceiling — matching the expectation that there is least scope for variation when a child is just starting out or near the checklist limit.
 
-## Extension mechanisms
+The signing models add an analogous ratio for signed words and, in VG15, estimate the association between speaking and signing rather than assuming conditional independence.
 
-The models differ only in which of the following mechanisms they switch on. Each maps directly onto a field (or flag) in `definitions.py`.
-
-### Joint outcomes and production ratios {#sec-ratios}
 
 The joint models estimate words **understood** and the conditional probability that an understood word is also produced. With $p_U(a) = \sigma(f_U(a))$ for understanding, define the **production ratio**
 
@@ -227,7 +197,7 @@ q(a) = P(\text{speak} \mid \text{understood}) = \sigma(h(a)),
 p_S(a) = p_U(a)\,q(a),
 $$
 
-where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-mean). Because $q(a) \in (0,1)$, this enforces $p_S \le p_U$ by construction.
+where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-trends). Because $q(a) \in (0,1)$, this enforces $p_S \le p_U$ by construction.
 
 Two properties of $q$ belong here, at its definition, rather than in a later caveat, because both bear on every comparison the report makes with it.
 
@@ -257,7 +227,17 @@ The size of that approximation is now known exactly rather than described. Binom
 
 The signing outcome is also harmonised before fitting. `uk_01` records sign-only words and cannot identify total signed vocabulary from the committed aggregate data, so its understood and spoken values are retained while its signing values are masked in the primary VG14, VG15 and VG17 analyses; an explicit sensitivity variant reintroduces it rather than pooling it silently with the comparable total-sign measures. The `uk_06` signing field was masked on the same principle from July 2026, its construct being unverified, and was reinstated in August once the source confirmed the instrument: the standard DSE checklists, whose second column is completed for a word the child *understands and signs*, ticked for imitated as well as spontaneous signs. That is a total sign count, and the committed data agrees — signed and spoken are each nested within understood on every uk_06 record, while their sum exceeds it on seven of eleven, which only overlapping per-word ticks can produce.
 
-### Study and subject random intercepts {#sec-randomeffects}
+Some models include several assessments from the same child and combine several studies. Random intercepts represent stable shifts on the logit scale:
+
+$$
+f_{ijs}=f(a_{ijs})+u_s+v_{is},
+$$
+
+where $u_s$ is the shift for study $s$ and $v_{is}$ is the shift for child $i$ within that study. Their estimated standard deviations describe between-study and between-child heterogeneity. They also stop repeated observations from being treated as if they came from unrelated children.
+
+
+
+## Multilevel models
 
 To separate the population age curves from differences in study composition and from repeated measurements on the same child, we add random intercepts on the logit-scale predictors at the observation level. For a predictor $f_\bullet \in \{f_U, h, g_{\text{sign}}\}$,
 
@@ -271,41 +251,35 @@ implemented non-centred, where $s(i)$ and $j(i)$ index the study and subject of 
 
 The TD hierarchical models apply the same repeated-measures rule. VG11 and VG12 include a child intercept on their single outcome, and VG13 includes child intercepts on both $p_U$ and $q$. A fixed-seed sensitivity retains one randomly selected administration per study-specific child and disables the child effects, providing a cheaper check that conclusions do not depend on treating repeat administrations as additional independent children.
 
-### Gaussian-process anchoring {#sec-gpanchor}
 
-Once a random intercept and the linear/intercept term and the GP can each carry the global level, that level becomes redundant and sampling geometry degrades (a GP↔intercept ridge). We remove the redundancy by constraining each GP to pass through zero at a reference age $a_{\text{ref}}$ **for every posterior draw**,
+## TODO...
 
-$$
-\tilde{g}(z) = \eta\left(g_{\mathrm{unit}}(z) - g_{\mathrm{unit}}(z_{\text{ref}})\right),
-$$
 
-so the level is owned solely by the linear/intercept term and the random effects, while the GP carries only the *shape* of departures around $a_{\text{ref}}$. The reference age $a_{\text{ref}}$ (`gp_anchor_age_months`) is model-specific.
 
-### Within-understood sign–speech association {#sec-association}
+#### Levelling the trend above the high anchor {#sec-clamp}
 
-For each understood word a child may sign it, speak it, both, or neither. The trivariate marginals $r$ and $q$ (@sec-ratios) leave the **overlap** unidentified; the joint model adds a single scalar **Plackett odds ratio** $\psi$ linking sign and speech within understood words via the copula $C(r, q; \psi)$:
+The Down syndrome joint models evaluate the trajectory over 8–115 months while their anchors sit at 24 and 84, so about a quarter of the domain lies above the high anchor, where no prior constrains the trend. On the logit scale a line steep enough to climb between the anchors saturates over that distance. Extrapolated to 115 months, VG10's production-ratio mean alone reaches 0.993 — $P(\text{mean} > 0.99) = 0.90$ across the posterior — against a realised 0.842. The GP is then spent hauling the mean back, $-3.3$ logits at the top of the range, while sitting idle ($+0.08$) at 48 months where the data are.
+
+We therefore level the trend off above the high anchor, replacing $z$ in the linear term with
 
 $$
-\pi_{\text{both}} = C(r, q; \psi),\quad
-\pi_{\text{sign-only}} = r - \pi_{\text{both}},\quad
-\pi_{\text{speak-only}} = q - \pi_{\text{both}},\quad
-\pi_{\text{neither}} = 1 - r - q + \pi_{\text{both}} .
+z_{\text{eff}} = z_b - \frac{1}{s}\operatorname{softplus}\!\big(s\,(z_b - z)\big),
+\qquad s = \frac{50}{z_b - z_a},
 $$
 
-$\psi = 1$ is independence ($\pi_{\text{both}} = r\,q$); $\psi > 1$ means a word is signed and spoken together more often than independence predicts. The four cells are fitted with a Dirichlet-Multinomial likelihood, identified from the four-cell cross-tabulation (the uk\_02 data; see @sec-data <!-- methods-data -->). The association yields a **data-identified total expressive vocabulary**
+so the mean rises linearly below $z_b$ and flattens above it, leaving the GP free to carry departures rather than correct an asymptote. The same coordinate is used for the projection basis in @sec-gpanchor, so the two constraints stay consistent.
 
-$$
-p_{\text{any}}(a) = p_U(a)\left(r(a) + q(a) - \pi_{\text{both}}(a)\right),
-$$
+Three properties are deliberate. **The clamp is one-sided:** below the low anchor the line extrapolates accurately — VG10's production ratio at 12 months is 0.019 by extrapolation against 0.022 fitted — and clamping there would instead pin young-age values at the 24-month level, which is much worse. **The transition is smooth rather than a hard minimum:** $\min(z, z_b)$ is continuous but its derivative jumps at the anchor and the fitted curve inherits a visible elbow, which in the first VG10 refit made the spoken trajectory briefly non-monotone, falling from 428.6 words at 84.3 months to 426.6 at 85.6. **The softness is scale-free:** setting $\beta$ from the anchor span makes the largest departure from the hard-clamped form $\beta_1 \log 2 / \beta$, or 1.4% of the anchor span — about 0.8 months of age for the Down syndrome models — whatever the age standardisation.
 
-which sits below an independence-based upper bound whenever $\psi > 1$.
+The cost is that $p_{x_b}$ is no longer exactly the mean at the high anchor age, falling short by that same amount. Between the anchors the mean is untouched, so both anchor priors carry over unchanged.
 
-::: {.callout-important}
-$\psi$ is a **single scalar**, identified from a small four-cell cross-tab, and is treated as **descriptive / exploratory** throughout this report. See @sec-sign-speech-association for the estimate, @sec-psi-by-study for how far the contributing sources disagree about it, and @sec-signing-limits for its scope and caveats.
-:::
+This applies to the Down syndrome joint and signing models (VG05, VG07–VG10, VG14–VG16 and VG20, which inherits VG10's setting), set by `clamp_mean_above_hi_anchor` in each model definition. The typically developing models do not use it: their evaluation domains extend barely beyond their high anchors. The univariate Down syndrome baselines, VG01 and VG02, extrapolate the line across the full domain.
 
-### Validation and publication gate {#sec-validation-gate}
 
-Every fit writes `fit_manifest.json` immediately after preparing its analysis frame. The manifest records the exact model definition and priors, sampling configuration and seed, prepared-row counts by source and outcome, a SHA-256 hash of the prepared analysis frame, the Git revision and dirty state, Python/platform details, and installed package versions. This makes a fitted artefact traceable to the code and filtered data that produced it.
+## Models of record
 
-Validation is layered rather than reduced to a single fit statistic: prior predictive checks assess whether the priors generate plausible trajectories; posterior predictive checks compare replicated counts with observed age-stratified distributions; PSIS-LOO and leave-one-subject-out comparisons assess relative prediction where their assumptions are appropriate; source, prior and single-administration sensitivities test the main measurement and dependence decisions; and independent developmental norms are reserved for external calibration rather than prior tuning where possible. Reporting-quality (`rep` and `rep-lite`) runs are fail-closed: if any sampled parameter has $\hat R>1.01$, bulk or tail ESS below 400, or the convergence scan itself fails, diagnostic artefacts and a `CONVERGENCE_FAILED.txt` marker are retained but posterior summaries and report-generation stages do not run. Development and test fits remain explicitly provisional and report the same warnings without being treated as publication artefacts.
+### Words understood
+
+### Words spoken
+
+### Words signed or gestured
