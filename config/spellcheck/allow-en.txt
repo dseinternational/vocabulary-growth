@@ -111,6 +111,7 @@ callout
 caveated
 centered
 centile
+centiles
 color
 compr
 crosswalk
