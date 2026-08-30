@@ -47,11 +47,14 @@ NEAR_CEILING_FRACTION = 0.90
 def _ceiling_by_form() -> pd.DataFrame:
     """Quantify at-ceiling and near-ceiling observations by (study, ceiling).
 
-    Reads ``survey_vocab_max`` straight from the ``vocab_combined`` view — it is
-    the native checklist ceiling of each row's source form and is dropped by
-    :func:`load_combined_data`, so this audit queries the view directly. For
-    each (study, ceiling, outcome) it reports how many modelled counts sit at
-    the ceiling or within ``NEAR_CEILING_FRACTION`` of it, i.e. how much of the
+    Reads ``survey_vocab_max`` — the native checklist ceiling of each row's
+    source form — straight from the raw ``vocab_combined`` view rather than
+    through :func:`load_combined_data`. The loader's frame carries the ceiling
+    too, but its default masking rules (ceiling-only children, implausible
+    production) remove or mask exactly the near-ceiling counts this audit
+    exists to count, so querying the pre-mask view is deliberate. For each
+    (study, ceiling, outcome) it reports how many source counts sit at the
+    ceiling or within ``NEAR_CEILING_FRACTION`` of it, i.e. how much of the
     data is exposed to the fixed-810-denominator harmonisation.
     """
     with duckdb.connect(VOCABULARY_DATA_PATH, read_only=True) as con:
