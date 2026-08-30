@@ -38,7 +38,7 @@ Frequentist uncertainty is instead grounded in how an estimation procedure behav
 
 Bayesian inference begins with a prior distribution -- what we consider plausible before seeing the data. It then uses Bayes' theorem to update the prior distribution with the data to yield a posterior distribution [@gillBayesianSocialScience2024; @mcelreathStatisticalRethinkingBayesian2020]. A Bayesian posterior distribution supports direct and intuitive statements such as: "given our model and the data, the typical 36-month-old child with Down syndrome learns about 5 new words per month, with an 89% probability that the median rate lies between 2 and 7."
 
-### Using existing knowledge
+#### Using existing knowledge
 
 A prior encodes what is plausible about each parameter before the current data are analysed. Priors can draw on previous research and the experience of people with relevant expertise, where this is available. A well-grounded prior combined with the data yields estimates that are more stable, and often more precise, than the data alone. This can be especially valuable when datasets are small or noisy and a substantial evidence base already exists [@gelmanStatisticalWorkflow2026; @mcelreathStatisticalRethinkingBayesian2020].
 
@@ -62,21 +62,33 @@ Vocabulary checklists record a subset of the words a child understands, speaks o
 
 ### A single reference inventory {#sec-reference-inventory}
 
-Our pooled data include multiple forms with varying numbers of lexical items[^lexical-items]: the DSE checklists together contain 810 items, while other forms contain between roughly 400 and 700 items (@sec-data). Checklists are designed to sample the words children learn earliest, and shorter forms are typically given to younger children. Therefore, for a child with an item count well below a form's maximum, the items a shorter form omits are mostly items that the child does not yet know. Given this, a count recorded on a shorter form will be close to the count a longer checklist would have recorded. We therefore score every count against a single reference inventory of $n = 810$ lexical items, whichever form recorded it, so that every estimate is on the same scale.
+Our pooled data include forms with varying numbers of lexical items[^lexical-items] (@sec-data). Checklists are designed to sample the words children learn earliest, and shorter forms are typically given to younger children. Therefore, for a child with an item count well below a form's maximum, the items a shorter form omits are mostly items that the child does not yet know. Given this, a count recorded on a shorter form will be close to the count a longer checklist would have recorded. We therefore score every count against a single reference inventory of $n = 810$ lexical items, whichever form recorded it, so that every estimate is on the same scale.
 
 [^lexical-items]: Vocabulary checklists contain lexical items presented in a single citation form -- typically the singular form for nouns and the base form for verbs. They do not list all word forms and so cannot count, for example, understanding “pea” and “peas” as understanding two words. 
 
-This approximation is less accurate for children near the maximum of a shorter form, who may know words their form does not ask about but that would have been identified on a longer form. Such observations are uncommon among the data we have pooled for children with Down syndrome.
+This approximation is less accurate for children near the maximum of a shorter form, who may know words their form does not ask about but that would have been identified on a longer form. To evaluate the assumption, we examine how often pooled counts approach their form's maximum, test whether raw counts or proportions of each form's maximum better align counts recorded on different checklists, and refit models using only the counts recorded natively on the 810-item checklists.
 
-The typically developing pool relies on the approximation more heavily. None of its counts are recorded on the 810-item checklists: every observation comes from a shorter form (@sec-data). Most sit well below their form's maximum, because the pool is restricted to ages 8 to 30 months and each form is designed for the ages at which it is given. The exception is spoken vocabulary towards the top of that window, where typically developing children can approach their form's ceiling -- 680 items on the Words and Sentences form. A count at the ceiling records every word the form asks about, not every word the child says, and so can only understate the count the reference inventory would have recorded. Estimates of spoken vocabulary at the oldest typically developing ages may be conservative as a result.
+#### Counts near maxima
 
-[**TODO**: quantify for DS/TD pools -- raw-vs-proportion check and the native-810 sensitivity refit]
+Counts near the maximum of a shorter form are uncommon among the data we have pooled for children with Down syndrome: 42 of 977 observations of words understood (4.3%, five of them at the maximum itself) and 18 of 1,428 observations of words spoken (1.3%) fall within 90% of a shorter form's maximum, and none of the 904 observations of words signed do.
+
+The typically developing pool relies on the approximation more heavily. Here, every observation comes from a shorter form (@sec-data). Most sit well below their form's maximum, because the pool is restricted to ages 8 to 30 months and each form is designed for the ages at which it is given. The exception is spoken vocabulary towards the top of that window, where typically developing children can approach their form's ceiling: 4.0% of the pool's spoken observations fall within 90% of their form's maximum -- negligible below 22 months, 3.5% at 22 to 25 months, 7.7% at 26 to 27 months, and about one in five observations at 28 to 30 months. Words understood show the same pattern on a smaller scale: 3.8% overall, rising above 20% only at 23 to 25 months, the oldest ages of the longest-running comprehension form (the 418-item Oxford CDI). A count at a shorter form's ceiling is censored: the child is credited with every word the form asks about, and under the same easiest-first approximation would have been credited with at least as many — and plausibly more — items on the reference inventory. Because the model treats such counts as exact, estimated counts at the oldest typically developing ages are more likely to understate than overstate the count the reference inventory would have recorded. This is a statement about the reference-inventory count, not about spoken vocabulary at large; what checklist counts can and cannot say about vocabulary beyond the words checklists sample is discussed is @sec-data.
+
+#### Forms align more closely on raw counts than on proportions
+
+Two checks support scoring raw counts against the reference inventory rather than rescaling each count in proportion to its form's length. First, one study assessed 34 children on both the 810-item DSE checklists and the 416-item Oxford CDI (@sec-data). A measurement model fitted to these dual-form administrations estimates the ratio of the two forms' counts at matched age: for words understood it runs from about 0.9 at the youngest dual-form ages to 1.4 by 49 months -- close to the value of 1 that our common scoring assumes over the ages at which shorter forms are typically given -- and it everywhere excludes the 1.95 that rescaling in proportion to form length (810/416) would imply. The rise with age is the compression described above: as the shorter form runs out of items, it records progressively fewer of the words a longer checklist would have identified. Second, if shorter forms sampled words in proportion rather than easiest-first, counts recorded on shorter forms would sit systematically lower. They do not: across the typically developing pool, the median counts of words understood in different languages align more closely on raw counts than on proportions of each form's maximum at every age from 8 to 15 months, and the shortest form (309 items) does not record the lowest counts.
+
+#### Sensitivity analysis
+
+Finally, we conducted a sensitivity analysis where models were refitted using only the administrations recorded natively on the 810-item DSE checklists, so that no count is scored against a maximum its form did not use. This restriction keeps 278 of the 1,521 administrations in the Down syndrome pool (194 children from four sources, spanning 9 to 115 months), so the restricted fits inform the comparison only where their coverage overlaps the full pool's.
+
+[**TODO**: figures from latest refit]
 
 ### A Beta-Binomial distribution {#sec-betabinomial}
 
 The words on a checklist are fixed. Therefore, a count $k$ can take only integer values $0 <= k <= n$, and the corresponding proportion $p$ is bounded accordingly. Our outcome model should respect these constraints: counts are discrete, non-negative and bounded above. Since every count in our data is scored against the reference inventory (@sec-reference-inventory), we define $n = 810$.
 
-A count of true responses out of $n$ items follows a Binomial distribution when two assumptions hold within an administration: that (a) given the probability of a true response $p$, the item responses (words checked) are independent; and that (b) every item carries that same probability. This gives a mean of $np$ and a variance (fixed by the mean) of $np(1-p)$. We then assume the same distribution holds across administrations: that (c) the probability is the same for every observation of a given outcome at the same age.
+A count of true responses out of $n$ items follows a Binomial distribution when two assumptions hold within an administration: that (a) given the probability of a true response $p$, the item responses (words checked) are independent; and that (b) every item carries that same probability. This gives a mean of $np$ and a variance (fixed by the mean) of $np(1-p)$ [@gelmanRegressionOtherStories2020, sec. 3.2]. We then assume the same distribution holds across administrations: that (c) the probability is the same for every observation of a given outcome at the same age.
 
 Under the Binomial model, given our inventory of $n = 810$ words, and with $p = 0.3$, the expected count is $np = 243$ with a variance of $np(1-p) = 170.1$, a standard deviation of about 13 words. Vocabulary scores vary far more *between* children of the same age than this common probability will allow [@galeoteAcquisitionProductiveVocabulary2008; @marchmanMacArthurBatesCommunicativeDevelopment2023; @zampiniVocabularyDevelopmentChildren2013]. A Beta-Binomial model relaxes assumption (c) by allowing the probability for each observation to vary: rather than one probability shared by all children of an age, each observation's probability is drawn from a Beta distribution [@gelmanBayesianDataAnalysis2013, sec. 17.2; @qiaoBetaBinomialModelCount2025].
 
@@ -188,24 +200,24 @@ The core structure described in the preceding section was our starting point for
 The joint models use the fact that production is logically nested within understanding. They define
 
 $$
-p_S(a)=p_U(a)q(a),
+p_{W_{\text{spoken}}}(a) = p_{W_{\text{understood}}}(a)\,q(a),
 $$
 
-where $p_U(a)$ is the expected proportion understood and $q(a)=P(\text{spoken}\mid\text{understood},a)$ is the expected fraction of understood words that are spoken. Because both terms lie between zero and one, expected spoken vocabulary cannot exceed expected understood vocabulary.
+where $p_{W_{\text{understood}}}(a)$ is the expected proportion understood and $q(a)=P(W_\text{spoken}\mid W_\text{understood},a)$ is the expected fraction of understood words that are spoken. Because both terms lie between zero and one, expected spoken vocabulary cannot exceed expected understood vocabulary.
 
 
 The signing models add an analogous ratio for signed words and, in VG15, estimate the association between speaking and signing rather than assuming conditional independence.
 
 
-The joint models estimate words **understood** and the conditional probability that an understood word is also produced. With $p_U(a) = \sigma(f_U(a))$ for understanding, define the **production ratio**
+The joint models estimate words **understood** and the conditional probability that an understood word is also produced. With $p_{W_{\text{understood}}}(a) = \sigma(f_U(a))$ for understanding, define the **production ratio**
 
 $$
 q(a) = P(\text{speak} \mid \text{understood}) = \sigma(h(a)),
 \qquad
-p_S(a) = p_U(a)\,q(a),
+p_{W_{\text{spoken}}}(a) = p_{W_{\text{understood}}}(a)\,q(a),
 $$
 
-where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-trends). Because $q(a) \in (0,1)$, this enforces $p_S \le p_U$ by construction.
+where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-trends). Because $q(a) \in (0,1)$, this enforces $p_{W_{\text{spoken}}} \le p_{W_{\text{understood}}}$ by construction.
 
 Two properties of $q$ belong here, at its definition, rather than in a later caveat, because both bear on every comparison the report makes with it.
 
