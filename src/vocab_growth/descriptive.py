@@ -28,6 +28,460 @@ from dse_research_utils.plot.styles import categorical_palette
 
 MEASURES = ("understood", "spoken", "signed")
 
+# The pooled-summary overlay the repeated-measures plots draw: pure red so it
+# reads as one family over any categorical palette, with a near-transparent
+# interquartile band.
+_SUMMARY_COLOUR = "red"
+_IQR_ALPHA = 0.08
+
+
+def drawable_groups(
+    df: pd.DataFrame,
+    outcomes: tuple[str, ...],
+    *,
+    group: str = "study",
+    subject_col: str = "subject_id",
+    form_col: str = "survey_vocab_max",
+) -> list[str]:
+    """Groups contributing at least one drawable repeated-measures fragment.
+
+    A fragment is two or more observations of one subject on one form for any
+    of ``outcomes``. Callers building a shared group -> colour mapping across
+    several figures should assign colours over this union, so a group keeps
+    one colour everywhere and the palette is not wasted on groups that never
+    draw a line.
+    """
+    drawn: set[str] = set()
+    for outcome in outcomes:
+        obs = df.dropna(subset=["age", outcome])
+        frag = (
+            obs[group].astype(str)
+            + "::"
+            + obs[subject_col].astype(str)
+            + "@"
+            + obs[form_col].astype(str)
+        )
+        counts = frag.groupby(frag).transform("size")
+        drawn |= set(obs.loc[counts >= 2, group].astype(str).unique())
+    return sorted(drawn)
+
+
+def summary_table_by_group(
+    age_frame: pd.DataFrame,
+    measure_frames: dict[str, pd.DataFrame],
+    *,
+    group: str = "study",
+    subject_col: str = "subject_id",
+) -> pd.DataFrame:
+    """Per-group range/median/mean/SD summary table, plus a pooled ``All`` row.
+
+    Age statistics and the observation/child counts come from ``age_frame``;
+    each measure's statistics come from its own frame's non-missing values.
+    The split matters for the typically-developing pool, whose comprehension
+    and production are loaded from different form sets — a single frame would
+    either drop the Words & Sentences production rows or misstate the ages the
+    pool covers. For the Down syndrome pool, pass the same frame throughout.
+
+    Columns: ``{group}``, ``n_subjects``, ``n_observations``, and
+    ``{m}_{stat}`` for ``age`` and each measure, with stat in
+    min/max/median/mean/sd (sd with ddof=1; all NaN where a group records no
+    such measure).
+    """
+
+    def stats(series: pd.Series) -> dict[str, float]:
+        s = pd.to_numeric(series, errors="coerce").dropna()
+        if not len(s):
+            return {k: np.nan for k in ("min", "max", "median", "mean", "sd")}
+        return {
+            "min": float(s.min()),
+            "max": float(s.max()),
+            "median": float(s.median()),
+            "mean": float(s.mean()),
+            "sd": float(s.std(ddof=1)),
+        }
+
+    def sub(frame: pd.DataFrame, name: str) -> pd.DataFrame:
+        return frame if name == "All" else frame[frame[group].astype(str) == name]
+
+    names = sorted(
+        set(age_frame[group].astype(str).unique()).union(
+            *[set(f[group].astype(str).unique()) for f in measure_frames.values()]
+        )
+    )
+    rows = []
+    for name in [*names, "All"]:
+        ages = sub(age_frame, name)
+        row: dict[str, object] = {
+            group: name,
+            "n_subjects": int(ages[subject_col].nunique()),
+            "n_observations": int(len(ages)),
+        }
+        for stat, value in stats(ages["age"]).items():
+            row[f"age_{stat}"] = value
+        for measure, frame in measure_frames.items():
+            for stat, value in stats(sub(frame, name)[measure]).items():
+                row[f"{measure}_{stat}"] = value
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _binned_outcome_summary(
+    obs: pd.DataFrame,
+    outcome: str,
+    lo: float,
+    hi: float,
+    bin_width: int,
+    min_bin_n: int,
+) -> pd.DataFrame:
+    """Pooled per-age-bin summary (n, median, mean, quartiles) of ``outcome``."""
+    edges = np.arange(lo - lo % bin_width, hi + bin_width, bin_width)
+    binned = obs.groupby(pd.cut(obs["age"], edges), observed=False)[outcome]
+    summary = pd.DataFrame(
+        {
+            "age_mid": edges[:-1] + bin_width / 2,
+            "n": binned.size().to_numpy(),
+            "median": binned.median().to_numpy(),
+            "mean": binned.mean().to_numpy(),
+            "q25": binned.quantile(0.25).to_numpy(),
+            "q75": binned.quantile(0.75).to_numpy(),
+        }
+    )
+    return summary[summary["n"] >= min_bin_n]
+
+
+def _draw_pooled_summary(
+    ax, summary: pd.DataFrame, bin_width: int, *, centre_lines: bool = True
+) -> None:
+    """The red pooled overlay: IQR band, plus solid median and dashed mean
+    unless ``centre_lines`` is False (the observation scatters draw the band
+    alone — a fitted-looking centre line overstates what a raw-data figure
+    shows)."""
+    ax.fill_between(
+        summary["age_mid"],
+        summary["q25"],
+        summary["q75"],
+        color=_SUMMARY_COLOUR,
+        alpha=_IQR_ALPHA,
+        linewidth=0,
+        zorder=2,
+        label="Pooled IQR (25th–75th percentile)",
+    )
+    if not centre_lines:
+        return
+    ax.plot(
+        summary["age_mid"],
+        summary["median"],
+        color=_SUMMARY_COLOUR,
+        lw=2.5,
+        zorder=3,
+        label=f"Pooled median ({bin_width}-month bins)",
+    )
+    ax.plot(
+        summary["age_mid"],
+        summary["mean"],
+        color=_SUMMARY_COLOUR,
+        lw=1.8,
+        ls="--",
+        zorder=3,
+        label=f"Pooled mean ({bin_width}-month bins)",
+    )
+
+
+def plot_observations_by_group(
+    df: pd.DataFrame,
+    outcome: str,
+    *,
+    group: str = "study",
+    subject_col: str = "subject_id",
+    age_range: tuple[float, float | None] = (8, None),
+    bin_width: int = 6,
+    min_bin_n: int = 5,
+    point_alpha: float = 0.45,
+    point_size: float = 12,
+    group_colors: dict | None = None,
+    ylabel: str | None = None,
+    title: str | None = None,
+    figsize: tuple[float, float] = (9, 6),
+    output_dir: str | None = None,
+    filename: str | None = None,
+):
+    """Every observation of ``outcome`` by age, coloured by group, with the
+    pooled IQR band.
+
+    The scatter companion to :func:`plot_repeat_measures_by_group`: the same
+    age window, binning and per-group colouring, but overlaying only the
+    pooled interquartile band (no median/mean centre lines — a fitted-looking
+    centre line overstates what a raw-data figure shows) and showing
+    ALL observations as points — single-visit children included — rather than
+    only the repeat-measures subset. An ``age_range`` upper bound of None means
+    the data's own maximum, so the scatter can show where the pool thins while
+    the windowed trajectory figures stay within the reporting range.
+    ``group_colors`` maps group name to colour; pass the same mapping to both
+    plot types so a group keeps one colour across the figures. Saves
+    ``.png``/``.svg`` and the binned summary as ``.csv`` when
+    ``output_dir``/``filename`` are given.
+    """
+    lo, hi = age_range
+    obs = df.dropna(subset=["age", outcome]).copy()
+    if hi is None:
+        hi = float(obs["age"].max())
+    obs = obs[(obs["age"] >= lo) & (obs["age"] <= hi)]
+    n_subjects = (
+        obs[group].astype(str) + "::" + obs[subject_col].astype(str)
+    ).nunique()
+
+    summary = _binned_outcome_summary(obs, outcome, lo, hi, bin_width, min_bin_n)
+
+    groups = sorted(obs[group].astype(str).unique())
+    if group_colors is None:
+        group_colors = dict(zip(groups, categorical_palette(len(groups)), strict=True))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    for name in groups:
+        rows = obs[obs[group].astype(str) == name]
+        ax.scatter(
+            rows["age"],
+            rows[outcome],
+            s=point_size,
+            alpha=point_alpha,
+            color=group_colors[name],
+            edgecolors="none",
+            zorder=1,
+        )
+
+    _draw_pooled_summary(ax, summary, bin_width, centre_lines=False)
+
+    per_group = obs.groupby(obs[group].astype(str))[subject_col].nunique()
+    for name in group_colors:
+        if name in per_group.index:
+            ax.scatter(
+                [], [],
+                s=30,
+                color=group_colors[name],
+                label=f"{name} (n = {per_group[name]})",
+            )
+
+    ax.set_xlabel("Age (months)")
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if title:
+        ax.set_title(f"{title} — {n_subjects:,} children, {len(obs):,} observations")
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(lo, hi)
+    ax.legend(loc="upper left", frameon=False, ncol=2, fontsize="small")
+    ax.grid(True, alpha=0.25)
+
+    if output_dir is not None and filename is not None:
+        os.makedirs(output_dir, exist_ok=True)
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300, bbox_inches="tight")
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"), bbox_inches="tight")
+        summary.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
+    return fig
+
+
+def plot_monthly_violins(
+    df: pd.DataFrame,
+    outcome: str,
+    *,
+    age_range: tuple[float, float | None] = (8, None),
+    min_month_n: int = 5,
+    body_colour: str = "#4878a8",
+    ylabel: str | None = None,
+    figsize: tuple[float, float] = (9, 6),
+    output_dir: str | None = None,
+    filename: str | None = None,
+):
+    """Per-month distributions of ``outcome`` as violins, with the pooled
+    monthly median and interquartile band.
+
+    Built for pools too dense for a scatter — the typically-developing
+    Wordbank pool records hundreds of administrations at each integer age, so
+    a scatter saturates into stripes while violins show the distribution's
+    shape: the mass on zero before production starts, the growing right tail,
+    and the accumulation at form ceilings. Ages are rounded to the nearest
+    month; months with fewer than ``min_month_n`` observations are omitted.
+    Each violin's density estimate is clipped to that month's observed range,
+    so no mass is drawn below zero or beyond the ceilings. An ``age_range``
+    upper bound of None means the data's own maximum, so the axis ends where
+    the measure's forms do. Saves ``.png``/``.svg`` and the monthly summary as
+    ``.csv`` when ``output_dir``/``filename`` are given.
+    """
+    lo, hi = age_range
+    obs = df.dropna(subset=["age", outcome]).copy()
+    if hi is None:
+        hi = float(obs["age"].max())
+    obs = obs[(obs["age"] >= lo) & (obs["age"] <= hi)]
+    obs["_month"] = obs["age"].round().astype(int)
+
+    months, groups = [], []
+    for month, rows in obs.groupby("_month"):
+        if len(rows) >= min_month_n:
+            months.append(int(month))
+            groups.append(rows[outcome].to_numpy())
+
+    summary = pd.DataFrame(
+        {
+            "age_months": months,
+            "n": [len(g) for g in groups],
+            "median": [float(np.median(g)) for g in groups],
+            "q25": [float(np.quantile(g, 0.25)) for g in groups],
+            "q75": [float(np.quantile(g, 0.75)) for g in groups],
+        }
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    parts = ax.violinplot(
+        groups, positions=months, widths=0.85, showmedians=False, showextrema=False
+    )
+    for body, values in zip(parts["bodies"], groups, strict=True):
+        body.set_facecolor(body_colour)
+        body.set_alpha(0.55)
+        body.set_edgecolor("none")
+        path = body.get_paths()[0]
+        path.vertices[:, 1] = np.clip(
+            path.vertices[:, 1], float(values.min()), float(values.max())
+        )
+
+    ax.fill_between(
+        summary["age_months"],
+        summary["q25"],
+        summary["q75"],
+        color=_SUMMARY_COLOUR,
+        alpha=_IQR_ALPHA,
+        linewidth=0,
+        zorder=2,
+        label="Pooled IQR (25th–75th percentile)",
+    )
+    ax.plot(
+        summary["age_months"],
+        summary["median"],
+        color=_SUMMARY_COLOUR,
+        lw=2.5,
+        zorder=3,
+        label="Pooled median (monthly)",
+    )
+
+    ax.set_xlabel("Age (months)")
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(min(months) - 1, max(months) + 1)
+    ax.legend(loc="upper left", frameon=False)
+    ax.grid(True, alpha=0.25)
+
+    if output_dir is not None and filename is not None:
+        os.makedirs(output_dir, exist_ok=True)
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300, bbox_inches="tight")
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"), bbox_inches="tight")
+        summary.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
+    return fig
+
+
+def plot_repeat_measures_by_group(
+    df: pd.DataFrame,
+    outcome: str,
+    *,
+    group: str = "study",
+    subject_col: str = "subject_id",
+    form_col: str = "survey_vocab_max",
+    age_range: tuple[float, float] = (8, 72),
+    bin_width: int = 6,
+    min_bin_n: int = 5,
+    line_alpha: float = 0.45,
+    group_colors: dict | None = None,
+    ylabel: str | None = None,
+    title: str | None = None,
+    figsize: tuple[float, float] = (9, 6),
+    output_dir: str | None = None,
+    filename: str | None = None,
+):
+    """Repeated-measures trajectories by group, with a pooled median/IQR overlay.
+
+    Every subject with two or more observations of ``outcome`` on one form is
+    drawn as a line joining those visits, coloured by ``group``. Over the fan
+    sit the pooled median (solid red), mean (dashed red) and interquartile band
+    (translucent red), computed in ``bin_width``-month age bins over ALL
+    observations in ``df`` within ``age_range`` — single-visit subjects
+    included, so the central trajectory describes the whole pool rather than
+    the repeat-measures subset.
+
+    Lines join observations of one subject on ONE form only (``form_col``): a
+    same-day dual-form pair or a cross-form transition is a change of
+    measurement scale, not development, so those segments are never drawn.
+
+    ``age_range`` bounds the observations used (excluded, not merely clipped
+    from view), and bins with fewer than ``min_bin_n`` observations are not
+    summarised. ``group_colors`` maps group name to colour; when None the
+    colours come from ``categorical_palette`` over the groups that contribute a
+    fragment — pass a shared mapping (see :func:`drawable_groups`) when several
+    figures must keep group colours aligned. Saves ``.png``/``.svg`` and the
+    binned summary as ``.csv`` when ``output_dir``/``filename`` are given.
+    """
+    lo, hi = age_range
+    obs = df.dropna(subset=["age", outcome]).copy()
+    obs = obs[(obs["age"] >= lo) & (obs["age"] <= hi)]
+
+    obs["_subject"] = obs[group].astype(str) + "::" + obs[subject_col].astype(str)
+    obs["_fragment"] = obs["_subject"] + "@" + obs[form_col].astype(str)
+    n_visits = obs.groupby("_fragment")["age"].transform("size")
+    repeats = obs[n_visits >= 2].sort_values(["_fragment", "age"])
+    n_subjects = repeats["_subject"].nunique()
+
+    summary = _binned_outcome_summary(obs, outcome, lo, hi, bin_width, min_bin_n)
+
+    if group_colors is None:
+        groups = drawable_groups(
+            df, (outcome,), group=group, subject_col=subject_col, form_col=form_col
+        )
+        palette = categorical_palette(len(groups))
+        group_colors = dict(zip(groups, palette, strict=True))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    for _, rows in repeats.groupby("_fragment"):
+        colour = group_colors[str(rows[group].iloc[0])]
+        ax.plot(
+            rows["age"],
+            rows[outcome],
+            color=colour,
+            alpha=line_alpha,
+            lw=1.0,
+            marker="o",
+            ms=2.5,
+            markerfacecolor=colour,
+            markeredgewidth=0,
+            zorder=1,
+        )
+
+    _draw_pooled_summary(ax, summary, bin_width)
+
+    per_group = repeats.groupby(repeats[group].astype(str))["_subject"].nunique()
+    for name in group_colors:
+        if name in per_group.index:
+            ax.plot(
+                [], [],
+                color=group_colors[name],
+                alpha=0.8,
+                lw=2,
+                label=f"{name} (n = {per_group[name]})",
+            )
+
+    ax.set_xlabel("Age (months)")
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if title:
+        ax.set_title(f"{title} — {n_subjects:,} children, linked within form")
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(lo, hi)
+    ax.legend(loc="upper left", frameon=False, ncol=2, fontsize="small")
+    ax.grid(True, alpha=0.25)
+
+    if output_dir is not None and filename is not None:
+        os.makedirs(output_dir, exist_ok=True)
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300, bbox_inches="tight")
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"), bbox_inches="tight")
+        summary.to_csv(os.path.join(output_dir, f"{filename}.csv"), index=False)
+    return fig
+
 
 def summarise_by_group(
     df: pd.DataFrame,
@@ -107,3 +561,5 @@ def scatter_by_group(
             os.path.join(output_dir, f"{filename}.csv"), index=False
         )
     return fig
+
+
