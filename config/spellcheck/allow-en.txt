@@ -167,6 +167,7 @@ miscited
 missingness
 modeling
 multiset
+mypy
 negll
 nohup
 nonlinear

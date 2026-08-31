@@ -23,9 +23,6 @@ six models of record and invalidate every one of their fitted outputs.
 import numpy as np
 import pytest
 
-from vocab_growth.models.common_bivariate_re import (
-    _resolve_subject_re_correlation,
-)
 from vocab_growth.models.definitions import (
     VG05,
     VG07,
@@ -34,10 +31,13 @@ from vocab_growth.models.definitions import (
     VG10,
     VG16,
     VG20,
+    AgeVaryingSubjectScale,
     BivariateCorrelatedSubjectREModelDefinition,
     BivariateModelDefinition,
+    SubjectSlopePriorParams,
     _as_definition_subclass,
 )
+from vocab_growth.models.subject_effects import resolve as resolve_subject_effects
 
 
 def test_vg20_differs_from_vg10_only_in_naming_and_the_correlation():
@@ -130,49 +130,68 @@ def test_beta_transform_spans_the_valid_correlation_range():
     assert sd[1] == pytest.approx(0.447, abs=0.01)
 
 
+# The correlation rules moved to `subject_effects.resolve` (issue #273), which
+# applies them to a **definition** rather than to arguments a caller derived
+# from one. These tests moved with them, and are stronger for it: the old ones
+# passed argument combinations no caller could produce -- `build_model_re`
+# always derived `use_subject_re_u` and the specs from the same definition it
+# passed -- so they tested a state the code could not reach. Each now names a
+# definition that really carries the rejected combination.
+
+
 def test_resolver_returns_none_when_unset():
     """A plain bivariate definition must be entirely unaffected."""
-    assert (
-        _resolve_subject_re_correlation(
-            VG10, use_subject_re_u=True, use_subject_re_q=True, spec_u=None, spec_q=None
-        )
-        is None
-    )
+    assert resolve_subject_effects(VG10).correlation_eta is None
 
 
 def test_resolver_accepts_vg20():
-    assert (
-        _resolve_subject_re_correlation(
-            VG20, use_subject_re_u=True, use_subject_re_q=True, spec_u=None, spec_q=None
-        )
-        == 2.0
-    )
+    assert resolve_subject_effects(VG20).correlation_eta == 2.0
 
 
 @pytest.mark.parametrize("drop", ["u", "q"])
 def test_resolver_rejects_a_missing_subject_block(drop):
+    definition = _as_definition_subclass(
+        VG20,
+        BivariateCorrelatedSubjectREModelDefinition,
+        model_id="VGXX",
+        **{f"use_subject_re_{drop}": False},
+    )
     with pytest.raises(ValueError, match="requires use_subject_re_u"):
-        _resolve_subject_re_correlation(
-            VG20,
-            use_subject_re_u=(drop != "u"),
-            use_subject_re_q=(drop != "q"),
-            spec_u=None,
-            spec_q=None,
-        )
+        resolve_subject_effects(definition)
 
 
 @pytest.mark.parametrize("side", ["u", "q"])
 def test_resolver_rejects_an_age_varying_scale(side):
     """Proposal A1's age-varying scale and a constant correlation do not compose."""
-    sentinel = object()
+    definition = _as_definition_subclass(
+        VG20,
+        BivariateCorrelatedSubjectREModelDefinition,
+        model_id="VGXX",
+        **{
+            f"tau_subj_{side}_sigma": AgeVaryingSubjectScale(
+                young_sigma=1.5, log_ratio_sigma=0.5, anchor_ages=(24.0, 60.0)
+            )
+        },
+    )
     with pytest.raises(ValueError, match="age-varying"):
-        _resolve_subject_re_correlation(
-            VG20,
-            use_subject_re_u=True,
-            use_subject_re_q=True,
-            spec_u=sentinel if side == "u" else None,
-            spec_q=sentinel if side == "q" else None,
-        )
+        resolve_subject_effects(definition)
+
+
+@pytest.mark.parametrize("side", ["u", "q"])
+def test_resolver_rejects_a_child_slope(side):
+    """VG19's per-outcome 2x2 and VG20's one constant are a 4x4 apart."""
+    definition = _as_definition_subclass(
+        VG20,
+        BivariateCorrelatedSubjectREModelDefinition,
+        model_id="VGXX",
+        **{
+            f"tau_subj_{side}_sigma": SubjectSlopePriorParams(
+                tau0_sigma=1.5, tau1_sigma=0.5, rho_eta=2.0
+            )
+        },
+    )
+    with pytest.raises(ValueError, match="child slope"):
+        resolve_subject_effects(definition)
 
 
 @pytest.mark.parametrize("bad", [0.0, -1.0, float("nan"), float("inf"), "2"])
@@ -184,13 +203,7 @@ def test_resolver_rejects_a_non_positive_eta(bad):
         subject_re_correlation_eta=bad,
     )
     with pytest.raises(ValueError, match="positive finite"):
-        _resolve_subject_re_correlation(
-            definition,
-            use_subject_re_u=True,
-            use_subject_re_q=True,
-            spec_u=None,
-            spec_q=None,
-        )
+        resolve_subject_effects(definition)
 
 
 def test_built_graph_adds_exactly_one_parameter_and_nothing_else():
@@ -539,12 +552,7 @@ def test_vg23_is_the_subclass_and_the_resolver_accepts_it():
     from vocab_growth.models.definitions import VG23
 
     assert isinstance(VG23, BivariateCorrelatedSubjectREModelDefinition)
-    assert (
-        _resolve_subject_re_correlation(
-            VG23, use_subject_re_u=True, use_subject_re_q=True, spec_u=None, spec_q=None
-        )
-        == 2.0
-    )
+    assert resolve_subject_effects(VG23).correlation_eta == 2.0
 
 
 def test_vg23_built_graph_adds_exactly_one_parameter_over_vg13():

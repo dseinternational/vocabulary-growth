@@ -34,6 +34,14 @@ Single-layer [uv](https://docs.astral.sh/uv/) environment (shared across DSE res
 uv run ruff check src/ scripts/ tests/
 ```
 
+### Type check
+
+```bash
+uv run mypy
+```
+
+Deliberately narrow: the four modules that _declare_ things — `models/definitions.py`, `models/catalogue.py`, `models/subject_effects.py` and `analysis_frames.py` — listed in `[tool.mypy]`. That is where an annotation quietly disagreeing with the value does real damage, and turning it on found two: `tau_subj_u_sigma` was annotated `float` while three registered models put an object in it, and `TrivariateModelDefinition.kappa_u` said `KappaPriorParams` while VG14 and VG15 both passed the two-anchor form. The PyMC graph code is **not** covered and should not be until these are stable — PyTensor's tensor algebra is not usefully typed, and the noise would bury findings like those two. CI runs it in the lint job, from a `typecheck` dependency group holding mypy alone.
+
 ### Test
 
 ```bash

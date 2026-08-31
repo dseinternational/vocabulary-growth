@@ -181,7 +181,7 @@ def clamp_targets(value: bool | str) -> tuple[bool, bool]:
 # ============================================================
 
 
-@dataclass
+@dataclass(frozen=True)
 class KappaPriorParams:
     """Parameters for the dispersion (kappa) prior distributions.
 
@@ -202,7 +202,7 @@ class KappaPriorParams:
     """HalfNormal sigma for b_kappa_mag."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class KappaAnchorPriorParams:
     """Two-anchor dispersion prior: `kappa` pinned at two reference ages.
 
@@ -258,7 +258,7 @@ class KappaAnchorPriorParams:
     """LogNormal sigma for the age term at the old anchor."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class SubjectVariancePartitionParams:
     """Priors for the shared scatter budget that ``tau_subject`` and ``kappa`` split.
 
@@ -593,7 +593,7 @@ class SingletonMarginalisationParams:
 # ============================================================
 
 
-@dataclass
+@dataclass(frozen=True)
 class UnivariateModelDefinition:
     """Complete definition for a single-outcome model (VG01-VG04, VG11-VG12)."""
 
@@ -609,7 +609,7 @@ class UnivariateModelDefinition:
     """Number of words on the vocabulary checklist."""
     slope_anchors: tuple[float, float]
     """Reference ages (months) for the slope parameterisation."""
-    ages_query: list[int]
+    ages_query: tuple[int, ...]
     """Ages (months) at which to query the posterior."""
 
     # -- Slope priors (the values that vary across models) --
@@ -717,7 +717,7 @@ class UnivariateModelDefinition:
         return f"Words {self.outcome.value}"
 
 
-@dataclass
+@dataclass(frozen=True)
 class UnivariateREModelDefinition(UnivariateModelDefinition):
     """A univariate model with random effects, plus the two sampling-geometry options.
 
@@ -772,7 +772,7 @@ class UnivariateREModelDefinition(UnivariateModelDefinition):
     a BFMI remedy. See :class:`SubjectVariancePartitionParams`."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class UnivariateMarginalisedREModelDefinition(UnivariateREModelDefinition):
     """A univariate RE model whose singleton child effects are integrated out.
 
@@ -800,7 +800,7 @@ class UnivariateMarginalisedREModelDefinition(UnivariateREModelDefinition):
 # ============================================================
 
 
-@dataclass
+@dataclass(frozen=True)
 class BivariateModelDefinition:
     """Complete definition for a joint understood+spoken model (e.g. VG05, VG07-VG10, VG13)."""
 
@@ -815,7 +815,7 @@ class BivariateModelDefinition:
     """Number of words on the vocabulary checklist."""
     slope_anchors: tuple[float, float]
     """Reference ages (months) for the slope parameterisation."""
-    ages_query: list[int]
+    ages_query: tuple[int, ...]
     """Ages (months) at which to query the posterior."""
 
     # -- Understood (U) trajectory slope priors --
@@ -879,15 +879,29 @@ class BivariateModelDefinition:
     # .tau_subject_sigma` for the evidence and why the study scales stay at 0.5.
     use_subject_re_u: bool = False
     """If True, add subject-level random intercepts on the understood trajectory."""
-    tau_subj_u_sigma: float = 1.5
+    tau_subj_u_sigma: float | AgeVaryingSubjectScale | SubjectSlopePriorParams = 1.5
     """HalfNormal scale for subject intercept SD on understood (logit scale).
     Estimated at 0.85 on the Down syndrome joint frame and 0.74-0.77 on the
-    typically-developing ones."""
+    typically-developing ones.
+
+    **This field is overloaded**, and the annotation says so since issue #273.
+    A float is the constant between-child scale; an
+    :class:`AgeVaryingSubjectScale` selects Proposal A1's age-varying scaling;
+    a :class:`SubjectSlopePriorParams` selects VG19's child intercept-and-rate
+    block. The overload exists because a fit is validated by comparing the
+    serialised definition field for field, so a *new* field on this class would
+    invalidate every existing fit of it -- six bivariate models of record. Which
+    shape a definition carries is resolved once, by
+    :func:`vocab_growth.models.subject_effects.resolve`, rather than tested
+    inline wherever it is read.
+    """
     use_subject_re_q: bool = False
     """If True, add subject-level random intercepts on the production ratio q."""
-    tau_subj_q_sigma: float = 1.5
+    tau_subj_q_sigma: float | AgeVaryingSubjectScale | SubjectSlopePriorParams = 1.5
     """HalfNormal scale for subject intercept SD on q (logit scale). Estimated at
-    1.15 on the Down syndrome joint frame and 1.12 on VG13's."""
+    1.15 on the Down syndrome joint frame and 1.12 on VG13's.
+
+    Overloaded exactly as ``tau_subj_u_sigma`` is; see there."""
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     provides a cheap sensitivity analysis for repeated-measures dependence."""
@@ -1063,7 +1077,7 @@ class BivariateModelDefinition:
         return ModelType.BIVARIATE
 
 
-@dataclass
+@dataclass(frozen=True)
 class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
     """Bivariate definition that also correlates the two subject random effects.
 
@@ -1093,7 +1107,7 @@ class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
     """
 
 
-@dataclass
+@dataclass(frozen=True)
 class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
     """Bivariate definition that gives each child a rate as well as an offset.
 
@@ -1133,7 +1147,7 @@ class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
     36 months is the Down syndrome pool's median age."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class BivariateFactorSubjectREModelDefinition(BivariateModelDefinition):
     """Bivariate definition whose four child effects share latent factors.
 
@@ -1170,7 +1184,7 @@ class BivariateFactorSubjectREModelDefinition(BivariateModelDefinition):
 # ============================================================
 
 
-@dataclass
+@dataclass(frozen=True)
 class TrivariateModelDefinition:
     """Complete definition for a joint understood + spoken + signed model (VG14).
 
@@ -1201,7 +1215,7 @@ class TrivariateModelDefinition:
     """Number of words on the vocabulary checklist."""
     slope_anchors: tuple[float, float]
     """Reference ages (months) for the slope parameterisation."""
-    ages_query: list[int]
+    ages_query: tuple[int, ...]
     """Ages (months) at which to query the posterior."""
 
     # -- Understood (U) trajectory slope priors --
@@ -1271,9 +1285,9 @@ class TrivariateModelDefinition:
     out of a flat intercept-only mean; that hack is no longer needed.)"""
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
-    kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
-    kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
-    kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
+    kappa_s: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
+    kappa_sign: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Signed data inclusion --
     include_uk01_signed: bool = False
@@ -1355,7 +1369,7 @@ class TrivariateModelDefinition:
 # ============================================================
 
 
-@dataclass
+@dataclass(frozen=True)
 class JointModelDefinition:
     """Complete definition for the joint sign/speech model (VG15).
 
@@ -1378,7 +1392,7 @@ class JointModelDefinition:
     population: Population
     n_trials: int
     slope_anchors: tuple[float, float]
-    ages_query: list[int]
+    ages_query: tuple[int, ...]
     gp_domain_months: tuple[float, float] | None = None
     """Fixed HSGP age domain. ``None`` uses the observed age range; reporting
     query ages never determine the approximation domain."""
@@ -1464,8 +1478,8 @@ class JointModelDefinition:
     eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
-    kappa_u: KappaPriorParams = field(default_factory=KappaPriorParams)
-    kappa_s: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
+    kappa_s: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
     # `kappa_sign` deliberately stays on the legacy dispersion form for VG15,
     # settled 2026-08-06. Unlike VG05/VG07/VG08/VG14 -- migrated because their
     # `b_kappa_mag_s` sat about four standard deviations beyond its prior with the
@@ -1473,7 +1487,7 @@ class JointModelDefinition:
     # 0.429) at prior CDF 0.276, and the form's non-increasing-with-age constraint
     # is not binding. The asymmetry with VG14 is two separate correct calls, not an
     # inconsistency. See notes/202608060900-three-prior-conflicts.md section 5b.
-    kappa_sign: KappaPriorParams = field(default_factory=KappaPriorParams)
+    kappa_sign: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Association (Plackett log odds-ratio) --
     log_psi_mu: float = 0.3
@@ -2290,7 +2304,7 @@ VG01 = UnivariateModelDefinition(
     outcome=Outcome.SPOKEN,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     p_slope_low_alpha=1.0,
     # Independent anchor — Berglund et al. (2001, Table 3; 330 DS children,
@@ -2323,7 +2337,7 @@ VG02 = UnivariateModelDefinition(
     outcome=Outcome.UNDERSTOOD,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     p_slope_low_alpha=1.0,
     # Data-informed regularisation — NOT independently anchored. DS comprehension
@@ -2370,7 +2384,7 @@ VG03 = UnivariateModelDefinition(
     # loader uses WG and Oxford CDI production plus WS production-only rows.
     n_trials=810,
     slope_anchors=(12, 26),
-    ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    ages_query=(9, 12, 15, 18, 21, 24, 27, 30,),
     # Pin the established 8-30 month TD reporting domain explicitly so
     # query-grid edits cannot resize the approximation.
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
@@ -2406,7 +2420,7 @@ VG04 = UnivariateModelDefinition(
     # loader excludes WS comprehension because it is a production proxy.
     n_trials=810,
     slope_anchors=(12, 26),
-    ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    ages_query=(9, 12, 15, 18, 21, 24, 27, 30,),
     # The 8-30 month HSGP domain is shared with VG03 and stays as it is.
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
     # Comprehension reporting stops at 25 months, 2026-08-17 (#228). Comprehension
@@ -2454,7 +2468,7 @@ VG05 = BivariateModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
     # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
@@ -2549,7 +2563,7 @@ VG07 = BivariateModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
     # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
@@ -2646,7 +2660,7 @@ VG08 = BivariateModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
     # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
@@ -2745,7 +2759,7 @@ VG09 = BivariateModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
     # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
@@ -2848,7 +2862,7 @@ VG10 = BivariateModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
     # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
@@ -2956,7 +2970,7 @@ VG11 = UnivariateREModelDefinition(
     # Common 810-item reference inventory for TD/DS comparisons.
     n_trials=810,
     slope_anchors=(12, 26),
-    ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    ages_query=(9, 12, 15, 18, 21, 24, 27, 30,),
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
     # Spoken trajectory priors shared with VG03 (see the note there): lower the
     # 12 mo anchor for delayed TD production, soften the 26 mo anchor, widen eta.
@@ -3008,7 +3022,7 @@ VG12 = UnivariateREModelDefinition(
     # Common 810-item reference inventory for TD/DS comparisons.
     n_trials=810,
     slope_anchors=(12, 26),
-    ages_query=[9, 12, 15, 18, 21, 24, 27, 30],
+    ages_query=(9, 12, 15, 18, 21, 24, 27, 30,),
     # As in VG04, observed comprehension ends at 25 months while reporting
     # reaches 30; this preserves the established 8-30 month HSGP domain.
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
@@ -3111,7 +3125,7 @@ VG13 = BivariateModelDefinition(
     # it costs. See notes/202608171500-reporting-scope-audit.md and #228.
     max_age_months=18,
     slope_anchors=(10, 16),
-    ages_query=[8, 10, 12, 14, 16, 18],
+    ages_query=(8, 10, 12, 14, 16, 18,),
     gp_domain_months=_YOUNG_TD_GP_DOMAIN_MONTHS,
     # Understood trajectory — Wordbank TD normative medians (published deciles):
     # ~50 words/810 at 10 mo, ~180 at 16 mo. Beta(1,15) (10 mo, median ~36) sits a
@@ -3185,7 +3199,7 @@ VG14 = TrivariateModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Migrated to the two-anchor dispersion form, 2026-08-06. VG14 had been left
     # on the class-default legacy priors, where `b_kappa_mag ~ HalfNormal(0.3)`
@@ -3293,7 +3307,7 @@ VG15 = JointModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # r/q/p_U priors seeded from the (uk_06-included) VG14 fit (see dataclass
     # defaults); psi ~ logNormal(0.3, 0.5) (weakly positive, spans independence);
@@ -3419,7 +3433,7 @@ VG16 = BivariateModelDefinition(
     population=Population.DOWN_SYNDROME,
     n_trials=810,
     slope_anchors=(24, 84),
-    ages_query=[12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90],
+    ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
     # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
     # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
@@ -3680,7 +3694,7 @@ VG21 = _as_definition_subclass(
     ),
     max_age_months=22,
     slope_anchors=(10, 21),
-    ages_query=[8, 10, 12, 14, 16, 18, 20, 22],
+    ages_query=(8, 10, 12, 14, 16, 18, 20, 22,),
     gp_domain_months=(8, 22),
     gp_anchor_age_months=15.5,
     # 21 mo in-sample medians: understood 0.359 of 810, q 0.417.

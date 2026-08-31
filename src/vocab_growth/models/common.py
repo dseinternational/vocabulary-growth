@@ -115,7 +115,7 @@ class BaseModelConfiguration:
     """Range of length-scales in months for the HSGP prior."""
     n_plot: int
     """Number of points for plotting the developmental trajectory."""
-    ages_query: list[int]
+    ages_query: tuple[int, ...]
     """Ages in months for querying the model."""
 
     def __post_init__(self) -> None:
@@ -125,8 +125,12 @@ class BaseModelConfiguration:
             raise ValueError("ell_months_range must be a tuple of two int values.")
         if self.n_plot <= 0:
             raise ValueError("n_plot must be a positive integer.")
-        if not isinstance(self.ages_query, list) or len(self.ages_query) == 0:
-            raise ValueError("ages_query must be a non-empty list of integers.")
+        # A tuple since issue #273 froze the definitions, but any non-empty
+        # ordered collection of ages is usable here; the check is on emptiness,
+        # not on the container, so a caller passing a list is not refused for a
+        # reason that has nothing to do with the model.
+        if isinstance(self.ages_query, (str, bytes)) or len(self.ages_query) == 0:
+            raise ValueError("ages_query must be a non-empty sequence of integers.")
 
 
 @dataclass(frozen=True)

@@ -21,7 +21,6 @@ above (see issue #65).
 Plot and query predictions use the population-level trajectory (delta=0).
 """
 
-import math
 import os
 from collections.abc import Callable
 
@@ -36,6 +35,7 @@ import pandas as pd
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
+from vocab_growth.models import subject_effects
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -66,9 +66,6 @@ from vocab_growth.models.common_bivariate import (
 from vocab_growth.models.definitions import (
     BivariateModelDefinition,
     clamp_targets,
-    subject_factor_spec,
-    subject_scale_spec,
-    subject_slope_spec,
 )
 from vocab_growth.models.gp_utils import (
     GPGrid,
@@ -356,64 +353,6 @@ def _validate_cross_lag(lag_baseline: str, use_subject_re_u: bool) -> None:
             "population-relative and within-child baselines are defined relative to "
             "the child's understood subject intercept."
         )
-
-
-def _resolve_subject_re_correlation(
-    definition,
-    *,
-    use_subject_re_u: bool,
-    use_subject_re_q: bool,
-    spec_u,
-    spec_q,
-    slope_u=None,
-    slope_q=None,
-) -> float | None:
-    """LKJ concentration for the subject-effect correlation, or None (issue #224).
-
-    Read through ``getattr`` because the field lives on a definition subclass, as
-    the variance partition and child slopes do: putting it on
-    ``BivariateModelDefinition`` would change the serialised definition of the six
-    bivariate models of record and invalidate every one of their fits.
-
-    Each rejection below is a configuration that would otherwise fit something
-    other than what was asked for, silently:
-
-    * one block missing — there is nothing to correlate, and the graph would
-      quietly emit an unused ``rho_uq`` that reads as an estimate;
-    * an age-varying scale (Proposal A1) — the deviate is scaled by tau(age) per
-      observation there, so a single constant correlation between the two blocks
-      is not the model anyone means; supporting the combination needs its own
-      design rather than an implicit reading of this one.
-    """
-    eta = getattr(definition, "subject_re_correlation_eta", None)
-    if eta is None:
-        return None
-    if not (use_subject_re_u and use_subject_re_q):
-        raise ValueError(
-            "subject_re_correlation_eta requires use_subject_re_u=True and "
-            "use_subject_re_q=True: a correlation needs both subject blocks."
-        )
-    if spec_u is not None or spec_q is not None:
-        raise ValueError(
-            "subject_re_correlation_eta cannot be combined with an age-varying "
-            "subject scale (Proposal A1): the age-varying path scales each "
-            "child's deviate per observation, so a single constant correlation "
-            "between the blocks is not well defined."
-        )
-    if slope_u is not None or slope_q is not None:
-        raise ValueError(
-            "subject_re_correlation_eta cannot be combined with a child slope "
-            "(VG19): each outcome then carries its own 2x2 intercept/slope "
-            "covariance, so correlating the two outcomes is a 4x4 design and "
-            "not this one constant. Supporting it needs its own Gate 1 rather "
-            "than an implicit reading of `rho_uq` as the intercept-intercept "
-            "element."
-        )
-    if not isinstance(eta, (int, float)) or not math.isfinite(eta) or eta <= 0:
-        raise ValueError(
-            f"subject_re_correlation_eta must be a positive finite number; got {eta!r}."
-        )
-    return float(eta)
 
 
 def iter_subject_age_waves(subject, age):
@@ -716,9 +655,14 @@ def build_model_re(
     has_s_likelihood[idx_s] = True
     n_studies = int(study_codes.max()) + 1
 
-    use_subject_re_u = bool(definition.use_subject_re_u)
-    use_subject_re_q = bool(definition.use_subject_re_q)
-    use_subject_codes = use_subject_re_u or use_subject_re_q
+    # One resolution of the child-effect structure, before the model context is
+    # entered, so every incompatible combination is refused against a definition
+    # rather than part-way through a half-built graph (issue #273). The plan is
+    # a pure function of the definition and carries no PyMC.
+    plan = subject_effects.resolve(definition)
+    use_subject_re_u = plan["u"].is_active
+    use_subject_re_q = plan["q"].is_active
+    use_subject_codes = plan.any_active
     if use_subject_codes:
         subject_codes = np.asarray(analysis_df["subject_code"], dtype=int)
         n_subjects = int(subject_codes.max()) + 1
@@ -875,8 +819,7 @@ def build_model_re(
         coords["subject_id"] = np.arange(n_subjects)
     # VG19: the two per-child effects (offset at the reference age, and rate).
     # Declared unconditionally -- an unused coord adds no variable to the graph,
-    # and making it conditional would put a `subject_slope_spec` call ahead of
-    # the model context for no benefit.
+    # and a conditional would have to re-derive what the plan already knows.
     coords["child_effect"] = np.array(["intercept", "slope"])
     # VG22: the four effects the low-rank factor spans, and its latent
     # dimensions. `child_effect4_b` is the second axis of the 4x4 correlation --
@@ -887,8 +830,7 @@ def build_model_re(
     coords["child_effect4_b"] = np.array(
         ["u_intercept", "u_slope", "q_intercept", "q_slope"]
     )
-    _factor_spec = subject_factor_spec(getattr(definition, "subject_factor", None))
-    coords["factor"] = np.arange(_factor_spec.rank if _factor_spec else 1)
+    coords["factor"] = np.arange(plan.factor.rank if plan.factor else 1)
 
     with pm.Model(coords=coords) as model_pm:
 
@@ -1007,6 +949,11 @@ def build_model_re(
         # Subject-level random intercepts (non-centered)
         # ============================================================
 
+        # Which of the five child-effect structures this definition selects, and
+        # every rejection that goes with them, was resolved by
+        # `subject_effects.resolve` before this context was entered (issue
+        # #273). What is left here is the graph each resolved kind emits.
+        #
         # Proposal A1 (registered sensitivity): where a subject-scale field
         # carries an `AgeVaryingSubjectScale` instead of a scalar, the per-child
         # deviate is scaled by tau(age) at each observation's own age and the
@@ -1014,61 +961,24 @@ def build_model_re(
         # emits exactly the ops it always did, so every model of record keeps its
         # graph. `tau_*_of_z` is carried forward to emit the plot/query scales
         # once the standardised grids exist.
-        spec_u = subject_scale_spec(definition.tau_subj_u_sigma)
-        spec_q = subject_scale_spec(definition.tau_subj_q_sigma)
+        spec_u = plan["u"].age_varying
+        spec_q = plan["q"].age_varying
         # VG19: the same overloaded field can instead carry a child slope, which
         # is a different age function through the seam A1 opened.
-        slope_u = subject_slope_spec(definition.tau_subj_u_sigma)
-        slope_q = subject_slope_spec(definition.tau_subj_q_sigma)
-        slope_ref_age = float(
-            getattr(definition, "subject_slope_ref_age_months", 36.0) or 36.0
-        )
-        corr_eta = _resolve_subject_re_correlation(
-            definition,
-            use_subject_re_u=use_subject_re_u,
-            use_subject_re_q=use_subject_re_q,
-            spec_u=spec_u,
-            spec_q=spec_q,
-            slope_u=slope_u,
-            slope_q=slope_q,
-        )
+        slope_u = plan["u"].slope
+        slope_q = plan["q"].slope
+        slope_ref_age = plan.slope_ref_age_months
+        corr_eta = plan.correlation_eta
         # VG22: a low-rank factor over all four child effects. Built once, ahead
         # of the per-outcome branches, because unlike every other subject
         # structure here it spans both outcomes -- the whole point of the form is
         # that one child's comprehension standing and production-ratio rate are
         # driven by shared latent dimensions. The per-outcome branches below then
         # consume the shifts it returns rather than building their own.
-        factor = subject_factor_spec(getattr(definition, "subject_factor", None))
-        if factor is not None:
-            if not (use_subject_re_u and use_subject_re_q):
-                raise ValueError(
-                    "subject_factor requires use_subject_re_u and "
-                    "use_subject_re_q: the form is a joint covariance over both "
-                    "outcomes' child effects and is undefined when only one "
-                    "outcome carries a child effect."
-                )
-            if spec_u is not None or spec_q is not None:
-                raise ValueError(
-                    "subject_factor cannot be combined with an age-varying "
-                    "subject scale (A1): both claim the same seam, and A1's "
-                    "rank-one scaling is a special case of the factor form."
-                )
-            if slope_u is not None or slope_q is not None:
-                raise ValueError(
-                    "subject_factor cannot be combined with a child slope "
-                    "(VG19): the factor already carries a rate per outcome, and "
-                    "supplying both would give a child two of each effect."
-                )
-            if corr_eta is not None:
-                raise ValueError(
-                    "subject_factor cannot be combined with "
-                    "subject_re_correlation_eta (VG20): the level-level "
-                    "correlation that field creates is an element of the "
-                    "factor's own covariance, emitted as `rho_uq`."
-                )
+        if plan.factor is not None:
             factor_shift_u, factor_shift_q, factor_tau_u, factor_tau_q = (
                 build_child_factor(
-                    factor,
+                    plan.factor,
                     tau0_u_sigma=definition.tau_subj_u_sigma,
                     tau0_q_sigma=definition.tau_subj_q_sigma,
                     age_obs_months=X_obs.flatten(),

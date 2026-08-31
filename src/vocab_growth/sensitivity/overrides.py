@@ -7,7 +7,8 @@
 ``dataclasses.replace``) whose ``config_name`` carries a suffix — so its fitted
 output lands in a separate ``output/models/<model_id>-<config_name>-<suffix>/``
 directory and never clobbers the model of record — with the named prior
-hyperparameters overridden. The committed ``VGxx`` instances are never mutated.
+hyperparameters overridden. The committed ``VGxx`` instances are never mutated,
+and since issue #273 they are frozen, so they cannot be.
 """
 
 from __future__ import annotations
@@ -25,10 +26,15 @@ def replace_kappa(
 ) -> KappaPriorParams | KappaAnchorPriorParams:
     """Return a NEW kappa prior block with the given fields overridden.
 
-    A fresh instance (rather than an in-place mutation) is required because
-    ``dataclasses.replace`` on the parent definition copies the nested kappa
-    objects by *reference*; an override must therefore supply a new object so the
-    variant and the base do not share (and accidentally alias) one kappa prior.
+    A fresh instance is required because ``dataclasses.replace`` on the parent
+    definition copies the nested kappa objects by *reference*, so an override
+    has to supply a new object rather than edit the shared one. Since issue #273
+    froze :class:`~vocab_growth.models.definitions.KappaPriorParams` and
+    :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams` there is no
+    longer an in-place edit to reach for -- the sharing is safe by construction
+    and an accidental mutation raises rather than silently reaching the base
+    definition -- but the reason this function exists is unchanged: a variant
+    needs its own block.
 
     Field names are checked against whichever form the block uses, so a variant
     written for the legacy triple fails loudly on a migrated outcome instead of
