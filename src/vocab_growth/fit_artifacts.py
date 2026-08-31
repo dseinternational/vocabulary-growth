@@ -321,9 +321,11 @@ def fit_validation_kwargs(
         raise ValueError(f"{purpose} validation requires the current source-data hash.")
     kwargs["expected_source_data_hash"] = current_source_data_hash
     # The exact prepared-frame hash catches loader-rule drift the raw-CSV
-    # fingerprint cannot (issue #266 finding 1). Optional because computing it
-    # rebuilds the frame per definition; callers with the registry in hand
-    # pass it via ``vocab_growth.analysis_frames.expected_analysis_frame_hash``.
+    # fingerprint cannot (issue #266 finding 1), and when it matches it also
+    # excuses a fingerprint mismatch from data the model never reads (see
+    # ``validate_fit_output``). Optional because computing it rebuilds the
+    # frame per definition; callers with the registry in hand pass it via
+    # ``vocab_growth.analysis_frames.expected_analysis_frame_hash``.
     if current_analysis_frame_hash is not None:
         kwargs["expected_analysis_frame_hash"] = current_analysis_frame_hash
 
@@ -590,9 +592,23 @@ def validate_fit_output(
         )
 
     data_payload = manifest.get("data", {})
+    # A model consumes the raw data only through its prepared analysis frame,
+    # so a recorded frame hash that matches the one the current loader rules
+    # produce vouches for the fit against raw-CSV churn the model never reads:
+    # a new Down syndrome study CSV changes the directory-wide fingerprint for
+    # every model, but cannot move a typically-developing model's frame. The
+    # fingerprint therefore stays a hard failure only when the frame hash
+    # cannot vouch — the caller did not supply one, the manifest predates it,
+    # or it mismatches too (then both messages are reported: the raw change is
+    # part of the diagnosis, not hidden behind the frame drift).
+    frame_hash_vouches = (
+        expected_analysis_frame_hash is not None
+        and data_payload.get("analysis_frame_hash") == expected_analysis_frame_hash
+    )
     if (
         expected_source_data_hash is not None
         and data_payload.get("source_data_hash") != expected_source_data_hash
+        and not frame_hash_vouches
     ):
         errors.append("Raw data inputs differ from those used for this fit.")
     if (

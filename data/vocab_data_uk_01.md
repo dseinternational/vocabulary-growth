@@ -109,25 +109,18 @@ This data was collected during the 1990s through to 2000.
 
 > [!NOTE]
 > This section was drafted by an LLM-based AI tool (Claude Code/Opus 4.8), from a
-> review of the uk_01 study write-up and the data (2026-07-13). WS word count corrected
-> 689 → 690 on 2026-08-31 (Claude Code/Fable 5): 689 had no traceable source, while 690
-> is the ceiling recorded throughout the pipeline (`survey_vocab_max`; hard-coded in
-> `research-data-analysis`'s `prepare/uk_01_edg.py` and stated in its `uk_01_edg.md`).
+> review of the uk_01 study write-up and the data (2026-07-13). The WS checklist total
+> was corrected to 680 on 2026-08-31 (Claude Code/Fable 5) after verification against
+> the original study report and the source data — see "WS checklist total" below.
 
 uk_01 is a Down syndrome study (~218 children, ages ~1–9 y, Sarah Duffen Centre,
 Portsmouth) using the MacArthur-Bates CDI — Words & Gestures (396-word checklist) and
-Words & Sentences (690 words per the recorded `survey_vocab_max`, including the 396);
-the two were combined for the vocabulary analysis.
+Words & Sentences (680 words, including the 396); the two were combined for the vocabulary
+analysis.
 
-⚠️ The WS ceiling of 690 has not been verified against the original UK-adaptation form,
-and the source data hints it may be an overstatement: in 18 of 22 WS categories the
-largest per-category count attained by two or more children equals the standard American
-680-item WS category size exactly, three categories stay below it, and only question
-words repeatedly exceeds it (9 vs the American 7) — pointing to a form total near
-680–682 rather than 690. Since `survey_vocab_max` is the Beta-Binomial denominator for
-WS rows, the recorded 690 should be confirmed against the original instrument if it can
-be consulted; changing it would invalidate fitted output for every model consuming uk_01
-WS observations.
+### WS checklist total: 680 (verified 2026-08-31)
+
+The `survey_vocab_max` recorded for WS rows was 690 for most of this dataset's history, and briefly 689; neither survives verification. The original project report (Sarah Duffen Centre, August 2000, `project_2.doc` in the DSE research archive) describes administering and scoring the standard MacArthur CDI per the Fenson et al. (1993) manual and comparing against the Fenson normative sample, with no mention of any restructured UK form; its instrument paragraph states "a checklist of 689 words" — the source of the 689 that stood here until 2026-08-31 — but that same paragraph also miscounts the WS categories (19 + 2 where the actual form has 22), and no published CDI version has 689 items. The published CDI:WS vocabulary checklist is 680 words across 22 semantic categories. The source data agrees: over the 154 WS administrations, the maximum count attained equals the standard American category size exactly in every category where the ceiling is reached (five children at exactly 103 action words, 14 at exactly 7 question words, 43 at exactly 12 sound effects, …), the remaining categories stay below their sizes, and the handful of single-row overshoots are isolated entry errors — two of them sit in rows that are corrupt on other fields as well (e.g. pronouns recorded as 55 of 25). The recorded 690 had no traceable source at all. No observed count exceeds 680 (WS maximum spoken/produced is 669), so the correction drops or masks nothing; it changes the recorded form ceiling only.
 
 The per-item columns carry a `c` / `v` / `s` suffix per semantic category:
 **c = comprehension** (understands), **v = vocalised** (says), **s = signed**. Signing

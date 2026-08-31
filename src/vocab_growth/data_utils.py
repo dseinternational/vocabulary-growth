@@ -640,7 +640,7 @@ child reached 668 words at 48 months.
 That age scope is load-bearing and deliberately **not** relaxed. Above it a
 near-ceiling count is ordinary rather than suspect, and removing the bound would mask
 19 apparently legitimate records across six studies — a uk_01 child at 115 months with
-658 of 690 words, an ie_01 child at 69 months with 741 of 810, an es_01 child at 54
+658 of 680 words, an ie_01 child at 69 months with 741 of 810, an es_01 child at 54
 months with 637 of 651. Age and count together therefore cannot separate a legitimate
 able older child from the Edgin ceiling batch; that batch is identified on its
 provenance instead, by :data:`CEILING_ONLY_CHILD_STUDIES`, which runs first and leaves
@@ -1097,10 +1097,10 @@ masks, so removing them changes no estimate.
 
 **Why a provenance criterion rather than an age one.** A near-ceiling count is a defect
 signature only in infancy, where the Berglund benchmark rules it out. At older ages it
-is ordinary: an eight-year-old with Down syndrome knowing 658 of 690 words is expected.
+is ordinary: an eight-year-old with Down syndrome knowing 658 of 680 words is expected.
 Removing the age scope from :data:`IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS` would
 therefore mask 19 apparently legitimate records across six other studies (uk_01 at 115
-months with 658 of 690, ie_01 at 69 with 741 of 810, es_01 at 54 with 637 of 651, and
+months with 658 of 680, ie_01 at 69 with 741 of 810, es_01 at 54 with 637 of 651, and
 so on). Age and count together cannot separate the Edgin batch from those. What does
 separate them is that **the batch children have no non-ceiling record of their own** --
 a fact about how the data were prepared, not about the values, so it is not selection
