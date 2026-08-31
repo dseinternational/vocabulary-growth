@@ -47,6 +47,8 @@ from dataclasses import fields, is_dataclass
 from enum import Enum
 from typing import Any
 
+from vocab_growth.models.likelihood_utils import SPOKEN_FALLBACK_PRODUCT
+
 #: Version of the payload's own structure, recorded alongside it. Bumped when
 #: the *shape* changes, not when a model does: a reader must be able to tell a
 #: payload it can interpret from one it cannot.
@@ -155,12 +157,24 @@ FIELD_ROLES: dict[str, FieldRole] = {
 #: justified where it is added -- the value alone does not show that the
 #: pre-field behaviour matched it.
 #:
-#: Empty at introduction, deliberately. Every field currently on a registered
-#: definition class is present in every manifest that class ever wrote, so
-#: nothing needs backfilling yet; the mechanism exists so the *next* field can
-#: be added without a refit of everything, and the first entry will come with
-#: the change that adds that field.
-BACKFILL_DEFAULTS: dict[str, Any] = {}
+#: The two entries here are the mechanism's first use, and they are what it was
+#: built for. Issue #266 finding 8 needed ``spoken_fallback`` on the trivariate
+#: and joint definitions so VG14 and VG15 could run the sensitivity the
+#: bivariate models have had since #240 -- and under raw dictionary equality
+#: adding it would have invalidated every VG14 and VG15 fit ever made, for a
+#: field whose default is what those fits already did.
+#:
+#: The claim each entry makes is checkable, not asserted:
+#: ``likelihood_utils.resolve_fallback_treatment`` reads the field through
+#: ``getattr`` with exactly this default, so an engine and a definition that
+#: predate the field resolved to ``product_marginal``; and
+#: ``spoken_fallback_kappa_sigma`` is read **only** under
+#: ``separate_dispersion``, which no fit without the field could have selected,
+#: so its value could not have affected one.
+BACKFILL_DEFAULTS: dict[str, Any] = {
+    "spoken_fallback": SPOKEN_FALLBACK_PRODUCT,
+    "spoken_fallback_kappa_sigma": 0.5,
+}
 
 
 def role_of(field_name: str) -> FieldRole:

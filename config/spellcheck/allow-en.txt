@@ -161,6 +161,7 @@ lengthscale
 logind
 logit
 logits
+logp
 matplotlib
 microbenchmark
 miscalibrated

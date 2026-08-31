@@ -1285,6 +1285,30 @@ class TrivariateModelDefinition:
     out of a flat intercept-only mean; that hack is no longer needed.)"""
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
+    # -- Child-outcome rows with no usable understood count (issues #266, #240) --
+    spoken_fallback: str = SPOKEN_FALLBACK_PRODUCT
+    """How child-outcome rows that cannot condition on an observed understood
+    count are modelled. One of
+    :data:`~vocab_growth.models.likelihood_utils.SPOKEN_FALLBACK_TREATMENTS`,
+    documented individually there, and applied to the **signed** rows as well as
+    the spoken ones on this engine.
+
+    Exposed here by issue #266 finding 8, which is explicit that the
+    approximation is a methodological exposure rather than a detail: the default
+    gives such a row ``BB(810, p_U*q, kappa)``, which is mean-correct but is not
+    the marginal implied by the paired model, and the affected rows are older and
+    clustered by study. The bivariate engines have carried the choice since #240;
+    this engine hard-coded the default, so no sensitivity could be run at all.
+
+    Part of the model graph: changing it requires a refit. Adding the field does
+    **not** invalidate existing fits -- ``resolve_fallback_treatment`` returned
+    this same default for every fit made before it existed, and
+    :data:`~vocab_growth.models.fit_identity.BACKFILL_DEFAULTS` records that."""
+    spoken_fallback_kappa_sigma: float = 0.5
+    """Normal SD for the fallback branch's log concentration offset. Read only
+    under ``spoken_fallback="separate_dispersion"``; see the bivariate
+    definition's field of the same name for the calibration."""
+
     kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
     kappa_s: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
     kappa_sign: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
@@ -1478,6 +1502,30 @@ class JointModelDefinition:
     eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
+    # -- Child-outcome rows with no usable understood count (issues #266, #240) --
+    spoken_fallback: str = SPOKEN_FALLBACK_PRODUCT
+    """How child-outcome rows that cannot condition on an observed understood
+    count are modelled. One of
+    :data:`~vocab_growth.models.likelihood_utils.SPOKEN_FALLBACK_TREATMENTS`,
+    documented individually there, and applied to the **signed** rows as well as
+    the spoken ones on this engine.
+
+    Exposed here by issue #266 finding 8, which is explicit that the
+    approximation is a methodological exposure rather than a detail: the default
+    gives such a row ``BB(810, p_U*q, kappa)``, which is mean-correct but is not
+    the marginal implied by the paired model, and the affected rows are older and
+    clustered by study. The bivariate engines have carried the choice since #240;
+    this engine hard-coded the default, so no sensitivity could be run at all.
+
+    Part of the model graph: changing it requires a refit. Adding the field does
+    **not** invalidate existing fits -- ``resolve_fallback_treatment`` returned
+    this same default for every fit made before it existed, and
+    :data:`~vocab_growth.models.fit_identity.BACKFILL_DEFAULTS` records that."""
+    spoken_fallback_kappa_sigma: float = 0.5
+    """Normal SD for the fallback branch's log concentration offset. Read only
+    under ``spoken_fallback="separate_dispersion"``; see the bivariate
+    definition's field of the same name for the calibration."""
+
     kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
     kappa_s: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
     # `kappa_sign` deliberately stays on the legacy dispersion form for VG15,

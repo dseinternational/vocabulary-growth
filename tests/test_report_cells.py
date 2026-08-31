@@ -656,15 +656,54 @@ def test_multi_outcome_loo_is_not_labelled_leave_one_administration_out(
     report_cells.render_loo_section(str(fit))
     out = capsys.readouterr().out
     assert (
-        "each row is leave-one-likelihood-term-out for that outcome, not "
-        "leave-one-administration-out" in out
+        "each per-outcome row is leave-one-likelihood-term-out for that "
+        "outcome, not leave-one-administration-out" in out
     )
     assert "conditional on the same administration's observed comprehension" in out
     assert "not independent held-out units" in out
     # Still usable for model comparison -- the finding is about the label, not
     # about the number, and a reader must not be sent away from a valid check.
-    assert "Comparing models on these numbers is still sound" in out
+    assert "Comparing models on these per-outcome numbers is still sound" in out
     assert "must not be read as whole-administration predictive accuracy" in out
+    # This fixture carries no administration row, so the section must say so
+    # rather than leave the conditional rows reading as the whole story.
+    assert "no administration-level row" in out
+
+
+def test_an_administration_row_is_named_as_the_one_to_read(tmp_path, capsys):
+    """The score the reports always described, once a fit actually carries it.
+
+    The per-outcome caveats stay -- they are still true of those rows -- but the
+    reader is told which row is whole-administration predictive accuracy rather
+    than left with three conditional ones and a warning.
+    """
+    from vocab_growth.administration_loo import ADMINISTRATION_LABEL
+
+    rows = _MULTI_OUTCOME_ROWS + [{**_CLEAN_ROW, "outcome": ADMINISTRATION_LABEL}]
+    fit = _loo_fit(tmp_path, rows, parameters=("eta_u", "eta_s"))
+    report_cells.render_loo_section(str(fit))
+    out = capsys.readouterr().out
+    assert f"The **{ADMINISTRATION_LABEL}** row is the one that can be" in out
+    assert "one importance weight rather than two" in out
+    # And it must not claim generalisation it does not have.
+    assert "not generalisation to a new child" in out
+    assert "no administration-level row" not in out
+
+
+def test_a_joint_fit_with_an_administration_row_scores_psi(tmp_path, capsys):
+    """The composition terms identify psi and the per-outcome rows omit them.
+
+    Summed into the administration case, they are scored -- which makes that row
+    the only one that touches this model's headline association at all.
+    """
+    from vocab_growth.administration_loo import ADMINISTRATION_LABEL
+
+    rows = _MULTI_OUTCOME_ROWS + [{**_CLEAN_ROW, "outcome": ADMINISTRATION_LABEL}]
+    fit = _loo_fit(tmp_path, rows, parameters=("psi", "conc", "eta_u"))
+    report_cells.render_loo_section(str(fit))
+    out = capsys.readouterr().out
+    assert "They **are** included in the administration row" in out
+    assert "not scored by leave-one-out at all" not in out
 
 
 def test_joint_composition_fits_say_psi_is_unscored(tmp_path, capsys):

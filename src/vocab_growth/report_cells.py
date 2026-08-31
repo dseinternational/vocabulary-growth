@@ -32,6 +32,7 @@ from collections.abc import Mapping
 
 from scipy import stats
 
+from vocab_growth.administration_loo import ADMINISTRATION_LABEL
 from vocab_growth.glossary import render_glossary  # noqa: F401  (re-exported)
 from vocab_growth.models.diagnostics_utils import (  # noqa: F401  (re-exported)
     render_convergence_caveats,
@@ -204,12 +205,20 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
         "log_conc",
         "log_concentration",
     ),
-    # Sampled only under `spoken_fallback="separate_dispersion"`, which is a
-    # registered VG10 sensitivity variant -- and a variant fit renders the model
-    # of record's template, so a prior with no row shows up on a real page.
+    # Sampled only under `spoken_fallback="separate_dispersion"`, a registered
+    # sensitivity variant -- and a variant fit renders the model of record's
+    # template, so a prior with no row shows up on a real page. One per nested
+    # outcome: the signing engines apply the treatment to their signed rows too,
+    # so VG14 and VG15 sample `log_kappa_sign_fallback` as well (#266 finding 8).
     (
         "log_kappa_s_fallback",
-        "Dispersion offset for spoken rows with no usable understood count",
+        "Dispersion offset, spoken rows with no usable understood count",
+        "spoken_fallback_kappa",
+        "log_multiplier",
+    ),
+    (
+        "log_kappa_sign_fallback",
+        "Dispersion offset, signed rows with no usable understood count",
         "spoken_fallback_kappa",
         "log_multiplier",
     ),
@@ -1425,11 +1434,16 @@ def render_loo_section(directory: str = ".") -> None:
             "study. " + scale_sentences
         )
     else:
+        # `emit_loo_summary` writes the label into an `outcome` column -- the
+        # name predates there being anything in the table that is not one.
+        has_administration_row = ADMINISTRATION_LABEL in set(
+            table.get("outcome", pd.Series(dtype=str)).astype(str)
+        )
         print(
             "Leave-one-out cross-validation estimates how well this model would "
             "predict an observation it had not seen. This model carries a separate "
             "likelihood term for each outcome, and the table below reports a "
-            "separate estimate for each of them, so **each row is "
+            "separate estimate for each of them, so **each per-outcome row is "
             "leave-one-likelihood-term-out for that outcome, not "
             "leave-one-administration-out**. The difference is not a technicality "
             "here, because the expressive outcomes are nested inside "
@@ -1443,28 +1457,62 @@ def render_loo_section(directory: str = ".") -> None:
             "same observed comprehension count in the spoken term's denominator, "
             "so the held-out value has not left the conditioning set and the two "
             "rows are not independent held-out units. Comparing models on these "
-            "numbers is still sound — every model is scored on the same "
-            "conditional units, computed the same way — but they must not be read "
-            "as whole-administration predictive accuracy. " + scale_sentences
+            "per-outcome numbers is still sound — every model is scored on the "
+            "same conditional units, computed the same way — but they must not be "
+            "read as whole-administration predictive accuracy. " + scale_sentences
         )
+        if has_administration_row:
+            print(
+                f"The **{ADMINISTRATION_LABEL}** row is the one that can be: it "
+                "sums every likelihood factor belonging to one administration "
+                "into a single held-out case, so a paired administration is one "
+                "observation with one importance weight rather than two, and "
+                "nothing of the held-out row remains in the conditioning set. "
+                "Repeated administrations of the same child are still separate "
+                "cases, so it scores prediction of another administration like "
+                "those in the frame — not generalisation to a new child, which "
+                "is what grouped leave-one-subject-out answers. It is the row to "
+                "read as this model's predictive accuracy, and the one to compare "
+                "against another model of the same administrations.\n"
+            )
+        else:
+            print(
+                "This fit carries **no administration-level row**: it was made "
+                "before that score was computed (issue #266, finding 4), so the "
+                "conditional rows above are all it has. A refit produces one.\n"
+            )
         if {"psi", "conc"} <= parameters:
             # The joint sign/speech engine is the only one that adds
             # Dirichlet-Multinomial composition terms, and `psi` (the Plackett
             # odds ratio) with `conc` (the composition concentration) is the
             # pair only it samples, so their presence identifies the model
             # without the report cell having to be told which model it is in.
-            print(
+            composition = (
                 "Two further likelihood terms — the within-understood four-cell "
                 "composition and the within-produced three-cell composition — are "
-                "excluded from every row above, because a Dirichlet-Multinomial "
-                "over cells is not the per-observation Beta-Binomial the other "
-                "terms are. Those are precisely the terms that identify the "
-                "sign–speech association $\\psi$, so **$\\psi$ is not scored by "
-                "leave-one-out at all**. A cross-tabulation row does still "
-                "contribute its words-understood term, so the words-understood "
-                "row holds out one of that row's two factors while leaving its "
-                "composition factor in the conditioning set.\n"
+                "excluded from every **per-outcome** row above, because a "
+                "Dirichlet-Multinomial over cells is not the per-observation "
+                "Beta-Binomial the other terms are. Those are precisely the terms "
+                "that identify the sign–speech association $\\psi$."
             )
+            if has_administration_row:
+                print(
+                    composition
+                    + " They **are** included in the administration row, which is "
+                    "why that row is the only one that scores $\\psi$ at all: a "
+                    "cross-tabulation row's composition factor is summed into the "
+                    "same held-out case as its words-understood factor, rather "
+                    "than left in the conditioning set.\n"
+                )
+            else:
+                print(
+                    composition
+                    + " so **$\\psi$ is not scored by leave-one-out at all** in "
+                    "this fit. A cross-tabulation row does still contribute its "
+                    "words-understood term, so the words-understood row holds out "
+                    "one of that row's two factors while leaving its composition "
+                    "factor in the conditioning set.\n"
+                )
 
     display = table.copy()
     for column in ("elpd_loo", "se", "p_loo", "good_k_threshold"):

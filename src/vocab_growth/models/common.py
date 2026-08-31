@@ -47,6 +47,12 @@ import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting as vg_reporting
 import vocab_growth.reporting_ages as reporting_ages
+from vocab_growth.administration_loo import (
+    ADMINISTRATION_LABEL,
+    ADMINISTRATION_VAR,
+    LikelihoodFactor,
+    attach_administration_log_likelihood,
+)
 from vocab_growth.analysis_frames import analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     ACCEPTED_EXCEPTION_KEY,
@@ -1215,6 +1221,7 @@ def diagnostics(
     *,
     extra_trace_var_names: tuple[str, ...] = (),
     loo_var_names: tuple[tuple[str, str], ...] | None = None,
+    administration_factors: tuple[LikelihoodFactor, ...] | None = None,
     var_names_fn=None,
     round_to: int = 3,
 ):
@@ -1231,6 +1238,17 @@ def diagnostics(
       LOO-CV (bivariate/trivariate/joint likelihoods are named, e.g.
       ``y_u_obs``). ``None`` runs a single unnamed ``az.loo`` call (the
       single-outcome / study-RE engines, which have exactly one likelihood).
+    - ``administration_factors``: the likelihood factors to sum onto
+      administration rows for a leave-one-**administration**-out score
+      (issue #266 finding 4). ``None`` for the single-outcome engines, whose
+      one likelihood term already *is* the administration. Supplied by every
+      multi-outcome engine, whose per-outcome scores hold out one likelihood
+      term rather than one administration -- the spoken factor's trial count is
+      the same row's observed comprehension, so holding it out scores a
+      conditional prediction, and holding out the comprehension factor leaves
+      its own value in that denominator. Both scores are reported: the
+      per-outcome ones are comparable across models on the same conditional
+      units, and the administration one is what the reports describe.
     - ``var_names_fn``: optional ``list[str] -> list[str]`` reordering applied
       before the pair/trace/posterior-density plots only (the joint engine
       prioritises ``psi``/``conc`` first); the summary table always uses the
@@ -1388,10 +1406,46 @@ def diagnostics(
                     f"[yellow]LOO ({label}): dropped {n_dropped} degenerate "
                     f"(constant log-likelihood) observation(s).[/yellow]"
                 )
+        # Leave-one-administration-out, alongside the per-outcome scores rather
+        # than instead of them (issue #266 finding 4). Every factor belonging to
+        # one row of the frame is summed into one pointwise entry, so a paired
+        # administration is one held-out case rather than two, and VG15's
+        # composition terms -- which identify `psi`, and which the per-outcome
+        # scores omit entirely -- are included.
+        if administration_factors:
+            attached = attach_administration_log_likelihood(
+                context.trace, administration_factors
+            )
+            if attached:
+                loocv_by_name[ADMINISTRATION_VAR], n_dropped = (
+                    _loo_dropping_degenerate(
+                        context.trace, var_name=ADMINISTRATION_VAR, reff=reff
+                    )
+                )
+                by_label[ADMINISTRATION_LABEL] = loocv_by_name[ADMINISTRATION_VAR]
+                dropped_by_label[ADMINISTRATION_LABEL] = n_dropped
+                if n_dropped:
+                    console.print(
+                        f"[yellow]LOO ({ADMINISTRATION_LABEL}): dropped "
+                        f"{n_dropped} degenerate observation(s).[/yellow]"
+                    )
+            else:
+                # Loud, because a silently absent administration score would
+                # leave the per-outcome ones reading as whole-administration
+                # accuracy -- the very confusion finding 4 is about.
+                console.print(
+                    "[yellow]Administration-level LOO not computed: the trace "
+                    "does not carry every likelihood factor and observation "
+                    "mask it needs.[/yellow]"
+                )
+
         context.set_loocv(loocv_by_name)
         for var_name, label in loo_var_names:
             heading(f"LOO-CV — {label}", style="bold cyan")
             console.print(loocv_by_name[var_name])
+        if ADMINISTRATION_VAR in loocv_by_name:
+            heading(f"LOO-CV — {ADMINISTRATION_LABEL}", style="bold cyan")
+            console.print(loocv_by_name[ADMINISTRATION_VAR])
         emit_loo_summary(
             by_label, dropped_by_label, context.reporting.output_dir, reff=reff
         )

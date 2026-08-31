@@ -75,6 +75,7 @@ import vocab_growth.environment as local_env
 import vocab_growth.intervals as intervals
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
+from vocab_growth.administration_loo import LikelihoodFactor
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -107,7 +108,12 @@ from vocab_growth.models.gp_utils import (
     tent_and_gp,
     trend_and_gp,
 )
-from vocab_growth.models.likelihood_utils import nested_outcome_spec
+from vocab_growth.models.likelihood_utils import (
+    SPOKEN_FALLBACK_PAIRED_ONLY,
+    nested_outcome_alpha_beta,
+    nested_outcome_spec,
+    resolve_fallback_treatment,
+)
 from vocab_growth.plotting import (
     _save_csv,
     plot_prior_samples,
@@ -980,6 +986,9 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     require_integral_counts(y_u_values, "understood")
     y_u = y_u_values.astype(int)
     marginal_outcome_eligible = ~holdout & ~has_cells
+    # Which treatment the child-outcome rows with no usable understood count
+    # take (issue #266 finding 8), resolved before the graph.
+    spoken_fallback = resolve_fallback_treatment(definition)
     spoken_spec = nested_outcome_spec(
         df,
         parent_col="understood",
@@ -994,16 +1003,42 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         n_trials=n_trials,
         eligible_mask=marginal_outcome_eligible,
     )
+
+    # `paired_only` is applied at data preparation, by dropping the rows, not in
+    # the graph -- so it has to happen here as well as in the treatment the
+    # builder receives. Both nested outcomes lose their marginal rows: signing
+    # is nested inside comprehension exactly as speech is (issue #266 finding 8).
     expected_spoken = marginal_outcome_eligible & df["spoken"].notna().to_numpy()
     expected_signed = marginal_outcome_eligible & df["signed"].notna().to_numpy()
     if not np.array_equal(spoken_spec.indices, np.flatnonzero(expected_spoken)):
         raise ValueError("Spoken likelihood rows do not match the marginal-data mask.")
     if not np.array_equal(signed_spec.indices, np.flatnonzero(expected_signed)):
         raise ValueError("Signed likelihood rows do not match the marginal-data mask.")
+    if spoken_fallback == SPOKEN_FALLBACK_PAIRED_ONLY:
+        n_fallback_dropped = spoken_spec.n_marginal + signed_spec.n_marginal
+        spoken_spec = spoken_spec.conditional_only()
+        signed_spec = signed_spec.conditional_only()
+        # Printed rather than silent: dropping rows changes what the fit is
+        # fitted to, and a sensitivity arm that quietly used fewer observations
+        # than the model of record would not be comparable with it.
+        print(
+            f"Marginal fallback treatment {spoken_fallback!r}: dropped "
+            f"{n_fallback_dropped} child-outcome row(s) with no usable "
+            "understood count from the likelihood.",
+            flush=True,
+        )
+
+    # Every one of these derives from the FILTERED spec, so the coords, the
+    # observed data, the trial counts and the stored masks all describe the same
+    # rows. Reading them before the drop -- as this did while the drop was being
+    # added -- leaves the coordinate sized by the unfiltered rows and the trial
+    # counts by the filtered ones, which fails at logp evaluation with a shape
+    # error and no indication of the cause.
     idx_s = spoken_spec.indices
     idx_sign = signed_spec.indices
     y_s = spoken_spec.observed
     y_sign = signed_spec.observed
+
     has_s_likelihood = np.zeros(len(df), dtype=bool)
     has_sign_likelihood = np.zeros(len(df), dtype=bool)
     has_s_likelihood[idx_s] = True
@@ -1486,26 +1521,43 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         pm.BetaBinomial("y_u_obs", n=n_trials, alpha=p_u_sel * k_u, beta=(1 - p_u_sel) * k_u,
                         observed=y_u, dims="obs_u_id")
 
-        # Spoken: nested where U is usable, otherwise marginal over the inventory.
-        p_s_sel = pm.math.switch(
-            s_is_conditional,
-            q_obs[idx_s],
-            (p_u_obs * q_obs)[idx_s],
+        # Spoken: nested where U is usable, otherwise marginal over the
+        # inventory. Through the shared builder since issue #266 finding 8, so
+        # this engine can run the marginal fallback sensitivity the bivariate
+        # engines have had since #240. Under the default `product_marginal` it
+        # emits the ops it always did, which `tests/test_graph_equivalence.py`
+        # checks.
+        alpha_s, beta_s = nested_outcome_alpha_beta(
+            treatment=spoken_fallback,
+            is_conditional=s_is_conditional,
+            conditional_p=q_obs[idx_s],
+            marginal_p=(p_u_obs * q_obs)[idx_s],
+            parent_p=p_u_obs[idx_s],
+            parent_kappa=kappa_u_obs[idx_s],
+            kappa=kappa_s_obs[idx_s],
+            epsilon=EPSILON,
+            outcome="s",
+            fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        p_s_sel = pm.math.clip(p_s_sel, EPSILON, 1 - EPSILON)
-        k_s = kappa_s_obs[idx_s]
-        pm.BetaBinomial("y_s_obs", n=s_likelihood_n, alpha=p_s_sel * k_s, beta=(1 - p_s_sel) * k_s,
+        pm.BetaBinomial("y_s_obs", n=s_likelihood_n, alpha=alpha_s, beta=beta_s,
                         observed=y_s, dims="obs_s_id")
 
-        # Signed: nested where U is usable, otherwise marginal over the inventory.
-        p_sign_sel = pm.math.switch(
-            sign_is_conditional,
-            r_obs[idx_sign],
-            (p_u_obs * r_obs)[idx_sign],
+        # Signed: the same treatment. Signing is nested inside comprehension
+        # exactly as speech is, so exposing the choice for one outcome and not
+        # the other would leave half the exposure unmeasurable.
+        alpha_sign, beta_sign = nested_outcome_alpha_beta(
+            treatment=spoken_fallback,
+            is_conditional=sign_is_conditional,
+            conditional_p=r_obs[idx_sign],
+            marginal_p=(p_u_obs * r_obs)[idx_sign],
+            parent_p=p_u_obs[idx_sign],
+            parent_kappa=kappa_u_obs[idx_sign],
+            kappa=kappa_sign_obs[idx_sign],
+            epsilon=EPSILON,
+            outcome="sign",
+            fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        p_sign_sel = pm.math.clip(p_sign_sel, EPSILON, 1 - EPSILON)
-        k_sign = kappa_sign_obs[idx_sign]
-        pm.BetaBinomial("y_sign_obs", n=sign_likelihood_n, alpha=p_sign_sel * k_sign, beta=(1 - p_sign_sel) * k_sign,
+        pm.BetaBinomial("y_sign_obs", n=sign_likelihood_n, alpha=alpha_sign, beta=beta_sign,
                         observed=y_sign, dims="obs_sign_id")
 
         # uk_02 four cells (Dirichlet-Multinomial), within-understood composition.
@@ -1691,6 +1743,18 @@ def diagnostics(context: JointContext):
             ("y_u_obs", "words understood"),
             ("y_s_obs", "words spoken"),
             ("y_sign_obs", "words signed"),
+        ),
+        # Every factor of an administration, the two composition terms included
+        # (issue #266 finding 4). Those terms are what identify `psi`, this
+        # model's headline association, and the per-outcome scores above omit
+        # them entirely -- so before this the LOO never scored the quantity the
+        # model exists to estimate.
+        administration_factors=(
+            LikelihoodFactor("y_u_obs", "obs_u_mask"),
+            LikelihoodFactor("y_s_obs", "obs_s_mask"),
+            LikelihoodFactor("y_sign_obs", "obs_sign_mask"),
+            LikelihoodFactor("cells_obs", "obs_cells_mask"),
+            LikelihoodFactor("nz_prod_cells_obs", "obs_prod_mask"),
         ),
     )
 
