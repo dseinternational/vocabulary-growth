@@ -10,6 +10,7 @@ import duckdb
 import pandas as pd
 
 from vocab_growth.data_utils import (
+    drop_uk01_withheld_subjects,
     drop_uk07_withheld_administrations,
     vocab_combined_view_sql,
 )
@@ -72,7 +73,20 @@ vocab_ie_02_df = vocab_ie_02_df[
     vocab_ie_02_df["subject_id"] != "ID_79C464EF367C4D5B"
 ].copy()
 vocab_it_01_df = _loaded["vocab_it_01"]
-vocab_uk_01_df = _loaded["vocab_uk_01"]
+
+# Exclude the uk_01 subjects withheld as probable homonym fusions. The source
+# keys children by name alone, and ID_E33ADE657109EBB8's four rows interleave
+# two contradictory modality profiles (a signer who barely speaks, a speaker
+# who never signs) — the signature of two same-named children fused under one
+# id, and the origin of the −424-word "collapse" at 76–78 months. Dropped here
+# at load so the rows are absent from the merged CSV, the DuckDB vocab_uk_01
+# table and the vocab_combined view alike. See
+# data_utils.UK01_WITHHELD_SUBJECTS for the evidence and how to reinstate.
+vocab_uk_01_df, _uk01_withheld = drop_uk01_withheld_subjects(_loaded["vocab_uk_01"])
+console.print(
+    f"[yellow]uk_01 rows withheld as probable homonym fusions:[/yellow] "
+    f"{_uk01_withheld}"
+)
 vocab_uk_02_df = _loaded["vocab_uk_02"]
 vocab_uk_03_df = _loaded["vocab_uk_03"]
 vocab_uk_04_df = _loaded["vocab_uk_04"]

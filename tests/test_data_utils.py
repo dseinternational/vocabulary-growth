@@ -1308,6 +1308,50 @@ def test_uk07_withheld_row_is_the_only_production_above_comprehension_row():
     assert (kept["produced"] <= kept["understood"]).all()
 
 
+def test_uk01_withheld_subjects_are_dropped_at_csv_load():
+    # Withholding is by whole subject: the defect is the name-derived identifier
+    # itself, so every row under the id goes. Reinstatement is removing the id
+    # from the constant.
+    subject = data_utils.UK01_WITHHELD_SUBJECTS[0]
+    raw = pd.DataFrame(
+        {
+            "subject_id": [subject, subject, "other"],
+            "age": [66, 76, 66],
+            "spoken": [8, 451, 100],
+        }
+    )
+    out, dropped = data_utils.drop_uk01_withheld_subjects(raw)
+
+    assert dropped == 2
+    assert list(out["subject_id"]) == ["other"]
+    assert list(out.index) == [0]                        # index reset
+
+    with pytest.raises(KeyError):
+        data_utils.drop_uk01_withheld_subjects(raw.drop(columns=["subject_id"]))
+
+
+def test_uk01_withheld_subject_interleaves_two_modality_profiles():
+    # Pins why the id is withheld, against the committed source: sorted by age,
+    # its four administrations alternate between a signer who barely speaks
+    # (ages 66 and 78) and a speaker who never signs (76 and 88) — the
+    # homonym-fusion signature, not a trajectory. If a data update changes
+    # this, the constant has gone stale and this test says so.
+    raw = pd.read_csv(
+        os.path.join(data_utils.local_env.DATA_DIR, "vocab_data_uk_01.csv")
+    )
+    rows = raw[
+        raw["subject_id"] == data_utils.UK01_WITHHELD_SUBJECTS[0]
+    ].sort_values("age")
+
+    assert list(rows["age"]) == [66, 76, 78, 88]
+    signer = rows.iloc[[0, 2]]
+    speaker = rows.iloc[[1, 3]]
+    assert (signer["signed"] >= 100).all()
+    assert (signer["spoken"] < 50).all()
+    assert (speaker["signed"] == 0).all()
+    assert (speaker["spoken"] > 400).all()
+
+
 def test_mask_incomplete_administrations_reports_counts_and_needs_columns():
     frame = pd.DataFrame({
         "study": ["ie_01", "ie_01", "uk_03"],

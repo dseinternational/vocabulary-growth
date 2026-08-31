@@ -249,6 +249,73 @@ def drop_uk07_withheld_administrations(
     return raw.loc[~drop].reset_index(drop=True), int(drop.sum())
 
 
+UK01_WITHHELD_SUBJECTS: tuple[str, ...] = ("ID_E33ADE657109EBB8",)
+"""uk_01 subjects withheld as probable homonym fusions of two children.
+
+uk_01 is the one source whose subject identifier is derived from the child's
+*name* alone (see ``prepare/uk_01_edg.py`` in the ``research-data-analysis``
+repository): the raw SPSS file carries no per-child identifier, so the name is
+the longitudinal linker, and two different children who share a name are
+silently fused into one ``subject_id``. That risk is documented at source as
+the homonym caveat; this constant records the one id where the fused pattern
+is actually observed.
+
+``ID_E33ADE657109EBB8`` (F) carries four administrations that split perfectly
+into two interleaved, internally consistent modality profiles — a signer who
+barely speaks and a speaker who never signs::
+
+    age 66 (WG):  spoken   8, signed 225
+    age 76 (WS):  spoken 451, signed   0
+    age 78 (WS):  spoken  27, signed 126
+    age 88 (WS):  spoken 483, signed   0
+
+Read as one child this is a 424-word production collapse in two months followed
+by a 456-word surge — the "uk_01 record at 76 months" the longitudinal-collapse
+rule (:data:`COLLAPSE_FACTOR`) deliberately left for separate investigation.
+Read as two children ({66, 78} and {76, 88}) both trajectories are ordinary.
+The four rows sit under one exact canonicalised name in the raw source
+(verified 2026-08-31), which carries no date of birth, record number or any
+other disambiguator, so the split cannot be made mechanically — and assigning
+rows to children by their outcome profile would be selection on the outcome.
+The whole id is therefore withheld, all four rows, pending adjudication
+against the original study records.
+
+Deliberately *not* withheld: ``ID_CEBD1F6C4348C78C`` (M, eight rows, 35–80
+months), the only other uk_01 id pairing a substantial-signer row with a
+non-signing-speaker row. Its profile — a heavy signer at 35 months becoming a
+240-word non-signing speaker by 44 — is also consistent with a genuine
+sign-to-speech transition, which is what the signing models estimate, so it
+stays in as a sensitivity target rather than an exclusion.
+
+Applied at CSV load in ``scripts/prepare_data.py``, so the rows are absent
+from the ``vocab_uk_01`` table, the ``vocab_combined`` view and
+``vocab_data_merged.csv`` alike. In the default pool the cost is four spoken
+observations: uk_01's ``signed`` is already masked by default
+(:data:`SIGNED_ONLY_STUDIES`) and ``understood`` is missing on all four rows.
+Removing the id from this tuple and re-running ``scripts/prepare_data.py``
+reinstates it. See ``notes/202608311600-uk01-homonym-fusion.md``.
+"""
+
+
+def drop_uk01_withheld_subjects(
+    raw: pd.DataFrame,
+    *,
+    subject_col: str = "subject_id",
+) -> tuple[pd.DataFrame, int]:
+    """Drop every row of the uk_01 subjects listed in :data:`UK01_WITHHELD_SUBJECTS`.
+
+    Takes the raw uk_01 CSV frame and returns it without the withheld subjects'
+    administrations, plus the number of rows removed. Withholding is by whole
+    subject rather than by administration because the defect is the identifier
+    itself: which rows belong to which child is exactly what cannot be
+    recovered from the aggregate data.
+    """
+    if subject_col not in raw.columns:
+        raise KeyError(f"uk_01 withholding requires column: {subject_col}")
+    drop = raw[subject_col].isin(UK01_WITHHELD_SUBJECTS)
+    return raw.loc[~drop].reset_index(drop=True), int(drop.sum())
+
+
 def mask_incomparable_signed_outcomes(
     df: pd.DataFrame,
     *,
