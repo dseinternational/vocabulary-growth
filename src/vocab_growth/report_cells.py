@@ -204,6 +204,15 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
         "log_conc",
         "log_concentration",
     ),
+    # Sampled only under `spoken_fallback="separate_dispersion"`, which is a
+    # registered VG10 sensitivity variant -- and a variant fit renders the model
+    # of record's template, so a prior with no row shows up on a real page.
+    (
+        "log_kappa_s_fallback",
+        "Dispersion offset for spoken rows with no usable understood count",
+        "spoken_fallback_kappa",
+        "log_multiplier",
+    ),
 ]
 
 
@@ -375,6 +384,18 @@ def _prior_row(
             description,
             f"LKJ({eta:g}), i.e. $(\\rho_{{uq}}+1)/2 \\sim$ Beta({eta:g}, {eta:g})",
             f"centred on zero and {emphasis}; 5–95% {lo:+.2f} to {hi:+.2f}",
+        )
+
+    if kind == "log_multiplier":
+        sigma = definition.get(f"{stem}_sigma")
+        if sigma is None:
+            return None
+        hi = math.exp(1.598 * sigma)  # 89% equal-tailed, centred on zero
+        return (
+            description,
+            f"Normal(0, {sigma:g})",
+            f"a multiplier on the shared age-varying $\\kappa$; centred on 1 "
+            f"(no separate dispersion), 89% {1 / hi:.2f}–{hi:.2f}",
         )
 
     if kind == "log_concentration":
@@ -707,14 +728,17 @@ def _prior_rows(
             rows.append(row)
             covered.append(parameter)
             # A subject-scale field holding a block renders one row for the
-            # block, so the row accounts for the block's own parameters --
-            # VG19's `tau_subj_u_0`, `_1` and `_rho` rather than the scalar
-            # `tau_subj_u` the spec is keyed on.
+            # block, so the row accounts for the block's own parameters. The
+            # two blocks name them differently: VG19's child slope emits
+            # `{name}_0`, `_1` and `_rho`, while Proposal A1's age-varying scale
+            # emits `log_{name}_ratio` -- a prefix rule alone finds only the
+            # first.
             if isinstance(definition.get(stem), Mapping):
                 covered.extend(
                     name
                     for name in present
                     if name.startswith(f"{parameter}_")
+                    or name == f"log_{parameter}_ratio"
                 )
 
     rows.extend(factor_rows)
