@@ -33,6 +33,7 @@ import vocab_growth.intervals as intervals
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
+from vocab_growth.administration_loo import LikelihoodFactor
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models import prior_child_checks
 from vocab_growth.models.build_utils import (
@@ -1069,6 +1070,15 @@ def diagnostics(context: BivariateContext, definition=None):
             loo_var_names=(
                 ("y_s_obs", "words spoken"),
                 ("y_u_obs", "words understood"),
+            ),
+            # Both factors of an administration, summed into one held-out case
+            # (issue #266 finding 4). Not supplied on the cross-lag branch
+            # below, for the reason its own message gives: the lag predictor
+            # embeds earlier observed comprehension, so no pointwise hold-out
+            # is clean there.
+            administration_factors=(
+                LikelihoodFactor("y_u_obs", "obs_u_mask"),
+                LikelihoodFactor("y_s_obs", "obs_s_mask"),
             ),
             var_names_fn=_prioritise if priority else None,
         )

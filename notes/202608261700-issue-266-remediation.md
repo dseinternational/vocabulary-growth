@@ -58,3 +58,41 @@ Comparison outputs got the provenance they lacked. A generating script records a
 ## 6. Discovered in passing
 
 VG17 and VG18 cannot be fitted at all, on this branch or on `main`: `_build` reuses VG01's `ages_query`, which runs to 90 months, against VG17's 12–66 month GP domain, and the domain check rejects it. This is pre-existing and unrelated to #266; it wants its own issue.
+
+## 7. Second remediation pass (2026-08-31)
+
+Three of the five items in §5 were code changes waiting on nothing, and this pass took them. The two that remain are refits and a statistical design; both are named again at the end.
+
+### Administration-level LOO is now computed, not only relabelled
+
+§5 recorded this as a separate change that "regenerates every model page", and deferred it. It is taken now for a reason that has a deadline attached: **every registered fit already needs re-running**, so the cost of this change is currently zero and rises the moment the refit run starts. Landing it after that run would waste the run.
+
+`vocab_growth.administration_loo` sums every likelihood factor belonging to one row of the analysis frame into a single pointwise entry, and the diagnostics stage computes a LOO over it **alongside** the per-outcome scores rather than instead of them. The per-outcome numbers stay comparable across models on the same conditional units; what they never were is whole-administration predictive accuracy, and the reports said they were.
+
+Three things follow. A paired administration is one held-out case with one importance weight rather than two. Nothing of a held-out row remains in the conditioning set — previously, holding out the comprehension factor left its own observed value in the spoken factor's denominator. And **VG15's two composition terms are included**, so the model's headline association `psi` is scored by leave-one-out at all for the first time; the per-outcome scores omit those terms entirely.
+
+The mechanics are `scripts/loo_compare.py`'s `_attach_joint_log_likelihood`, which has computed this correctly for the bivariate case since #236, generalised to any number of factors including the matrix-valued composition ones. Verified on a real two-chain VG10 fit while it was written: 96 per-outcome terms collapse to 48 administration cases with the total log-likelihood conserved to 0.0 exactly.
+
+**This depended on finding 3 having been fixed first.** The mapping from a factor's likelihood rows back to administration rows is the `obs_*_mask` constant data. A mask marking recorded rows rather than likelihood rows would sum the wrong factors onto the wrong administrations — silently, and plausibly. The combiner refuses a mask that does not match its factor rather than proceeding.
+
+### VG14 and VG15 can run the marginal fallback sensitivity
+
+Finding 8's exposure — roughly 455 of 1,428 Down syndrome spoken rows take an approximation that preserves the mean but not the variance, on rows that are older and clustered by study — could not be measured on either signing model, because both hard-coded the default. Both now carry `spoken_fallback`, route their child-outcome likelihoods through the shared `nested_outcome_alpha_beta`, and have the three arms registered. The treatment applies to the **signed** rows as well as the spoken ones: signing is nested inside comprehension exactly as speech is, so varying one and not the other would leave half the exposure in place.
+
+Two things were found in doing it.
+
+**The trivariate engine carried finding 3's defect, unreachably.** It stored `has_s` and `has_sign` — the _recorded_ masks — where the bivariate engines store the likelihood ones. With no fallback choice to select, no row was ever dropped and the two coincided; exposing the choice would have made it reachable, and the first `paired_only` run would have died at calibration after sampling, exactly as the bivariate fits did. Fixed before it could be discovered that way.
+
+**The joint engine read its indices before applying the drop**, leaving the `obs_s_id` coordinate sized by the unfiltered rows and the trial counts by the filtered ones. That fails at logp evaluation with a bare shape error and no indication of the cause. Caught because the test builds each treatment on a frame that _has_ marginal rows — the graph-equivalence harness's frame is fully paired, so `paired_only` and `moment_matched` are no-ops on it and a test using it would have passed while proving nothing.
+
+**Adding the field invalidated no existing fit**, which is the first real use of the versioned manifest payload from #273 step 5. Under the raw dictionary equality this replaced, adding `spoken_fallback` would have invalidated every VG14 and VG15 fit ever made, for a field whose default is what those fits already did. `BACKFILL_DEFAULTS` records that claim, and it is checkable rather than asserted: `resolve_fallback_treatment` reads the field through `getattr` with exactly this default, so a definition that predates it resolved to `product_marginal`.
+
+Both models also became reachable from `fit_sensitivity.py` and `refit_hightune.py` with no further change, because #273 made those scripts derive their runner map from the catalogue and the variant registry.
+
+### Still outstanding, and still not a code change
+
+**Every registered model needs a reporting-quality refit.** Unchanged from §5, and now also the only way to get an administration-level LOO row onto any model page — the score is computed during the fit.
+
+**VG22's induced prior needs designing.** Unchanged: an explicit prior over the implied correlations, a refit of the rank family, parameter recovery and a whole-child predictive comparison before the default rank is re-selected.
+
+**The fallback sensitivity arms need running.** They can now be run on all four affected engines rather than two, which is what this pass changed; running them is a fitting task.

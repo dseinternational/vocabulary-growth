@@ -220,7 +220,15 @@ def test_registry_counts_and_models():
     # `lag-gap-12`, `no-us01` and `lag-continuity`. A field with no variant
     # using it is dead weight in the fingerprint of all twelve bivariate models,
     # so the fields and their variants land together or not at all.
-    assert len(VARIANTS) == 74
+    #
+    # +6 on 2026-08-31 (#266 finding 8): the three marginal-fallback arms for
+    # VG14 and VG15. Their engines hard-coded the default until then, so the
+    # exposure the finding names -- an approximation preserving the mean but not
+    # the variance, on rows that are older and clustered by study -- could not
+    # be measured on either signing model at all. VG14 had no variants before
+    # this and so no entry below.
+    assert len(VARIANTS) == 80
+    assert len(variants_for("vg14")) == 3
     assert len(variants_for("vg16")) == 5
     assert len(variants_for("vg21")) == 1
     assert len(variants_for("vg23")) == 1
@@ -230,7 +238,7 @@ def test_registry_counts_and_models():
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 5
     assert len(variants_for("vg13")) == 4
-    assert len(variants_for("vg15")) == 27
+    assert len(variants_for("vg15")) == 30
     assert len(variants_for("vg20")) == 6
 
 
@@ -248,9 +256,9 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 27
+    assert len(all_vg15) == 30
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 27
+    assert len({d.config_name for d in all_vg15}) == 30
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")

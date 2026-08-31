@@ -47,6 +47,7 @@ import vocab_growth.intervals as intervals
 import vocab_growth.plotting as plotting
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
+from vocab_growth.administration_loo import LikelihoodFactor
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -78,7 +79,12 @@ from vocab_growth.models.gp_utils import (
     tent_and_gp,
     trend_and_gp,
 )
-from vocab_growth.models.likelihood_utils import nested_outcome_spec
+from vocab_growth.models.likelihood_utils import (
+    SPOKEN_FALLBACK_PAIRED_ONLY,
+    nested_outcome_alpha_beta,
+    nested_outcome_spec,
+    resolve_fallback_treatment,
+)
 from vocab_growth.plotting import (
     _save_csv,
     plot_comprehension_production_gap,
@@ -508,6 +514,10 @@ def build_model(
     n = len(X_obs)
     n_u = len(y_u_observed)
     n_trials = context.model_data.n_trials
+    # Which treatment the child-outcome rows with no usable understood count
+    # take (issue #266 finding 8). Resolved before the graph so an unknown value
+    # is refused against the definition.
+    spoken_fallback = resolve_fallback_treatment(definition)
     spoken_spec = nested_outcome_spec(
         analysis_df,
         parent_col="understood",
@@ -520,16 +530,40 @@ def build_model(
         outcome_col="signed",
         n_trials=n_trials,
     )
+
     if not np.array_equal(spoken_spec.indices, np.flatnonzero(has_s)):
         raise ValueError("Spoken likelihood rows do not match the observed-data mask.")
     if not np.array_equal(signed_spec.indices, np.flatnonzero(has_sign)):
         raise ValueError("Signed likelihood rows do not match the observed-data mask.")
+    # `paired_only` is applied at data preparation, by dropping the rows, not in
+    # the graph -- so it has to happen here as well as in the treatment the
+    # builder receives. Both nested outcomes lose their marginal rows: signing
+    # is nested inside comprehension exactly as speech is (issue #266 finding 8).
+    # After the checks above, which are written to test the UNFILTERED spec and
+    # still do so under every treatment.
+    n_fallback_dropped = 0
+    if spoken_fallback == SPOKEN_FALLBACK_PAIRED_ONLY:
+        n_fallback_dropped = spoken_spec.n_marginal + signed_spec.n_marginal
+        spoken_spec = spoken_spec.conditional_only()
+        signed_spec = signed_spec.conditional_only()
     y_s_observed = spoken_spec.observed
     y_sign_observed = signed_spec.observed
     idx_s = spoken_spec.indices
     idx_sign = signed_spec.indices
     n_s = spoken_spec.n_observed
     n_sign = signed_spec.n_observed
+    # Stored masks mark the rows the likelihood actually carries, not every row
+    # with a recorded count. Identical to `has_s` / `has_sign` under every
+    # treatment but `paired_only`, which drops rows -- and storing the recorded
+    # mask there is issue #266 finding 3, which killed every paired-only
+    # bivariate fit at calibration after sampling. This engine had no fallback
+    # choice when that was found, so it carried the same latent defect
+    # unreachably; exposing the choice makes it reachable, so it is fixed here
+    # rather than discovered by the first run.
+    has_s_likelihood = np.zeros(n, dtype=bool)
+    has_s_likelihood[spoken_spec.indices] = True
+    has_sign_likelihood = np.zeros(n, dtype=bool)
+    has_sign_likelihood[signed_spec.indices] = True
 
     # Validate
     if not np.all(y_u_observed >= 0):
@@ -561,6 +595,8 @@ def build_model(
             ("Signed conditional on understood", signed_spec.n_conditional),
             ("Signed marginal fallback", signed_spec.n_marginal),
             ("Signed > understood violations", signed_spec.n_parent_violations),
+            ("Marginal fallback treatment", spoken_fallback),
+            ("Marginal fallback rows dropped", n_fallback_dropped),
             ("n_trials", n_trials),
             ("Age mean (months)", X_obs_mean),
             ("Age std (months)", X_obs_std),
@@ -640,8 +676,10 @@ def build_model(
 
         # Store masks for extraction
         _ = pm.Data("obs_u_mask", has_u.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_s_mask", has_s.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_sign_mask", has_sign.astype(int), dims=("obs_id",))
+        _ = pm.Data("obs_s_mask", has_s_likelihood.astype(int), dims=("obs_id",))
+        _ = pm.Data(
+            "obs_sign_mask", has_sign_likelihood.astype(int), dims=("obs_id",)
+        )
         s_likelihood_n = pm.Data(
             "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
         )
@@ -922,15 +960,24 @@ def build_model(
             dims=("obs_u_id",),
         )
 
-        # Spoken likelihood (only where observed)
-        p_s_likelihood = pm.math.switch(
-            s_is_conditional,
-            q_obs[idx_s],
-            p_s_obs[idx_s],
+        # Spoken likelihood (only where observed). Through the shared builder
+        # since issue #266 finding 8, so this engine can run the marginal
+        # fallback sensitivity the bivariate engines have had since #240. Under
+        # the default `product_marginal` it emits the same ops it always did --
+        # `nested_outcome_alpha_beta`'s `else` branch is the two lines this
+        # replaced -- which `tests/test_graph_equivalence.py` checks.
+        alpha_s, beta_s = nested_outcome_alpha_beta(
+            treatment=spoken_fallback,
+            is_conditional=s_is_conditional,
+            conditional_p=q_obs[idx_s],
+            marginal_p=p_s_obs[idx_s],
+            parent_p=p_u_obs[idx_s],
+            parent_kappa=kappa_u_obs[idx_s],
+            kappa=kappa_s_obs[idx_s],
+            epsilon=EPSILON,
+            outcome="s",
+            fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        p_s_likelihood = pm.math.clip(p_s_likelihood, EPSILON, 1 - EPSILON)
-        alpha_s = p_s_likelihood * kappa_s_obs[idx_s]
-        beta_s = (1 - p_s_likelihood) * kappa_s_obs[idx_s]
 
         _ = pm.BetaBinomial(
             "y_s_obs",
@@ -941,15 +988,23 @@ def build_model(
             dims=("obs_s_id",),
         )
 
-        # Signed likelihood (only where observed)
-        p_sign_likelihood = pm.math.switch(
-            sign_is_conditional,
-            r_obs[idx_sign],
-            p_sign_obs[idx_sign],
+        # Signed likelihood (only where observed). The same treatment applies:
+        # signing is nested inside comprehension exactly as speech is, and a
+        # signed row with no usable understood count takes the same
+        # approximation, so exposing the choice for one outcome and not the
+        # other would leave half the exposure unmeasurable.
+        alpha_sign, beta_sign = nested_outcome_alpha_beta(
+            treatment=spoken_fallback,
+            is_conditional=sign_is_conditional,
+            conditional_p=r_obs[idx_sign],
+            marginal_p=p_sign_obs[idx_sign],
+            parent_p=p_u_obs[idx_sign],
+            parent_kappa=kappa_u_obs[idx_sign],
+            kappa=kappa_sign_obs[idx_sign],
+            epsilon=EPSILON,
+            outcome="sign",
+            fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        p_sign_likelihood = pm.math.clip(p_sign_likelihood, EPSILON, 1 - EPSILON)
-        alpha_sign = p_sign_likelihood * kappa_sign_obs[idx_sign]
-        beta_sign = (1 - p_sign_likelihood) * kappa_sign_obs[idx_sign]
 
         _ = pm.BetaBinomial(
             "y_sign_obs",
@@ -1262,6 +1317,15 @@ def diagnostics(context: TrivariateContext):
             ("y_u_obs", "words understood"),
             ("y_s_obs", "words spoken"),
             ("y_sign_obs", "words signed"),
+        ),
+        # All three factors of an administration, summed into one held-out case
+        # (issue #266 finding 4). The spoken and signed likelihoods take the
+        # same row's observed comprehension as their trial count, so the
+        # per-outcome scores above are conditional on it.
+        administration_factors=(
+            LikelihoodFactor("y_u_obs", "obs_u_mask"),
+            LikelihoodFactor("y_s_obs", "obs_s_mask"),
+            LikelihoodFactor("y_sign_obs", "obs_sign_mask"),
         ),
     )
 

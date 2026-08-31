@@ -396,6 +396,27 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg10", "marginal-moments"): {"suffix": "marginal-moments", "scalar": {
         "spoken_fallback": SPOKEN_FALLBACK_MOMENT_MATCHED}},
 
+    # The same three arms for the two signing models, registered once their
+    # engines could run them (#266 finding 8). VG14 and VG15 hard-coded the
+    # default, so the exposure the finding names -- an approximation that
+    # preserves the mean but not the variance, on rows that are older and
+    # clustered by study -- could not be measured on either at all. On these
+    # engines the treatment applies to the SIGNED rows as well as the spoken
+    # ones: signing is nested inside comprehension exactly as speech is, so
+    # varying one and not the other would leave half the exposure in place.
+    ("vg14", "paired-only"): {"suffix": "paired-only", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_PAIRED_ONLY}},
+    ("vg14", "fallback-dispersion"): {"suffix": "fallback-dispersion", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_SEPARATE_DISPERSION}},
+    ("vg14", "marginal-moments"): {"suffix": "marginal-moments", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_MOMENT_MATCHED}},
+    ("vg15", "paired-only"): {"suffix": "paired-only", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_PAIRED_ONLY}},
+    ("vg15", "fallback-dispersion"): {"suffix": "fallback-dispersion", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_SEPARATE_DISPERSION}},
+    ("vg15", "marginal-moments"): {"suffix": "marginal-moments", "scalar": {
+        "spoken_fallback": SPOKEN_FALLBACK_MOMENT_MATCHED}},
+
     # -- VG13 observation window (#228) --
     #
     # These two are the widest-scoped variants registered on VG13, and the only
