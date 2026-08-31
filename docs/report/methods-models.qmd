@@ -58,7 +58,7 @@ Today, modern sampling algorithms [@metropolisEquationStateCalculations1953; @ha
 
 ## Outcomes {#sec-outcomes}
 
-Vocabulary checklists record a subset of the words a child understands, speaks or signs (@sec-data) at a point in time. Each item is a true or false (checked or not checked) option. A child's score is a count of true responses out of $n$ checklist items. One completion of a checklist (an *administration*) yields up to one count per *outcome* (understood, spoken, signed) for a child of a given age. Each such count (one child, one age, one outcome) is an *observation*. Our statistical models must consider how observations are distributed.
+Vocabulary checklists record a subset of the words a child understands, speaks or signs (@sec-data) at a point in time. Each item is a true or false (checked or not checked) option. A child's score is a count of true responses out of $n$ checklist items. One completion of a checklist (an *administration*) yields up to one count per *outcome* (understood, spoken, signed) for a child of a given age. Each such count (one child, one age, one outcome) is an *observation*. We write $W$ for an observed count, subscripted by outcome where the distinction matters: $W_{\text{understood}}$, $W_{\text{spoken}}$ and $W_{\text{signed}}$. Our statistical models must consider how observations are distributed.
 
 ### A single reference inventory {#sec-reference-inventory}
 
@@ -72,7 +72,7 @@ This approximation is less accurate for children near the maximum of a shorter f
 
 Counts near the maximum of a shorter form are uncommon among the data we have pooled for children with Down syndrome: 42 of 977 observations of words understood (4.3%, five of them at the maximum itself) and 18 of 1,428 observations of words spoken (1.3%) fall within 90% of a shorter form's maximum, and none of the 904 observations of words signed do.
 
-The typically developing pool relies on the approximation more heavily. Here, every observation comes from a shorter form (@sec-data). Most sit well below their form's maximum, because the pool is restricted to ages 8 to 30 months and each form is designed for the ages at which it is given. The exception is spoken vocabulary towards the top of that window, where typically developing children can approach their form's ceiling: 4.0% of the pool's spoken observations fall within 90% of their form's maximum -- negligible below 22 months, 3.5% at 22 to 25 months, 7.7% at 26 to 27 months, and about one in five observations at 28 to 30 months. Words understood show the same pattern on a smaller scale: 3.8% overall, rising above 20% only at 23 to 25 months, the oldest ages of the longest-running comprehension form (the 418-item Oxford CDI). A count at a shorter form's ceiling is censored: the child is credited with every word the form asks about, and under the same easiest-first approximation would have been credited with at least as many — and plausibly more — items on the reference inventory. Because the model treats such counts as exact, estimated counts at the oldest typically developing ages are more likely to understate than overstate the count the reference inventory would have recorded. This is a statement about the reference-inventory count, not about spoken vocabulary at large; what checklist counts can and cannot say about vocabulary beyond the words checklists sample is discussed is @sec-data.
+The typically developing pool relies on the approximation more heavily. Here, every observation comes from a shorter form (@sec-data). Most sit well below their form's maximum, because the pool is restricted to ages 8 to 30 months and each form is designed for the ages at which it is given. The exception is spoken vocabulary towards the top of that window, where typically developing children can approach their form's ceiling: 4.0% of the pool's spoken observations fall within 90% of their form's maximum -- negligible below 22 months, 3.5% at 22 to 25 months, 7.7% at 26 to 27 months, and about one in five observations at 28 to 30 months. Words understood show the same pattern on a smaller scale: 3.8% overall, rising above 20% only at 23 to 25 months, the oldest ages of the longest-running comprehension form (the 418-item Oxford CDI). A count at a shorter form's ceiling is censored: the child is credited with every word the form asks about, and under the same easiest-first approximation would have been credited with at least as many — and plausibly more — items on the reference inventory. Because the model treats such counts as exact, estimated counts at the oldest typically developing ages are more likely to understate than overstate the count the reference inventory would have recorded. This is a statement about the reference-inventory count, not about spoken vocabulary at large; what checklist counts can and cannot say about vocabulary beyond the words checklists sample is discussed in @sec-data.
 
 #### Forms align more closely on raw counts than on proportions
 
@@ -86,7 +86,7 @@ Finally, we conducted a sensitivity analysis where models were refitted using on
 
 ### A Beta-Binomial distribution {#sec-betabinomial}
 
-The words on a checklist are fixed. Therefore, a count $k$ can take only integer values $0 <= k <= n$, and the corresponding proportion $p$ is bounded accordingly. Our outcome model should respect these constraints: counts are discrete, non-negative and bounded above. Since every count in our data is scored against the reference inventory (@sec-reference-inventory), we define $n = 810$.
+The words on a checklist are fixed. Therefore, a count $W$ can take only integer values $0 \le W \le n$, and the corresponding proportion $p$ is bounded accordingly. Our outcome model should respect these constraints: counts are discrete, non-negative and bounded above. Since every count in our data is scored against the reference inventory (@sec-reference-inventory), we define $n = 810$.
 
 A count of true responses out of $n$ items follows a Binomial distribution when two assumptions hold within an administration: that (a) given the probability of a true response $p$, the item responses (words checked) are independent; and that (b) every item carries that same probability. This gives a mean of $np$ and a variance (fixed by the mean) of $np(1-p)$ [@gelmanRegressionOtherStories2020, sec. 3.2]. We then assume the same distribution holds across administrations: that (c) the probability is the same for every observation of a given outcome at the same age.
 
@@ -111,7 +111,7 @@ Change measured in raw words is therefore not comparable across ages or between 
 For the reasons discussed in the preceding sections, we model each count as Beta-Binomial with mean proportion $p$ and concentration $\kappa$:
 
 $$
-y \sim \mathrm{BetaBinomial}(n,\,p,\,\kappa),
+W \sim \mathrm{BetaBinomial}(n,\,p,\,\kappa),
 \qquad
 \alpha = p\,\kappa,
 \qquad
@@ -120,7 +120,9 @@ $$
 
 where $\alpha$ and $\beta$ are the Beta distribution's conventional shape parameters, related to ours by $p = \alpha/(\alpha+\beta)$ and $\kappa = \alpha+\beta$.
 
-Here $p$ is the expected proportion of the inventory checked, so the expected count is $\mathrm{E}[y] = np$. The concentration $\kappa$ controls the extra spread: as $\kappa$ grows large the Beta-Binomial approaches the Binomial; as it shrinks, counts spread more widely around the same mean $np$. This extra variation describes observations around a population trajectory. It should not be confused with uncertainty about the trajectory itself.
+Here $p$ is the expected proportion of the inventory checked, so the expected count is $\mathrm{E}[W] = np$. The concentration $\kappa$ controls the extra spread: as $\kappa$ grows large the Beta-Binomial approaches the Binomial; as it shrinks, counts spread more widely around the same mean $np$. This extra variation describes observations around a population trajectory. It should not be confused with uncertainty about the trajectory itself.
+
+Where a model estimates several outcomes jointly (@sec-joint-outcomes), parameters carry the outcome's subscript: $p_{\text{understood}}$ is the expected proportion for the count $W_{\text{understood}}$, and likewise the concentration $\kappa_{\text{understood}}$.
 
 ### Age-varying dispersion {#sec-kappa}
 
@@ -130,7 +132,7 @@ $$
 z_i = \frac{x_i - \bar{x}}{\sigma_x},
 $$
 
-so that a one-unit change in $z$ corresponds to $\sigma_x$ months. This scale differs by population and model (identical $z$-scale priors imply different smoothness assumptions in months for different models), and is primarily motivated by .
+so that a one-unit change in $z$ corresponds to $\sigma_x$ months. This scale differs by population and model (identical $z$-scale priors imply different smoothness assumptions in months for different models), and is primarily a computational convenience: the samplers and the Gaussian process approximation (@sec-hsgp) work with centred inputs of unit order.
 
 Spoken vocabulary counts are more dispersed at older ages than at younger ones [@berglundParentalReportsSpoken2001; @galeoteDevelopmentVocabularySpanish2011; @marchmanMacArthurBatesCommunicativeDevelopment2023; @zampiniLexicalSyntacticDevelopment2011]. We therefore let the conditional dispersion vary smoothly with age:
 
@@ -195,71 +197,78 @@ The reference ages and the priors on $p_{x_a}, p_{x_b}$ are model-specific (e.g.
 
 ## Joint outcomes {#sec-joint-outcomes}
 
-The core structure described in the preceding section was our starting point for our base models with single outcomes: VG01 (words spoken) and VG02 (words understood) for Down syndrome, and VG03 (words spoken) and VG04 (words understood) for typically developing children. 
+The core structure described in the preceding sections is our starting point, used unchanged by our base models with single outcomes: VG01 (words spoken) and VG02 (words understood) for Down syndrome, and VG03 (words spoken) and VG04 (words understood) for typically developing children. The remaining models estimate two or three outcomes jointly. 
 
-The joint models use the fact that production is logically nested within understanding. They define
+### Production nested within understanding
 
-$$
-p_{W_{\text{spoken}}}(a) = p_{W_{\text{understood}}}(a)\,q(a),
-$$
-
-where $p_{W_{\text{understood}}}(a)$ is the expected proportion understood and $q(a)=P(W_\text{spoken}\mid W_\text{understood},a)$ is the expected fraction of understood words that are spoken. Because both terms lie between zero and one, expected spoken vocabulary cannot exceed expected understood vocabulary.
-
-
-The signing models add an analogous ratio for signed words and, in VG15, estimate the association between speaking and signing rather than assuming conditional independence.
-
-
-The joint models estimate words **understood** and the conditional probability that an understood word is also produced. With $p_{W_{\text{understood}}}(a) = \sigma(f_U(a))$ for understanding, define the **production ratio**
+The joint models use the fact that production is logically nested within understanding. They estimate the expected proportion of words understood, $p_{\text{understood}}(z) = \operatorname{logistic}\!\left(f_{\text{understood}}(z)\right)$, together with the *production ratio* -- the expected fraction of understood words that are also spoken:
 
 $$
-q(a) = P(\text{speak} \mid \text{understood}) = \sigma(h(a)),
+q(z) = \operatorname{logistic}\!\left(h(z)\right),
 \qquad
-p_{W_{\text{spoken}}}(a) = p_{W_{\text{understood}}}(a)\,q(a),
+p_{\text{spoken}}(z) = p_{\text{understood}}(z)\,q(z),
 $$
 
-where $f_U$ and $h$ each have their own linear-trend-plus-GP structure (@sec-trends). Because $q(a) \in (0,1)$, this enforces $p_{W_{\text{spoken}}} \le p_{W_{\text{understood}}}$ by construction.
+where $f_{\text{understood}}$ and $h$ are logit-scale age predictors, each built as in @sec-trends (a linear trend plus a smooth GP departure): $f_{\text{understood}}$ carries the age profile of the proportion understood, and $h$ that of the production ratio. Both factors lie between zero and one, so expected spoken vocabulary can never exceed expected understood vocabulary.
+
+The nesting also holds count by count, not only in expectation. When an administration records both counts, we model the pair in two steps that mirror how the words relate. The first step models the understood count, out of the full inventory of $n$ items. The second models the spoken count out of the $W_{\text{understood}}$ words that child understands -- not out of $n$ -- with $q$ as the expected proportion of them spoken:
+
+$$
+\begin{aligned}
+W_{\text{understood}} &\sim \mathrm{BetaBinomial}\!\left(n,\, p_{\text{understood}},\, \kappa_{\text{understood}}\right),\\
+W_{\text{spoken}} \mid W_{\text{understood}} &\sim \mathrm{BetaBinomial}\!\left(W_{\text{understood}},\, q,\, \kappa_{\text{spoken}}\right).
+\end{aligned}
+$$
+
+Multiplying the two steps gives a single, coherent probability for the observed pair, and the constraint $0 \le W_{\text{spoken}} \le W_{\text{understood}} \le n$ is respected automatically: the model cannot produce a spoken count exceeding the understood count, because the spoken words are drawn from the understood ones. (The rare recorded pairs that violate the constraint are handled separately, below.) $q$ is therefore a genuine conditional proportion for paired, nested counts, not a ratio imposed on marginal means, and each outcome keeps its own age-varying dispersion (@sec-kappa).
+
+@fig-joint-generative shows this structure. Age shapes spoken vocabulary through two routes: by growing the understood vocabulary from which spoken words are drawn, and by changing the fraction of understood words that are spoken.
+
+![The joint model's generative structure. A paired observation's age determines the expected proportion understood and the production ratio; the understood count is drawn from the full inventory, and the spoken count from the child's understood words. Boxes are observed quantities; rounded nodes are latent ones.](diagrams/fig-joint-generative){#fig-joint-generative width="85%"}
+
+This is the model's data-generating graph, not a causal diagram of development. The direction of the factorisation follows the logical nesting of the outcomes -- a child's spoken words are a subset of the words they understand -- and whether comprehension causally enables production is a developmental question these cross-sectional models do not address.
+
+Note also the arrow the diagram does not contain: $q$ varies with age but, given age, not with the size of the child's understood vocabulary -- the understood count affects the spoken count only as the pool of words the ratio applies to. Two same-age children who understand 100 and 400 words are given the same expected production ratio. Whether the ratio additionally depends on comprehension itself is a question we return to with the cross-lag model (VG16).
+
+### What the production ratio is -- and is not
 
 Two properties of $q$ belong here, at its definition, rather than in a later caveat, because both bear on every comparison the report makes with it.
 
-**$q$ is a composition-weighted average, not an item-level probability.** The notation $P(\text{speak} \mid \text{understood})$ invites reading $q(a)$ as the probability that a given word is spoken once understood. It is not that. Words differ markedly in difficulty (@sec-betabinomial), and children at a given age understand different numbers of words and different *sets* of words, so $q(a)$ averages the per-word production probability over whatever vocabulary each contributing child happens to have. Two populations can differ in $q$ purely because their understood vocabularies are composed differently, with no difference in how readily any particular word is produced. The sufficiency argument in @sec-betabinomial is also the proof that this cannot be repaired within a sum-score model: a statistic sufficient for ability carries no information about item composition.
+**$q$ is a composition-weighted average, not an item-level probability.** Its definition -- the fraction of understood words that are also spoken -- invites reading $q$ as the probability that a given word is spoken once understood. It is not that. Words differ markedly in difficulty (@sec-betabinomial), and children at a given age understand different numbers of words and different *sets* of words, so $q$ averages the per-word production probability over whatever vocabulary each contributing child happens to have. Two populations can differ in $q$ purely because their understood vocabularies are composed differently, with no difference in how readily any particular word is produced. The sufficiency argument in @sec-betabinomial is also the proof that this cannot be repaired within a sum-score model: a statistic sufficient for ability carries no information about item composition.
 
 **A contrast at matched comprehension is not a contrast at matched age.** Where the report compares Down syndrome and typically-developing children at the same level of comprehension, the two groups are **8–13 months apart in age** at that matched level. A difference in $q$ read off such a comparison is therefore a difference between groups that are simultaneously unlike in age and in vocabulary composition, and neither can be held fixed while varying the other. Both qualifications apply wherever $q$ is reported.
 
-The trivariate models add a **sign ratio**
+### Signed words
+
+The signing models add an analogous *sign ratio*:
 
 $$
-r(a) = P(\text{sign} \mid \text{understood}) = \sigma(g_{\text{sign}}(a)),
+r(z) = \operatorname{logistic}\!\left(f_{\text{signed}}(z)\right),
 \qquad
-p_{\text{Sign}}(a) = p_U(a)\,r(a) .
+p_{\text{signed}}(z) = p_{\text{understood}}(z)\,r(z),
 $$
 
-The signed mean $g_{\text{sign}}$ is a three-anchor, piecewise logit-linear **tent** with young, peak and older reference levels, plus a GP for smooth departures. This allows a signing rise and decline without making the GP alone carry the entire shape. Each outcome retains its own age-varying dispersion (@sec-betabinomial, @sec-kappa).
+with the parallel conditional likelihood $W_{\text{signed}} \mid W_{\text{understood}} \sim \mathrm{BetaBinomial}\!\left(W_{\text{understood}},\, r,\, \kappa_{\text{signed}}\right)$. Unlike the other predictors, $f_{\text{signed}}$ replaces the single linear trend with a three-anchor, piecewise logit-linear *tent* -- young, peak and older reference levels -- plus the usual GP for smooth departures. This allows signing to rise and then decline without making the GP alone carry the entire shape.
 
-For rows where understood and spoken counts are both available and satisfy $0 \le S_i \le U_i \le N$, the likelihood is a coherent factorisation,
+VG14 treats speaking and signing as conditionally independent given understanding. VG15 instead estimates their association: rows carrying the richer uk_02 four-cell table (spoken and signed, spoken only, signed only, neither) are scored with a Dirichlet-Multinomial composition term in place of separate spoken and signed likelihood contributions, while the understood likelihood remains, because the composition is conditional on its observed total. Which sources' signing fields measure total signed vocabulary -- and which are masked, or reintroduced only as sensitivity analyses -- is a data question, addressed in @sec-data.
 
-$$
-U_i \sim \mathrm{BetaBinomial}(N,p_{U,i},\kappa_{U,i}), \qquad S_i\mid U_i \sim \mathrm{BetaBinomial}(U_i,q_i,\kappa_{S,i}).
-$$
+### When only one count of a pair is recorded
 
-The signing models use the parallel conditional likelihood $\mathrm{Sign}_i\mid U_i \sim \mathrm{BetaBinomial}(U_i,r_i,\kappa_{\mathrm{Sign},i})$. Thus $q$ and $r$ are genuine conditional proportions for paired, logically nested counts rather than ratios imposed only on marginal means. When the understood count is unavailable, the child outcome remains usable through the marginal fallback $S_i\sim\mathrm{BetaBinomial}(N,p_{U,i}q_i,\kappa_{S,i})$ (and analogously for signing). A recorded child count greater than understood is retained through that fallback and counted as a source-data violation in the fit log rather than silently discarded. The same age-varying $\kappa_S$ is used for conditional and fallback rows, although it has different interpretations: conditional-row dispersion is variation in $q$, whereas fallback-row dispersion also absorbs unobserved variation in $p_U$. The fallback is therefore a pragmatic information-preserving approximation rather than a claim that the two dispersion processes are identical.
-
-The size of that approximation is now known exactly rather than described. Binomial thinning collapses the paired factorisation to $S_i \mid \theta_{U},\theta_{S} \sim \mathrm{Binomial}(N, \theta_U\theta_S)$, so the true marginal of a fallback row is a Binomial mixed over the *product* of the two independent Beta variates. That product is not itself Beta, but both its moments are elementary, and comparing them against the fallback's cancels to a single condition: the true marginal is more dispersed than the fallback exactly when $q\kappa_S > \kappa_U$, with $p_U$ dropping out entirely, and the two variances are equal on the boundary. The fallback is therefore neither conservative nor anti-conservative as a structural matter — which way a given model errs is a question about its fitted concentrations. Three registered sensitivities bound it on VG10 and VG20: `paired-only` drops the fallback rows altogether, `fallback-dispersion` gives the branch its own concentration through a single signed scalar that nests the default at zero, and `marginal-moments` replaces the fallback's concentration with the one that matches the true marginal's first two moments. Posterior-predictive calibration is also reported separately for the two branches, since they are fitted by different distributions and differ systematically in age and study composition. In VG15, rows with the richer uk_02 four-cell table use the Dirichlet-Multinomial composition term instead of duplicate spoken and signed likelihood contributions; the understood likelihood remains because the four-cell model is conditional on its observed total.
-
-The signing outcome is also harmonised before fitting. `uk_01` records sign-only words and cannot identify total signed vocabulary from the committed aggregate data, so its understood and spoken values are retained while its signing values are masked in the primary VG14, VG15 and VG17 analyses; an explicit sensitivity variant reintroduces it rather than pooling it silently with the comparable total-sign measures. The `uk_06` signing field was masked on the same principle from July 2026, its construct being unverified, and was reinstated in August once the source confirmed the instrument: the standard DSE checklists, whose second column is completed for a word the child *understands and signs*, ticked for imitated as well as spontaneous signs. That is a total sign count, and the committed data agrees — signed and spoken are each nested within understood on every uk_06 record, while their sum exceeds it on seven of eleven, which only overlapping per-word ticks can produce.
-
-Some models include several assessments from the same child and combine several studies. Random intercepts represent stable shifts on the logit scale:
+When the understood count is unavailable, the spoken or signed count remains usable through a marginal fallback,
 
 $$
-f_{ijs}=f(a_{ijs})+u_s+v_{is},
+W_{\text{spoken}} \sim \mathrm{BetaBinomial}\!\left(n,\, p_{\text{understood}}\,q,\, \kappa_{\text{spoken}}\right),
 $$
 
-where $u_s$ is the shift for study $s$ and $v_{is}$ is the shift for child $i$ within that study. Their estimated standard deviations describe between-study and between-child heterogeneity. They also stop repeated observations from being treated as if they came from unrelated children.
+and analogously for signing. A recorded spoken or signed count greater than its understood count is retained through the same fallback and counted as a source-data violation in the fit log rather than silently discarded.
 
+The fallback reuses the conditional branch's dispersion $\kappa_{\text{spoken}}$, and that is an approximation: on conditional rows the dispersion is variation in $q$ alone, whereas fallback rows also absorb unobserved variation in $p_{\text{understood}}$. The size of the approximation is bounded exactly: the true marginal of a fallback row is more dispersed than the fallback's Beta-Binomial precisely when $q\,\kappa_{\text{spoken}} > \kappa_{\text{understood}}$ -- the level $p_{\text{understood}}$ drops out entirely -- and the two variances are equal on the boundary.[^fallback-moments] The fallback is therefore neither conservative nor anti-conservative as a structural matter: which way a given model errs is a question about its fitted concentrations. Three registered sensitivity analyses bound it in practice -- dropping the fallback rows altogether, giving the fallback branch its own dispersion through a single signed scalar that nests the default at zero, and replacing the fallback's dispersion with the one matching the true marginal's first two moments -- and posterior-predictive calibration is reported separately for the conditional and fallback rows, which differ systematically in age and study composition.
 
+[^fallback-moments]: Binomial thinning collapses the paired factorisation to $W_{\text{spoken}} \mid \theta_{\text{understood}}, \theta_{\text{spoken}} \sim \mathrm{Binomial}\!\left(n,\, \theta_{\text{understood}}\theta_{\text{spoken}}\right)$, so the true marginal of a fallback row is a Binomial mixed over the *product* of two independent Beta variates. That product is not itself Beta, but both its moments are elementary, and comparing them with the fallback's reduces to the single condition given here.
 
 ## Multilevel models
 
-To separate the population age curves from differences in study composition and from repeated measurements on the same child, we add random intercepts on the logit-scale predictors at the observation level. For a predictor $f_\bullet \in \{f_U, h, g_{\text{sign}}\}$,
+To separate the population age curves from differences in study composition and from repeated measurements on the same child, we add random intercepts on the logit-scale predictors at the observation level. For a predictor $f_\bullet \in \{f_{\text{understood}}, h, f_{\text{signed}}\}$,
 
 $$
 f_\bullet(z_i) \;\to\; f_\bullet(z_i) + \delta^{\text{study}}_{\bullet,\,s(i)} + \delta^{\text{subj}}_{\bullet,\,j(i)},
@@ -269,7 +278,7 @@ $$
 
 implemented non-centred, where $s(i)$ and $j(i)$ index the study and subject of observation $i$. The two levels take different scales because they are on different scales in the data: fitting the same grouping structure outside the models puts the between-child standard deviation at 0.74–1.15 on the logit scale across the family, where between-study differences are around a third of that. Study intercepts absorb between-lab/between-study level differences; subject intercepts stop within-child repeated measurements being treated as independent. **The reported population curves set every random effect to zero**, so their interpretation is unchanged. Tiny studies can be trimmed before fitting (`min_study_observations`) to avoid near-unidentified intercepts.
 
-The TD hierarchical models apply the same repeated-measures rule. VG11 and VG12 include a child intercept on their single outcome, and VG13 includes child intercepts on both $p_U$ and $q$. A fixed-seed sensitivity retains one randomly selected administration per study-specific child and disables the child effects, providing a cheaper check that conclusions do not depend on treating repeat administrations as additional independent children.
+The TD hierarchical models apply the same repeated-measures rule. VG11 and VG12 include a child intercept on their single outcome, and VG13 includes child intercepts on both $p_{\text{understood}}$ and $q$. A fixed-seed sensitivity retains one randomly selected administration per study-specific child and disables the child effects, providing a cheaper check that conclusions do not depend on treating repeat administrations as additional independent children.
 
 
 ## TODO...
