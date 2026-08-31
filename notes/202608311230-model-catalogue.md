@@ -56,9 +56,9 @@ Nothing here samples; the heaviest thing is importing the engine modules.
 
 The observation-deterministic module was entirely marked `slow`, so its struct contract — the one that should have caught VG14 — was not running on any pull request. The mark now sits on the tests that draw the two-real-fits fixture; the pure rule tests run in the fast job.
 
-## 4. Not done here
+## 4. Not done in steps 1–4
 
-VG17/VG18 (issue finding 4) are untouched and deliberately absent from the catalogue: an entry would assert a supported lifecycle they do not have. Their query grid runs to 90 months against a 12–66 month observation window with no explicit GP domain, and their custom fit path bypasses the shared manifest, staged promotion, calibration, LOO and the convergence gate. Clipping the grid and widening the domain are different statistical choices, so it is a model decision, to be coordinated with [#266](https://github.com/dseinternational/vocabulary-growth/issues/266).
+VG17/VG18 (issue finding 4) were untouched here and are deliberately absent from the catalogue: an entry would assert a supported lifecycle they do not have. Their query grid runs to 90 months against a 12–66 month observation window with no explicit GP domain, and their custom fit path bypasses the shared manifest, staged promotion, calibration, LOO and the convergence gate. Clipping the grid and widening the domain are different statistical choices, so it is a model decision. **Resolved in section 6.**
 
 Steps 5–8 of the issue — versioned semantic manifest payloads, the typed `SubjectEffectPlan`, targeted static type checking, builder seams and frozen definitions — are also not done.
 
@@ -107,3 +107,23 @@ The payload is written _alongside_ the raw `model.definition` dictionary rather 
 `observation_arrays.prepare_bivariate_observations` takes the seventy lines at the top of `build_model_re` that derive the likelihood's arrays and masks from the frame, and makes them a pure function returning a frozen record. Three things in there have a specific past failure behind them and none could be exercised without building a model on real data: the spoken likelihood mask (#266 finding 3), the count validation that must precede the integer cast (#236, #240), and the held-out mask that keeps rows in observation space while removing them from every likelihood. `tests/test_observation_arrays.py` is those three failures, stated directly.
 
 With the plan and this seam, `build_model_re` is 702 lines, from 772. The remaining reduction is in the trajectory, dispersion and likelihood blocks, which are not extracted here.
+
+## 6. Step 9: VG17/VG18 (added 2026-08-31)
+
+The issue's finding 4 asked for a **decision** rather than a fix: either give the exploratory sign-group modules frozen definitions and a supported lifecycle, or say plainly that they are exploratory and mark their output accordingly. Investigating it first turned up two facts the finding did not state, and both bear on the decision.
+
+**VG17's default `fit()` did not work at all.** Not "internally inconsistent" — it raised. `_config()` copies VG01's query grid, which runs to 90 months; the model observes 12–66 and passes no explicit `gp_domain_months`, so `construct_age_grids` takes the observed range as the domain and refuses every query age above 66. `fit()` raised on its default path, and VG18 inherits it. The one test that touched the graph rewrote the configuration to clip the grid, which is exactly why nothing noticed: the workaround made the test pass while the model could not be built.
+
+**The fit path already discarded every out-of-window query age.** `expected_by_group.csv` was written through a `[AGE_LO, AGE_HI]` filter, so nothing above 66 was ever reported. That is evidence about intent, and it is what makes clipping the grid the intent-preserving reading rather than a coin toss between two statistical choices: widening the domain to 12–90 would extrapolate the HSGP two years past any observation and change `L` and `M`, for a model whose window is documented as a deliberate restriction to the dense age range. Clipping changes no fitted number, because no fit succeeded.
+
+### The decision (study owner, 2026-08-31)
+
+Both recommendations were taken: **clip the query grid to the observation window**, and **make the modules explicitly exploratory and non-validatable** rather than productionise them.
+
+They now live in `src/vocab_growth/models/exploratory/`, which puts them outside the `model_vgNN` naming convention `fit_model.py` resolves from the catalogue — unreachable from the registered path by construction rather than by omission. This is what the modules already claimed about themselves, made structural: both docstrings said "Exploratory", "not in `MODEL_REGISTRY`", and that folding the covariate into `common_univariate_re` "would be the productionisation step".
+
+`write_exploratory_marker` writes `exploratory_output.json` into every output directory they produce, before the trace, so an interrupted run still leaves the directory labelled. It lists what a registered fit carries and this one does not: no manifest (so no definition, sampling configuration, raw-data fingerprint or prepared-frame hash to validate against), no staged promotion, no predictive checks, no calibration, no LOO, and no convergence gate — the maximum R-hat over the three contrasts is printed, not enforced, and the other parameters are not screened at all. `sync_report_figures.py` already skipped these directories as unregistered output, but that protects the report; the marker is for whoever finds a directory shaped exactly like a publishable fit.
+
+### What is still open
+
+Productionising either model remains a **statistical** decision and is deliberately not taken. `common_univariate_re` constrains its study effects to sum to zero while VG17 uses unconstrained offsets, so routing VG17 through it would change the model rather than move it; and VG17 borrows VG01's dispersion prior, which was calibrated marginally, while adding study and child random effects that change what that prior means. Both belong with [#266](https://github.com/dseinternational/vocabulary-growth/issues/266).

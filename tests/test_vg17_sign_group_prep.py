@@ -11,13 +11,13 @@ random effect but no child effect despite most rows coming from children with
 repeated visits.
 """
 
-import dataclasses
 
 import numpy as np
 import pandas as pd
 
 import vocab_growth.data_utils as data_utils
-from vocab_growth.models import model_vg17, model_vg18
+from vocab_growth.models.exploratory import vg17 as model_vg17
+from vocab_growth.models.exploratory import vg18 as model_vg18
 
 
 def _canonical_keys(outcome):
@@ -95,17 +95,14 @@ def test_build_carries_a_child_random_intercept():
     # test is structural, not a function of pool size.
     keep = sorted(pool["study"].unique())[:2]
     df, studies, subjects = model_vg17._prepare("spoken", studies=keep)
-    base = model_vg17._config()
-    config = dataclasses.replace(
-        base,
-        # VG01's query ages run past VG17's 12-66 month window; clip them so this
-        # structural test does not depend on the grid's domain check.
-        ages_query=[
-            a for a in base.ages_query if model_vg17.AGE_LO <= a <= model_vg17.AGE_HI
-        ],
-    )
+    # The public configuration, unmodified. It used to be rewritten here --
+    # VG01's query ages run past this model's 12-66 month window, so the grid's
+    # domain check refused the default build -- and that workaround was the only
+    # reason the test passed while `fit()` could not run at all. `_config()`
+    # now clips the grid at source (issue #273 finding 4), so a test that has to
+    # repair the configuration would mean the repair had come undone.
     model, _ = model_vg17._build(
-        df, studies, config, y_col="spoken", subjects=subjects
+        df, studies, model_vg17._config(), y_col="spoken", subjects=subjects
     )
     names = {v.name for v in model.free_RVs}
     assert "tau_subj" in names

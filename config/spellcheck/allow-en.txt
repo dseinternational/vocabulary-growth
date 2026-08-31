@@ -195,6 +195,9 @@ pathlib
 pgrep
 ppid
 preliz
+productionisation
+productionise
+productionising
 pyplot
 pytest
 rankdir
@@ -245,6 +248,7 @@ unmodelled
 unrepresentable
 unsmoothed
 urlsafe
+validatable
 vars
 vocab
 Wilk
