@@ -32,7 +32,7 @@ def _write_manifest(
     *,
     sampling_name: str = "rep",
     dirty: bool = False,
-    frame_hash: str = "sha256:frame",
+    frame_hash: str | None = "sha256:frame",
 ) -> None:
     payload = {
         "model": {
@@ -116,6 +116,57 @@ def test_a_changed_prepared_frame_invalidates_a_fit(tmp_path):
     )
     assert len(drifted) == 1
     assert "prepared analysis frame differs" in drifted[0]
+
+
+def test_a_matching_frame_hash_excuses_a_raw_data_mismatch(tmp_path):
+    """New data a model never reads must not stale its fit.
+
+    The raw fingerprint hashes every CSV in ``data/``, so a new Down syndrome
+    study CSV changes it for every model — including the typically-developing
+    models, whose prepared frames contain no Down syndrome rows. The model
+    consumes the raw data only through its prepared frame, so a matching exact
+    frame hash vouches for the fit and the fingerprint mismatch alone is not a
+    reason to refit.
+    """
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+
+    excused = validate_fit_output(
+        str(output_dir),
+        expected_source_data_hash="sha256:data-after-a-new-ds-study",
+        expected_analysis_frame_hash="sha256:frame",
+    )
+    assert excused == []
+
+    # Without the frame hash to vouch, the fingerprint stays a hard failure.
+    unvouched = validate_fit_output(
+        str(output_dir),
+        expected_source_data_hash="sha256:data-after-a-new-ds-study",
+    )
+    assert unvouched == ["Raw data inputs differ from those used for this fit."]
+
+    # When both moved, both are reported: the raw change is part of the
+    # diagnosis, not hidden behind the frame drift.
+    both = validate_fit_output(
+        str(output_dir),
+        expected_source_data_hash="sha256:data-after-a-new-ds-study",
+        expected_analysis_frame_hash="sha256:frame-after-a-rule-change",
+    )
+    assert any("Raw data inputs differ" in error for error in both)
+    assert any("prepared analysis frame differs" in error for error in both)
+    assert len(both) == 2
+
+    # A manifest that predates frame-hash recording cannot vouch either: an
+    # old fit must not be excused just because the caller asked for the check.
+    legacy_dir = tmp_path / "legacy-fit"
+    _write_complete_output(legacy_dir)
+    _write_manifest(legacy_dir, frame_hash=None)
+    legacy = validate_fit_output(
+        str(legacy_dir),
+        expected_source_data_hash="sha256:data-after-a-new-ds-study",
+        expected_analysis_frame_hash="sha256:frame",
+    )
+    assert any("Raw data inputs differ" in error for error in legacy)
 
 
 def test_frame_hash_validation_is_opt_in_for_callers_without_the_registry(tmp_path):
