@@ -784,7 +784,7 @@ def test_ceiling_only_rule_is_scoped_and_child_level():
             "subject_id": ["a", "a", "b", "b", "b"],
             "age": [40.0, 17.0, 44.0, 91.0, 95.0],
             "spoken": [680.0, 4.0, 680.0, 669.0, 660.0],
-            "survey_vocab_max": [680, 396, 680, 690, 690],
+            "survey_vocab_max": [680, 396, 680, 680, 680],
         }
     )
 
