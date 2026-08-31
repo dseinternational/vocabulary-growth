@@ -455,7 +455,7 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg13", "window-25"): {"suffix": "window-25", "scalar": {
         "max_age_months": 25,
         "slope_anchors": (10, 24),
-        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22, 24],
+        "ages_query": (8, 10, 12, 14, 16, 18, 20, 22, 24,),
         "gp_domain_months": (8, 25),
         "gp_anchor_age_months": 17.0,
         # 24 mo in-sample medians: understood 0.415 of 810, q 0.675.
@@ -467,7 +467,7 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg13", "window-22"): {"suffix": "window-22", "scalar": {
         "max_age_months": 22,
         "slope_anchors": (10, 21),
-        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22],
+        "ages_query": (8, 10, 12, 14, 16, 18, 20, 22,),
         "gp_domain_months": (8, 22),
         "gp_anchor_age_months": 15.5,
         # 21 mo in-sample medians: understood 0.359 of 810, q 0.417.
@@ -516,7 +516,7 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg13", "window-22-vague-anchors"): {"suffix": "window-22-vague-anchors", "scalar": {
         "max_age_months": 22,
         "slope_anchors": (10, 21),
-        "ages_query": [8, 10, 12, 14, 16, 18, 20, 22],
+        "ages_query": (8, 10, 12, 14, 16, 18, 20, 22,),
         "gp_domain_months": (8, 22),
         "gp_anchor_age_months": 15.5,
         "p_slope_hi_u_alpha": 1.2, "p_slope_hi_u_beta": 2.0,   # median 0.346

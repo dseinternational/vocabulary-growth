@@ -61,3 +61,49 @@ The observation-deterministic module was entirely marked `slow`, so its struct c
 VG17/VG18 (issue finding 4) are untouched and deliberately absent from the catalogue: an entry would assert a supported lifecycle they do not have. Their query grid runs to 90 months against a 12–66 month observation window with no explicit GP domain, and their custom fit path bypasses the shared manifest, staged promotion, calibration, LOO and the convergence gate. Clipping the grid and widening the domain are different statistical choices, so it is a model decision, to be coordinated with [#266](https://github.com/dseinternational/vocabulary-growth/issues/266).
 
 Steps 5–8 of the issue — versioned semantic manifest payloads, the typed `SubjectEffectPlan`, targeted static type checking, builder seams and frozen definitions — are also not done.
+
+## 5. Steps 5–8 (added 2026-08-31)
+
+Steps 1–4 above landed first. What follows is the rest of the issue's structural programme, minus step 9 (VG17/VG18), each verified against the graph baseline described below.
+
+### The prerequisite: a graph-equivalence harness
+
+The issue's constraints say what a structural refactor must preserve — free random-variable names **and order**, deterministic names, dimensions, coordinates, likelihood factorisation, and a fixed-point log probability to numerical tolerance — and none of it was checked. `tests/test_graph_equivalence.py` builds all twenty models on one small deterministic synthetic frame and compares against a committed baseline.
+
+Synthetic on purpose. Building against the prepared DuckDB would tie the recorded fingerprint to the data as well, so a legitimate data change would present as a refactor failure and a real refactor failure could hide inside one; data changes are already guarded exactly by `data.analysis_frame_hash`. All twenty models build on the one frame, across all six engines, at about a second each.
+
+**The log probability is read away from the model's own initial point, and that is the whole design.** PyMC initialises a positive parameter at its moment, which for the `HalfNormal` scales this family is built from _is_ the scale; on the log transform the Jacobian contributes `+log(sigma)` while the density contributes `-log(sigma)`, and they cancel exactly. A log probability read at the initial point is therefore **invariant to every prior scale in the model** — a 1% change to VG05's `eta_u_sigma` moved it by exactly zero, and VG09 and VG10, which differ, recorded the identical value. Measured, not reasoned about. Offsetting each coordinate by a fixed amount on the unconstrained scale breaks the cancellation, and the offsets vary along each vector so a permutation within one array is visible too.
+
+Mutation-checked on the shapes of error the refactors could introduce: a reordered variable creation with the same names, a 1% prior-scale change, and a swap of the two whitened coordinates in VG20's Cholesky — same names, same dims, same order, caught by the log probability alone. A negligible epsilon change inside a norm correctly passes, which is what the tolerance is for.
+
+### Step 8: immutable definitions
+
+Twenty definitions are module-level singletons shared by every fit, sensitivity variant, recovery replicate and validator in the same process, and they were mutable dataclasses holding mutable lists. `_as_definition_subclass` shares nested prior blocks with its base **by reference** — VG20, VG22 and VG23 all carry VG10's or VG13's kappa objects — so one edit could have moved several models at once. The sensitivity override code has carried a comment about exactly that aliasing risk since it was written; freezing the blocks is what makes the sharing safe rather than merely untested.
+
+No fitted output is invalidated, and that is checked rather than asserted: `normalise_for_json` renders a tuple and a list as the same JSON array, so every registered model's serialised definition is byte-identical before and after.
+
+### Step 6: one child-effect plan, and targeted typing
+
+Five structures can occupy the same definition seam — constant offset, variance partition, age-varying scale, child slope, low-rank factor — and three arrive as a scalar field holding an object, because a new field on a shared base class would invalidate every existing fit of it. "What child structure does this model have?" was answered by four selector calls, two `getattr` reads and five rejection rules interleaved with graph construction _inside_ the PyMC context, so a refusal fired part-way through a half-built model and the rules could only be tested by building one.
+
+`models/subject_effects.resolve` answers it once, before the context is entered, as a pure PyMC-free function of the definition. Writing it found two things the old scattered form had hidden: a plan assuming two outcomes silently drops VG15's third (signing) block, and VG14 has no child-effect seam at all rather than an inactive one. The outcome set is therefore read from the definition.
+
+The tests that pinned the old correlation resolver moved with the rules and are stronger for it: they passed argument combinations no caller could produce — `build_model_re` always derived the booleans and specs from the same definition it passed — so they exercised a state the code could not reach.
+
+mypy now covers the four modules that _declare_ things. Narrow on purpose: the PyMC graph code is excluded and should stay excluded until these are stable, because PyTensor's tensor algebra is not usefully typed and the noise would bury real findings. It found two immediately, both annotations disagreeing with every value in the registry — `tau_subj_{u,q}_sigma` said `float` while VG19 and Proposal A1 put objects there, and the trivariate and joint `kappa_u`/`kappa_s` said `KappaPriorParams` while VG14 and VG15 both pass the two-anchor form.
+
+### Step 5: a versioned, classified manifest payload
+
+Raw dictionary equality over `dataclasses.asdict` has one consequence that has shaped the model API more than any statistical consideration: **adding a field with a default invalidates every historical fit of that dataclass**, even when the default reproduces exactly what those fits did. That is why VG19's child slope and Proposal A1's age-varying scale arrive through an overloaded scalar field, why VG20's correlation and VG22's factor live on sibling subclasses, and why `CLAMP_Q_ONLY` rides on `clamp_mean_above_hi_anchor`.
+
+`models/fit_identity` classifies every field of every registered definition class as graph-affecting, data-affecting, reporting or identity. The classification is complete (checked against the registry) and fails closed (an unclassified field is graph-affecting). `BACKFILL_DEFAULTS` names the fields whose _absence_ from an older manifest is equivalent to a stated value — a claim that every fit made before the field existed behaved exactly as a fit with the field set to it, and the only thing that excuses a difference. It starts empty on purpose: nothing needs backfilling yet, and the first entry belongs with the change that adds the field it excuses.
+
+**Every difference remains fatal, reporting and identity ones included.** The classification's job here is to say what kind of thing moved. Whether a reporting-only difference should stop a fit being published is a separate decision with a real consequence — a changed `ages_query` leaves the stored query outputs describing ages the report no longer asks for — and it is not made here.
+
+The payload is written _alongside_ the raw `model.definition` dictionary rather than replacing it: every fit on disk carries the raw form, several readers index it directly, and the report layer reads its numbers out of it.
+
+### Step 7: the first builder seam
+
+`observation_arrays.prepare_bivariate_observations` takes the seventy lines at the top of `build_model_re` that derive the likelihood's arrays and masks from the frame, and makes them a pure function returning a frozen record. Three things in there have a specific past failure behind them and none could be exercised without building a model on real data: the spoken likelihood mask (#266 finding 3), the count validation that must precede the integer cast (#236, #240), and the held-out mask that keeps rows in observation space while removing them from every likelihood. `tests/test_observation_arrays.py` is those three failures, stated directly.
+
+With the plan and this seam, `build_model_re` is 702 lines, from 772. The remaining reduction is in the trajectory, dispersion and likelihood blocks, which are not extracted here.

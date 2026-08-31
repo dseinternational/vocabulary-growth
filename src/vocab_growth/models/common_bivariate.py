@@ -1356,7 +1356,7 @@ def sample_posterior_predictive(context: BivariateContext, definition=None):
             # its own scale instead of introducing a standardised RV, so no
             # variable is renamed and no model's graph gains or loses a node.
             # The age-varying branch below cannot carry a correlation at all:
-            # `_resolve_subject_re_correlation` rejects that combination,
+            # `subject_effects.resolve` rejects that combination,
             # because a constant correlation between per-observation-scaled
             # deviates is not a model anyone means.
             rho_marg = context.model_variables.get("rho_uq")

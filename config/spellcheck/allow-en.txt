@@ -116,6 +116,7 @@ color
 compr
 crosswalk
 dataclass
+dataclasses
 datatree
 deterministics
 dexp
@@ -168,6 +169,7 @@ miscited
 missingness
 modeling
 multiset
+mypy
 negll
 nohup
 nonlinear

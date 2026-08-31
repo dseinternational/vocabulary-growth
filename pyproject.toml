@@ -45,6 +45,12 @@ dependencies = [
 lint = [
   "ruff>=0.16.1"
 ]
+# Static type checking, split out for the same reason `lint` is: mypy reads
+# source rather than importing it, so the narrow set of modules it covers can be
+# checked without syncing PyMC, JAX and ArviZ to do it.
+typecheck = [
+  "mypy>=2.3.1"
+]
 dev = [
   "ipython>=9.13.0",
   "ipywidgets>=8.1.8",
@@ -54,7 +60,8 @@ dev = [
   # there is no shared state between workers. See
   # `notes/202608241530-test-suite-performance.md`.
   "pytest-xdist>=3.8.0",
-  { include-group = "lint" }
+  { include-group = "lint" },
+  { include-group = "typecheck" }
 ]
 
 [tool.uv]
@@ -92,6 +99,33 @@ markers = [
     "slow: real sampling, compilation or numerical optimisation — minutes, not seconds. Deselected by default; CI runs them with `-m \"\"`.",
     "emits_reporting_artefacts: opts out of the conftest fixture that silences the fit pipeline's console and figure output, for the tests that assert those artefacts are still produced.",
 ]
+
+[tool.mypy]
+# Deliberately narrow (issue #273). These are the modules that *declare* things
+# -- the model definitions, the catalogue, the child-effect plan and the
+# analysis-frame mapping derived from it -- and they are where an annotation
+# that quietly disagrees with the value does real damage: `tau_subj_u_sigma`
+# was annotated `float` while three registered models put an object in it, and
+# `TrivariateModelDefinition.kappa_u` said `KappaPriorParams` while VG14 and
+# VG15 both passed the two-anchor form. Both were found by turning this on.
+#
+# The PyMC graph code is **not** covered and should not be until these are
+# stable: PyTensor's tensor algebra is not usefully typed, and the noise would
+# bury findings like the two above.
+files = [
+  "src/vocab_growth/analysis_frames.py",
+  "src/vocab_growth/models/catalogue.py",
+  "src/vocab_growth/models/definitions.py",
+  "src/vocab_growth/models/subject_effects.py"
+]
+python_version = "3.14"
+# The scientific stack ships partial or absent stubs and is not what is being
+# checked here; a missing stub must not become a finding.
+ignore_missing_imports = true
+# Only the listed files are analysed. Without this, mypy follows first-party
+# imports into the engines and reports on the graph code this deliberately
+# excludes.
+follow_imports = "silent"
 
 [tool.jupytext]
 formats = "ipynb,py:percent"

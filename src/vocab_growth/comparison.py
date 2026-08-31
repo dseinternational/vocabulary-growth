@@ -777,7 +777,8 @@ def child_spread_product(
     age_varying = np.asarray(tau_u).ndim == 2 or np.asarray(tau_q).ndim == 2
     if rho is not None and age_varying:
         # The engine refuses to build this combination (see
-        # `_resolve_subject_re_correlation`), so reaching it means a caller has
+        # `vocab_growth.models.subject_effects.resolve`), so reaching it means a
+        # caller has
         # paired a child-slope scale with a cross-outcome correlation by hand.
         # `rho` would then be read as the intercept-intercept element of a 4x4
         # covariance that was never estimated.

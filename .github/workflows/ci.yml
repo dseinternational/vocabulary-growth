@@ -61,6 +61,19 @@ jobs:
       - name: Lint
         run: uv run --no-sync ruff check src/ scripts/ tests/
 
+      # Targeted static type checking (issue #273). Narrow on purpose: the
+      # modules that declare the model definitions, the catalogue, the
+      # child-effect plan and the analysis-frame mapping, where an annotation
+      # that disagrees with the value does real damage. mypy reads source rather
+      # than importing it, so this needs no scientific stack — the `typecheck`
+      # group holds mypy alone, at the version uv.lock pins. See the file list
+      # in `[tool.mypy]`.
+      - name: Install mypy
+        run: uv sync --locked --only-group typecheck
+
+      - name: Type check
+        run: uv run --no-sync mypy
+
   # Classifies the change so the heavy jobs can skip documentation-only work:
   # 8 of the 19 main commits before this job existed touched only notes, report
   # chapters or Markdown, and each paid the full test-and-fit pipeline for it
