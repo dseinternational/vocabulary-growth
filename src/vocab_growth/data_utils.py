@@ -316,6 +316,67 @@ def drop_uk01_withheld_subjects(
     return raw.loc[~drop].reset_index(drop=True), int(drop.sum())
 
 
+IE02_WITHHELD_ADMINISTRATIONS: tuple[tuple[str, str], ...] = (
+    ("ID_62C63BE2B3B627E6", "t2"),
+)
+"""ie_02 administrations withheld as internally contradictory.
+
+Keyed by ``(subject_id, timepoint)``. One administration is listed: at 48
+months (t2) this child records 442 words understood, 3 spoken and 301 signed,
+against 111 understood, 72 spoken and 64 signed three months earlier at t1.
+Read together, the two administrations assert a 331-word comprehension surge,
+a 237-word signing surge and a 96% collapse in speech within the same three
+months. The comprehension gain rate (110 words/month) is the largest in the
+Down syndrome pool and sits beyond the typically-developing pool's own 99th
+percentile for within-child comprehension gains (90 words/month), and
+vocabulary does not shrink — let alone by 96% while comprehension quadruples.
+
+The spoken collapse (72 → 3) is the "ie_02 record at 45 months" that
+:data:`COLLAPSE_FACTOR`'s age scope deliberately left for separate
+investigation. That investigation
+(``notes/202608311830-steep-within-child-gains.md``) found the whole t2
+administration anomalous, not just its spoken value: every count moves
+implausibly at once, in the pattern of a checklist completed differently
+between waves — the DSE checklists record "understands and signs" and "says"
+as separate per-word columns, so words ticked under signing at t2 that t1
+recorded as said would produce exactly this signature. Which columns are
+trustworthy cannot be recovered from the aggregate counts, so the
+administration is withheld whole, pending clarification with the source team,
+rather than half-masked.
+
+Applied at CSV load in ``scripts/prepare_data.py``, so the row is absent from
+the ``vocab_ie_02`` table, the ``vocab_combined`` view and
+``vocab_data_merged.csv`` alike — the same treatment as
+:data:`UK07_WITHHELD_ADMINISTRATIONS`, and the same study-level precedent as
+the ie_02 subject already excluded at load in ``prepare_data.py``. Removing
+the entry from this tuple and re-running ``scripts/prepare_data.py``
+reinstates it.
+"""
+
+
+def drop_ie02_withheld_administrations(
+    raw: pd.DataFrame,
+    *,
+    subject_col: str = "subject_id",
+) -> tuple[pd.DataFrame, int]:
+    """Drop the ie_02 rows listed in :data:`IE02_WITHHELD_ADMINISTRATIONS`.
+
+    Takes the raw ie_02 CSV frame (``subject_id`` and ``timepoint`` columns)
+    and returns it without the withheld administrations, plus the number
+    removed. The child's other timepoint is retained.
+    """
+    required = {subject_col, "timepoint"}
+    missing = required - set(raw.columns)
+    if missing:
+        raise KeyError(
+            "ie_02 withholding requires columns: " + ", ".join(sorted(missing))
+        )
+
+    keys = pd.MultiIndex.from_arrays([raw[subject_col], raw["timepoint"]])
+    drop = keys.isin(IE02_WITHHELD_ADMINISTRATIONS)
+    return raw.loc[~drop].reset_index(drop=True), int(drop.sum())
+
+
 def mask_incomparable_signed_outcomes(
     df: pd.DataFrame,
     *,
@@ -618,19 +679,25 @@ months is not measurement noise. The floor matters: without it the rule fires on
 trivial pairs such as 5 understood words falling to 1. The age scope matters too:
 at older ages a decline can arise from a form change or from noise in large counts,
 and two such records outside ``us_01`` (a uk_01 record at 76 months, an ie_02
-record at 45) are deliberately left for separate investigation rather than masked
-by a rule whose justification is developmental.
+record at 45) were deliberately left for separate investigation rather than masked
+by a rule whose justification is developmental. Both investigations have since
+concluded (2026-08-31): the uk_01 record was two same-named children fused under
+one name-derived id, resolved by :data:`UK01_WITHHELD_SUBJECTS`, and the ie_02
+record's whole follow-up administration proved internally contradictory, resolved
+by :data:`IE02_WITHHELD_ADMINISTRATIONS`. Leaving them out of this rule was the
+right call in both cases — neither was a developmental collapse.
 
 Within the scoped window the two signatures together mask 11 ``us_01`` spoken counts
 and nothing in any other study. That is fewer than the 30 masked before the source
 change, and the reason is not that less is caught but that
 :func:`exclude_ceiling_only_children` removes the ceiling batch as whole children
-first, so those counts never reach this rule. Not caught, and retained: a Words &
-Sentences record of 406 words at 23 months with no later administration to
-contradict it. It is extreme against the external benchmark but has no positive
-defect signature, so it is a sensitivity target rather than an exclusion — the same
-treatment as the high-comprehension records described on
-:data:`DUPLICATED_OUTCOME_RATIO`.
+first, so those counts never reach this rule. A Words & Sentences record of 406 words
+at 23 months was long retained here as extreme against the external benchmark but
+lacking a positive defect signature — no later administration contradicted it. Its
+*same-day* Words & Gestures administration does contradict it (50 words), which is
+now its own signature: :data:`SAME_DAY_DISAGREEMENT_FACTOR` masks that record and
+one other. The high-comprehension records described on
+:data:`DUPLICATED_OUTCOME_RATIO` remain retained sensitivity targets.
 """
 
 
@@ -746,6 +813,136 @@ def mask_implausible_production_administrations(
     return out, dropped
 
 
+SAME_DAY_DISAGREEMENT_STUDIES: tuple[str, ...] = ("us_01",)
+SAME_DAY_DISAGREEMENT_FACTOR = 5.0
+SAME_DAY_DISAGREEMENT_MIN_VALUE = 100
+"""Signature of a production count contradicted by a same-day count on another form.
+
+46 of the ``us_01`` children took Words & Gestures and Words & Sentences at the
+same visit, giving two same-day measurements of the same construct — the forms
+share the MacArthur core vocabulary, so two same-day production counts cannot
+legitimately be far apart. The pool's same-age pairs bear this out: all but two
+agree closely, and the largest disagreement among the rest is 10 against 71, at
+counts where a handful of ticks moves the ratio.
+
+The two violations are stark. At 23 months one child records 11 words spoken on
+Words & Gestures against **385** on Words & Sentences the same day; another
+records 50 against **406**. 385 and 406 words spoken at 23 months are
+impossible against the independent Berglund et al. (2001) Down syndrome
+benchmark (median spoken vocabulary near 10 words at 24 months; the single most
+able child of 330 reached 668 words at 48 months). The 406 record is the one
+:data:`COLLAPSE_FACTOR`'s docstring long retained as extreme-but-uncontradicted
+— the same-day Words & Gestures administration *is* the contradiction, which is
+why this rule now exists.
+
+Detected within a ``(study, subject, age)`` group holding two or more observed
+production counts: the group is flagged when its largest count is at least
+``SAME_DAY_DISAGREEMENT_MIN_VALUE`` and at least
+``SAME_DAY_DISAGREEMENT_FACTOR`` times its smallest. **Only the larger side is
+masked.** The smaller count is corroborated twice over — by the external
+benchmark and, in both flagged cases, by the child's independently measured
+Words & Gestures comprehension-production gap (comprehension 279 and 89 against
+production 11 and 50) — so discarding it would throw away a defensible
+measurement. This differs from :data:`DUPLICATED_OUTCOME_RATIO`, which masks
+both columns because there neither is defensible. The floor keeps small-count
+noise out (10 against 71 is untouched); the factor matches
+:data:`COLLAPSE_FACTOR`.
+
+The rule runs **after** the other production rules, deliberately: several
+same-day pairs in the ceiling region at 17-18 months would also match this
+signature, but the near-ceiling, collapse and duplicated-outcome rules already
+mask them, so running last keeps those rules' documented counts unchanged and
+makes this rule's catch exactly the counts nothing else explains — within the
+current pool, the two Words & Sentences counts above and nothing else. The net
+masking is order-independent. One interaction follows from the overlap: under
+the ``include_implausible_production`` sensitivity this rule still sees the
+reinstated ceiling-region pairs and independently re-masks those with an
+observed same-day partner, so that sensitivity's net reinstatement is smaller
+than the implausible rule's own catch —
+:func:`count_reinstated_implausible_production` reports the true figure.
+
+Study-scoped to ``us_01`` deliberately. uk_01's six same-day WG/WS pairs agree
+closely, so there is nothing to catch; uk_02's same-day pairs are Oxford (416)
+against DSE (810) counts, whose inventories differ enough that a factor-two
+disagreement is mechanical rather than contradictory — a cross-inventory
+version of this rule would need the dual-form crosswalk, not a threshold.
+
+Both rows are retained and only ``spoken``/``produced`` masked, so age coverage
+and provenance stay auditable. Set ``include_same_day_disagreements=True`` to
+reinstate the masked counts for sensitivity analysis. See
+``notes/202608311830-steep-within-child-gains.md``.
+"""
+
+
+def mask_same_day_production_disagreements(
+    df: pd.DataFrame,
+    *,
+    include_disagreements: bool = False,
+    subject_col: str = "subject_id",
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Mask production counts contradicted by a same-day count on another form.
+
+    Applies the signature documented on :data:`SAME_DAY_DISAGREEMENT_FACTOR`.
+    Within a flagged same-day group only the counts on the larger side are
+    masked (``spoken`` and ``produced``); the smaller count and both rows are
+    retained. The returned counts report how many observed values were masked
+    per study, for the fit log. Pass ``include_disagreements=True`` to
+    reintroduce them as a sensitivity.
+    """
+    required = {"study", "age", "spoken", subject_col}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Same-day disagreement masking requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    out = df.copy()
+    dropped: dict[str, int] = {}
+    if include_disagreements:
+        return out, dropped
+
+    spoken = pd.to_numeric(out["spoken"], errors="coerce")
+    age = pd.to_numeric(out["age"], errors="coerce")
+    observed = (
+        out["study"].isin(SAME_DAY_DISAGREEMENT_STUDIES)
+        & spoken.notna()
+        & age.notna()
+    )
+    key = (
+        out["study"].astype(str)
+        + "::"
+        + out[subject_col].astype(str)
+        + "@"
+        + age.astype(str)
+    )
+    group_min = spoken.where(observed).groupby(key).transform("min")
+    group_size = observed.groupby(key).transform("sum")
+    suspect = (
+        observed
+        & (group_size >= 2)
+        & (spoken > group_min)
+        & (spoken >= SAME_DAY_DISAGREEMENT_MIN_VALUE)
+        & (spoken >= SAME_DAY_DISAGREEMENT_FACTOR * group_min)
+    )
+    if not suspect.any():
+        return out, dropped
+
+    outcome_columns = [
+        column for column in ("spoken", "produced") if column in out.columns
+    ]
+    counts = (
+        out.loc[suspect, outcome_columns]
+        .notna()
+        .sum(axis=1)
+        .groupby(out.loc[suspect, "study"])
+        .sum()
+    )
+    dropped = {str(study): int(count) for study, count in counts.items()}
+    out.loc[suspect, outcome_columns] = float("nan")
+    return out, dropped
+
+
 def validate_subject_ids(
     df: pd.DataFrame,
     *,
@@ -818,12 +1015,14 @@ def restrict_to_dse_native_administrations(
 
     A sensitivity-analysis transformation, not a primary inclusion rule. It
     answers what the trajectories look like when no count has been carried onto
-    a denominator its form did not use: 278 of the Down syndrome pool's 1,521
+    a denominator its form did not use: 277 of the Down syndrome pool's 1,516
     rows survive, from 194 children across ie_01 (its 810 wave only), ie_02,
-    uk_02 (DSE form only) and uk_06 -- 252 understood, 264 spoken and 218 signed
+    uk_02 (DSE form only) and uk_06 -- 251 understood, 263 spoken and 217 signed
     observations spanning 9-115 months. (Understood was 259 before
     :func:`mask_comprehension_below_production`, whose ten masked counts fall
-    seven inside this subset, all in ie_01.) Every other source is on a shorter form
+    seven inside this subset, all in ie_01, and 252 before the withheld ie_02
+    administration -- :data:`IE02_WITHHELD_ADMINISTRATIONS` -- left the
+    pool.) Every other source is on a shorter form
     and drops out entirely, es_01, nz_01, uk_07 and us_01 among them.
 
     Rows whose ceiling is unrecorded are dropped rather than kept: an unknown
@@ -1477,6 +1676,7 @@ def load_combined_data(
     include_below_form_floor=False,
     include_ceiling_only_children=False,
     include_comprehension_below_production=False,
+    include_same_day_disagreements=False,
     include_produced=False,
 ):
     """
@@ -1513,6 +1713,12 @@ def load_combined_data(
         include_comprehension_below_production (bool): Reintroduce comprehension
             counts that fall below the child's recorded ``produced`` union, for
             sensitivity analysis. Defaults to False.
+        include_same_day_disagreements (bool): Reintroduce production counts
+            contradicted by a same-day administration on another form, for
+            sensitivity analysis. Defaults to False. Read
+            :data:`SAME_DAY_DISAGREEMENT_FACTOR` first — the two counts this
+            puts back record 385 and 406 words spoken at 23 months against
+            same-day measurements of 11 and 50.
         include_produced (bool): Keep the ``produced`` column in the returned
             frame. Defaults to False, preserving the historical column set every
             existing caller expects. The exploratory produced-outcome models
@@ -1572,6 +1778,15 @@ def load_combined_data(
     df, _ = mask_implausible_production_administrations(
         df, include_implausible=include_implausible_production
     )
+    # Same-day contradictions run after the production rules deliberately:
+    # several ceiling-region same-day pairs are already masked by the
+    # near-ceiling, collapse and duplicated-outcome signatures, so running
+    # last-of-the-production-rules keeps those rules' documented counts
+    # unchanged and makes this rule's catch exactly the counts nothing else
+    # explains. The net masking is order-independent.
+    df, _ = mask_same_day_production_disagreements(
+        df, include_disagreements=include_same_day_disagreements
+    )
     # Last, and deliberately so: this rule compares two columns of a single row,
     # so it needs no cross-row context, and running it after the others means it
     # only fires on comprehension counts that survived every earlier rule. A row
@@ -1598,7 +1813,13 @@ def count_reinstated_implausible_production(max_age_months: int | None = None) -
     reinstatement variant printing 0 here would be the same fault in mirror image.
 
     Derived by differencing the two loader paths rather than reimplementing the
-    signature, so it cannot drift from the rule it reports on.
+    signature, so it cannot drift from the rule it reports on. The figure is
+    the sensitivity's *net* reinstatement, not the implausible rule's own
+    catch: :func:`mask_same_day_production_disagreements` independently
+    re-masks reinstated ceiling-region counts that have an observed same-day
+    partner, so the count is smaller than the rule's documented total (5
+    against 11 in the current pool). Pass ``include_same_day_disagreements``
+    as well to reinstate those too.
     """
     masked = load_combined_data(max_age_months=max_age_months)
     reinstated = load_combined_data(
@@ -1669,6 +1890,7 @@ def load_data(
     include_below_form_floor: bool = False,
     include_ceiling_only_children: bool = False,
     include_comprehension_below_production: bool = False,
+    include_same_day_disagreements: bool = False,
 ) -> pd.DataFrame:
     """
     Load vocabulary data for the specified population.
@@ -1697,7 +1919,7 @@ def load_data(
         :data:`ENGLISH_LANGUAGES`. Pass a wider tuple to broaden the scope, or
         ``None`` to include all languages. Ignored for DS (the DS subset is
         fixed to English when the database is built).
-    include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production, include_below_form_floor, include_ceiling_only_children, include_comprehension_below_production : bool
+    include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production, include_below_form_floor, include_ceiling_only_children, include_comprehension_below_production, include_same_day_disagreements : bool
         Reinstate records that :func:`load_combined_data` masks or drops by default,
         for sensitivity analysis. **DS only** — each names a specific documented
         defect class in the DS pool, so passing one for the TD population is a
@@ -1717,6 +1939,7 @@ def load_data(
         "include_comprehension_below_production": (
             include_comprehension_below_production
         ),
+        "include_same_day_disagreements": include_same_day_disagreements,
     }
     if population == Population.DOWN_SYNDROME:
         df = load_combined_data(max_age_months=max_age_months, **reinstatements)

@@ -109,12 +109,27 @@ This data was collected during the 1990s through to 2000.
 
 > [!NOTE]
 > This section was drafted by an LLM-based AI tool (Claude Code/Opus 4.8), from a
-> review of the uk_01 study write-up and the data (2026-07-13).
+> review of the uk_01 study write-up and the data (2026-07-13). WS word count corrected
+> 689 → 690 on 2026-08-31 (Claude Code/Fable 5): 689 had no traceable source, while 690
+> is the ceiling recorded throughout the pipeline (`survey_vocab_max`; hard-coded in
+> `research-data-analysis`'s `prepare/uk_01_edg.py` and stated in its `uk_01_edg.md`).
 
 uk_01 is a Down syndrome study (~218 children, ages ~1–9 y, Sarah Duffen Centre,
 Portsmouth) using the MacArthur-Bates CDI — Words & Gestures (396-word checklist) and
-Words & Sentences (689 words, including the 396); the two were combined for the vocabulary
-analysis. The per-item columns carry a `c` / `v` / `s` suffix per semantic category:
+Words & Sentences (690 words per the recorded `survey_vocab_max`, including the 396);
+the two were combined for the vocabulary analysis.
+
+⚠️ The WS ceiling of 690 has not been verified against the original UK-adaptation form,
+and the source data hints it may be an overstatement: in 18 of 22 WS categories the
+largest per-category count attained by two or more children equals the standard American
+680-item WS category size exactly, three categories stay below it, and only question
+words repeatedly exceeds it (9 vs the American 7) — pointing to a form total near
+680–682 rather than 690. Since `survey_vocab_max` is the Beta-Binomial denominator for
+WS rows, the recorded 690 should be confirmed against the original instrument if it can
+be consulted; changing it would invalidate fitted output for every model consuming uk_01
+WS observations.
+
+The per-item columns carry a `c` / `v` / `s` suffix per semantic category:
 **c = comprehension** (understands), **v = vocalised** (says), **s = signed**. Signing
 was recorded as a **per-word add-on question** ("indicate if the child _signs_ the
 word"), and — per the write-up — was added to **only some** questionnaires.

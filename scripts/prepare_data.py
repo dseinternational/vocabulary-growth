@@ -10,6 +10,7 @@ import duckdb
 import pandas as pd
 
 from vocab_growth.data_utils import (
+    drop_ie02_withheld_administrations,
     drop_uk01_withheld_subjects,
     drop_uk07_withheld_administrations,
     vocab_combined_view_sql,
@@ -72,6 +73,20 @@ vocab_ie_02_df = _loaded["vocab_ie_02"]
 vocab_ie_02_df = vocab_ie_02_df[
     vocab_ie_02_df["subject_id"] != "ID_79C464EF367C4D5B"
 ].copy()
+
+# Withhold the ie_02 t2 administration whose counts are internally
+# contradictory — a 331-word comprehension surge, a 237-word signing surge and
+# a 96% speech collapse asserted for the same three months, the pattern of a
+# checklist completed differently between waves. Dropped here at load so it is
+# absent from the merged CSV, the DuckDB vocab_ie_02 table and the
+# vocab_combined view alike; the child's t1 administration is retained. See
+# data_utils.IE02_WITHHELD_ADMINISTRATIONS for the evidence and how to
+# reinstate.
+vocab_ie_02_df, _ie02_withheld = drop_ie02_withheld_administrations(vocab_ie_02_df)
+console.print(
+    f"[yellow]ie_02 administrations withheld as internally contradictory:[/yellow] "
+    f"{_ie02_withheld}"
+)
 vocab_it_01_df = _loaded["vocab_it_01"]
 
 # Exclude the uk_01 subjects withheld as probable homonym fusions. The source
