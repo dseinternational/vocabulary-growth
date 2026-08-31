@@ -202,6 +202,9 @@ def build_child_factor(
     Returns ``(shift_u_obs, shift_q_obs, tau0_u, tau0_q)``.
     """
     k = int(spec.rank)
+    rho_uq_eta = float(getattr(spec, "rho_uq_eta", 2.0))
+    if not rho_uq_eta > 0:
+        raise ValueError(f"rho_uq_eta must be positive; got {rho_uq_eta!r}.")
     if not tau0_u_sigma > 0 or not tau0_q_sigma > 0:
         raise ValueError(
             "child-factor level scales must be positive; got "
@@ -214,14 +217,26 @@ def build_child_factor(
     tau1_q = pm.HalfNormal("tau_subj_q_1", sigma=spec.tau1_q_sigma)
     tau = pm.math.stack([tau0_u, tau1_u, tau0_q, tau1_q])
 
-    # Rows of the raw loading matrix, emitted in effect order but constrained in
-    # anchor order: the row at anchor position p carries min(p + 1, k) entries
-    # and, for p < k, a HalfNormal at column p, so the k anchor rows form a
-    # lower-triangular block with a positive diagonal and the rotation (and the
-    # sign of each factor) is pinned on rows that have variance to pin it with.
-    # Rows are built individually rather than as a masked matrix because the
-    # mask would put structural zeros in the trace and make the free-parameter
-    # count unreadable.
+    # Rows of the loading matrix as UNIT directions, emitted in effect order but
+    # constrained in anchor order: the row at anchor position p spans the first
+    # min(p + 1, k) columns and, for p < k, has a positive entry at column p, so
+    # the k anchor rows form a lower-triangular block with a positive diagonal
+    # and the rotation (and the sign of each factor) is pinned on rows that have
+    # variance to pin it with. Rows are built individually rather than as a
+    # masked matrix because the mask would put structural zeros in the trace and
+    # make the free-parameter count unreadable.
+    #
+    # Sigma depends on the rows only through their DIRECTIONS -- each row's
+    # radial magnitude cancels in the normalisation -- so a row sampled as m
+    # entries and then normalised spends m parameters on m - 1 identified
+    # quantities. Issue #266 finding 5 asked for those prior-only magnitudes to
+    # be removed where possible. Two of the four can be, and are; the other two
+    # cannot without a chart on the sphere, whose azimuth wraps at 0 = 2*pi. That
+    # was measured rather than assumed: on a direction with a real posterior the
+    # (z, phi) chart lost up to 17x the effective sample size against normalised
+    # normals and reached R-hat 1.053, which this project's convergence gate
+    # fails. An inert parameter costs a row in the gate; a wrapped coordinate
+    # costs the fit.
     width_of = {
         effect: min(position + 1, k)
         for position, effect in enumerate(CHILD_FACTOR_ANCHOR_ORDER)
@@ -231,27 +246,58 @@ def build_child_factor(
         for position, effect in enumerate(CHILD_FACTOR_ANCHOR_ORDER)
         if position < k
     }
+    first_anchor = CHILD_FACTOR_ANCHOR_ORDER[0]
+    second_anchor = CHILD_FACTOR_ANCHOR_ORDER[1]
+
+    def _pad(entries):
+        if len(entries) < k:
+            entries = entries + [pt.constant(0.0)] * (k - len(entries))
+        return pm.math.stack(entries)
+
     rows = []
     for i in range(4):
         width = width_of[i]
+        diagonal = diagonal_of.get(i)
+
+        if i == first_anchor and width == 1 and diagonal == 0:
+            # Its direction is e_0 for ANY positive entry, so the entry carried
+            # no information at all -- not even a sign. Sampling it also left the
+            # documented `Sigma_ii = tau_i ** 2` false in the tail: a one-entry
+            # row's norm IS its magnitude, so a near-zero HalfNormal draw met the
+            # numerical floor and shrank the row below unit length. Measured at
+            # 55 draws in two million more than 0.1% short, worst case 37%.
+            rows.append(_pad([pt.constant(1.0)]))
+            continue
+
+        if i == second_anchor and width == 2 and diagonal == 1:
+            # `rho_uq` IS this row's first coordinate, because the first anchor
+            # row is exactly e_0 -- so a prior placed here is a prior on the
+            # correlation, with no approximation. Written as VG20 writes it, so
+            # `rho_uq_raw` means the same thing in both models.
+            rho_raw = pm.Beta("rho_uq_raw", alpha=rho_uq_eta, beta=rho_uq_eta)
+            rho = pm.Deterministic("rho_uq", 2.0 * rho_raw - 1.0)
+            rows.append(
+                _pad([rho, pm.math.sqrt(pm.math.maximum(1.0 - rho**2, 1e-12))])
+            )
+            continue
+
+        # Everything else keeps the normalise-a-Normal construction: it has no
+        # boundary and no wrap, at the cost of one inert magnitude per row.
         entries = []
         for j in range(width):
-            if diagonal_of.get(i) == j:
+            if diagonal == j:
                 entries.append(pm.HalfNormal(f"subject_factor_w_{i}{j}", sigma=1.0))
             else:
                 entries.append(pm.Normal(f"subject_factor_w_{i}{j}", mu=0.0, sigma=1.0))
-        if width < k:
-            entries.extend([pt.constant(0.0)] * (k - width))
-        rows.append(pm.math.stack(entries))
-    W = pm.math.stack(rows)  # (4, k)
+        raw = pm.math.stack(entries)
+        norm = pm.math.sqrt(pm.math.sum(raw**2) + 1e-12)
+        rows.append(_pad([entry / norm for entry in entries]))
 
-    # Unit rows, so tau carries the whole marginal scale. The floor is numerical
-    # insurance only: with a HalfNormal on every leading diagonal entry and
-    # Normals elsewhere, a zero row has probability zero.
-    norms = pm.math.sqrt(pm.math.sum(W**2, axis=1) + 1e-12)
+    U = pm.math.stack(rows)  # (4, k), unit rows
+
     L = pm.Deterministic(
         "subject_factor_loadings",
-        (tau / norms)[:, None] * W,
+        tau[:, None] * U,
         dims=("child_effect4", "factor"),
     )
 
@@ -263,8 +309,13 @@ def build_child_factor(
         dims=("child_effect4", "child_effect4_b"),
     )
     # The element VG20 estimates, so its comparator and the recovery scorer read
-    # the same named quantity here as there.
-    _ = pm.Deterministic("rho_uq", corr[0, 2])
+    # the same named quantity here as there. Emitted by the second-anchor branch
+    # above wherever that branch exists -- where it does, `corr[0, 2]` equals the
+    # sampled value exactly, since the first anchor row is e_0. At rank 1 there
+    # is no such branch: every effect is one deviate scaled four ways, so
+    # `rho_uq` is +/-1 by construction and is read off the matrix.
+    if "rho_uq" not in pm.modelcontext(None).named_vars:
+        _ = pm.Deterministic("rho_uq", corr[0, 2])
 
     z = pm.Normal(
         "subject_factor_z", mu=0.0, sigma=1.0, dims=("subject_id", "factor")
