@@ -183,15 +183,16 @@ def test_dse_native_restriction_on_the_real_pool():
     )
     native, dropped = data_utils.restrict_to_dse_native_administrations(pool)
 
-    assert len(native) == 278
-    assert dropped == len(pool) - 278
+    assert len(native) == 277
+    assert dropped == len(pool) - 277
     assert sorted(native["study"].unique()) == ["ie_01", "ie_02", "uk_02", "uk_06"]
     assert native["subject_id"].nunique() == 194
-    # 252, not 259: seven of the ten counts mask_comprehension_below_production
-    # masks are ie_01 rows, and ie_01's 810 wave is inside this subset.
-    assert int(native["understood"].notna().sum()) == 252
-    assert int(native["spoken"].notna().sum()) == 264
-    assert int(native["signed"].notna().sum()) == 218
+    # 251, not 259: seven of the ten counts mask_comprehension_below_production
+    # masks are ie_01 rows inside this subset, and the withheld ie_02 t2
+    # administration (IE02_WITHHELD_ADMINISTRATIONS) took one more.
+    assert int(native["understood"].notna().sum()) == 251
+    assert int(native["spoken"].notna().sum()) == 263
+    assert int(native["signed"].notna().sum()) == 217
 
 
 def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
@@ -1308,6 +1309,142 @@ def test_uk07_withheld_row_is_the_only_production_above_comprehension_row():
     assert (kept["produced"] <= kept["understood"]).all()
 
 
+def test_uk01_withheld_subjects_are_dropped_at_csv_load():
+    # Withholding is by whole subject: the defect is the name-derived identifier
+    # itself, so every row under the id goes. Reinstatement is removing the id
+    # from the constant.
+    subject = data_utils.UK01_WITHHELD_SUBJECTS[0]
+    raw = pd.DataFrame(
+        {
+            "subject_id": [subject, subject, "other"],
+            "age": [66, 76, 66],
+            "spoken": [8, 451, 100],
+        }
+    )
+    out, dropped = data_utils.drop_uk01_withheld_subjects(raw)
+
+    assert dropped == 2
+    assert list(out["subject_id"]) == ["other"]
+    assert list(out.index) == [0]                        # index reset
+
+    with pytest.raises(KeyError):
+        data_utils.drop_uk01_withheld_subjects(raw.drop(columns=["subject_id"]))
+
+
+def test_uk01_withheld_subject_interleaves_two_modality_profiles():
+    # Pins why the id is withheld, against the committed source: sorted by age,
+    # its four administrations alternate between a signer who barely speaks
+    # (ages 66 and 78) and a speaker who never signs (76 and 88) — the
+    # homonym-fusion signature, not a trajectory. If a data update changes
+    # this, the constant has gone stale and this test says so.
+    raw = pd.read_csv(
+        os.path.join(data_utils.local_env.DATA_DIR, "vocab_data_uk_01.csv")
+    )
+    rows = raw[
+        raw["subject_id"] == data_utils.UK01_WITHHELD_SUBJECTS[0]
+    ].sort_values("age")
+
+    assert list(rows["age"]) == [66, 76, 78, 88]
+    signer = rows.iloc[[0, 2]]
+    speaker = rows.iloc[[1, 3]]
+    assert (signer["signed"] >= 100).all()
+    assert (signer["spoken"] < 50).all()
+    assert (speaker["signed"] == 0).all()
+    assert (speaker["spoken"] > 400).all()
+
+
+def test_ie02_withheld_administrations_are_dropped_at_csv_load():
+    # The withheld row is keyed by (subject_id, timepoint): the child's other
+    # timepoint, and the same timepoint for another child, both survive.
+    subject, timepoint = data_utils.IE02_WITHHELD_ADMINISTRATIONS[0]
+    raw = pd.DataFrame(
+        {
+            "subject_id": [subject, subject, "other"],
+            "timepoint": [timepoint, "t1", timepoint],
+            "understood": [442, 111, 200],
+        }
+    )
+    out, dropped = data_utils.drop_ie02_withheld_administrations(raw)
+
+    assert dropped == 1
+    assert len(out) == 2
+    assert not ((out["subject_id"] == subject) & (out["timepoint"] == timepoint)).any()
+    assert list(out.index) == [0, 1]                     # index reset
+
+    with pytest.raises(KeyError):
+        data_utils.drop_ie02_withheld_administrations(raw.drop(columns=["timepoint"]))
+
+
+def test_ie02_withheld_administration_is_the_contradictory_t2():
+    # Pins why the administration is withheld, against the committed source:
+    # its t2 asserts a 331-word comprehension surge, a 237-word signing surge
+    # and a 96% speech collapse in three months. If a data update changes
+    # these counts, the constant has gone stale and this test says so.
+    raw = pd.read_csv(
+        os.path.join(data_utils.local_env.DATA_DIR, "vocab_data_ie_02.csv")
+    )
+    subject, timepoint = data_utils.IE02_WITHHELD_ADMINISTRATIONS[0]
+    rows = raw[raw["subject_id"] == subject].set_index("timepoint")
+
+    assert list(rows.loc["t2", ["understood", "spoken", "signed"]]) == [442, 3, 301]
+    assert list(rows.loc["t1", ["understood", "spoken", "signed"]]) == [111, 72, 64]
+
+    kept, dropped = data_utils.drop_ie02_withheld_administrations(raw)
+    assert dropped == 1
+    assert (kept["subject_id"] == subject).sum() == 1    # t1 retained
+
+
+def test_mask_same_day_production_disagreements_masks_larger_side_only():
+    frame = pd.DataFrame(
+        {
+            "study": ["us_01"] * 6 + ["uk_01"] * 2,
+            "subject_id": ["a", "a", "b", "b", "c", "c", "d", "d"],
+            "age": [23, 23, 23, 23, 17, 17, 50, 50],
+            "spoken": [11.0, 385.0, 10.0, 71.0, 0.0, 19.0, 20.0, 300.0],
+            "produced": [11.0, 385.0, 10.0, 71.0, 0.0, 19.0, 20.0, 300.0],
+        }
+    )
+    out, dropped = data_utils.mask_same_day_production_disagreements(frame)
+
+    # a: the contradicted larger count is masked, the smaller kept, row retained.
+    assert pd.isna(out.loc[1, "spoken"]) and pd.isna(out.loc[1, "produced"])
+    assert out.loc[0, "spoken"] == 11
+    # b: below the magnitude floor — 10 vs 71 is small-count noise, untouched.
+    assert out.loc[3, "spoken"] == 71
+    # c: tiny counts, untouched even at an infinite ratio.
+    assert out.loc[5, "spoken"] == 19
+    # d: out-of-scope study, untouched at any disagreement.
+    assert out.loc[7, "spoken"] == 300
+    assert dropped == {"us_01": 2}                       # spoken + produced, one row
+
+    reinstated, none_dropped = data_utils.mask_same_day_production_disagreements(
+        frame, include_disagreements=True
+    )
+    assert none_dropped == {}
+    assert reinstated["spoken"].notna().all()
+
+    with pytest.raises(KeyError):
+        data_utils.mask_same_day_production_disagreements(frame.drop(columns=["age"]))
+
+
+def test_us01_same_day_disagreement_rule_masks_exactly_two_counts():
+    # Pins the rule's net catch on the real pool: reinstating it puts back
+    # exactly two us_01 spoken counts, the same-day-contradicted Words &
+    # Sentences records of 385 and 406 words at 23 months. Running after the
+    # other production rules, its catch is precisely the counts nothing else
+    # explains — raw same-day pairs in the ceiling region are already masked
+    # by the near-ceiling, collapse and duplicated-outcome signatures.
+    masked = data_utils.load_combined_data()
+    reinstated = data_utils.load_combined_data(include_same_day_disagreements=True)
+
+    regained = reinstated["spoken"].notna() & ~masked["spoken"].notna()
+    rows = reinstated[regained]
+
+    assert sorted(rows["spoken"]) == [385, 406]
+    assert set(rows["study"]) == {"us_01"}
+    assert set(rows["age"]) == {23}
+
+
 def test_mask_incomplete_administrations_reports_counts_and_needs_columns():
     frame = pd.DataFrame({
         "study": ["ie_01", "ie_01", "uk_03"],
@@ -1508,19 +1645,23 @@ def test_implausible_production_leaves_comprehension_alone():
 @requires_real_db
 def test_edgin_rules_together_on_the_real_database():
     # End to end: the widened duplicated-outcome rule masks 8 understood values,
-    # the production rules mask 19 spoken values, and one duplicate row is dropped.
+    # the production rules mask 21 spoken values (8 duplicated-outcome + 11
+    # near-ceiling/collapse + 2 same-day contradictions), and one duplicate row
+    # is dropped.
     #
-    # 19, not the 30 this pinned before the us_01 source moved to the item-level
+    # 21, not the 30 this pinned before the us_01 source moved to the item-level
     # contributor files. Fewer counts are masked because more records are removed
     # earlier: exclude_ceiling_only_children takes the Edgin ceiling batch out as whole
     # children on its provenance, so those counts never reach the production rules. See
     # CEILING_ONLY_CHILD_STUDIES.
     base = data_utils.load_combined_data(
-        include_duplicated_outcomes=True, include_implausible_production=True
+        include_duplicated_outcomes=True,
+        include_implausible_production=True,
+        include_same_day_disagreements=True,
     )
     final = data_utils.load_combined_data()
     assert base["understood"].notna().sum() - final["understood"].notna().sum() == 8
-    assert base["spoken"].notna().sum() - final["spoken"].notna().sum() == 19
+    assert base["spoken"].notna().sum() - final["spoken"].notna().sum() == 21
 
     # Every exclusion is in us_01, and the retained borderline cases survive.
     for column in ("understood", "spoken"):
@@ -1530,7 +1671,10 @@ def test_edgin_rules_together_on_the_real_database():
             - final[final["study"] == "us_01"][column].notna().sum()
         )
         assert lost == in_us01
-    assert ((final["spoken"] == 406) & (final["age"] == 23)).sum() == 1
+    # The two same-day-contradicted WS counts are gone from the default pool…
+    assert ((final["spoken"] == 406) & (final["age"] == 23)).sum() == 0
+    assert ((final["spoken"] == 385) & (final["age"] == 23)).sum() == 0
+    # …while the retained high-comprehension borderline cases survive.
     assert (final["understood"].between(210, 220) & (final["age"] == 18)).sum() == 2
 
 

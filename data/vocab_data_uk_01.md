@@ -160,6 +160,13 @@ Harmonising `signed` across studies (or deriving uk_01's total-signed from the o
 word-level forms) is needed before cross-study signed-ratio comparisons. See
 `notes/202607121753-reporting-config-fit-run-and-findings.md`.
 
+## Withheld subjects (probable homonym fusion)
+
+> [!NOTE]
+> This section was drafted by an LLM-based AI tool (Claude Code/Fable 5), from the 2026-08-31 subject-id audit.
+
+uk_01 has no per-child identifier in its source: the child's name is the longitudinal linker, so two different children sharing a name are silently fused under one `subject_id` (the homonym caveat documented in `research-data-analysis`'s `prepare/uk_01_edg.md`). One id shows the fused pattern in the committed data: `ID_E33ADE657109EBB8` (F) interleaves a signer who barely speaks (66 mo: spoken 8 / signed 225; 78 mo: 27 / 126) with a speaker who never signs (76 mo: 451 / 0; 88 mo: 483 / 0) — read as one child, a 424-word production collapse followed by a 456-word surge. The rows remain in this CSV; `scripts/prepare_data.py` drops them at load (see `UK01_WITHHELD_SUBJECTS` in `src/vocab_growth/data_utils.py`), pending adjudication against the original study records. See `notes/202608311600-uk01-homonym-fusion.md`.
+
 ## License
 
 This data is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) — see `LICENSE` for details.

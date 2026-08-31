@@ -111,6 +111,7 @@ callout
 caveated
 centered
 centile
+centiles
 color
 compr
 crosswalk
@@ -252,3 +253,4 @@ worktrees
 xarray
 zygosity
 Babylab
+HMAC

@@ -10,6 +10,8 @@ import duckdb
 import pandas as pd
 
 from vocab_growth.data_utils import (
+    drop_ie02_withheld_administrations,
+    drop_uk01_withheld_subjects,
     drop_uk07_withheld_administrations,
     vocab_combined_view_sql,
 )
@@ -71,8 +73,35 @@ vocab_ie_02_df = _loaded["vocab_ie_02"]
 vocab_ie_02_df = vocab_ie_02_df[
     vocab_ie_02_df["subject_id"] != "ID_79C464EF367C4D5B"
 ].copy()
+
+# Withhold the ie_02 t2 administration whose counts are internally
+# contradictory — a 331-word comprehension surge, a 237-word signing surge and
+# a 96% speech collapse asserted for the same three months, the pattern of a
+# checklist completed differently between waves. Dropped here at load so it is
+# absent from the merged CSV, the DuckDB vocab_ie_02 table and the
+# vocab_combined view alike; the child's t1 administration is retained. See
+# data_utils.IE02_WITHHELD_ADMINISTRATIONS for the evidence and how to
+# reinstate.
+vocab_ie_02_df, _ie02_withheld = drop_ie02_withheld_administrations(vocab_ie_02_df)
+console.print(
+    f"[yellow]ie_02 administrations withheld as internally contradictory:[/yellow] "
+    f"{_ie02_withheld}"
+)
 vocab_it_01_df = _loaded["vocab_it_01"]
-vocab_uk_01_df = _loaded["vocab_uk_01"]
+
+# Exclude the uk_01 subjects withheld as probable homonym fusions. The source
+# keys children by name alone, and ID_E33ADE657109EBB8's four rows interleave
+# two contradictory modality profiles (a signer who barely speaks, a speaker
+# who never signs) — the signature of two same-named children fused under one
+# id, and the origin of the −424-word "collapse" at 76–78 months. Dropped here
+# at load so the rows are absent from the merged CSV, the DuckDB vocab_uk_01
+# table and the vocab_combined view alike. See
+# data_utils.UK01_WITHHELD_SUBJECTS for the evidence and how to reinstate.
+vocab_uk_01_df, _uk01_withheld = drop_uk01_withheld_subjects(_loaded["vocab_uk_01"])
+console.print(
+    f"[yellow]uk_01 rows withheld as probable homonym fusions:[/yellow] "
+    f"{_uk01_withheld}"
+)
 vocab_uk_02_df = _loaded["vocab_uk_02"]
 vocab_uk_03_df = _loaded["vocab_uk_03"]
 vocab_uk_04_df = _loaded["vocab_uk_04"]
