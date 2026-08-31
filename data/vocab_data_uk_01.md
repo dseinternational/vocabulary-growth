@@ -109,12 +109,20 @@ This data was collected during the 1990s through to 2000.
 
 > [!NOTE]
 > This section was drafted by an LLM-based AI tool (Claude Code/Opus 4.8), from a
-> review of the uk_01 study write-up and the data (2026-07-13).
+> review of the uk_01 study write-up and the data (2026-07-13). The WS checklist total
+> was corrected to 680 on 2026-08-31 (Claude Code/Fable 5) after verification against
+> the original study report and the source data — see "WS checklist total" below.
 
 uk_01 is a Down syndrome study (~218 children, ages ~1–9 y, Sarah Duffen Centre,
 Portsmouth) using the MacArthur-Bates CDI — Words & Gestures (396-word checklist) and
-Words & Sentences (689 words, including the 396); the two were combined for the vocabulary
-analysis. The per-item columns carry a `c` / `v` / `s` suffix per semantic category:
+Words & Sentences (680 words, including the 396); the two were combined for the vocabulary
+analysis.
+
+### WS checklist total: 680 (verified 2026-08-31)
+
+The `survey_vocab_max` recorded for WS rows was 690 for most of this dataset's history, and briefly 689; neither survives verification. The original project report (Sarah Duffen Centre, August 2000, `project_2.doc` in the DSE research archive) describes administering and scoring the standard MacArthur CDI per the Fenson et al. (1993) manual and comparing against the Fenson normative sample, with no mention of any restructured UK form; its instrument paragraph states "a checklist of 689 words" — the source of the 689 that stood here until 2026-08-31 — but that same paragraph also miscounts the WS categories (19 + 2 where the actual form has 22), and no published CDI version has 689 items. The published CDI:WS vocabulary checklist is 680 words across 22 semantic categories. The source data agrees: over the 154 WS administrations, the maximum count attained equals the standard American category size exactly in every category where the ceiling is reached (five children at exactly 103 action words, 14 at exactly 7 question words, 43 at exactly 12 sound effects, …), the remaining categories stay below their sizes, and the handful of single-row overshoots are isolated entry errors — two of them sit in rows that are corrupt on other fields as well (e.g. pronouns recorded as 55 of 25). The recorded 690 had no traceable source at all. No observed count exceeds 680 (WS maximum spoken/produced is 669), so the correction drops or masks nothing; it changes the recorded form ceiling only.
+
+The per-item columns carry a `c` / `v` / `s` suffix per semantic category:
 **c = comprehension** (understands), **v = vocalised** (says), **s = signed**. Signing
 was recorded as a **per-word add-on question** ("indicate if the child _signs_ the
 word"), and — per the write-up — was added to **only some** questionnaires.
@@ -151,6 +159,13 @@ signing models VG14/VG15, whose signed ratio `r(a) = P(sign | understood)` treat
 Harmonising `signed` across studies (or deriving uk_01's total-signed from the original
 word-level forms) is needed before cross-study signed-ratio comparisons. See
 `notes/202607121753-reporting-config-fit-run-and-findings.md`.
+
+## Withheld subjects (probable homonym fusion)
+
+> [!NOTE]
+> This section was drafted by an LLM-based AI tool (Claude Code/Fable 5), from the 2026-08-31 subject-id audit.
+
+uk_01 has no per-child identifier in its source: the child's name is the longitudinal linker, so two different children sharing a name are silently fused under one `subject_id` (the homonym caveat documented in `research-data-analysis`'s `prepare/uk_01_edg.md`). One id shows the fused pattern in the committed data: `ID_E33ADE657109EBB8` (F) interleaves a signer who barely speaks (66 mo: spoken 8 / signed 225; 78 mo: 27 / 126) with a speaker who never signs (76 mo: 451 / 0; 88 mo: 483 / 0) — read as one child, a 424-word production collapse followed by a 456-word surge. The rows remain in this CSV; `scripts/prepare_data.py` drops them at load (see `UK01_WITHHELD_SUBJECTS` in `src/vocab_growth/data_utils.py`), pending adjudication against the original study records. See `notes/202608311600-uk01-homonym-fusion.md`.
 
 ## License
 
