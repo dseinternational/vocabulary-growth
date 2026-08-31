@@ -519,23 +519,23 @@ def test_child_factor_anchor_order_is_levels_then_q_rate_then_u_rate():
     assert [_EFFECTS[i] for i in CHILD_FACTOR_ANCHOR_ORDER] == ["b0u", "b0q", "b1q", "b1u"]
 
 
+# Since issue #266 finding 5 the two leading anchor rows are no longer sampled
+# as raw entries: b0u's direction is the constant e_0, and b0q's is set by the
+# designed `rho_uq`. Both changes remove a magnitude that cancelled before
+# reaching Sigma. The rows that remain keep the normalise-a-Normal construction,
+# because the alternative -- a chart on the sphere -- wraps at its azimuth and
+# was measured losing up to 17x the effective sample size and reaching R-hat
+# 1.053, which this project's gate fails.
 @pytest.mark.parametrize(
     "rank, expected_entries, expected_positive",
     [
-        # One column: every row has one entry; only b0u's is positive.
-        (1, {(0, 0), (1, 0), (2, 0), (3, 0)}, {(0, 0)}),
-        # Two columns: b0u pins column 1, b0q pins column 2; b1q and b1u are free.
-        (
-            2,
-            {(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (3, 1)},
-            {(0, 0), (2, 1)},
-        ),
+        # One column: b0u is the constant e_0 and b0q has no second column to
+        # place a correlation in, so the three remaining rows carry a sign each.
+        (1, {(1, 0), (2, 0), (3, 0)}, set()),
+        # Two columns: b0q's row is `rho_uq`; b1q and b1u are free directions.
+        (2, {(1, 0), (1, 1), (3, 0), (3, 1)}, set()),
         # Three columns: b1q pins column 3; b1u carries all three, none positive.
-        (
-            3,
-            {(0, 0), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)},
-            {(0, 0), (2, 1), (3, 2)},
-        ),
+        (3, {(1, 0), (1, 1), (1, 2), (3, 0), (3, 1), (3, 2)}, {(3, 2)}),
     ],
 )
 def test_child_factor_anchors_on_live_effects(rank, expected_entries, expected_positive):
@@ -551,11 +551,20 @@ def test_child_factor_anchors_on_live_effects(rank, expected_entries, expected_p
 
 @pytest.mark.parametrize("rank, expected", [(1, 4), (2, 7), (3, 9)])
 def test_child_factor_free_covariance_parameter_count(rank, expected):
+    """Gate 1's rank table (4, 7, 9) is unchanged by the reparameterisation.
+
+    This is the check that the design did not change what Gate 1 analysed: the
+    identified count is the same, only the number of parameters spent reaching
+    it has fallen. `rho_uq_raw` is one identified direction parameter; the raw
+    entries contribute one fewer than they number, per row, to the unit-row
+    normalisation.
+    """
     m = _build_child_factor(rank)
-    n_w = sum(1 for rv in m.free_RVs if rv.name.startswith("subject_factor_w_"))
-    # Four scales plus the raw loading entries, minus one unit-row normalisation
-    # per effect -- Gate 1's rank table (4, 7, 9), unchanged by the anchor order.
-    assert 4 + n_w - 4 == expected
+    names = {rv.name for rv in m.free_RVs}
+    rows = {int(name.split("_w_")[1][0]) for name in names if "_w_" in name}
+    n_w = sum(1 for name in names if name.startswith("subject_factor_w_"))
+    identified = n_w - len(rows) + int("rho_uq_raw" in names)
+    assert 4 + identified == expected
 
 
 @pytest.mark.parametrize("rank", [1, 2, 3])

@@ -662,19 +662,58 @@ def _factor_rows(
         rows.append((description, f"HalfNormal({sigma:g})", reading))
         covered.append(parameter)
 
-    loadings = sorted(p for p in present if p.startswith("subject_factor_w_"))
-    if loadings or not present:
-        # The k anchor diagonals carry a HalfNormal, which is what pins each
-        # factor's sign; everything else is a Normal. The count is reported
-        # because it is the free-parameter count the rank was chosen on.
-        anchors = min(rank, len(loadings)) if loadings else rank
+    # `rho_uq` is sampled directly since #266 finding 5: the first anchor row is
+    # exactly e_0, so the second row's first coordinate IS the correlation, and a
+    # prior there is a prior on it with no approximation.
+    if not present or "rho_uq_raw" in present:
+        eta = float(spec.get("rho_uq_eta", 2.0))
+        lo = float(stats.beta.ppf(0.05, eta, eta)) * 2.0 - 1.0
+        hi = float(stats.beta.ppf(0.95, eta, eta)) * 2.0 - 1.0
         rows.append(
             (
-                f"Loading directions $W$ ({len(loadings) or 'rank-dependent'} sampled entries)",
-                "HalfNormal(1) on the anchor diagonal, Normal(0, 1) elsewhere",
-                f"{anchors} anchor entries fix the rotation and each factor's sign; "
-                "rows are normalised to unit length, so $\\tau$ carries the whole "
-                "marginal scale",
+                "Correlation between a child's understood and $q$ levels "
+                "$\\rho_{uq}$",
+                f"LKJ({eta:g}), i.e. $(\\rho_{{uq}}+1)/2 \\sim$ Beta({eta:g}, {eta:g})",
+                "centred on zero and pulled toward it, so a correlation has to be "
+                f"evidenced; 5–95% {lo:+.2f} to {hi:+.2f}. The same prior VG20 "
+                "places on the same quantity, so the two are comparable",
+            )
+        )
+        covered.extend(["rho_uq_raw", "rho_uq"])
+    elif rank == 1:
+        # Rank 1 gives every child one deviate scaled four ways, so every
+        # implied correlation is exactly +/-1 and no prior over (-1, 1) can be
+        # placed on one. Said rather than omitted: a reader who finds `rho_uq`
+        # in the diagnostics and no row for it would reasonably assume the table
+        # had lost one.
+        rows.append(
+            (
+                "Correlation between a child's understood and $q$ levels "
+                "$\\rho_{uq}$",
+                "none — $\\pm 1$ by construction at rank 1",
+                "one latent dimension makes every child's four effects one "
+                "deviate scaled four ways, so the correlations are degenerate "
+                "and only their signs are estimated",
+            )
+        )
+        covered.append("rho_uq")
+
+    loadings = sorted(p for p in present if p.startswith("subject_factor_w_"))
+    if loadings or not present:
+        # What remains after the two leading anchor rows: one direction per
+        # non-anchor row, still sampled as entries and normalised. Each such row
+        # spends one parameter on a magnitude that cancels, which is stated
+        # rather than hidden -- removing them needs a chart on the sphere, and
+        # that was measured sampling far worse (#266 finding 5).
+        anchors = sum(1 for name in loadings if name.endswith(("22", "32")))
+        rows.append(
+            (
+                f"Loading directions ({len(loadings) or 'rank-dependent'} sampled entries)",
+                "HalfNormal(1) on a remaining anchor diagonal, Normal(0, 1) elsewhere",
+                f"{anchors} anchor entr{'y' if anchors == 1 else 'ies'} fix the "
+                "rotation and each factor's sign; rows are normalised to unit "
+                "length, so $\\tau$ carries the whole marginal scale and one "
+                "magnitude per row is prior-only",
             )
         )
         covered.extend(loadings)
@@ -692,16 +731,13 @@ def _factor_rows(
     if rows:
         rows.append(
             (
-                "Implied correlations $\\rho$ among the four child effects",
-                "induced by the loading priors, **not designed**",
-                "at the registered anchor order $\\rho_{uq}$ is arcsine on "
-                "$(-1, 1)$, which piles mass at the extremes and is not "
-                "prior-comparable with an LKJ; see the model page and #266",
+                "The other five implied correlations",
+                "induced by the loading directions, uniform on $(-1, 1)$",
+                "$\\rho_{uq}$ is designed above; the remaining five are whatever "
+                "the unit-row geometry induces, which is the $\\mathrm{LKJ}(1)$ "
+                "marginal — flat rather than extreme, and not separately chosen",
             )
         )
-        # That row *is* this model's statement about rho_uq's prior: it is a
-        # deterministic here, so `_PRIOR_SPECS`'s LKJ row correctly declines it.
-        covered.append("rho_uq")
     return covered, rows
 
 

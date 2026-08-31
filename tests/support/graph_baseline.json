@@ -3945,9 +3945,9 @@
    "h_all",
    "delta_u",
    "delta_q",
+   "rho_uq",
    "subject_factor_loadings",
    "subject_factor_corr",
-   "rho_uq",
    "b0_tau_subj_u",
    "b1_tau_subj_u",
    "b0_tau_subj_q",
@@ -4142,6 +4142,7 @@
     "query_id"
    ],
    "rho_uq": [],
+   "rho_uq_raw": [],
    "slope_q": [],
    "slope_u": [],
    "subject_factor_corr": [
@@ -4152,12 +4153,9 @@
     "child_effect4",
     "factor"
    ],
-   "subject_factor_w_00": [],
    "subject_factor_w_10": [],
    "subject_factor_w_11": [],
    "subject_factor_w_12": [],
-   "subject_factor_w_20": [],
-   "subject_factor_w_21": [],
    "subject_factor_w_30": [],
    "subject_factor_w_31": [],
    "subject_factor_w_32": [],
@@ -4208,12 +4206,10 @@
    "tau_subj_u_1",
    "tau_subj_q_0",
    "tau_subj_q_1",
-   "subject_factor_w_00",
    "subject_factor_w_10",
    "subject_factor_w_11",
    "subject_factor_w_12",
-   "subject_factor_w_20",
-   "subject_factor_w_21",
+   "rho_uq_raw",
    "subject_factor_w_30",
    "subject_factor_w_31",
    "subject_factor_w_32",
@@ -4225,7 +4221,7 @@
    "kappa_excess_young_s",
    "kappa_excess_old_s"
   ],
-  "logp_at_fixed_point": -3752.57320039313,
+  "logp_at_fixed_point": -3632.5060684527516,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs"

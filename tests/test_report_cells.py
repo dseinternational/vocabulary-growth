@@ -133,15 +133,17 @@ def test_priors_table_omits_the_correlation_for_an_uncorrelated_model(tmp_path, 
 
 # --- VG22's factor block (issue #273) -------------------------------------------
 
-#: VG22's real sampled parameter set at rank 3: the shared bivariate-RE block,
-#: then the four factor scales, the nine sampled loading entries and the
-#: per-child scores that `gp_utils.build_child_factor` creates.
+#: VG22's real sampled parameter set at rank 3, as the graph builds it since
+#: issue #266 finding 5: the shared bivariate-RE block, the four factor scales,
+#: the designed `rho_uq_raw`, the six loading entries that remain, and the
+#: per-child scores. `subject_factor_w_00`, `_w_20` and `_w_21` are gone --
+#: the first anchor row is the constant e_0 and the second is set by `rho_uq`.
 _VG22_PARAMETERS = (
     "p_slope_low_u", "p_slope_hi_u", "p_slope_low_q", "p_slope_hi_q",
     "eta_u", "eta_q", "tau_u", "tau_q",
     "tau_subj_u_0", "tau_subj_u_1", "tau_subj_q_0", "tau_subj_q_1",
-    "subject_factor_w_00", "subject_factor_w_10", "subject_factor_w_11",
-    "subject_factor_w_20", "subject_factor_w_21", "subject_factor_w_22",
+    "rho_uq_raw",
+    "subject_factor_w_10", "subject_factor_w_11", "subject_factor_w_12",
     "subject_factor_w_30", "subject_factor_w_31", "subject_factor_w_32",
     "subject_factor_z",
     # Deterministics the diagnostics table carries alongside them.
@@ -167,6 +169,7 @@ _VG22_DEFINITION = {
         "tau1_u_sigma": 0.5,
         "tau1_q_sigma": 0.5,
         "ref_age_months": 36.0,
+        "rho_uq_eta": 2.0,
     },
 }
 
@@ -190,15 +193,19 @@ def test_priors_table_carries_the_factor_block(tmp_path, capsys):
     assert "Between-child SD, understood — rate" in out
     assert "logits per year of age" in out
     assert out.count("HalfNormal(0.5)") >= 2
-    # The loading family, with the count the rank was chosen on.
-    assert "Loading directions $W$ (9 sampled entries)" in out
-    assert "3 anchor entries" in out
+    # The loading family that remains after the two leading anchor rows.
+    assert "Loading directions (6 sampled entries)" in out
     # The factor scores, and the rank.
     assert "Per-child factor scores $z$ (rank 3)" in out
     assert "Normal(0, I)" in out
-    # And the caveat that the correlations were induced rather than designed.
-    assert "not designed" in out
-    assert "arcsine" in out
+    # rho_uq is designed now, under the prior VG20 places on the same quantity.
+    assert "LKJ(2)" in out
+    assert "The same prior VG20 places on the same quantity" in out
+    # And the five that remain induced are named as such rather than left silent.
+    assert "The other five implied correlations" in out
+    assert "not separately chosen" in out
+    # The arcsine is gone: it was the defect, not a property of the model.
+    assert "arcsine" not in out
 
 
 def test_the_factor_block_replaces_the_parent_child_intercept_rows(tmp_path, capsys):
@@ -235,7 +242,11 @@ def test_prior_coverage_reports_no_gap_for_the_factor_model(tmp_path):
     coverage = report_cells.prior_coverage(str(fit))
     assert coverage["uncovered"] == []
     assert "subject_factor_z" in coverage["rendered"]
-    assert "subject_factor_w_21" in coverage["rendered"]
+    assert "subject_factor_w_31" in coverage["rendered"]
+    # The designed correlation is rendered under its own row, not left
+    # to the induced-geometry caveat.
+    assert "rho_uq_raw" in coverage["rendered"]
+    assert "rho_uq" in coverage["rendered"]
     # Deterministics have no prior of their own and are exempt with a reason.
     assert "subject_factor_corr" in coverage["exempt"]
     assert report_cells._is_exempt("subject_factor_corr")
@@ -254,7 +265,7 @@ def test_the_table_discloses_its_own_gap(tmp_path, capsys):
     report_cells.render_priors_table(str(fit))
     out = capsys.readouterr().out
     assert "Incomplete priors table" in out
-    assert "`subject_factor_w_00`" in out
+    assert "`subject_factor_w_10`" in out
     assert "the gap is in the table, not in the fit" in out
 
 
@@ -270,7 +281,7 @@ def test_prior_coverage_names_an_unrendered_family(tmp_path):
     definition.pop("subject_factor")
     fit = _fit(tmp_path, definition=definition, parameters=_VG22_PARAMETERS)
     coverage = report_cells.prior_coverage(str(fit))
-    assert "subject_factor_w_00" in coverage["uncovered"]
+    assert "subject_factor_w_10" in coverage["uncovered"]
     assert "tau_subj_u_1" in coverage["uncovered"]
 
 

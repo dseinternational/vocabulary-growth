@@ -96,3 +96,33 @@ Both models also became reachable from `fit_sensitivity.py` and `refit_hightune.
 **VG22's induced prior needs designing.** Unchanged: an explicit prior over the implied correlations, a refit of the rank family, parameter recovery and a whole-child predictive comparison before the default rank is re-selected.
 
 **The fallback sensitivity arms need running.** They can now be run on all four affected engines rather than two, which is what this pass changed; running them is a fitting task.
+
+## 8. VG22's correlation prior, designed (2026-08-31)
+
+§5 said this needed designing rather than documenting, and §7 left it outstanding. It is now designed. The refit, recovery and whole-child predictive comparison remain, and are in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
+
+### What it was, reproduced rather than taken on trust
+
+The loading rows were sampled independently and normalised, so the implied correlations had whatever prior the geometry gave. At the registered anchor order the first row is exactly $e_0$, which makes $\rho_{uq}$ the second row's first coordinate — $X/\sqrt{X^2+Y^2}$ with $X$ Normal and $Y$ HalfNormal, whose angle is uniform on $(0,\pi)$ and whose cosine is therefore **exactly arcsine**. Two million draws: $P(|\rho_{uq}|>0.8) = 0.4093$ against the closed form 0.4097, 89% $[-0.985,+0.985]$. VG20's LKJ(2) on the same quantity gives 0.056 and $[-0.715,+0.716]$.
+
+The anchor-order dependence turned out to be structured rather than arbitrary: the arcsine attaches to the correlation between the **first two anchor rows**, whichever those are. Swapping the two levels leaves it arcsine; moving a wider row into second place makes it uniform. The other five correlations are the LKJ(1) marginal — 0.200 and $[-0.890,+0.890]$ — at every order.
+
+### The fix is exact, and the geometry that caused the problem is why
+
+Because the first anchor row is $e_0$, $\rho_{uq}$ _is_ the second row's first coordinate, verified to floating point over 200,000 draws. A prior placed on that coordinate is a prior on the correlation with no approximation. The row is now $(\rho, \sqrt{1-\rho^2})$ with $(\rho+1)/2 \sim \mathrm{Beta}(\eta,\eta)$ — exactly $\mathrm{LKJ}(\eta)$ for a $2\times2$, written as VG20 writes it so `rho_uq_raw` means the same thing in both. At $\eta = 2$ a prior-predictive check on the built graph returns 0.055 and $[-0.714,+0.715]$: VG20's numbers to sampling error.
+
+The five other correlations are unchanged and remain uniform. Designing all six would need a vine construction over the rank-constrained correlation matrix and would change what Gate 1 analysed; the flatness is stated on the model page instead.
+
+### Two of the four prior-only magnitudes are gone, and the other two stay deliberately
+
+$\Sigma$ depends on the rows only through their directions, so each row's radial magnitude cancels: 13 sampled parameters for 9 free covariance parameters. The first anchor row's single entry carried nothing at all — its direction is $e_0$ for any positive value — and the second row's pair is replaced by $\rho_{uq}$ itself, so both go.
+
+**The remaining two are kept on measurement, not preference.** Removing them needs a chart on the sphere, and its azimuth wraps at $0 = 2\pi$. On a direction with a real posterior the $(z,\phi)$ chart lost up to seventeenfold the effective sample size against normalised normals and reached $\hat{R} = 1.053$ at one seed — a convergence failure by this project's own gate. An inert parameter costs a row in the gate; a wrapped coordinate costs the fit. This reversed the recommendation the design started from, which had assumed the removal was clean for all four.
+
+Removing the first row's entry also fixed a tail defect nobody had noticed. That row had one entry, so its norm _was_ its magnitude, and a near-zero draw met the `1e-12` floor and left the row shorter than unit length — making $\Sigma_{ii} = \tau_i^2$, documented as exact, false for those draws: 55 in two million more than 0.1% short, worst case 37%. It now holds to floating point.
+
+### What the change costs
+
+VG22's graph moves, and `tests/test_graph_equivalence.py` flagged it — on all four properties, for VG22 and no other model, which is the mechanism working as intended. The baseline diff is the change's own statement: three free variables removed, `rho_uq_raw` added, the fixed-point log probability moved. **The deterministics are unchanged as a set**, so every downstream reader keeps the variables it reads.
+
+Every VG22 number currently on disk was fitted under the arcsine and is superseded. The model page now says so at each of the three places that quote one, rather than presenting them as current.

@@ -454,6 +454,35 @@ class SubjectFactorPriorParams:
     ``tau_subj_q_sigma``, so this form re-uses the parent's priors rather than
     restating them."""
 
+    rho_uq_eta: float = 2.0
+    """LKJ concentration for the level-level correlation ``rho_uq``.
+
+    **Designed, not induced, since issue #266 finding 5.** Before this, the
+    loading rows were sampled independently and normalised, which left
+    ``rho_uq`` with whatever prior the geometry happened to give: exactly the
+    **arcsine** distribution, whose density piles at the extremes.
+    ``P(|rho_uq| > 0.8) = 0.410`` and the 89% interval was ``[-0.985, +0.985]``,
+    against ``0.056`` and ``[-0.715, +0.715]`` under the ``LKJ(2)`` VG20 places
+    on the same quantity -- so the two models' posteriors were not
+    prior-comparable, and a difference between them was partly a difference
+    between their priors. It also depended on the anchor order, which the
+    2026-08-23 change had documented as a pure gauge choice.
+
+    The design is exact rather than approximate. The first anchor row is
+    ``e_0``, so ``rho_uq`` **is** the second anchor row's first coordinate; that
+    row is parameterised as ``(rho, sqrt(1 - rho^2))`` with
+    ``(rho + 1) / 2 ~ Beta(eta, eta)``, which for a 2x2 is exactly ``LKJ(eta)``
+    -- the form VG20 uses, written the same way so ``rho_uq_raw`` carries the
+    same meaning in both.
+
+    ``eta = 2`` matches VG20 deliberately, for the reason VG23's registration
+    gives for matching it there: the correlations are then estimated under the
+    same prior in both models and their comparison is not a prior artefact.
+
+    Applies from ``rank >= 2``. At ``rank = 1`` every effect is one deviate
+    scaled four ways, so ``|rho_uq| = 1`` by construction and no prior over
+    ``(-1, 1)`` can be placed on it; the field is then unused."""
+
     def __post_init__(self) -> None:
         if self.rank not in (1, 2, 3):
             raise ValueError(
@@ -461,7 +490,7 @@ class SubjectFactorPriorParams:
                 "rank 3 already reaches the free 4x4's likelihood exactly, so "
                 f"rank 4 buys nothing. Got {self.rank!r}."
             )
-        for name in ("tau1_u_sigma", "tau1_q_sigma"):
+        for name in ("tau1_u_sigma", "tau1_q_sigma", "rho_uq_eta"):
             if not getattr(self, name) > 0:
                 raise ValueError(f"{name} must be positive; got {getattr(self, name)!r}.")
 
