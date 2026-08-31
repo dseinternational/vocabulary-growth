@@ -23,6 +23,10 @@ from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
+# `fit_identity` defers its own import of this module to call time, so this is
+# a one-way edge rather than a cycle.
+from vocab_growth.models.fit_identity import definition_differences
+
 FIT_MANIFEST_FILENAME = "fit_manifest.json"
 FIT_STATE_FILENAME = "fit_state.json"
 TRACE_FILENAME = "trace.nc"
@@ -569,10 +573,28 @@ def validate_fit_output(
         return errors
 
     manifest_definition = manifest.get("model", {}).get("definition")
-    if expected_definition is not None and manifest_definition != normalise_for_json(
-        expected_definition
-    ):
-        errors.append("The model definition differs from the current registered definition.")
+    if expected_definition is not None:
+        # Compared field by field through the classified payload rather than by
+        # raw dictionary equality (issue #273). Every difference is still fatal,
+        # including reporting and identity ones -- what the classification adds
+        # is a message that says *what kind* of thing moved, and the one
+        # documented excuse: a field absent from an older manifest whose
+        # `BACKFILL_DEFAULTS` entry states that its absence meant exactly the
+        # value registered today. Without that, adding a field with a default
+        # invalidates every historical fit of its dataclass even when the
+        # default reproduces what those fits did, which is the constraint that
+        # has shaped the model API more than any statistical consideration.
+        differences = definition_differences(manifest_definition, expected_definition)
+        if differences:
+            summary = "; ".join(
+                difference.describe() for difference in differences[:5]
+            )
+            if len(differences) > 5:
+                summary += f"; and {len(differences) - 5} more"
+            errors.append(
+                "The model definition differs from the current registered "
+                f"definition: {summary}."
+            )
 
     sampling_payload = manifest.get("sampling", {})
     recorded_sampling_name = sampling_payload.get("configuration_name")

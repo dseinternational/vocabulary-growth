@@ -73,6 +73,7 @@ from vocab_growth.fit_artifacts import (
     write_json_atomic,
 )
 from vocab_growth.loo_reff import sampled_parameter_reff
+from vocab_growth.models import fit_identity
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_integral_counts,
@@ -2120,6 +2121,14 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
             "model_id": definition.model_id,
             "config_name": definition.config_name,
             "definition": normalise_for_json(definition),
+            # The same fields again, classified as graph-affecting,
+            # data-affecting, reporting or identity, and versioned (issue #273).
+            # Written *alongside* the raw dictionary rather than replacing it:
+            # every fit on disk carries the raw form, several readers index it
+            # directly, and the report layer reads its numbers out of it. A
+            # reader that wants to know what kind of thing a field controls now
+            # has it recorded rather than having to guess from the name.
+            "definition_payload": fit_identity.semantic_payload(definition),
         },
         "sampling": {
             "configuration_name": context.sampling_config_name,

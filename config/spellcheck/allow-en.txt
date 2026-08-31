@@ -115,6 +115,7 @@ color
 compr
 crosswalk
 dataclass
+dataclasses
 datatree
 deterministics
 dexp
