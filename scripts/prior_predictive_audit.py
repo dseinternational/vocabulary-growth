@@ -8,6 +8,18 @@ plots (``prior_samples_*.png``, ``prior_predictive_checks.png``,
 ``prior_predictions.png`` and the analytic prior-distribution PNGs) are
 regenerated cheaply into each model's output dir for review.
 
+The engine and the calling convention come from
+:mod:`vocab_growth.models.catalogue`, not from a table maintained here. Until
+issue #273 they were maintained here, and the table had gone stale: VG16 and
+VG19-VG23 all fit on ``common_bivariate_re`` while a hard-coded set routed them
+through the plain ``common_bivariate``, so an audit of those six models built a
+graph without the cross-lag, child-slope, correlated-effect or factor structure
+that distinguishes them — and still produced plots, which is how a mismatch
+comes to be mistaken for a valid prior check. The same table dropped the
+definition argument for every random-effect model, discarding
+:mod:`vocab_growth.models.prior_child_checks`'s unseen-child figures, which are
+the ones a child-effect model's prior audit exists to look at (issue #233).
+
 Usage:
     python scripts/prior_predictive_audit.py [models...]   # default: family reps
 """
@@ -22,20 +34,13 @@ import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
-from vocab_growth.models import common
-from vocab_growth.models import common_bivariate as cb
-from vocab_growth.models import common_bivariate_re as cbr
-from vocab_growth.models import common_joint_modality as cj
-from vocab_growth.models import common_trivariate as ct
-from vocab_growth.models import common_univariate_re as cur
+from vocab_growth.models.catalogue import get as catalogue_get
 from vocab_growth.models.common import ModelFitContext
-from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
+from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting import console, heading
 
 # §6 regeneration set (family representatives + the reporting models).
 _DEFAULT = ["vg10", "vg11", "vg12", "vg13", "vg14", "vg15"]
-_UNIVARIATE_RE = {"vg11", "vg12"}
-_BIVARIATE_RE = {"vg07", "vg08", "vg09", "vg10", "vg13"}
 
 
 def _context(definition) -> ModelFitContext:
@@ -55,39 +60,27 @@ def _context(definition) -> ModelFitContext:
 
 def audit(model_key: str) -> str:
     """Build the model and run only its prior-predictive stage; return its dir."""
-    d = MODEL_REGISTRY[model_key]
-    ctx = _context(d)
-    mt = d.model_type
-    if mt == ModelType.UNIVARIATE and model_key in _UNIVARIATE_RE:
-        cur.prepare_univariate_re_data(ctx, d)
-        common.configure_univariate_priors(ctx, d)
-        cur.build_univariate_re_model(ctx, d)
-        common.prior_predictive_checks(ctx, d.outcome.value, d.outcome_label)
-    elif mt == ModelType.UNIVARIATE:
-        common.prepare_univariate_data(ctx, d)
-        common.configure_univariate_priors(ctx, d)
-        common.build_model(ctx, d)
-        common.prior_predictive_checks(ctx, d.outcome.value, d.outcome_label)
-    elif mt == ModelType.BIVARIATE:
-        if model_key in _BIVARIATE_RE:
-            cbr.prepare_bivariate_re_data(ctx, d)
-            cb.configure_bivariate_priors(ctx, d)
-            cbr.build_model_re(ctx, d)
-        else:
-            cb.prepare_bivariate_data(ctx, d)
-            cb.configure_bivariate_priors(ctx, d)
-            cb.build_model(ctx, d)
-        cb.prior_predictive_checks(ctx)
-    elif mt == ModelType.TRIVARIATE:
-        ct.prepare_trivariate_data(ctx, d)
-        ct.configure_trivariate_priors(ctx, d)
-        ct.build_model(ctx, d)
-        ct.prior_predictive_checks(ctx)
-    elif mt == ModelType.JOINT:
-        cj.prepare_joint_data(ctx, d)
-        cj.configure_joint_priors(ctx, d)
-        cj.build_model(ctx, d)
-        cj.prior_predictive_checks(ctx)
+    model = catalogue_get(model_key)
+    definition = model.definition
+    engine = model.engine
+    ctx = _context(definition)
+
+    engine.resolve("prepare")(ctx, definition)
+    engine.resolve("priors")(ctx, definition)
+    engine.resolve("build")(ctx, definition)
+
+    prior_checks = engine.resolve("prior_checks")
+    call = engine.prior_checks_call
+    if call == "outcome":
+        prior_checks(ctx, definition.outcome.value, definition.outcome_label)
+    elif call == "definition":
+        prior_checks(ctx, definition)
+    elif call == "context":
+        prior_checks(ctx)
+    else:
+        raise ValueError(
+            f"engine {engine.name!r} declares unknown prior_checks_call {call!r}"
+        )
     return ctx.reporting.output_dir
 
 

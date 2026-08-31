@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from vocab_growth.models.catalogue import engine_for
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 
@@ -184,16 +185,6 @@ class RecoveryTarget:
         return getattr(module, function_name)(definition)
 
 
-_UNIVARIATE_RE = (
-    "vocab_growth.models.common_univariate_re:univariate_re_stages",
-    UNIVARIATE_RE_SPEC,
-)
-_BIVARIATE_RE = (
-    "vocab_growth.models.common_bivariate_re:bivariate_re_stages",
-    BIVARIATE_RE_SPEC,
-)
-_JOINT = ("vocab_growth.models.common_joint_modality:joint_stages", JOINT_SPEC)
-
 # Models whose data-generating process this harness can reproduce exactly.
 #
 # VG01-VG05 and VG14 are deliberately absent: they are descriptive baselines on
@@ -207,15 +198,19 @@ _JOINT = ("vocab_growth.models.common_joint_modality:joint_stages", JOINT_SPEC)
 # synthetic-data lags, and the resulting "recovery failure" would be an artefact
 # of the harness rather than of the model. A correct VG16 check needs
 # wave-sequential simulation; until that exists VG16 stays unsupported.
-_TARGETS: dict[str, tuple[str, EngineRecoverySpec]] = {
-    "vg07": _BIVARIATE_RE,
-    "vg08": _BIVARIATE_RE,
-    "vg09": _BIVARIATE_RE,
-    "vg10": _BIVARIATE_RE,
-    "vg11": _UNIVARIATE_RE,
-    "vg12": _UNIVARIATE_RE,
-    "vg13": _BIVARIATE_RE,
-    "vg15": _JOINT,
+#
+# Only the data-generating spec is named here. The engine's stage factory comes
+# from `vocab_growth.models.catalogue`, so a model cannot be paired with another
+# engine's pipeline (issue #273).
+_TARGETS: dict[str, EngineRecoverySpec] = {
+    "vg07": BIVARIATE_RE_SPEC,
+    "vg08": BIVARIATE_RE_SPEC,
+    "vg09": BIVARIATE_RE_SPEC,
+    "vg10": BIVARIATE_RE_SPEC,
+    "vg11": UNIVARIATE_RE_SPEC,
+    "vg12": UNIVARIATE_RE_SPEC,
+    "vg13": BIVARIATE_RE_SPEC,
+    "vg15": JOINT_SPEC,
     # VG19 runs VG10's engine and VG10's data-generating process. The child slope
     # changes the PRIOR on each child's effect -- one deviate becomes an
     # intercept/rate pair -- but not how counts are drawn, and the simulator
@@ -233,7 +228,7 @@ _TARGETS: dict[str, tuple[str, EngineRecoverySpec]] = {
     # specification registered". `tau1` is the parameter the check exists for:
     # the plan predicts it is weakly identified, and recovery at `test` is how
     # that is measured rather than assumed.
-    "vg19": _BIVARIATE_RE,
+    "vg19": BIVARIATE_RE_SPEC,
     # VG20 runs the same engine and the same data-generating process as VG10 --
     # the correlation changes the PRIOR on the pair of subject deviates, not how
     # counts are simulated -- so the VG10 spec is correct here unchanged. It is
@@ -243,7 +238,7 @@ _TARGETS: dict[str, tuple[str, EngineRecoverySpec]] = {
     # entry of its own: it is a scalar Deterministic, so the target selection in
     # recovery/compare.py picks it up, while `rho_uq_raw` is excluded by the
     # existing `*_raw` rule as a non-centred offset with no interpretation.
-    "vg20": _BIVARIATE_RE,
+    "vg20": BIVARIATE_RE_SPEC,
 }
 
 UNSUPPORTED_REASONS: dict[str, str] = {
@@ -283,12 +278,18 @@ def recovery_target(model_key: str) -> RecoveryTarget:
             f"Parameter recovery is not supported for {model_key!r}: {reason}. "
             f"Supported models: {', '.join(supported_models())}."
         )
-    stages_factory, spec = _TARGETS[model_key]
+    engine = engine_for(model_key)
+    if engine.stages is None:
+        raise KeyError(
+            f"Parameter recovery is not supported for {model_key!r}: its engine "
+            f"({engine.name}) exposes no stage factory, so the harness cannot "
+            "substitute the simulated-frame loader for stage 0."
+        )
     return RecoveryTarget(
         model_key=model_key,
-        spec=spec,
-        stages_factory=stages_factory,
-        engine_module=spec.engine,
+        spec=_TARGETS[model_key],
+        stages_factory=f"{engine.module}:{engine.stages}",
+        engine_module=engine.module.rpartition(".")[2],
     )
 
 

@@ -213,11 +213,13 @@ class TrivariateModelSamples:
     kappa_s_plot: np.ndarray
     kappa_s_query: np.ndarray
 
-    # Signed ratio (r) samples
-    g_sign_obs: np.ndarray
+    # Signed ratio (r) samples. No ``*_obs`` counterparts: both are
+    # observation-dimensioned deterministics, so the sampler is told not to
+    # store them (``fit_artifacts.sampled_variable_names``) and reading them
+    # back would raise. Nothing consumed them; ``r_obs`` remains in the graph
+    # because the likelihood uses it, which needs no stored draws.
     g_sign_plot: np.ndarray
     g_sign_query: np.ndarray
-    r_obs: np.ndarray
     r_plot: np.ndarray
     r_query: np.ndarray
 
@@ -1002,12 +1004,11 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     kappa_s_plot = _extract_posterior(trace, "kappa_s_plot", "plot_id")
     kappa_s_query = _extract_posterior(trace, "kappa_s_query", "query_id")
 
-    # Signed rate
-    g_sign_obs = _extract_posterior(trace, "g_sign_obs", "obs_id")
+    # Signed rate. `g_sign_obs` and `r_obs` are deliberately not read: the
+    # sampler does not store the observation-dimensioned deterministics.
     g_sign_plot = _extract_posterior(trace, "g_sign_plot", "plot_id")
     g_sign_query = _extract_posterior(trace, "g_sign_query", "query_id")
 
-    r_obs = _extract_posterior(trace, "r_obs", "obs_id")
     r_plot = _extract_posterior(trace, "r_plot", "plot_id")
     r_query = _extract_posterior(trace, "r_query", "query_id")
 
@@ -1106,10 +1107,8 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         y_s_query=y_s_query,
         kappa_s_plot=kappa_s_plot,
         kappa_s_query=kappa_s_query,
-        g_sign_obs=g_sign_obs,
         g_sign_plot=g_sign_plot,
         g_sign_query=g_sign_query,
-        r_obs=r_obs,
         r_plot=r_plot,
         r_query=r_query,
         f_sign_plot=f_sign_plot,

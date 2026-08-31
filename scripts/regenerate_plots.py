@@ -31,6 +31,7 @@ Usage: regenerate_plots.py <model_id|all> [--config rep] [--output-dir DIR]
 """
 
 import argparse
+import importlib
 import os
 import shutil
 import sys
@@ -51,6 +52,8 @@ from vocab_growth.fit_artifacts import (
     require_valid_fit,
     source_data_hash,
 )
+from vocab_growth.models.catalogue import CATALOGUE
+from vocab_growth.models.catalogue import ENGINES as CATALOGUE_ENGINES
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting import console
 
@@ -58,97 +61,45 @@ from vocab_growth.reporting import console
 # to another stage (or to the fit's identity) and is left alone.
 PLOT_SUFFIXES = (".png", ".svg")
 
-# Engines whose plot stage this script knows how to drive. A model outside this
-# map is skipped loudly rather than silently, because a silent skip in a
-# diagnostic reads as a pass (see notes/202608061500 section 5).
+# Engines whose plot stage this script knows how to drive, derived from
+# `vocab_growth.models.catalogue`. A model whose engine declares no plot hook is
+# skipped loudly rather than silently, because a silent skip in a diagnostic
+# reads as a pass (see notes/202608061500 section 5); the engine records *why*
+# it has none, and that reason is printed.
 #
-# ``build`` matters as much as ``prepare``: the random-effect engines share
-# ``configure_bivariate_priors`` and the plot stage with the plain bivariate
+# `build` matters as much as `prepare`: the random-effect engines share
+# `configure_bivariate_priors` and the plot stage with the plain bivariate
 # engine but have their own data preparation and model build. Driving a
 # subject-RE model through the plain engine happens to produce identical figures
 # today -- the plot stage reads its posterior from the trace, and the only
-# context-derived inputs it uses are ``n_trials`` and the reporting caps, which
+# context-derived inputs it uses are `n_trials` and the reporting caps, which
 # agree -- but that is a coincidence of the current plot code, not a guarantee,
-# so each model is routed through the engine that actually fitted it.
+# so each model is routed through the engine that actually fitted it. Deriving
+# the routing from the catalogue is what makes that structural rather than a
+# table someone has to remember to update (issue #273).
 #
-# ``plots_call`` names the plot stage's calling convention, which differs by
-# engine: ``definition`` passes the model definition, ``context`` passes nothing
-# beyond the context, and ``outcome_label`` passes the definition's outcome label
+# `plots_call` names the plot stage's calling convention, which differs by
+# engine: `definition` passes the model definition, `context` passes nothing
+# beyond the context, and `outcome_label` passes the definition's outcome label
 # as a keyword (the single-outcome stage is shared across models that plot
 # different outcomes, so the label is not recoverable from the context).
 ENGINES = {
-    "univariate": {
-        "module": "vocab_growth.models.common",
-        "prepare": "prepare_univariate_data",
-        "priors": "configure_univariate_priors",
-        "build": "build_model",
-        "plots": "run_standard_plots",
-        "plots_call": "outcome_label",
-    },
-    "bivariate": {
-        "module": "vocab_growth.models.common_bivariate",
-        "prepare": "prepare_bivariate_data",
-        "priors": "configure_bivariate_priors",
-        "build": "build_model",
-        "plots": "_run_bivariate_joint_plots",
-        "plots_call": "definition",
-    },
-    "bivariate_re": {
-        "module": "vocab_growth.models.common_bivariate_re",
-        "prepare": "prepare_bivariate_re_data",
-        "priors": "configure_bivariate_priors",
-        "build": "build_model_re",
-        "plots": "_run_bivariate_joint_plots",
-        "plots_call": "definition",
-    },
-    "trivariate": {
-        "module": "vocab_growth.models.common_trivariate",
-        "prepare": "prepare_trivariate_data",
-        "priors": "configure_trivariate_priors",
-        "build": "build_model",
-        "plots": "_run_trivariate_plots",
-        "plots_call": "context",
-    },
-    "joint": {
-        "module": "vocab_growth.models.common_joint_modality",
-        "prepare": "prepare_joint_data",
-        "priors": "configure_joint_priors",
-        "build": "build_model",
-        "plots": "_run_joint_plots",
-        "plots_call": "context",
-    },
+    name: engine for name, engine in CATALOGUE_ENGINES.items() if engine.supports_replot
 }
 
 ENGINE_BY_MODEL = {
-    "vg01": "univariate",
-    "vg02": "univariate",
-    "vg03": "univariate",
-    "vg04": "univariate",
-    "vg05": "bivariate",
-    "vg07": "bivariate_re",
-    "vg08": "bivariate_re",
-    "vg09": "bivariate_re",
-    "vg10": "bivariate_re",
-    "vg13": "bivariate_re",
-    "vg16": "bivariate_re",
-    "vg19": "bivariate_re",
-    "vg20": "bivariate_re",
-    "vg21": "bivariate_re",
-    "vg22": "bivariate_re",
-    "vg23": "bivariate_re",
-    "vg14": "trivariate",
-    "vg15": "joint",
+    key: model.engine.name
+    for key, model in CATALOGUE.items()
+    if model.engine.supports_replot
 }
 
 
-def _resolve(module_name, attr):
-    import importlib
-
-    module = importlib.import_module(module_name)
-    fn = getattr(module, attr, None)
-    if fn is None:
-        raise AttributeError(f"{module_name} has no {attr!r}")
-    return module, fn
+def _no_replot_reason(model_id: str) -> str:
+    """Why ``model_id`` cannot be redrawn, from the catalogue rather than guessed."""
+    model = CATALOGUE.get(model_id)
+    if model is None:
+        return "not a registered model"
+    return model.engine.replot_note or f"engine {model.engine.name!r} declares no plot stage"
 
 
 def _rebuild_context(model_id: str, config: str, output_root_dir: str):
@@ -171,9 +122,9 @@ def _rebuild_context(model_id: str, config: str, output_root_dir: str):
         sampling_config_name=config,
     )
 
-    module, prepare = _resolve(engine["module"], engine["prepare"])
-    _, configure = _resolve(engine["module"], engine["priors"])
-    _, build_model = _resolve(engine["module"], engine["build"])
+    prepare = engine.resolve("prepare")
+    configure = engine.resolve("priors")
+    build_model = engine.resolve("build")
 
     prepare(context, definition)
     configure(context, definition)
@@ -263,18 +214,16 @@ def regenerate(model_id: str, config: str, dry_run: bool = False) -> bool:
         # reproduces the stored draws rather than perturbing them, and it writes
         # its trace copy into staging, never over the promoted one.
         extractor = getattr(
-            _resolve(engine["module"], engine["prepare"])[0],
-            "extract_model_samples",
-            None,
+            importlib.import_module(engine.module), "extract_model_samples", None
         )
         if extractor is not None:
             context.set_model_samples(extractor(context.trace))
         else:
-            _, resample_pp = _resolve(engine["module"], "sample_posterior_predictive")
-            resample_pp(context, definition)
+            engine_module = importlib.import_module(engine.module)
+            engine_module.sample_posterior_predictive(context, definition)
 
-        _, plots = _resolve(engine["module"], engine["plots"])
-        plots_call = engine["plots_call"]
+        plots = engine.resolve("plots")
+        plots_call = engine.plots_call
         if plots_call == "definition":
             plots(context, definition)
         elif plots_call == "outcome_label":
@@ -337,14 +286,15 @@ if __name__ == "__main__":
     if args.model == "all":
         selected = [m for m in MODEL_REGISTRY if m in ENGINE_BY_MODEL]
         skipped = [m for m in MODEL_REGISTRY if m not in ENGINE_BY_MODEL]
-        if skipped:
-            console.print(
-                f"[skip] no plot-regeneration path for: {', '.join(sorted(skipped))}"
-            )
+        for model_id in sorted(skipped):
+            console.print(f"[skip] {model_id}: {_no_replot_reason(model_id)}")
     elif args.model in ENGINE_BY_MODEL:
         selected = [args.model]
     else:
-        console.print(f"[bold red]No regeneration path for model: {args.model}[/bold red]")
+        console.print(
+            f"[bold red]No regeneration path for model: {args.model}"
+            f" ({_no_replot_reason(args.model)})[/bold red]"
+        )
         sys.exit(1)
 
     updated = [m for m in selected if regenerate(m, args.config, dry_run=args.dry_run)]

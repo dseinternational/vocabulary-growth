@@ -14,13 +14,20 @@ write descriptive CSVs into a fit's output directory.
 
 Each engine therefore exposes a pure ``build_*_analysis_frame(definition)``
 function containing exactly the frame construction its prepare stage runs, and
-this module maps every registered model to its engine's builder so a validator
-can ask "what would this definition's frame hash be today?". The mapping is by
-model key because the engine choice lives in each ``model_vgNN`` module, not
-in the definition class (VG05 and VG07 share a definition class on different
-engines); ``tests/test_analysis_frames.py`` pins every registered key to a
-builder and pins a fitted manifest's recorded hash to the recomputed one, so
-a model moved between engines cannot silently drift.
+every registered model is mapped to its engine's builder so a validator can ask
+"what would this definition's frame hash be today?". The mapping is by model key
+because the engine choice lives in each ``model_vgNN`` module, not in the
+definition class (VG05 and VG07 share a definition class on different engines).
+
+Since issue #273 that mapping is **derived** from
+:mod:`vocab_growth.models.catalogue` rather than restated here. It was one of
+five hand-maintained copies of the same engine assignment, and the copy in
+``scripts/prior_predictive_audit.py`` had gone stale for six models without
+anything failing. ``tests/test_analysis_frames.py`` pins every registered key to
+a builder and pins a fitted manifest's recorded hash to the recomputed one, and
+``tests/test_model_catalogue.py`` pins each catalogue engine against what the
+model's own wrapper module imports, so a model moved between engines cannot
+silently drift.
 """
 
 from __future__ import annotations
@@ -32,31 +39,16 @@ import json
 import numpy as np
 import pandas as pd
 
+from vocab_growth.models.catalogue import CATALOGUE
+
 #: Engine frame builder for every registered model, as ``module:function``.
-#: Held as strings so importing this module stays light — the engines pull in
-#: PyMC. See the module docstring for why this is keyed by model rather than
-#: by definition class.
+#: Derived from the catalogue, so a model's frame builder and the engine that
+#: actually fits it cannot disagree. Kept as strings, and as a module-level
+#: mapping, because importing this module must stay light -- the engines pull in
+#: PyMC and the validators that need a frame hash must not.
 FRAME_BUILDERS: dict[str, str] = {
-    "vg01": "vocab_growth.models.common:build_univariate_analysis_frame",
-    "vg02": "vocab_growth.models.common:build_univariate_analysis_frame",
-    "vg03": "vocab_growth.models.common:build_univariate_analysis_frame",
-    "vg04": "vocab_growth.models.common:build_univariate_analysis_frame",
-    "vg05": "vocab_growth.models.common_bivariate:build_bivariate_analysis_frame",
-    "vg07": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg08": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg09": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg10": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg11": "vocab_growth.models.common_univariate_re:build_univariate_re_analysis_frame",
-    "vg12": "vocab_growth.models.common_univariate_re:build_univariate_re_analysis_frame",
-    "vg13": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg14": "vocab_growth.models.common_trivariate:build_trivariate_analysis_frame",
-    "vg15": "vocab_growth.models.common_joint_modality:build_joint_analysis_frame",
-    "vg16": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg19": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg20": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg21": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg22": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
-    "vg23": "vocab_growth.models.common_bivariate_re:build_bivariate_re_analysis_frame",
+    key: f"{model.engine.module}:{model.engine.frame_builder}"
+    for key, model in CATALOGUE.items()
 }
 
 

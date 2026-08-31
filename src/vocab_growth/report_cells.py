@@ -195,6 +195,24 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ),
     ("log_psi", "Sign–speech association $\\psi$ (log scale)", "log_psi", "log_psi"),
     ("beta_lag", "Cross-lag coefficient $\\beta$", "beta_lag", "lag"),
+    # VG15 samples this and its own page names it a prior-sensitivity target,
+    # but the table had no row for it -- the same omission as VG22's factor
+    # block, found by the coverage check written for that one (#273).
+    (
+        "log_conc",
+        "Dirichlet-Multinomial concentration (log scale)",
+        "log_conc",
+        "log_concentration",
+    ),
+    # Sampled only under `spoken_fallback="separate_dispersion"`, which is a
+    # registered VG10 sensitivity variant -- and a variant fit renders the model
+    # of record's template, so a prior with no row shows up on a real page.
+    (
+        "log_kappa_s_fallback",
+        "Dispersion offset for spoken rows with no usable understood count",
+        "spoken_fallback_kappa",
+        "log_multiplier",
+    ),
 ]
 
 
@@ -368,6 +386,33 @@ def _prior_row(
             f"centred on zero and {emphasis}; 5–95% {lo:+.2f} to {hi:+.2f}",
         )
 
+    if kind == "log_multiplier":
+        sigma = definition.get(f"{stem}_sigma")
+        if sigma is None:
+            return None
+        hi = math.exp(1.598 * sigma)  # 89% equal-tailed, centred on zero
+        return (
+            description,
+            f"Normal(0, {sigma:g})",
+            f"a multiplier on the shared age-varying $\\kappa$; centred on 1 "
+            f"(no separate dispersion), 89% {1 / hi:.2f}–{hi:.2f}",
+        )
+
+    if kind == "log_concentration":
+        mu = definition.get(f"{stem}_mu")
+        sigma = definition.get(f"{stem}_sigma")
+        if mu is None or sigma is None:
+            return None
+        lo = math.exp(mu - 1.645 * sigma)
+        hi = math.exp(mu + 1.645 * sigma)
+        return (
+            description,
+            f"Normal({mu:g}, {sigma:g})",
+            f"concentration median {math.exp(mu):.0f}, 5–95% {lo:.0f}–{hi:.0f}; "
+            "larger means the four-cell counts cluster more tightly around the "
+            "predicted composition",
+        )
+
     if kind in {"lag", "log_psi"}:
         mu = definition.get(f"{stem}_mu", 0.0)
         sigma = definition.get(f"{stem}_sigma")
@@ -427,30 +472,252 @@ def _subject_scale_row(description: str, spec: Mapping) -> tuple[str, str, str] 
     return None
 
 
-def render_priors_table(directory: str = ".") -> None:
-    """Print the fitted model's priors as a table read from its own manifest.
+#: Fitted parameters a priors table is not expected to carry a row for, and why.
+#: Checked by :func:`prior_coverage`, which is the graph-to-report contract that
+#: VG22's missing factor block escaped: a whole parameter family had no entry in
+#: :data:`_PRIOR_SPECS` and nothing said so (issue #273).
+#:
+#: Each entry is a predicate on the parameter name. The exemptions are the
+#: reparameterisation machinery and the derived quantities, never a prior a
+#: reader would want and cannot find.
+PRIOR_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    (
+        "*_raw",
+        "non-centred offset: the prior a reader wants is on the scale that "
+        "multiplies it, which carries its own row",
+    ),
+    (
+        "*_z",
+        "standard-normal deviate of a non-centred block, reported through its "
+        "scale",
+    ),
+    (
+        "derived",
+        "deterministic function of sampled parameters, not something a prior is "
+        "placed on",
+    ),
+)
 
-    Anchored proportions are given a word-count reading against the reference
-    inventory, and random-effect scales an odds-multiplier reading, because a
-    number on the logit scale is not something a reader can picture and every
-    review of these reports said so.
+#: Deterministics that appear in ``diagnostics.csv`` alongside the sampled
+#: parameters. Named explicitly because the diagnostics table does not
+#: distinguish the two, and a coverage check that treated every row as a
+#: parameter would demand priors for quantities that have none.
+#:
+#: The trend stems are the straight-line trajectory written on its natural
+#: scale: ``slope``/``intercept`` are the logit-scale line implied by the two
+#: anchored proportions, and ``ell`` is the length-scale in months implied by
+#: ``ell_unit``. All three are functions of priors that carry their own rows,
+#: and each appears once per outcome (``slope_u``, ``ell_q``, and the signed
+#: tent's ``slope_up_sign`` / ``slope_dn_sign``).
+_OUTCOME_SUFFIXES = ("", "_u", "_q", "_s", "_sign")
+_TREND_DETERMINISTICS = frozenset(
+    f"{stem}{suffix}"
+    for stem in ("slope", "intercept", "ell")
+    for suffix in _OUTCOME_SUFFIXES
+) | {"slope_up_sign", "slope_dn_sign"}
 
-    Only parameters this fit actually sampled appear: see :data:`_PRIOR_SPECS`.
+_DERIVED_PREFIXES = (
+    "b0_",
+    "b1_",
+    "delta_",
+    "subject_factor_corr",
+    "subject_factor_loadings",
+)
+#: Unconditionally derived: no registered model places a prior on any of these.
+#:
+#: `tau_subject`, `tau_subj_u`, `tau_subj_q` and `rho_uq` are deliberately
+#: **absent**. Each is a sampled parameter in some models and a deterministic in
+#: others -- `tau_subject` becomes a function of the variance budget in VG11/VG12,
+#: the two child scales become the factor block's level scales in VG22, and
+#: `rho_uq` is sampled in VG20 and implied by the loadings in VG22 -- so an
+#: unconditional exemption would absorb the loss of a row that other models do
+#: need. They are handled by `_prior_rows`'s `inert` set instead, which is
+#: computed from the definition and is therefore right per model.
+_DERIVED_NAMES = (
+    frozenset(
+        {
+            # exp(log_psi) and exp(log_conc); both priors are placed and
+            # reported on the log scale.
+            "psi",
+            "conc",
+        }
+    )
+    | _TREND_DETERMINISTICS
+)
+
+
+def _is_exempt(parameter: str) -> str | None:
+    """The reason ``parameter`` needs no prior row, or ``None`` if it needs one."""
+    if parameter.endswith("_raw"):
+        return PRIOR_EXEMPTIONS[0][1]
+    if parameter.endswith("_z") or "_z_" in parameter or parameter.startswith("z_"):
+        return PRIOR_EXEMPTIONS[1][1]
+    if parameter in _DERIVED_NAMES or parameter.startswith(_DERIVED_PREFIXES):
+        return PRIOR_EXEMPTIONS[2][1]
+    return None
+
+
+def _dispersion_parameters(present: set[str], field: str) -> list[str]:
+    """The ``kappa`` parameters one dispersion row accounts for.
+
+    The definition field is ``kappa`` / ``kappa_u`` / ``kappa_s`` / ``kappa_sign``,
+    but the graph names carry the outcome as a **suffix** on several different
+    stems -- ``kappa_min_u``, ``kappa_excess_young_u``, ``a_kappa_u``,
+    ``b_kappa_mag_s``, ``kappa_old_sign`` -- so a prefix match on the field name
+    finds none of them. One dispersion row describes that whole
+    parameterisation for its outcome, which is what it is a *block* row for.
+    """
+    suffix = field.removeprefix("kappa")  # "", "_u", "_s", "_sign"
+    other = {"_u", "_q", "_s", "_sign"} - {suffix}
+    return [
+        name
+        for name in present
+        if "kappa" in name
+        and (name.endswith(suffix) if suffix else not name.endswith(tuple(other)))
+    ]
+
+
+def prior_coverage(directory: str = ".") -> dict[str, list[str]]:
+    """Which of this fit's parameters the priors table covers, and which it does not.
+
+    Returns ``{"rendered": [...], "exempt": [...], "uncovered": [...]}``. A
+    non-empty ``uncovered`` means the rendered table is silently incomplete --
+    the VG22 failure, where the four factor scales, the nine loading directions
+    and the per-child factor scores had no entry in :data:`_PRIOR_SPECS` and the
+    page said only that the table "omits every prior this block adds".
+
+    Pure and cheap: it reads the same manifest and ``diagnostics.csv`` the table
+    itself reads, so it can be called from a report cell or a test without a
+    model build.
     """
     manifest = read_manifest(directory)
     definition = (manifest.get("model") or {}).get("definition") or {}
-    if not definition:
-        print(
-            "_No fit manifest for this fit (`fit_manifest.json` absent), so the "
-            "priors cannot be read from the fitted definition._"
-        )
-        return
-
     present = fitted_parameters(directory)
-    # Under a variance partition the child scale is a deterministic function of
-    # the budget, so its own prior never enters the model.
-    inert = {"tau_subject"} if definition.get("subject_variance_partition") else set()
+    rendered = set(_prior_rows(definition, present)[0])
+
+    covered: list[str] = []
+    exempt: list[str] = []
+    uncovered: list[str] = []
+    for parameter in sorted(present):
+        if parameter in rendered:
+            covered.append(parameter)
+        elif _is_exempt(parameter):
+            exempt.append(parameter)
+        else:
+            uncovered.append(parameter)
+    return {"rendered": covered, "exempt": exempt, "uncovered": uncovered}
+
+
+def _factor_rows(
+    definition: dict, present: set[str]
+) -> tuple[list[str], list[tuple[str, str, str]]]:
+    """Rows for VG22's low-rank factor block, and the parameters they cover.
+
+    The block replaces the parent's two child-intercept priors with four scale
+    priors, the sampled entries of the raw loading matrix and the per-child
+    factor scores. None of them fits :data:`_PRIOR_SPECS`'s
+    one-parameter-one-definition-field shape: the loading entries are a family
+    whose size depends on ``rank``, and the two rate scales live on the factor
+    spec while the two level scales are inherited from the parent's own scalar
+    fields. Rendering them by hand in the model's prose is what left VG22's
+    table describing a model it was not fitted under.
+    """
+    spec = definition.get("subject_factor")
+    if not isinstance(spec, Mapping):
+        return [], []
+
+    rank = int(spec.get("rank", 0))
     rows: list[tuple[str, str, str]] = []
+    covered: list[str] = []
+
+    scales = (
+        ("tau_subj_u_0", "Between-child SD, understood — level", definition.get("tau_subj_u_sigma")),
+        ("tau_subj_u_1", "Between-child SD, understood — rate", spec.get("tau1_u_sigma")),
+        ("tau_subj_q_0", "Between-child SD, ratio $q$ — level", definition.get("tau_subj_q_sigma")),
+        ("tau_subj_q_1", "Between-child SD, ratio $q$ — rate", spec.get("tau1_q_sigma")),
+    )
+    reference = spec.get("ref_age_months")
+    for parameter, description, sigma in scales:
+        if not isinstance(sigma, (int, float)):
+            # A level scale that is itself a block belongs to a different
+            # structure; say nothing rather than describe the wrong one.
+            continue
+        if present and parameter not in present:
+            continue
+        median = float(stats.halfnorm.ppf(0.5, scale=sigma))
+        if parameter.endswith("_1"):
+            reading = f"median {median:.2f} logits per year of age"
+        else:
+            where = f" at {reference:g} months" if isinstance(reference, (int, float)) else ""
+            reading = f"median {median:.2f} logits{where} (odds ×{math.exp(median):.2f} at +1 SD)"
+        rows.append((description, f"HalfNormal({sigma:g})", reading))
+        covered.append(parameter)
+
+    loadings = sorted(p for p in present if p.startswith("subject_factor_w_"))
+    if loadings or not present:
+        # The k anchor diagonals carry a HalfNormal, which is what pins each
+        # factor's sign; everything else is a Normal. The count is reported
+        # because it is the free-parameter count the rank was chosen on.
+        anchors = min(rank, len(loadings)) if loadings else rank
+        rows.append(
+            (
+                f"Loading directions $W$ ({len(loadings) or 'rank-dependent'} sampled entries)",
+                "HalfNormal(1) on the anchor diagonal, Normal(0, 1) elsewhere",
+                f"{anchors} anchor entries fix the rotation and each factor's sign; "
+                "rows are normalised to unit length, so $\\tau$ carries the whole "
+                "marginal scale",
+            )
+        )
+        covered.extend(loadings)
+
+    if not present or "subject_factor_z" in present:
+        rows.append(
+            (
+                f"Per-child factor scores $z$ (rank {rank})" if rank else "Per-child factor scores $z$",
+                "Normal(0, I)",
+                "standard normal by construction; the scale lives in the loadings",
+            )
+        )
+        covered.append("subject_factor_z")
+
+    if rows:
+        rows.append(
+            (
+                "Implied correlations $\\rho$ among the four child effects",
+                "induced by the loading priors, **not designed**",
+                "at the registered anchor order $\\rho_{uq}$ is arcsine on "
+                "$(-1, 1)$, which piles mass at the extremes and is not "
+                "prior-comparable with an LKJ; see the model page and #266",
+            )
+        )
+        # That row *is* this model's statement about rho_uq's prior: it is a
+        # deterministic here, so `_PRIOR_SPECS`'s LKJ row correctly declines it.
+        covered.append("rho_uq")
+    return covered, rows
+
+
+def _prior_rows(
+    definition: dict, present: set[str]
+) -> tuple[list[str], list[tuple[str, str, str]]]:
+    """Every priors-table row for this definition, and the parameters they cover.
+
+    Split out of :func:`render_priors_table` so :func:`prior_coverage` can ask
+    what the table would say without printing it.
+    """
+    covered: list[str] = []
+    rows: list[tuple[str, str, str]] = []
+
+    factor_covered, factor_rows = _factor_rows(definition, present)
+    # A factor block reports the two level scales under their own names, so the
+    # parent's scalar rows would restate them; and under a variance partition the
+    # child scale is a deterministic function of the budget, so its own prior
+    # never enters the model.
+    inert = set(factor_covered)
+    if definition.get("subject_variance_partition"):
+        inert.add("tau_subject")
+    if factor_rows:
+        inert.update({"tau_subj_u", "tau_subj_q"})
+
     for parameter, description, stem, kind in _PRIOR_SPECS:
         if parameter in inert:
             continue
@@ -459,6 +726,28 @@ def render_priors_table(directory: str = ".") -> None:
         row = _prior_row(parameter, description, stem, kind, definition)
         if row is not None:
             rows.append(row)
+            covered.append(parameter)
+            # A subject-scale field holding a block renders one row for the
+            # block, so the row accounts for the block's own parameters. The
+            # two blocks name them differently: VG19's child slope emits
+            # `{name}_0`, `_1` and `_rho`, while Proposal A1's age-varying scale
+            # emits `log_{name}_ratio` -- a prefix rule alone finds only the
+            # first.
+            if isinstance(definition.get(stem), Mapping):
+                covered.extend(
+                    name
+                    for name in present
+                    if name.startswith(f"{parameter}_")
+                    or name == f"log_{parameter}_ratio"
+                )
+
+    rows.extend(factor_rows)
+    covered.extend(factor_covered)
+    # An inert parameter is a *positive* statement, not a gap: the model makes it
+    # a deterministic function of something else, and the rows that replaced it
+    # are in the table. Counting it as covered is what keeps the coverage check
+    # from demanding a prior that does not exist.
+    covered.extend(name for name in inert if name in present)
 
     for field in ("kappa", "kappa_u", "kappa_s", "kappa_sign"):
         kappa = definition.get(field)
@@ -482,6 +771,32 @@ def render_priors_table(directory: str = ".") -> None:
                 "larger $\\kappa$ means *less* between-child spread",
             )
         )
+        covered.extend(_dispersion_parameters(present, field))
+
+    return covered, rows
+
+
+def render_priors_table(directory: str = ".") -> None:
+    """Print the fitted model's priors as a table read from its own manifest.
+
+    Anchored proportions are given a word-count reading against the reference
+    inventory, and random-effect scales an odds-multiplier reading, because a
+    number on the logit scale is not something a reader can picture and every
+    review of these reports said so.
+
+    Only parameters this fit actually sampled appear: see :data:`_PRIOR_SPECS`.
+    """
+    manifest = read_manifest(directory)
+    definition = (manifest.get("model") or {}).get("definition") or {}
+    if not definition:
+        print(
+            "_No fit manifest for this fit (`fit_manifest.json` absent), so the "
+            "priors cannot be read from the fitted definition._"
+        )
+        return
+
+    present = fitted_parameters(directory)
+    covered, rows = _prior_rows(definition, present)
 
     if not rows:
         print("_This fit's manifest records no recognised prior fields._")
@@ -497,6 +812,27 @@ def render_priors_table(directory: str = ".") -> None:
     if n_trials:
         caption += f" Word counts are against the {n_trials:,}-word reference inventory."
     print(caption)
+
+    # Say so on the page when the table is incomplete. VG22 fitted a factor
+    # block this table could not render, and the only record of it was a
+    # sentence someone had written by hand into that model's template -- which
+    # is the same failure mode as the copied priors this module exists to
+    # replace. A gap now announces itself wherever it occurs.
+    uncovered = sorted(
+        parameter
+        for parameter in present
+        if parameter not in set(covered) and not _is_exempt(parameter)
+    )
+    if uncovered:
+        print()
+        print(
+            "::: {.callout-warning title=\"Incomplete priors table\"}\n\n"
+            "This fit sampled "
+            + ", ".join(f"`{name}`" for name in uncovered)
+            + ", for which this table has no row. The priors in force are the "
+            "ones the model definition records; the gap is in the table, not in "
+            "the fit.\n:::"
+        )
 
 
 def render_model_at_a_glance(directory: str = ".") -> None:

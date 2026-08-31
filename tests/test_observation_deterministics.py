@@ -17,9 +17,13 @@ The end-to-end tests build the real VG07 model on synthetic data and sample it
 with nutpie for a handful of draws; the point is exactness, not convergence.
 """
 
+import ast
+import importlib
+import inspect
 import json
 import os
 from dataclasses import fields as dc_fields
+from pathlib import Path
 
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
@@ -39,12 +43,14 @@ from vocab_growth.fit_artifacts import (
     save_trace,
     unsampled_deterministic_names,
 )
+from vocab_growth.models import catalogue
 from vocab_growth.models.common import ModelFitContext, ModelSamples, sample
 from vocab_growth.models.common_bivariate import (
     BivariateModelSamples,
     configure_bivariate_priors,
 )
 from vocab_growth.models.common_bivariate_re import build_model_re
+from vocab_growth.models.common_joint_modality import JointModelSamples
 from vocab_growth.models.common_trivariate import TrivariateModelSamples
 from vocab_growth.models.definitions import VG07
 from vocab_growth.posterior_recompute import (
@@ -52,10 +58,18 @@ from vocab_growth.posterior_recompute import (
     with_deterministics,
 )
 
-# The module fixture is two real nutpie fits of the same model, which is the
-# only way to show the draws are unchanged. Minutes, not seconds, so
-# deselected unless `-m ""` asks for it.
-pytestmark = pytest.mark.slow
+# The `two_fits` fixture is two real nutpie fits of the same model, which is the
+# only way to show the draws are unchanged. Minutes, not seconds, so every test
+# that draws it is marked `slow` and deselected unless `-m "slow or not slow"`
+# asks for it.
+#
+# The rule tests above it are pure -- a toy graph, the sample structs' declared
+# fields, and an AST walk over the engine sources -- and are deliberately *not*
+# marked, so they run in the fast job. Until issue #273 a module-level
+# `pytestmark` made the whole file slow, which is why the struct contract that
+# should have caught VG14's `g_sign_obs` and `r_obs` was not running on any
+# pull request even after it was extended.
+_slow = pytest.mark.slow
 
 
 class _NoopDigraph:
@@ -101,19 +115,84 @@ def test_sampled_names_keep_every_free_rv_and_the_other_deterministics():
     assert not {"f_obs", "f_all"} & set(names)
 
 
-@pytest.mark.parametrize("struct", [ModelSamples, BivariateModelSamples, TrivariateModelSamples])
+@pytest.mark.parametrize(
+    "struct",
+    [ModelSamples, BivariateModelSamples, TrivariateModelSamples, JointModelSamples],
+)
 def test_sample_structs_carry_no_observation_level_posterior(struct):
     # Nothing read these fields; the extractors no longer populate them, so the
     # structs must not declare them either (a declared field would make the
     # extractor's omission a construction error).
+    #
+    # `g_sign_obs` and `r_obs` were the two that survived the 2026-08-23 sweep:
+    # VG14 alone carries them, they were not in this list, and a fresh default
+    # VG14 fit therefore raised KeyError in `extract_model_samples` after
+    # posterior-predictive sampling -- hours into a fit, on a model no CI job
+    # samples (issue #273). The general rule is pinned by
+    # `test_no_extractor_reads_an_observation_dimensioned_posterior` below;
+    # this list is the readable statement of it.
     names = {f.name for f in dc_fields(struct)}
     forbidden = {
         "X_obs_z", "f_obs", "p_obs", "f_u_obs", "p_u_obs", "h_obs", "q_obs",
         "f_s_obs", "p_s_obs", "f_sign_obs", "p_sign_obs",
+        "g_sign_obs", "r_obs",
     }
     assert not names & forbidden
-    # The observed counts and the constant age grid are data, not posterior, and stay.
-    assert "X_obs" in names
+    # The observed counts and the constant age grid are data, not posterior, and
+    # stay. The joint engine carries no observation grid at all.
+    if struct is not JointModelSamples:
+        assert "X_obs" in names
+
+
+#: Trace dimensions the sampler is told not to store, so nothing may read a
+#: posterior variable indexed by one. Mirrors `fit_artifacts._is_recomputable_dim`.
+_UNSTORED_DIMS = {"obs_id", "all_id"}
+
+_ENGINE_MODULES = sorted(
+    {engine.module for engine in catalogue.ENGINES.values()}
+)
+
+
+@pytest.mark.parametrize("module_name", _ENGINE_MODULES)
+def test_no_extractor_reads_an_observation_dimensioned_posterior(module_name):
+    """No engine may read back a deterministic the sampler was told to skip.
+
+    The rule is on the *dimension*, so this is checked as a rule rather than as
+    a list of names: any ``extract_posterior(trace, <name>, "obs_id")`` reads
+    ``trace.posterior[<name>]`` for a variable ``pm.sample`` never stored, and
+    raises ``KeyError`` -- after sampling and after posterior prediction, which
+    on a reporting fit is hours in. Read from the source rather than from a fit,
+    so it costs nothing and covers every engine including the ones no CI job
+    samples.
+
+    ``posterior_predictive`` is a different group and is stored in full, so
+    ``extract_posterior_predictive`` on ``obs_id`` is fine and is not matched
+    here.
+    """
+    tree = ast.parse(
+        (Path(inspect.getfile(importlib.import_module(module_name)))).read_text(
+            encoding="utf-8"
+        )
+    )
+    offences = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+        if name not in {"extract_posterior", "_extract_posterior"}:
+            continue
+        dim = node.args[-1]
+        if isinstance(dim, ast.Constant) and dim.value in _UNSTORED_DIMS:
+            variable = node.args[1]
+            offences.append(
+                (getattr(variable, "value", "<expr>"), dim.value, node.lineno)
+            )
+    assert not offences, (
+        f"{module_name} reads posterior variables the sampler does not store: "
+        + ", ".join(f"{n!r} on {d} (line {ln})" for n, d, ln in offences)
+        + ". Drop the read and the struct field, or recompute it with "
+        "vocab_growth.posterior_recompute."
+    )
 
 
 # --- end to end on the real VG07 graph ------------------------------------------
@@ -180,6 +259,7 @@ def two_fits(tmp_path_factory):
         mp.undo()
 
 
+@_slow
 def test_lean_fit_stores_no_observation_deterministics(two_fits):
     lean, full = two_fits
     excluded = unsampled_deterministic_names(lean.model)
@@ -194,6 +274,7 @@ def test_lean_fit_stores_no_observation_deterministics(two_fits):
     assert kept <= set(full_post.data_vars)
 
 
+@_slow
 def test_not_storing_them_does_not_change_the_draws(two_fits):
     lean, full = two_fits
     lean_post = _as_dataset(lean.trace.posterior)
@@ -218,6 +299,7 @@ def test_not_storing_them_does_not_change_the_draws(two_fits):
         )
 
 
+@_slow
 def test_trace_records_what_was_not_sampled(two_fits):
     lean, full = two_fits
     excluded = unsampled_deterministic_names(lean.model)
@@ -226,6 +308,7 @@ def test_trace_records_what_was_not_sampled(two_fits):
     assert read_not_sampled_attr(full.trace) == []
 
 
+@_slow
 def test_recomputed_deterministic_matches_the_stored_one(two_fits):
     lean, full = two_fits
     lean_post = _as_dataset(lean.trace.posterior)
@@ -243,12 +326,14 @@ def test_recomputed_deterministic_matches_the_stored_one(two_fits):
     assert missing_deterministics(lean_post, names) == names
 
 
+@_slow
 def test_recompute_refuses_names_the_model_does_not_define(two_fits):
     lean, _ = two_fits
     with pytest.raises(KeyError, match="no_such_deterministic"):
         with_deterministics(_as_dataset(lean.trace.posterior), lean.model, ["no_such_deterministic"])
 
 
+@_slow
 def test_save_trace_records_not_sampled_and_compact_finds_nothing_observation_sized(
     two_fits, tmp_path
 ):
@@ -263,6 +348,7 @@ def test_save_trace_records_not_sampled_and_compact_finds_nothing_observation_si
     assert not set(excluded) & set(plan.get("posterior", []))
 
 
+@_slow
 def test_recompute_works_on_a_thinned_posterior(two_fits):
     # loso_compare thins before recomputing; compute_deterministics relabels the
     # draw axis 0..n-1, so without carrying the input's labels over the exact
@@ -277,6 +363,7 @@ def test_recompute_works_on_a_thinned_posterior(two_fits):
     )
 
 
+@_slow
 def test_trace_records_the_sampled_parameters(two_fits):
     # What loo_reff pins PSIS-LOO's relative efficiency to, readable from the
     # stored trace without the model.

@@ -43,16 +43,19 @@ from dse_research_utils.statistics.models.sampling import SamplingConfiguration
 
 from vocab_growth import environment as env
 
-# Same mapping as scripts/fit_sensitivity.py — the engine each model's variants
-# are fitted through. Imported lazily in main so that a plain model refit does
-# not pay for the sensitivity imports.
-_RUNNER_IMPORTS = {
-    "vg10": ("common_bivariate_re", "fit_bivariate_re_model"),
-    "vg11": ("common_univariate_re", "fit_univariate_re_model"),
-    "vg12": ("common_univariate_re", "fit_univariate_re_model"),
-    "vg13": ("common_bivariate_re", "fit_bivariate_re_model"),
-    "vg15": ("common_joint_modality", "fit_joint_model"),
-}
+
+# Which models have sensitivity variants, and the engine each is fitted through.
+# Both come from the catalogue and the variant registry rather than from a table
+# maintained here: the copy this replaced was missing VG16, VG21 and VG23, whose
+# registered variants were therefore unreachable from both this script and
+# scripts/fit_sensitivity.py (issue #273). Importing the variant registry is
+# cheap -- it holds no PyMC -- and the engine module is still resolved lazily, so
+# a plain model refit does not pay for the engine import.
+def _models_with_variants() -> list[str]:
+    from vocab_growth.sensitivity.registry import VARIANTS
+
+    return sorted({model_key for model_key, _ in VARIANTS})
+
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -73,10 +76,10 @@ if __name__ == "__main__":
     freeze_support()
     a = p.parse_args()
 
-    if a.variant and a.model not in _RUNNER_IMPORTS:
+    if a.variant and a.model not in _models_with_variants():
         p.error(
             f"No sensitivity variants for model {a.model!r} "
-            f"(available: {', '.join(_RUNNER_IMPORTS)})."
+            f"(available: {', '.join(_models_with_variants())})."
         )
 
     _orig = S.get_sampling_configuration
@@ -104,13 +107,10 @@ if __name__ == "__main__":
     )
 
     if a.variant:
+        from vocab_growth.models.catalogue import engine_for
         from vocab_growth.sensitivity.registry import build_variant
 
-        module_name, runner_name = _RUNNER_IMPORTS[a.model]
-        runner = getattr(
-            importlib.import_module(f"vocab_growth.models.{module_name}"),
-            runner_name,
-        )
+        runner = engine_for(a.model).resolve("fit")
         # build_variant raises KeyError on an unregistered name, which is the
         # right failure: better than fitting the model of record by accident.
         (vdef,) = build_variant(a.model, a.variant)
