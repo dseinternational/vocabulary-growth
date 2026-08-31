@@ -23,6 +23,12 @@ docs/comparison/*.svg
 docs/comparison/index.html
 docs/comparison/index_files/
 
+# The standalone descriptive report renders in place the same way: index.html
+# and index_files/ land beside docs/descriptive/index.qmd and are regenerated
+# on every render — never committed.
+docs/descriptive/index.html
+docs/descriptive/index_files/
+
 # Quarto/LaTeX render byproducts staged next to docs/report/index.qmd. The book
 # renders to the output root (see _quarto.yml's output-dir), so an index.html
 # here is a leftover from an older render, not a deliverable -- but it is

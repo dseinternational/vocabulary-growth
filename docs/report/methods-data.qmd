@@ -45,3 +45,94 @@ This data was collected as part of two studies investigating longitudinal trends
 In the first study, 18 children with Down syndrome were studied longitudinally, including 10 children who were 2 years old and were followed for a 2-year period until they reached the age of 4 years. Moreover, eight other 3-year-old children were followed for a 1-year period until they reached the age of 4 years. For the second study, 27 children were selected from the sample of 60 toddlers attending our monitoring program on language development. The inclusion criteria for these children were a developmental age of approximately 18 (M = 18.22, range: 16–20), 24 (M = 24.11, range: 23–25), and 30 (M = 29.22, range: 28–30) months. Nine children were included in each group.
 
 \[TODO\]
+
+## Study summaries {#sec-study-summaries}
+
+```{python}
+#| label: tbl-summary-ds
+#| echo: false
+#| tbl-cap: "Pooled Down syndrome data, by study: children, checklist administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Blank cells mean the study records no such measure (or the loader masks it). The All row pools every observation."
+from pathlib import Path
+
+import pandas as pd
+
+
+def _summary_display(path, group_label):
+    p = Path(path)
+    if not p.exists():
+        return pd.DataFrame({"note": ["Run scripts/generate_descriptive_report.py first."]})
+    d = pd.read_csv(p)
+
+    def rng(prefix):
+        return [
+            "" if pd.isna(lo) else f"{lo:.0f}–{hi:.0f}"
+            for lo, hi in zip(d[f"{prefix}_min"], d[f"{prefix}_max"])
+        ]
+
+    def med(prefix):
+        return [
+            "" if pd.isna(v) else (f"{v:.0f}" if float(v).is_integer() else f"{v:.1f}")
+            for v in d[f"{prefix}_median"]
+        ]
+
+    def mean_sd(prefix):
+        return [
+            "" if pd.isna(m) else (f"{m:.1f} ({s:.1f})" if pd.notna(s) else f"{m:.1f}")
+            for m, s in zip(d[f"{prefix}_mean"], d[f"{prefix}_sd"])
+        ]
+
+    return pd.DataFrame(
+        {
+            group_label: d["study"],
+            "Children": d["n_subjects"].astype(int),
+            "Obs.": d["n_observations"].astype(int),
+            "Age range": rng("age"),
+            "Age mdn": med("age"),
+            "Age mean (SD)": mean_sd("age"),
+            "Und. range": rng("understood"),
+            "Und. mdn": med("understood"),
+            "Und. mean (SD)": mean_sd("understood"),
+            "Spoken range": rng("spoken"),
+            "Spoken mdn": med("spoken"),
+            "Spoken mean (SD)": mean_sd("spoken"),
+        }
+    )
+
+
+_summary_display("figures/descriptives/summary_table_ds.csv", "Study")
+```
+
+```{python}
+#| label: tbl-summary-td
+#| echo: false
+#| tbl-cap: "Typically-developing Wordbank reference pool, by dataset: children, administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Comprehension is measured only on the bivariate forms, so its columns cover fewer administrations than the spoken ones. The All row pools every observation."
+_summary_display("figures/descriptives/summary_table_td.csv", "Dataset")
+```
+
+## Vocabulary by age {#sec-vocabulary-by-age}
+
+Every observation in the pooled Down syndrome data, coloured by study, against the pooled interquartile band (25th–75th percentile) per 6-month age bin, drawn where a bin holds at least five observations. The scatter covers the pool's full age range deliberately: beyond about 72 months coverage rests on a couple of studies, which is why the results are reported to 72 months.
+
+![Words understood by age in the pooled Down syndrome data, coloured by study, against the pooled interquartile band.](figures/descriptives/observations_age_understood_ds){#fig-obs-understood-ds .lightbox}
+
+![Words spoken by age in the pooled Down syndrome data, coloured by study, against the pooled interquartile band.](figures/descriptives/observations_age_spoken_ds){#fig-obs-spoken-ds .lightbox}
+
+The typically-developing Wordbank reference pool is too dense for a scatter — hundreds of administrations at each integer age — so its by-age view is the monthly distribution: one violin per month (density clipped to that month's observed range), with the pooled monthly median and interquartile band. Comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do:
+
+![Words understood by age in the typically-developing reference pool — monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_understood_td){#fig-obs-understood-td .lightbox}
+
+![Words spoken by age in the typically-developing reference pool — monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_spoken_td){#fig-obs-spoken-td .lightbox}
+
+## Repeated measures {#sec-repeated-measures}
+
+Many children are measured more than once, and the within-child trajectories motivate the models' subject-level random effects. In the figures below each line joins one child's visits on one checklist form, drawn against the pooled median, mean and interquartile range for that age window (computed over all observations, single-visit children included). Lines are linked **within form only**: a child measured on two forms at one visit, or moved between forms, records counts on different item inventories, and joining those would draw measurement-scale changes as development. The Down syndrome figures cover the 8–72 month reporting window; individual trajectories fan widely around the pooled centre — same-age children span an order of magnitude in vocabulary, and individual slopes vary far more than the median slope.
+
+![Words understood by age — repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_understood_ds){#fig-rm-understood-ds .lightbox}
+
+![Words spoken by age — repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_spoken_ds){#fig-rm-spoken-ds .lightbox}
+
+The same view of the typically-developing Wordbank reference pool, over its 8–30 month admission window (3-month bins; comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do):
+
+![Words understood by age — repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_understood_td){#fig-rm-understood-td .lightbox}
+
+![Words spoken by age — repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_spoken_td){#fig-rm-spoken-td .lightbox}

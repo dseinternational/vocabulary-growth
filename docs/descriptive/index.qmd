@@ -23,7 +23,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
+Drafted by an LLM-based AI tool (Claude Code/Opus 4.8; repeated-measures trajectory sections Claude Code/Fable 5).
 :::
 
 ::: {.callout-warning title="Warning: Describes the observed data, not model output"}
@@ -32,7 +32,7 @@ This report summarises the **raw observed data only** — no fitted model output
 
 This report inventories the pooled Down syndrome vocabulary data before any modelling: how much data each contributing study provides, over what ages, and how words understood, spoken and signed are distributed. It is deliberately separate from the [modelling report](../report/) and the [model pages](../models/) — a plain description of what we are fitting to.
 
-Each row of the source data is one **parent-report checklist administration** for one child at one age: counts of words *understood* and *spoken* (and, for the signing sub-set, words *signed*), harmonised onto the common 810-item reference inventory. Children measured repeatedly contribute several rows, so observations exceed children. The current pooled sample comprises **1,078 observations of 576 children across eleven international studies, spanning ages 8–115 months** — 818 observations record words understood, 1,063 words spoken, and 528 words signed. Per-study detail is in @tbl-inventory; the figures then plot the raw observations, one colour per study.
+Each row of the source data is one **parent-report checklist administration** for one child at one age: counts of words *understood* and *spoken* (and, for the signing sub-set, words *signed*), harmonised onto the common 810-item reference inventory. Children measured repeatedly contribute several rows, so observations exceed children. The current pooled sample comprises **1,516 observations of 777 children across fourteen international studies, spanning ages 8–115 months** — 976 observations record words understood, 1,421 words spoken, and 899 words signed. Per-study detail is in @tbl-inventory; the figures then plot the raw observations, one colour per study.
 
 ## Study inventory
 
@@ -88,11 +88,37 @@ The studies vary widely in size (from a dozen to a couple of hundred observation
 
 ## Vocabulary by age
 
-Both receptive and expressive vocabulary rise with age, but with very wide between-child spread at every age — the raw scatter makes the case for a flexible (nonparametric) mean function and for modelling the between-child variability explicitly rather than assuming a tight growth curve.
+Both receptive and expressive vocabulary rise with age, but with very wide between-child spread at every age — the raw scatter makes the case for a flexible (nonparametric) mean function and for modelling the between-child variability explicitly rather than assuming a tight growth curve. Every observation is drawn (single-visit children included) over the pool's full age range, so it is also visible where the data thins: beyond about 72 months, coverage rests on a couple of studies, which is why the modelling report's figures stop there. The red band is the pooled interquartile range (25th–75th percentile) per 6-month age bin, drawn only where a bin holds at least five observations; the pooled median and mean appear on the repeated-measures figures below.
 
-![Words understood by age, coloured by study](figures/scatter_age_understood_ds.png){#fig-understood-age .lightbox fig-align="left"}
+![Words understood by age, coloured by study, against the pooled interquartile band](figures/observations_age_understood_ds.png){#fig-understood-age .lightbox fig-align="left"}
 
-![Words spoken by age, coloured by study](figures/scatter_age_spoken_ds.png){#fig-spoken-age .lightbox fig-align="left"}
+![Words spoken by age, coloured by study, against the pooled interquartile band](figures/observations_age_spoken_ds.png){#fig-spoken-age .lightbox fig-align="left"}
+
+### The typically-developing reference pool by age
+
+The Wordbank typically-developing pool the models compare against is too dense for a scatter — hundreds of administrations at each integer age saturate into stripes — so its by-age view is the monthly distribution: one violin per month (density clipped to that month's observed range), with the pooled monthly median and interquartile band. The shapes carry the story a scatter hides: production mass sitting on zero into the second year, the long right tail as the spurt begins, and accumulation at the form ceilings. Comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do.
+
+![Words understood by age (typically developing), monthly distributions](figures/violins_age_understood_td.png){#fig-understood-age-td .lightbox fig-align="left"}
+
+![Words spoken by age (typically developing), monthly distributions](figures/violins_age_spoken_td.png){#fig-spoken-age-td .lightbox fig-align="left"}
+
+## Individual trajectories (repeated measures)
+
+Many children are measured more than once, and the within-child view is sharper than the pooled scatter: each line below joins one child's visits on one checklist form, drawn against the pooled median, mean and interquartile range (computed over all observations in the window, single-visit children included). Lines are deliberately linked **within form only** — a child measured on two forms at one visit, or moved between forms, records counts on different item inventories, and joining those would draw measurement-scale changes as development. The Down syndrome figures cover the 8–72 month reporting window.
+
+![Words understood by age — individual repeated-measures trajectories (Down syndrome), by study](figures/repeat_measures_age_understood_ds.png){#fig-rm-understood .lightbox fig-align="left"}
+
+![Words spoken by age — individual repeated-measures trajectories (Down syndrome), by study](figures/repeat_measures_age_spoken_ds.png){#fig-rm-spoken .lightbox fig-align="left"}
+
+Individual trajectories fan widely around the pooled centre: same-age children span an order of magnitude in vocabulary, and individual slopes vary far more than the median slope — the case for child-level random effects, made visually. The spoken panel also shows the median child speaking very few words before roughly 30 months while the upper quartile is already in the hundreds, the right skew the dispersion model carries.
+
+### The typically-developing reference pool
+
+The same view of the Wordbank typically-developing pool the models compare against, over its 8–30 month admission window (3-month bins; comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do). Its repeat measures are concentrated in a few longitudinal datasets, and the pace difference is direct: the typically-developing median passes 300 words understood soon after 22 months, a level the Down syndrome pool's median approaches around 40.
+
+![Words understood by age — individual repeated-measures trajectories (typically developing), by dataset](figures/repeat_measures_age_understood_td.png){#fig-rm-understood-td .lightbox fig-align="left"}
+
+![Words spoken by age — individual repeated-measures trajectories (typically developing), by dataset](figures/repeat_measures_age_spoken_td.png){#fig-rm-spoken-td .lightbox fig-align="left"}
 
 ## Words understood versus words spoken
 
