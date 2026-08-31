@@ -5,7 +5,6 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 """
 
 import argparse
-import importlib
 import os
 import shutil
 import subprocess
@@ -30,6 +29,7 @@ from vocab_growth.fit_artifacts import (
     set_trace_persistence,
     source_data_hash,
 )
+from vocab_growth.models import catalogue
 from vocab_growth.models.common import (
     ConvergenceGateError,
     is_reporting_quality_config,
@@ -232,11 +232,13 @@ if __name__ == "__main__":
         help=(
             "How much of the trace to keep in trace.nc (overrides "
             "$DSE_VOCAB_GROWTH_TRACE_PERSISTENCE; default: full). 'compact' "
-            "drops the observation-sized deterministics, which are recomputable "
-            "from the parameters and cost nothing statistically; 'minimal' also "
-            "drops the stored log-likelihood and posterior predictive, which "
-            "forecloses recomputing LOO or a new predictive check without "
-            "refitting. Does not affect the posterior."
+            "drops the duplicated scaled random effects, which are recomputable "
+            "from the raw draws and the scales and cost nothing statistically "
+            "(the observation-sized deterministics are not stored at any tier "
+            "since 2026-08-23, so compact no longer has them to drop); "
+            "'minimal' also drops the stored log-likelihood and posterior "
+            "predictive, which forecloses recomputing LOO or a new predictive "
+            "check without refitting. Does not affect the posterior."
         ),
     )
 
@@ -270,17 +272,17 @@ if __name__ == "__main__":
     # user input so "VG01", "vg01", "Vg01" and "ALL" all resolve correctly.
     args.model = args.model.lower()
 
-    # Model modules follow the "model_<key>" naming convention 1:1 with
-    # MODEL_REGISTRY (definitions.py), so the set of fittable models is
-    # derived from the registry rather than a second, hand-maintained list
-    # that can drift out of sync with it (e.g. a newly added model forgetting
-    # this file).
+    # The set of fittable models, and each one's wrapper module, come from the
+    # catalogue rather than from a second hand-maintained list that can drift
+    # out of sync with it (e.g. a newly added model forgetting this file). The
+    # catalogue covers MODEL_REGISTRY exactly and refuses an unregistered key by
+    # name rather than guessing a module.
     def _load_model_module(key: str):
-        return importlib.import_module(f"vocab_growth.models.model_{key}")
+        return catalogue.get(key).load_wrapper()
 
     if args.model == "all":
-        selected = [(key, _load_model_module(key)) for key in MODEL_REGISTRY]
-    elif args.model in MODEL_REGISTRY:
+        selected = [(key, _load_model_module(key)) for key in catalogue.CATALOGUE]
+    elif args.model in catalogue.CATALOGUE:
         selected = [(args.model, _load_model_module(args.model))]
     else:
         console.print(f"[bold red]Unknown model: {args.model}[/bold red]")

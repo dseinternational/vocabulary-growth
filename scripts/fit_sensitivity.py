@@ -21,40 +21,30 @@ from multiprocessing import freeze_support
 import dse_research_utils.environment.setup as setup
 
 from vocab_growth import environment as env
+from vocab_growth.models.catalogue import engine_for
 from vocab_growth.models.common import is_reporting_quality_config
-from vocab_growth.models.common_bivariate_re import fit_bivariate_re_model
-from vocab_growth.models.common_joint_modality import fit_joint_model
-from vocab_growth.models.common_univariate_re import fit_univariate_re_model
 from vocab_growth.reporting import (
     console,
     format_duration,
     key_value_table,
     pipeline_summary,
 )
-from vocab_growth.sensitivity.registry import build_variant, variants_for
+from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
-# The sensitivity models of record and the runner each uses (all are RE / joint
-# engines). VG13 is intentionally limited to its single-administration variant,
-# which reduces rather than multiplies the full repeated-measures fit cost.
-_RUNNER_BY_KEY = {
-    "vg10": fit_bivariate_re_model,
-    "vg11": fit_univariate_re_model,
-    "vg12": fit_univariate_re_model,
-    "vg13": fit_bivariate_re_model,
-    "vg15": fit_joint_model,
-    # VG20 is the DS joint model of record and shares VG10's engine; its
-    # correlated subject block is a field on the definition, not a different
-    # runner. Added 2026-08-19 with the kappa placement variants (#229) -- the
-    # first sensitivity variants registered against a model of record.
-    "vg20": fit_bivariate_re_model,
-    # VG22 shares VG10's engine too; its factor block is a field on the
-    # definition, not a different runner. Registered 2026-08-23 with the rank
-    # family, which is how `k` gets settled -- Gate 1 cannot choose it.
-    "vg22": fit_bivariate_re_model,
-    # VG19 shares VG10's engine; its child slope is a field on the definition,
-    # not a different runner. Added 2026-08-21 for gate G5b.
-    "vg19": fit_bivariate_re_model,
-}
+#: Models with registered sensitivity variants, each paired with the engine fit
+#: function the catalogue says fits it. A variant is the model of record with
+#: one field overridden, so it fits through the model's own engine by
+#: construction -- deriving the pairing removes what was a fifth hand-maintained
+#: copy of the engine assignment (issue #273). VG13 is intentionally limited to
+#: its single-administration variant, which reduces rather than multiplies the
+#: full repeated-measures fit cost.
+_MODELS_WITH_VARIANTS = sorted({model_key for model_key, _ in VARIANTS})
+
+
+def _runner(model_key: str):
+    """The engine fit function for ``model_key``'s variants."""
+    return engine_for(model_key).resolve("fit")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -62,7 +52,7 @@ if __name__ == "__main__":
         "model",
         help=(
             "Model key with sensitivity variants "
-            f"({', '.join(_RUNNER_BY_KEY)})."
+            f"({', '.join(_MODELS_WITH_VARIANTS)})."
         ),
     )
     parser.add_argument("variant", help="Variant name, or 'all' for every variant of the model.")
@@ -87,14 +77,14 @@ if __name__ == "__main__":
     env.set_output_root(args.output_dir)
     setup.init_script()
 
-    if args.model not in _RUNNER_BY_KEY:
+    if args.model not in _MODELS_WITH_VARIANTS:
         console.print(
             f"[bold red]No sensitivity variants for model: {args.model}[/bold red] "
-            f"(available: {', '.join(_RUNNER_BY_KEY)})"
+            f"(available: {', '.join(_MODELS_WITH_VARIANTS)})"
         )
         sys.exit(1)
 
-    runner = _RUNNER_BY_KEY[args.model]
+    runner = _runner(args.model)
     names = variants_for(args.model) if args.variant == "all" else [args.variant]
     variant_defs = build_variant(args.model, args.variant)
 

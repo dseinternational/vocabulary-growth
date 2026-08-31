@@ -141,6 +141,12 @@ The full, canonical list of models -- each model's population, outcome, structur
 
 There are currently twenty registered models (`VG01`-`VG16` and `VG19`-`VG23`, with retired `VG06` omitted and `VG17`/`VG18` reserved for the exploratory sign-group modules), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag, correlated-random-effect, child-slope and low-rank-factor structures.
 
+### Registering a model
+
+Registering a model takes two entries and nothing else: the statistical definition in `definitions.py` (added to `MODEL_REGISTRY`) and a `RegisteredModel` record in `src/vocab_growth/models/catalogue.py` naming the engine that fits it. Everything per-model that is not part of the statistical definition -- the analysis-frame builder, the prior-predictive hook and its calling convention, the plot hook, the pipeline stage factory, the wrapper module and the report template -- follows from that record. `FRAME_BUILDERS`, `regenerate_plots.py`'s engine tables, `prior_predictive_audit.py`'s dispatch, both sensitivity scripts' runner map and `recovery/spec.py`'s stage factory are all derived from it, so there is no second model-ID list to update.
+
+The catalogue is deliberately **outside** the serialised statistical definition. A fit is validated by comparing the manifest's recorded definition field for field, so adding a field to a definition dataclass invalidates every existing fit of that class; engine identity and the reporting hooks must be free to change without a refit. Engine identity is **declared, not inferred from the definition class**: VG05 and VG07 share `BivariateModelDefinition` and run on different engines. `tests/test_model_catalogue.py` pins every declaration against the code it describes -- the wrapper's own import, each hook's signature, the report template's existence -- and `tests/test_report_cells.py` pins that every sampled parameter family is either rendered in the priors table or exempt with a recorded reason. Before the catalogue existed the same engine assignment was written in seven places and three of them were wrong at once (issue #273, `notes/202608311230-model-catalogue.md`).
+
 ### Shared utilities (`dse_research_utils`)
 
 Plotting styles, sampling configurations, MCMC diagnostics, and reporting helpers come from the sibling `research` repository. Import paths start with `dse_research_utils.*`.

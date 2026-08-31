@@ -131,6 +131,205 @@ def test_priors_table_omits_the_correlation_for_an_uncorrelated_model(tmp_path, 
     assert "LKJ" not in capsys.readouterr().out
 
 
+# --- VG22's factor block (issue #273) -------------------------------------------
+
+#: VG22's real sampled parameter set at rank 3: the shared bivariate-RE block,
+#: then the four factor scales, the nine sampled loading entries and the
+#: per-child scores that `gp_utils.build_child_factor` creates.
+_VG22_PARAMETERS = (
+    "p_slope_low_u", "p_slope_hi_u", "p_slope_low_q", "p_slope_hi_q",
+    "eta_u", "eta_q", "tau_u", "tau_q",
+    "tau_subj_u_0", "tau_subj_u_1", "tau_subj_q_0", "tau_subj_q_1",
+    "subject_factor_w_00", "subject_factor_w_10", "subject_factor_w_11",
+    "subject_factor_w_20", "subject_factor_w_21", "subject_factor_w_22",
+    "subject_factor_w_30", "subject_factor_w_31", "subject_factor_w_32",
+    "subject_factor_z",
+    # Deterministics the diagnostics table carries alongside them.
+    "rho_uq", "tau_subj_u", "tau_subj_q", "subject_factor_corr",
+    "subject_factor_loadings", "delta_subj_u", "b0_tau_subj_u",
+)
+
+_VG22_DEFINITION = {
+    "n_trials": 810,
+    "slope_anchors": [24.0, 84.0],
+    "p_slope_low_u_alpha": 1.5, "p_slope_low_u_beta": 8.0,
+    "p_slope_hi_u_alpha": 3.0, "p_slope_hi_u_beta": 1.3,
+    "p_slope_low_q_alpha": 2.0, "p_slope_low_q_beta": 12.0,
+    "p_slope_hi_q_alpha": 4.0, "p_slope_hi_q_beta": 1.2,
+    "tau_subj_u_sigma": 1.5,
+    "tau_subj_q_sigma": 1.5,
+    "eta_u_sigma": 0.6,
+    "eta_q_sigma": 0.8,
+    "tau_u_sigma": 0.5,
+    "tau_q_sigma": 0.5,
+    "subject_factor": {
+        "rank": 3,
+        "tau1_u_sigma": 0.5,
+        "tau1_q_sigma": 0.5,
+        "ref_age_months": 36.0,
+    },
+}
+
+
+def test_priors_table_carries_the_factor_block(tmp_path, capsys):
+    """VG22's page said the table "omits every prior this block adds" (#273).
+
+    The four scales, the loading directions and the per-child factor scores had
+    no entry in `_PRIOR_SPECS`, and nothing but that sentence recorded it -- so
+    the rendered table described VG10's two child intercepts for a model that
+    does not have them.
+    """
+    fit = _fit(tmp_path, definition=_VG22_DEFINITION, parameters=_VG22_PARAMETERS)
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+
+    # The two level scales are the parent's own, at a stated reference age.
+    assert "Between-child SD, understood — level" in out
+    assert "at 36 months" in out
+    # The two rate scales are per year, not per month, and are VG19's 0.5.
+    assert "Between-child SD, understood — rate" in out
+    assert "logits per year of age" in out
+    assert out.count("HalfNormal(0.5)") >= 2
+    # The loading family, with the count the rank was chosen on.
+    assert "Loading directions $W$ (9 sampled entries)" in out
+    assert "3 anchor entries" in out
+    # The factor scores, and the rank.
+    assert "Per-child factor scores $z$ (rank 3)" in out
+    assert "Normal(0, I)" in out
+    # And the caveat that the correlations were induced rather than designed.
+    assert "not designed" in out
+    assert "arcsine" in out
+
+
+def test_the_factor_block_replaces_the_parent_child_intercept_rows(tmp_path, capsys):
+    """`tau_subj_u` is a deterministic here, equal to the level scale.
+
+    Rendering VG10's generic "Between-child SD, understood" row beside the four
+    explicit ones would state the same prior twice under a name that no longer
+    means what it means in VG10.
+    """
+    fit = _fit(tmp_path, definition=_VG22_DEFINITION, parameters=_VG22_PARAMETERS)
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "| Between-child SD, understood |" not in out
+    assert "| Between-child SD, production ratio $q$ |" not in out
+
+
+def test_a_model_without_a_factor_block_is_unchanged(tmp_path, capsys):
+    """VG10's own table must not gain factor rows."""
+    fit = _fit(
+        tmp_path,
+        definition={"tau_subj_u_sigma": 1.5, "tau_subj_q_sigma": 1.5},
+        parameters=("tau_subj_u", "tau_subj_q"),
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "| Between-child SD, understood |" in out
+    assert "Loading directions" not in out
+    assert "factor scores" not in out
+
+
+def test_prior_coverage_reports_no_gap_for_the_factor_model(tmp_path):
+    """The graph-to-report contract: every sampled family is rendered or exempt."""
+    fit = _fit(tmp_path, definition=_VG22_DEFINITION, parameters=_VG22_PARAMETERS)
+    coverage = report_cells.prior_coverage(str(fit))
+    assert coverage["uncovered"] == []
+    assert "subject_factor_z" in coverage["rendered"]
+    assert "subject_factor_w_21" in coverage["rendered"]
+    # Deterministics have no prior of their own and are exempt with a reason.
+    assert "subject_factor_corr" in coverage["exempt"]
+    assert report_cells._is_exempt("subject_factor_corr")
+
+
+def test_the_table_discloses_its_own_gap(tmp_path, capsys):
+    """A gap must announce itself on the page, not in a hand-written sentence.
+
+    VG22's template carried the disclosure by hand, which is the same failure
+    the whole module exists to replace: a fact about the fit, copied into prose,
+    that nothing keeps true.
+    """
+    definition = dict(_VG22_DEFINITION)
+    definition.pop("subject_factor")
+    fit = _fit(tmp_path, definition=definition, parameters=_VG22_PARAMETERS)
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "Incomplete priors table" in out
+    assert "`subject_factor_w_00`" in out
+    assert "the gap is in the table, not in the fit" in out
+
+
+def test_a_complete_table_says_nothing_about_gaps(tmp_path, capsys):
+    fit = _fit(tmp_path, definition=_VG22_DEFINITION, parameters=_VG22_PARAMETERS)
+    report_cells.render_priors_table(str(fit))
+    assert "Incomplete priors table" not in capsys.readouterr().out
+
+
+def test_prior_coverage_names_an_unrendered_family(tmp_path):
+    """The check must fail loudly on the shape of the defect it exists for."""
+    definition = dict(_VG22_DEFINITION)
+    definition.pop("subject_factor")
+    fit = _fit(tmp_path, definition=definition, parameters=_VG22_PARAMETERS)
+    coverage = report_cells.prior_coverage(str(fit))
+    assert "subject_factor_w_00" in coverage["uncovered"]
+    assert "tau_subj_u_1" in coverage["uncovered"]
+
+
+def test_priors_table_carries_the_dirichlet_multinomial_concentration(tmp_path, capsys):
+    """VG15's concentration had a prior figure, a sensitivity mention, and no row.
+
+    Found by the coverage check written for VG22's factor block: the same class
+    of omission, in a different model, that nothing had noticed (#273).
+    """
+    fit = _fit(
+        tmp_path,
+        definition={"log_conc_mu": 3.0, "log_conc_sigma": 1.0},
+        parameters=("log_conc",),
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "Dirichlet-Multinomial concentration" in out
+    assert "Normal(3, 1)" in out
+    # Reported on the plain scale too: log 3 is not something a reader pictures.
+    assert "concentration median 20" in out
+
+
+def test_a_scale_that_is_inert_in_one_model_is_still_required_in_another(tmp_path):
+    """`tau_subject` and `rho_uq` are sampled in some models, derived in others.
+
+    An unconditional exemption for either would let the row that VG10 and VG20
+    do need disappear unnoticed, which is how VG22's block was lost. The
+    exemption must therefore come from the definition, not from the name.
+    """
+    assert report_cells._is_exempt("tau_subject") is None
+    assert report_cells._is_exempt("rho_uq") is None
+    assert report_cells._is_exempt("tau_subj_u") is None
+
+    # Under a variance partition `tau_subject` is a deterministic function of the
+    # budget, so it is covered without a HalfNormal row of its own.
+    partitioned = _fit(
+        tmp_path,
+        definition={
+            "subject_variance_partition": {
+                "total_mu": 0.0,
+                "total_sigma": 0.7,
+                "share_alpha": 2.0,
+                "share_beta": 2.0,
+            }
+        },
+        parameters=("tau_subject", "v_total", "subject_variance_share"),
+    )
+    coverage = report_cells.prior_coverage(str(partitioned))
+    assert coverage["uncovered"] == []
+    assert "tau_subject" in coverage["rendered"]
+
+
+def test_non_centred_offsets_are_exempt_with_a_reason(tmp_path):
+    """`*_raw` and `*_z` carry no prior a reader would look for."""
+    for name in ("rho_uq_raw", "delta_u_raw", "subject_factor_z"):
+        assert report_cells._is_exempt(name), name
+    assert report_cells._is_exempt("eta_u") is None
+
+
 def test_signed_anchors_use_the_signed_anchor_ages(tmp_path, capsys):
     """Signing has its own anchor ages; labelling them with slope_anchors lies."""
     fit = _fit(
