@@ -50,10 +50,10 @@ expressive contrast, restrict to the union studies uk_01 + uk_02 + nz_01 + es_01
 uk_07 (fit(..., studies=("uk_01","uk_02","nz_01","es_01","uk_07"))), or use VG15's
 modelled ``p_any`` (estimates the sign/speech overlap ``psi``). Note that uk_07's
 34-95 month span sits largely outside VG17/VG18's 12-66 month window, so it
-contributes only its younger assessments. Exploratory; not in MODEL_REGISTRY.
+contributes only its younger assessments. Exploratory; not in MODEL_REGISTRY. Its output is not validatable and must not be published -- see `vocab_growth.models.exploratory` for what it does not carry.
 """
 
-from vocab_growth.models import model_vg17
+from vocab_growth.models.exploratory import vg17
 
 CAUTION = (
     "CAUTION: the sign-group contrast is PARTLY MECHANICAL. Sign group is derived from "
@@ -81,7 +81,7 @@ def fit(config: str = "test", studies=None):
     subdir = "VG18-age-produced-ds-signgroup"
     if studies is not None:
         subdir += "-" + "-".join(studies)
-    return model_vg17.fit(
+    return vg17.fit(
         config,
         outcome="produced",
         label="VG18",

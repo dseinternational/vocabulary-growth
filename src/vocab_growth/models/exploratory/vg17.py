@@ -26,10 +26,21 @@ one. Both are reported.
 
 Reuses the family's HSGP trend + age-varying Beta-Binomial machinery
 (`gp_utils`, `build_utils`); the sign-group covariate and the study/child
-intercepts are the structural additions. Exploratory: self-contained (not routed through the generic engine and
-not yet in `MODEL_REGISTRY` / the model inventory) so it cannot perturb the model
-family. Folding the covariate into `common_univariate_re` would be the
-productionisation step.
+intercepts are the structural additions.
+
+**Exploratory. Its output is not validatable and must not be published.** It is
+self-contained -- not routed through a shared engine, not in `MODEL_REGISTRY`,
+not in the model inventory -- so it cannot perturb the model family, and since
+issue #273 it lives in `vocab_growth.models.exploratory`, whose docstring lists
+what its `fit()` does not produce (no manifest, no staged promotion, no
+predictive checks, no calibration, no LOO, no convergence gate). Every output
+directory it writes carries an `exploratory_output.json` saying so.
+
+Folding the covariate into `common_univariate_re` would be the productionisation
+step, and it is a **statistical** decision rather than a packaging one: that
+engine constrains its study effects to sum to zero while this model uses
+unconstrained offsets, so routing it through would change the model rather than
+move it. That work belongs with #266.
 """
 
 import os
@@ -59,6 +70,7 @@ from vocab_growth.models.common import (
     get_hsgp_hyperparams,
 )
 from vocab_growth.models.definitions import VG01, KappaAnchorPriorParams
+from vocab_growth.models.exploratory import write_exploratory_marker
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 
 EPS = 1e-6
@@ -144,7 +156,17 @@ def _config() -> ModelConfiguration:
         ell_unit_dist=pz.Beta(alpha=b.ell_unit_alpha, beta=b.ell_unit_beta),
         eta_dist=pz.HalfNormal(sigma=b.eta_sigma),
         n_plot=b.n_plot,
-        ages_query=b.ages_query,
+        # VG01's grid runs to 90 months; this model observes 12-66 and takes
+        # that as its GP domain, so the ages above 66 made `construct_age_grids`
+        # refuse to build at all -- `fit()` raised on its default path (issue
+        # #273 finding 4). Clipped rather than widening the domain: the fit
+        # already discarded every out-of-window age when it wrote
+        # `expected_by_group.csv`, so nothing above 66 was ever reported, and
+        # AGE_LO/AGE_HI are a deliberate restriction to the dense window.
+        # Widening the domain to 12-90 would extrapolate the HSGP two years past
+        # any observation and change L and M, which is a statistical change and
+        # not this one (study owner's decision, 2026-08-31).
+        ages_query=tuple(age for age in b.ages_query if AGE_LO <= age <= AGE_HI),
         **kappa_fields,
     )
 
@@ -276,6 +298,11 @@ def fit(config: str = "test", outcome="spoken", label="VG17", subdir="VG17-age-s
 
     out_dir = os.path.join(env.output_root(), "models", subdir)
     os.makedirs(out_dir, exist_ok=True)
+    # Before the trace, so an interrupted run still leaves the directory
+    # labelled. This output carries no manifest, no staged promotion and no
+    # convergence gate; without the marker it is shaped exactly like a
+    # publishable fit (issue #273 finding 4).
+    write_exploratory_marker(out_dir, model_label=label, note=caution or None)
     save_trace(idata, out_dir)
 
     # convergence
@@ -305,7 +332,9 @@ def fit(config: str = "test", outcome="spoken", label="VG17", subdir="VG17-age-s
     ages_q = _config().ages_query
     eq = pd.DataFrame(pq.T, columns=SIGN_GROUPS)
     eq.insert(0, "age", ages_q)
-    eq = eq[(eq.age >= AGE_LO) & (eq.age <= AGE_HI)]
+    # No age filter here: `_config()` clips the query grid to the observation
+    # window, so this is already in range. Filtering again would give the window
+    # two definitions, which is how the grid and the domain came apart.
     eq.to_csv(os.path.join(out_dir, "expected_by_group.csv"), index=False)
     print(f"\n[{label}] population expected {outcome} (of 810) by sign group and age:")
     print(eq.round(1).to_string(index=False), flush=True)

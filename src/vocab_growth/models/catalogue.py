@@ -332,10 +332,14 @@ def _catalogue() -> dict[str, RegisteredModel]:
 CATALOGUE: dict[str, RegisteredModel] = _catalogue()
 
 # The exploratory sign-group modules (VG17, VG18) are deliberately absent. They
-# are not in MODEL_REGISTRY, carry a custom fit path that bypasses the shared
-# manifest, staged promotion and convergence gate, and their lifecycle is an
-# open model decision (issue #273 finding 4, coordinated with #266). Adding a
-# catalogue entry would assert a supported lifecycle they do not have.
+# are not in MODEL_REGISTRY and carry a custom fit path that bypasses the shared
+# manifest, staged promotion and convergence gate, so a catalogue entry would
+# assert a supported lifecycle they do not have. Issue #273 finding 4 asked for
+# that to be decided rather than left implicit; it was, on 2026-08-31, in favour
+# of "explicitly exploratory and non-validatable" -- they now live in
+# `vocab_growth.models.exploratory`, outside the `model_vgNN` naming convention
+# `fit_model.py` resolves, so they are unreachable from here by construction.
+# Productionising either remains a statistical decision for #266.
 
 
 def get(model_key: str) -> RegisteredModel:

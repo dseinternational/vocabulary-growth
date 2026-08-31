@@ -77,12 +77,23 @@ def test_the_exploratory_modules_are_deliberately_absent():
 
     A catalogue entry would assert a supported lifecycle they do not have, and
     would make ``fit_model.py`` and the validators offer to treat their output as
-    publishable. Their lifecycle is an open model decision (#273 finding 4).
+    publishable. Since #273 finding 4 was resolved they live in
+    ``vocab_growth.models.exploratory``, outside the ``model_vgNN`` naming
+    convention ``fit_model.py`` resolves, so they are unreachable from the
+    registered path by construction rather than by omission.
+    ``tests/test_exploratory_lifecycle.py`` covers the rest of that resolution.
     """
     assert "vg17" not in CATALOGUE
     assert "vg18" not in CATALOGUE
+    exploratory = _REPO_ROOT / "src" / "vocab_growth" / "models" / "exploratory"
     for key in ("vg17", "vg18"):
-        assert (_REPO_ROOT / "src" / "vocab_growth" / "models" / f"model_{key}.py").is_file()
+        assert (exploratory / f"{key}.py").is_file()
+        assert not (
+            _REPO_ROOT / "src" / "vocab_growth" / "models" / f"model_{key}.py"
+        ).exists(), (
+            f"model_{key}.py is back beside the registered wrappers, where "
+            "fit_model.py's name resolution can reach it"
+        )
 
 
 # --- every declared hook exists, and is called the way it is declared ------------
