@@ -252,3 +252,4 @@ worktree
 worktrees
 xarray
 zygosity
+HMAC
