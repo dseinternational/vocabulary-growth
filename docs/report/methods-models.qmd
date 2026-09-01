@@ -4,6 +4,10 @@ abstract: "*Statistical models provide a framework for expressing hypotheses, qu
 
 # Models {#sec-models}
 
+::: {.callout-note}
+Drafted in part by LLM-based AI tools (Claude Code/Opus 5).
+:::
+
 To describe trajectories of word learning, we must estimate the number of words children understand, say or sign at different ages. Averages are insufficient: families and practitioners also want to know ranges -- the extents to which children tend to differ at each age. Our target is therefore the distributions of word counts at monthly age intervals, describing both typical counts and the spreads around them.
 
 Previous research, personal experience and evident constraints can inform our expectations. When children are beginning to learn their first words, counts must sit close to zero, so the distribution starts narrow. Children then learn new words at different rates, so as the typical count rises with age, the differences between children compound and the distribution widens. Counts are also bounded -- a child cannot know fewer than zero words, and a checklist cannot record more words than it contains. Vocabulary grows gradually, word by word, so we can expect the distribution to shift and spread smoothly with age rather than to make large jumps over short periods. A statistical model lets us state these expectations precisely and combine them with our data to estimate the distributions we are seeking.
@@ -250,7 +254,7 @@ $$
 
 with the parallel conditional likelihood $W_{\text{signed}} \mid W_{\text{understood}} \sim \mathrm{BetaBinomial}\!\left(W_{\text{understood}},\, r,\, \kappa_{\text{signed}}\right)$. Unlike the other predictors, $f_{\text{signed}}$ replaces the single linear trend with a three-anchor, piecewise logit-linear *tent* -- young, peak and older reference levels -- plus the usual GP for smooth departures. This allows signing to rise and then decline without making the GP alone carry the entire shape.
 
-VG14 treats speaking and signing as conditionally independent given understanding. VG15 instead estimates their association: rows carrying the richer uk_02 four-cell table (spoken and signed, spoken only, signed only, neither) are scored with a Dirichlet-Multinomial composition term in place of separate spoken and signed likelihood contributions, while the understood likelihood remains, because the composition is conditional on its observed total. Which sources' signing fields measure total signed vocabulary -- and which are masked, or reintroduced only as sensitivity analyses -- is a data question, addressed in @sec-data.
+VG14 treats speaking and signing as conditionally independent given understanding. VG15 instead estimates their association, from the four pooled sources that record production word by word in both modalities rather than as marginal totals: uk_02, uk_07 and es_01 give, for each understood word, whether the child signs it, says it, does both or neither -- directly in the first two, and by subtraction from recorded totals in es_01 -- while nz_01 gives, within produced words, whether each is spoken, signed or both. These compositions are scored with a Dirichlet-Multinomial term in place of separate spoken and signed likelihood contributions, while the understood likelihood remains, because each composition is conditional on its observed total. The association carries a study-level random term: the informing sources disagree by more than sampling error, and with only four of them the between-study spread is itself weakly identified, so the per-study values rather than the pooled centre are the primary read wherever the association is reported. Which sources' signing fields measure total signed vocabulary -- and which are masked, or reintroduced only as sensitivity analyses -- is a data question, addressed in @sec-data.
 
 ### When only one count of a pair is recorded
 
