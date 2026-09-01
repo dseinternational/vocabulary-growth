@@ -40,6 +40,7 @@ Hermite
 Holzinger
 Hutchins
 Jupytext
+Juárez
 Kaat
 Kalashnikova
 Karousou
@@ -128,6 +129,7 @@ disattenuating
 disattenuation
 disclosable
 docstrings
+downweights
 dropna
 dseresearch
 dtau
@@ -228,6 +230,7 @@ resumable
 reweighting
 reweights
 rhat
+robustification
 scratchpad
 sens
 setsid
