@@ -14,8 +14,8 @@ Policy
 quantity                    cap  rationale
 ==========================  ===  =========================================
 understood                   72  Lowered from 84 on 2026-08-22. Not for
-                                 want of data — the 72-84 band holds 25
-                                 rows from 20 children across 5 studies —
+                                 want of data — the 72-84 band holds 24
+                                 rows from 18 children across 5 studies —
                                  but because the number there is set by
                                  the child-effect structure rather than by
                                  the data. See below.

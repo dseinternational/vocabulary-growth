@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Unit tests for ``_loo_dropping_degenerate`` in ``models.common``.
+"""Unit tests for ``loo_dropping_degenerate`` in ``models.common``.
 
 The nested joint likelihood models a paired outcome conditionally on the
 observed *understood* count, so an ``understood == 0`` row gives that outcome a
@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 from arviz import ELPDData
 
-from vocab_growth.models.common import _loo_dropping_degenerate
+from vocab_growth.models.common import loo_dropping_degenerate
 
 _NOBS = 25
 _VAR = "y_s_obs"
@@ -53,14 +53,14 @@ def test_bare_loo_crashes_on_constant_observation():
 
 def test_drops_degenerate_and_computes_loo():
     idata = _synthetic_idata([5, 12])
-    loo, n_dropped = _loo_dropping_degenerate(idata, var_name=_VAR)
+    loo, n_dropped = loo_dropping_degenerate(idata, var_name=_VAR)
     assert n_dropped == 2
     assert isinstance(loo, ELPDData)
 
 
 def test_no_degenerate_observations_is_a_no_op():
     idata = _synthetic_idata([])
-    loo, n_dropped = _loo_dropping_degenerate(idata, var_name=_VAR)
+    loo, n_dropped = loo_dropping_degenerate(idata, var_name=_VAR)
     assert n_dropped == 0
     assert isinstance(loo, ELPDData)
 
@@ -68,7 +68,7 @@ def test_no_degenerate_observations_is_a_no_op():
 def test_original_idata_not_mutated():
     idata = _synthetic_idata([5, 12])
     before = int(idata.log_likelihood.sizes["obs"])
-    _loo_dropping_degenerate(idata, var_name=_VAR)
+    loo_dropping_degenerate(idata, var_name=_VAR)
     after = int(idata.log_likelihood.sizes["obs"])
     assert before == after == _NOBS
 
@@ -77,6 +77,6 @@ def test_resolves_single_var_when_var_name_is_none():
     """The ``loo_var_names is None`` engine path passes no ``var_name``; the
     helper must resolve the sole log-likelihood array and still drop/compute."""
     idata = _synthetic_idata([5, 12])
-    loo, n_dropped = _loo_dropping_degenerate(idata)
+    loo, n_dropped = loo_dropping_degenerate(idata)
     assert n_dropped == 2
     assert isinstance(loo, ELPDData)

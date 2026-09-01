@@ -11,6 +11,7 @@ from vocab_growth.posterior_analysis import (
     COUNT_BUCKET_THRESHOLDS,
     MAX_MONTH_SNAP_OFFSET,
     add_probability_estimand_columns,
+    expand_observed_to_obs_id,
     extract_posterior,
     extract_posterior_predictive,
     monthly_summary_table,
@@ -286,3 +287,58 @@ def test_monthly_summary_keeps_boundary_months_when_the_grid_is_integral():
     offsets = monthly.set_index("age_months")["grid_offset_months"]
     assert offsets.loc[8] == 0.0
     assert offsets.loc[115] == 0.0
+
+
+# --------------------------------------------------------------------------
+# expand_observed_to_obs_id (issue #67)
+# --------------------------------------------------------------------------
+
+
+def _masked_trace(mask, observed):
+    """Just the two groups the expansion reads."""
+    return xr.DataTree.from_dict(
+        {
+            "constant_data": xr.Dataset(
+                {"obs_u_mask": (("obs_id",), np.asarray(mask, dtype=int))}
+            ),
+            "observed_data": xr.Dataset(
+                {"y_u_obs": (("row",), np.asarray(observed, dtype=float))}
+            ),
+        }
+    )
+
+
+def test_expansion_scatters_the_observed_rows_through_the_mask():
+    """The five copies of this in two engines asserted nothing between them."""
+    trace = _masked_trace([1, 0, 1, 1, 0], [10.0, 30.0, 40.0])
+
+    out = expand_observed_to_obs_id(trace, "y_u_obs", "obs_u_mask")
+
+    assert out.shape == (5,)
+    assert out[0] == 10.0 and out[2] == 30.0 and out[3] == 40.0
+    assert np.isnan(out[1]) and np.isnan(out[4])
+
+
+def test_expansion_of_an_all_false_mask_is_all_nan():
+    trace = _masked_trace([0, 0, 0], [])
+
+    out = expand_observed_to_obs_id(trace, "y_u_obs", "obs_u_mask")
+
+    assert out.shape == (3,) and np.isnan(out).all()
+
+
+@pytest.mark.parametrize(
+    ("mask", "observed"),
+    [([1, 1, 0], [5.0]), ([1, 0, 0], [5.0, 6.0])],
+)
+def test_a_mask_that_disagrees_with_the_likelihood_rows_is_refused(mask, observed):
+    """Issue #67: silently scattering a misaligned vector produces plausible figures.
+
+    Both directions, because only one of them would ever raise on its own: too few
+    observed rows leaves trailing NaN, too many raises from NumPy with a shape
+    message that says nothing about masks.
+    """
+    trace = _masked_trace(mask, observed)
+
+    with pytest.raises(ValueError, match=r"issue #67"):
+        expand_observed_to_obs_id(trace, "y_u_obs", "obs_u_mask")

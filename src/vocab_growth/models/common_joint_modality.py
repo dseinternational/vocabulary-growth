@@ -58,6 +58,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import dse_research_utils.math.constants as math_constants
+import dse_research_utils.plot.io as plot_io
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
@@ -76,12 +77,25 @@ import vocab_growth.intervals as intervals
 import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.administration_loo import LikelihoodFactor
+from vocab_growth.cross_tab_sources import (
+    ES01_STUDY_ID,
+    NZ01_STUDY_ID,
+    UK02_DSE_FORM,
+    UK02_STUDY_ID,
+    UK07_STUDY_ID,
+    load_es01_four_cell,
+    load_nz01_produced_cells,
+    load_uk02_four_cell,
+    load_uk07_four_cell,
+)
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_integral_counts,
-    slope_anchor_logit_coeffs,
+    require_valid_counts,
     standardize_ages,
+    standardize_ages_to_z,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.calibration import write_trace_calibration
@@ -89,12 +103,12 @@ from vocab_growth.models.common import (
     AnchoredKappaPriors,
     BaseModelConfiguration,
     ModelFitContext,
-    _configure_kappa_priors,
-    _plot_and_print_dist,
     build_kappa_for_config,
+    configure_kappa_priors,
     emit_monthly_summary,
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
+    plot_and_print_dist,
     render_model_graph,
     report,
     run_fit_pipeline,
@@ -115,11 +129,10 @@ from vocab_growth.models.likelihood_utils import (
     resolve_fallback_treatment,
 )
 from vocab_growth.plotting import (
-    _save_csv,
     plot_prior_samples,
     plot_prior_samples_ratio,
 )
-from vocab_growth.posterior_analysis import extract_posterior as _extract
+from vocab_growth.posterior_analysis import extract_posterior
 from vocab_growth.reporting import (
     console,
     dataframe_table,
@@ -129,21 +142,6 @@ from vocab_growth.reporting import (
 
 EPSILON = math_constants.EPSILON
 
-# The two sources with the four-cell within-understood cross-tabulation.
-UK02_STUDY_ID = "uk_02"
-# uk_02 ran two instruments. Its `form` column separates them, and only the DSE
-# arm is native to the 810-item reference (the other is the 416-item Oxford CDI),
-# which the DSE-native sensitivity needs to tell apart.
-UK02_DSE_FORM = "DSE"
-# uk_07 (PACT-DS) records comprehension alongside modality-exclusive expressive
-# cells, so its four cells are derivable: understood_only = understood - produced.
-UK07_STUDY_ID = "uk_07"
-# es_01 (Galeote) records comprehension, a spoken total, a symbolic-gesture total
-# and their recorded union, from which the same four cells follow by subtraction.
-ES01_STUDY_ID = "es_01"
-# nz_01 (Foster-Cohen) carries a production-only three-cell (within-produced)
-# cross-tabulation: word-only, sign-only, both. No comprehension.
-NZ01_STUDY_ID = "nz_01"
 
 # Order of the four mutually-exclusive within-understood cells.
 CELL_NAMES = ["neither", "sign_only", "speak_only", "both"]
@@ -309,13 +307,11 @@ class JointModelSamples:
     # Four-cell posterior predictive (counts) and observed, all sources
     cell_obs: np.ndarray  # (n_cells_obs, 4) observed
     cell_pred: np.ndarray  # (n_cells_obs, 4, n_samples) predicted
-    cell_ages: np.ndarray  # (n_cells_obs,)
     cell_studies: np.ndarray  # (n_cells_obs,) source study of each row
 
     # nz_01 produced-cell posterior predictive (counts) and observed
     prod_cell_obs: np.ndarray  # (n_prod_obs, 3) observed
     prod_cell_pred: np.ndarray  # (n_prod_obs, 3, n_samples) predicted
-    prod_cell_ages: np.ndarray  # (n_prod_obs,)
 
 
 JointContext = ModelFitContext[JointModelConfiguration, JointModelSamples]
@@ -324,167 +320,6 @@ JointContext = ModelFitContext[JointModelConfiguration, JointModelSamples]
 # ============================================================
 # Data preparation
 # ============================================================
-
-
-def _load_uk02_four_cell():
-    """Load uk_02 rows, split into four-cell (cross-tab) and marginal-only rows.
-
-    Returns (four_cell_df, marginal_df). The four-cell rows are those that have
-    all four cell counts recorded, whose signed and spoken margins reconcile
-    with the cross-tab cells (signed == signed_only + signed_spoken,
-    spoken == spoken_only + signed_spoken) and whose four cells sum to a
-    positive total; they identify psi. For these rows the four-cell sum is
-    treated as the authoritative understood total, so a small mismatch between
-    the raw comprehension column and the cross-tab partition does not make the
-    U likelihood and the Dirichlet-Multinomial likelihood disagree. The rest are
-    marginal-only uk_02 rows (no usable cross-tab).
-
-    A row missing any cell — in particular ``understood_only`` (some uk_02 rows
-    record a produced sign/speech cross-tab but no comprehension total) — cannot
-    form the within-understood four-way composition, so it is routed to the
-    marginal-only set, where its recorded spoken/signed margins still inform the
-    model. (Without this guard a NaN cell casts to a negative integer and trips
-    the four-cell count validation in ``build_model``.)
-    """
-    path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_02.csv")
-    raw = pd.read_csv(path)
-    cells = ["understood_only", "signed_only", "spoken_only", "signed_spoken"]
-    raw["cell_total"] = raw[cells].sum(axis=1)
-    reconciles = (
-        raw[cells].notna().all(axis=1)
-        & (raw["signed"] == raw["signed_only"] + raw["signed_spoken"])
-        & (raw["spoken"] == raw["spoken_only"] + raw["signed_spoken"])
-        & (raw["cell_total"] > 0)
-    )
-    four = raw[reconciles].copy()
-    marg = raw[~reconciles].copy()
-    return four, marg
-
-
-def _load_uk07_four_cell():
-    """Load uk_07 (PACT-DS) rows as a four-cell within-understood cross-tab.
-
-    uk_07 records comprehension per item alongside a three-way *modality-exclusive*
-    expressive coding — says-only, signs-only, both — so the fourth cell follows by
-    subtraction: ``understood_only = understood - produced``, where ``produced`` is
-    the source's own sum of the three expressive cells. That is the same
-    within-understood partition uk_02 supplies, and it is what identifies psi.
-
-    Two guards, mirroring ``_load_uk02_four_cell``. A row whose production exceeds
-    its comprehension has no non-negative ``understood_only`` cell, and a row with
-    no understood words carries no composition; both are routed to the marginal
-    set, where the recorded spoken/signed margins still inform the model. Neither
-    fires on the current source: the one administration that would have failed the
-    first is withheld before this point (see
-    ``data_utils.UK07_WITHHELD_ADMINISTRATIONS``). They are kept so the guarantee
-    holds for whatever the source becomes, rather than for what it is today.
-
-    Returns ``(four_cell_df, marginal_df)`` with the any-modality marginals
-    re-derived on the marginal rows exactly as ``vocab_combined`` does them.
-    """
-    path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_07.csv")
-    raw, _withheld = vocab_data_utils.drop_uk07_withheld_administrations(
-        pd.read_csv(path)
-    )
-    raw["understood_only"] = raw["understood"] - raw["produced"]
-    usable = (
-        raw[["understood", "produced", "spoken", "signed", "spoken_signed"]]
-        .notna()
-        .all(axis=1)
-        & (raw["understood_only"] >= 0)
-        & (raw["understood"] > 0)
-    )
-    four = raw[usable].copy()
-    marg = raw[~usable].copy()
-    return four, marg
-
-
-def _load_es01_four_cell():
-    """Load es_01 (Galeote) rows as a four-cell within-understood cross-tab.
-
-    es_01 records four totals per child. In the original table they are labelled
-    TOTAL COMPREHENSIÓN, TOTAL PRODUCTION, TOTAL GESTURES and WORD PRODUCED +
-    GESTURES ONLY — the last being what Galeote et al. (2011) describe as "total
-    lexical production combining the two modalities". So the third column is a
-    *total* (words gestured whether or not also spoken) and the fourth is a
-    de-duplicated union, and the four cells follow by subtraction::
-
-        understood_only = understood        - union
-        spoken_only     = union             - gestured
-        signed_only     = union             - spoken
-        signed_spoken   = spoken + gestured - union
-
-    which sum to ``understood`` identically. That the fourth column is a union
-    rather than a disjoint cell is not an assumption: a disjoint reading forces
-    ``union == spoken + gestured`` on every row, and 134 of the 186 Down syndrome
-    rows have a union strictly smaller than that sum.
-
-    Guards mirror ``_load_uk07_four_cell``: a row with any negative cell, or with
-    no understood words, carries no composition and is routed to the marginal set.
-    One row of 186 fails (1 spoken, 15 gestured, union 11 — a union smaller than
-    one of its parts, so ``spoken_only`` is negative); its comprehension and spoken
-    marginals still inform the model, and its ``signed`` is masked there on the
-    same reasoning the ``vocab_combined`` view applies.
-
-    Returns ``(four_cell_df, marginal_df)``. Down syndrome children only — the
-    matched typically developing group stays out of this relation, as it does in
-    the view.
-    """
-    path = os.path.join(local_env.DATA_DIR, "vocab_data_es_01.csv")
-    raw = pd.read_csv(path)
-    raw = raw[raw["group"] == "DS"].copy()
-
-    union = raw["spoken_or_gestured"]
-    raw["understood_only"] = raw["understood"] - union
-    raw["spoken_only"] = union - raw["gestured"]
-    raw["signed_only"] = union - raw["spoken"]
-    raw["signed_spoken"] = raw["spoken"] + raw["gestured"] - union
-
-    cells = ["understood_only", "spoken_only", "signed_only", "signed_spoken"]
-    usable = (
-        raw[["understood", "spoken", "gestured", "spoken_or_gestured"]]
-        .notna()
-        .all(axis=1)
-        & (raw[cells] >= 0).all(axis=1)
-        & (raw["understood"] > 0)
-    )
-    four = raw[usable].copy()
-    marg = raw[~usable].copy()
-    return four, marg
-
-
-def _load_nz01_produced_cells():
-    """Load nz_01 (Foster-Cohen) rows as a within-produced three-cell cross-tab.
-
-    nz_01 is production-only (no comprehension). Its checklist codes partition ALL
-    items into word-only (a), sign-only (b), both (c) and neither (d). The three
-    produced cells {a, b, c} form a modality cross-tab *conditioned on production*,
-    not on comprehension: nz_01 records no understood total, and its "neither"
-    mixes understood-but-unproduced with not-understood, so it cannot fill uk_02's
-    ``understood_only`` cell. Conditioning on produced cancels that cell (and the
-    understood level), so these rows identify psi/q/r through a three-cell
-    Dirichlet-Multinomial (see ``build_model``). Rows with no produced words
-    (``prod_total == 0``) carry no composition and are dropped.
-    """
-    path = os.path.join(local_env.DATA_DIR, "vocab_data_nz_01.csv")
-    raw = pd.read_csv(path)
-    out = pd.DataFrame(
-        {
-            "study": NZ01_STUDY_ID,
-            "age": raw["age"].to_numpy(dtype=float),
-            "subject_id": raw["subject_id"].to_numpy(),
-            # CSV columns are modality-exclusive: spoken=word-only, signed=sign-only,
-            # spoken_signed=both. Marginal understood/spoken/signed stay NaN so these
-            # rows feed only the produced DM (no double counting).
-            "prod_spoken_only": raw["spoken"].to_numpy(dtype=float),
-            "prod_signed_only": raw["signed"].to_numpy(dtype=float),
-            "prod_signed_spoken": raw["spoken_signed"].to_numpy(dtype=float),
-        }
-    )
-    out["prod_total"] = (
-        out["prod_spoken_only"] + out["prod_signed_only"] + out["prod_signed_spoken"]
-    )
-    return out[out["prod_total"] > 0].reset_index(drop=True)
 
 
 def build_joint_analysis_frame(
@@ -527,11 +362,13 @@ def build_joint_analysis_frame(
     use_uk07_cells = definition.include_uk07_cells and not native_only
     use_es01_cells = definition.include_es01_cells and not native_only
     use_nz01_cells = definition.include_nz01_cells and not native_only
-    # uk_02, uk_07 and nz_01 are handled via their cross-tab paths below, so
+    # uk_02, uk_07, es_01 and nz_01 are handled via their cross-tab paths below, so
     # exclude their marginals from the merged view here to avoid double counting.
-    # (nz_01 is dropped entirely when include_nz01_cells is False; uk_07 falls back
-    # to its merged-view marginals when include_uk07_cells is False, because unlike
-    # nz_01 its marginals are usable on their own.)
+    # uk_02 and nz_01 are unconditional; uk_07 and es_01 join the list only when
+    # their include_* flags select the cross-tab path (see the appends below).
+    # (nz_01 is dropped entirely when include_nz01_cells is False; uk_07 and es_01
+    # fall back to their merged-view marginals when their flag is False, because
+    # unlike nz_01 those marginals are usable on their own.)
     cross_tab_studies = [UK02_STUDY_ID, NZ01_STUDY_ID]
     if use_uk07_cells:
         cross_tab_studies.append(UK07_STUDY_ID)
@@ -539,7 +376,7 @@ def build_joint_analysis_frame(
         cross_tab_studies.append(ES01_STUDY_ID)
     other = merged[~merged["study"].isin(cross_tab_studies)].copy()
 
-    four, marg = _load_uk02_four_cell()
+    four, marg = load_uk02_four_cell()
     if native_only:
         # uk_02 ran both forms; only its DSE arm is on the native 810 reference.
         # All 56 four-cell rows are that arm, so the cross-tab survives intact
@@ -586,7 +423,7 @@ def build_joint_analysis_frame(
     # spoken/signed are NaN on the four-cell rows for the same no-double-counting
     # reason. See data/vocab_data_uk_07.md.
     if use_uk07_cells:
-        four07, marg07 = _load_uk07_four_cell()
+        four07, marg07 = load_uk07_four_cell()
         four07_cols = {
             "study": UK07_STUDY_ID,
             "age": four07["age"].to_numpy(dtype=float),
@@ -620,7 +457,7 @@ def build_joint_analysis_frame(
     # its own association is carried by delta_psi — see
     # JointModelDefinition.include_es01_cells.
     if use_es01_cells:
-        four_es, marg_es = _load_es01_four_cell()
+        four_es, marg_es = load_es01_four_cell()
         four_es_cols = {
             "study": ES01_STUDY_ID,
             "age": four_es["age"].to_numpy(dtype=float),
@@ -664,7 +501,7 @@ def build_joint_analysis_frame(
                 f"include_nz01_cells is set but {nz01_csv} is absent; set "
                 "include_nz01_cells=False to fit without nz_01's cross-tab."
             )
-        frames.append(_load_nz01_produced_cells())
+        frames.append(load_nz01_produced_cells())
     analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
     ceiling_rows_excluded = 0
@@ -848,12 +685,12 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
 
     def beta(a, b, name):
         d = pz.Beta(alpha=a, beta=b)
-        _plot_and_print_dist(context, d, name)
+        plot_and_print_dist(context, d, name)
         return d
 
     def halfnormal(sigma, name):
         d = pz.HalfNormal(sigma=sigma)
-        _plot_and_print_dist(context, d, name)
+        plot_and_print_dist(context, d, name)
         return d
 
     heading("Understood trajectory priors", style="bold cyan")
@@ -879,7 +716,7 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
 
     def kappa_block(kp, suffix):
         heading(f"Kappa priors — {suffix}", style="bold cyan")
-        return _configure_kappa_priors(context, kp, f"_{suffix}")
+        return configure_kappa_priors(context, kp, f"_{suffix}")
 
     kappa_u_fields = kappa_block(definition.kappa_u, "u")
     kappa_s_fields = kappa_block(definition.kappa_s, "s")
@@ -887,9 +724,9 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
 
     heading("Association (psi) and Dirichlet-Multinomial concentration", style="bold cyan")
     log_psi_dist = pz.Normal(mu=definition.log_psi_mu, sigma=definition.log_psi_sigma)
-    _plot_and_print_dist(context, log_psi_dist, "log_psi_dist")
+    plot_and_print_dist(context, log_psi_dist, "log_psi_dist")
     log_conc_dist = pz.Normal(mu=definition.log_conc_mu, sigma=definition.log_conc_sigma)
-    _plot_and_print_dist(context, log_conc_dist, "log_conc_dist")
+    plot_and_print_dist(context, log_conc_dist, "log_conc_dist")
 
     config = JointModelConfiguration(
         slope_anchors=definition.slope_anchors,
@@ -983,7 +820,11 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     idx_cells = np.where(has_cells_t)[0]
 
     y_u_values = np.asarray(df.loc[has_u_t, "understood"], dtype=float)
-    require_integral_counts(y_u_values, "understood")
+    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
+    # post-cast bound cannot catch 810.9 or -0.1, which truncate into range. Spoken
+    # and signed get the same finite/integral/range checks from
+    # `nested_outcome_spec`, so all three outcomes are covered pre-cast (#236, #240).
+    require_valid_counts(y_u_values, "understood", n_trials)
     y_u = y_u_values.astype(int)
     marginal_outcome_eligible = ~holdout & ~has_cells
     # Which treatment the child-outcome rows with no usable understood count
@@ -1056,10 +897,8 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     require_integral_counts(cell_total_values, "cell_total")
     cell_total = cell_total_values.astype(int)
 
-    # Validate
-    for arr, nm in [(y_u, "understood"), (y_s, "spoken"), (y_sign, "signed")]:
-        if arr.size and (arr.min() < 0 or arr.max() > n_trials):
-            raise ValueError(f"{nm} outside [0, n_trials].")
+    # The three marginal outcomes are range-checked pre-cast above; what is left
+    # here is the four-cell reconciliation, which has no pre-cast equivalent.
     if cell_counts.size:
         if cell_counts.min() < 0:
             raise ValueError("negative four-cell count.")
@@ -1146,7 +985,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         grids.X_gp_domain_z, (ell_low_z, ell_high_z)
     )
 
-    sa_z, sb_z = slope_anchor_logit_coeffs(
+    sa_z, sb_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_mean, X_obs_std=X_std
     )
 
@@ -1282,13 +1121,16 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # anchored at 54 mo (anchor_g_sign) so the tent supplies the hump and the GP
         # only deviates around it.
         sa_young, sa_peak, sa_old = definition.sign_anchor_ages
+        sa_young_z, sa_peak_z, sa_old_z = standardize_ages_to_z(
+            (sa_young, sa_peak, sa_old), X_obs_mean=X_mean, X_obs_std=X_std
+        )
         g_all = tent_and_gp(
             cfg_low=config.p_slope_low_sign_dist,
             cfg_mid=config.p_slope_mid_sign_dist,
             cfg_hi=config.p_slope_hi_sign_dist,
-            z_low=(sa_young - X_mean) / X_std,
-            z_mid=(sa_peak - X_mean) / X_std,
-            z_hi=(sa_old - X_mean) / X_std,
+            z_low=sa_young_z,
+            z_mid=sa_peak_z,
+            z_hi=sa_old_z,
             # Optional: estimate the peak age rather than assert it. Read from the
             # definition so no configuration class changes -- adding a field to a
             # definition class invalidates every existing fit of that class, and
@@ -1301,21 +1143,21 @@ def build_model(context: JointContext, definition: JointModelDefinition):
                 if getattr(definition, "sign_peak_prior", None) is not None
                 else None
             ),
-            # `sign_gp_mode` resolves the signed GP's unidentified hyperparameters:
-            # "sampled" (default, as shipped), "fixed-ell" (length-scale held at its
-            # prior median, amplitude still sampled), or "off" (no GP; the tent
-            # carries the latent). Read through getattr so no definition class
-            # changes and no existing model's graph moves.
-            cfg_ell=(
-                float(config.ell_unit_sign_dist.ppf(0.5))
-                if getattr(definition, "sign_gp_mode", "sampled") == "fixed-ell"
-                else config.ell_unit_sign_dist
-            ),
-            cfg_eta=(
-                None
-                if getattr(definition, "sign_gp_mode", "sampled") == "off"
-                else config.eta_sign_dist
-            ),
+            # The signed GP's hyperparameters are always sampled. Two alternatives
+            # were considered for their weak identifiability -- holding the
+            # length-scale at its prior median, and dropping the GP so the tent
+            # carries the whole latent -- and were reachable here through a
+            # `sign_gp_mode` getattr probe that NO definition class declared. Since
+            # `JointModelDefinition` is frozen and `sensitivity.make_variant` goes
+            # through `dataclasses.replace`, which raises on an unknown field, there
+            # was no way to select either branch: they were dead, while reading as a
+            # live switch. Exercising them needs a real field, which is a decision
+            # with a price -- on `JointModelDefinition` it invalidates every VG15
+            # fit; on a sibling subclass via `_as_definition_subclass` it invalidates
+            # nothing. The comparison was settled on 2026-08-06 in favour of
+            # sampling, so nothing needs it today.
+            cfg_ell=config.ell_unit_sign_dist,
+            cfg_eta=config.eta_sign_dist,
             suffix="_sign",
             X_all_z_data=X_all_z_data,
             grid=gp_grid,
@@ -1328,7 +1170,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # only. Sum-to-zero on the unit offsets removes the intercept vs
         # study-RE-mean ridge; the tau * z scaling keeps the non-centring. This is an
         # intentional identifiability constraint, not a prior-preserving
-        # reparameterisation: it removes the group-mean DOF and imposes a -1/K
+        # reparameterisation: it removes the group-mean DOF and imposes a -1/(K-1)
         # correlation. Each ZeroSumNormal sigma is rescaled by sqrt(K/(K-1)) so the
         # marginal per-study prior variance stays tau^2 (its value before the
         # constraint), where K is the number of studies the *outcome* actually
@@ -1560,7 +1402,11 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         pm.BetaBinomial("y_sign_obs", n=sign_likelihood_n, alpha=alpha_sign, beta=beta_sign,
                         observed=y_sign, dims="obs_sign_id")
 
-        # uk_02 four cells (Dirichlet-Multinomial), within-understood composition.
+        # Four-cell rows (Dirichlet-Multinomial), within-understood composition.
+        # `idx_cells` covers EVERY within-understood cross-tab source, not just
+        # uk_02: uk_02 always, plus uk_07 and es_01 when their include_* flags are
+        # set (see the per-study counts at the top of prepare_joint_data). Mislabelling
+        # this block "uk_02" is the error #238 corrected in the figure layer.
         # Uses population+study marginals (r_obs_pop/q_obs_pop), so psi stays a
         # population-conditioned association decoupled from the per-child sign RE.
         r_c = pm.math.clip(r_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
@@ -1582,9 +1428,10 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # composition. nz_01 has no comprehension, so we condition on produced:
         # drop the unobservable "neither" (understood_only) cell from the Plackett
         # within-understood composition and renormalise over {sign_only, speak_only,
-        # both}. Same conc and population+study marginals as the uk_02 DM, and the
-        # same per-study psi construction, so every cross-tab source identifies its
-        # own psi and they share the population level through the zero-sum.
+        # both}. Same conc and population+study marginals as the within-understood DM
+        # above, and the same per-study psi construction, so every cross-tab source
+        # identifies its own psi and they share the population level through the
+        # zero-sum.
         if idx_prod.size:
             r_p = pm.math.clip(r_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
             q_p = pm.math.clip(q_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
@@ -1762,29 +1609,37 @@ def diagnostics(context: JointContext):
 def _extract_produced_cell_observations(
     df: pd.DataFrame,
     has_prod: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Observed nz_01 produced-cell counts and ages for rows flagged by ``has_prod``."""
-    if not has_prod.any():
-        return (
-            np.zeros((0, len(PROD_CELL_NAMES)), dtype=int),
-            np.zeros(0, dtype=float),
-        )
+) -> np.ndarray:
+    """Observed nz_01 produced-cell counts for the rows flagged by ``has_prod``.
 
-    missing = [col for col in (*PROD_CELL_COLUMNS, "age") if col not in df.columns]
+    Counts only. It returned the matching ages as well until 2026-09-01, and no
+    caller ever read them -- the tuple target hid that from ruff's unused-variable
+    rule, which is why they outlived the ``prod_cell_ages`` *field* they were the
+    source of.
+    """
+    if not has_prod.any():
+        return np.zeros((0, len(PROD_CELL_NAMES)), dtype=int)
+
+    missing = [col for col in PROD_CELL_COLUMNS if col not in df.columns]
     if missing:
         raise ValueError(
             "obs_prod_mask marks produced-cell rows, but analysis_df is missing "
             f"columns: {', '.join(missing)}"
         )
 
-    return (
-        np.asarray(df.loc[has_prod, PROD_CELL_COLUMNS], dtype=int),
-        np.asarray(df.loc[has_prod, "age"], dtype=float),
-    )
+    return np.asarray(df.loc[has_prod, PROD_CELL_COLUMNS], dtype=int)
 
 
-def sample_posterior_predictive(context: JointContext, definition=None):
-    """Posterior predictive for the observed cell-count likelihoods."""
+def sample_posterior_predictive(
+    context: JointContext, definition: JointModelDefinition
+):
+    """Posterior predictive for the observed cell-count likelihoods.
+
+    ``definition`` is required but unread. Every engine's predictive stage is called
+    with the same two arguments so the catalogue can describe them uniformly, and a
+    default of ``None`` here only hid that no caller ever omitted it. Keeping the
+    parameter is the contract; defaulting it was the defect.
+    """
     with context.model:
         # Include the three marginal word-count likelihoods alongside the
         # four-cell composition likelihoods so they are posterior-predictively
@@ -1811,15 +1666,16 @@ def sample_posterior_predictive(context: JointContext, definition=None):
     context.dataframes["posterior_predictive_calibration"] = calibration_df
     save_trace(trace, context.reporting.output_dir)
 
-    # Observed uk_02 four-cell counts / ages. Use the stored training mask so
-    # held-out four-cell rows stay aligned with posterior_predictive["cells_obs"].
+    # Observed four-cell counts / ages, over every within-understood cross-tab
+    # source the fit admitted (uk_02, and uk_07 / es_01 when enabled) — not uk_02
+    # alone. Use the stored training mask so held-out four-cell rows stay aligned
+    # with posterior_predictive["cells_obs"].
     df = context.analysis_df
     has_cells = np.array(trace.constant_data["obs_cells_mask"].values, dtype=bool)
     cell_counts = np.asarray(
         df.loc[has_cells, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
         dtype=int,
     )
-    cell_ages = np.asarray(df.loc[has_cells, "age"], dtype=float)
     cell_studies = np.asarray(df.loc[has_cells, "study"], dtype=str)
     cell_pred = np.array(
         trace.posterior_predictive["cells_obs"]
@@ -1835,7 +1691,7 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         )
 
     has_prod = np.array(trace.constant_data["obs_prod_mask"].values, dtype=bool)
-    prod_counts, prod_ages = _extract_produced_cell_observations(df, has_prod)
+    prod_counts = _extract_produced_cell_observations(df, has_prod)
     if "nz_prod_cells_obs" in trace.posterior_predictive:
         prod_pred = np.array(
             trace.posterior_predictive["nz_prod_cells_obs"]
@@ -1864,20 +1720,20 @@ def sample_posterior_predictive(context: JointContext, definition=None):
     samples = JointModelSamples(
         X_plot=np.array(trace.constant_data["X_plot"].values),
         X_query=np.array(trace.constant_data["X_query"].values),
-        p_u_plot=_extract(trace, "p_u_plot", "plot_id"),
-        q_plot=_extract(trace, "q_plot", "plot_id"),
-        r_plot=_extract(trace, "r_plot", "plot_id"),
-        pi_both_plot=_extract(trace, "pi_both_plot", "plot_id"),
-        p_any_plot=_extract(trace, "p_any_plot", "plot_id"),
-        p_any_indep_plot=_extract(trace, "p_any_indep_plot", "plot_id"),
-        pi_neither_plot=_extract(trace, "pi_neither_plot", "plot_id"),
-        pi_sign_only_plot=_extract(trace, "pi_sign_only_plot", "plot_id"),
-        pi_speak_only_plot=_extract(trace, "pi_speak_only_plot", "plot_id"),
-        p_u_query=_extract(trace, "p_u_query", "query_id"),
-        q_query=_extract(trace, "q_query", "query_id"),
-        r_query=_extract(trace, "r_query", "query_id"),
-        p_any_query=_extract(trace, "p_any_query", "query_id"),
-        p_any_indep_query=_extract(trace, "p_any_indep_query", "query_id"),
+        p_u_plot=extract_posterior(trace, "p_u_plot", "plot_id"),
+        q_plot=extract_posterior(trace, "q_plot", "plot_id"),
+        r_plot=extract_posterior(trace, "r_plot", "plot_id"),
+        pi_both_plot=extract_posterior(trace, "pi_both_plot", "plot_id"),
+        p_any_plot=extract_posterior(trace, "p_any_plot", "plot_id"),
+        p_any_indep_plot=extract_posterior(trace, "p_any_indep_plot", "plot_id"),
+        pi_neither_plot=extract_posterior(trace, "pi_neither_plot", "plot_id"),
+        pi_sign_only_plot=extract_posterior(trace, "pi_sign_only_plot", "plot_id"),
+        pi_speak_only_plot=extract_posterior(trace, "pi_speak_only_plot", "plot_id"),
+        p_u_query=extract_posterior(trace, "p_u_query", "query_id"),
+        q_query=extract_posterior(trace, "q_query", "query_id"),
+        r_query=extract_posterior(trace, "r_query", "query_id"),
+        p_any_query=extract_posterior(trace, "p_any_query", "query_id"),
+        p_any_indep_query=extract_posterior(trace, "p_any_indep_query", "query_id"),
         psi=np.array(trace.posterior["psi"].stack(sample=("chain", "draw")).values),
         psi_study=np.array(
             trace.posterior["psi_study"].stack(sample=("chain", "draw")).values
@@ -1891,11 +1747,9 @@ def sample_posterior_predictive(context: JointContext, definition=None):
         ),
         cell_obs=cell_counts,
         cell_pred=cell_pred,
-        cell_ages=cell_ages,
         cell_studies=cell_studies,
         prod_cell_obs=prod_counts,
         prod_cell_pred=prod_pred,
-        prod_cell_ages=prod_ages,
     )
     context.set_model_samples(samples)
 
@@ -2143,7 +1997,7 @@ def posterior_summary(context: JointContext):
 # ============================================================
 
 
-def _run_joint_plots(context: JointContext):
+def run_joint_plots(context: JointContext):
     s = context.model_samples
     n_trials = context.model_data.n_trials
     od = context.reporting.output_dir
@@ -2192,9 +2046,9 @@ def _run_joint_plots(context: JointContext):
     ax.set_title("Total expressive vocabulary: identified vs independence bound")
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.png"), dpi=300)
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.svg"))
-    _save_csv(pd.DataFrame({"age_months": X_sign, "identified_median": id_med,
+    plot_io.save_plot_data(od, "p_any_identified_vs_bound", pd.DataFrame({"age_months": X_sign, "identified_median": id_med,
                             "identified_ci_lo": id_hdi[:, 0], "identified_ci_hi": id_hdi[:, 1],
-                            "independence_median": ind_med}), od, "p_any_identified_vs_bound")
+                            "independence_median": ind_med}))
     context.plots["p_any_identified_vs_bound"] = fig
     plt.close(fig)
 
@@ -2215,7 +2069,7 @@ def _run_joint_plots(context: JointContext):
     ax.set_title("Within-understood composition (sign-only → both → speak-only)")
     fig.savefig(os.path.join(od, "four_cell_composition.png"), dpi=300)
     fig.savefig(os.path.join(od, "four_cell_composition.svg"))
-    _save_csv(pd.DataFrame({"age_months": X_sign, **{k: v[0] for k, v in comp.items()}}), od, "four_cell_composition")
+    plot_io.save_plot_data(od, "four_cell_composition", pd.DataFrame({"age_months": X_sign, **{k: v[0] for k, v in comp.items()}}))
     context.plots["four_cell_composition"] = fig
     plt.close(fig)
 
@@ -2279,7 +2133,7 @@ def _run_joint_plots(context: JointContext):
     context.plots["signing_uplift"] = fig
     plt.close(fig)
 
-    _save_csv(pd.DataFrame({
+    plot_io.save_plot_data(od, "signing_profile", pd.DataFrame({
         "age_months": X_sign,
         "spoken_median": np.median(spoken_w, axis=1),
         "any_median": np.median(any_w, axis=1),
@@ -2290,8 +2144,16 @@ def _run_joint_plots(context: JointContext):
         "uplift_median": up_med, "uplift_ci_lo": up_ci[:, 0], "uplift_ci_hi": up_ci[:, 1],
         "sign_only_share_median": sh_med,
         "sign_only_share_ci_lo": sh_ci[:, 0], "sign_only_share_ci_hi": sh_ci[:, 1],
-    }), od, "signing_profile")
+    }))
 
+    # These two summary TABLES are written from the plot stage, not from
+    # `posterior_summary`, and that placement is load-bearing rather than untidy:
+    # `scripts/regenerate_plots.py` re-runs only the plot stage, so a table written
+    # here can be refreshed by a replot, while the same table moved into
+    # `posterior_summary` could only be refreshed by a reporting-quality refit. The
+    # next time a reporting cap moves, that is the difference between minutes and
+    # multiple gigabytes. (Recorded until now only in a `KNOWN_STALE` comment inside
+    # tests/test_reporting_age_policy.py.)
     _signing_milestones(X_sign, sign_only_w, both_w, speak_only_w, ci_prob).to_csv(
         os.path.join(od, "signing_milestones.csv"), index=False)
 
@@ -2456,7 +2318,7 @@ def joint_stages(
             lambda ctx: sample_posterior_predictive(ctx, definition),
         ),
         ("Posterior summary", posterior_summary),
-        ("Plots", _run_joint_plots),
+        ("Plots", run_joint_plots),
         ("Report", report),
     ]
 

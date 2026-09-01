@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from vocab_growth.models.cross_lag import validate_cross_lag
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     VG01,
@@ -17,6 +18,7 @@ from vocab_growth.models.definitions import (
     validate_model_definition,
     validate_model_registry,
 )
+from vocab_growth.models.likelihood_utils import LAG_BASELINES, LAG_ZERO_TREATMENTS
 
 
 def test_all_registered_model_definitions_are_valid():
@@ -56,6 +58,38 @@ def test_cross_lag_requires_understood_subject_effect():
 
     with pytest.raises(ValueError, match="requires use_subject_re_u"):
         validate_model_definition(invalid)
+
+
+def test_definition_rejects_unknown_lag_baseline():
+    invalid = replace(VG16, lag_baseline="between")
+
+    with pytest.raises(ValueError, match="lag_baseline"):
+        validate_model_definition(invalid)
+
+
+def test_definition_rejects_unknown_lag_zero_handling():
+    """The field had no definition-level check until 2026-09-01.
+
+    Its only rejection was inside the lag construction itself, which runs after
+    data preparation and prior configuration -- so a typo in a sensitivity variant
+    cost a full prepare-and-configure pass before failing.
+    """
+    invalid = replace(VG16, lag_zero_handling="jeffreys")
+
+    with pytest.raises(ValueError, match="lag_zero_handling"):
+        validate_model_definition(invalid)
+
+
+@pytest.mark.parametrize("baseline", LAG_BASELINES)
+def test_definition_accepts_every_declared_lag_baseline(baseline):
+    """`LAG_BASELINES` is the engine's tuple too, so this pins both checks at once."""
+    validate_model_definition(replace(VG16, lag_baseline=baseline))
+    validate_cross_lag(baseline, subject_re_u_active=True)
+
+
+@pytest.mark.parametrize("treatment", LAG_ZERO_TREATMENTS)
+def test_definition_accepts_every_declared_lag_zero_treatment(treatment):
+    validate_model_definition(replace(VG16, lag_zero_handling=treatment))
 
 
 def test_definition_rejects_unordered_kappa_anchors():

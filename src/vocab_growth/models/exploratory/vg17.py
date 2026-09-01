@@ -4,6 +4,9 @@
 """
 Model VG17: study-adjusted contrast of DS *spoken* vocabulary by sign-group.
 
+**EXPLORATORY. Its output is not validatable and must not be published.** See
+:mod:`vocab_growth.models.exploratory` for what a `fit()` here does not produce.
+
 A single-outcome (words spoken) DS model on the logit scale:
 
     f(a, s, c, g) = mean_trend(a) + gp(a) + delta[s] + delta_subj[c] + beta_sign[g]
@@ -59,17 +62,17 @@ from vocab_growth import intervals
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
-    slope_anchor_logit_coeffs,
     standardize_ages,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.common import (
-    AnchoredKappaPriors,
     ModelConfiguration,
     build_kappa_for_config,
     get_hsgp_hyperparams,
+    kappa_config_fields,
 )
-from vocab_growth.models.definitions import VG01, KappaAnchorPriorParams
+from vocab_growth.models.definitions import VG01
 from vocab_growth.models.exploratory import write_exploratory_marker
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 
@@ -132,22 +135,12 @@ def _config() -> ModelConfiguration:
     stays a genuine reuse rather than a copy that silently diverges.
     """
     b = VG01
-    kp = b.kappa
-    if isinstance(kp, KappaAnchorPriorParams):
-        kappa_fields = {
-            "kappa_anchored": AnchoredKappaPriors(
-                kappa_min_dist=pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma),
-                excess_young_dist=pz.LogNormal(mu=kp.excess_young_mu, sigma=kp.excess_young_sigma),
-                excess_old_dist=pz.LogNormal(mu=kp.excess_old_mu, sigma=kp.excess_old_sigma),
-                anchor_ages=tuple(float(age) for age in kp.anchor_ages),
-            )
-        }
-    else:
-        kappa_fields = {
-            "kappa_min_dist": pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma),
-            "a_kappa_dist": pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma),
-            "b_kappa_mag_dist": pz.HalfNormal(sigma=kp.b_kappa_mag_sigma),
-        }
+    # The engines' own translation, not a copy of it: `kappa_config_fields` is the
+    # pure half of `common.configure_kappa_priors`, which cannot be called here
+    # because it emits prior figures into a `ModelFitContext` that does not exist at
+    # module level. The hand-written copy this replaces is what the docstring above
+    # was promising against.
+    kappa_fields = kappa_config_fields(b.kappa)
     return ModelConfiguration(
         slope_anchors=b.slope_anchors,
         ell_months_range=b.ell_months_range,
@@ -195,7 +188,7 @@ def _build(df, studies, config, y_col="spoken", tau_study_sigma=0.5, beta_sign_s
     ell_low_m, ell_high_m = validate_ell_bounds(config.ell_months_range)
     ell_low_z, ell_high_z = ell_low_m / X_std, ell_high_m / X_std
     L, M = get_hsgp_hyperparams(X_all_z, (ell_low_z, ell_high_z))
-    sa_z, sb_z = slope_anchor_logit_coeffs(config.slope_anchors, X_obs_mean=X_mean, X_obs_std=X_std)
+    sa_z, sb_z = standardize_anchor_ages(config.slope_anchors, X_obs_mean=X_mean, X_obs_std=X_std)
 
     i_o0, i_o1 = 0, n
     i_p0, i_p1 = i_o1, i_o1 + n_plot
@@ -347,5 +340,4 @@ if __name__ == "__main__":
     from multiprocessing import freeze_support
 
     freeze_support()
-    env.set_output_root("/scratch/vg-output")
     fit(sys.argv[1] if len(sys.argv) > 1 else "test")

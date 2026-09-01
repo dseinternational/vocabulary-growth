@@ -17,6 +17,7 @@ import pytest
 import xarray as xr
 
 from vocab_growth.models import prior_child_checks as pcc
+from vocab_growth.models.definitions import SubjectFactorPriorParams
 
 
 def _prior(**arrays):
@@ -200,6 +201,72 @@ def test_the_slope_reference_age_comes_from_the_definition():
     delta, _ = pcc.unseen_child_deltas(prior, _Ref24(), [24.0, 36.0], rng)
     assert delta[:, 0].std() == pytest.approx(0.75, rel=0.06)
     assert delta[:, 1].std() > delta[:, 0].std()
+
+
+def test_the_factor_branch_reads_the_factors_own_reference_age():
+    """VG22's class carries no ``subject_slope_ref_age_months``.
+
+    The reference age lives on ``subject_factor.ref_age_months``, which is what the
+    graph and the predictive path read. Before this was fixed the check probed the
+    slope field, fell through to its default, and agreed with the graph only
+    because both defaults are 36.0 -- so a variant that moved the factor's
+    reference age mis-centred these figures silently. A loading matrix that is
+    pure *rate* (zero intercept) puts the zero-spread age exactly at the reference
+    age, which is what this asserts.
+    """
+    n = 4000
+    # (b0u, b1u, b0q, b1q): intercepts zero, rates 0.5 per year, rank 1.
+    loadings = np.zeros((n, 4, 1))
+    loadings[:, 1, 0] = 0.5
+    loadings[:, 3, 0] = 0.5
+    prior = _prior(f_u_plot=np.zeros(n), tau_subj_u=np.full(n, 0.4))
+    prior = prior.assign(
+        subject_factor_loadings=xr.DataArray(
+            loadings.reshape(1, n, 4, 1),
+            dims=("chain", "draw", "factor_effect", "factor_dim"),
+        )
+    )
+
+    class _Factor48:
+        n_trials = 810
+        subject_factor = SubjectFactorPriorParams(
+            rank=1, tau1_u_sigma=0.5, tau1_q_sigma=0.5, ref_age_months=48.0
+        )
+
+    rng = np.random.default_rng(7)
+    delta_u, delta_q = pcc.unseen_child_deltas(
+        prior, _Factor48(), [36.0, 48.0, 60.0], rng
+    )
+    # Zero spread at the factor's own reference age, not at 36.
+    assert delta_u[:, 1].std() == pytest.approx(0.0, abs=1e-12)
+    assert delta_q[:, 1].std() == pytest.approx(0.0, abs=1e-12)
+    assert delta_u[:, 0].std() > 0.0
+    assert delta_u[:, 2].std() > 0.0
+    # And the offsets are antisymmetric about it: -12 and +12 months.
+    assert delta_u[:, 0] == pytest.approx(-delta_u[:, 2])
+
+
+def test_an_explicit_zero_reference_age_is_not_rewritten_to_the_default():
+    """``or DEFAULT`` would silently turn a stated 0.0 into 36.0."""
+    n = 2000
+    prior = _prior(
+        f_u_plot=np.zeros(n),
+        tau_subj_u_0=np.zeros(n),
+        tau_subj_u_1=np.full(n, 0.5),
+        tau_subj_u_rho=np.zeros(n),
+        tau_subj_q_0=np.zeros(n),
+        tau_subj_q_1=np.full(n, 0.5),
+        tau_subj_q_rho=np.zeros(n),
+    )
+
+    class _Ref0(_Definition):
+        subject_slope_ref_age_months = 0.0
+
+    rng = np.random.default_rng(8)
+    delta, _ = pcc.unseen_child_deltas(prior, _Ref0(), [0.0, 12.0], rng)
+    # Zero spread at age 0 is only true if 0.0 was honoured as the reference.
+    assert delta[:, 0].std() == pytest.approx(0.0, abs=1e-12)
+    assert delta[:, 1].std() == pytest.approx(0.5, rel=0.08)
 
 
 # --------------------------------------------------------------------------

@@ -40,6 +40,7 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth.models.catalogue import CATALOGUE
+from vocab_growth.models.definitions import ModelDefinition
 
 #: Engine frame builder for every registered model, as ``module:function``.
 #: Derived from the catalogue, so a model's frame builder and the engine that
@@ -62,7 +63,9 @@ def analysis_frame_hash(df: pd.DataFrame) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
-def build_analysis_frame(model_key: str, definition) -> tuple[pd.DataFrame, dict]:
+def build_analysis_frame(
+    model_key: str, definition: ModelDefinition
+) -> tuple[pd.DataFrame, dict]:
     """Rebuild ``definition``'s prepared analysis frame outside a fit.
 
     Returns the frame and the engine's side information (exclusion counts and
@@ -81,7 +84,9 @@ def build_analysis_frame(model_key: str, definition) -> tuple[pd.DataFrame, dict
     return getattr(module, function_name)(definition)
 
 
-def expected_analysis_frame_hash(model_key: str, definition) -> str:
+def expected_analysis_frame_hash(
+    model_key: str, definition: ModelDefinition
+) -> str:
     """The exact frame hash a fresh fit of ``definition`` would record today.
 
     This is what fitted-output validation compares against the manifest's

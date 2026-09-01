@@ -239,6 +239,24 @@ _TARGETS: dict[str, EngineRecoverySpec] = {
     # recovery/compare.py picks it up, while `rho_uq_raw` is excluded by the
     # existing `*_raw` rule as a non-centred offset with no interpretation.
     "vg20": BIVARIATE_RE_SPEC,
+    # VG21, VG22 and VG23 all run the bivariate-RE engine and all draw counts the
+    # same way VG10 does, so the VG10 spec is correct for each unchanged -- the same
+    # argument as VG19 and VG20 above, and for the same reason: what these models
+    # change is the PRIOR on the per-child effects, not the observation nodes the
+    # simulator samples from. VG21 is a plain `BivariateModelDefinition` on that
+    # engine, as VG13 is. VG23 shares VG20's definition class exactly.
+    #
+    # VG22 is the one that most needs a recovery check rather than least: a rank-k
+    # factor over four child effects is the weakly identified structure the harness
+    # exists to measure, and #283's rank-2/rank-3 disagreement on the spoken slope
+    # scale is precisely a "is this identified?" question. Its parameters need no
+    # scoring entries -- `target_variables` selects by dimension, so the scalar
+    # `tau_subj_*_0` / `tau_subj_*_1` are picked up while the two-dimensional
+    # `subject_factor_loadings` and `subject_factor_z` fall through both branches
+    # rather than erroring, exactly as VG19's `tau_subj_*_z` does.
+    "vg21": BIVARIATE_RE_SPEC,
+    "vg22": BIVARIATE_RE_SPEC,
+    "vg23": BIVARIATE_RE_SPEC,
 }
 
 UNSUPPORTED_REASONS: dict[str, str] = {
@@ -254,6 +272,43 @@ UNSUPPORTED_REASONS: dict[str, str] = {
     "vg05": "descriptive baseline on the non-RE bivariate engine (superseded by VG10)",
     "vg14": "signing baseline on the trivariate engine (superseded by VG15)",
 }
+
+
+def _require_complete_coverage() -> None:
+    """Every registered model is either a recovery target or has a recorded reason.
+
+    Without this, registering a model leaves it in neither table and
+    `recovery_target` falls through to the generic "no recovery specification
+    registered" -- which reads as a considered decision when nobody decided
+    anything. That is exactly what happened to VG21, VG22 and VG23, and it is the
+    failure mode the two blocks of prose above were written to avoid. This is the
+    same both-directions completeness check `catalogue._catalogue` makes, for the
+    same reason (#273).
+    """
+    registered = set(MODEL_REGISTRY)
+    covered = set(_TARGETS) | set(UNSUPPORTED_REASONS)
+    missing = sorted(registered - covered)
+    if missing:
+        raise RuntimeError(
+            "Registered models absent from both _TARGETS and UNSUPPORTED_REASONS: "
+            f"{', '.join(missing)}. Add a recovery spec, or a recorded reason why "
+            "recovery does not apply -- not nothing."
+        )
+    unknown = sorted(covered - registered)
+    if unknown:
+        raise RuntimeError(
+            "Recovery tables name models that are not registered: "
+            f"{', '.join(unknown)}. Remove them, or register the model."
+        )
+    both = sorted(set(_TARGETS) & set(UNSUPPORTED_REASONS))
+    if both:
+        raise RuntimeError(
+            f"Models in both _TARGETS and UNSUPPORTED_REASONS: {', '.join(both)}. "
+            "A model is either supported or explained, not both."
+        )
+
+
+_require_complete_coverage()
 
 # The three models #163 names as preferred/headline, in reporting order. VG20
 # replaced VG10 here on 2026-08-19 when it took over as the model of record for

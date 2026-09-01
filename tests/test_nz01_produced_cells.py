@@ -21,6 +21,7 @@ import pandas as pd
 import pytest
 
 import vocab_growth.environment as env
+from vocab_growth import cross_tab_sources
 from vocab_growth.models import common_joint_modality as cjm
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.definitions import VG15
@@ -68,7 +69,7 @@ def test_nz01_loader_maps_cells_and_drops_zero_produced(tmp_path, monkeypatch):
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_nz01_csv(tmp_path / "vocab_data_nz_01.csv")
 
-    out = cjm._load_nz01_produced_cells()
+    out = cross_tab_sources.load_nz01_produced_cells()
 
     # The zero-produced row is dropped; two rows remain.
     assert set(out["subject_id"]) == {"nz_1", "nz_2"}
@@ -207,13 +208,12 @@ def test_a_requested_but_missing_nz01_source_fails_closed(tmp_path, monkeypatch)
 
 def test_produced_cell_observation_extraction_tolerates_empty_mask_without_columns():
     df = pd.DataFrame({"age": [30.0, 48.0]})
-    counts, ages = cjm._extract_produced_cell_observations(
+    counts = cjm._extract_produced_cell_observations(
         df,
         np.zeros(len(df), dtype=bool),
     )
 
     assert counts.shape == (0, len(cjm.PROD_CELL_NAMES))
-    assert ages.shape == (0,)
 
 
 def test_produced_cell_observation_extraction_rejects_inconsistent_mask():

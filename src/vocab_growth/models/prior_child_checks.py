@@ -46,6 +46,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import betabinom
 
+from vocab_growth.models.definitions import subject_factor_spec
+from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
+
 N_CHILD_CURVES = 300
 """Unseen children drawn for the trajectory figures.
 
@@ -116,17 +119,43 @@ def unseen_child_deltas(prior, definition, ages_months, rng):
 
     ages = np.asarray(ages_months, dtype=float)
     n_draws = _flat(prior, "f_u_plot").shape[0]
-    ref = float(getattr(definition, "subject_slope_ref_age_months", 36.0) or 36.0)
-    years = (ages - ref) / 12.0
+
+    def years_from(ref: float) -> np.ndarray:
+        return (ages - float(ref)) / 12.0
 
     if structure == "factor":
         # VG22: b = z @ L.T over (b0u, b1u, b0q, b1q).
+        #
+        # The reference age comes from the FACTOR's own spec, not from
+        # `subject_slope_ref_age_months`: that field is declared on
+        # `BivariateChildSlopeModelDefinition` and VG22's
+        # `BivariateFactorSubjectREModelDefinition` does not carry it, so a probe
+        # for it falls through to the default. The graph and the predictive path
+        # both read `subject_factor.ref_age_months` (`gp_utils.build_child_factor`,
+        # `common_bivariate._unseen_child_factor_deltas`), and the two agreed only
+        # because both defaults happen to be 36.0 -- so a variant that moved the
+        # factor's reference age would have silently mis-centred these prior
+        # figures, which exist for a reader to judge the factor prior (#233).
+        factor = subject_factor_spec(getattr(definition, "subject_factor", None))
+        years = years_from(
+            factor.ref_age_months
+            if factor is not None
+            else DEFAULT_SLOPE_REF_AGE_MONTHS
+        )
         loadings = _flat(prior, "subject_factor_loadings")  # (draw, 4, k)
         z = rng.standard_normal((n_draws, loadings.shape[2]))
         b = np.einsum("dik,dk->di", loadings, z)
         delta_u = b[:, 0][:, None] + b[:, 1][:, None] * years[None, :]
         delta_q = b[:, 2][:, None] + b[:, 3][:, None] * years[None, :]
         return delta_u, delta_q
+
+    # Every remaining structure that uses a reference age is the child slope's, so
+    # this is the field that declares one. `or` is deliberately not used: an
+    # explicit 0.0 is a legitimate reference age and must not be rewritten to 36.
+    ref = getattr(definition, "subject_slope_ref_age_months", None)
+    years = years_from(
+        DEFAULT_SLOPE_REF_AGE_MONTHS if ref is None else ref
+    )
 
     if structure == "slope":
         # VG19: an intercept and a rate per outcome, correlated within outcome.

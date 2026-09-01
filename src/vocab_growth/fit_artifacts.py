@@ -199,6 +199,20 @@ def source_data_hash(data_dir: str) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+def require_classified_sampling_config(sampling_config_name: str) -> None:
+    """Refuse a sampling tier this repository has no convergence-gate class for.
+
+    The same check as :func:`is_reporting_quality_config`, called for the raise
+    rather than the answer -- ``--config`` has no argparse ``choices``, so an
+    unrecognised tier would otherwise reach the sampler and produce output with no
+    gate classification. Named so a reader can tell it is doing something: as a
+    bare ``is_reporting_quality_config(config)`` expression statement with its
+    return value discarded it read as dead code, and ruff's B018 does not flag
+    call statements.
+    """
+    is_reporting_quality_config(sampling_config_name)
+
+
 def is_reporting_quality_config(sampling_config_name: str) -> bool:
     """Classify a known sampling tier without silently accepting new aliases."""
     name = sampling_config_name.strip().lower()

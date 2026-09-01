@@ -21,7 +21,7 @@ definition argument for every random-effect model, discarding
 the ones a child-effect model's prior audit exists to look at (issue #233).
 
 Usage:
-    python scripts/prior_predictive_audit.py [models...]   # default: family reps
+    python scripts/prior_predictive_audit.py [models...]   # default: see _default_models
 """
 
 import argparse
@@ -34,13 +34,60 @@ import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
 
 from vocab_growth import environment as env
+from vocab_growth.models import subject_effects
 from vocab_growth.models.catalogue import get as catalogue_get
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting import console, heading
 
-# §6 regeneration set (family representatives + the reporting models).
-_DEFAULT = ["vg10", "vg11", "vg12", "vg13", "vg14", "vg15"]
+
+def _default_models() -> list[str]:
+    """The §6 regeneration set, DERIVED rather than listed.
+
+    Two coverage obligations, both of which a hand-written list had already failed.
+    One model per **engine**, so every graph builder is exercised. And one model per
+    distinct **child-effect structure**, because that is what issue #233 extended
+    this audit for: the unseen-child figures are the ones a child-effect model's
+    prior audit exists to look at, and they only appear for a model whose engine
+    passes the definition through.
+
+    The list this replaced was ``[vg10, vg11, vg12, vg13, vg14, vg15]``. It omitted
+    VG20 — the Down syndrome model of record — along with VG19, VG21, VG22 and VG23,
+    and of its six entries only VG10 and VG13 reached ``prior_child_checks`` at all
+    (VG11 and VG12 are ``outcome``-convention), both with a constant offset. So the
+    correlated, child-slope and low-rank-factor branches were never exercised by the
+    documented default invocation.
+
+    Registry order throughout, so the output is stable and reviewable.
+    """
+    chosen: list[str] = []
+    seen_engines: set[str] = set()
+    seen_structures: set[str] = set()
+    for key in MODEL_REGISTRY:
+        record = catalogue_get(key)
+        engine = record.engine.name
+        structure = _child_effect_signature(MODEL_REGISTRY[key])
+        if engine not in seen_engines or structure not in seen_structures:
+            chosen.append(key)
+        seen_engines.add(engine)
+        seen_structures.add(structure)
+    return chosen
+
+
+def _child_effect_signature(definition) -> str:
+    """A comparable label for a definition's child-effect structure.
+
+    Read through :func:`vocab_growth.models.subject_effects.resolve`, the one
+    resolver, rather than by sniffing fields here.
+    """
+    try:
+        plan = subject_effects.resolve(definition)
+    except Exception:
+        # Not a multi-outcome definition, or a combination the resolver refuses:
+        # either way it is not a child-effect model and groups with the others.
+        return "none"
+    kinds = "+".join(sorted({effect.kind.value for effect in plan.effects}))
+    return f"{kinds}|corr={plan.correlation_eta is not None}|factor={plan.factor is not None}"
 
 
 def _context(definition) -> ModelFitContext:
@@ -86,11 +133,29 @@ def audit(model_key: str) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("models", nargs="*", default=None, help="Model keys (default: family reps).")
+    parser.add_argument(
+        "models",
+        nargs="*",
+        default=None,
+        help="Model keys (default: one per engine and per child-effect structure).",
+    )
     freeze_support()
     setup.init_script()
     args = parser.parse_args()
-    models = [m.lower() for m in (args.models or _DEFAULT)]
+    using_default = not args.models
+    models = [m.lower() for m in (args.models or _default_models())]
+    if using_default:
+        # Say what a default run does NOT cover. A partial default that reads as
+        # complete is what let VG19-VG23 go unaudited; naming the gap is the
+        # cheapest guard against the same thing happening to the next model.
+        skipped = [key for key in MODEL_REGISTRY if key not in models]
+        console.print(
+            f"[dim]Default set ({len(models)} of {len(MODEL_REGISTRY)}): one model per "
+            f"engine and per child-effect structure. Not audited: "
+            f"{', '.join(k.upper() for k in skipped) or 'none'} — each shares both an "
+            f"engine and a child-effect structure with a model above. "
+            f"Pass model keys explicitly to override.[/dim]"
+        )
 
     for key in models:
         if key not in MODEL_REGISTRY:

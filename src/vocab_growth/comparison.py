@@ -48,6 +48,7 @@ from vocab_growth.models.definitions import (
     ModelType,
     subject_slope_spec,
 )
+from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
 
 DEFAULT_MILESTONES = (25, 50, 100, 200, 400)
 DEFAULT_MIN_COVERAGE = 0.80
@@ -907,7 +908,8 @@ def subject_heterogeneity(
         # Resolved exactly as `common_bivariate_re.build_model_re` resolves it,
         # default included: a reference age here that differs from the one the
         # fit used would silently shift the whole curve.
-        ref = float(getattr(d, "subject_slope_ref_age_months", 36.0) or 36.0)
+        ref = getattr(d, "subject_slope_ref_age_months", None)
+        ref = float(DEFAULT_SLOPE_REF_AGE_MONTHS if ref is None else ref)
         return child_scale_of_age(t0, t1, r, grid, ref_age_months=ref)
 
     if mt is ModelType.UNIVARIATE:

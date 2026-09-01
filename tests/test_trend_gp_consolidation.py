@@ -4,7 +4,7 @@
 """Graph-shape guard for the shared trend + HSGP builder (issue #86).
 
 The inlined trend + HSGP construction was lifted into
-``vocab_growth.models.gp_utils`` (``trend_and_gp`` / ``intercept_and_gp``) and
+``vocab_growth.models.gp_utils`` (``trend_and_gp`` / ``tent_and_gp``) and
 adopted across all six engines. Because ``hsgp.prior`` is the sole RNG-bearing
 call, the consolidation must not change any model's PyMC graph. These tests build
 the real model for one representative of each engine (no sampling) and pin the
@@ -104,7 +104,7 @@ def _build_uncached(model_id, tmp_path, monkeypatch):
         cj.build_model(ctx, d)
     else:
         # Without this, a newly registered model falls through with no model
-        # built and fails on "Model has not been set in the context" — which
+        # built and fails on "the fit context for ... has no model set" — which
         # reads as a defect in the model rather than an omission here. VG20 hit
         # exactly that.
         raise AssertionError(

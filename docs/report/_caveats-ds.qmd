@@ -4,6 +4,9 @@ Included via {{< include _caveats-ds.qmd >}} so the shared caveats are stated
 once and reused. Edit here only. The long-form treatment is the Limitations
 section of the Discussion (@sec-limitations); keep the two consistent.
 Drafted by an LLM-based AI tool (Claude Code/Fable 5).
+Cross-references repaired after the 2026-08-26 report tidy (Claude Code/Fable 5,
+2026-08-31): sec-mean -> sec-trends, and the Appendix C pointer dropped until
+the reference-tables appendix is restored.
 -->
 
 ::: {.callout-warning title="Scope and caveats"}
@@ -13,7 +16,7 @@ All outcomes are **parent-report checklist counts**, harmonised from several ins
 
 Coverage is **uneven across age**: dense between about 18 and 54 months and thin above 72 months for spoken words and above about 60 for words understood, where the study mix also changes. Estimates at older ages are smoothed by the model from few children and carry correspondingly wide intervals; monthly rows with `n_obs = 0` are extrapolation, not evidence.
 
-The study is **descriptive and exploratory**, not preregistered or confirmatory. Estimates are conditional on the model (@sec-mean, @sec-betabinomial, @sec-randomeffects), sex, health, cognitive level, socio-economic status and intervention exposure are not modelled, and no causal reading is licensed. When setting expectations for an individual child, quote the **posterior predictive** count ($Y$, $P(Y \le k)$), which carries between-child variability and stays wide, not the expected trajectory ($E[Y]$), which carries parameter uncertainty only (@sec-interval-convention).
+The study is **descriptive and exploratory**, not preregistered or confirmatory. Estimates are conditional on the model (@sec-trends, @sec-betabinomial, @sec-randomeffects), sex, health, cognitive level, socio-economic status and intervention exposure are not modelled, and no causal reading is licensed. When setting expectations for an individual child, quote the **posterior predictive** count ($Y$, $P(Y \le k)$), which carries between-child variability and stays wide, not the expected trajectory ($E[Y]$), which carries parameter uncertainty only (@sec-interval-convention).
 
-Numbers are drawn from the model of record (VG20, which replaced VG10 on 2026-08-19 and differs from it by one parameter) at the canonical 6-monthly ages; see Appendix C for the complete tables and the Discussion (@sec-limitations) for the full statement of limitations.
+Numbers are drawn from the model of record (VG20, which replaced VG10 on 2026-08-19 and differs from it by one parameter) at the canonical 6-monthly ages; see the Discussion (@sec-limitations) for the full statement of limitations.
 :::

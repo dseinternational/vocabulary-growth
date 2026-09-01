@@ -17,11 +17,18 @@ Uses a production-ratio reparameterization that extends the bivariate engine
 
 The total-expressive quantity p_any assumes signing and speaking are
 *conditionally independent given age* (the stated Option 1 limitation of
-issue #49; VG15 will relax it).
+issue #49). VG15 relaxes that assumption and is the model of record for the
+sign-speech association; see :func:`plot_p_any_validation`, which quantifies
+what the independence assumption costs here.
 
-This module is a deliberate, self-contained copy-and-extend of
-common_bivariate.py. It does not import from or modify the bivariate engine;
-some duplication is intentional, to keep the signed logic fully isolated.
+This module does not import from or modify :mod:`common_bivariate`: the signed
+logic is deliberately isolated from the bivariate graph builder, and the
+structural parallel between the two ratio blocks is a duplication that was
+accepted for that isolation. It is **not** otherwise self-contained — the
+configuration base class, the kappa dispatch, the sampling, diagnostics,
+monthly-summary and report stages and the fit-pipeline driver all come from
+:mod:`vocab_growth.models.common`, and a change there reaches VG14 like every
+other model.
 """
 
 import os
@@ -29,6 +36,7 @@ import sys
 from dataclasses import dataclass
 
 import dse_research_utils.math.constants as math_constants
+import dse_research_utils.plot.io as plot_io
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
@@ -51,9 +59,10 @@ from vocab_growth.administration_loo import LikelihoodFactor
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
-    require_integral_counts,
-    slope_anchor_logit_coeffs,
+    require_valid_counts,
     standardize_ages,
+    standardize_ages_to_z,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.calibration import write_trace_calibration
@@ -61,11 +70,11 @@ from vocab_growth.models.common import (
     AnchoredKappaPriors,
     BaseModelConfiguration,
     ModelFitContext,
-    _configure_kappa_priors,
-    _plot_and_print_dist,
     build_kappa_for_config,
+    configure_kappa_priors,
     emit_monthly_summary,
     get_hsgp_hyperparams,
+    plot_and_print_dist,
     render_model_graph,
     report,
     run_fit_pipeline,
@@ -86,17 +95,15 @@ from vocab_growth.models.likelihood_utils import (
     resolve_fallback_treatment,
 )
 from vocab_growth.plotting import (
-    _save_csv,
     plot_comprehension_production_gap,
     plot_production_rate,
 )
 from vocab_growth.posterior_analysis import (
-    extract_posterior as _extract_posterior,
-)
-from vocab_growth.posterior_analysis import (
-    extract_posterior_predictive as _extract_posterior_predictive,
+    extract_posterior,
+    extract_posterior_predictive,
 )
 from vocab_growth.reporting import (
+    console,
     dataframe_table,
     heading,
     key_value_table,
@@ -186,14 +193,9 @@ class TrivariateModelSamples:
     X_query: np.ndarray
     """Ages in months for the query points, shape (n_query,)."""
 
-    X_plot_z: np.ndarray
-    """Standardized ages for the plot points, shape (n_plot, n_samples)."""
-    X_query_z: np.ndarray
-    """Standardized ages for the query points, shape (n_query, n_samples)."""
 
     # Understood (U) samples
     f_u_plot: np.ndarray
-    f_u_query: np.ndarray
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
     y_u_obs: np.ndarray
@@ -203,14 +205,11 @@ class TrivariateModelSamples:
     kappa_u_query: np.ndarray
 
     # Production rate (q) samples
-    h_plot: np.ndarray
-    h_query: np.ndarray
     q_plot: np.ndarray
     q_query: np.ndarray
 
     # Spoken (S) samples (derived)
     f_s_plot: np.ndarray
-    f_s_query: np.ndarray
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
     y_s_obs: np.ndarray
@@ -224,14 +223,11 @@ class TrivariateModelSamples:
     # store them (``fit_artifacts.sampled_variable_names``) and reading them
     # back would raise. Nothing consumed them; ``r_obs`` remains in the graph
     # because the likelihood uses it, which needs no stored draws.
-    g_sign_plot: np.ndarray
-    g_sign_query: np.ndarray
     r_plot: np.ndarray
     r_query: np.ndarray
 
     # Signed (Sign) samples (derived)
     f_sign_plot: np.ndarray
-    f_sign_query: np.ndarray
     p_sign_plot: np.ndarray
     p_sign_query: np.ndarray
     y_sign_obs: np.ndarray
@@ -249,8 +245,6 @@ class TrivariateModelSamples:
     """Boolean array: True where understood is observed, shape (n,)."""
     obs_s_mask: np.ndarray
     """Boolean array: True where spoken is observed, shape (n,)."""
-    obs_sign_mask: np.ndarray
-    """Boolean array: True where signed is observed, shape (n,)."""
 
 
 TrivariateContext = ModelFitContext[
@@ -362,20 +356,20 @@ def configure_trivariate_priors(
     ell_unit_u_dist = pz.Beta(
         alpha=definition.ell_unit_u_alpha, beta=definition.ell_unit_u_beta
     )
-    _plot_and_print_dist(context, ell_unit_u_dist, "ell_unit_u_dist")
+    plot_and_print_dist(context, ell_unit_u_dist, "ell_unit_u_dist")
 
     eta_u_dist = pz.HalfNormal(sigma=definition.eta_u_sigma)
-    _plot_and_print_dist(context, eta_u_dist, "eta_u_dist")
+    plot_and_print_dist(context, eta_u_dist, "eta_u_dist")
 
     p_slope_low_u_dist = pz.Beta(
         alpha=definition.p_slope_low_u_alpha, beta=definition.p_slope_low_u_beta
     )
-    _plot_and_print_dist(context, p_slope_low_u_dist, "p_slope_low_u_dist")
+    plot_and_print_dist(context, p_slope_low_u_dist, "p_slope_low_u_dist")
 
     p_slope_hi_u_dist = pz.Beta(
         alpha=definition.p_slope_hi_u_alpha, beta=definition.p_slope_hi_u_beta
     )
-    _plot_and_print_dist(context, p_slope_hi_u_dist, "p_slope_hi_u_dist")
+    plot_and_print_dist(context, p_slope_hi_u_dist, "p_slope_hi_u_dist")
 
     # --- Production ratio (q) priors ---
     heading("Production ratio priors", style="bold cyan")
@@ -383,20 +377,20 @@ def configure_trivariate_priors(
     ell_unit_q_dist = pz.Beta(
         alpha=definition.ell_unit_q_alpha, beta=definition.ell_unit_q_beta
     )
-    _plot_and_print_dist(context, ell_unit_q_dist, "ell_unit_q_dist")
+    plot_and_print_dist(context, ell_unit_q_dist, "ell_unit_q_dist")
 
     eta_q_dist = pz.HalfNormal(sigma=definition.eta_q_sigma)
-    _plot_and_print_dist(context, eta_q_dist, "eta_q_dist")
+    plot_and_print_dist(context, eta_q_dist, "eta_q_dist")
 
     p_slope_low_q_dist = pz.Beta(
         alpha=definition.p_slope_low_q_alpha, beta=definition.p_slope_low_q_beta
     )
-    _plot_and_print_dist(context, p_slope_low_q_dist, "p_slope_low_q_dist")
+    plot_and_print_dist(context, p_slope_low_q_dist, "p_slope_low_q_dist")
 
     p_slope_hi_q_dist = pz.Beta(
         alpha=definition.p_slope_hi_q_alpha, beta=definition.p_slope_hi_q_beta
     )
-    _plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
+    plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
 
     # --- Signed ratio (r) priors ---
     heading("Signed ratio priors", style="bold cyan")
@@ -404,46 +398,46 @@ def configure_trivariate_priors(
     ell_unit_sign_dist = pz.Beta(
         alpha=definition.ell_unit_sign_alpha, beta=definition.ell_unit_sign_beta
     )
-    _plot_and_print_dist(context, ell_unit_sign_dist, "ell_unit_sign_dist")
+    plot_and_print_dist(context, ell_unit_sign_dist, "ell_unit_sign_dist")
 
     eta_sign_dist = pz.HalfNormal(sigma=definition.eta_sign_sigma)
-    _plot_and_print_dist(context, eta_sign_dist, "eta_sign_dist")
+    plot_and_print_dist(context, eta_sign_dist, "eta_sign_dist")
 
     # Three-anchor hump signed mean (young / peak / old): Beta priors on r at three
     # reference ages, interpolated as a tent meeting at the peak (gp_utils.tent_and_gp).
     p_slope_low_sign_dist = pz.Beta(
         alpha=definition.p_slope_low_sign_alpha, beta=definition.p_slope_low_sign_beta
     )
-    _plot_and_print_dist(context, p_slope_low_sign_dist, "p_slope_low_sign_dist")
+    plot_and_print_dist(context, p_slope_low_sign_dist, "p_slope_low_sign_dist")
 
     p_slope_mid_sign_dist = pz.Beta(
         alpha=definition.p_slope_mid_sign_alpha, beta=definition.p_slope_mid_sign_beta
     )
-    _plot_and_print_dist(context, p_slope_mid_sign_dist, "p_slope_mid_sign_dist")
+    plot_and_print_dist(context, p_slope_mid_sign_dist, "p_slope_mid_sign_dist")
 
     p_slope_hi_sign_dist = pz.Beta(
         alpha=definition.p_slope_hi_sign_alpha, beta=definition.p_slope_hi_sign_beta
     )
-    _plot_and_print_dist(context, p_slope_hi_sign_dist, "p_slope_hi_sign_dist")
+    plot_and_print_dist(context, p_slope_hi_sign_dist, "p_slope_hi_sign_dist")
 
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
 
-    kappa_u_fields = _configure_kappa_priors(
+    kappa_u_fields = configure_kappa_priors(
         context, definition.kappa_u, "_u"
     )
 
     # --- Kappa priors — spoken ---
     heading("Kappa priors — spoken", style="bold cyan")
 
-    kappa_s_fields = _configure_kappa_priors(
+    kappa_s_fields = configure_kappa_priors(
         context, definition.kappa_s, "_s"
     )
 
     # --- Kappa priors — signed ---
     heading("Kappa priors — signed", style="bold cyan")
 
-    kappa_sign_fields = _configure_kappa_priors(
+    kappa_sign_fields = configure_kappa_priors(
         context, definition.kappa_sign, "_sign"
     )
 
@@ -505,15 +499,21 @@ def build_model(
     has_sign = analysis_df["signed"].notna().values
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
+    n_trials = context.model_data.n_trials
     y_u_values = np.asarray(analysis_df.loc[has_u, "understood"], dtype=float)
-    require_integral_counts(y_u_values, "understood")
+    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
+    # post-cast bound cannot catch 810.9 or -0.1, which truncate into range. This
+    # was `require_integral_counts`, whose finite/integral checks left the range to
+    # a post-cast test -- the weaker of the two forms the engines used. The spoken
+    # and signed sides get the same finite/integral/range checks from
+    # `nested_outcome_spec` (#236, #240).
+    require_valid_counts(y_u_values, "understood", n_trials)
     y_u_observed = y_u_values.astype(int)
 
     idx_u = np.where(has_u)[0]
 
     n = len(X_obs)
     n_u = len(y_u_observed)
-    n_trials = context.model_data.n_trials
     # Which treatment the child-outcome rows with no usable understood count
     # take (issue #266 finding 8). Resolved before the graph so an unknown value
     # is refused against the definition.
@@ -565,19 +565,9 @@ def build_model(
     has_sign_likelihood = np.zeros(n, dtype=bool)
     has_sign_likelihood[signed_spec.indices] = True
 
-    # Validate
-    if not np.all(y_u_observed >= 0):
-        raise ValueError("y_u contains negative counts.")
-    if not np.all(y_u_observed <= n_trials):
-        raise ValueError("y_u exceeds n_trials.")
-    if not np.all(y_s_observed >= 0):
-        raise ValueError("y_s contains negative counts.")
-    if not np.all(y_s_observed <= n_trials):
-        raise ValueError("y_s exceeds n_trials.")
-    if not np.all(y_sign_observed >= 0):
-        raise ValueError("y_sign contains negative counts.")
-    if not np.all(y_sign_observed <= n_trials):
-        raise ValueError("y_sign exceeds n_trials.")
+    # Range validation happens ONCE, before the integer cast, and not here: see the
+    # `require_valid_counts` call above for understood, and `nested_outcome_spec`
+    # for spoken and signed.
 
     # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
@@ -634,7 +624,7 @@ def build_model(
     L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
     # Slope anchors
-    slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
+    slope_age_a_z, slope_age_b_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
     )
 
@@ -749,17 +739,26 @@ def build_model(
         # outside), giving a hill-shaped prior median rather than the flat median an
         # intercept-only mean gives. The GP carries smooth departures.
         sa_young, sa_peak, sa_old = config.sign_anchor_ages
+        sa_young_z, sa_peak_z, sa_old_z = standardize_ages_to_z(
+            (sa_young, sa_peak, sa_old), X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+        )
         g_sign_all = tent_and_gp(
             cfg_low=config.p_slope_low_sign_dist,
             cfg_mid=config.p_slope_mid_sign_dist,
             cfg_hi=config.p_slope_hi_sign_dist,
-            z_low=(sa_young - X_obs_mean) / X_obs_std,
-            z_mid=(sa_peak - X_obs_mean) / X_obs_std,
-            z_hi=(sa_old - X_obs_mean) / X_obs_std,
+            z_low=sa_young_z,
+            z_mid=sa_peak_z,
+            z_hi=sa_old_z,
             # Optional: estimate the peak age rather than assert it. Read from the
             # definition so no configuration class changes -- adding a field to a
             # definition class invalidates every existing fit of that class, and
             # nothing here should do that until the change is chosen deliberately.
+            #
+            # **The getattr is REQUIRED, not defensive.** `TrivariateModelDefinition`
+            # declares no `sign_peak_prior` -- the field is `JointModelDefinition`'s
+            # (VG15's) -- so a plain attribute read raises on every VG14 build. This
+            # probe looks identical to ones elsewhere that are provably redundant, so
+            # it is worth saying which kind this is before someone tidies it away.
             cfg_peak=(
                 pz.Beta(
                     alpha=definition.sign_peak_prior[0],
@@ -1033,97 +1032,74 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     """Extract model samples into a structured format for plotting and reporting."""
 
     # Understood
-    f_u_plot = _extract_posterior(trace, "f_u_plot", "plot_id")
-    f_u_query = _extract_posterior(trace, "f_u_query", "query_id")
+    f_u_plot = extract_posterior(trace, "f_u_plot", "plot_id")
 
-    p_u_plot = _extract_posterior(trace, "p_u_plot", "plot_id")
-    p_u_query = _extract_posterior(trace, "p_u_query", "query_id")
+    p_u_plot = extract_posterior(trace, "p_u_plot", "plot_id")
+    p_u_query = extract_posterior(trace, "p_u_query", "query_id")
 
-    kappa_u_plot = _extract_posterior(trace, "kappa_u_plot", "plot_id")
-    kappa_u_query = _extract_posterior(trace, "kappa_u_query", "query_id")
+    kappa_u_plot = extract_posterior(trace, "kappa_u_plot", "plot_id")
+    kappa_u_query = extract_posterior(trace, "kappa_u_query", "query_id")
 
     # Production rate
-    h_plot = _extract_posterior(trace, "h_plot", "plot_id")
-    h_query = _extract_posterior(trace, "h_query", "query_id")
 
-    q_plot = _extract_posterior(trace, "q_plot", "plot_id")
-    q_query = _extract_posterior(trace, "q_query", "query_id")
+    q_plot = extract_posterior(trace, "q_plot", "plot_id")
+    q_query = extract_posterior(trace, "q_query", "query_id")
 
     # Spoken (derived)
-    f_s_plot = _extract_posterior(trace, "f_s_plot", "plot_id")
-    f_s_query = _extract_posterior(trace, "f_s_query", "query_id")
+    f_s_plot = extract_posterior(trace, "f_s_plot", "plot_id")
 
-    p_s_plot = _extract_posterior(trace, "p_s_plot", "plot_id")
-    p_s_query = _extract_posterior(trace, "p_s_query", "query_id")
+    p_s_plot = extract_posterior(trace, "p_s_plot", "plot_id")
+    p_s_query = extract_posterior(trace, "p_s_query", "query_id")
 
-    kappa_s_plot = _extract_posterior(trace, "kappa_s_plot", "plot_id")
-    kappa_s_query = _extract_posterior(trace, "kappa_s_query", "query_id")
+    kappa_s_plot = extract_posterior(trace, "kappa_s_plot", "plot_id")
+    kappa_s_query = extract_posterior(trace, "kappa_s_query", "query_id")
 
     # Signed rate. `g_sign_obs` and `r_obs` are deliberately not read: the
     # sampler does not store the observation-dimensioned deterministics.
-    g_sign_plot = _extract_posterior(trace, "g_sign_plot", "plot_id")
-    g_sign_query = _extract_posterior(trace, "g_sign_query", "query_id")
 
-    r_plot = _extract_posterior(trace, "r_plot", "plot_id")
-    r_query = _extract_posterior(trace, "r_query", "query_id")
+    r_plot = extract_posterior(trace, "r_plot", "plot_id")
+    r_query = extract_posterior(trace, "r_query", "query_id")
 
     # Signed (derived)
-    f_sign_plot = _extract_posterior(trace, "f_sign_plot", "plot_id")
-    f_sign_query = _extract_posterior(trace, "f_sign_query", "query_id")
+    f_sign_plot = extract_posterior(trace, "f_sign_plot", "plot_id")
 
-    p_sign_plot = _extract_posterior(trace, "p_sign_plot", "plot_id")
-    p_sign_query = _extract_posterior(trace, "p_sign_query", "query_id")
+    p_sign_plot = extract_posterior(trace, "p_sign_plot", "plot_id")
+    p_sign_query = extract_posterior(trace, "p_sign_query", "query_id")
 
-    kappa_sign_plot = _extract_posterior(trace, "kappa_sign_plot", "plot_id")
-    kappa_sign_query = _extract_posterior(trace, "kappa_sign_query", "query_id")
+    kappa_sign_plot = extract_posterior(trace, "kappa_sign_plot", "plot_id")
+    kappa_sign_query = extract_posterior(trace, "kappa_sign_query", "query_id")
 
     # Total expressive vocabulary (derived)
-    p_any_plot = _extract_posterior(trace, "p_any_plot", "plot_id")
-    p_any_query = _extract_posterior(trace, "p_any_query", "query_id")
+    p_any_plot = extract_posterior(trace, "p_any_plot", "plot_id")
+    p_any_query = extract_posterior(trace, "p_any_query", "query_id")
 
     # Observed data — expand to full obs_id length with NaN where unobserved
+    # Understood and spoken only: those two are stored on the samples object. The
+    # signed mask was read here solely for its #67 alignment check, which
+    # `expand_observed_to_obs_id` now carries -- and it re-reads the mask itself, so
+    # the check and the mask it checks against cannot come apart.
     obs_u_mask = np.array(trace.constant_data["obs_u_mask"].values, dtype=bool)
     obs_s_mask = np.array(trace.constant_data["obs_s_mask"].values, dtype=bool)
-    obs_sign_mask = np.array(trace.constant_data["obs_sign_mask"].values, dtype=bool)
-    n_obs = len(obs_u_mask)
 
-    y_u_obs_raw = np.array(trace.observed_data["y_u_obs"].values, dtype=float)
-    if int(obs_u_mask.sum()) != y_u_obs_raw.shape[0]:
-        raise ValueError(
-            f"obs_u_mask count ({int(obs_u_mask.sum())}) does not match observed "
-            f"y_u_obs length ({y_u_obs_raw.shape[0]}); stored mask and likelihood "
-            "rows are misaligned (issue #67)."
-        )
-    y_u_obs = np.full(n_obs, np.nan)
-    y_u_obs[obs_u_mask] = y_u_obs_raw
+    y_u_obs = posterior_analysis.expand_observed_to_obs_id(
+        trace, "y_u_obs", "obs_u_mask"
+    )
 
-    y_s_obs_raw = np.array(trace.observed_data["y_s_obs"].values, dtype=float)
-    if int(obs_s_mask.sum()) != y_s_obs_raw.shape[0]:
-        raise ValueError(
-            f"obs_s_mask count ({int(obs_s_mask.sum())}) does not match observed "
-            f"y_s_obs length ({y_s_obs_raw.shape[0]}); stored mask and likelihood "
-            "rows are misaligned (issue #67)."
-        )
-    y_s_obs = np.full(n_obs, np.nan)
-    y_s_obs[obs_s_mask] = y_s_obs_raw
+    y_s_obs = posterior_analysis.expand_observed_to_obs_id(
+        trace, "y_s_obs", "obs_s_mask"
+    )
 
-    y_sign_obs_raw = np.array(trace.observed_data["y_sign_obs"].values, dtype=float)
-    if int(obs_sign_mask.sum()) != y_sign_obs_raw.shape[0]:
-        raise ValueError(
-            f"obs_sign_mask count ({int(obs_sign_mask.sum())}) does not match observed "
-            f"y_sign_obs length ({y_sign_obs_raw.shape[0]}); stored mask and likelihood "
-            "rows are misaligned (issue #67)."
-        )
-    y_sign_obs = np.full(n_obs, np.nan)
-    y_sign_obs[obs_sign_mask] = y_sign_obs_raw
+    y_sign_obs = posterior_analysis.expand_observed_to_obs_id(
+        trace, "y_sign_obs", "obs_sign_mask"
+    )
 
     # Posterior predictive
-    y_u_plot = _extract_posterior_predictive(trace, "y_u_plot", "plot_id")
-    y_u_query = _extract_posterior_predictive(trace, "y_u_query", "query_id")
-    y_s_plot = _extract_posterior_predictive(trace, "y_s_plot", "plot_id")
-    y_s_query = _extract_posterior_predictive(trace, "y_s_query", "query_id")
-    y_sign_plot = _extract_posterior_predictive(trace, "y_sign_plot", "plot_id")
-    y_sign_query = _extract_posterior_predictive(trace, "y_sign_query", "query_id")
+    y_u_plot = extract_posterior_predictive(trace, "y_u_plot", "plot_id")
+    y_u_query = extract_posterior_predictive(trace, "y_u_query", "query_id")
+    y_s_plot = extract_posterior_predictive(trace, "y_s_plot", "plot_id")
+    y_s_query = extract_posterior_predictive(trace, "y_s_query", "query_id")
+    y_sign_plot = extract_posterior_predictive(trace, "y_sign_plot", "plot_id")
+    y_sign_query = extract_posterior_predictive(trace, "y_sign_query", "query_id")
 
     # Constant data
     X_obs = np.array(trace.constant_data["X_obs"].values)
@@ -1131,17 +1107,12 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     X_query = np.array(trace.constant_data["X_query"].values)
 
     # Standardised ages
-    X_plot_z = _extract_posterior(trace, "z_plot", "plot_id")
-    X_query_z = _extract_posterior(trace, "z_query", "query_id")
 
     return TrivariateModelSamples(
         X_obs=X_obs,
         X_plot=X_plot,
         X_query=X_query,
-        X_plot_z=X_plot_z,
-        X_query_z=X_query_z,
         f_u_plot=f_u_plot,
-        f_u_query=f_u_query,
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
         y_u_obs=y_u_obs,
@@ -1149,12 +1120,9 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         y_u_query=y_u_query,
         kappa_u_plot=kappa_u_plot,
         kappa_u_query=kappa_u_query,
-        h_plot=h_plot,
-        h_query=h_query,
         q_plot=q_plot,
         q_query=q_query,
         f_s_plot=f_s_plot,
-        f_s_query=f_s_query,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
         y_s_obs=y_s_obs,
@@ -1162,12 +1130,9 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         y_s_query=y_s_query,
         kappa_s_plot=kappa_s_plot,
         kappa_s_query=kappa_s_query,
-        g_sign_plot=g_sign_plot,
-        g_sign_query=g_sign_query,
         r_plot=r_plot,
         r_query=r_query,
         f_sign_plot=f_sign_plot,
-        f_sign_query=f_sign_query,
         p_sign_plot=p_sign_plot,
         p_sign_query=p_sign_query,
         y_sign_obs=y_sign_obs,
@@ -1179,7 +1144,6 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
         p_any_query=p_any_query,
         obs_u_mask=obs_u_mask,
         obs_s_mask=obs_s_mask,
-        obs_sign_mask=obs_sign_mask,
     )
 
 
@@ -1330,11 +1294,18 @@ def diagnostics(context: TrivariateContext):
     )
 
 
-def sample_posterior_predictive(context: TrivariateContext, definition=None):
+def sample_posterior_predictive(
+    context: TrivariateContext, definition: TrivariateModelDefinition
+):
     """Sample from the posterior predictive distribution.
 
     VG14 has no random intercepts (it mirrors VG05), so the plot/query
     predictive nodes use the population-mean conditional probabilities directly.
+
+    ``definition`` is required but unread. Every engine's predictive stage is called
+    with the same two arguments so the catalogue can describe them uniformly, and a
+    default of ``None`` here only hid that no caller ever omitted it. Keeping the
+    parameter is the contract; defaulting it was the defect.
     """
     n_trials = context.model_data.n_trials
 
@@ -1499,7 +1470,12 @@ def posterior_summary(context: TrivariateContext):
         index=False,
     )
 
-    # Spoken summary
+    # Spoken summary. No `trim_reported_ages` call, unlike understood above and
+    # signed below, and that is a provable no-op rather than an omission:
+    # `reporting_ages.max_age_for(ReportedQuantity.SPOKEN)` returns
+    # `max(ages_query)`, so the cap is the last query age and trimming to it removes
+    # nothing. Spoken keeps the full grid by design -- it has the evidence
+    # comprehension lacks above 72 months.
     summary_s = posterior_analysis.posterior_summary_table(
         samples.X_query,
         samples.p_s_query,
@@ -1672,15 +1648,28 @@ def plot_understood_spoken_signed_trajectory(
     ax.fill_between(X_plot[ksg], y_sign_ci50[ksg, 0], y_sign_ci50[ksg, 1], alpha=0.22, color="C2")
     ax.plot(X_plot[ksg], y_sign_median[ksg], lw=3, color="C2", label="Words signed (median)")
 
-    # Observed data
+    # Observed data, each modality trimmed with its own curve -- as the bivariate
+    # twin has done since b2e999d, which changed only that copy. Without this the
+    # scatter runs to the full 115-month grid while each curve stops at its own cap:
+    # understood at 72 (`report_max_age_understood`), signed at 84
+    # (`report_max_age_signed`) and spoken at `max(ages_query)`, 90, which is no
+    # trim at all. So the figure showed observations in a region it declines to
+    # summarise -- for VG14, 24 understood rows in the 72-84 band inclusive, from
+    # ie_01, uk_01, uk_06, uk_07 and us_02. (18 children: VG14's frame carries no
+    # child identifier, so that is counted on VG10's and VG20's, which select the
+    # same 24 rows. Measured 2026-09-01; the figure recorded elsewhere as 25 rows
+    # from 20 children predates the uk_01 correction of 2026-08-31.)
     X_obs = samples.X_obs
-    u_mask = ~np.isnan(samples.y_u_obs)
+    u_cap = np.inf if max_age_months_understood is None else max_age_months_understood
+    s_cap = np.inf if max_age_months_spoken is None else max_age_months_spoken
+    sign_cap = np.inf if max_age_months_signed is None else max_age_months_signed
+    u_mask = ~np.isnan(samples.y_u_obs) & (X_obs <= u_cap)
     if u_mask.any():
         ax.scatter(X_obs[u_mask], samples.y_u_obs[u_mask], s=10, alpha=0.2, color="C0")
-    s_mask = ~np.isnan(samples.y_s_obs)
+    s_mask = ~np.isnan(samples.y_s_obs) & (X_obs <= s_cap)
     if s_mask.any():
         ax.scatter(X_obs[s_mask], samples.y_s_obs[s_mask], s=10, alpha=0.2, color="C1")
-    sign_mask = ~np.isnan(samples.y_sign_obs)
+    sign_mask = ~np.isnan(samples.y_sign_obs) & (X_obs <= sign_cap)
     if sign_mask.any():
         ax.scatter(
             X_obs[sign_mask], samples.y_sign_obs[sign_mask], s=10, alpha=0.3, color="C2"
@@ -1695,32 +1684,34 @@ def plot_understood_spoken_signed_trajectory(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _blank_ku = np.where(ku, 1.0, np.nan)
-        _blank_ks = np.where(ks, 1.0, np.nan)
-        _blank_ksg = np.where(ksg, 1.0, np.nan)
-        _save_csv(
-            pd.DataFrame(
-                {
-                    "age_months": X_plot,
-                    "understood_median": y_u_median * _blank_ku,
-                    "understood_ci50_lo": y_u_ci50[:, 0] * _blank_ku,
-                    "understood_ci50_hi": y_u_ci50[:, 1] * _blank_ku,
-                    "understood_ci_lo": y_u_ci[:, 0] * _blank_ku,
-                    "understood_ci_hi": y_u_ci[:, 1] * _blank_ku,
-                    "spoken_median": y_s_median * _blank_ks,
-                    "spoken_ci50_lo": y_s_ci50[:, 0] * _blank_ks,
-                    "spoken_ci50_hi": y_s_ci50[:, 1] * _blank_ks,
-                    "spoken_ci_lo": y_s_ci[:, 0] * _blank_ks,
-                    "spoken_ci_hi": y_s_ci[:, 1] * _blank_ks,
-                    "signed_median": y_sign_median * _blank_ksg,
-                    "signed_ci50_lo": y_sign_ci50[:, 0] * _blank_ksg,
-                    "signed_ci50_hi": y_sign_ci50[:, 1] * _blank_ksg,
-                    "signed_ci_lo": y_sign_ci[:, 0] * _blank_ksg,
-                    "signed_ci_hi": y_sign_ci[:, 1] * _blank_ksg,
-                }
-            )[ku | ks | ksg],
+        # Through the shared helper rather than hand-rolled blanking: it is the
+        # same convention -- age column to the widest cap, each series NaN past its
+        # own -- and `_multi_outcome_frame`'s docstring credits this function with
+        # having had it first. Output is byte-identical: all three VG14 caps are
+        # non-None, so `ages <= max(caps)` is exactly `ku | ks | ksg`.
+        plot_io.save_plot_data(
             output_dir,
             filename,
+            _multi_outcome_frame(
+                X_plot,
+                {
+                    "understood_median": (y_u_median, max_age_months_understood),
+                    "understood_ci50_lo": (y_u_ci50[:, 0], max_age_months_understood),
+                    "understood_ci50_hi": (y_u_ci50[:, 1], max_age_months_understood),
+                    "understood_ci_lo": (y_u_ci[:, 0], max_age_months_understood),
+                    "understood_ci_hi": (y_u_ci[:, 1], max_age_months_understood),
+                    "spoken_median": (y_s_median, max_age_months_spoken),
+                    "spoken_ci50_lo": (y_s_ci50[:, 0], max_age_months_spoken),
+                    "spoken_ci50_hi": (y_s_ci50[:, 1], max_age_months_spoken),
+                    "spoken_ci_lo": (y_s_ci[:, 0], max_age_months_spoken),
+                    "spoken_ci_hi": (y_s_ci[:, 1], max_age_months_spoken),
+                    "signed_median": (y_sign_median, max_age_months_signed),
+                    "signed_ci50_lo": (y_sign_ci50[:, 0], max_age_months_signed),
+                    "signed_ci50_hi": (y_sign_ci50[:, 1], max_age_months_signed),
+                    "signed_ci_lo": (y_sign_ci[:, 0], max_age_months_signed),
+                    "signed_ci_hi": (y_sign_ci[:, 1], max_age_months_signed),
+                },
+            ),
         )
 
     return fig
@@ -1787,7 +1778,9 @@ def plot_signed_rate(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(
+        plot_io.save_plot_data(
+            output_dir,
+            filename,
             pd.DataFrame(
                 {
                     "age_months": X_plot,
@@ -1798,8 +1791,6 @@ def plot_signed_rate(
                     "ci_hi": r_ci[:, 1],
                 }
             ),
-            output_dir,
-            filename,
         )
 
     return fig
@@ -1857,7 +1848,9 @@ def plot_sign_speech_crossover(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(
+        plot_io.save_plot_data(
+            output_dir,
+            filename,
             pd.DataFrame(
                 {
                     "age_months": X_plot,
@@ -1869,8 +1862,6 @@ def plot_sign_speech_crossover(
                     "r_ci_hi": r_hdi[:, 1],
                 }
             ),
-            output_dir,
-            filename,
         )
 
     return fig
@@ -1990,7 +1981,9 @@ def plot_modality_trajectories(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(
+        plot_io.save_plot_data(
+            output_dir,
+            filename,
             _multi_outcome_frame(
                 X_plot,
                 {
@@ -2002,8 +1995,6 @@ def plot_modality_trajectories(
                     "any_ci_hi": (any_hdi_full[:, 1], any_cap),
                 },
             ),
-            output_dir,
-            filename,
         )
 
     return fig
@@ -2014,6 +2005,15 @@ def plot_modality_trajectories(
 # ============================================================
 
 
+# The bivariate outcome-plot helper additionally takes `subject_ids`, `form_max`
+# and `trajectory_samples`, for the observed-trajectory overlay on its median-trend
+# figures. This one deliberately does not, and it is not drift: VG14 is the only
+# model on this engine, `TrivariateModelDefinition` carries no random intercepts, the
+# built graph has no `*_subject_marginal` node, and the prepared frame has neither
+# `subject_key` nor `survey_vocab_max` -- so there are no per-child trajectories to
+# overlay and nothing to distinguish a real reversal from a change of recording form.
+# Adding them would need a new graph node and two new frame columns, i.e. a
+# frame-hash change and a refit, on a model already superseded for reporting by VG15.
 def _run_trivariate_outcome_plots(
     samples: TrivariateModelSamples,
     y_plot: np.ndarray,
@@ -2026,6 +2026,10 @@ def _run_trivariate_outcome_plots(
     y_obs: pd.Series,
     n_trials: int,
     ci_prob: float,
+    # Passed explicitly rather than defaulted: `emit_monthly_summary` falls
+    # back to "eti", so an omission here silently pins this engine's monthly
+    # tables to ETI while the rest of its reporting follows the context.
+    interval_kind: str,
     output_dir: str,
     suffix: str,
     outcome_label: str,
@@ -2041,6 +2045,7 @@ def _run_trivariate_outcome_plots(
         X_obs=x_obs,
         n_trials=n_trials,
         ci_prob=ci_prob,
+        interval_kind=interval_kind,
         suffix=suffix,
         outcome_label=outcome_label.lower(),
         y_label=y_label,
@@ -2143,11 +2148,18 @@ def _run_trivariate_outcome_plots(
     )
 
 
+#: Age window (months) the p_any validation compares over: uk_02's four-cell
+#: coverage intersected with the ages VG14 reports. Named rather than left as a
+#: default argument because no caller has ever passed it, so the figure's domain was
+#: recorded only in a signature.
+P_ANY_VALIDATION_WINDOW = (20.0, 56.0)
+
+
 def plot_p_any_validation(
     samples: TrivariateModelSamples,
     output_dir: str | None = None,
     filename: str | None = None,
-    window: tuple[float, float] = (20.0, 56.0),
+    window: tuple[float, float] = P_ANY_VALIDATION_WINDOW,
 ):
     """Validate the independence-based p_any against uk_02's observed union.
 
@@ -2164,15 +2176,30 @@ def plot_p_any_validation(
     materially different descriptive associations by source (#238). VG15
     identifies the association from all four and is the model of record for it.
 
-    The model side of ``model_gap_pp`` is evaluated per posterior draw **at
-    uk_02's observed ages** and averaged over those same rows, so observed and
-    modelled unions share one empirical age distribution and the gap carries a
-    posterior interval. It previously averaged the pointwise median over an
-    equally spaced grid, so part of any reported gap was age weighting rather
-    than model behaviour, and no interval was supplied (#238).
+    The model side of ``model_gap_pp`` is evaluated per posterior draw **at the
+    ages of the rows the observed mean is taken over** and averaged over those same
+    rows, so observed and modelled unions share one empirical age distribution and
+    the gap carries a posterior interval. It previously averaged the pointwise
+    median over an equally spaced grid, so part of any reported gap was age
+    weighting rather than model behaviour, and no interval was supplied (#238).
+
+    "The rows the observed mean is taken over" is narrower than "uk_02's observed
+    ages", and the difference was a live defect: 74 of the 130 rows in the window
+    have a missing four-cell entry, so ``union_obs`` is NaN for 56.9% of them and
+    ``mean()`` silently skips those. The model side took **all 130** ages, so the
+    two sides averaged over different age distributions (39.24 against 38.57 months
+    mean age) while this docstring promised they shared one. Both sides now use the
+    usable rows, and ``usable_rows`` / ``window_rows`` are recorded in the ``_gap``
+    CSV and printed, so a future row with a missing cell cannot vanish silently.
     """
     csv_path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_02.csv")
     if not os.path.exists(csv_path):
+        # Named, not silent: a bare `return None` in a validation artefact reads as
+        # "the check passed" to anyone reading the fit log.
+        console.print(
+            f"[yellow]p_any validation skipped: {csv_path} not found. "
+            "The figure and its gap table are not written.[/yellow]"
+        )
         return None
 
     raw = pd.read_csv(csv_path)
@@ -2199,11 +2226,16 @@ def plot_p_any_validation(
     union_ci = intervals.bands(union_draws, intervals.DEFAULT_CI_PROB, "eti", sample_axis=1)
     union_pct = int(round(intervals.DEFAULT_CI_PROB * 100))
 
-    # Binned observed union (4-month bins, >= 3 children per bin)
+    # Binned observed union (4-month bins, >= 3 children with a USABLE union per
+    # bin). The guard used to count every row in the bin, including those whose
+    # four-cell entry is missing: bin 44-48 has 25 rows and 4 usable ones, and the
+    # series is labelled "binned mean", so a bin could be drawn from a single child
+    # while appearing to rest on 25.
+    usable = raw["union_obs"].notna()
     edges = np.arange(lo, hi + 4, 4)
     centers, obs_means, indep_means = [], [], []
     for j in range(len(edges) - 1):
-        m = (raw["age"] >= edges[j]) & (raw["age"] < edges[j + 1])
+        m = (raw["age"] >= edges[j]) & (raw["age"] < edges[j + 1]) & usable
         if int(m.sum()) >= 3:
             centers.append((edges[j] + edges[j + 1]) / 2)
             obs_means.append(float(raw.loc[m, "union_obs"].mean()))
@@ -2234,8 +2266,14 @@ def plot_p_any_validation(
     ax.legend(loc="upper left", frameon=True)
     ax.set_title("p_any validation: independence over-states the observed union")
 
-    obs_mean = float(raw["union_obs"].mean())
-    indep_mean = float(raw["indep_union"].mean())
+    # The rows both means are taken over. `mean()` skips NaN, so this is the set the
+    # observed mean has always used; the model side used to take every row in the
+    # window, which is what broke the shared-age-distribution guarantee.
+    scored = raw.loc[usable]
+    window_rows = int(len(raw))
+    usable_rows = int(len(scored))
+    obs_mean = float(scored["union_obs"].mean())
+    indep_mean = float(scored["indep_union"].mean())
     # Pure independence bias, computed within uk_02 (its own r,q): isolates the
     # positive sign-speech association from model fit.
     indep_bias_pp = 100.0 * (indep_mean - obs_mean)
@@ -2243,7 +2281,7 @@ def plot_p_any_validation(
     # association with the model's r,q differing from uk_02's in-sample r,q).
     # Per draw, at the observed ages, so the two sides share one age
     # distribution and the gap has an interval -- see the docstring.
-    obs_ages = raw["age"].to_numpy(dtype=float)
+    obs_ages = scored["age"].to_numpy(dtype=float)
     union_at_obs = np.empty((len(obs_ages), union_draws.shape[1]))
     for d in range(union_draws.shape[1]):
         union_at_obs[:, d] = np.interp(obs_ages, Xw, union_draws[:, d])
@@ -2256,7 +2294,9 @@ def plot_p_any_validation(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(
+        plot_io.save_plot_data(
+            output_dir,
+            filename,
             pd.DataFrame(
                 {
                     "age_months": Xw,
@@ -2265,14 +2305,16 @@ def plot_p_any_validation(
                     "model_union_ci_hi": union_ci[:, 1],
                 }
             ),
-            output_dir,
-            filename,
         )
-        _save_csv(
+        plot_io.save_plot_data(
+            output_dir,
+            f"{filename}_gap",
             pd.DataFrame(
                 {
                     "window_lo": [lo],
                     "window_hi": [hi],
+                    "window_rows": [window_rows],
+                    "usable_rows": [usable_rows],
                     "uk02_observed_union_mean": [obs_mean],
                     "uk02_independence_union_mean": [indep_mean],
                     "independence_bias_pp": [indep_bias_pp],
@@ -2282,14 +2324,16 @@ def plot_p_any_validation(
                     "model_gap_pp_ci_hi": [gap_hi],
                 }
             ),
-            output_dir,
-            f"{filename}_gap",
         )
 
     heading("p_any validation against uk_02 four-cell union", style="bold cyan")
     key_value_table(
         f"Union of understood words produced (ages {lo:.0f}-{hi:.0f} mo)",
         [
+            (
+                "uk_02 rows in window (usable / total)",
+                f"{usable_rows} / {window_rows}",
+            ),
             ("uk_02 observed union (mean)", round(obs_mean, 3)),
             ("uk_02 independence union (mean)", round(indep_mean, 3)),
             ("Independence bias within uk_02 (pp)", round(indep_bias_pp, 1)),
@@ -2304,7 +2348,7 @@ def plot_p_any_validation(
     return fig
 
 
-def _run_trivariate_plots(context: TrivariateContext):
+def run_trivariate_plots(context: TrivariateContext):
     """Run the joint trivariate plots and per-outcome plots for VG14."""
     samples = context.model_samples
     analysis_df = context.analysis_df
@@ -2319,6 +2363,7 @@ def _run_trivariate_plots(context: TrivariateContext):
     )
     n_trials = context.model_data.n_trials
     ci_prob = context.reporting.ci_prob
+    ci_kind = context.reporting.interval_kind
     output_dir = context.reporting.output_dir
 
     # Per-quantity reporting caps (vocab_growth.reporting_ages). Named locals,
@@ -2438,6 +2483,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         y_obs=analysis_df.loc[has_u, "understood"],
         n_trials=n_trials,
         ci_prob=ci_prob,
+        interval_kind=ci_kind,
         output_dir=output_dir,
         suffix="u",
         outcome_label="Words understood",
@@ -2458,6 +2504,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         y_obs=analysis_df.loc[has_s, "spoken"],
         n_trials=n_trials,
         ci_prob=ci_prob,
+        interval_kind=ci_kind,
         output_dir=output_dir,
         suffix="s",
         outcome_label="Words spoken",
@@ -2478,6 +2525,7 @@ def _run_trivariate_plots(context: TrivariateContext):
         y_obs=analysis_df.loc[has_sign, "signed"],
         n_trials=n_trials,
         ci_prob=ci_prob,
+        interval_kind=ci_kind,
         output_dir=output_dir,
         suffix="sign",
         outcome_label="Words signed",
@@ -2519,7 +2567,7 @@ def fit_trivariate_model(
                 lambda ctx: sample_posterior_predictive(ctx, definition),
             ),
             ("Posterior summary", posterior_summary),
-            ("Plots", _run_trivariate_plots),
+            ("Plots", run_trivariate_plots),
             ("Report", report),
         ],
     )

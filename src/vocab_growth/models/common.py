@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from importlib import metadata as importlib_metadata
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import arviz as az
 import dse_research_utils.environment.info as env_info
@@ -70,6 +70,7 @@ from vocab_growth.fit_artifacts import (
     is_reporting_quality_config,
     normalise_for_json,
     promote_staged_fit,
+    require_classified_sampling_config,
     retain_failed_fit,
     sampled_variable_names,
     save_trace,
@@ -82,8 +83,7 @@ from vocab_growth.loo_reff import sampled_parameter_reff
 from vocab_growth.models import fit_identity
 from vocab_growth.models.build_utils import (
     construct_age_grids,
-    require_integral_counts,
-    slope_anchor_logit_coeffs,
+    require_valid_counts,
     standardize_ages,
     standardize_anchor_ages,
     validate_ell_bounds,
@@ -99,6 +99,10 @@ from vocab_growth.models.gp_utils import (
     build_kappa_of_z,
     build_kappa_of_z_anchored,
     trend_and_gp,
+)
+from vocab_growth.posterior_analysis import (
+    extract_posterior,
+    extract_posterior_predictive,
 )
 from vocab_growth.reporting import (
     config_table,
@@ -393,14 +397,8 @@ class ModelSamples:
     """Ages in months for the plot points, shape (n_plot,)."""
     X_query: np.ndarray
     """Ages in months for the query points, shape (n_query,)."""
-    X_plot_z: np.ndarray
-    """Standardized ages for the plot points, shape (n_plot, n_samples)."""
-    X_query_z: np.ndarray
-    """Standardized ages for the query points, shape (n_query, n_samples)."""
     f_plot: np.ndarray
     """Posterior samples of the latent linear predictor f for the plot points: (n_plot, n_samples)"""
-    f_query: np.ndarray
-    """Posterior samples of the latent linear predictor f for the query points: (n_query, n_samples)"""
     p_plot: np.ndarray
     """Posterior samples of p(z) for the plot points: (n_plot, n_samples)"""
     p_query: np.ndarray
@@ -423,6 +421,30 @@ S = TypeVar("S", default=ModelSamples)
 
 @dataclass
 class ModelFitContext(Generic[C, S]):
+    """Everything one fit accumulates, passed stage to stage by ``run_fit_pipeline``.
+
+    **Write once, read after.** The nine underscore-prefixed fields below start
+    ``None`` and are filled in by the pipeline stage that produces each one; every
+    read goes through a property that raises if that stage has not run. Nothing in
+    the pipeline is written twice -- a second ``set_*`` for the same field would mean
+    two stages claim to produce it -- with two deliberate exceptions, both re-binding
+    the *frame* while keeping the model data: ``recovery/simulate.py`` swaps in the
+    simulated frame, and ``scripts/kfold_loso.py`` swaps in the held-out one.
+
+    That shape is why the properties raise rather than returning ``None``. A stage
+    list in the wrong order otherwise fails deep inside a plotting helper on an
+    attribute of ``None``; here it fails at the first read, naming the model and the
+    missing artefact. ``tests/test_fit_artifacts.py`` records the case that motivated
+    it -- an engine author who put the priors stage first got "no analysis DataFrame
+    set" out of a manifest writer they never invoked.
+
+    The two type parameters carry the *engine's* configuration and samples classes
+    (``BivariateContext`` and friends bind them); they default to the univariate
+    pair, so a bare ``ModelFitContext`` annotation silently means "univariate".
+    Shared stages therefore annotate :data:`AnyModelFitContext` instead -- see its
+    comment.
+    """
+
     reporting: reporting.ReportingConfiguration
     sampling: sampling.SamplingConfiguration
     sampling_config_name: str = "unknown"
@@ -448,32 +470,55 @@ class ModelFitContext(Generic[C, S]):
         """Check if the execution context is interactive (e.g., Jupyter notebook)."""
         return self.execution_context in ("jupyter", "ipython", "interactive-other")
 
+    def _require[T](self, value: T | None, label: str) -> T:
+        """``value`` if the stage that sets it has run, else a ValueError naming both.
+
+        Takes the value rather than an attribute name so the calling property keeps
+        its own return type -- ``getattr(self, attr)`` would hand every one of them
+        back as ``Any``, including ``model_config`` and ``model_samples``, whose
+        whole purpose is to be the engine's own class.
+        """
+        if value is None:
+            raise ValueError(
+                f"The fit context for {self.reporting.model_label} has no "
+                f"{label} set. The pipeline stage that sets it has not run: check "
+                "this engine's stage list and the order it declares them in."
+            )
+        return value
+
     def set_model_data(
-        self, model_data: model_data.BinomialModelData, analysis_df: pd.DataFrame
+        self, data: model_data.BinomialModelData, analysis_df: pd.DataFrame
     ):
-        self._model_data = model_data
+        # `data`, not `model_data`: that name is the module alias imported above, and
+        # shadowing it here made the annotation on this very parameter unresolvable.
+        self._model_data = data
         self._analysis_df = analysis_df
 
     @property
     def model_data(self) -> model_data.BinomialModelData:
-        if self._model_data is None:
-            raise ValueError("Model data has not been set in the context.")
-        return self._model_data
+        return self._require(self._model_data, "model data")
 
     @property
     def analysis_df(self) -> pd.DataFrame:
-        if self._analysis_df is None:
-            raise ValueError("Analysis DataFrame has not been set in the context.")
-        return self._analysis_df
+        return self._require(self._analysis_df, "analysis DataFrame")
+
+    @property
+    def has_prepared_data(self) -> bool:
+        """Whether a stage has set the model data and the analysis frame.
+
+        The one read here that must not raise. ``run_fit_pipeline`` checks it after
+        stage 0, because that is the precondition the fit-manifest writer actually
+        has -- as opposed to stage 0 being *called* "Prepare data", which the
+        recovery harness legitimately renames.
+        """
+        return self._model_data is not None and self._analysis_df is not None
 
     def set_model_config(self, model_config: C):
         self._model_config = model_config
 
     @property
     def model_config(self) -> C:
-        if self._model_config is None:
-            raise ValueError("Model configuration has not been set in the context.")
-        return self._model_config
+        return self._require(self._model_config, "model configuration")
 
     def set_model(self, model: pm.Model, variables: dict):
         self._model = model
@@ -481,51 +526,50 @@ class ModelFitContext(Generic[C, S]):
 
     @property
     def model(self) -> pm.Model:
-        if self._model is None:
-            raise ValueError("Model has not been set in the context.")
-        return self._model
+        return self._require(self._model, "model")
 
     @property
     def model_variables(self) -> dict:
-        if self._model_variables is None:
-            raise ValueError("Model variables have not been set in the context.")
-        return self._model_variables
+        return self._require(self._model_variables, "model variables")
 
     def set_prior_samples(self, prior_samples: xr.DataTree):
         self._prior_samples = prior_samples
 
     @property
     def prior_samples(self) -> xr.DataTree:
-        if self._prior_samples is None:
-            raise ValueError("Prior samples have not been set in the context.")
-        return self._prior_samples
+        return self._require(self._prior_samples, "prior samples")
 
     def set_trace(self, trace: xr.DataTree):
         self._trace = trace
 
     @property
     def trace(self) -> xr.DataTree:
-        if self._trace is None:
-            raise ValueError("Trace has not been set in the context.")
-        return self._trace
+        return self._require(self._trace, "trace")
 
     def set_loocv(self, loocv: ELPDData | dict[str, ELPDData]):
         self._loocv = loocv
 
     @property
     def loocv(self) -> ELPDData | dict[str, ELPDData]:
-        if self._loocv is None:
-            raise ValueError("LOO-CV data has not been set in the context.")
-        return self._loocv
+        return self._require(self._loocv, "LOO-CV data")
 
     def set_model_samples(self, model_samples: S):
         self._model_samples = model_samples
 
     @property
     def model_samples(self) -> S:
-        if self._model_samples is None:
-            raise ValueError("Model samples have not been set in the context.")
-        return self._model_samples
+        return self._require(self._model_samples, "model samples")
+
+
+#: A context of any engine's configuration and samples classes.
+#:
+#: ``ModelFitContext``'s two parameters default to the *univariate* pair (PEP 696),
+#: so a bare ``ModelFitContext`` annotation reads as "shared" while meaning
+#: "univariate" -- and the shared stages below are in fact called with
+#: ``BivariateContext``, ``TrivariateContext`` and ``JointContext``. Annotate a stage
+#: with this alias when it is engine-agnostic, and with the bare name only when it
+#: genuinely belongs to the univariate engine.
+AnyModelFitContext = ModelFitContext[Any, Any]
 
 
 # ============================================================
@@ -612,116 +656,31 @@ def render_model_graph(model: pm.Model, output_dir: str) -> None:
 
 
 def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
+    """Everything the univariate plots and summaries read, out of one trace.
+
+    Field by field: :class:`ModelSamples` documents what each one is, and this
+    reads them in its declaration order rather than restating those docstrings --
+    which is what the seven inlined ``stack(sample=("chain", "draw"))`` blocks
+    replaced here used to do, in the one engine that missed
+    :func:`posterior_analysis.extract_posterior`'s own extraction.
+
+    The four reads that stay open-coded are the ones the helpers do not cover:
+    ``observed_data`` and the three ``constant_data`` arrays are stored once, not
+    per draw, so there is no chain/draw pair to stack.
     """
-    Extract model samples into a structured format for plotting and reporting.
-    """
-
-    # Posterior samples of the latent linear predictor f for the plot points: (n_plot, n_samples)
-    f_plot = np.array(
-        trace.posterior["f_plot"]
-        .stack(sample=("chain", "draw"))
-        .transpose("plot_id", "sample")
-        .values
+    return ModelSamples(
+        X_obs=np.array(trace.constant_data["X_obs"].values),
+        X_plot=np.array(trace.constant_data["X_plot"].values),
+        X_query=np.array(trace.constant_data["X_query"].values),
+        f_plot=extract_posterior(trace, "f_plot", "plot_id"),
+        p_plot=extract_posterior(trace, "p_plot", "plot_id"),
+        p_query=extract_posterior(trace, "p_query", "query_id"),
+        y_obs=np.array(trace.observed_data["y_obs"].values, dtype=int),
+        y_plot=extract_posterior_predictive(trace, "y_plot", "plot_id"),
+        y_query=extract_posterior_predictive(trace, "y_query", "query_id"),
+        kappa_plot=extract_posterior(trace, "kappa_plot", "plot_id"),
+        kappa_query=extract_posterior(trace, "kappa_query", "query_id"),
     )
-
-    # Posterior samples of the latent linear predictor f for the query points: (n_query, n_samples)
-    f_query = np.array(
-        trace.posterior["f_query"]
-        .stack(sample=("chain", "draw"))
-        .transpose("query_id", "sample")
-        .values
-    )
-
-    # Posterior samples of p(z) for the plot points: (n_plot, n_samples)
-    p_plot = np.array(
-        trace.posterior["p_plot"]
-        .stack(sample=("chain", "draw"))
-        .transpose("plot_id", "sample")
-        .values
-    )
-
-    # Posterior samples of p(z) for the query points: (n_query, n_samples)
-    p_query = np.array(
-        trace.posterior["p_query"]
-        .stack(sample=("chain", "draw"))
-        .transpose("query_id", "sample")
-        .values
-    )
-
-    # Posterior samples of kappa for the plot points: (n_plot, n_samples)
-    kappa_plot = np.array(
-        trace.posterior["kappa_plot"]
-        .stack(sample=("chain", "draw"))
-        .transpose("plot_id", "sample")
-        .values
-    )
-
-    # Posterior samples of kappa for the query points: (n_query, n_samples)
-    kappa_query = np.array(
-        trace.posterior["kappa_query"]
-        .stack(sample=("chain", "draw"))
-        .transpose("query_id", "sample")
-        .values
-    )
-
-    y_obs = np.array(trace.observed_data["y_obs"].values, dtype=int)
-
-    # Posterior predictive samples of Y for the plot points: (n_plot, n_samples)
-    y_plot = np.array(
-        trace.posterior_predictive["y_plot"]
-        .stack(sample=("chain", "draw"))
-        .transpose("plot_id", "sample")
-        .values,
-        dtype=int,
-    )
-
-    # Posterior predictive samples of Y for the query points: (n_query, n_samples)
-    y_query = np.array(
-        trace.posterior_predictive["y_query"]
-        .stack(sample=("chain", "draw"))
-        .transpose("query_id", "sample")
-        .values,
-        dtype=int,
-    )
-
-    X_obs = np.array(trace.constant_data["X_obs"].values)
-
-    X_plot = np.array(trace.constant_data["X_plot"].values)
-
-    X_query = np.array(trace.constant_data["X_query"].values)
-
-    X_plot_z = np.array(
-        trace.posterior["z_plot"]
-        .stack(sample=("chain", "draw"))
-        .transpose("plot_id", "sample")
-        .values
-    )
-
-    X_query_z = np.array(
-        trace.posterior["z_query"]
-        .stack(sample=("chain", "draw"))
-        .transpose("query_id", "sample")
-        .values
-    )
-
-    model_samples = ModelSamples(
-        X_obs=X_obs,
-        X_plot=X_plot,
-        X_query=X_query,
-        X_plot_z=X_plot_z,
-        X_query_z=X_query_z,
-        f_plot=f_plot,
-        f_query=f_query,
-        p_plot=p_plot,
-        p_query=p_query,
-        y_obs=y_obs,
-        y_plot=y_plot,
-        y_query=y_query,
-        kappa_plot=kappa_plot,
-        kappa_query=kappa_query,
-    )
-
-    return model_samples
 
 
 def build_model(
@@ -735,10 +694,8 @@ def build_model(
 
     if context.model_data.X_obs.shape[0] != n:
         raise ValueError("X_obs and y_obs have inconsistent lengths.")
-    if not np.all(0 <= context.model_data.y_obs):
-        raise ValueError("y_obs contains negative counts.")
-    if not np.all(context.model_data.y_obs <= context.model_data.n_trials):
-        raise ValueError("y_obs exceeds n_trials.")
+    # Range validation happens ONCE, before the integer cast, in the prepare stage's
+    # `require_valid_counts` -- not here, where the cast has already truncated.
 
     X_obs_median = float(np.median(context.model_data.X_obs))
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(context.model_data.X_obs)
@@ -804,7 +761,7 @@ def build_model(
         ell_range_z,
     )
 
-    slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
+    slope_age_a_z, slope_age_b_z = standardize_anchor_ages(
         context.model_config.slope_anchors,
         X_obs_mean=X_obs_mean,
         X_obs_std=X_obs_std,
@@ -1020,7 +977,7 @@ def prior_predictive_checks(
     )
 
 
-def sample(context: ModelFitContext, *, store_observation_deterministics: bool = False):
+def sample(context: AnyModelFitContext, *, store_observation_deterministics: bool = False):
     """
     Draw samples from the posterior using MCMC.
 
@@ -1168,7 +1125,7 @@ def emit_loo_summary(
     return frame
 
 
-def _loo_dropping_degenerate(idata, var_name=None, *, reff=None):
+def loo_dropping_degenerate(idata, var_name=None, *, reff=None):
     """Compute PSIS-LOO, excluding observations with a constant pointwise
     log-likelihood.
 
@@ -1217,7 +1174,7 @@ def _loo_dropping_degenerate(idata, var_name=None, *, reff=None):
 
 
 def diagnostics(
-    context: ModelFitContext,
+    context: AnyModelFitContext,
     *,
     extra_trace_var_names: tuple[str, ...] = (),
     loo_var_names: tuple[tuple[str, str], ...] | None = None,
@@ -1276,7 +1233,7 @@ def diagnostics(
     )
 
     dataframe_table(diagnostics_df, title="Posterior diagnostics")
-    _report_diagnostic_warnings(gate_summary)
+    report_diagnostic_warnings(gate_summary)
 
     # Kernel density estimates (KDE) of the joint posterior, and marginals
 
@@ -1379,7 +1336,7 @@ def diagnostics(
 
     dropped_by_label: dict[str, int] = {}
     if loo_var_names is None:
-        loocv, n_dropped = _loo_dropping_degenerate(context.trace, reff=reff)
+        loocv, n_dropped = loo_dropping_degenerate(context.trace, reff=reff)
         dropped_by_label["all"] = n_dropped
         if n_dropped:
             console.print(
@@ -1396,7 +1353,7 @@ def diagnostics(
         loocv_by_name = {}
         by_label = {}
         for var_name, label in loo_var_names:
-            loocv_by_name[var_name], n_dropped = _loo_dropping_degenerate(
+            loocv_by_name[var_name], n_dropped = loo_dropping_degenerate(
                 context.trace, var_name=var_name, reff=reff
             )
             by_label[label] = loocv_by_name[var_name]
@@ -1418,7 +1375,7 @@ def diagnostics(
             )
             if attached:
                 loocv_by_name[ADMINISTRATION_VAR], n_dropped = (
-                    _loo_dropping_degenerate(
+                    loo_dropping_degenerate(
                         context.trace, var_name=ADMINISTRATION_VAR, reff=reff
                     )
                 )
@@ -1552,6 +1509,16 @@ def posterior_summary(context: ModelFitContext):
         os.path.join(context.reporting.output_dir, "posterior_summary.csv"), index=False
     )
 
+    # No `max_age_months`: the monthly companion is deliberately NOT trimmed at
+    # the comprehension reporting cap, unlike the query-age summary above and unlike
+    # the three sibling engines' monthly calls. It covers the whole observed age
+    # span so the rows above the cap show directly how little data sits behind
+    # them -- the reader is told to read those as interpolation. That decision was
+    # recorded only in prose, at docs/models/vg02/index.qmd's "Expected vocabulary
+    # by month" section, which is why the omission reads here as the oversight #238
+    # found five times elsewhere. Passing the cap explicitly to say so, rather than
+    # relying on the default, would trim it; there is no "uncapped" sentinel
+    # distinct from `None`.
     emit_monthly_summary(
         output_dir=context.reporting.output_dir,
         X_plot=context.model_samples.X_plot,
@@ -1563,6 +1530,7 @@ def posterior_summary(context: ModelFitContext):
         interval_kind=context.reporting.interval_kind,
         dataframes=context.dataframes,
         plots=context.plots,
+        max_age_months=None,
     )
 
 
@@ -1740,7 +1708,7 @@ def run_standard_plots(
     )
 
 
-def report(context: ModelFitContext):
+def report(context: AnyModelFitContext):
     """
     Copy the model's Quarto source into its fitted output directory.
 
@@ -1785,7 +1753,7 @@ def report(context: ModelFitContext):
     )
 
 
-def _plot_and_print_dist(context, dist, name):
+def plot_and_print_dist(context, dist, name):
     """Plot a prior distribution and print its summary."""
     context.plots[name] = plot_dist.plot_distribution(
         dist, context.reporting.output_dir, name
@@ -1903,7 +1871,7 @@ def enforce_convergence_gate(
     return caveats
 
 
-def _report_diagnostic_warnings(gate_summary: dict) -> None:
+def report_diagnostic_warnings(gate_summary: dict) -> None:
     """Flag MCMC convergence issues recorded in the gate payload.
 
     ``gate_summary`` is the dict returned by
@@ -2002,7 +1970,11 @@ def prepare_univariate_data(
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_values = np.asarray(analysis_df[y_col], dtype=float)
-    require_integral_counts(y_values, y_col)
+    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
+    # post-cast bound cannot catch 810.9 or -0.1, which truncate into range. This
+    # is the ONLY range check this column gets -- `build_model` deliberately carries
+    # none (#236, #240).
+    require_valid_counts(y_values, y_col, definition.n_trials)
     y_obs = y_values.astype(int)
 
     data = model_data.BinomialModelData(
@@ -2024,18 +1996,23 @@ def configure_univariate_priors(
 ):
     """Configure priors and hyperparameters from a univariate model definition."""
     ell_unit_dist = pz.Beta(alpha=definition.ell_unit_alpha, beta=definition.ell_unit_beta)
-    _plot_and_print_dist(context, ell_unit_dist, "ell_unit_dist")
+    plot_and_print_dist(context, ell_unit_dist, "ell_unit_dist")
 
     eta_dist = pz.HalfNormal(sigma=definition.eta_sigma)
-    _plot_and_print_dist(context, eta_dist, "eta_dist")
+    plot_and_print_dist(context, eta_dist, "eta_dist")
 
     p_slope_low_dist = pz.Beta(alpha=definition.p_slope_low_alpha, beta=definition.p_slope_low_beta)
-    _plot_and_print_dist(context, p_slope_low_dist, "p_slope_low_dist")
+    plot_and_print_dist(context, p_slope_low_dist, "p_slope_low_dist")
 
     p_slope_hi_dist = pz.Beta(alpha=definition.p_slope_hi_alpha, beta=definition.p_slope_hi_beta)
-    _plot_and_print_dist(context, p_slope_hi_dist, "p_slope_hi_dist")
+    plot_and_print_dist(context, p_slope_hi_dist, "p_slope_hi_dist")
 
-    kappa_fields = _configure_kappa_priors(context, definition.kappa)
+    kappa_fields = configure_kappa_priors(context, definition.kappa)
+    # getattr: the field lives on `UnivariateREModelDefinition`, not on the plain
+    # `UnivariateModelDefinition` this stage is also called with (VG01-VG04). Putting
+    # it on the base class would change the serialised definition of every univariate
+    # model and invalidate their fits, which is the constraint that produced the
+    # subclass -- see `_as_definition_subclass` and the class's own docstring.
     partition_fields = _configure_variance_partition_priors(
         context, getattr(definition, "subject_variance_partition", None)
     )
@@ -2057,7 +2034,9 @@ def configure_univariate_priors(
     context.set_model_config(config)
 
 
-def _configure_variance_partition_priors(context: ModelFitContext, vp) -> dict:
+def _configure_variance_partition_priors(
+    context: AnyModelFitContext, vp
+) -> dict:
     """Build the scatter-budget priors, or nothing when the model does not use them.
 
     Plots both under their own names, as the other prior blocks do, so a report
@@ -2066,9 +2045,9 @@ def _configure_variance_partition_priors(context: ModelFitContext, vp) -> dict:
     if vp is None:
         return {}
     total_dist = pz.LogNormal(mu=vp.total_mu, sigma=vp.total_sigma)
-    _plot_and_print_dist(context, total_dist, "v_total_dist")
+    plot_and_print_dist(context, total_dist, "v_total_dist")
     share_dist = pz.Beta(alpha=vp.share_alpha, beta=vp.share_beta)
-    _plot_and_print_dist(context, share_dist, "subject_variance_share_dist")
+    plot_and_print_dist(context, share_dist, "subject_variance_share_dist")
     return {
         "variance_partition_total_dist": total_dist,
         "variance_partition_share_dist": share_dist,
@@ -2076,63 +2055,79 @@ def _configure_variance_partition_priors(context: ModelFitContext, vp) -> dict:
     }
 
 
-def _configure_kappa_priors(context: ModelFitContext, kp, suffix: str = "") -> dict:
-    """Build the dispersion priors for whichever kappa parameterisation `kp` is.
+def kappa_config_fields(kp, suffix: str = "") -> dict:
+    """The dispersion-prior configuration fields for whichever form ``kp`` is.
+
+    The pure half of :func:`configure_kappa_priors`: the same distributions under
+    the same field names, with no context and no figures. ``suffix`` selects the
+    outcome for the multi-outcome engines (``"_u"``, ``"_s"``, ``"_sign"``) and
+    names the fields.
+
+    Split out for ``exploratory/vg17.py``, which needs these fields at module level
+    where no ``ModelFitContext`` exists yet and had a hand-written copy of the
+    translation for that reason -- the copy its own docstring described as "a
+    genuine reuse rather than a copy that silently diverges". The cause was never
+    the leading underscore on the old name; it was the context argument.
+    """
+    if isinstance(kp, KappaAnchorPriorParams):
+        return {
+            f"kappa_anchored{suffix}": AnchoredKappaPriors(
+                kappa_min_dist=pz.LogNormal(
+                    mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma
+                ),
+                excess_young_dist=pz.LogNormal(
+                    mu=kp.excess_young_mu, sigma=kp.excess_young_sigma
+                ),
+                excess_old_dist=pz.LogNormal(
+                    mu=kp.excess_old_mu, sigma=kp.excess_old_sigma
+                ),
+                anchor_ages=tuple(float(age) for age in kp.anchor_ages),
+            )
+        }
+    return {
+        f"kappa_min{suffix}_dist": pz.LogNormal(
+            mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma
+        ),
+        f"a_kappa{suffix}_dist": pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma),
+        f"b_kappa_mag{suffix}_dist": pz.HalfNormal(sigma=kp.b_kappa_mag_sigma),
+    }
+
+
+def configure_kappa_priors(context: AnyModelFitContext, kp, suffix: str = "") -> dict:
+    """:func:`kappa_config_fields`, plus one prior figure per distribution.
 
     Returns the configuration keyword arguments for that form, and plots each
     prior under its own name, so a report shows the parameters the model actually
     samples rather than a fixed three. ``suffix`` selects the outcome for the
     joint engines ("_u", "_s", "_sign"); it names both the configuration fields
     and the plotted priors.
+
+    The figure names are not derivable from the field names -- the anchored form
+    returns one ``kappa_anchored`` holder carrying three distributions, none of them
+    plotted under that name -- which is why they are spelled out below. The order is
+    the order they were always emitted in: three engines' console output follows it,
+    and reports read the files by name.
     """
+    fields = kappa_config_fields(kp, suffix)
     if isinstance(kp, KappaAnchorPriorParams):
-        kappa_min_dist = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
-        _plot_and_print_dist(context, kappa_min_dist, f"kappa_min{suffix}_dist")
-
-        excess_young_dist = pz.LogNormal(
-            mu=kp.excess_young_mu, sigma=kp.excess_young_sigma
-        )
-        _plot_and_print_dist(
-            context, excess_young_dist, f"kappa_excess_young{suffix}_dist"
-        )
-
-        excess_old_dist = pz.LogNormal(mu=kp.excess_old_mu, sigma=kp.excess_old_sigma)
-        _plot_and_print_dist(
-            context, excess_old_dist, f"kappa_excess_old{suffix}_dist"
-        )
-
-        return {
-            f"kappa_anchored{suffix}": AnchoredKappaPriors(
-                kappa_min_dist=kappa_min_dist,
-                excess_young_dist=excess_young_dist,
-                excess_old_dist=excess_old_dist,
-                anchor_ages=tuple(float(age) for age in kp.anchor_ages),
-            )
-        }
-
-    kappa_min_dist = pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
-    _plot_and_print_dist(context, kappa_min_dist, f"kappa_min{suffix}_dist")
-
-    a_kappa_dist = pz.Normal(mu=kp.a_kappa_mu, sigma=kp.a_kappa_sigma)
-    _plot_and_print_dist(context, a_kappa_dist, f"a_kappa{suffix}_dist")
-
-    b_kappa_mag_dist = pz.HalfNormal(sigma=kp.b_kappa_mag_sigma)
-    _plot_and_print_dist(context, b_kappa_mag_dist, f"b_kappa_mag{suffix}_dist")
-
-    return {
-        f"kappa_min{suffix}_dist": kappa_min_dist,
-        f"a_kappa{suffix}_dist": a_kappa_dist,
-        f"b_kappa_mag{suffix}_dist": b_kappa_mag_dist,
-    }
+        anchored = fields[f"kappa_anchored{suffix}"]
+        figures = [
+            (anchored.kappa_min_dist, f"kappa_min{suffix}_dist"),
+            (anchored.excess_young_dist, f"kappa_excess_young{suffix}_dist"),
+            (anchored.excess_old_dist, f"kappa_excess_old{suffix}_dist"),
+        ]
+    else:
+        figures = [
+            (fields[f"kappa_min{suffix}_dist"], f"kappa_min{suffix}_dist"),
+            (fields[f"a_kappa{suffix}_dist"], f"a_kappa{suffix}_dist"),
+            (fields[f"b_kappa_mag{suffix}_dist"], f"b_kappa_mag{suffix}_dist"),
+        ]
+    for dist, figure_name in figures:
+        plot_and_print_dist(context, dist, figure_name)
+    return fields
 
 
-# The exact-frame hash lives in ``vocab_growth.analysis_frames`` so validators
-# can recompute it without importing the engines; kept under its historical
-# name here for the manifest writer below.
-_analysis_data_hash = analysis_frame_hash
-
-
-def write_fit_manifest(context: ModelFitContext, definition) -> None:
+def write_fit_manifest(context: AnyModelFitContext, definition) -> None:
     """Write a machine-readable provenance manifest for the prepared fit."""
     analysis_df = context.analysis_df
     source_counts = (
@@ -2192,7 +2187,9 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
             "rows": len(analysis_df),
             "columns": list(analysis_df.columns),
             "n_trials": context.model_data.n_trials,
-            "analysis_frame_hash": _analysis_data_hash(analysis_df),
+            # `analysis_frames.analysis_frame_hash` rather than a local helper:
+            # validators recompute this without importing the engines.
+            "analysis_frame_hash": analysis_frame_hash(analysis_df),
             "source_data_hash": source_data_hash(local_env.DATA_DIR),
             "source_row_counts": source_counts,
             "observed_outcome_counts": outcome_counts,
@@ -2214,12 +2211,30 @@ def write_fit_manifest(context: ModelFitContext, definition) -> None:
     write_json_atomic(manifest_path, manifest)
 
 
+#: The engine stage names ``run_fit_pipeline`` and its consumers agree on.
+#:
+#: These are contract, not labels. ``run_fit_pipeline`` writes the fit manifest
+#: after stage 0 because ``write_fit_manifest`` reads ``context.analysis_df`` and
+#: ``context.model_data``, which only the data-preparation stage sets -- so a stage
+#: list that opens with anything else fails inside a manifest writer the engine
+#: author never invoked, reporting "Analysis DataFrame has not been set in the
+#: context". Every engine happens to name it correctly; nothing checked that it had
+#: to until :func:`run_fit_pipeline` began asserting it.
+#:
+#: They live here rather than in ``recovery.simulate``, which is where they were
+#: first written: that module is a consumer of the contract, and ``common`` cannot
+#: import it (the dependency runs the other way).
+PREPARE_STAGE_NAME = "Prepare data"
+PRIORS_STAGE_NAME = "Priors and hyperparameters"
+BUILD_STAGE_NAME = "Model definition and initialisation"
+
+
 def run_fit_pipeline(
     config: str,
     definition,
     *,
-    stages: list[tuple[str, Callable[[ModelFitContext], None]]],
-) -> ModelFitContext:
+    stages: list[tuple[str, Callable[[AnyModelFitContext], None]]],
+) -> AnyModelFitContext:
     """Shared fit-pipeline scaffold used by every engine's ``fit_*_model``.
 
     Every engine's orchestration function differed only in *which* stage
@@ -2231,7 +2246,7 @@ def run_fit_pipeline(
     ``fn`` takes the freshly-created ``context`` (typically a closure binding
     the engine's ``definition``).
     """
-    is_reporting_quality_config(config)
+    require_classified_sampling_config(config)
     run_banner(definition.banner, subtitle=f"sampling config: {config}")
 
     env_info.report_environment_info()
@@ -2285,6 +2300,31 @@ def run_fit_pipeline(
             with section(name, timings=timings):
                 fn(context)
                 if stage_index == 0:
+                    # The manifest is written after stage 0 because
+                    # `write_fit_manifest` reads the prepared frame and the model
+                    # data, which only a data-preparation stage sets. Assert the
+                    # ordering rather than assume it: without this, an engine whose
+                    # stage list opened with the priors -- plausible, since priors
+                    # depend on no data -- would fail inside a manifest writer it
+                    # never invoked.
+                    #
+                    # The check is on the stage's EFFECT, not its name. Two callers
+                    # legitimately substitute stage 0 with a loader for a synthetic
+                    # frame -- `recovery/refit.py` ("Load simulated data") and
+                    # `scripts/experiments/vg10_under_vg20_truth.py` ("Load
+                    # VG20-simulated data") -- and both call `set_model_data`, so
+                    # they satisfy the precondition while failing a name comparison.
+                    # Those two check the name they are replacing themselves, one
+                    # layer out, against `PREPARE_STAGE_NAME`.
+                    if not context.has_prepared_data:
+                        raise RuntimeError(
+                            f"Stage 0 of this engine's pipeline, {name!r}, left the "
+                            f"context without model data or an analysis frame, and "
+                            f"`run_fit_pipeline` writes the fit manifest "
+                            f"immediately after it. Stage 0 must prepare the data "
+                            f"(the engines' own is {PREPARE_STAGE_NAME!r}) or load "
+                            f"an equivalent frame through `set_model_data`."
+                        )
                     write_fit_manifest(context, definition)
 
         required_paths = [

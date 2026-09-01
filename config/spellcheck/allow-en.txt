@@ -26,6 +26,7 @@ EOWPVT
 ESRC
 Edgin
 Fenson
+Golay
 Figshare
 Floccia
 GLMM
@@ -79,6 +80,7 @@ Soto
 Spiegelhalter
 Stojanovik
 Sánchez
+Savitzky
 TEDS
 TOST
 Thal
@@ -157,6 +159,7 @@ isna
 iterrows
 jittered
 judgments
+latents
 lengthscale
 logind
 logit
@@ -169,6 +172,9 @@ miscalibration
 miscited
 missingness
 modeling
+monkeypatch
+monkeypatched
+monkeypatches
 multiset
 mypy
 negll
@@ -213,6 +219,7 @@ reparameterisations
 reparameterise
 reparameterised
 reparameterising
+rescoped
 rescore
 rescoring
 residualised
@@ -226,6 +233,7 @@ sens
 setsid
 signspeech
 spanos
+stales
 subj
 swapfile
 swapon

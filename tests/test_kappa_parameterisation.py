@@ -183,12 +183,12 @@ def _configure(definition, monkeypatch):
     captured = []
     context = types.SimpleNamespace(set_model_config=captured.append)
     # Not a performance stub — the conftest already silences the plotting. This
-    # context is a namespace with one method on it, and `_plot_and_print_dist`
+    # context is a namespace with one method on it, and `plot_and_print_dist`
     # reads `context.reporting` and `context.plots` before it draws anything.
     # What is under test is which kappa form the definition selects, so the
     # whole helper goes rather than the model configuration growing a fake
     # reporting block to satisfy it.
-    monkeypatch.setattr(common, "_plot_and_print_dist", lambda *a, **k: None)
+    monkeypatch.setattr(common, "plot_and_print_dist", lambda *a, **k: None)
     common.configure_univariate_priors(context, definition)
     (config,) = captured
     return config

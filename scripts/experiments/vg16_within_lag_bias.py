@@ -25,7 +25,7 @@ function of the outcome. Simulation therefore has to walk each child's waves in
 age order, deriving `x_lag` at wave t from the *already simulated* understood
 count at wave t-1. That sequential dependence is the whole point here, so it is
 built explicitly below. The wave walk and the lag indexing are the engine's own
-(`iter_subject_age_waves` / `compute_prev_wave_lag`), imported rather than
+(`iter_subject_age_waves` / `prev_wave_lag`), imported rather than
 copied: an earlier copy of the engine's row-by-row walk reproduced its
 row-order-dependent lag-assignment defect here (issue #242).
 
@@ -78,9 +78,9 @@ from vocab_growth.fit_artifacts import (
     require_valid_fit,
     source_data_hash,
 )
-from vocab_growth.models.common_bivariate_re import (
-    compute_prev_wave_lag,
+from vocab_growth.models.cross_lag import (
     iter_subject_age_waves,
+    prev_wave_lag,
 )
 from vocab_growth.models.definitions import VG16
 
@@ -341,8 +341,15 @@ def estimate(truth, design, sim, baseline):
 
     # The engine's own wave-grouped construction (issue #242): understood
     # counts are usable as a source only where the real design observed them.
-    prev_idx, has_f, y_prev_logit = compute_prev_wave_lag(
-        subj, age, np.where(umask, y_u.astype(float), np.nan), N_TRIALS
+    prev_idx, has_f, y_prev_logit = prev_wave_lag(
+        subj,
+        age,
+        np.where(umask, y_u.astype(float), np.nan),
+        N_TRIALS,
+        # Off VG16, not the primitive's defaults: equal today, but a variant that
+        # moved either would otherwise be reconstructed under the wrong setting.
+        max_gap_months=VG16.lag_max_gap_months,
+        zero_handling=VG16.lag_zero_handling,
     )
     has = has_f > 0
     base = design["f_u"][prev_idx]

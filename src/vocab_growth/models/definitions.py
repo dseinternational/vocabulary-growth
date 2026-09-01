@@ -18,9 +18,12 @@ import math
 import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
+from typing import Any, TypedDict
 
 from vocab_growth.models.likelihood_utils import (
+    LAG_BASELINES,
     LAG_ZERO_CLIP,
+    LAG_ZERO_TREATMENTS,
     SPOKEN_FALLBACK_PRODUCT,
 )
 
@@ -164,12 +167,20 @@ def clamp_targets(value: bool | str) -> tuple[bool, bool]:
     corner at 84 months so much sharper than either factor alone.
 
     ``"q_only"`` is spelled as a string rather than added as a second boolean
-    field on purpose. ``fit_manifest.json`` fingerprints the definition with
-    ``asdict`` and compares it as whole-object equality, so a *new* field would
-    add a key to all fifteen models' definitions and invalidate every model of
-    record at once. Widening this field's domain leaves ``True``/``False``
-    serialising exactly as before, so only a definition that actually opts in
-    changes. See ``notes/202608141200-clamp-q-only.md``.
+    field on purpose. ``fit_manifest.json`` fingerprints the definition field by
+    field, so a *new* field would add a key to every definition of every class that
+    declares it and invalidate every one of their fits at once — which for this
+    field is every class that declares it: the whole ``BivariateModelDefinition``
+    tree, ``TrivariateModelDefinition`` and ``JointModelDefinition``, fourteen of
+    the twenty registered models (the six univariate ones do not declare it, which
+    is why ``common_univariate_re`` reads it through ``getattr``). Widening this
+    field's domain leaves ``True``/``False`` serialising exactly as before, so only
+    a definition that actually opts in changes. Stated as the rule rather than a
+    count: the count was written as "fifteen" and stayed there through five
+    registrations, and then briefly as "all twenty", which is the reach of
+    ``report_max_age_understood`` rather than of this field. Both are asserted in
+    ``tests/test_ds_joint_shared_priors.py``.
+    See ``notes/202608141200-clamp-q-only.md``.
     """
     if value == CLAMP_Q_ONLY:
         return False, True
@@ -501,9 +512,9 @@ class AgeVaryingSubjectScale:
 
     Supplied **in place of** a scalar ``tau_subj_*_sigma`` / ``tau_subject_sigma``.
     That is deliberate: the field it replaces already selects the subject-effect
-    scale, so A1 needs no new definition field, and the fifteen models of record
-    keep their fingerprints (a new field would appear in every ``asdict`` and
-    invalidate every fit). The same trick carries
+    scale, so A1 needs no new definition field, and every existing model of record
+    keeps its fingerprint (a new field would appear in every serialised definition
+    of its class and invalidate every fit of it). The same trick carries
     :data:`CLAMP_Q_ONLY` on ``clamp_mean_above_hi_anchor``.
 
     The scale is log-linear in standardised age between two reference ages, and
@@ -553,8 +564,13 @@ class AgeVaryingSubjectScale:
 def subject_scale_spec(value) -> AgeVaryingSubjectScale | None:
     """Return the A1 spec a subject-scale field carries, or ``None`` if scalar.
 
-    The one place the overloaded field is interpreted. Engines call this rather
-    than testing types inline, so "is this model A1?" has a single answer.
+    A low-level probe on one overloaded ``tau_subj_*_sigma`` field, and the one
+    place that field's A1 reading is interpreted. It is **not** the engines'
+    entry point: they ask :func:`vocab_growth.models.subject_effects.resolve`,
+    which calls this and its two companions and returns a typed
+    ``SubjectEffectPlan`` covering every child-effect structure at once. Use this
+    directly only when you have a bare field value and no definition -- as
+    ``comparison.py`` does when describing a model from its definition alone.
     """
     return value if isinstance(value, AgeVaryingSubjectScale) else None
 
@@ -562,10 +578,12 @@ def subject_scale_spec(value) -> AgeVaryingSubjectScale | None:
 def subject_slope_spec(value) -> SubjectSlopePriorParams | None:
     """Return the VG19 child-slope spec a subject-scale field carries, or ``None``.
 
-    The companion to :func:`subject_scale_spec`, on the same overloaded field.
-    The two are mutually exclusive by construction: a field holds a float, an
-    :class:`AgeVaryingSubjectScale`, or a :class:`SubjectSlopePriorParams`, and
-    each selector recognises exactly one of them.
+    The companion to :func:`subject_scale_spec`, on the same overloaded field, and
+    a low-level probe in the same sense -- :func:`subject_effects.resolve` is the
+    engines' entry point. The two are mutually exclusive by construction: a field
+    holds a float, an :class:`AgeVaryingSubjectScale`, or a
+    :class:`SubjectSlopePriorParams`, and each selector recognises exactly one of
+    them.
     """
     return value if isinstance(value, SubjectSlopePriorParams) else None
 
@@ -573,7 +591,9 @@ def subject_slope_spec(value) -> SubjectSlopePriorParams | None:
 def subject_factor_spec(value) -> SubjectFactorPriorParams | None:
     """Return the VG22 low-rank factor spec, or ``None``.
 
-    Unlike :func:`subject_scale_spec` and :func:`subject_slope_spec` this does
+    A low-level probe like its two companions, with
+    :func:`subject_effects.resolve` as the engines' entry point. Unlike
+    :func:`subject_scale_spec` and :func:`subject_slope_spec` this does
     **not** read an overloaded ``tau_subj_*_sigma`` field. A factor spans both
     outcomes at once, so it is not "the u scale" or "the q scale" and putting it
     in one of them would misname it; it lives on its own subclass field, the
@@ -1016,19 +1036,21 @@ class BivariateModelDefinition:
 
     # -- Mean extrapolation above the high anchor --
     clamp_mean_above_hi_anchor: bool | str = False
-    """Level the mean off above the high slope anchor instead of extrapolating.
+    """Level the logit-linear mean off above the high slope anchor instead of
+    extrapolating the line.
 
-    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
-    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
-    rather than testing truthiness -- ``"q_only"`` is truthy."""
-    """If True, level the logit-linear mean off above the high anchor age instead
-    of extrapolating the line. The transition is a soft minimum, so the mean stays
-    differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
-    VG10 spoken curve briefly non-monotone at the anchor. One-sided: below the low
-    anchor the line still extrapolates, which is accurate there. Applied to the
-    Down syndrome models, whose GP domain runs to 115 months against a high anchor
-    at 84 — see ``gp_utils.trend_and_gp`` and
-    notes/202608042030-q-mean-extrapolation.md."""
+    **Not a plain boolean.** ``True`` clamps both the understood mean and ``q``;
+    ``CLAMP_Q_ONLY`` (``"q_only"``) clamps only ``q``. Resolve with
+    :func:`clamp_targets` rather than testing truthiness -- ``"q_only"`` is truthy,
+    so ``if definition.clamp_mean_above_hi_anchor:`` silently clamps the understood
+    mean as well.
+
+    The transition is a soft minimum, so the mean stays differentiable and the
+    fitted curve inherits no elbow; a hard ``min`` made the VG10 spoken curve
+    briefly non-monotone at the anchor. One-sided: below the low anchor the line
+    still extrapolates, which is accurate there. Applied to the Down syndrome
+    models, whose GP domain runs to 115 months against a high anchor at 84 -- see
+    ``gp_utils.trend_and_gp`` and notes/202608042030-q-mean-extrapolation.md."""
 
     # -- Reporting range --
     report_max_age_understood: int | None = None
@@ -1114,7 +1136,12 @@ class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
     ``BivariateModelDefinition``, for the reason ``UnivariateREModelDefinition``
     exists: a fit is validated by comparing the serialised definition field for
     field, so adding a field to a definition class invalidates every existing fit
-    of that class — here VG05, VG07-VG10 and VG16, six models of record.
+    of that class — which for ``BivariateModelDefinition`` means **every instance
+    of its whole tree, subclasses included**: today twelve models, only eight of
+    them direct instances. The subclasses added since this was written (VG19's
+    slope, VG20's and VG23's correlation, VG22's factor) inherit the parent's fields
+    and are invalidated by a change to them just the same. Both sizes are asserted
+    in ``tests/test_ds_joint_shared_priors.py`` rather than restated here.
 
     ``None`` means "behave exactly as the parent class", so the subclass is inert
     until a definition sets the field; the engine reads it through ``getattr``.
@@ -1357,19 +1384,21 @@ class TrivariateModelDefinition:
 
     # -- Mean extrapolation above the high anchor --
     clamp_mean_above_hi_anchor: bool | str = False
-    """Level the mean off above the high slope anchor instead of extrapolating.
+    """Level the logit-linear mean off above the high slope anchor instead of
+    extrapolating the line.
 
-    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
-    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
-    rather than testing truthiness -- ``"q_only"`` is truthy."""
-    """If True, level the logit-linear mean off above the high anchor age instead
-    of extrapolating the line. The transition is a soft minimum, so the mean stays
-    differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
-    VG10 spoken curve briefly non-monotone at the anchor. One-sided: below the low
-    anchor the line still extrapolates, which is accurate there. Applied to the
-    Down syndrome models, whose GP domain runs to 115 months against a high anchor
-    at 84 — see ``gp_utils.trend_and_gp`` and
-    notes/202608042030-q-mean-extrapolation.md."""
+    **Not a plain boolean.** ``True`` clamps both the understood mean and ``q``;
+    ``CLAMP_Q_ONLY`` (``"q_only"``) clamps only ``q``. Resolve with
+    :func:`clamp_targets` rather than testing truthiness -- ``"q_only"`` is truthy,
+    so ``if definition.clamp_mean_above_hi_anchor:`` silently clamps the understood
+    mean as well.
+
+    The transition is a soft minimum, so the mean stays differentiable and the
+    fitted curve inherits no elbow; a hard ``min`` made the VG10 spoken curve
+    briefly non-monotone at the anchor. One-sided: below the low anchor the line
+    still extrapolates, which is accurate there. Applied to the Down syndrome
+    models, whose GP domain runs to 115 months against a high anchor at 84 -- see
+    ``gp_utils.trend_and_gp`` and notes/202608042030-q-mean-extrapolation.md."""
 
     # -- Reporting range --
     report_max_age_understood: int | None = None
@@ -1476,6 +1505,11 @@ class JointModelDefinition:
     # rationale. Study REs carry between-study level; the GP (anchored at 54 mo,
     # below) carries smooth departures.
     sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
+    """Young / peak / old reference ages (months) for the signed-ratio hump.
+
+    When ``sign_peak_prior`` is set the middle entry is the *initial* peak position
+    rather than a fixed one -- the peak's position between the outer two is then
+    sampled. The outer two always bound it."""
     sign_peak_prior: tuple[float, float] | None = None
     """Beta(alpha, beta) on the signed peak's POSITION between the outer sign
     anchors, or None to fix it at ``sign_anchor_ages[1]``.
@@ -1500,7 +1534,6 @@ class JointModelDefinition:
     for the model it was made about. See
     notes/202608060900-three-prior-conflicts.md section 5.
     """
-    """Young / peak / old reference ages (months) for the signed-ratio hump."""
     p_slope_low_sign_alpha: float = 2.0
     p_slope_low_sign_beta: float = 20.0
     """Young anchor r(~15 mo): Beta(2, 20), median ~0.08 (signing just emerging)."""
@@ -1524,8 +1557,12 @@ class JointModelDefinition:
     # band width, convergence unchanged -- and removing the signed GP is worse: it
     # fails the hard convergence tier and narrows the band 63% at 96 months,
     # stripping the model's only honest signal of ignorance where signed data have
-    # run out. `sign_gp_mode` in the joint engine can express both alternatives;
-    # neither is an improvement. See notes/202608060900 section 5b.
+    # run out. Neither is an improvement, so neither is selectable: the joint
+    # engine's `sign_gp_mode` probe was removed once it was clear no definition
+    # class declared the field and no variant could set one. Reinstating either
+    # alternative means adding a real field -- here (invalidating every VG15 fit) or
+    # on a sibling subclass via `_as_definition_subclass` (invalidating nothing).
+    # See notes/202608060900 section 5b.
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
     eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
@@ -1643,19 +1680,21 @@ class JointModelDefinition:
 
     # -- Mean extrapolation above the high anchor --
     clamp_mean_above_hi_anchor: bool | str = False
-    """Level the mean off above the high slope anchor instead of extrapolating.
+    """Level the logit-linear mean off above the high slope anchor instead of
+    extrapolating the line.
 
-    ``True`` clamps both the understood mean and ``q``; ``CLAMP_Q_ONLY``
-    (``"q_only"``) clamps only ``q``. Resolve with :func:`clamp_targets`
-    rather than testing truthiness -- ``"q_only"`` is truthy."""
-    """If True, level the logit-linear mean off above the high anchor age instead
-    of extrapolating the line. The transition is a soft minimum, so the mean stays
-    differentiable and the fitted curve inherits no elbow; a hard ``min`` made the
-    VG10 spoken curve briefly non-monotone at the anchor. One-sided: below the low
-    anchor the line still extrapolates, which is accurate there. Applied to the
-    Down syndrome models, whose GP domain runs to 115 months against a high anchor
-    at 84 — see ``gp_utils.trend_and_gp`` and
-    notes/202608042030-q-mean-extrapolation.md."""
+    **Not a plain boolean.** ``True`` clamps both the understood mean and ``q``;
+    ``CLAMP_Q_ONLY`` (``"q_only"``) clamps only ``q``. Resolve with
+    :func:`clamp_targets` rather than testing truthiness -- ``"q_only"`` is truthy,
+    so ``if definition.clamp_mean_above_hi_anchor:`` silently clamps the understood
+    mean as well.
+
+    The transition is a soft minimum, so the mean stays differentiable and the
+    fitted curve inherits no elbow; a hard ``min`` made the VG10 spoken curve
+    briefly non-monotone at the anchor. One-sided: below the low anchor the line
+    still extrapolates, which is accurate there. Applied to the Down syndrome
+    models, whose GP domain runs to 115 months against a high anchor at 84 -- see
+    ``gp_utils.trend_and_gp`` and notes/202608042030-q-mean-extrapolation.md."""
 
     # -- Reporting range --
     report_max_age_understood: int | None = None
@@ -2260,10 +2299,18 @@ _TD_WINDOW22_Q_KAPPA_RE = KappaAnchorPriorParams(
     excess_old_sigma=0.7,
 )
 
-# Down syndrome joint frame -- VG09, VG10, VG15, VG16, the four models carrying
-# subject random intercepts on *both* outcomes and therefore sharing one
-# calibration target. 671 understood and 645 nested-spoken rows over 8-115
-# months, 387 children at 1.73 administrations each.
+# Down syndrome joint frame -- the models fitted to it, and therefore sharing one
+# dispersion calibration target. Directly: VG09, VG10, VG15 and VG16; through
+# `_as_definition_subclass` from VG10: VG19, VG20 and VG22; plus VG14. Eight in all,
+# not the four this comment named for as long as there were eight --
+# `tests/test_ds_joint_shared_priors.py` asserts the set, so it cannot drift again.
+#
+# Seven of the eight carry subject random intercepts on both outcomes, which is what
+# the conditioning in the calibration assumes. VG14 does not: its class declares no
+# `use_subject_re_*` or `tau_subj_*` field at all, and its own registration records
+# that as a KNOWN MISMATCH twenty lines below. It shares the block because it fits
+# this frame, not because it shares this structure. 671 understood and 645 nested-spoken rows over 8-115 months,
+# 387 children at 1.73 administrations each.
 #
 # Section 19 left these on the legacy form because the frame failed its recovery
 # check. Section 22 re-runs that check properly and reaches a different verdict.
@@ -2291,8 +2338,9 @@ _TD_WINDOW22_Q_KAPPA_RE = KappaAnchorPriorParams(
 
 _DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
     # Recalibrated 2026-08-19 (#229), promoted from VG20's
-    # `kappa-anchor-18-72-floor` variant. Shared by VG09, VG10, VG14, VG15,
-    # VG16 and VG20, and changed here rather than on VG20 alone so those six
+    # `kappa-anchor-18-72-floor` variant. Shared by the eight named at the section
+    # header above -- VG09, VG10, VG14, VG15, VG16, VG19, VG20 and VG22 -- and
+    # changed here rather than on VG20 alone so all eight
     # keep a common dispersion treatment -- VG20 is defined as VG10 plus a
     # correlated subject block and nothing else, an invariant two tests
     # enforce, and a VG20-only change would have made that description false
@@ -2372,6 +2420,222 @@ _DS_JOINT_Q_KAPPA_RE = KappaAnchorPriorParams(
     excess_old_mu=math.log(0.6),
     excess_old_sigma=1.5,
 )
+
+
+# ============================================================
+# Shared DS joint trajectory-prior and reporting values
+# ============================================================
+#
+# Seven registrations -- VG05, VG07-VG10, VG14 and VG16 -- passed all eleven of the
+# fields below with byte-identical values, for 386 lines of literal repetition: six
+# of them above a verbatim copy of the rationale, VG14 above an abbreviated summary
+# pointing at VG05's copy. VG15 shares the q and reporting groups; VG19, VG20 and
+# VG22 inherit them through `_as_definition_subclass` from VG10. VG21 and VG23 do
+# NOT -- they derive from the typically-developing VG13 and keep its anchors, which
+# is the whole point of the DS/TD contrast, and a test asserts they do not carry
+# these values.
+# Splatting these dicts leaves every serialised field value exactly as it was, so no
+# fit is invalidated -- it is the pattern `_DS_JOINT_UNDERSTOOD_KAPPA_RE` already
+# uses, and for the reason stated at VG20's derivation: deriving rather than
+# restating is what stops one model's recalibration drifting away from another's.
+# `tests/test_ds_joint_shared_priors.py` pins which models share each group.
+
+
+class _DSJointUnderstoodAnchors(TypedDict):
+    """Field types for :data:`_DS_JOINT_UNDERSTOOD_ANCHORS`.
+
+    A ``TypedDict`` rather than ``dict[str, float]`` so mypy still checks the
+    splat against each definition class's own parameter types -- a plain dict
+    erases them and the narrow type coverage on this module stops doing its job.
+    """
+
+    p_slope_low_u_alpha: float
+    p_slope_low_u_beta: float
+    p_slope_hi_u_alpha: float
+    p_slope_hi_u_beta: float
+    eta_u_sigma: float
+
+
+_DS_JOINT_UNDERSTOOD_ANCHORS: _DSJointUnderstoodAnchors = {
+    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
+    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
+    # ~100 words below the fitted one across 24-60 months and put 80% of prior
+    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
+    # 108 words, against a frame median of 132 over the densest band in the pool
+    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
+    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
+    # between the four administrations observed at 78-95 mo (median 554) and
+    # those same fitted anchors (658-663); the tails stay wide because the
+    # evidence there is thin. Both are scale calibration on the project's own
+    # frame, not an independent norm -- there is none for DS comprehension.
+    #
+    # This corrects the *level* only. The prior is still logit-linear in age
+    # between the anchors while the trajectory is strongly concave on that scale,
+    # so lifting the line to fit 24-60 raises its backward extrapolation too and
+    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
+    # sat at prior CDF 0.80-0.89 across all eight DS joint models registered when
+    # this was measured on 2026-08-04. The fix is a log-age mean, which is a graph
+    # change and therefore a new variant; see
+    # notes/202608041216-ds-understood-trajectory-prior.md.
+    "p_slope_low_u_alpha": 1.5,
+    "p_slope_low_u_beta": 8.0,
+    "p_slope_hi_u_alpha": 3.0,
+    "p_slope_hi_u_beta": 1.3,
+    "eta_u_sigma": 0.6,
+}
+
+
+class _DSJointQAnchors(TypedDict):
+    """Field types for :data:`_DS_JOINT_Q_ANCHORS`. See
+    :class:`_DSJointUnderstoodAnchors` for why this is a ``TypedDict``."""
+
+    p_slope_low_q_alpha: float
+    p_slope_low_q_beta: float
+    p_slope_hi_q_alpha: float
+    p_slope_hi_q_beta: float
+
+
+_DS_JOINT_Q_ANCHORS: _DSJointQAnchors = {
+    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
+    # to remove prior-data double-dipping; the high anchor then recalibrated
+    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
+    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
+    # carrying the whole displacement. A weighted least-squares line through the
+    # directly observed spoken/understood ratio (902 rows with both outcomes,
+    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
+    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
+    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
+    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 -- deliberately short of
+    # the observed extrapolation, because the last band carrying both outcomes is
+    # 72 mo (n=11) and only one row has both above 78 -- with a wide lower tail
+    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
+    # none for the DS production ratio. See
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
+    "p_slope_low_q_alpha": 2.0,
+    "p_slope_low_q_beta": 12.0,
+    "p_slope_hi_q_alpha": 4.0,
+    "p_slope_hi_q_beta": 1.2,
+}
+
+
+class _DSJointReporting(TypedDict):
+    """Field types for :data:`_DS_JOINT_REPORTING`. See
+    :class:`_DSJointUnderstoodAnchors` for why this is a ``TypedDict``.
+
+    ``clamp_mean_above_hi_anchor`` is ``bool | str`` because
+    :data:`CLAMP_Q_ONLY` is a sentinel string -- see the field's own docstring."""
+
+    report_max_age_understood: int
+    clamp_mean_above_hi_anchor: bool | str
+
+
+_DS_JOINT_REPORTING: _DSJointReporting = {
+    # Level the mean off above the 84 mo high anchor rather than extrapolating the
+    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
+    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
+    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
+    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
+    # same defect about 3x milder. One-sided, and the corner is rounded over about
+    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    #
+    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
+    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
+    # asked whether the 72-84 band is observed rather than extrapolated, and the
+    # answer was and remains yes -- 24 understood rows from 18 children across five
+    # studies (ie_01, uk_01, uk_06, uk_07, us_02; it was 25 rows from 20 children
+    # when the decision was taken, and the uk_01 correction of 2026-08-31 removed
+    # one row, which changes nothing about the argument). It applies a second and stricter
+    # test that the raise did not: is the number in that band fixed by the data, or
+    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
+    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
+    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
+    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. Two dozen
+    # comprehension
+    # observations cannot separate the two structures, so above 72 the report would
+    # quote a modelling choice as a measurement. Below 60 the same comparison never
+    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
+    # the answer rather than where they stop existing.
+    #
+    # The binding quantity is now q, not understood: the three models agree on the
+    # understood curve to within 0.15 interval widths at every age to 84, so
+    # understood alone would still support 84. It is trimmed with q because both
+    # ride this one field and q is conditioned on understood -- see
+    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
+    # would invalidate every fit of every definition class that declares this one,
+    # which today is all twenty registered models, to express a cap that this field
+    # already expresses correctly, if conservatively, for understood.
+    #
+    # Raise it again when the 72-84 band can *distinguish* the child structures, not
+    # merely when it is populated -- so on new older-child comprehension data, and
+    # by rerunning the comparison rather than recounting rows.
+    #
+    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
+    # above 84, and the three models agree on its subject-marginal curve to within
+    # 0.03 interval widths at every age. Reporting only -- it cannot move the
+    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
+    # notes/202608042030-q-mean-extrapolation.md.
+    "report_max_age_understood": 72,
+    "clamp_mean_above_hi_anchor": CLAMP_Q_ONLY,
+}
+
+
+# ============================================================
+# The definition union, and deriving one definition class from another
+# ============================================================
+
+#: Every definition class a registered model can be an instance of.
+#:
+#: Spelled once here rather than inline at :data:`MODEL_REGISTRY`, so the functions
+#: that take "a definition" can say so. That matters more than it looks: mypy covers
+#: four modules in this project, and an unannotated ``definition`` parameter makes
+#: every field access on it ``Any`` — which is the check the narrow coverage exists
+#: to provide. Only the four *base* classes are named; every derived subclass is an
+#: instance of one of them.
+ModelDefinition = (
+    UnivariateModelDefinition
+    | BivariateModelDefinition
+    | TrivariateModelDefinition
+    | JointModelDefinition
+)
+
+
+def _as_definition_subclass[Derived](
+    base: ModelDefinition,
+    cls: type[Derived],
+    **overrides: Any,
+) -> Derived:
+    """Rebuild ``base`` as an instance of ``cls``, overriding named fields.
+
+    **This is the mechanism for adding a definition field without invalidating the
+    parent's fits**, and it is why several apparent smells in this file are
+    deliberate. A fit is validated by comparing the serialised definition field for
+    field, so a new field on an existing class invalidates every fit of that class.
+    Deriving a sibling subclass instead invalidates nothing: the parent's
+    serialisation is untouched, and only the new class carries the new field. VG19's
+    child slope, VG20's and VG23's correlation and VG22's factor all arrived this
+    way, and it is why the engines read those fields through ``getattr`` rather than
+    as plain attributes.
+
+    Shallow by design: nested prior dataclasses are shared with ``base`` rather
+    than copied, so the derived definition serialises identically to its parent
+    except for what is overridden here. ``dataclasses.replace`` cannot do this —
+    it returns the base's own class — and ``asdict`` cannot either, because it
+    recursively converts the nested prior blocks to plain dicts.
+
+    Generic in ``cls`` so a derived definition types as its own class rather than
+    as ``Any``. Without that, five of the twenty registry entries — VG19-VG23,
+    including VG22, whose ``subject_factor`` is exactly the union-typed field the
+    coverage exists to police — went unchecked inside the one definition module
+    mypy covers.
+
+    Lives here, above the registrations and below the definition classes, rather
+    than beside the first model that happens to use it: it is a mechanism shared by
+    five of them, not a VG20 detail.
+    """
+    values = {item.name: getattr(base, item.name) for item in fields(base)}
+    values.update(overrides)
+    return cls(**values)
+
 
 VG01 = UnivariateModelDefinition(
     model_id="VG01",
@@ -2547,87 +2811,12 @@ VG05 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
-    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
-    # ~100 words below the fitted one across 24-60 months and put 80% of prior
-    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
-    # 108 words, against a frame median of 132 over the densest band in the pool
-    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
-    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
-    # between the four administrations observed at 78-95 mo (median 554) and
-    # those same fitted anchors (658-663); the tails stay wide because the
-    # evidence there is thin. Both are scale calibration on the project's own
-    # frame, not an independent norm — there is none for DS comprehension.
-    #
-    # This corrects the *level* only. The prior is still logit-linear in age
-    # between the anchors while the trajectory is strongly concave on that scale,
-    # so lifting the line to fit 24-60 raises its backward extrapolation too and
-    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
-    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
-    # log-age mean, which is a graph change and therefore a new variant; see
-    # notes/202608041216-ds-understood-trajectory-prior.md.
-    p_slope_low_u_alpha=1.5,
-    p_slope_low_u_beta=8.0,
-    p_slope_hi_u_alpha=3.0,
-    p_slope_hi_u_beta=1.3,
-    eta_u_sigma=0.6,
-    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
-    # to remove prior-data double-dipping; the high anchor then recalibrated
-    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
-    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
-    # carrying the whole displacement. A weighted least-squares line through the
-    # directly observed spoken/understood ratio (902 rows with both outcomes,
-    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
-    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
-    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
-    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
-    # the observed extrapolation, because the last band carrying both outcomes is
-    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
-    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
-    # none for the DS production ratio. See
-    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
+    # Understood trajectory anchors -- rationale at the constant.
+    **_DS_JOINT_UNDERSTOOD_ANCHORS,
+    # Production-ratio anchors -- rationale at the constant.
+    **_DS_JOINT_Q_ANCHORS,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
 )
 
 VG07 = BivariateModelDefinition(
@@ -2642,89 +2831,14 @@ VG07 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
-    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
-    # ~100 words below the fitted one across 24-60 months and put 80% of prior
-    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
-    # 108 words, against a frame median of 132 over the densest band in the pool
-    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
-    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
-    # between the four administrations observed at 78-95 mo (median 554) and
-    # those same fitted anchors (658-663); the tails stay wide because the
-    # evidence there is thin. Both are scale calibration on the project's own
-    # frame, not an independent norm — there is none for DS comprehension.
-    #
-    # This corrects the *level* only. The prior is still logit-linear in age
-    # between the anchors while the trajectory is strongly concave on that scale,
-    # so lifting the line to fit 24-60 raises its backward extrapolation too and
-    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
-    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
-    # log-age mean, which is a graph change and therefore a new variant; see
-    # notes/202608041216-ds-understood-trajectory-prior.md.
-    p_slope_low_u_alpha=1.5,
-    p_slope_low_u_beta=8.0,
-    p_slope_hi_u_alpha=3.0,
-    p_slope_hi_u_beta=1.3,
-    eta_u_sigma=0.6,
-    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
-    # to remove prior-data double-dipping; the high anchor then recalibrated
-    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
-    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
-    # carrying the whole displacement. A weighted least-squares line through the
-    # directly observed spoken/understood ratio (902 rows with both outcomes,
-    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
-    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
-    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
-    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
-    # the observed extrapolation, because the last band carrying both outcomes is
-    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
-    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
-    # none for the DS production ratio. See
-    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
+    # Understood trajectory anchors -- rationale at the constant.
+    **_DS_JOINT_UNDERSTOOD_ANCHORS,
+    # Production-ratio anchors -- rationale at the constant.
+    **_DS_JOINT_Q_ANCHORS,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
 )
 
 VG08 = BivariateModelDefinition(
@@ -2739,91 +2853,16 @@ VG08 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
-    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
-    # ~100 words below the fitted one across 24-60 months and put 80% of prior
-    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
-    # 108 words, against a frame median of 132 over the densest band in the pool
-    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
-    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
-    # between the four administrations observed at 78-95 mo (median 554) and
-    # those same fitted anchors (658-663); the tails stay wide because the
-    # evidence there is thin. Both are scale calibration on the project's own
-    # frame, not an independent norm — there is none for DS comprehension.
-    #
-    # This corrects the *level* only. The prior is still logit-linear in age
-    # between the anchors while the trajectory is strongly concave on that scale,
-    # so lifting the line to fit 24-60 raises its backward extrapolation too and
-    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
-    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
-    # log-age mean, which is a graph change and therefore a new variant; see
-    # notes/202608041216-ds-understood-trajectory-prior.md.
-    p_slope_low_u_alpha=1.5,
-    p_slope_low_u_beta=8.0,
-    p_slope_hi_u_alpha=3.0,
-    p_slope_hi_u_beta=1.3,
-    eta_u_sigma=0.6,
-    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
-    # to remove prior-data double-dipping; the high anchor then recalibrated
-    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
-    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
-    # carrying the whole displacement. A weighted least-squares line through the
-    # directly observed spoken/understood ratio (902 rows with both outcomes,
-    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
-    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
-    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
-    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
-    # the observed extrapolation, because the last band carrying both outcomes is
-    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
-    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
-    # none for the DS production ratio. See
-    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
+    # Understood trajectory anchors -- rationale at the constant.
+    **_DS_JOINT_UNDERSTOOD_ANCHORS,
+    # Production-ratio anchors -- rationale at the constant.
+    **_DS_JOINT_Q_ANCHORS,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
     tau_subj_u_sigma=1.5,
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
 )
 
 VG09 = BivariateModelDefinition(
@@ -2838,49 +2877,10 @@ VG09 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
-    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
-    # ~100 words below the fitted one across 24-60 months and put 80% of prior
-    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
-    # 108 words, against a frame median of 132 over the densest band in the pool
-    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
-    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
-    # between the four administrations observed at 78-95 mo (median 554) and
-    # those same fitted anchors (658-663); the tails stay wide because the
-    # evidence there is thin. Both are scale calibration on the project's own
-    # frame, not an independent norm — there is none for DS comprehension.
-    #
-    # This corrects the *level* only. The prior is still logit-linear in age
-    # between the anchors while the trajectory is strongly concave on that scale,
-    # so lifting the line to fit 24-60 raises its backward extrapolation too and
-    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
-    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
-    # log-age mean, which is a graph change and therefore a new variant; see
-    # notes/202608041216-ds-understood-trajectory-prior.md.
-    p_slope_low_u_alpha=1.5,
-    p_slope_low_u_beta=8.0,
-    p_slope_hi_u_alpha=3.0,
-    p_slope_hi_u_beta=1.3,
-    eta_u_sigma=0.6,
-    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
-    # to remove prior-data double-dipping; the high anchor then recalibrated
-    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
-    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
-    # carrying the whole displacement. A weighted least-squares line through the
-    # directly observed spoken/understood ratio (902 rows with both outcomes,
-    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
-    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
-    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
-    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
-    # the observed extrapolation, because the last band carrying both outcomes is
-    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
-    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
-    # none for the DS production ratio. See
-    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
+    # Understood trajectory anchors -- rationale at the constant.
+    **_DS_JOINT_UNDERSTOOD_ANCHORS,
+    # Production-ratio anchors -- rationale at the constant.
+    **_DS_JOINT_Q_ANCHORS,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -2889,44 +2889,8 @@ VG09 = BivariateModelDefinition(
     tau_subj_q_sigma=1.5,
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
 )
 
 VG10 = BivariateModelDefinition(
@@ -2941,49 +2905,10 @@ VG10 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
-    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
-    # ~100 words below the fitted one across 24-60 months and put 80% of prior
-    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
-    # 108 words, against a frame median of 132 over the densest band in the pool
-    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
-    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
-    # between the four administrations observed at 78-95 mo (median 554) and
-    # those same fitted anchors (658-663); the tails stay wide because the
-    # evidence there is thin. Both are scale calibration on the project's own
-    # frame, not an independent norm — there is none for DS comprehension.
-    #
-    # This corrects the *level* only. The prior is still logit-linear in age
-    # between the anchors while the trajectory is strongly concave on that scale,
-    # so lifting the line to fit 24-60 raises its backward extrapolation too and
-    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
-    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
-    # log-age mean, which is a graph change and therefore a new variant; see
-    # notes/202608041216-ds-understood-trajectory-prior.md.
-    p_slope_low_u_alpha=1.5,
-    p_slope_low_u_beta=8.0,
-    p_slope_hi_u_alpha=3.0,
-    p_slope_hi_u_beta=1.3,
-    eta_u_sigma=0.6,
-    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
-    # to remove prior-data double-dipping; the high anchor then recalibrated
-    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
-    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
-    # carrying the whole displacement. A weighted least-squares line through the
-    # directly observed spoken/understood ratio (902 rows with both outcomes,
-    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
-    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
-    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
-    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
-    # the observed extrapolation, because the last band carrying both outcomes is
-    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
-    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
-    # none for the DS production ratio. See
-    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
+    # Understood trajectory anchors -- rationale at the constant.
+    **_DS_JOINT_UNDERSTOOD_ANCHORS,
+    # Production-ratio anchors -- rationale at the constant.
+    **_DS_JOINT_Q_ANCHORS,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -2996,44 +2921,8 @@ VG10 = BivariateModelDefinition(
     gp_anchor_age_months=54.0,
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
 )
 
 VG11 = UnivariateREModelDefinition(
@@ -3308,69 +3197,23 @@ VG14 = TrivariateModelDefinition(
     # (scripts/kappa_conditional_calibration.py without the RE conditioning).
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
-    # Understood trajectory: matches VG05, including the 2026-08-04 anchor
-    # recalibration (Beta(1,7) -> Beta(1.5,8) at 24 mo, Beta(2,1.5) -> Beta(3,1.3)
-    # at 84 mo) and eta_u at 0.6. See VG05 for the reasoning and
-    # notes/202608041216-ds-understood-trajectory-prior.md for the measurements.
-    p_slope_low_u_alpha=1.5,
-    p_slope_low_u_beta=8.0,
-    p_slope_hi_u_alpha=3.0,
-    p_slope_hi_u_beta=1.3,
-    eta_u_sigma=0.6,
-    # Spoken ratio q. Broadened from the VG07-posterior-derived
-    # Beta(3,22)/Beta(20,4); the high anchor then recalibrated 2026-08-04 from
-    # Beta(3,2) to Beta(4,1.2) alongside the rest of the DS joint family. q_low ~
-    # Beta(2,12) is unchanged. See VG05 for the calibration and
-    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
+    # Understood trajectory anchors -- the reasoning is at
+    # `_DS_JOINT_UNDERSTOOD_ANCHORS`, which is where VG05's copy of it went, and
+    # notes/202608041216-ds-understood-trajectory-prior.md has the measurements.
+    **_DS_JOINT_UNDERSTOOD_ANCHORS,
+    # Production-ratio anchors -- the calibration is at `_DS_JOINT_Q_ANCHORS`,
+    # which is where VG05's copy of it went, and
+    # notes/202608041730-ds-spoken-q-trajectory-prior.md has the measurements.
+    **_DS_JOINT_Q_ANCHORS,
     # Signed ratio r uses the three-anchor tent + GP defined above.  uk_01's
     # signed-only field and uk_06's unverified field are excluded from the signed
     # likelihood by default; their understood/spoken observations remain.
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
     # Signed gets its own cap rather than inheriting the comprehension one, which
     # is what it did until 2026-08-13. 84 matches VG15's report_max_age_signed on
     # the same evidence, and stops the r(a) table where the r(a) figure stops.
     report_max_age_signed=84,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 VG15 = JointModelDefinition(
@@ -3402,10 +3245,8 @@ VG15 = JointModelDefinition(
     # sign anchors + GP), so there is no monotone signed slope to tighten; the
     # anchors set the level and the GP carries smooth departures. Option D (below)
     # removes the GP<->intercept ridge.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
+    # Production-ratio anchors -- rationale at the constant.
+    **_DS_JOINT_Q_ANCHORS,
     # Subject random intercepts on all three trajectories. Signed data has more
     # repeated-subject structure than first feared (substantial repeats across
     # uk_01/02/04/05), so the sign-subject RE is strongly data-identified — its
@@ -3444,43 +3285,8 @@ VG15 = JointModelDefinition(
     # conditional estimator reproduces.
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
     # Signed evidence now reaches 84 months. Adopted 2026-08-07 at 60 on the same
     # argument that capped comprehension at 72 -- then 46 of 593 signed
     # observations lay above 60 and none above 72. uk_07 (PACT-DS) adds 82
@@ -3493,7 +3299,6 @@ VG15 = JointModelDefinition(
     # from the signed ratio, so they take the tighter of this cap and the
     # comprehension one (reporting_ages.max_age_for_sign_ratio) -- currently 72.
     report_max_age_signed=84,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
 )
 
 # ============================================================
@@ -3512,49 +3317,10 @@ VG16 = BivariateModelDefinition(
     slope_anchors=(24, 84),
     ages_query=(12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90,),
     gp_domain_months=_DS_GP_DOMAIN_MONTHS,
-    # Understood anchors. Recalibrated 2026-08-04 (see the note referenced below)
-    # from Beta(1,7)/Beta(2,1.5), which left the prior median population curve
-    # ~100 words below the fitted one across 24-60 months and put 80% of prior
-    # mass below the frame's own median there (87% at 48 mo). 24 mo: median 76 ->
-    # 108 words, against a frame median of 132 over the densest band in the pool
-    # (160 rows, 156 children) and fitted anchors of 109-113 in the three models
-    # that identify this parameter (VG10/VG15/VG16). 84 mo: median 475 -> 592,
-    # between the four administrations observed at 78-95 mo (median 554) and
-    # those same fitted anchors (658-663); the tails stay wide because the
-    # evidence there is thin. Both are scale calibration on the project's own
-    # frame, not an independent norm — there is none for DS comprehension.
-    #
-    # This corrects the *level* only. The prior is still logit-linear in age
-    # between the anchors while the trajectory is strongly concave on that scale,
-    # so lifting the line to fit 24-60 raises its backward extrapolation too and
-    # the 12-18 mo end gets worse, not better. eta_u absorbs the difference and
-    # sits at prior CDF 0.80-0.89 across all eight DS joint models. The fix is a
-    # log-age mean, which is a graph change and therefore a new variant; see
-    # notes/202608041216-ds-understood-trajectory-prior.md.
-    p_slope_low_u_alpha=1.5,
-    p_slope_low_u_beta=8.0,
-    p_slope_hi_u_alpha=3.0,
-    p_slope_hi_u_beta=1.3,
-    eta_u_sigma=0.6,
-    # q anchors. Broadened from the VG07-posterior-derived Beta(3,22)/Beta(20,4)
-    # to remove prior-data double-dipping; the high anchor then recalibrated
-    # 2026-08-04 from Beta(3,2). q_low ~ Beta(2,12) is unchanged and well-centred
-    # (fitted 0.117 at prior CDF 0.46, contraction 0.81); the high anchor was
-    # carrying the whole displacement. A weighted least-squares line through the
-    # directly observed spoken/understood ratio (902 rows with both outcomes,
-    # 18-72 mo) implies a trend q(84) of 0.946; unweighted 0.924, 36 mo+ 0.943.
-    # Beta(3,2)'s median of 0.614 left the prior trend line 1.9x too shallow,
-    # putting the prior median spoken curve 12x above the fitted one at 12 mo and
-    # 2.2x below it at 54. Beta(4,1.2) has median 0.805 — deliberately short of
-    # the observed extrapolation, because the last band carrying both outcomes is
-    # 72 mo (n=11) and only one row has both above 78 — with a wide lower tail
-    # (5-95% 0.44-0.98). Frame calibration, not an independent norm: there is
-    # none for the DS production ratio. See
-    # notes/202608041730-ds-spoken-q-trajectory-prior.md.
-    p_slope_low_q_alpha=2.0,
-    p_slope_low_q_beta=12.0,
-    p_slope_hi_q_alpha=4.0,
-    p_slope_hi_q_beta=1.2,
+    # Understood trajectory anchors -- rationale at the constant.
+    **_DS_JOINT_UNDERSTOOD_ANCHORS,
+    # Production-ratio anchors -- rationale at the constant.
+    **_DS_JOINT_Q_ANCHORS,
     tau_u_sigma=0.5,
     tau_q_sigma=0.5,
     use_subject_re_u=True,
@@ -3599,63 +3365,13 @@ VG16 = BivariateModelDefinition(
     gp_anchor_age_months=54.0,
     kappa_u=_DS_JOINT_UNDERSTOOD_KAPPA_RE,
     kappa_s=_DS_JOINT_Q_KAPPA_RE,
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 25 understood rows from 20 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. 25 comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate all seventeen models to express a cap that this one already
-    # expresses correctly, if conservatively, for understood.
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
-    report_max_age_understood=72,
-    clamp_mean_above_hi_anchor=CLAMP_Q_ONLY,
+    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    **_DS_JOINT_REPORTING,
 )
 
 # ============================================================
 # VG20 — correlated subject random effects (issue #224): VG10 + rho_uq
 # ============================================================
-
-
-def _as_definition_subclass(base, cls, **overrides):
-    """Rebuild ``base`` as an instance of ``cls``, overriding named fields.
-
-    Shallow by design: nested prior dataclasses are shared with ``base`` rather
-    than copied, so the derived definition serialises identically to its parent
-    except for what is overridden here. ``dataclasses.replace`` cannot do this —
-    it returns the base's own class — and ``asdict`` cannot either, because it
-    recursively converts the nested prior blocks to plain dicts.
-    """
-    values = {item.name: getattr(base, item.name) for item in fields(base)}
-    values.update(overrides)
-    return cls(**values)
 
 
 # Derived from VG10 so the two differ in exactly one thing, which is what makes
@@ -3840,7 +3556,6 @@ VG22 = _as_definition_subclass(
 )
 
 
-
 # Derived from VG13 so the two differ in exactly one thing, which is the whole
 # point: VG13 is nested at rho_uq = 0, so the pair is a one-factor contrast on
 # the typically-developing side of exactly the kind VG20 gives on the Down
@@ -3881,13 +3596,7 @@ VG23 = _as_definition_subclass(
     subject_re_correlation_eta=2.0,
 )
 
-MODEL_REGISTRY: dict[
-    str,
-    UnivariateModelDefinition
-    | BivariateModelDefinition
-    | TrivariateModelDefinition
-    | JointModelDefinition,
-] = {
+MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
     "vg03": VG03,
@@ -4047,10 +3756,18 @@ def validate_model_definition(definition) -> None:
             )
         # Deliberately not checked here: that a model going beyond English carries a
         # study random intercept to absorb between-language variation. Every
-        # definition class names its study scale differently (tau_study_sigma,
-        # tau_u_study_sigma, ...), so any attribute-sniffing check would quietly pass
-        # for a class it does not know and give false assurance. The requirement is
-        # stated on ENGLISH_AND_ROMANCE_LANGUAGES and is a review matter.
+        # definition class names its study scale differently, and this comment is the
+        # one place the mapping is written down:
+        #   Univariate / UnivariateRE  -> tau_study_sigma
+        #   Bivariate                  -> tau_u_sigma, tau_q_sigma
+        #   Joint                      -> tau_u_sigma, tau_q_sigma, tau_sign_sigma
+        #   Trivariate                 -> none (VG14 carries no study intercepts)
+        # Note these are the STUDY scales; the per-child ones are tau_subj_*_sigma,
+        # a distinct family (see the suffix legend in vocab_growth.models). Because
+        # the names differ by class, an attribute-sniffing check would quietly pass
+        # for a class it does not know and give false assurance -- and it would pass
+        # vacuously for Trivariate, which has no such field to find. The requirement
+        # is stated on ENGLISH_AND_ROMANCE_LANGUAGES and is a review matter.
     sign_anchors = getattr(definition, "sign_anchor_ages", None)
     if sign_anchors is not None and (
         len(sign_anchors) != 3
@@ -4077,8 +3794,20 @@ def validate_model_definition(definition) -> None:
             f"{prefix}.sign_peak_prior must be two finite positive Beta "
             "parameters (alpha, beta)."
         )
-    if getattr(definition, "lag_baseline", "within") not in {"within", "population"}:
-        raise ValueError(f"{prefix}.lag_baseline must be 'within' or 'population'.")
+    if getattr(definition, "lag_baseline", LAG_BASELINES[0]) not in LAG_BASELINES:
+        raise ValueError(
+            f"{prefix}.lag_baseline must be one of {LAG_BASELINES}."
+        )
+    # Until 2026-09-01 `lag_zero_handling` was validated nowhere at this level: its
+    # only rejection was inside `cross_lag.prev_wave_lag`, reached after data
+    # preparation and prior configuration had already run.
+    if (
+        getattr(definition, "lag_zero_handling", LAG_ZERO_CLIP)
+        not in LAG_ZERO_TREATMENTS
+    ):
+        raise ValueError(
+            f"{prefix}.lag_zero_handling must be one of {LAG_ZERO_TREATMENTS}."
+        )
     if getattr(definition, "use_cross_lag", False) and not getattr(
         definition, "use_subject_re_u", False
     ):

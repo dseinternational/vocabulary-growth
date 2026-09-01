@@ -3,12 +3,26 @@
 
 """
 Shared dataclasses and pipeline functions for the bivariate vocabulary growth
-models (e.g. VG05, VG07-VG10, VG13).
+models.
+
+Two things in this module have different reach, and the distinction matters when
+changing either. The **shared** half — the configuration and samples dataclasses,
+the prior configuration, the extraction, the predictive, the summary and every
+``plot_*`` function — is used by all twelve bivariate models. The PyMC graph
+builder :func:`build_model` and :func:`fit_bivariate_model` serve **VG05 alone**:
+every other bivariate model carries study-level random intercepts and is built by
+:mod:`vocab_growth.models.common_bivariate_re`, which imports the shared half
+from here. :mod:`vocab_growth.models.catalogue` is the authoritative mapping.
 
 Uses a production-ratio reparameterization:
     p_U(a) = sigmoid(f_U(a))
     q(a)   = sigmoid(h(a))       # fraction of understood words spoken
     p_S(a) = p_U(a) * q(a)       # enforces p_S <= p_U by construction
+
+This is where the graph's ``_u`` / ``_q`` / ``_s`` suffix split comes from, and it
+is not uniform -- ``_q`` is the ratio's latent and carries no observation, while
+``_s`` covers both the derived marginal and the spoken likelihood. The legend is in
+:mod:`vocab_growth.models`; read it before touching a suffixed name.
 """
 
 import os
@@ -16,6 +30,7 @@ import sys
 from dataclasses import dataclass
 
 import dse_research_utils.math.constants as math_constants
+import dse_research_utils.plot.io as plot_io
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.models.data as model_data
@@ -39,8 +54,8 @@ from vocab_growth.models import prior_child_checks
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
-    slope_anchor_logit_coeffs,
     standardize_ages,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.calibration import write_trace_calibration
@@ -48,12 +63,12 @@ from vocab_growth.models.common import (
     AnchoredKappaPriors,
     BaseModelConfiguration,
     ModelFitContext,
-    _configure_kappa_priors,
-    _plot_and_print_dist,
     build_kappa_for_config,
+    configure_kappa_priors,
     emit_monthly_summary,
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
+    plot_and_print_dist,
     render_model_graph,
     report,
     run_fit_pipeline,
@@ -69,16 +84,14 @@ from vocab_growth.models.likelihood_utils import (
     nested_outcome_spec,
     resolve_fallback_treatment,
 )
+from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
 from vocab_growth.plotting import (
-    _save_csv,
     plot_comprehension_production_gap,
     plot_production_rate,
 )
 from vocab_growth.posterior_analysis import (
-    extract_posterior as _extract_posterior,
-)
-from vocab_growth.posterior_analysis import (
-    extract_posterior_predictive as _extract_posterior_predictive,
+    extract_posterior,
+    extract_posterior_predictive,
 )
 from vocab_growth.reporting import (
     console,
@@ -159,14 +172,9 @@ class BivariateModelSamples:
     X_query: np.ndarray
     """Ages in months for the query points, shape (n_query,)."""
 
-    X_plot_z: np.ndarray
-    """Standardized ages for the plot points, shape (n_plot, n_samples)."""
-    X_query_z: np.ndarray
-    """Standardized ages for the query points, shape (n_query, n_samples)."""
 
     # Understood (U) samples
     f_u_plot: np.ndarray
-    f_u_query: np.ndarray
     p_u_plot: np.ndarray
     p_u_query: np.ndarray
     p_u_query_subject_marginal: np.ndarray
@@ -178,14 +186,11 @@ class BivariateModelSamples:
     kappa_u_query: np.ndarray
 
     # Production rate (q) samples
-    h_plot: np.ndarray
-    h_query: np.ndarray
     q_plot: np.ndarray
     q_query: np.ndarray
 
     # Spoken (S) samples (derived)
     f_s_plot: np.ndarray
-    f_s_query: np.ndarray
     p_s_plot: np.ndarray
     p_s_query: np.ndarray
     p_s_query_subject_marginal: np.ndarray
@@ -329,21 +334,21 @@ def configure_bivariate_priors(
     ell_unit_u_dist = pz.Beta(
         alpha=definition.ell_unit_u_alpha, beta=definition.ell_unit_u_beta
     )
-    _plot_and_print_dist(context, ell_unit_u_dist, "ell_unit_u_dist")
+    plot_and_print_dist(context, ell_unit_u_dist, "ell_unit_u_dist")
 
     eta_u_dist = pz.HalfNormal(sigma=definition.eta_u_sigma)
-    _plot_and_print_dist(context, eta_u_dist, "eta_u_dist")
+    plot_and_print_dist(context, eta_u_dist, "eta_u_dist")
 
     # Slope priors for understood
     p_slope_low_u_dist = pz.Beta(
         alpha=definition.p_slope_low_u_alpha, beta=definition.p_slope_low_u_beta
     )
-    _plot_and_print_dist(context, p_slope_low_u_dist, "p_slope_low_u_dist")
+    plot_and_print_dist(context, p_slope_low_u_dist, "p_slope_low_u_dist")
 
     p_slope_hi_u_dist = pz.Beta(
         alpha=definition.p_slope_hi_u_alpha, beta=definition.p_slope_hi_u_beta
     )
-    _plot_and_print_dist(context, p_slope_hi_u_dist, "p_slope_hi_u_dist")
+    plot_and_print_dist(context, p_slope_hi_u_dist, "p_slope_hi_u_dist")
 
     # --- Production ratio (q) priors ---
     heading("Production ratio priors", style="bold cyan")
@@ -351,20 +356,20 @@ def configure_bivariate_priors(
     ell_unit_q_dist = pz.Beta(
         alpha=definition.ell_unit_q_alpha, beta=definition.ell_unit_q_beta
     )
-    _plot_and_print_dist(context, ell_unit_q_dist, "ell_unit_q_dist")
+    plot_and_print_dist(context, ell_unit_q_dist, "ell_unit_q_dist")
 
     eta_q_dist = pz.HalfNormal(sigma=definition.eta_q_sigma)
-    _plot_and_print_dist(context, eta_q_dist, "eta_q_dist")
+    plot_and_print_dist(context, eta_q_dist, "eta_q_dist")
 
     p_slope_low_q_dist = pz.Beta(
         alpha=definition.p_slope_low_q_alpha, beta=definition.p_slope_low_q_beta
     )
-    _plot_and_print_dist(context, p_slope_low_q_dist, "p_slope_low_q_dist")
+    plot_and_print_dist(context, p_slope_low_q_dist, "p_slope_low_q_dist")
 
     p_slope_hi_q_dist = pz.Beta(
         alpha=definition.p_slope_hi_q_alpha, beta=definition.p_slope_hi_q_beta
     )
-    _plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
+    plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
 
     # --- Cross-lag coefficient prior (VG16) ---
     # Emitted as its own artefact so the report can put a prior figure beside
@@ -377,15 +382,15 @@ def configure_bivariate_priors(
         beta_lag_dist = pz.Normal(
             mu=definition.beta_lag_mu, sigma=definition.beta_lag_sigma
         )
-        _plot_and_print_dist(context, beta_lag_dist, "beta_lag_dist")
+        plot_and_print_dist(context, beta_lag_dist, "beta_lag_dist")
 
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
-    kappa_u_fields = _configure_kappa_priors(context, definition.kappa_u, "_u")
+    kappa_u_fields = configure_kappa_priors(context, definition.kappa_u, "_u")
 
     # --- Kappa priors — spoken ---
     heading("Kappa priors — spoken", style="bold cyan")
-    kappa_s_fields = _configure_kappa_priors(context, definition.kappa_s, "_s")
+    kappa_s_fields = configure_kappa_priors(context, definition.kappa_s, "_s")
 
     # --- Configuration object ---
 
@@ -435,7 +440,7 @@ def build_model(
     n_trials = context.model_data.n_trials
     y_u_values = np.asarray(analysis_df.loc[has_u, "understood"], dtype=float)
     # Validate BEFORE the integer cast, exactly as the RE engine does: the cast
-    # truncates silently, so the post-cast bounds checks below cannot catch
+    # truncates silently, so a post-cast bound cannot catch
     # 810.9 or -0.1, which truncate into range (#236, #240).
     require_valid_counts(y_u_values, "understood", n_trials)
     y_u_observed = y_u_values.astype(int)
@@ -469,15 +474,11 @@ def build_model(
     has_s_likelihood = np.zeros(n, dtype=bool)
     has_s_likelihood[idx_s] = True
 
-    # Validate
-    if not np.all(y_u_observed >= 0):
-        raise ValueError("y_u contains negative counts.")
-    if not np.all(y_u_observed <= n_trials):
-        raise ValueError("y_u exceeds n_trials.")
-    if not np.all(y_s_observed >= 0):
-        raise ValueError("y_s contains negative counts.")
-    if not np.all(y_s_observed <= n_trials):
-        raise ValueError("y_s exceeds n_trials.")
+    # Range validation happens ONCE, before the integer cast, and not here: the cast
+    # truncates silently, so a post-cast bound cannot catch 810.9 or -0.1, which
+    # truncate into range. `build_utils.require_valid_counts` covers the parent
+    # column and `likelihood_utils.nested_outcome_spec` covers each nested one, both
+    # on the pre-cast floats (#236, #240).
 
     # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
@@ -530,7 +531,7 @@ def build_model(
     L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
     # Slope anchors
-    slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
+    slope_age_a_z, slope_age_b_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
     )
 
@@ -794,62 +795,49 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     """Extract model samples into a structured format for plotting and reporting."""
 
     # Understood
-    f_u_plot = _extract_posterior(trace, "f_u_plot", "plot_id")
-    f_u_query = _extract_posterior(trace, "f_u_query", "query_id")
+    f_u_plot = extract_posterior(trace, "f_u_plot", "plot_id")
 
-    p_u_plot = _extract_posterior(trace, "p_u_plot", "plot_id")
-    p_u_query = _extract_posterior(trace, "p_u_query", "query_id")
+    p_u_plot = extract_posterior(trace, "p_u_plot", "plot_id")
+    p_u_query = extract_posterior(trace, "p_u_query", "query_id")
 
-    kappa_u_plot = _extract_posterior(trace, "kappa_u_plot", "plot_id")
-    kappa_u_query = _extract_posterior(trace, "kappa_u_query", "query_id")
+    kappa_u_plot = extract_posterior(trace, "kappa_u_plot", "plot_id")
+    kappa_u_query = extract_posterior(trace, "kappa_u_query", "query_id")
 
     # Production rate
-    h_plot = _extract_posterior(trace, "h_plot", "plot_id")
-    h_query = _extract_posterior(trace, "h_query", "query_id")
 
-    q_plot = _extract_posterior(trace, "q_plot", "plot_id")
-    q_query = _extract_posterior(trace, "q_query", "query_id")
+    q_plot = extract_posterior(trace, "q_plot", "plot_id")
+    q_query = extract_posterior(trace, "q_query", "query_id")
 
     # Spoken (derived)
-    f_s_plot = _extract_posterior(trace, "f_s_plot", "plot_id")
-    f_s_query = _extract_posterior(trace, "f_s_query", "query_id")
+    f_s_plot = extract_posterior(trace, "f_s_plot", "plot_id")
 
-    p_s_plot = _extract_posterior(trace, "p_s_plot", "plot_id")
-    p_s_query = _extract_posterior(trace, "p_s_query", "query_id")
+    p_s_plot = extract_posterior(trace, "p_s_plot", "plot_id")
+    p_s_query = extract_posterior(trace, "p_s_query", "query_id")
 
-    kappa_s_plot = _extract_posterior(trace, "kappa_s_plot", "plot_id")
-    kappa_s_query = _extract_posterior(trace, "kappa_s_query", "query_id")
+    kappa_s_plot = extract_posterior(trace, "kappa_s_plot", "plot_id")
+    kappa_s_query = extract_posterior(trace, "kappa_s_query", "query_id")
 
     # Observed data — expand to full obs_id length with NaN where unobserved
+    # Both masks are stored on the samples object; `expand_observed_to_obs_id`
+    # re-reads the one it needs rather than taking it as an argument, so that the
+    # #67 alignment check and the mask it checks against cannot be given different
+    # arrays by a caller.
     obs_u_mask = np.array(trace.constant_data["obs_u_mask"].values, dtype=bool)
     obs_s_mask = np.array(trace.constant_data["obs_s_mask"].values, dtype=bool)
-    n_obs = len(obs_u_mask)
 
-    y_u_obs_raw = np.array(trace.observed_data["y_u_obs"].values, dtype=float)
-    if int(obs_u_mask.sum()) != y_u_obs_raw.shape[0]:
-        raise ValueError(
-            f"obs_u_mask count ({int(obs_u_mask.sum())}) does not match observed "
-            f"y_u_obs length ({y_u_obs_raw.shape[0]}); stored mask and likelihood "
-            "rows are misaligned (issue #67)."
-        )
-    y_u_obs = np.full(n_obs, np.nan)
-    y_u_obs[obs_u_mask] = y_u_obs_raw
+    y_u_obs = posterior_analysis.expand_observed_to_obs_id(
+        trace, "y_u_obs", "obs_u_mask"
+    )
 
-    y_s_obs_raw = np.array(trace.observed_data["y_s_obs"].values, dtype=float)
-    if int(obs_s_mask.sum()) != y_s_obs_raw.shape[0]:
-        raise ValueError(
-            f"obs_s_mask count ({int(obs_s_mask.sum())}) does not match observed "
-            f"y_s_obs length ({y_s_obs_raw.shape[0]}); stored mask and likelihood "
-            "rows are misaligned (issue #67)."
-        )
-    y_s_obs = np.full(n_obs, np.nan)
-    y_s_obs[obs_s_mask] = y_s_obs_raw
+    y_s_obs = posterior_analysis.expand_observed_to_obs_id(
+        trace, "y_s_obs", "obs_s_mask"
+    )
 
     # Posterior predictive
-    y_u_plot = _extract_posterior_predictive(trace, "y_u_plot", "plot_id")
-    y_u_query = _extract_posterior_predictive(trace, "y_u_query", "query_id")
-    y_s_plot = _extract_posterior_predictive(trace, "y_s_plot", "plot_id")
-    y_s_query = _extract_posterior_predictive(trace, "y_s_query", "query_id")
+    y_u_plot = extract_posterior_predictive(trace, "y_u_plot", "plot_id")
+    y_u_query = extract_posterior_predictive(trace, "y_u_query", "query_id")
+    y_s_plot = extract_posterior_predictive(trace, "y_s_plot", "plot_id")
+    y_s_query = extract_posterior_predictive(trace, "y_s_query", "query_id")
     p_u_query_subject_marginal = posterior_analysis.extract_posterior_predictive_float(
         trace, "p_u_query_subject_marginal", "query_id"
     )
@@ -871,17 +859,12 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     X_query = np.array(trace.constant_data["X_query"].values)
 
     # Standardised ages
-    X_plot_z = _extract_posterior(trace, "z_plot", "plot_id")
-    X_query_z = _extract_posterior(trace, "z_query", "query_id")
 
     return BivariateModelSamples(
         X_obs=X_obs,
         X_plot=X_plot,
         X_query=X_query,
-        X_plot_z=X_plot_z,
-        X_query_z=X_query_z,
         f_u_plot=f_u_plot,
-        f_u_query=f_u_query,
         p_u_plot=p_u_plot,
         p_u_query=p_u_query,
         p_u_query_subject_marginal=p_u_query_subject_marginal,
@@ -891,12 +874,9 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         y_u_query=y_u_query,
         kappa_u_plot=kappa_u_plot,
         kappa_u_query=kappa_u_query,
-        h_plot=h_plot,
-        h_query=h_query,
         q_plot=q_plot,
         q_query=q_query,
         f_s_plot=f_s_plot,
-        f_s_query=f_s_query,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
         p_s_query_subject_marginal=p_s_query_subject_marginal,
@@ -916,7 +896,9 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
 # ============================================================
 
 
-def prior_predictive_checks(context: BivariateContext, definition=None):
+def prior_predictive_checks(
+    context: BivariateContext, definition: BivariateModelDefinition
+):
     """Run prior predictive checks.
 
     The three figures below are **population mean functions**: they set every
@@ -931,8 +913,10 @@ def prior_predictive_checks(context: BivariateContext, definition=None):
     figures: unseen-child trajectories, nested Beta-Binomial counts, and (for a
     model that couples the two outcomes) the induced joint association. Those
     are computed in NumPy from these same draws, so they add no node to the
-    graph. ``definition`` is optional because the engines that carry no child
-    effects call this without one.
+    graph. A definition carrying no child effects simply adds no figures --
+    ``prior_child_checks`` returns nothing for it -- so ``definition`` is required
+    rather than optional: VG05 was the only caller that omitted it, and passing its
+    own definition produces byte-identical output.
     """
     with context.model:
         # No ``mode="FAST_COMPILE"`` -- it makes this fixed-cost stage 20-40x
@@ -1019,7 +1003,7 @@ def prior_predictive_checks(context: BivariateContext, definition=None):
 sample = _shared_sample
 
 
-def diagnostics(context: BivariateContext, definition=None):
+def diagnostics(context: BivariateContext, definition: BivariateModelDefinition):
     """Run diagnostics on the posterior samples.
 
     Thin wrapper over the shared engine (common.py): bivariate reports
@@ -1040,7 +1024,9 @@ def diagnostics(context: BivariateContext, definition=None):
     grid instead of falling off the end of model order (issue #233). The
     ordering comes from :func:`pair_plot_priority`, which returns an empty tuple
     for a model without one -- and then the reordering is not installed at all,
-    so those pair plots are unchanged. This began as VG16's own reordering for
+    so those pair plots are unchanged. That is why ``definition`` is required
+    rather than defaulted: a model without a distinguishing structure passes its
+    definition and gets the same plots it got from ``None``. This began as VG16's own reordering for
     ``beta_lag`` (#242) and is now general.
 
     A cross-lag definition (VG16, issue #242) additionally **suppresses
@@ -1142,7 +1128,10 @@ def _child_slope_offsets(context: BivariateContext, definition):
     Read from the model's own ``X_plot`` / ``X_query`` data rather than recomputed,
     so the predictive cannot drift from the grids the fit actually used.
     """
-    ref = float(getattr(definition, "subject_slope_ref_age_months", 36.0) or 36.0)
+    # The default lives once, in `subject_effects`, beside the plan that resolves
+    # it. `or` is not used: an explicit 0.0 is a legitimate reference age.
+    ref = getattr(definition, "subject_slope_ref_age_months", None)
+    ref = float(DEFAULT_SLOPE_REF_AGE_MONTHS if ref is None else ref)
     # From the model's own named vars, not `context.model_variables`:
     # `get_variables_dict` collects free RVs, deterministics and observed RVs, so
     # `pm.Data` grids are absent from it.
@@ -1277,7 +1266,9 @@ def _unseen_child_slope_deltas(context, definition, name, tag):
     return b0 + b1 * d_plot, b0 + b1 * d_query
 
 
-def sample_posterior_predictive(context: BivariateContext, definition=None):
+def sample_posterior_predictive(
+    context: BivariateContext, definition: BivariateModelDefinition
+):
     """Sample from the posterior predictive distribution.
 
     For models with subject-level random intercepts (use_subject_re_u and/or
@@ -1684,7 +1675,7 @@ def plot_understood_spoken_trajectory(
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
         blank_u = np.where(ku, 1.0, np.nan)
         blank_s = np.where(ks, 1.0, np.nan)
-        _save_csv(pd.DataFrame({
+        plot_io.save_plot_data(output_dir, filename, pd.DataFrame({
             "age_months": X_plot,
             "understood_median": y_u_median * blank_u,
             "understood_ci50_lo": y_u_ci50[:, 0] * blank_u,
@@ -1696,7 +1687,7 @@ def plot_understood_spoken_trajectory(
             "spoken_ci50_hi": y_s_ci50[:, 1] * blank_s,
             "spoken_ci_lo": y_s_ci[:, 0] * blank_s,
             "spoken_ci_hi": y_s_ci[:, 1] * blank_s,
-        })[ku | ks], output_dir, filename)
+        })[ku | ks])
 
     return fig
 
@@ -1759,7 +1750,7 @@ def plot_understood_spoken_trajectory_intervals(
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
         blank_u = np.where(ku, 1.0, np.nan)
         blank_s = np.where(ks, 1.0, np.nan)
-        _save_csv(pd.DataFrame({
+        plot_io.save_plot_data(output_dir, filename, pd.DataFrame({
             "age_months": X_plot,
             "understood_median": y_u_median * blank_u,
             "understood_ci50_lo": y_u_ci50[:, 0] * blank_u,
@@ -1771,7 +1762,7 @@ def plot_understood_spoken_trajectory_intervals(
             "spoken_ci50_hi": y_s_ci50[:, 1] * blank_s,
             "spoken_ci_lo": y_s_ci[:, 0] * blank_s,
             "spoken_ci_hi": y_s_ci[:, 1] * blank_s,
-        })[ku | ks], output_dir, filename)
+        })[ku | ks])
 
     return fig
 
@@ -1855,14 +1846,14 @@ def plot_production_rate_by_understood(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(pd.DataFrame({
+        plot_io.save_plot_data(output_dir, filename, pd.DataFrame({
             "words_understood": x_words,
             "q_median": q_median,
             "ci50_lo": q_ci50[:, 0],
             "ci50_hi": q_ci50[:, 1],
             "ci_lo": q_ci[:, 0],
             "ci_hi": q_ci[:, 1],
-        }), output_dir, filename)
+        }))
 
     return fig
 
@@ -1940,14 +1931,14 @@ def plot_production_rate_predictive(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(pd.DataFrame({
+        plot_io.save_plot_data(output_dir, filename, pd.DataFrame({
             "age_months": X_plot,
             "ratio_median": ratio_median,
             "ci50_lo": ratio_ci50[:, 0],
             "ci50_hi": ratio_ci50[:, 1],
             "ci_lo": ratio_ci[:, 0],
             "ci_hi": ratio_ci[:, 1],
-        }), output_dir, filename)
+        }))
 
     return fig
 
@@ -2002,11 +1993,11 @@ def plot_understood_vs_spoken(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(pd.DataFrame({
+        plot_io.save_plot_data(output_dir, filename, pd.DataFrame({
             "age_months": X_plot,
             "understood_median": E_u_median,
             "spoken_median": E_s_median,
-        }), output_dir, filename)
+        }))
 
     return fig
 
@@ -2060,11 +2051,11 @@ def plot_understood_vs_spoken_predictive(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(pd.DataFrame({
+        plot_io.save_plot_data(output_dir, filename, pd.DataFrame({
             "age_months": X_plot,
             "understood_median": y_u_median,
             "spoken_median": y_s_median,
-        }), output_dir, filename)
+        }))
 
     return fig
 
@@ -2158,7 +2149,7 @@ def plot_spoken_given_understood(
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
         fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        _save_csv(pd.concat(rows, ignore_index=True), output_dir, filename)
+        plot_io.save_plot_data(output_dir, filename, pd.concat(rows, ignore_index=True))
 
     return fig
 
@@ -2215,6 +2206,10 @@ def _run_bivariate_outcome_plots(
     y_obs: pd.Series,
     n_trials: int,
     ci_prob: float,
+    # Passed explicitly rather than defaulted: `emit_monthly_summary` falls
+    # back to "eti", so an omission here silently pins this engine's monthly
+    # tables to ETI while the rest of its reporting follows the context.
+    interval_kind: str,
     output_dir: str,
     suffix: str,
     outcome_label: str,
@@ -2239,6 +2234,7 @@ def _run_bivariate_outcome_plots(
         X_obs=x_obs,
         n_trials=n_trials,
         ci_prob=ci_prob,
+        interval_kind=interval_kind,
         suffix=suffix,
         outcome_label=outcome_label.lower(),
         y_label=y_label,
@@ -2347,11 +2343,18 @@ def _run_bivariate_outcome_plots(
     )
 
 
-def _run_bivariate_joint_plots(
+def run_bivariate_joint_plots(
     context: BivariateContext,
     definition: BivariateModelDefinition,
 ):
-    """Run the joint bivariate plots and per-outcome plots shared by VG05–VG07."""
+    """Run the joint bivariate plots and per-outcome plots.
+
+    This is the plot stage of all twelve bivariate models: VG05 through this
+    module's own stage list, and VG07-VG10, VG13, VG16 and VG19-VG23 through
+    :mod:`vocab_growth.models.common_bivariate_re`, which imports it. It is
+    declared to the catalogue by name, so a rename must update
+    :mod:`vocab_growth.models.catalogue` too.
+    """
     samples = context.model_samples
     analysis_df = context.analysis_df
     has_u = analysis_df["understood"].notna()
@@ -2496,6 +2499,7 @@ def _run_bivariate_joint_plots(
         ),
         n_trials=context.model_data.n_trials,
         ci_prob=context.reporting.ci_prob,
+        interval_kind=context.reporting.interval_kind,
         output_dir=context.reporting.output_dir,
         suffix="u",
         outcome_label="Words understood",
@@ -2524,6 +2528,7 @@ def _run_bivariate_joint_plots(
         ),
         n_trials=context.model_data.n_trials,
         ci_prob=context.reporting.ci_prob,
+        interval_kind=context.reporting.interval_kind,
         output_dir=context.reporting.output_dir,
         suffix="s",
         outcome_label="Words spoken",
@@ -2544,7 +2549,11 @@ def fit_bivariate_model(
     definition: BivariateModelDefinition,
 ) -> BivariateContext:
     """
-    Shared fit pipeline for bivariate models (e.g. VG05, VG07-VG10, VG13).
+    Fit pipeline for the bivariate model without study random intercepts: VG05 only.
+
+    Every other bivariate model goes through
+    :func:`vocab_growth.models.common_bivariate_re.fit_bivariate_re_model`, which
+    reuses this module's prior, predictive, summary and plot stages.
     """
     return run_fit_pipeline(
         config,
@@ -2559,9 +2568,12 @@ def fit_bivariate_model(
                 "Model definition and initialisation",
                 lambda ctx: build_model(ctx, definition),
             ),
-            ("Prior predictive checks", prior_predictive_checks),
+            (
+                "Prior predictive checks",
+                lambda ctx: prior_predictive_checks(ctx, definition),
+            ),
             ("Posterior sampling", sample),
-            ("Diagnostics", diagnostics),
+            ("Diagnostics", lambda ctx: diagnostics(ctx, definition)),
             (
                 "Posterior predictions",
                 lambda ctx: sample_posterior_predictive(ctx, definition),
@@ -2569,7 +2581,7 @@ def fit_bivariate_model(
             ("Posterior summary", posterior_summary),
             (
                 "Plots",
-                lambda ctx: _run_bivariate_joint_plots(ctx, definition),
+                lambda ctx: run_bivariate_joint_plots(ctx, definition),
             ),
             ("Report", report),
         ],

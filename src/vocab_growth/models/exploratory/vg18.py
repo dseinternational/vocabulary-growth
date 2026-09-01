@@ -4,6 +4,9 @@
 """
 Model VG18: study-adjusted contrast of DS *total expressive production* by sign-group.
 
+**EXPLORATORY. Its output is not validatable and must not be published.** See
+:mod:`vocab_growth.models.exploratory` for what a `fit()` here does not produce.
+
 CAUTION — THE SIGN-GROUP CONTRAST IS PARTLY MECHANICAL. Sign group is derived from
 ``signed``, and ``signed`` is a *component* of this model's ``produced`` outcome for
 every union study (uk_01, uk_02, nz_01, es_01, uk_07, where ``produced`` counts words
@@ -50,7 +53,7 @@ expressive contrast, restrict to the union studies uk_01 + uk_02 + nz_01 + es_01
 uk_07 (fit(..., studies=("uk_01","uk_02","nz_01","es_01","uk_07"))), or use VG15's
 modelled ``p_any`` (estimates the sign/speech overlap ``psi``). Note that uk_07's
 34-95 month span sits largely outside VG17/VG18's 12-66 month window, so it
-contributes only its younger assessments. Exploratory; not in MODEL_REGISTRY. Its output is not validatable and must not be published -- see `vocab_growth.models.exploratory` for what it does not carry.
+contributes only its younger assessments. Not in MODEL_REGISTRY.
 """
 
 from vocab_growth.models.exploratory import vg17
@@ -95,8 +98,5 @@ if __name__ == "__main__":
     import sys
     from multiprocessing import freeze_support
 
-    from vocab_growth import environment as env
-
     freeze_support()
-    env.set_output_root("/scratch/vg-output")
     fit(sys.argv[1] if len(sys.argv) > 1 else "test")

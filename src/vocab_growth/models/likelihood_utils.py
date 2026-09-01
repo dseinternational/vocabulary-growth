@@ -102,6 +102,20 @@ rather than from an arbitrary floor. Non-boundary sources move by less than
 
 LAG_ZERO_TREATMENTS = (LAG_ZERO_CLIP, LAG_ZERO_CONTINUITY)
 
+LAG_BASELINES = ("population", "within")
+"""What the lag predictor is measured *from*, for ``lag_baseline``.
+
+Both are defined relative to the child's understood subject intercept: ``"within"``
+subtracts it, so the predictor is the child's own deviation from their own level;
+``"population"`` adds it back, so the predictor is the level itself. They coincide
+when there is no comprehension child effect, which is why both
+``definitions.validate_model_definition`` and ``cross_lag.validate_cross_lag``
+refuse that combination.
+
+Here beside :data:`LAG_ZERO_TREATMENTS` so the definition-level check and the
+engine-level one read one tuple. They were two literals with different messages,
+in ``definitions.py`` and in the engine."""
+
 SPOKEN_FALLBACK_TREATMENTS = (
     SPOKEN_FALLBACK_PRODUCT,
     SPOKEN_FALLBACK_PAIRED_ONLY,

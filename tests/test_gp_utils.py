@@ -6,7 +6,7 @@
 Covers the kappa dispersion-closure factory (``make_kappa_of_z`` — pinning the
 closed form ``z -> kappa_min + exp(a_kappa + b_kappa * z)``), the two-anchor
 builder over the same curve (``build_kappa_of_z_anchored``), the trend + HSGP
-graph builders (``trend_and_gp`` / ``intercept_and_gp`` — checking which RVs and
+graph builders (``trend_and_gp`` / ``tent_and_gp`` — checking which RVs and
 deterministics they emit), ``get_hsgp_hyperparams`` (the boundary/basis
 sizing), and VG22's child-factor builder (``build_child_factor`` — pinning which
 raw loading entries exist, which are positive, and that the gauge is anchored on
@@ -21,16 +21,15 @@ import pymc as pm
 import pytensor.tensor as pt
 import pytest
 
+from vocab_growth.models.build_utils import CLAMP_SOFTNESS
 from vocab_growth.models.common import get_hsgp_hyperparams
 from vocab_growth.models.definitions import SubjectFactorPriorParams
 from vocab_growth.models.gp_utils import (
-    _CLAMP_SOFTNESS,
     CHILD_FACTOR_ANCHOR_ORDER,
     GPGrid,
     _soft_clamp_z,
     build_child_factor,
     build_kappa_of_z_anchored,
-    intercept_and_gp,
     make_kappa_of_z,
     tent_and_gp,
     trend_and_gp,
@@ -127,7 +126,7 @@ def test_anchored_kappa_rejects_unordered_anchors():
         _anchored((0.5, -0.5))
 
 
-# --- trend_and_gp / intercept_and_gp -----------------------------------------
+# --- trend_and_gp / tent_and_gp ----------------------------------------------
 
 _GRID = GPGrid(sa_z=-1.0, sb_z=1.0, ell_low_z=0.2, ell_high_z=2.0, M=[10], L=[2.0])
 
@@ -209,7 +208,7 @@ def test_trend_and_gp_anchor_adds_no_free_rv():
 # draws the mean and the model's own intercept/slope jointly from one seeded draw,
 # so identities are checked against the same realisation.
 
-_SOFT_BETA = _CLAMP_SOFTNESS / (_GRID.sb_z - _GRID.sa_z)
+_SOFT_BETA = CLAMP_SOFTNESS / (_GRID.sb_z - _GRID.sa_z)
 #: Largest departure of the soft form from a hard clamp, in z units, at the anchor.
 _SOFT_MAX_DZ = np.log(2.0) / _SOFT_BETA
 
@@ -385,26 +384,6 @@ def test_without_the_clamp_orthogonalisation_uses_the_raw_coordinate():
     assert abs(float(g[0])) < 1e-9
 
 
-def test_intercept_and_gp_intercept_is_free_no_slope():
-    def call(X):
-        intercept_and_gp(
-            cfg_intercept=pz.Normal(mu=0, sigma=1),
-            cfg_ell=pz.Beta(alpha=2, beta=2),
-            cfg_eta=pz.HalfNormal(sigma=1.0),
-            suffix="_sign",
-            X_all_z_data=X,
-            grid=_GRID,
-            store_deterministic=False,
-        )
-
-    m = _model_with(call)
-    free = {v.name for v in m.free_RVs}
-    det = {d.name for d in m.deterministics}
-    assert "intercept_sign" in free  # intercept-only mean is a free RV
-    assert "slope_sign" not in det  # no slope for the signed trajectory
-    assert "ell_sign" in det
-
-
 def test_tent_and_gp_three_anchors_no_intercept():
     def call(X):
         tent_and_gp(
@@ -465,8 +444,6 @@ def test_get_hsgp_hyperparams_boundary_covers_centred_grid():
     centred = x - (x.max() + x.min()) / 2.0
     # c >= 1.2, so the boundary always covers the midpoint-centred grid
     assert L[0] >= np.max(np.abs(centred))
-
-
 
 
 # ---------------------------------------------------------------------------

@@ -9,8 +9,19 @@ random intercepts on the outcome trajectory:
 
     f(a, s) = mean_trend(a) + g(a) + delta[s]
 
-    delta[s] ~ Normal(0, tau)
+    delta[s] = tau * delta_raw[s],  delta_raw ~ ZeroSumNormal(sqrt(K / (K - 1)))
     tau ~ HalfNormal(tau_study_sigma)
+
+over the K retained studies. The sum-to-zero constraint is a deliberate
+**identifiability** constraint, not a prior-preserving reparameterisation: it
+removes the group-mean degree of freedom that otherwise trades off against the
+global intercept. The ``sqrt(K / (K - 1))`` rescaling keeps each study effect's
+marginal prior variance at ``tau^2``, so the marginals match an independent
+``Normal(0, tau)`` while the joint does not — the K effects carry a ``-1/(K-1)``
+correlation.
+``centred_study_re`` selects an equivalent centred coordinate for the same
+distribution. See the full argument at the construction site in
+:func:`build_univariate_re_model`.
 
 Plot and query predictions use the population-level trajectory (delta = 0).
 
@@ -34,9 +45,9 @@ import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
 from vocab_growth.models.build_utils import (
     construct_age_grids,
-    require_integral_counts,
-    slope_anchor_logit_coeffs,
+    require_valid_counts,
     standardize_ages,
+    standardize_anchor_ages,
     validate_ell_bounds,
 )
 from vocab_growth.models.calibration import write_trace_calibration
@@ -234,7 +245,15 @@ def prepare_univariate_re_data(
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     y_values = np.asarray(analysis_df[y_col], dtype=float)
-    require_integral_counts(y_values, y_col)
+    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
+    # post-cast bound cannot catch 810.9 or -0.1, which truncate into range. This is
+    # the range check this column gets on the fit path (#236, #240).
+    # `build_univariate_re_model` below repeats it, because that builder is also
+    # re-entered on simulated frames this stage never sees; the repeat is a no-op
+    # here. Note it is `build_univariate_re_model`, not `common.build_model` --
+    # that one belongs to the plain univariate engine, and naming it here is what
+    # hid the gap.
+    require_valid_counts(y_values, y_col, definition.n_trials)
     y_obs = y_values.astype(int)
 
     bmd = model_data.BinomialModelData(
@@ -282,7 +301,17 @@ def build_univariate_re_model(
     y_col = definition.outcome.value
 
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
-    y_obs = np.asarray(analysis_df[y_col], dtype=int)
+    # Validated here, on the pre-cast float, and not only in the prepare stage:
+    # `recovery/simulate.py` re-enters this builder twice on a *simulated* frame
+    # that no prepare stage has seen (`set_model_data(context.model_data, frame)`
+    # then `build_stage(context)`), and VG11/VG12 are recovery targets. Three of the
+    # six engines already validate inside their builders for this reason -- the
+    # bivariate-RE one in `observation_arrays`, the joint one in `build`. On the
+    # normal fit path the prepare stage has already run the same guard on the same
+    # column, so this is a no-op there.
+    y_values = np.asarray(analysis_df[y_col], dtype=float)
+    require_valid_counts(y_values, y_col, definition.n_trials)
+    y_obs = y_values.astype(int)
     study_codes = np.asarray(analysis_df["study_code"], dtype=int)
 
     n = len(X_obs)
@@ -310,11 +339,12 @@ def build_univariate_re_model(
         partition_subject_rows(subject_codes) if marginalisation is not None else None
     )
 
-    # Validate
-    if not np.all(y_obs >= 0):
-        raise ValueError("y_obs contains negative counts.")
-    if not np.all(y_obs <= n_trials):
-        raise ValueError("y_obs exceeds n_trials.")
+    # Range validation happens before the integer cast, above, and in the prepare
+    # stage -- never after it, where the cast has already truncated. Until
+    # 2026-08-31 this engine used the weaker `require_integral_counts` and carried a
+    # post-cast bounds check, so that check WAS load-bearing while the visually
+    # identical ones in the bivariate engines were dead. All six engines now call
+    # the same guard function, `build_utils.require_valid_counts`.
 
     # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
@@ -376,7 +406,7 @@ def build_univariate_re_model(
     L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
     # Slope anchors
-    slope_age_a_z, slope_age_b_z = slope_anchor_logit_coeffs(
+    slope_age_a_z, slope_age_b_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
     )
 
@@ -473,7 +503,7 @@ def build_univariate_re_model(
         # against the global intercept/slope (R-hat failure at rep-hightune). This is
         # an intentional identifiability constraint, NOT a prior-preserving
         # reparameterisation: it removes the group-mean degree of freedom (that is
-        # the ridge) and imposes a -1/K correlation. ZeroSumNormal(sigma=1) would
+        # the ridge) and imposes a -1/(K-1) correlation. ZeroSumNormal(sigma=1) would
         # also shrink each marginal to Var = tau^2 * (K-1)/K; we rescale sigma by
         # sqrt(K/(K-1)) so the marginal per-study prior variance stays tau^2 (its
         # value before this change), leaving only the mean DOF removed. The tau * raw

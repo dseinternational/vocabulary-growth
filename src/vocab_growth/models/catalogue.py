@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
-from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.definitions import MODEL_REGISTRY, ModelDefinition
 
 # ============================================================
 # Engines
@@ -121,6 +121,51 @@ class EngineAdapter:
     a pass, so ``scripts/regenerate_plots.py`` prints this reason instead.
     """
 
+    samples_extractor: str | None = None
+    """Pure ``f(trace) -> samples`` for a replot, or ``None`` to re-sample instead.
+
+    Declared rather than probed. ``regenerate_plots.py`` used to decide this with
+    ``getattr(engine_module, "extract_model_samples", None)``, which made the branch
+    a function of an engine module's **import list**: ``common_bivariate_re`` imports
+    the shared predictive but not the shared extractor, so its eleven models silently
+    took the re-sampling path while the surrounding comment said the bivariate engines
+    reused stored draws. Adding that name for an unrelated reason would have flipped
+    eleven models' replot behaviour with nothing to notice.
+
+    ``None`` means the replot re-runs :attr:`posterior_predictive`, which is seeded
+    from the sampling configuration and so reproduces the stored draws. Whether an
+    engine that could expose an extractor *should* is a separate decision; these
+    declarations record what each engine does today.
+    """
+
+    posterior_predictive: str | None = None
+    """Posterior-predictive stage, re-run on replot when :attr:`samples_extractor`
+    is ``None``. Required exactly when an engine supports replot and declares no
+    extractor."""
+
+    def __post_init__(self) -> None:
+        """Refuse a replot declaration that cannot be carried out.
+
+        An engine that supports replot must say how the samples are obtained --
+        either a pure extractor or a posterior-predictive stage to re-run. Neither
+        would make ``regenerate_plots.py`` fail at the point of use, after it had
+        already staged an output directory.
+        """
+        if not self.supports_replot:
+            return
+        if self.samples_extractor is None and self.posterior_predictive is None:
+            raise ValueError(
+                f"engine {self.name!r} declares a plot stage but neither "
+                "'samples_extractor' nor 'posterior_predictive', so a replot has no "
+                "way to obtain model samples."
+            )
+        if self.samples_extractor is not None and self.posterior_predictive is not None:
+            raise ValueError(
+                f"engine {self.name!r} declares both 'samples_extractor' and "
+                "'posterior_predictive'; a replot uses exactly one, so declaring "
+                "both hides which."
+            )
+
     @property
     def supports_replot(self) -> bool:
         """Whether a fitted model on this engine can have its figures redrawn."""
@@ -130,7 +175,14 @@ class EngineAdapter:
         """The callable this adapter names in ``attribute``.
 
         Raises ``AttributeError`` naming both the engine and the field, rather
-        than returning ``None`` for a caller to trip over later.
+        than returning ``None`` for a caller to trip over later -- but only for a
+        hook this engine declares as absent. A field name *misspelt by the caller*
+        raises from the ``getattr`` below with only that name, and a declared hook
+        the module does not actually define raises from ``getattr`` on the module,
+        naming the module rather than the engine. Both are pinned by
+        ``tests/test_model_catalogue.py``, which is what makes the declarations
+        trustworthy enough for this to return ``Any``: the return type cannot be
+        narrowed while the hooks have five different signatures.
         """
         name = getattr(self, attribute)
         if name is None:
@@ -164,6 +216,7 @@ ENGINES: dict[str, EngineAdapter] = {
             fit="fit_single_outcome_model",
             plots="run_standard_plots",
             plots_call="outcome_label",
+            samples_extractor="extract_model_samples",
         ),
         EngineAdapter(
             name="univariate_re",
@@ -194,11 +247,18 @@ ENGINES: dict[str, EngineAdapter] = {
             priors="configure_bivariate_priors",
             build="build_model",
             prior_checks="prior_predictive_checks",
-            prior_checks_call="context",
+            # "definition", like the RE engine: the stage's `definition` parameter
+            # used to default to None so VG05 could omit it, and this convention
+            # recorded that. VG05 has no child effects, so `prior_child_checks`
+            # adds nothing for it and passing the definition is byte-identical --
+            # one convention fewer, and no optional parameter pretending a caller
+            # might not have one.
+            prior_checks_call="definition",
             frame_builder="build_bivariate_analysis_frame",
             fit="fit_bivariate_model",
-            plots="_run_bivariate_joint_plots",
+            plots="run_bivariate_joint_plots",
             plots_call="definition",
+            samples_extractor="extract_model_samples",
         ),
         EngineAdapter(
             name="bivariate_re",
@@ -211,8 +271,13 @@ ENGINES: dict[str, EngineAdapter] = {
             frame_builder="build_bivariate_re_analysis_frame",
             fit="fit_bivariate_re_model",
             stages="bivariate_re_stages",
-            plots="_run_bivariate_joint_plots",
+            plots="run_bivariate_joint_plots",
             plots_call="definition",
+            # This engine imports the shared predictive from `common_bivariate` but
+            # not the shared extractor, so its eleven models re-run the predictive
+            # on replot. Declared, not inferred: the old `getattr` probe made the
+            # branch depend on this module's import list.
+            posterior_predictive="sample_posterior_predictive",
         ),
         EngineAdapter(
             name="trivariate",
@@ -224,8 +289,9 @@ ENGINES: dict[str, EngineAdapter] = {
             prior_checks_call="context",
             frame_builder="build_trivariate_analysis_frame",
             fit="fit_trivariate_model",
-            plots="_run_trivariate_plots",
+            plots="run_trivariate_plots",
             plots_call="context",
+            samples_extractor="extract_model_samples",
         ),
         EngineAdapter(
             name="joint",
@@ -238,8 +304,12 @@ ENGINES: dict[str, EngineAdapter] = {
             frame_builder="build_joint_analysis_frame",
             fit="fit_joint_model",
             stages="joint_stages",
-            plots="_run_joint_plots",
+            plots="run_joint_plots",
             plots_call="context",
+            # The joint engine builds its samples inside the posterior-predictive
+            # stage, so there is no pure extractor to declare and the whole stage
+            # is re-run.
+            posterior_predictive="sample_posterior_predictive",
         ),
     )
 }
@@ -263,7 +333,7 @@ class RegisteredModel:
     definition class and run on different engines."""
 
     @property
-    def definition(self):
+    def definition(self) -> ModelDefinition:
         """The registered statistical definition, from ``definitions.py``.
 
         A property rather than a stored field so the catalogue cannot hold a
