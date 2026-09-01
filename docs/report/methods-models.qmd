@@ -5,7 +5,7 @@ abstract: "*Statistical models provide a framework for expressing hypotheses, qu
 # Models {#sec-models}
 
 ::: {.callout-note}
-Drafted in part by LLM-based AI tools (Claude Code/Fable 5).
+Drafted in part by LLM-based AI tools (Claude Code/Fable 5, Claude Code/Opus 5).
 :::
 
 To describe trajectories of word learning, we must estimate the number of words children understand, say or sign at different ages. Averages are insufficient: families and practitioners also want to know ranges -- the extents to which children tend to differ at each age. Our target is therefore the distributions of word counts at monthly age intervals, describing both typical counts and the spreads around them.
