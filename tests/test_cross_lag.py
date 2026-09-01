@@ -16,12 +16,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from vocab_growth.models.common_bivariate_re import (
-    _compute_prev_wave_lag,
-    _validate_cross_lag,
-    compute_prev_wave_lag,
+from vocab_growth.models.cross_lag import (
     cross_lag_audit_frame,
+    prev_wave_lag,
+    prev_wave_lag_for_frame,
+    validate_cross_lag,
 )
+from vocab_growth.models.definitions import VG16
 from vocab_growth.models.likelihood_utils import (
     LAG_ZERO_CLIP,
     LAG_ZERO_CONTINUITY,
@@ -51,8 +52,23 @@ def _synthetic_df():
     )
 
 
+def test_vg16_is_the_definition_these_tests_assume():
+    """VG16 leaves both lag settings at the primitive's defaults.
+
+    Every frame-level call below passes VG16, because
+    :func:`prev_wave_lag_for_frame` requires a definition -- the point of which is
+    that a caller cannot silently get the defaults for a variant that moved them.
+    The counts and logits asserted throughout this module were written against
+    those defaults, so this pins the one fact that makes them still apply. If a
+    future VG16 sets a gap ceiling or the continuity correction, this fails here
+    rather than as a wrong number in fifteen other tests.
+    """
+    assert VG16.lag_max_gap_months is None
+    assert VG16.lag_zero_handling == LAG_ZERO_CLIP
+
+
 def test_compute_prev_wave_lag_identifies_prior_understood_wave():
-    prev_idx, has_lag_f, _ = _compute_prev_wave_lag(_synthetic_df(), N_TRIALS)
+    prev_idx, has_lag_f, _ = prev_wave_lag_for_frame(_synthetic_df(), N_TRIALS, VG16)
 
     # Only rows with a valid earlier understood wave carry a lag.
     np.testing.assert_array_equal(has_lag_f, [0, 1, 1, 0, 0, 0, 0, 1, 1])
@@ -64,7 +80,7 @@ def test_compute_prev_wave_lag_identifies_prior_understood_wave():
 
 
 def test_compute_prev_wave_lag_logit_of_prior_understood():
-    _, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(_synthetic_df(), N_TRIALS)
+    _, has_lag_f, y_u_prev_logit = prev_wave_lag_for_frame(_synthetic_df(), N_TRIALS, VG16)
 
     # Non-lagged rows are 0; lagged rows carry the logit of the prior wave's proportion.
     np.testing.assert_allclose(
@@ -89,7 +105,7 @@ def test_compute_prev_wave_lag_ignores_same_age_duplicates():
         }
     )
 
-    prev_idx, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(df, N_TRIALS)
+    prev_idx, has_lag_f, y_u_prev_logit = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
 
     np.testing.assert_array_equal(has_lag_f, [0, 0, 1])
     assert prev_idx[2] == 1
@@ -121,7 +137,7 @@ def test_compute_prev_wave_lag_parallel_form_rows_share_the_wave_source(
         }
     )
 
-    prev_idx, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(df, N_TRIALS)
+    prev_idx, has_lag_f, y_u_prev_logit = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
 
     np.testing.assert_array_equal(has_lag_f, [0, 1, 1])
     np.testing.assert_array_equal(prev_idx[[1, 2]], [0, 0])
@@ -146,7 +162,7 @@ def test_compute_prev_wave_lag_selects_largest_count_at_the_source_wave():
 
     for order in ([0, 1, 2], [1, 0, 2], [2, 1, 0]):
         shuffled = df.iloc[order].reset_index(drop=True)
-        _, has_lag_f, y_u_prev_logit = _compute_prev_wave_lag(shuffled, N_TRIALS)
+        _, has_lag_f, y_u_prev_logit = prev_wave_lag_for_frame(shuffled, N_TRIALS, VG16)
         target = shuffled.index[shuffled["age"] == 30][0]
         np.testing.assert_array_equal(has_lag_f[target], 1.0)
         np.testing.assert_allclose(y_u_prev_logit[target], logit(300 / 800), rtol=1e-6)
@@ -174,14 +190,14 @@ def test_compute_prev_wave_lag_is_row_order_invariant():
     )
     n = len(df)
     age = df["age"].to_numpy(float)
-    prev0, has0, ylog0 = _compute_prev_wave_lag(df, N_TRIALS)
+    prev0, has0, ylog0 = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
     source_age0 = np.where(has0 > 0, age[prev0], np.nan)
 
     rng = np.random.default_rng(20260823)
     for _ in range(10):
         perm = rng.permutation(n)
         shuffled = df.iloc[perm].reset_index(drop=True)
-        prev_p, has_p, ylog_p = _compute_prev_wave_lag(shuffled, N_TRIALS)
+        prev_p, has_p, ylog_p = prev_wave_lag_for_frame(shuffled, N_TRIALS, VG16)
         # Row k of the shuffle is original row perm[k]; every per-row output
         # must follow it, and the source's identity (its age and its count via
         # the logit) must be the same wave whichever row index carries it.
@@ -201,13 +217,13 @@ def test_compute_prev_wave_lag_is_row_order_invariant():
 
 def test_compute_prev_wave_lag_array_api_matches_dataframe_adapter():
     df = _synthetic_df()
-    from_arrays = compute_prev_wave_lag(
+    from_arrays = prev_wave_lag(
         df["subject_code"].to_numpy(int),
         df["age"].to_numpy(float),
         df["understood"].to_numpy(float),
         N_TRIALS,
     )
-    from_frame = _compute_prev_wave_lag(df, N_TRIALS)
+    from_frame = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
     for a, b in zip(from_arrays, from_frame, strict=True):
         np.testing.assert_array_equal(a, b)
 
@@ -222,7 +238,7 @@ def test_cross_lag_audit_frame_records_support_gaps_forms_and_branch():
             "survey_vocab_max": [396.0, 810.0, 680.0, 810.0, 810.0],
         }
     )
-    prev_idx, has_lag_f, _ = _compute_prev_wave_lag(df, N_TRIALS)
+    prev_idx, has_lag_f, _ = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
     # Rows 1, 2 and 4 carry a spoken observation: 1 conditional, 2 and 4 marginal.
     audit = cross_lag_audit_frame(
         df,
@@ -263,7 +279,7 @@ def test_cross_lag_audit_frame_tolerates_minimal_frames():
             "understood": [100.0, 200.0],
         }
     )
-    prev_idx, has_lag_f, _ = _compute_prev_wave_lag(df, N_TRIALS)
+    prev_idx, has_lag_f, _ = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
     audit = cross_lag_audit_frame(
         df,
         prev_idx,
@@ -278,18 +294,18 @@ def test_cross_lag_audit_frame_tolerates_minimal_frames():
 
 @pytest.mark.parametrize("baseline", ["population", "within"])
 def test_validate_cross_lag_accepts_valid_config(baseline):
-    _validate_cross_lag(baseline, use_subject_re_u=True)  # no raise
+    validate_cross_lag(baseline, subject_re_u_active=True)  # no raise
 
 
 def test_validate_cross_lag_rejects_unknown_baseline():
     with pytest.raises(ValueError, match="lag_baseline"):
-        _validate_cross_lag("bogus", use_subject_re_u=True)
+        validate_cross_lag("bogus", subject_re_u_active=True)
 
 
 @pytest.mark.parametrize("baseline", ["population", "within"])
 def test_validate_cross_lag_requires_subject_re_u(baseline):
     with pytest.raises(ValueError, match="use_subject_re_u"):
-        _validate_cross_lag(baseline, use_subject_re_u=False)
+        validate_cross_lag(baseline, subject_re_u_active=False)
 
 
 # --- Gap ceiling and zero-count handling (issue #242) --------------------------
@@ -303,8 +319,8 @@ def test_gap_ceiling_drops_the_lag_but_keeps_the_row():
     a sample-size change.
     """
     df = _synthetic_df()
-    base_idx, base_lag, _ = _compute_prev_wave_lag(df, N_TRIALS)
-    idx, lag, logits = compute_prev_wave_lag(
+    base_idx, base_lag, _ = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
+    idx, lag, logits = prev_wave_lag(
         df["subject_code"].to_numpy(int),
         df["age"].to_numpy(float),
         df["understood"].to_numpy(float),
@@ -327,8 +343,8 @@ def test_gap_ceiling_never_changes_which_wave_is_the_source():
     one that was rejected.
     """
     df = _synthetic_df()
-    base_idx, base_lag, _ = _compute_prev_wave_lag(df, N_TRIALS)
-    idx, lag, _ = compute_prev_wave_lag(
+    base_idx, base_lag, _ = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
+    idx, lag, _ = prev_wave_lag(
         df["subject_code"].to_numpy(int),
         df["age"].to_numpy(float),
         df["understood"].to_numpy(float),
@@ -341,8 +357,8 @@ def test_gap_ceiling_never_changes_which_wave_is_the_source():
 
 def test_no_ceiling_reproduces_the_historical_lag_exactly():
     df = _synthetic_df()
-    base = _compute_prev_wave_lag(df, N_TRIALS)
-    same = compute_prev_wave_lag(
+    base = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
+    same = prev_wave_lag(
         df["subject_code"].to_numpy(int),
         df["age"].to_numpy(float),
         df["understood"].to_numpy(float),
@@ -368,8 +384,8 @@ def test_continuity_correction_moves_a_zero_source_off_the_clip():
         df["understood"].to_numpy(float),
         N_TRIALS,
     )
-    _, _, clipped = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CLIP)
-    _, _, corrected = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CONTINUITY)
+    _, _, clipped = prev_wave_lag(*args, zero_handling=LAG_ZERO_CLIP)
+    _, _, corrected = prev_wave_lag(*args, zero_handling=LAG_ZERO_CONTINUITY)
 
     assert clipped[1] == pytest.approx(logit(1e-4), rel=1e-9)
     assert corrected[1] == pytest.approx(logit(0.5 / (N_TRIALS + 1)), rel=1e-9)
@@ -390,15 +406,15 @@ def test_continuity_correction_barely_moves_a_non_boundary_source():
         df["understood"].to_numpy(float),
         N_TRIALS,
     )
-    _, _, clipped = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CLIP)
-    _, _, corrected = compute_prev_wave_lag(*args, zero_handling=LAG_ZERO_CONTINUITY)
+    _, _, clipped = prev_wave_lag(*args, zero_handling=LAG_ZERO_CLIP)
+    _, _, corrected = prev_wave_lag(*args, zero_handling=LAG_ZERO_CONTINUITY)
     assert abs(corrected[1] - clipped[1]) < 0.01
 
 
 def test_unknown_zero_handling_is_rejected():
     df = _synthetic_df()
     with pytest.raises(ValueError, match="lag_zero_handling"):
-        compute_prev_wave_lag(
+        prev_wave_lag(
             df["subject_code"].to_numpy(int),
             df["age"].to_numpy(float),
             df["understood"].to_numpy(float),

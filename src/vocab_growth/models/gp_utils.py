@@ -19,13 +19,26 @@ Two builders wrap it, differing only in how the same curve is parameterised:
 from which the intercept and slope are derived). Models migrate one at a time;
 see :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams`.
 
-It also provides the trend + HSGP construction (``trend_and_gp`` /
-``intercept_and_gp``) shared by every engine. Because these carry the sole
-RNG-bearing call (``hsgp.prior()``), they are parameterised (``suffix``,
-``store_deterministic``, ``latent_name``, ``anchor_idx``, ``grid``) so each engine
-reproduces its previous PyMC graph byte-for-byte (same free RVs, in the same order,
-with the same names and ``logp``); the named-``Deterministic`` differences between
-engines change only what is stored in the trace, not the sampled distribution.
+It also provides the mean + HSGP constructions shared by every engine. They differ
+only in the mean term and share the HSGP tail through :func:`_gp_from_mean`:
+:func:`trend_and_gp` (a logit-linear age trend, anchored at two reference ages —
+every understood and production-ratio trajectory in the family) and
+:func:`tent_and_gp` (three anchors interpolated as a tent meeting at a peak, used
+for the signed ratio by VG14 and VG15, where a free age slope would extrapolate
+the ratio below the data floor; it replaced an intercept-only builder in #154).
+Because these carry the sole RNG-bearing call (``hsgp.prior()``), they are
+parameterised (``suffix``, ``store_deterministic``, ``latent_name``,
+``anchor_idx``, ``grid``) so each engine reproduces its previous PyMC graph
+byte-for-byte (same free RVs, in the same order, with the same names and
+``logp``); the named-``Deterministic`` differences between engines change only
+what is stored in the trace, not the sampled distribution.
+
+Child-effect and variance builders live here too, and are tabulated by structure
+in :mod:`vocab_growth.models.subject_effects`, which resolves *which* structure a
+definition selects but holds none of the builders: :func:`build_child_factor`
+(VG22's low-rank factor), :func:`build_child_slope` (VG19's per-child slope),
+:func:`build_subject_scale_of_z` (Proposal A1's age-varying scale) and
+:func:`build_variance_partition` (the shared subject/dispersion budget).
 """
 
 from __future__ import annotations
@@ -37,6 +50,8 @@ import pymc as pm
 import pytensor.tensor as pt
 from dse_research_utils.statistics.models.pymc_utils import logit
 from pytensor.tensor.linalg import solve as pt_solve
+
+from vocab_growth.models.build_utils import CLAMP_SOFTNESS
 
 
 def make_kappa_of_z(kappa_min, a_kappa, b_kappa):
@@ -641,18 +656,6 @@ class GPGrid:
     x_center_z: float | None = None
 
 
-#: Sharpness of the soft clamp above the high anchor, in units of the anchor span
-#: (``beta = _CLAMP_SOFTNESS / (sb_z - sa_z)``). Stating it relative to the span
-#: makes the rounding scale-free: whatever a model's age standardisation, the
-#: mean's largest departure from a hard ``min(z, sb_z)`` is
-#: ``slope * log(2) / beta`` = ``slope * (sb_z - sa_z) * log(2) / 50``, i.e. 1.4%
-#: of the anchor span, which for the Down syndrome 24-84 month anchors is about
-#: 0.8 months of age. Raising it sharpens the corner toward the hard clamp (and
-#: its elbow); lowering it rounds the corner further below the anchor, which eats
-#: into the region where ``p_slope_hi`` is meant to be interpretable.
-_CLAMP_SOFTNESS = 50.0
-
-
 def _soft_clamp_z(z, grid):
     """Soft minimum of ``z`` and ``grid.sb_z`` — linear below, flat above.
 
@@ -661,7 +664,7 @@ def _soft_clamp_z(z, grid):
     both directions: the departure from ``min(z, sb_z)`` decays exponentially away
     from the anchor and is at most ``log(2) / beta`` there.
     """
-    beta = _CLAMP_SOFTNESS / (grid.sb_z - grid.sa_z)
+    beta = CLAMP_SOFTNESS / (grid.sb_z - grid.sa_z)
     return grid.sb_z - pt.softplus(beta * (grid.sb_z - z)) / beta
 
 
@@ -723,7 +726,7 @@ def trend_and_gp(
 
     The cost is that ``p_slope_hi`` is no longer *exactly* the mean at the high
     anchor age — it is short by ``slope * log(2) / beta``, which at
-    ``_CLAMP_SOFTNESS`` = 50 is 1.4% of the anchor span (about 0.8 months of age
+    ``build_utils.CLAMP_SOFTNESS`` = 50 is 1.4% of the anchor span (about 0.8 months of age
     for the Down syndrome models). Between the anchors the mean is otherwise
     untouched, so both anchor priors carry over unchanged.
     """
@@ -746,51 +749,6 @@ def trend_and_gp(
     )
     return _gp_from_mean(
         mean_trend,
-        cfg_ell=cfg_ell,
-        cfg_eta=cfg_eta,
-        suffix=suffix,
-        X_all_z_data=X_all_z_data,
-        grid=grid,
-        store_deterministic=store_deterministic,
-        latent_name=latent_name,
-        anchor_idx=anchor_idx,
-        n_obs=n_obs,
-        nuisance_basis=nuisance_basis,
-    )
-
-
-def intercept_and_gp(
-    *,
-    cfg_intercept,
-    cfg_ell,
-    cfg_eta,
-    suffix,
-    X_all_z_data,
-    grid,
-    store_deterministic,
-    latent_name=None,
-    anchor_idx=None,
-    n_obs=None,
-):
-    """Intercept-only mean (no age slope) + HSGP deviation; full-grid latent.
-
-    Used for the signed ratio, where a free age slope would extrapolate the ratio
-    below the data floor: the mean is the free RV ``intercept{suffix}`` (created via
-    ``to_pymc``, *not* a ``Deterministic``) and the GP carries the age-varying
-    shape. Otherwise identical to :func:`trend_and_gp` (see it for the parameters).
-    When anchored the nuisance basis is ``[1]`` only — the mean carries no age slope,
-    so a linear GP direction is genuine signal here and must not be projected out;
-    only the level (co-identified with the free ``intercept``) is removed, then the
-    GP is pinned to zero at the reference-age anchor row.
-    """
-    intercept = cfg_intercept.to_pymc(f"intercept{suffix}")
-    nuisance_basis = (
-        pt.stack([pt.ones_like(X_all_z_data[:, 0])], axis=1)
-        if anchor_idx is not None
-        else None
-    )
-    return _gp_from_mean(
-        intercept,
         cfg_ell=cfg_ell,
         cfg_eta=cfg_eta,
         suffix=suffix,
@@ -970,7 +928,7 @@ def _gp_from_mean(
 ):
     """Shared HSGP tail: build ell/eta/HSGP, sample ``g_unit``, combine with the mean.
 
-    Factored out of :func:`trend_and_gp` / :func:`intercept_and_gp` so the two
+    Factored out of :func:`trend_and_gp` / :func:`tent_and_gp` so the mean builders
     differ only in their mean term. ``ell_unit`` and ``eta`` are created after the
     mean term and before the single RNG-bearing ``hsgp.prior`` call, so the free-RV
     stream is identical across engines. When ``anchor_idx`` is set the GP is

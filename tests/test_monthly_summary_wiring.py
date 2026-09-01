@@ -164,3 +164,41 @@ def test_joint_engine_scopes_n_obs_per_outcome():
     # It must select on the outcome column rather than handing over the frame.
     assert 'analysis_df[column].notna()' in source
     assert 'X_obs=context.analysis_df["age"]' not in source
+
+# --------------------------------------------------------------------------
+# No engine may rely on the emitter's interval-kind default
+# --------------------------------------------------------------------------
+
+_ENGINE_MODULES_WITH_MONTHLY = (common, cb, ct, cj)
+
+
+@pytest.mark.parametrize(
+    "module", _ENGINE_MODULES_WITH_MONTHLY, ids=lambda m: m.__name__.rpartition(".")[2]
+)
+def test_every_emit_monthly_summary_call_passes_interval_kind(module):
+    """`emit_monthly_summary` defaults `interval_kind` to "eti".
+
+    That default is a convenience for a direct caller, not a licence for an engine:
+    an engine that omits it pins its monthly tables to ETI while the rest of its
+    reporting follows `context.reporting.interval_kind`. The bivariate and trivariate
+    engines had omitted it. Checked as a rule on the source rather than by running a
+    fit, so it costs nothing and covers the engines no CI job samples.
+    """
+    import ast
+
+    tree = ast.parse(inspect.getsource(module))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "emit_monthly_summary"
+    ]
+    assert calls, f"{module.__name__} does not call emit_monthly_summary"
+    for call in calls:
+        passed = {kw.arg for kw in call.keywords if kw.arg}
+        assert "interval_kind" in passed, (
+            f"{module.__name__}:{call.lineno} calls emit_monthly_summary without "
+            "interval_kind, so it silently takes the \"eti\" default"
+        )
+

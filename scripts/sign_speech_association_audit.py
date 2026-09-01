@@ -51,7 +51,7 @@ import pandas as pd
 import statsmodels.api as sm
 from scipy import stats
 
-from vocab_growth.models import common_joint_modality as cjm
+from vocab_growth import cross_tab_sources
 from vocab_growth.reporting import console, dataframe_table, heading, key_value_table
 
 WITHIN_UNDERSTOOD = ("uk_02", "uk_07", "es_01")
@@ -62,9 +62,9 @@ WITHIN_UNDERSTOOD = ("uk_02", "uk_07", "es_01")
 # ----------------------------------------------------------------------------
 def within_understood_cells() -> pd.DataFrame:
     """Four-cell rows from the three sources that partition understood words."""
-    four_02, _ = cjm._load_uk02_four_cell()
-    four_07, _ = cjm._load_uk07_four_cell()
-    four_es, _ = cjm._load_es01_four_cell()
+    four_02, _ = cross_tab_sources.load_uk02_four_cell()
+    four_07, _ = cross_tab_sources.load_uk07_four_cell()
+    four_es, _ = cross_tab_sources.load_es01_four_cell()
 
     def frame(study, src, age, neither, sign_only, speak_only, both, subject, **extra):
         out = pd.DataFrame({
@@ -104,7 +104,7 @@ def within_understood_cells() -> pd.DataFrame:
 
 def nz01_cells() -> pd.DataFrame:
     """nz_01's produced-only three-cell partition (no comprehension total)."""
-    raw = cjm._load_nz01_produced_cells()
+    raw = cross_tab_sources.load_nz01_produced_cells()
     out = pd.DataFrame({
         "study": "nz_01",
         "subject_id": raw["subject_id"].to_numpy(),

@@ -144,6 +144,41 @@ def test_sample_structs_carry_no_observation_level_posterior(struct):
         assert "X_obs" in names
 
 
+#: Fields that were declared, populated from the trace and then read by nothing --
+#: removed in the readability sweep of 2026-08-31. Listed rather than left to a
+#: reviewer's grep because the cost of re-adding one is invisible: the field
+#: compiles, the extractor fills it, and the only symptom is a slightly larger
+#: read of a trace nobody consults. ``obs_sign_mask`` and ``prod_cell_ages`` are
+#: here for a slightly different reason: they were unread as *fields*, and their
+#: local extractions went too once the code that used them moved -- the sign mask's
+#: #67 alignment check into `posterior_analysis.expand_observed_to_obs_id`, which
+#: reads the mask itself, and the produced-cell ages out of
+#: `_extract_produced_cell_observations`, which never had a reader.
+_REMOVED_UNREAD_SAMPLE_FIELDS = {
+    "X_plot_z", "X_query_z", "f_query",
+    "f_u_query", "f_s_query", "h_plot", "h_query",
+    "g_sign_plot", "g_sign_query", "f_sign_query",
+    "obs_sign_mask", "cell_ages", "prod_cell_ages",
+}
+
+
+@pytest.mark.parametrize(
+    "struct",
+    [ModelSamples, BivariateModelSamples, TrivariateModelSamples, JointModelSamples],
+)
+def test_sample_structs_do_not_reintroduce_an_unread_field(struct):
+    """No samples struct re-declares a field that nothing reads.
+
+    Companion to the observation-level rule above, on the same principle: a
+    declared field obliges the extractor to populate it, so an unread one is a
+    trace read and a construction argument bought for nothing. If a field on this
+    list becomes genuinely needed, remove it here in the same change that adds the
+    consumer -- the point is that the consumer has to exist.
+    """
+    names = {f.name for f in dc_fields(struct)}
+    assert not names & _REMOVED_UNREAD_SAMPLE_FIELDS
+
+
 #: Trace dimensions the sampler is told not to store, so nothing may read a
 #: posterior variable indexed by one. Mirrors `fit_artifacts._is_recomputable_dim`.
 _UNSTORED_DIMS = {"obs_id", "all_id"}

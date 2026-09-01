@@ -124,6 +124,22 @@ def prepare_bivariate_observations(
     :class:`~vocab_growth.models.subject_effects.SubjectEffectPlan` rather than
     being re-derived here: which outcomes carry a child effect is that plan's
     question, and asking it twice is how the two answers come apart.
+
+    **Frame preconditions.** This is the *bivariate-RE* engine's derivation, not a
+    general one, and it reads two columns beyond the two outcomes:
+
+    * ``study_code`` -- so a frame without study codes raises ``KeyError``. VG05's
+      frame has none and VG05 has no study effect, which is why the plain bivariate
+      engine does not call this. Do not add the column to VG05's frame to make it
+      fit: ``analysis_frames.analysis_frame_hash`` hashes the schema, so a new
+      column stales VG05's fitted output.
+    * ``holdout`` is optional and defaults to all-False.
+
+    Routing another engine through this function therefore needs a parameter for the
+    study codes, not a one-line call; and the trivariate and joint cases want
+    *sibling* functions here rather than a generalisation of this one. Its only
+    caller is `common_bivariate_re.build_model_re`, which eleven registered models
+    run: VG07-VG10, VG13, VG16 and VG19-VG23.
     """
     has_u = analysis_df["understood"].notna().values
     has_s = analysis_df["spoken"].notna().values
@@ -143,7 +159,7 @@ def prepare_bivariate_observations(
     y_u_values = np.asarray(analysis_df.loc[has_u_train, "understood"], dtype=float)
     # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
     # fractional or out-of-range understood count would corrupt the likelihood
-    # without a trace -- the post-cast bounds checks cannot catch 810.9 or -0.1,
+    # without a trace -- a post-cast bound cannot catch 810.9 or -0.1,
     # which truncate into range. The spoken side gets the same
     # finite/integral/range checks from `nested_outcome_spec` (#240, #236).
     require_valid_counts(y_u_values, "understood", n_trials)

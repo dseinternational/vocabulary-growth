@@ -49,6 +49,7 @@ from enum import Enum
 
 from vocab_growth.models.definitions import (
     AgeVaryingSubjectScale,
+    ModelDefinition,
     SubjectFactorPriorParams,
     SubjectSlopePriorParams,
     SubjectVariancePartitionParams,
@@ -65,6 +66,11 @@ UNIVARIATE_OUTCOME = ""
 #: actually has is read from the definition, not assumed: the bivariate engines
 #: carry ``u`` and ``q``, the joint modality engine adds ``sign``, and a plan
 #: that assumed two would drop VG15's third block without saying so.
+#:
+#: Note the set is ``u``/``q``/``sign`` and NOT ``u``/``s``/``sign``: a child
+#: effect is carried on the production *ratio*, which is ``q``. See the outcome
+#: suffix legend in :mod:`vocab_growth.models` for why the graph uses both
+#: ``q`` and ``s``, and what each means.
 OUTCOME_SUFFIXES = ("u", "q", "sign")
 
 #: Default reference age for a child slope, in months — the Down syndrome pool's
@@ -227,7 +233,7 @@ def _outcome_effect(
     )
 
 
-def resolve(definition) -> SubjectEffectPlan:
+def resolve(definition: ModelDefinition) -> SubjectEffectPlan:
     """The child-effect plan ``definition`` implies, with every rule applied.
 
     Works for both definition shapes: a single-outcome definition (``use_subject_re``)

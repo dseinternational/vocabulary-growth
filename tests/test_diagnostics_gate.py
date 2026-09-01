@@ -17,10 +17,10 @@ import pytest
 
 from vocab_growth.models.common import (
     ConvergenceGateError,
-    _report_diagnostic_warnings,
     diagnostics_var_names,
     enforce_convergence_gate,
     is_reporting_quality_config,
+    report_diagnostic_warnings,
 )
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 
@@ -97,14 +97,14 @@ def _payload(
 
 
 def test_banner_passes_on_clean_payload(capsys):
-    _report_diagnostic_warnings(_payload())
+    report_diagnostic_warnings(_payload())
     out = capsys.readouterr().out
     assert "✓" in out
     assert "free parameters" in out
 
 
 def test_banner_warns_on_failing_vector_elements(capsys):
-    _report_diagnostic_warnings(
+    report_diagnostic_warnings(
         _payload(
             rhat_failing=["g_unit_hsgp_coeffs_[3]"],
             ess_failing=["study_intercept[1]", "study_intercept[4]"],
@@ -120,7 +120,7 @@ def test_banner_warns_on_failing_vector_elements(capsys):
 
 
 def test_banner_claims_nothing_when_gate_scan_failed(capsys):
-    _report_diagnostic_warnings(_payload(max_rhat=None, min_ess=None))
+    report_diagnostic_warnings(_payload(max_rhat=None, min_ess=None))
     out = capsys.readouterr().out
     assert "✓" not in out
     assert "⚠" not in out

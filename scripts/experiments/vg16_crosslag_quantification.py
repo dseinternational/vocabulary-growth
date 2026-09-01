@@ -65,7 +65,7 @@ from vocab_growth.fit_artifacts import (
     require_valid_fit,
     source_data_hash,
 )
-from vocab_growth.models.common_bivariate_re import compute_prev_wave_lag
+from vocab_growth.models import cross_lag
 from vocab_growth.models.definitions import VG10, VG16
 
 VG10_DIR = "VG10-age-understood-spoken-ds-re-subj-uq-anchored"
@@ -124,8 +124,19 @@ def prev_wave_lag(age, subj, und):
     row-by-row walk reproduced its row-order-dependent lag-assignment defect
     here, so this script's identification-base figures inherited the bug they
     should have been able to detect.
+
+    The two settings are read off VG16 rather than left to the primitive's own
+    defaults. They are equal today, so nothing here moves; a variant that changed
+    either would previously have been reconstructed under the wrong one.
     """
-    return compute_prev_wave_lag(subj, age, und, N_TRIALS)
+    return cross_lag.prev_wave_lag(
+        subj,
+        age,
+        und,
+        N_TRIALS,
+        max_gap_months=VG16.lag_max_gap_months,
+        zero_handling=VG16.lag_zero_handling,
+    )
 
 
 def age_equivalent(target_logit, grid_logit, grid_age):

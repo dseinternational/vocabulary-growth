@@ -23,6 +23,27 @@ from dataclasses import dataclass
 
 import numpy as np
 
+#: Sharpness of the soft clamp above the high slope anchor, in units of the anchor
+#: span (``beta = CLAMP_SOFTNESS / span``). Stating it relative to the span makes the
+#: rounding scale-free: whatever a model's age standardisation, the mean's largest
+#: departure from a hard ``min(age, hi_anchor)`` is ``slope * log(2) / beta`` =
+#: ``slope * span * log(2) / 50``, i.e. 1.4% of the anchor span, which for the Down
+#: syndrome 24-84 month anchors is about 0.8 months of age. Raising it sharpens the
+#: corner toward the hard clamp (and its elbow); lowering it rounds the corner
+#: further below the anchor, which eats into the region where ``p_slope_hi`` is meant
+#: to be interpretable.
+#:
+#: It lives here, in the pymc-free module, because two implementations need it and
+#: only one of them builds a graph: ``gp_utils._soft_clamp_z`` works in standardised
+#: age, and ``scripts/generate_prior_figures.py`` works in months for the methods
+#: chapter's figures. Because the constant is expressed per unit of span, the two are
+#: *exactly* equal, not merely close -- ``beta_z * (hi_z - z)`` reduces to
+#: ``CLAMP_SOFTNESS * (hi - age) / span`` with the standard deviation cancelling.
+#: ``tests/test_build_utils.py`` pins that equality. Those figures back the methods
+#: chapter and are not covered by ``sync_report_figures.py``'s validation, so a
+#: second copy of this number drifting would not be caught by the fit pipeline.
+CLAMP_SOFTNESS = 50.0
+
 
 def standardize_ages(X_obs: np.ndarray) -> tuple[float, float, np.ndarray]:
     """Return ``(mean, std, X_obs_z)`` for the observed ages.
@@ -255,26 +276,29 @@ def standardize_anchor_ages(
 ) -> tuple[float, float]:
     """Z-score a pair of reference ages against the observed-age standardisation.
 
-    Shared by every anchored parameterisation — the mean trajectory's slope
+    Shared by every *two*-anchor parameterisation — the mean trajectory's slope
     anchors and the dispersion curve's kappa anchors — so an age stated in a model
-    definition always reaches the graph through the same conversion.
+    definition always reaches the graph through the same conversion. The
+    three-anchor signed hump uses :func:`standardize_ages_to_z`, which is the same
+    arithmetic for an arbitrary number of anchors.
     """
     age_a, age_b = float(anchor_ages[0]), float(anchor_ages[1])
     return (age_a - X_obs_mean) / X_obs_std, (age_b - X_obs_mean) / X_obs_std
 
 
-def slope_anchor_logit_coeffs(
-    slope_anchors,
+def standardize_ages_to_z(
+    ages,
     *,
     X_obs_mean: float,
     X_obs_std: float,
-) -> tuple[float, float]:
-    """Return the z-scored slope-anchor ages ``(slope_age_a_z, slope_age_b_z)``.
+) -> tuple[float, ...]:
+    """Z-score any number of reference ages, in order.
 
-    Only the pure z-scoring is shared. The logit-difference computation of the
-    slope/intercept coefficients operates on PyMC random variables and stays
-    inline in each engine's model context.
+    The n-ary form of :func:`standardize_anchor_ages`, for the three-anchor signed
+    hump (``gp_utils.tent_and_gp``'s ``z_low`` / ``z_mid`` / ``z_hi``), which two
+    engines previously spelled out as three copies of the same subtract-and-divide.
+    Same arithmetic, so it moves no value and changes no graph -- it exists so that
+    "how does an age in a definition become a z" has one answer however many ages
+    are involved.
     """
-    return standardize_anchor_ages(
-        slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
-    )
+    return tuple((float(age) - X_obs_mean) / X_obs_std for age in ages)

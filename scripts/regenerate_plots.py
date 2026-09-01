@@ -31,7 +31,6 @@ Usage: regenerate_plots.py <model_id|all> [--config rep] [--output-dir DIR]
 """
 
 import argparse
-import importlib
 import os
 import shutil
 import sys
@@ -207,20 +206,19 @@ def regenerate(model_id: str, config: str, dry_run: bool = False) -> bool:
             interval_kind="eti",
         )
 
-        # The bivariate and trivariate engines expose a pure extractor, so the
-        # stored posterior-predictive draws are reused verbatim. The joint engine
-        # builds its samples inside the posterior-predictive stage, so that stage
-        # is re-run -- it is seeded from the sampling configuration, so it
-        # reproduces the stored draws rather than perturbing them, and it writes
-        # its trace copy into staging, never over the promoted one.
-        extractor = getattr(
-            importlib.import_module(engine.module), "extract_model_samples", None
-        )
-        if extractor is not None:
-            context.set_model_samples(extractor(context.trace))
+        # Which of these an engine takes is a CATALOGUE DECLARATION, not a probe of
+        # its module. `samples_extractor` names a pure `f(trace) -> samples`, so the
+        # stored posterior-predictive draws are reused verbatim; where it is None the
+        # engine builds its samples inside the posterior-predictive stage, which is
+        # re-run -- seeded from the sampling configuration, so it reproduces the
+        # stored draws rather than perturbing them, and it writes its trace copy into
+        # staging, never over the promoted one. The univariate, bivariate and
+        # trivariate engines declare an extractor; `bivariate_re` (eleven models) and
+        # `joint` do not.
+        if engine.samples_extractor is not None:
+            context.set_model_samples(engine.resolve("samples_extractor")(context.trace))
         else:
-            engine_module = importlib.import_module(engine.module)
-            engine_module.sample_posterior_predictive(context, definition)
+            engine.resolve("posterior_predictive")(context, definition)
 
         plots = engine.resolve("plots")
         plots_call = engine.plots_call

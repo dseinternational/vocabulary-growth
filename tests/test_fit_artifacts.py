@@ -23,7 +23,7 @@ from vocab_growth.fit_artifacts import (
     validate_fit_output,
     write_fit_state,
 )
-from vocab_growth.models.common import run_fit_pipeline
+from vocab_growth.models.common import PREPARE_STAGE_NAME, run_fit_pipeline
 from vocab_growth.models.definitions import VG01
 
 
@@ -441,7 +441,9 @@ def test_successful_pipeline_atomically_promotes_complete_fit(tmp_path, monkeypa
         Path(context.reporting.output_dir, "trace.nc").touch()
 
     try:
-        context = run_fit_pipeline("dev", VG01, stages=[("Prepare", prepare)])
+        context = run_fit_pipeline(
+            "dev", VG01, stages=[(PREPARE_STAGE_NAME, prepare)]
+        )
     finally:
         env.set_output_root(None)
 
@@ -450,3 +452,141 @@ def test_successful_pipeline_atomically_promotes_complete_fit(tmp_path, monkeypa
     state = json.loads((canonical / "fit_state.json").read_text())
     assert state["state"] == "complete"
     assert (canonical / "fit_manifest.json").is_file()
+
+# --------------------------------------------------------------------------
+# The two load-bearing lines in run_fit_pipeline
+# --------------------------------------------------------------------------
+
+
+def test_an_unclassified_sampling_tier_is_refused_before_the_banner(tmp_path, monkeypatch):
+    """`--config` has no argparse `choices`, so this is the only thing stopping an
+    unknown tier from reaching the sampler and producing output with no
+    convergence-gate classification. It used to be a bare
+    `is_reporting_quality_config(config)` expression statement with its return value
+    discarded -- one deletion from gone, with nothing pinning it at this call site.
+    """
+    env.set_output_root(str(tmp_path))
+    banner_calls = []
+    monkeypatch.setattr(
+        "vocab_growth.models.common.run_banner",
+        lambda *a, **k: banner_calls.append(a),
+    )
+
+    def never_called(_context):  # pragma: no cover - must not run
+        raise AssertionError("the pipeline ran a stage on an unclassified tier")
+
+    try:
+        with pytest.raises(ValueError, match="no convergence-gate classification"):
+            run_fit_pipeline(
+                "not-a-tier", VG01, stages=[(PREPARE_STAGE_NAME, never_called)]
+            )
+    finally:
+        env.set_output_root(None)
+    assert banner_calls == [], "the tier check must run before the banner"
+
+
+def test_a_pipeline_whose_first_stage_is_not_data_preparation_is_refused(
+    tmp_path, monkeypatch
+):
+    """The manifest is written after stage 0 and needs the prepared frame.
+
+    Before this was asserted, an engine author who put the priors stage first --
+    plausible, since priors depend on no data in any engine -- got "the fit
+    context for VGnn-dev has no analysis DataFrame set" from a manifest writer
+    they never invoked, with nothing in `run_fit_pipeline` to explain why ordering
+    mattered.
+    """
+    env.set_output_root(str(tmp_path))
+    monkeypatch.setattr(
+        "vocab_growth.models.common.env_info.report_environment_info", lambda: None
+    )
+    monkeypatch.setattr(
+        "vocab_growth.models.common.package_metadata.report_package_versions",
+        lambda packages: None,
+    )
+    monkeypatch.setattr("vocab_growth.models.common.run_banner", lambda *a, **k: None)
+
+    try:
+        with pytest.raises(RuntimeError, match="Stage 0 of this engine"):
+            run_fit_pipeline(
+                "dev", VG01, stages=[("Priors and hyperparameters", lambda ctx: None)]
+            )
+    finally:
+        env.set_output_root(None)
+
+
+def test_a_substituted_first_stage_that_loads_the_data_is_accepted(
+    tmp_path, monkeypatch
+):
+    """The recovery harness renames stage 0, and that must stay allowed.
+
+    `recovery/refit.py` and `scripts/experiments/vg10_under_vg20_truth.py` replace
+    the engine's own "Prepare data" with a loader for a simulated frame, under a
+    name that says so. An earlier version of the guard above compared stage 0's
+    *name*, which rejected both -- every `scripts/fit_recovery.py` fit died after
+    its loader stage had already run. The precondition the manifest writer actually
+    has is that the data is loaded, whatever the stage was called.
+    """
+    env.set_output_root(str(tmp_path))
+    monkeypatch.setattr(
+        "vocab_growth.models.common.env_info.report_environment_info", lambda: None
+    )
+    monkeypatch.setattr(
+        "vocab_growth.models.common.package_metadata.report_package_versions",
+        lambda packages: None,
+    )
+    monkeypatch.setattr("vocab_growth.models.common.run_banner", lambda *a, **k: None)
+
+    def load_simulated_data(context):
+        # The same two-row stub the "Prepare data" test above uses; what matters
+        # here is that a differently-named stage 0 sets the same two fields.
+        frame = pd.DataFrame(
+            {"study": ["toy", "toy"], "age": [24.0, 36.0], "spoken": [2, 12]}
+        )
+        context.set_model_data(
+            model_data.BinomialModelData(
+                X_obs=frame[["age"]].to_numpy(),
+                y_obs=np.array([2, 12]),
+                n_trials=810,
+            ),
+            frame,
+        )
+        # Finalisation requires it, as in the test above; nothing here reads it.
+        Path(context.reporting.output_dir, "trace.nc").touch()
+
+    reached = []
+    try:
+        run_fit_pipeline(
+            "dev",
+            VG01,
+            stages=[
+                ("Load simulated data", load_simulated_data),
+                ("Next stage", lambda ctx: reached.append(True)),
+            ],
+        )
+    finally:
+        env.set_output_root(None)
+
+    assert reached == [True], "the pipeline stopped after the substituted stage 0"
+
+
+def test_every_stage_factory_names_its_first_stage_the_way_the_pipeline_requires():
+    """The contract, checked against the engines that expose a stage factory.
+
+    The other engines build their stage lists inline inside their fit functions,
+    which cannot be called without fitting; those are covered by the two engines
+    here plus `tests/test_recovery_spec.py`, which asserts the same equality for
+    every recovery-capable model.
+    """
+    from vocab_growth.models import catalogue
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    checked = 0
+    for key, definition in MODEL_REGISTRY.items():
+        engine = catalogue.get(key).engine
+        if engine.stages is None:
+            continue
+        first = engine.resolve("stages")(definition)[0][0]
+        assert first == PREPARE_STAGE_NAME, f"{key} ({engine.name}): {first!r}"
+        checked += 1
+    assert checked >= 2, f"only {checked} models exercised this contract"

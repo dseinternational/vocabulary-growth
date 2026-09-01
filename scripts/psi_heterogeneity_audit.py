@@ -30,7 +30,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from vocab_growth.models import common_joint_modality as cjm
+from vocab_growth import cross_tab_sources
 from vocab_growth.reporting import console, dataframe_table, heading, key_value_table
 
 # Haldane-Anscombe correction: added to every cell before taking a per-child log
@@ -49,9 +49,9 @@ def _cells() -> pd.DataFrame:
     separately in :func:`report_association_by_source` with that caveat attached,
     because the reference set changes the odds ratio (see the uk_07 both-ways row).
     """
-    four_02, _ = cjm._load_uk02_four_cell()
-    four_07, _ = cjm._load_uk07_four_cell()
-    four_es, _ = cjm._load_es01_four_cell()
+    four_02, _ = cross_tab_sources.load_uk02_four_cell()
+    four_07, _ = cross_tab_sources.load_uk07_four_cell()
+    four_es, _ = cross_tab_sources.load_es01_four_cell()
 
     def frame(study, age, neither, sign_only, speak_only, both, subject):
         return pd.DataFrame({
@@ -139,7 +139,7 @@ def report_association_by_source(cells: pd.DataFrame) -> None:
         })
 
     # nz_01: within-PRODUCED cells, so its "neither" spans all unproduced items.
-    nz = cjm._load_nz01_produced_cells()
+    nz = cross_tab_sources.load_nz01_produced_cells()
     nz_cells = pd.DataFrame({
         "neither": nz["prod_signed_only"] * 0 + (675 - nz["prod_total"]),
         "sign_only": nz["prod_signed_only"],

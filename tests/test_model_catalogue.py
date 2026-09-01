@@ -124,6 +124,55 @@ def test_the_optional_hooks_are_all_or_nothing(engine_name):
 
 
 @pytest.mark.parametrize("engine_name", _ENGINE_NAMES)
+def test_a_replot_engine_declares_exactly_one_way_to_obtain_samples(engine_name):
+    """Either a pure extractor or a posterior-predictive stage to re-run, not both.
+
+    `regenerate_plots.py` used to decide this with
+    `getattr(engine_module, "extract_model_samples", None)`, so the branch was a
+    function of an engine module's import list rather than of any declaration:
+    `common_bivariate_re` imports the shared predictive but not the shared
+    extractor, and its eleven models therefore re-sampled while the surrounding
+    comment said otherwise. Adding that name for an unrelated reason would have
+    flipped eleven models with nothing to notice.
+    """
+    engine = ENGINES[engine_name]
+    declared = [
+        h for h in ("samples_extractor", "posterior_predictive")
+        if getattr(engine, h) is not None
+    ]
+    if not engine.supports_replot:
+        return
+    assert len(declared) == 1, (
+        f"{engine_name} declares {declared or 'neither'}; a replot uses exactly one"
+    )
+    assert callable(engine.resolve(declared[0]))
+
+
+@pytest.mark.parametrize("engine_name", _ENGINE_NAMES)
+def test_a_declared_extractor_really_is_importable_from_the_engine_module(engine_name):
+    """The declaration must match the module, in both directions.
+
+    A module that exports `extract_model_samples` while the catalogue declares
+    `posterior_predictive` is the old probe's behaviour re-emerging by accident, and
+    it would silently change which draws eleven models' figures are drawn from.
+    """
+    engine = ENGINES[engine_name]
+    module = importlib.import_module(engine.module)
+    exports_extractor = hasattr(module, "extract_model_samples")
+    if engine.samples_extractor is not None:
+        assert exports_extractor, (
+            f"{engine_name} declares samples_extractor but {engine.module} has no "
+            "extract_model_samples"
+        )
+    elif engine.supports_replot:
+        assert not exports_extractor, (
+            f"{engine.module} exports extract_model_samples but {engine_name} "
+            "declares posterior_predictive. Decide which the replot should use and "
+            "declare it -- do not leave the two disagreeing."
+        )
+
+
+@pytest.mark.parametrize("engine_name", _ENGINE_NAMES)
 def test_resolve_names_the_engine_and_the_field_when_a_hook_is_missing(engine_name):
     broken = EngineAdapter(**{**ENGINES[engine_name].__dict__, "build": "no_such_stage"})
     with pytest.raises(AttributeError, match="no_such_stage"):

@@ -51,7 +51,12 @@ from vocab_growth.fit_artifacts import (
     validate_fit_output,
     write_json_atomic,
 )
-from vocab_growth.models.common import ModelFitContext
+from vocab_growth.models.common import (
+    BUILD_STAGE_NAME,
+    PREPARE_STAGE_NAME,
+    PRIORS_STAGE_NAME,
+    ModelFitContext,
+)
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.recovery import compare
 from vocab_growth.recovery.spec import (
@@ -63,10 +68,6 @@ from vocab_growth.recovery.spec import (
     recovery_target,
 )
 from vocab_growth.reporting import console, key_value_table
-
-BUILD_STAGE_NAME = "Model definition and initialisation"
-PRIORS_STAGE_NAME = "Priors and hyperparameters"
-PREPARE_STAGE_NAME = "Prepare data"
 
 SYNTHETIC_FRAME_FILENAME = "synthetic_analysis_frame.parquet"
 TRUTH_FILENAME = "truth.nc"

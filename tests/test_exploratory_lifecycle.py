@@ -189,6 +189,22 @@ def test_each_module_says_its_output_must_not_be_published(module):
     assert "must not" in lowered and "publish" in lowered
 
 
+@pytest.mark.parametrize("module", _EXPLORATORY_MODULES)
+def test_the_publication_hazard_is_in_the_first_lines_not_buried(module):
+    """Position, not merely presence.
+
+    VG18 had it as the final clause of a 200-character line at the end of a 50-line
+    docstring whose *first* line is a different hazard, and VG17 had it as the
+    fourth paragraph. A reader who opens the file and reads the top has to meet it,
+    so this pins where it is rather than that it exists somewhere.
+    """
+    assert module.__doc__
+    head = module.__doc__.strip().splitlines()[:5]
+    joined = " ".join(head).lower()
+    assert "exploratory" in joined, head
+    assert "must not be published" in joined, head
+
+
 def test_the_package_records_why_productionising_is_a_statistical_decision():
     """Routing VG17 through `common_univariate_re` would change the model.
 

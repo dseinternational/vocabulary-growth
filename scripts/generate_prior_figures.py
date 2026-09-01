@@ -46,13 +46,13 @@ from scipy.stats import beta as beta_dist
 import vocab_growth.environment as local_env
 from vocab_growth.data_utils import load_combined_data
 from vocab_growth.intervals import DEFAULT_CI_PROB, INNER_CI_PROB
+from vocab_growth.models.build_utils import CLAMP_SOFTNESS
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 N_TRIALS = 810
 GP_DOMAIN_MONTHS = (8.0, 115.0)
 ELL_MONTHS_RANGE = (6.0, 18.0)
 ELL_UNIT = (3.0, 3.0)
-CLAMP_SOFTNESS = 50.0  # gp_utils._CLAMP_SOFTNESS
 
 C_DRAWS = "#E8863B"
 C_HIGHLIGHT = "#B4450E"

@@ -18,6 +18,7 @@ import dataclasses
 from vocab_growth.models.definitions import (
     KappaAnchorPriorParams,
     KappaPriorParams,
+    validate_model_definition,
 )
 
 
@@ -87,9 +88,22 @@ def make_variant(
                 f"{type(base).__name__} has no kappa attribute {attr!r}."
             )
         over[attr] = replace_kappa(getattr(base, attr), **sub)
-    return dataclasses.replace(
+    variant = dataclasses.replace(
         base,
         config_name=f"{base.config_name}-{config_suffix}",
         banner=f"{base.banner} [sensitivity: {config_suffix}]",
         **over,
     )
+    # Validate the VARIANT, not just the registered base. `validate_model_definition`
+    # is documented as the guard for a declarative specification and is cited from
+    # field docstrings as such, but it ran only from `validate_model_registry` -- so
+    # the sensitivity variants, which are fitted and reported like any other model,
+    # were never checked. They override precisely the fields it cross-checks:
+    # `slope_anchors`, `ages_query` and `gp_domain_months` together (the GP-domain
+    # containment check exists because a query age outside the domain extrapolates
+    # the HSGP basis), and `sign_peak_prior`, whose check exists because the engines
+    # index the pair straight into `pz.Beta`, which accepts a non-positive parameter
+    # and then samples garbage (#238). Both failure modes are silent-wrong-number.
+    # Every current variant passes, so this is inert today and costs nothing.
+    validate_model_definition(variant)
+    return variant

@@ -61,6 +61,36 @@ def extract_posterior_predictive_float(trace, name, dim):
     )
 
 
+def expand_observed_to_obs_id(trace, observed_name: str, mask_name: str):
+    """One likelihood's observed counts, expanded to obs_id length with NaN gaps.
+
+    A multi-outcome likelihood is registered only on the rows that carry its
+    outcome, so ``trace.observed_data[observed_name]`` is as long as that mask's
+    count, not as long as the frame. Plots and summaries index by obs_id, so the
+    vector is scattered back through the stored mask and left NaN elsewhere.
+
+    The length comparison is issue #67: if the mask stored in ``constant_data`` and
+    the rows the likelihood actually saw disagree, the scatter silently misaligns
+    every observation, and the figures look plausible. It was five verbatim copies
+    across the bivariate and trivariate engines before it lived here.
+
+    Not for the joint engine's two similarly-worded checks: those compare a
+    *posterior-predictive* array's leading dimension against a mask count, which is
+    a different pairing and a different failure.
+    """
+    mask = np.array(trace.constant_data[mask_name].values, dtype=bool)
+    observed = np.array(trace.observed_data[observed_name].values, dtype=float)
+    if int(mask.sum()) != observed.shape[0]:
+        raise ValueError(
+            f"{mask_name} count ({int(mask.sum())}) does not match observed "
+            f"{observed_name} length ({observed.shape[0]}); stored mask and "
+            "likelihood rows are misaligned (issue #67)."
+        )
+    expanded = np.full(len(mask), np.nan)
+    expanded[mask] = observed
+    return expanded
+
+
 def add_probability_estimand_columns(
     summary: pd.DataFrame,
     p_population: np.ndarray,

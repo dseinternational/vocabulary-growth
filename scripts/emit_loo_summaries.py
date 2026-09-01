@@ -37,8 +37,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from vocab_growth import environment as env  # noqa: E402
 from vocab_growth.models.common import (  # noqa: E402
     LOO_SUMMARY_FILENAME,
-    _loo_dropping_degenerate,
     emit_loo_summary,
+    loo_dropping_degenerate,
 )
 from vocab_growth.reporting import heading  # noqa: E402
 
@@ -110,13 +110,13 @@ def emit_for(model_id: str, directory: str) -> bool:
     dropped_by_label: dict[str, int] = {}
 
     if available == [SINGLE_OUTCOME]:
-        loo, dropped = _loo_dropping_degenerate(idata)
+        loo, dropped = loo_dropping_degenerate(idata)
         loo_by_label["all"] = loo
         dropped_by_label["all"] = dropped
     else:
         for var_name in available:
             label = OUTCOME_LABELS.get(var_name, var_name)
-            loo, dropped = _loo_dropping_degenerate(idata, var_name=var_name)
+            loo, dropped = loo_dropping_degenerate(idata, var_name=var_name)
             loo_by_label[label] = loo
             dropped_by_label[label] = dropped
 

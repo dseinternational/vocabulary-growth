@@ -11,11 +11,12 @@ import numpy as np
 import pytest
 
 from vocab_growth.models.build_utils import (
+    CLAMP_SOFTNESS,
     construct_age_grids,
     require_integral_counts,
     require_valid_counts,
-    slope_anchor_logit_coeffs,
     standardize_ages,
+    standardize_ages_to_z,
     standardize_anchor_ages,
     validate_ell_bounds,
 )
@@ -77,15 +78,6 @@ def test_validate_ell_bounds_non_increasing_raises():
         validate_ell_bounds((6, 6))
 
 
-# --- slope_anchor_logit_coeffs ----------------------------------------------
-
-
-def test_slope_anchor_logit_coeffs():
-    a_z, b_z = slope_anchor_logit_coeffs((24, 84), X_obs_mean=30.0, X_obs_std=12.0)
-    assert np.isclose(a_z, (24 - 30) / 12)
-    assert np.isclose(b_z, (84 - 30) / 12)
-
-
 # --- standardize_anchor_ages ------------------------------------------------
 
 
@@ -95,13 +87,27 @@ def test_standardize_anchor_ages_known_values():
     assert np.isclose(o_z, (20 - 19.6) / 5.9)
 
 
-def test_slope_anchor_logit_coeffs_delegates_to_standardize_anchor_ages():
+def test_slope_anchors_and_kappa_anchors_share_one_conversion():
     # One conversion, so the mean trajectory's anchors and the dispersion
-    # curve's cannot drift apart.
+    # curve's cannot drift apart. `slope_anchor_logit_coeffs` was a body-less
+    # alias for this and the engines now call it directly.
+    a_z, b_z = standardize_anchor_ages((24, 84), X_obs_mean=30.0, X_obs_std=12.0)
+    assert np.isclose(a_z, (24 - 30) / 12)
+    assert np.isclose(b_z, (84 - 30) / 12)
+
+
+def test_standardize_ages_to_z_agrees_with_the_pair_form():
+    # The n-ary form is the same arithmetic, so the three-anchor signed hump and
+    # the two-anchor trajectories cannot diverge either.
     kwargs = {"X_obs_mean": 30.0, "X_obs_std": 12.0}
 
-    assert slope_anchor_logit_coeffs((24, 84), **kwargs) == standardize_anchor_ages(
+    assert standardize_ages_to_z((24, 84), **kwargs) == standardize_anchor_ages(
         (24, 84), **kwargs
+    )
+    assert standardize_ages_to_z((15.0, 36.0, 96.0), **kwargs) == (
+        (15.0 - 30) / 12,
+        (36.0 - 30) / 12,
+        (96.0 - 30) / 12,
     )
 
 
@@ -279,3 +285,67 @@ def test_require_valid_counts_delegates_the_non_finite_message():
     # than reporting a bare "non-finite observed count(s)" (#236).
     with pytest.raises(ValueError, match="understood contains 1 non-finite"):
         require_valid_counts(np.array([1.0, np.inf]), "understood", 810)
+
+# --- CLAMP_SOFTNESS ----------------------------------------------------------
+
+
+def test_the_months_and_standardised_soft_clamps_are_exactly_equal():
+    """One constant, two implementations, and they must not merely be close.
+
+    `gp_utils._soft_clamp_z` works in standardised age for the graph;
+    `scripts/generate_prior_figures.py` works in months for the methods chapter's
+    figures, which `sync_report_figures.py` does not validate. Because
+    CLAMP_SOFTNESS is expressed per unit of anchor span, the standard deviation
+    cancels: `beta_z * (hi_z - z)` reduces to `CLAMP_SOFTNESS * (hi - age) / span`.
+    So the two agree exactly in algebra, and the assertion below is a tolerance
+    tight enough that no changed constant can hide inside it: 1e-9 absolute with
+    `rtol=0`, against clamp arguments of order 1. Not literal float identity --
+    the two expressions reach the same value by different operation orders, so the
+    last bit is not guaranteed to match and asserting it would make this test
+    brittle rather than strict.
+    """
+    import numpy as np
+
+    lo, hi = 24.0, 84.0
+    mean, std = 30.0, 12.0
+    ages = np.array([8.0, 24.0, 48.0, 84.0, 96.0, 115.0])
+
+    # Months form, as the figure script computes it.
+    beta_months = CLAMP_SOFTNESS / (hi - lo)
+    months = hi - np.logaddexp(0.0, beta_months * (hi - ages)) / beta_months
+
+    # Standardised form, as the graph computes it, mapped back to months.
+    z = (ages - mean) / std
+    lo_z, hi_z = (lo - mean) / std, (hi - mean) / std
+    beta_z = CLAMP_SOFTNESS / (hi_z - lo_z)
+    clamped_z = hi_z - np.logaddexp(0.0, beta_z * (hi_z - z)) / beta_z
+    from_z = clamped_z * std + mean
+
+    assert np.allclose(months, from_z, rtol=0, atol=1e-9), (months, from_z)
+    # Below the anchor the clamp is near-identity; above it, flat.
+    assert months[3] < hi and hi - months[3] < 0.9
+    assert abs(months[-1] - hi) < 1e-6
+
+
+def test_the_soft_clamp_constant_has_one_home():
+    """The figure script and the graph builder must read the same object.
+
+    Loaded by path because `scripts/` is not an importable package -- the pattern
+    `tests/test_regenerate_plots_engines.py` uses.
+    """
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    from vocab_growth.models import gp_utils
+
+    assert gp_utils.CLAMP_SOFTNESS is CLAMP_SOFTNESS
+
+    path = Path(__file__).parents[1] / "scripts" / "generate_prior_figures.py"
+    spec = importlib.util.spec_from_file_location("generate_prior_figures_script", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    assert module.CLAMP_SOFTNESS is CLAMP_SOFTNESS
+

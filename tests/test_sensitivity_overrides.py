@@ -720,7 +720,7 @@ def test_vg16_lag_scope_variants_change_what_each_claims():
     import numpy as np
 
     import vocab_growth.data_utils as vocab_data_utils
-    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models import cross_lag
     from vocab_growth.models.definitions import VG16
 
     if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
@@ -728,13 +728,11 @@ def test_vg16_lag_scope_variants_change_what_each_claims():
 
     def measure(definition, root):
         _, frame = _prepared_bivariate(definition, root)
-        _, has_lag, logits = cbr.compute_prev_wave_lag(
-            frame["subject_code"].to_numpy(int),
-            frame["age"].to_numpy(float),
-            frame["understood"].to_numpy(float),
-            definition.n_trials,
-            max_gap_months=definition.lag_max_gap_months,
-            zero_handling=definition.lag_zero_handling,
+        # The frame-level entry point rather than a hand-rebuilt copy of it: it
+        # reads the same three columns and the same two settings off the same
+        # definition, so this measures what a fit would build.
+        _, has_lag, logits = cross_lag.prev_wave_lag_for_frame(
+            frame, definition.n_trials, definition
         )
         lagged = has_lag > 0
         return {

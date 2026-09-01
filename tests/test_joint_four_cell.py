@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 import vocab_growth.environment as env
+from vocab_growth import cross_tab_sources
 from vocab_growth.models import common_joint_modality as cjm
 from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.definitions import VG15
@@ -92,7 +93,7 @@ def test_four_cell_loader_routes_incomplete_rows_to_marginal(tmp_path, monkeypat
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
 
-    four, marg = cjm._load_uk02_four_cell()
+    four, marg = cross_tab_sources.load_uk02_four_cell()
 
     # Only complete, margin-reconciling rows are treated as four-cell rows.
     assert len(four) == 2
@@ -191,7 +192,7 @@ def test_uk07_loader_derives_the_fourth_cell_and_guards_the_partition(
         ],
     )
 
-    four, marg = cjm._load_uk07_four_cell()
+    four, marg = cross_tab_sources.load_uk07_four_cell()
 
     assert list(four["subject_id"]) == ["ok"]
     assert sorted(marg["subject_id"]) == ["over", "zero"]
@@ -339,7 +340,7 @@ def test_es01_loader_derives_four_cells_from_the_recorded_union(
         ],
     )
 
-    four, marg = cjm._load_es01_four_cell()
+    four, marg = cross_tab_sources.load_es01_four_cell()
 
     assert list(four["subject_id"]) == ["ok"]
     assert list(marg["subject_id"]) == ["bad"]          # TD is filtered, not routed
@@ -480,7 +481,7 @@ def test_psi_carries_a_study_term_and_all_cross_tab_sources_are_on():
 def test_es01_real_cells_reconcile_and_sit_near_independence():
     """The real source, not a fixture: the partition must be exact, and the
     association must still be the one the default is justified on."""
-    four, marg = cjm._load_es01_four_cell()
+    four, marg = cross_tab_sources.load_es01_four_cell()
 
     assert len(four) == 185 and len(marg) == 1     # one known defective row
 

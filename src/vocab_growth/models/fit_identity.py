@@ -78,7 +78,17 @@ class FieldRole(Enum):
     name that fixes the output directory, and the console banner."""
 
 
-_GRAPH_PREFIXES = (
+#: Field-name prefixes the completeness test accepts without an explicit
+#: :data:`FIELD_ROLES` entry, because every field in these families is a prior and
+#: therefore GRAPH. This is **not** a classifier -- :func:`role_of` returns GRAPH for
+#: any unlisted name regardless -- it is an allowance that keeps
+#: :func:`is_classified` from demanding a row per prior hyperparameter.
+#:
+#: That makes the broad tokens a real hazard rather than a convenience: ``use_`` and
+#: ``lag_`` would silently absorb a future *data* or *reporting* switch and classify
+#: it GRAPH, which fails safe for validation but mislabels the failure message. Add a
+#: narrower prefix, or an explicit entry, rather than widening one of these.
+_ASSUMED_GRAPH_PREFIXES = (
     "anchor_g",
     "beta_lag",
     "ell_months_range",
@@ -102,7 +112,8 @@ _GRAPH_PREFIXES = (
 )
 
 #: Every definition field, classified. Written out for the fields that are not
-#: obviously a prior, and matched by prefix for the families that are -- the
+#: obviously a prior; the prior families are covered by
+#: :data:`_ASSUMED_GRAPH_PREFIXES` instead -- the
 #: ``p_slope_*``/``ell_unit_*``/``eta_*``/``tau_*``/``kappa*`` blocks are the
 #: priors themselves and nothing else.
 FIELD_ROLES: dict[str, FieldRole] = {
@@ -188,8 +199,9 @@ def role_of(field_name: str) -> FieldRole:
     role = FIELD_ROLES.get(field_name)
     if role is not None:
         return role
-    if field_name.startswith(_GRAPH_PREFIXES):
-        return FieldRole.GRAPH
+    # Everything else is GRAPH, whether or not it matches a prefix. The prefixes
+    # are not a classifier -- they are a completeness *allowance*, used only by
+    # :func:`is_classified` (see the tuple's own comment).
     return FieldRole.GRAPH
 
 
@@ -199,7 +211,7 @@ def is_classified(field_name: str) -> bool:
     Distinct from :func:`role_of`, which answers for every name because it has
     to fail closed. This is what the completeness test asks.
     """
-    return field_name in FIELD_ROLES or field_name.startswith(_GRAPH_PREFIXES)
+    return field_name in FIELD_ROLES or field_name.startswith(_ASSUMED_GRAPH_PREFIXES)
 
 
 def semantic_payload(definition) -> dict[str, Any]:

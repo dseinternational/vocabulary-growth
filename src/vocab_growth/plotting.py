@@ -20,8 +20,11 @@ import vocab_growth.intervals as intervals
 def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
     """Save a DataFrame as CSV alongside the corresponding plot.
 
-    Delegates to the shared writer; kept as a local name (and argument order)
-    for this module's call sites.
+    An argument-order adapter for :func:`plot_io.save_plot_data`, and genuinely
+    private: this module's ten call sites put the frame first. The three engines
+    imported it across the module boundary until 2026-09-01 -- 16 call sites on a
+    private name whose only content is the reordering -- and now call the public
+    writer directly.
     """
     plot_io.save_plot_data(output_dir, filename, df)
 
