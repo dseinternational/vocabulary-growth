@@ -26,6 +26,7 @@ EOWPVT
 ESRC
 Edgin
 Fenson
+Golay
 Figshare
 Floccia
 GLMM
@@ -79,6 +80,7 @@ Soto
 Spiegelhalter
 Stojanovik
 Sánchez
+Savitzky
 TEDS
 TOST
 Thal
