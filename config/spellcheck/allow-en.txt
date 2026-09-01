@@ -131,6 +131,7 @@ disclosable
 docstrings
 downweights
 dropna
+dsegroup
 dseresearch
 dtau
 dtype
