@@ -137,17 +137,24 @@ MIN_COVERAGE = 0.80
 KEY_AGES = [12, 18, 24, 30]
 
 # Comprehension-matched lens needs JOINT models (U and S coupled per draw): the
-# DS joint VG20 vs the TD joint VG13 (RE-based, 8-18 mo). VG13 is the only valid
-# TD joint model (wide-age TD comprehension is not validly measured; VG06 was
-# excluded as invalid).
+# DS joint VG20 vs the TD joint VG21 (RE-based, 8-22 mo). The TD comparator was
+# VG13 (8-18 mo) until 2026-09-02, with the 22-month window reachable only as the
+# `vg13:window-22` sensitivity variant through `resolve_joint`; VG21 is that
+# window as a registered model of its own, adopted on 2026-08-21 precisely so the
+# matched-comprehension contrast could reach the levels MAX_MATCHED_U below was
+# already set for. Under VG13 the TD curve's population median never reached 250
+# words within support, so every q(U) cell above N = 200 was blank on the TD
+# side and the contrast could say nothing about the 300-word milestone. VG06 --
+# wide-age TD comprehension, not validly measured -- remains excluded.
 JOINT_DS_KEY = "vg20"
-JOINT_TD_KEY = "vg13"
+JOINT_TD_KEY = "vg21"
 # Hard ceiling on every comprehension-matched contrast, in words understood.
 #
 # Set by the TD side's support, not by the DS side or by taste. The TD joint
 # model's q-by-understood grid reaches 220.9 words at VG13's 8-18 month window,
-# 328.0 under `window-22` (8-22) and 355.8 under `window-25` (8-25). 320 sits
-# just inside `window-22`, which is the extension adopted on 2026-08-21 --
+# 328.0 under VG21's 8-22 (formerly the `window-22` variant) and 355.8 under
+# `window-25` (8-25). 320 sits just inside VG21's reach, the extension adopted on
+# 2026-08-21 --
 # `window-25`'s extra reach comes from the 23-25 month rows where 20-36% of
 # Oxford CDI administrations sit within 10% of the form's 418-item cap, and its
 # q reads visibly high there (0.602 against `window-22`'s 0.504 at 328 words,
@@ -169,7 +176,7 @@ N_GRID_Q = np.array(
 def resolve_joint(key: str) -> tuple[str, int, str]:
     """Resolve a joint-model key that may name a registered sensitivity variant.
 
-    Accepts ``vg13`` or ``vg13:window-22``. The suffix selects the variant's own
+    Accepts ``vg21`` or ``vg13:window-22``. The suffix selects the variant's own
     fit directory (``<model_id>-<config_name>-<suffix>``); the trial count and
     population come from the base registry entry, which a window variant does
     not change. Returns ``(trace_path, n_trials, label)``.
@@ -568,7 +575,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     each population's comprehension trajectory reaches N words. It is a
     population-curve contrast, not a child-level conditional — it uses no
     subject effects and no rho_uq, so it is not E[q_i | U_i = N]. Requires JOINT
-    models so U and S are coupled per draw (VG20 DS vs VG13 TD).
+    models so U and S are coupled per draw (VG20 DS vs VG21 TD).
     """
     ds_trace, ds_n, ds_lab = resolve_joint(ds_key)
     td_trace, td_n, td_lab = resolve_joint(td_key)

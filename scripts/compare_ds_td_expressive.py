@@ -65,7 +65,7 @@ from vocab_growth.models.definitions import VG15
 
 # -- Comparators (joint U+S models so U and S are coupled per draw) --
 DS_JOINT_KEY = "vg20"          # DS joint, study+subject REs, correlated (model of record)
-TD_JOINT_KEY = "vg13"          # TD joint, study REs, 8-18 mo
+TD_JOINT_KEY = "vg21"          # TD joint, study+subject REs, 8-22 mo (VG13 until 2026-09-02)
 # Dispersion / distributional contrasts need the DS model whose kappa means the
 # same thing as the TD comparators' -- i.e. one that ALSO carries subject REs,
 # so neither side's kappa absorbs between-child variance. This matches
@@ -133,7 +133,8 @@ def _band(ax, frame, x, label, colour, *, cov=MIN_COVERAGE):
     level-indexed panels, which pass ``cov`` explicitly, were filtered while
     every age-indexed panel was not. On the delay-by-age panel that drew the
     curves a third of the way past the point where the typically-developing
-    comparator runs out: both equivalent ages saturate at VG13's 18-month
+    comparator runs out: both equivalent ages saturate at the TD comparator's
+    (then VG13's 18-month, now VG21's 22-month)
     ceiling, so the delays rise 1:1 with age and their difference is forced to
     zero, and at 40 months the plotted interval was a single draw (coverage
     2.8e-05). Filtering removes exactly that region and nothing else — the

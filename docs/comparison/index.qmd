@@ -87,7 +87,7 @@ def plain_at(df, idxcol, idxval, dec=0, cov_min=0.80):
 | DS between-child heterogeneity         | **VG20** (as above)                     |
 | DS sign-inclusive total expressive     | **VG15** (joint sign/speech, `p_any`)   |
 | TD spoken / understood (univariate)    | **VG11 / VG12** (study RE)              |
-| TD joint (comprehension-matched)       | **VG13** (joint, 8–18 mo)               |
+| TD joint (comprehension-matched)       | **VG21** (joint, 8–22 mo; VG13 to 2026-09-02) |
 
 All contrasts are at the **population level** (random effects excluded, so the
 estimand is identical on both sides) and restricted to the **empirical age/level
@@ -111,9 +111,9 @@ quantity.** Spoken reaches 30 months, which is where `TD_POOL_AGE_MONTHS` ends.
 **Comprehension stops at 25** — it rides only on the bivariate forms, and VG04
 and VG12 declare `report_max_age_understood = 25` accordingly ([#228](https://github.com/dseinternational/vocabulary-growth/issues/228)),
 so everything derived from comprehension inherits that. The
-comprehension-matched joint model is narrower again: VG13 spans 8–18 months and
-reaches about 221 understood words, and its adopted successor VG21 spans 8–22
-and reaches 328. Several estimands are therefore identified only at younger ages
+comprehension-matched joint model is narrower again: its TD side, VG21, spans
+8–22 months and reaches about 328 understood words (VG13, which it replaced as
+the comparator on 2026-09-02, spans 8–18 and reached about 221). Several estimands are therefore identified only at younger ages
 or lower vocabulary levels. Each table cell is blanked (—) where posterior
 **coverage** of the comparable region falls below 0.80; read the supported range
 only.
@@ -231,7 +231,7 @@ pd.DataFrame(rows).set_index("Vocabulary N (words)")
 $\Delta_{exp}(N)$ = (spoken attainment delay) − (understood attainment delay): at
 a matched vocabulary _size_, the extra months DS takes to **say** the words it
 **understands**, relative to TD. The window where both populations reach N within
-support is narrow — TD (VG13, 8–18 mo) already understands ~40 words at its
+support is narrow — TD (VG21, 8–22 mo) already understands ~40 words at its
 youngest supported age, and DS spoken-delay coverage thins above ~75 — so it is
 robustly identified around **N ≈ 50: ≈12.5 months [9.7, 15.3], P > 0 = 1.00**.
 DS takes about a year longer to say the words it understands, at matched
@@ -300,7 +300,7 @@ for N in [50, 100, 150, 200, 300]:
 pd.DataFrame(rows).set_index("Understood N (words)")
 ```
 
-Two columns, two different questions. The **curve** columns are the population production ratio read at the age each population's comprehension trajectory reaches N words — a population-curve contrast, not E[q_i | U_i = N]. On that reading the DS population curve produces a smaller fraction of what the population trajectory understands at every level both populations reach: Δq ≈ +0.06 at N = 100, ≈ +0.09 at 150 and 200, P(Δq > 0) ≈ 1.00 throughout. The TD comparator (VG13) is capped at 18 months and its population median never reaches 250 words within support, so the TD curve columns are empty above N = 200 and no convergence can be read from the curves. The **children** columns are the observed spoken-to-understood ratio among the administrations whose understood count fell within ±10% of N, rebuilt from each fit's own frame and verified against its recorded hash. They are lower than the curves at every level and the DS–TD gap between them does not close: at N = 300, where the DS curve alone gives ≈ 0.43, the children who understood 300 words have median ratios of about 0.23 (TD) and 0.13 (DS). Conditioning on N selects every child who reached it at *any* age; the ratio rises with age; so those children are younger than the age at which the population median reaches N and speak a smaller share — increasingly so as N rises, and most where comprehension grows slowly over a long window, which is the DS pool. **A statement about children at a comprehension milestone must be made from the children columns.** A model-derived E[q_i | U_i = N] would need the subject random effects and (in VG20) their correlation rho_uq, which this transformation does not use; the observed column is the honest substitute until that exists (#233). The TD comparator already understands ~40 words at its youngest supported age, so q is **not identified below N ≈ 50 for TD** — those points are dropped by the coverage filter, and the curves begin where both populations genuinely reach that comprehension level within support.
+Two columns, two different questions. The **curve** columns are the population production ratio read at the age each population's comprehension trajectory reaches N words — a population-curve contrast, not E[q_i | U_i = N]. On that reading the DS population curve produces a smaller fraction of what the population trajectory understands at the lower levels (Δq ≈ +0.06 at N = 100, ≈ +0.09 at 150, ≈ +0.10 at 200, P(Δq > 0) ≈ 1.00) and the gap then closes: ≈ +0.04 at 250 and **0.00 [−0.07, +0.08] at 300, P(Δq > 0) = 0.50** — at the age each population's median child understands 300 words, the median child in both populations speaks about 43% of them. The **children** columns are the observed spoken-to-understood ratio among the administrations whose understood count fell within ±10% of N, rebuilt from each fit's own frame and verified against its recorded hash. They sit below the curves at every level and their gap does **not** close: at N = 300 the children who understood 300 words have median ratios of about 0.27 (TD, 464 children) and 0.13 (DS, 97 children). Conditioning on N selects every child who reached it at *any* age; the ratio rises with age; so those children are younger than the age at which the population median reaches N and speak a smaller share — increasingly so as N rises, and most where comprehension grows slowly over a long window, which is the DS pool. The curves' convergence at 300 is a real statement about the two populations' developmental stages; it is not a statement that a child with Down syndrome who understands 300 words speaks the same share as a typically developing child who does. **A statement about children at a comprehension milestone must be made from the children columns.** A model-derived E[q_i | U_i = N] would need the subject random effects and (in VG20) their correlation rho_uq, which this transformation does not use; the observed column is the honest substitute until that exists (#233). The TD comparator already understands ~40 words at its youngest supported age, so q is **not identified below N ≈ 50 for TD** — those points are dropped by the coverage filter, and the curves begin where both populations genuinely reach that comprehension level within support.
 
 ![Population production ratio at matched comprehension q(U=N)](ds_td_comprehension_q_at_U.png){#fig-qatu .lightbox fig-align="left"}
 

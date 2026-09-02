@@ -9,7 +9,7 @@ Produces figures under ``output/comparisons/``:
 - ``ds_td_understood_by_age.{png,svg}`` — VG02 (DS) vs VG04 (TD) — understood
 - ``vg05_vs_vg07_{understood,spoken}.{png,svg}`` — study-RE effect in VG07
 - ``vg07_vg09_vg10_q_by_age.{png,svg}`` — q(age) three-way overlay
-- ``ds_td_q_by_age_vg20.{png,svg}`` — q(age) DS (VG20) vs TD (VG13)
+- ``ds_td_q_by_age_vg20.{png,svg}`` — q(age) DS (VG20) vs TD (VG21)
 - ``ds_td_spoken_vs_understood_vg20.{png,svg}`` (+ ``.csv``) — the same
   matched-comprehension comparison in words spoken rather than the ratio
 
@@ -21,7 +21,7 @@ the crossings table read that curve as the words-understood at which children
 speak half of what they understand -- the conditional reading issue #233 rules
 out, and one the children contradict (0.27 TD against 0.13 DS at 300 words, where
 the curves both give 0.4). The book's version, ``compare_ds_td_re.py
-comprehension`` (VG20 vs VG13, with the observed children beside the curve), is
+comprehension`` (VG20 vs VG21, with the observed children beside the curve), is
 the one figure of record for that contrast.
 
 Shared helpers (``first_crossing``, ``overlay_age_curves``) and model-path
@@ -57,7 +57,7 @@ OUT_DIR = env.comparisons_output_dir()
 #: CSV without validating its fit was how a stale posterior reached a published
 #: overlay (issue #266 finding 1).
 CONTRIBUTING_MODELS = (
-    "vg01", "vg02", "vg03", "vg04", "vg05", "vg07", "vg09", "vg10", "vg13", "vg20",
+    "vg01", "vg02", "vg03", "vg04", "vg05", "vg07", "vg09", "vg10", "vg20", "vg21",
 )
 
 DS_COLOUR = plot_styles.COLOUR_BLUE
@@ -167,15 +167,15 @@ def vg07_vg09_vg10_q_by_age() -> None:
 
 
 def ds_td_q_by_age_vg20() -> None:
-    """DS (VG20) vs TD (VG13) production-ratio overlay against age."""
+    """DS (VG20) vs TD (VG21) production-ratio overlay against age."""
     ds = _read("vg20", "posterior_summary_q.csv")
-    td = _read("vg13", "posterior_summary_q.csv")
+    td = _read("vg21", "posterior_summary_q.csv")
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(td["age_months"], td["q_ci_lo"], td["q_ci_hi"],
                     color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 89% interval")
     ax.fill_between(ds["age_months"], ds["q_ci_lo"], ds["q_ci_hi"],
                     color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 89% interval")
-    ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG13)")
+    ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG21)")
     ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG20)")
     for thresh in (0.5, 0.9):
         ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
@@ -184,7 +184,7 @@ def ds_td_q_by_age_vg20() -> None:
     ax.set_ylim(0, 1)
     ax.set_xlabel("Age (months)")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio by age — DS (VG20) vs TD (VG13)")
+    ax.set_title("Production ratio by age — DS (VG20) vs TD (VG21)")
     ax.legend(loc="lower right", frameon=True)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg20.png"))
     fig.savefig(os.path.join(OUT_DIR, "ds_td_q_by_age_vg20.svg"))
@@ -224,7 +224,7 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     published.
     """
     ds = _read("vg20", "production_rate_by_understood.csv")
-    td = _read("vg13", "production_rate_by_understood.csv")
+    td = _read("vg21", "production_rate_by_understood.csv")
 
     for frame in (ds, td):
         u = frame["words_understood"]
@@ -234,11 +234,11 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
     ax.fill_between(td["words_understood"], td["s_ci_lo"], td["s_ci_hi"],
-                    color=TD_COLOUR, alpha=0.15, linewidth=0, label="TD (VG13) 89% interval")
+                    color=TD_COLOUR, alpha=0.15, linewidth=0, label="TD (VG21) 89% interval")
     ax.fill_between(td["words_understood"], td["s_ci50_lo"], td["s_ci50_hi"],
-                    color=TD_COLOUR, alpha=0.30, linewidth=0, label="TD (VG13) 50% interval")
+                    color=TD_COLOUR, alpha=0.30, linewidth=0, label="TD (VG21) 50% interval")
     ax.plot(td["words_understood"], td["s_q_median"], color=TD_COLOUR, lw=2.5,
-            label="TD (VG13) median")
+            label="TD (VG21) median")
 
     ax.fill_between(ds["words_understood"], ds["s_ci_lo"], ds["s_ci_hi"],
                     color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG20) 89% interval")
@@ -259,7 +259,7 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     ax.set_ylim(0, None)
     ax.set_xlabel("Expected words understood")
     ax.set_ylabel("Expected words spoken")
-    ax.set_title("Words spoken against words understood — DS (VG20) vs TD (VG13)")
+    ax.set_title("Words spoken against words understood — DS (VG20) vs TD (VG21)")
     ax.legend(loc="upper left", frameon=True, fontsize=10)
     ax.grid(True, alpha=0.3)
 
@@ -272,7 +272,7 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     # outer merge on that column yields a frame where no row carries both
     # populations — every lookup returns NaN for one side. Interpolate each onto
     # a shared grid instead, leaving NaN only outside a model's own support
-    # (VG13 covers 8-18 months, so its curve genuinely stops early).
+    # (VG21 covers 8-22 months, so its curve genuinely stops at ~328 words).
     cols = ["s_q_median", "s_ci50_lo", "s_ci50_hi", "s_ci_lo", "s_ci_hi"]
     grid = pd.Series(sorted(set(range(10, 531, 5))), name="words_understood")
     merged = pd.DataFrame({"words_understood": grid})
