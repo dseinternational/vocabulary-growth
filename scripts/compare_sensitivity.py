@@ -88,7 +88,14 @@ def _override_keys(spec: dict) -> set[str]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("model", help="Model key (vg10, vg11, vg12, vg13, vg15).")
+    parser.add_argument(
+        "model",
+        help=(
+            "Model key with registered sensitivity variants: "
+            + ", ".join(sorted({key for key, _ in VARIANTS}))
+            + "."
+        ),
+    )
     parser.add_argument("--variant", default="all", help="Variant name or 'all' (default).")
     parser.add_argument("--out", default=None, help="Robustness-matrix CSV path.")
     args = parser.parse_args()
