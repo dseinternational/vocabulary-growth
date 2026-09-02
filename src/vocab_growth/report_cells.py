@@ -2193,6 +2193,36 @@ def _print_age_band_coverage(detail) -> None:
     )
 
 
+def _verified_frame(manifest: dict):
+    """The fit's analysis frame rebuilt from current data, or ``None`` and a reason.
+
+    A block that wants more than the manifest records has to rebuild the frame,
+    and must only use it if it still hashes to the one the fit recorded -- a
+    loader-rule change since the fit would otherwise be described as if it had
+    been fitted. Shared so the frame-composition and dispersion-scope blocks
+    cannot apply that guard differently.
+    """
+    data = manifest.get("data") or {}
+    try:
+        from vocab_growth.analysis_frames import (
+            analysis_frame_hash,
+            build_analysis_frame,
+        )
+        from vocab_growth.models.definitions import MODEL_REGISTRY
+
+        model_id = str((manifest.get("model") or {}).get("model_id") or "").lower()
+        recorded = data.get("analysis_frame_hash")
+        registered = MODEL_REGISTRY.get(model_id)
+        if registered is None or not recorded:
+            return None, "the registered definition or the recorded frame hash is unavailable"
+        frame, _ = build_analysis_frame(model_id, registered)
+        if analysis_frame_hash(frame) != recorded:
+            return None, "the frame the current loader rules build no longer hashes to the fitted one"
+        return frame, None
+    except Exception as exc:  # pragma: no cover - render robustness, not model logic
+        return None, f"it could not be rebuilt here (`{type(exc).__name__}`)"
+
+
 def render_frame_composition(directory: str = ".") -> None:
     """Print what the fitted frame is made of, exactly, from the manifest.
 
@@ -2230,28 +2260,7 @@ def render_frame_composition(directory: str = ".") -> None:
     print(" ".join(facts).replace(" ;", ";") + ".")
     print()
 
-    detail = None
-    reason = None
-    try:
-        from vocab_growth.analysis_frames import (
-            analysis_frame_hash,
-            build_analysis_frame,
-        )
-        from vocab_growth.models.definitions import MODEL_REGISTRY
-
-        model_id = str((manifest.get("model") or {}).get("model_id") or "").lower()
-        recorded = data.get("analysis_frame_hash")
-        registered = MODEL_REGISTRY.get(model_id)
-        if registered is None or not recorded:
-            reason = "the registered definition or the recorded frame hash is unavailable"
-        else:
-            frame, _ = build_analysis_frame(model_id, registered)
-            if analysis_frame_hash(frame) != recorded:
-                reason = "the frame the current loader rules build no longer hashes to the fitted one"
-            else:
-                detail = frame
-    except Exception as exc:  # pragma: no cover - render robustness, not model logic
-        reason = f"it could not be rebuilt here (`{type(exc).__name__}`)"
+    detail, reason = _verified_frame(manifest)
 
     if detail is not None and "age" in detail.columns and "subject_id" not in detail.columns:
         # The engines without child effects build a frame with no child key --
@@ -2320,3 +2329,230 @@ def render_frame_composition(directory: str = ".") -> None:
                 "the totals above are exact."
             )
         print(note)
+
+
+#: Which sampled kappa parameter governs which part of a two-anchor curve. The
+#: engines build ``kappa(age) = kappa_min + exp(a + b z)`` and give the age term
+#: priors at two reference ages, so a flagged parameter implicates a *region* of
+#: the curve rather than the whole of it -- which is the difference between "do
+#: not read this figure" and "do not read this end of it".
+_KAPPA_ROLE_REGIONS = {
+    "min": "the floor the curve cannot fall below, at every age",
+    "excess_young": "the curve at and below the younger reference age",
+    "excess_old": "the curve at and above the older reference age",
+}
+
+
+def _kappa_curve_scope(suffix, n_trials) -> str:
+    """One sentence naming the denominator a kappa's dispersion is measured on."""
+    if suffix == "u" or suffix is None:
+        pool = f"the {n_trials:,}-item reference inventory" if n_trials else "the reference inventory"
+        return f"counts out of {pool}"
+    conditional = {"s": "spoken among the words that child understands",
+                   "sign": "signed among the words that child understands"}[suffix]
+    return (
+        f"the **conditional** ratio — {conditional} — measured on that child's own "
+        "understood count as the denominator"
+    )
+
+
+def render_dispersion_scope(directory: str = ".") -> None:
+    """State what each dispersion parameter is a dispersion *of*, and where it is silent.
+
+    The two kappa figures sit side by side on every bivariate page under headings
+    that differ by one word, which invites three readings the model does not
+    support: that the two are on one scale (they are not -- ``kappa_u`` is
+    marginal on the item pool, ``kappa_s`` is conditional on the child's own
+    understood count), that a kappa curve is comparable across models (it is
+    residual after whatever child structure that model carries, and the models
+    carry different structure), and that the whole curve is estimated (a
+    two-anchor kappa can have one end the data never informed).
+
+    Every claim here is read from this fit -- the manifest's ``n_trials`` and
+    kappa anchor ages, the diagnostics' parameter list, and the contraction
+    table's flags -- so a page cannot assert a scope its own fit contradicts.
+    """
+    manifest = read_manifest(directory)
+    definition = ((manifest.get("model") or {}).get("definition")) or {}
+    n_trials = (manifest.get("data") or {}).get("n_trials") or definition.get("n_trials")
+    suffixes = [
+        suffix
+        for suffix in (None, "u", "s", "sign")
+        if _read(directory, "posterior_kappa" if suffix is None else f"posterior_kappa_{suffix}")
+        is not None
+    ]
+    if not suffixes:
+        print("_This fit writes no posterior dispersion curve, so there is no per-age scope to state._")
+        return
+
+    print("| Curve | What its dispersion is measured on |")
+    print("| --- | --- |")
+    for suffix in suffixes:
+        name = "$\\kappa$" if suffix is None else f"$\\kappa_{{{suffix}}}$"
+        print(f"| {name} ({_OUTCOME_LABELS[suffix]}) | {_kappa_curve_scope(suffix, n_trials)} |")
+    print()
+
+    if {"u", "s"} <= set(suffixes):
+        count = {2: "two", 3: "three", 4: "four"}.get(len(suffixes), str(len(suffixes)))
+        print(
+            f": These {count} curves sit on **different denominators** — one marginal on the "
+            "item pool, the rest conditional on each child's own understood count — so their "
+            "levels are not comparable with each other. A higher $\\kappa$ on a production "
+            "outcome than on understood at some age says nothing about which outcome is more "
+            "variable. Compare each curve with itself across age, which is what the findings "
+            "table above reports as a variance inflation factor."
+        )
+        print()
+
+    _print_nested_outcome_split(manifest, directory)
+    _print_kappa_identification(directory, definition, suffixes)
+
+    print()
+    print(
+        "Neither curve is comparable across models. $\\kappa$ is what is left once "
+        "that model's own mean curve and child effects have taken their share, and the "
+        "models differ in how much child structure they carry — a model with child "
+        "*slopes* leaves less in $\\kappa$ than one with child intercepts alone, on the "
+        "same data. Read a $\\kappa$ curve against the same model's other ages, never "
+        "against another model's curve."
+    )
+
+
+def _print_nested_outcome_split(manifest: dict, directory: str) -> None:
+    """How many production rows enter conditionally, and how many via the fallback.
+
+    ``kappa_s`` is the conditional ratio's dispersion only on rows whose understood
+    count is usable as a denominator; the rest enter through the treatment named by
+    ``spoken_fallback``, where the concentration is a derived quantity rather than
+    ``kappa_s`` itself. Where that share is large the curve is a blend, and saying
+    so is the difference between reading it and over-reading it.
+    """
+    treatment = ((manifest.get("model") or {}).get("definition") or {}).get("spoken_fallback")
+    if not treatment:
+        return
+    frame, reason = _verified_frame(manifest)
+    if frame is None or not {"understood", "spoken"} <= set(frame.columns):
+        if reason:
+            print(f"_The conditional/fallback split is not shown because {reason}._")
+            print()
+        return
+
+    import pandas as pd
+
+    understood = pd.to_numeric(frame["understood"], errors="coerce")
+    spoken = pd.to_numeric(frame["spoken"], errors="coerce")
+    has_spoken = spoken.notna()
+    total = int(has_spoken.sum())
+    if not total:
+        return
+    conditional = int((has_spoken & understood.notna() & (spoken <= understood)).sum())
+    fallback = total - conditional
+    share = fallback / total
+
+    if not fallback:
+        print(
+            f"Every one of the {total:,} production rows carries a usable understood count, "
+            f"so $\\kappa_s$ is the conditional ratio's dispersion throughout — the "
+            f"`{treatment}` fallback is declared but never reached."
+        )
+        print()
+        return
+
+    print(
+        f"Of the {total:,} production rows, **{conditional:,} ({1 - share:.0%})** carry a usable "
+        f"understood count and enter as the conditional ratio; the remaining "
+        f"**{fallback:,} ({share:.0%})** have none and enter through the `{treatment}` "
+        "treatment, whose concentration is derived from the understood dispersion and the "
+        "ratio rather than being $\\kappa_s$ itself. The curve below is therefore a blend "
+        "over those two branches, weighted as the ages of those rows fall."
+    )
+    print()
+
+
+def _print_kappa_identification(directory: str, definition: dict, suffixes: list) -> None:
+    """Name the parts of each kappa curve the data did not inform.
+
+    A two-anchor kappa is three sampled parameters, and a fit can inform one end
+    of the curve and not the other -- VG22's ``kappa_excess_young_s`` contracts
+    to **-0.23** (the posterior is *wider* than the prior) because Down syndrome
+    children below the younger anchor produce almost nothing, so the ratio has
+    almost no denominator to disperse. The figure still draws a confident-looking
+    median there. This says which end not to read.
+    """
+    table = _read(directory, "prior_posterior_contraction")
+    if table is None or "flags" not in table.columns:
+        return
+
+    anchor_ages = {}
+    for suffix in suffixes:
+        field = "kappa" if suffix is None else f"kappa_{suffix}"
+        block = definition.get(field)
+        if isinstance(block, dict) and block.get("anchor_ages"):
+            anchor_ages[suffix] = tuple(block["anchor_ages"])
+
+    notes = []
+    for row in table.itertuples(index=False):
+        name = str(row.parameter)
+        if not name.startswith("kappa"):
+            continue
+        contraction = float(row.contraction)
+        cdf = float(row.prior_cdf)
+        # The two-sided test, applied to the numbers rather than to the CSV's
+        # `flags` column: a prior acting as a floor is the same finding as one
+        # acting as a ceiling, and tables written before 2026-09-02 carry a
+        # one-sided flag. Reading the numbers means a page is right either way.
+        uninformed = contraction <= 0.05
+        pressing = cdf >= 0.95 or cdf <= 0.05
+        if not (uninformed or pressing):
+            continue
+        stem = name.removeprefix("kappa_")
+        suffix = None
+        for candidate in ("_u", "_s", "_sign"):
+            if stem.endswith(candidate):
+                suffix, stem = candidate.lstrip("_"), stem[: -len(candidate)]
+                break
+        region = _KAPPA_ROLE_REGIONS.get(stem, "this curve")
+        if suffix in anchor_ages and stem in ("excess_young", "excess_old"):
+            young, old = anchor_ages[suffix][0], anchor_ages[suffix][-1]
+            age = young if stem == "excess_young" else old
+            region = (
+                f"the curve at and {'below' if stem == 'excess_young' else 'above'} "
+                f"{age:.0f} months"
+            )
+        outcome = _OUTCOME_LABELS.get(suffix, "words")
+        if uninformed:
+            notes.append(
+                f"- **{region}** for {outcome} is **not estimated from this data**: "
+                f"`{name}` has contraction {contraction:.2f}, so the posterior is "
+                "no narrower than the prior it started from. The figure draws a median "
+                "there because the curve is continuous, not because the data placed it."
+            )
+        else:
+            direction = "above" if cdf >= 0.95 else "below"
+            notes.append(
+                f"- **{region}** for {outcome} is **pressing against its prior**: "
+                f"`{name}` sits at prior CDF {cdf:.2f}, so the data wants a value "
+                f"{direction} what the prior comfortably allows. Read the level as a bound "
+                "the prior is setting rather than as an estimate, and see the sensitivity "
+                "analysis."
+            )
+
+    if not notes:
+        print(
+            "Every dispersion parameter in this fit is informed by the data and sits "
+            "within its prior, so both ends of each curve can be read."
+        )
+        print()
+        return
+
+    print('::: {.callout-warning title="Part of this dispersion curve is prior, not data"}')
+    print()
+    for note in notes:
+        print(note)
+    print()
+    print(
+        "Read from the fit's own prior-to-posterior contraction table, not asserted here."
+    )
+    print()
+    print(":::")
+    print()

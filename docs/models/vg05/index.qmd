@@ -384,6 +384,14 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 ### Dispersion
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the dispersion parameter for words understood changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** variability between children relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. In this model $\kappa$ is doing double duty: with no study or child effects, it absorbs differences between studies and repeated measurements of the same child as well as genuine differences between children, so it should not be quoted as a statement about how much children differ.

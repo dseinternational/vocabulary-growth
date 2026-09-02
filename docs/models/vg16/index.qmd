@@ -579,6 +579,14 @@ posterior_summary_u
 
 ![The probability of a given understood-word count **or fewer** for a new, unseen child. Read this for questions of the form "what fraction of children understand 100 words or fewer at this age?"](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** between-child variability relative to the mean; higher means less. Read this as _falling $\kappa$ = children becoming more spread out_, and conclude that residual spread grows with age even after each child's own level is accounted for. Dispersion is also why the cross-lag's predictor is noisy: a comprehension count at an earlier wave is a single draw from a distribution this wide, which is why its measurement error matters for reading $\beta$ (see [Findings](#the-cross-lag-coefficient)).

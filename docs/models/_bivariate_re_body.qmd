@@ -123,6 +123,14 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 ### Dispersion $\kappa$ -- understood
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** between-child variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so read this figure as _falling $\kappa$ = children becoming more spread out_, and read the findings table above, which restates the same thing as a variance inflation factor where a larger number means a wider spread. Conclude that residual spread grows with age even after each child's own level is accounted for.
@@ -188,7 +196,7 @@ Compare the peak here with the peak in the understood derivative above: the fast
 
 ![How the spoken dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
 
-Again, falling $\kappa$ means children becoming more spread out. Conclude that spoken dispersion is flatter across age than understood dispersion, but starts from a more dispersed position.
+Again, falling $\kappa$ means children becoming more spread out. Read this curve's *shape* across age, not its level against the understood curve's: as the scope table above the understood figure sets out, this $\kappa$ disperses the production ratio on each child's own understood count while that one disperses counts out of the whole item pool. Whether one number here is larger than one there says nothing about which outcome varies more.
 
 ## Expected vocabulary by month {#sec-monthly}
 

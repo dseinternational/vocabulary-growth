@@ -13,6 +13,7 @@ VG10 and VG15 described amplitudes that had been changed months earlier.
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,8 @@ import pytest
 
 from vocab_growth import glossary, report_cells
 from vocab_growth.models.diagnostics_utils import render_convergence_caveats
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _fit(tmp_path, *, definition=None, config="rep", parameters=("eta_u",), gate=None):
@@ -1369,3 +1372,134 @@ def test_frame_composition_tabulates_studies_when_only_the_child_key_is_absent(t
     assert "| `uk_02` | 2 | 20–40 |" in out
     assert "**This frame carries no child key**" in out
     assert "no study or child key" not in out
+
+
+# --------------------------------------------------------------------------
+# Dispersion scope
+# --------------------------------------------------------------------------
+
+
+def _kappa_fit(tmp_path, *, definition=None, contraction=None, curves=("u", "s")):
+    """A fit directory carrying posterior kappa curves and a contraction table."""
+    fit = _fit(tmp_path, definition=definition or {"n_trials": 810})
+    for suffix in curves:
+        name = "posterior_kappa" if suffix is None else f"posterior_kappa_{suffix}"
+        pd.DataFrame(
+            {"age_months": [8.0, 24.0], "kappa_median": [30.0, 60.0], "vif_median": [20.0, 10.0]}
+        ).to_csv(fit / f"{name}.csv", index=False)
+    if contraction is not None:
+        pd.DataFrame(contraction).to_csv(fit / "prior_posterior_contraction.csv", index=False)
+    return fit
+
+
+def test_dispersion_scope_names_the_denominator_of_each_curve(tmp_path, capsys):
+    """The defect: two kappa figures under near-identical headings, no scope stated.
+
+    ``kappa_u`` disperses counts out of the item pool; ``kappa_s`` disperses the
+    production ratio on the child's own understood count. Nothing on the page
+    said so, which invited reading one level against the other.
+    """
+    report_cells.render_dispersion_scope(str(_kappa_fit(tmp_path)))
+    out = capsys.readouterr().out
+    assert "810-item reference inventory" in out
+    assert "**conditional** ratio" in out
+    assert "spoken among the words that child understands" in out
+    assert "different denominators" in out and "These two curves" in out
+    assert "never against another model's curve" in out
+
+
+def test_dispersion_scope_counts_a_third_curve_in_words(tmp_path, capsys):
+    report_cells.render_dispersion_scope(
+        str(_kappa_fit(tmp_path, curves=("u", "s", "sign")))
+    )
+    out = capsys.readouterr().out
+    assert "These three curves" in out
+    assert "signed among the words that child understands" in out
+
+
+def test_dispersion_scope_omits_the_comparison_for_a_single_outcome(tmp_path, capsys):
+    report_cells.render_dispersion_scope(str(_kappa_fit(tmp_path, curves=(None,))))
+    out = capsys.readouterr().out
+    assert "810-item reference inventory" in out
+    assert "different denominators" not in out
+
+
+def test_dispersion_scope_maps_an_uninformed_kappa_to_its_anchor_age(tmp_path, capsys):
+    """VG22's ``kappa_excess_young_s`` contracts to -0.23 on real data.
+
+    The curve is still drawn there, so the page has to say which *end* of it the
+    data never placed -- which means resolving the parameter to the reference age
+    its prior is anchored at, not just naming the parameter.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        definition={"n_trials": 810, "kappa_s": {"anchor_ages": [18.0, 72.0]}},
+        contraction=[
+            {"parameter": "kappa_min_u", "posterior_mean": 8.6, "posterior_sd": 5.1,
+             "prior_cdf": 0.55, "contraction": 0.50, "flags": ""},
+            {"parameter": "kappa_excess_young_s", "posterior_mean": 49.6, "posterior_sd": 27.6,
+             "prior_cdf": 0.94, "contraction": -0.2286, "flags": "uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "the curve at and below 18 months" in out
+    assert "not estimated from this data" in out and "-0.23" in out
+    assert "callout-warning" in out
+    # The informed parameter is not listed as a caveat.
+    assert "kappa_min_u" not in out
+
+
+def test_dispersion_scope_flags_a_prior_acting_as_a_floor(tmp_path, capsys):
+    """The two-sided test. VG14's kappa parameters press the *lower* tail.
+
+    ``prior_vs_posterior.py`` flagged only ``cdf >= 0.95`` until 2026-09-02, so a
+    fit whose data wants a smaller dispersion than the prior offers carried an
+    empty ``flags`` column. This block reads the numbers, so it is right against
+    a table written either side of that fix.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        definition={"n_trials": 810, "kappa_u": {"anchor_ages": [18.0, 72.0]}},
+        contraction=[
+            {"parameter": "kappa_excess_young_u", "posterior_mean": 8.7, "posterior_sd": 1.15,
+             "prior_cdf": 0.0114, "contraction": 0.9937, "flags": ""},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "pressing against its prior" in out
+    assert "below what the prior comfortably allows" in out
+    assert "the curve at and below 18 months" in out
+
+
+def test_dispersion_scope_reports_every_curve_readable_when_nothing_is_flagged(
+    tmp_path, capsys
+):
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "kappa_min_u", "posterior_mean": 8.6, "posterior_sd": 5.1,
+             "prior_cdf": 0.55, "contraction": 0.50, "flags": ""},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "both ends of each curve can be read" in out
+    assert "callout-warning" not in out
+
+
+def test_dispersion_scope_says_so_when_the_fit_writes_no_curve(tmp_path, capsys):
+    report_cells.render_dispersion_scope(str(_fit(tmp_path)))
+    assert "no posterior dispersion curve" in capsys.readouterr().out
+
+
+def test_prior_vs_posterior_presses_on_both_tails():
+    """A prior acting as a floor is the same finding as one acting as a ceiling.
+
+    ``scripts/`` is not importable from the test run, and the assertion is about
+    one condition, so this reads the source rather than adding path plumbing.
+    """
+    source = (REPO_ROOT / "scripts" / "prior_vs_posterior.py").read_text(encoding="utf-8")
+    assert "CONFLICT_CDF = 0.95" in source
+    assert "if cdf >= CONFLICT_CDF or cdf <= 1.0 - CONFLICT_CDF:" in source

@@ -459,6 +459,14 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 ### Dispersion $\kappa$ -- understood
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the dispersion parameter for words understood changes with age, with uncertainty intervals. **Population-level**.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** residual variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the headline table above restates it as a variance inflation factor, where a larger number means a wider spread. Because this model carries a child random intercept on understood, this $\kappa$ is what remains once a child's own level is known.

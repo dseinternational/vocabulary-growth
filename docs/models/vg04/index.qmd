@@ -347,6 +347,14 @@ The right-hand edge of this figure needs particular care. It sits at the last ob
 
 ### Dispersion
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** spread between same-age administrations relative to the mean; higher $\kappa$ means less. In this model that spread mixes between-child, between-dataset and repeat-visit variation — it is marginal count dispersion, not a between-child quantity. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. This is the model whose dispersion prior expected no trend with age, so the thing to check here is whether the fitted curve is flat and whether its interval is wide enough to admit a trend anyway.

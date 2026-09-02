@@ -303,7 +303,17 @@ def overlay_model(short: str, label: str,
 
 
 CONFLICT_CDF = 0.95
-"""Prior CDF at the posterior mean above which a parameter counts as pressing."""
+"""Prior CDF at the posterior mean beyond which a parameter counts as pressing.
+
+Two-sided: a posterior mean in either tail of the prior is the same finding. The
+test was ``cdf >= CONFLICT_CDF`` alone until 2026-09-02, which saw a prior acting
+as a ceiling but never one acting as a floor -- and VG14 is entirely the second
+kind. Its data wants a far lower dispersion than the Down syndrome kappa prior
+offers (``kappa_min_u`` posterior 2.74 against a prior median of 7.8, prior CDF
+0.096; ``kappa_excess_young_u`` 8.7 against 84.8, CDF 0.011), five parameters
+below CDF 0.14 and none of them flagged. ``report_cells`` had tested both tails
+since it began rendering this table, so the console report and the page it feeds
+disagreed."""
 CONTRACTION_FLOOR = 0.05
 """Contraction below which the posterior is essentially reporting the prior back."""
 
@@ -362,7 +372,7 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
         except Exception:
             prior_median = float("nan")
         flags = []
-        if cdf >= CONFLICT_CDF:
+        if cdf >= CONFLICT_CDF or cdf <= 1.0 - CONFLICT_CDF:
             flags.append("pressing")
         if contraction <= CONTRACTION_FLOOR:
             flags.append("uninformed")
