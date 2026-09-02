@@ -7,12 +7,14 @@ Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 Cross-references repaired after the 2026-08-26 report tidy (Claude Code/Fable 5,
 2026-08-31): sec-mean -> sec-trends, and the Appendix C pointer dropped until
 the reference-tables appendix is restored.
+Composition sentence (a count cannot see which words) added by Claude Code/Fable 5.1,
+2026-09-02.
 -->
 
 ::: {.callout-warning title="Scope and caveats"}
 The Down syndrome estimates in this chapter describe a **pooled research sample, not a population**: children with Down syndrome from studies in six countries, recruited through research projects (including an intervention trial), charities and family organisations, and assessed between the 1990s and the 2020s. Families who enrol in such studies are not a random draw of all families of children with Down syndrome, so the reported trajectories and percentiles are expectations for the modelled pool and are **not norms**, cut-offs or a screening instrument.
 
-All outcomes are **parent-report checklist counts**, harmonised from several instruments onto a common 810-item reference inventory (@sec-data). Comprehension is the least direct of the three measures, and everything derived from it — the production ratio $q(a)$, the signing ratio $r(a)$ and total expressive vocabulary — inherits that. A checklist word count says nothing about intelligibility, grammar or use in context.
+All outcomes are **parent-report checklist counts**, harmonised from several instruments onto a common 810-item reference inventory (@sec-data). Comprehension is the least direct of the three measures, and everything derived from it — the production ratio $q(a)$, the signing ratio $r(a)$ and total expressive vocabulary — inherits that. A checklist word count says nothing about intelligibility, grammar or use in context, and nothing about which words: a count treats a verb or a function word the same as a noun, and those are the words that grammar is built from (@sec-ds-vocabulary-grammar).
 
 Coverage is **uneven across age**: dense between about 18 and 54 months and thin above 72 months for spoken words and above about 60 for words understood, where the study mix also changes. Estimates at older ages are smoothed by the model from few children and carry correspondingly wide intervals; monthly rows with `n_obs = 0` are extrapolation, not evidence.
 

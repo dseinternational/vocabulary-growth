@@ -26,6 +26,8 @@ import numpy as np
 import pandas as pd
 from dse_research_utils.plot.styles import categorical_palette
 
+from vocab_growth.data_utils import WORDBANK_FORM_ITEMS
+
 MEASURES = ("understood", "spoken", "signed")
 
 # The pooled-summary overlay the repeated-measures plots draw: pure red so it
@@ -122,6 +124,99 @@ def summary_table_by_group(
             for stat, value in stats(sub(frame, name)[measure]).items():
                 row[f"{measure}_{stat}"] = value
         rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def td_form_alignment_table(
+    td: pd.DataFrame,
+    *,
+    age_range: tuple[int, int] = (8, 15),
+    outcome: str = "understood",
+    form_items: dict[tuple[str, str], int] | None = None,
+) -> pd.DataFrame:
+    """Per-age, per-form medians of a typically-developing count on two scales.
+
+    Every model scores checklist counts against the fixed 810-item reference
+    inventory, which assumes the shorter forms are *nested* -- each omits the
+    rarer, later-acquired words -- rather than proportional samples of one
+    word universe. Under nesting, forms of different length record similar raw
+    counts at a given age; under proportional sampling the shorter forms sit
+    systematically lower on raw counts and align instead on the proportion of
+    their own inventory. This table lets a reader see which holds: for each age
+    in ``age_range`` (inclusive) and each ``(language, form)`` present, the
+    median ``outcome`` count as recorded (``median_count``) and as a proportion
+    of the form's word-item count (``median_proportion``), with ``n``
+    administrations.
+
+    ``td`` is a typically-developing frame from
+    :func:`~vocab_growth.data_utils.load_data` carrying ``language``, ``form``,
+    ``age`` and ``outcome``. ``form_items`` maps ``(language, form)`` to the
+    form's item count and defaults to
+    :data:`~vocab_growth.data_utils.WORDBANK_FORM_ITEMS`; a form absent from the
+    map raises, because a silently wrong ceiling would defeat the check.
+
+    Columns: ``age``, ``language``, ``form``, ``n_items``, ``n``,
+    ``median_count``, ``median_proportion``. :func:`form_alignment_spread`
+    compares the two scales age by age. Reproduces the check in
+    ``notes/202608031500-td-romance-extension.md``.
+    """
+    items = WORDBANK_FORM_ITEMS if form_items is None else form_items
+    lo, hi = age_range
+    obs = td.dropna(subset=["age", outcome])
+    obs = obs[(obs["age"] >= lo) & (obs["age"] <= hi)]
+    missing = sorted(set(zip(obs["language"], obs["form"], strict=True)) - set(items))
+    if missing:
+        raise KeyError(f"no word-item count for form(s) {missing}; add them to WORDBANK_FORM_ITEMS")
+    rows = []
+    for (age, language, form), g in obs.groupby(["age", "language", "form"], sort=True):
+        n_items = int(items[(language, form)])
+        counts = pd.to_numeric(g[outcome], errors="coerce").dropna()
+        median = float(counts.median())
+        rows.append(
+            {
+                "age": int(age),
+                "language": language,
+                "form": form,
+                "n_items": n_items,
+                "n": int(len(counts)),
+                "median_count": median,
+                "median_proportion": median / n_items,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def form_alignment_spread(table: pd.DataFrame) -> pd.DataFrame:
+    """Per-age dispersion of the form medians on each scale.
+
+    From a :func:`td_form_alignment_table`: for each age, the number of forms,
+    the coefficient of variation (population SD over mean) of the form medians
+    on raw counts (``cv_count``) and on proportion of own form
+    (``cv_proportion``), which scale is tighter (``tighter``), and the form
+    recording the lowest raw median (``lowest_count_form``). Raw counts
+    aligning more closely than proportions is what nesting predicts; the
+    shortest form recording the lowest counts is what proportional sampling
+    would predict.
+    """
+
+    def cv(values: pd.Series) -> float:
+        x = np.asarray(values, dtype=float)
+        return float(x.std(ddof=0) / x.mean()) if len(x) and x.mean() else np.nan
+
+    rows = []
+    for age, g in table.groupby("age", sort=True):
+        cv_count, cv_proportion = cv(g["median_count"]), cv(g["median_proportion"])
+        lowest = g.loc[g["median_count"].idxmin()]
+        rows.append(
+            {
+                "age": int(age),
+                "n_forms": int(len(g)),
+                "cv_count": cv_count,
+                "cv_proportion": cv_proportion,
+                "tighter": "count" if cv_count < cv_proportion else "proportion",
+                "lowest_count_form": f"{lowest['language']} {lowest['form']}",
+            }
+        )
     return pd.DataFrame(rows)
 
 

@@ -28,14 +28,16 @@ from matplotlib.colors import to_rgb
 import vocab_growth.environment as local_env
 from vocab_growth.data_utils import load_combined_data, load_data
 from vocab_growth.descriptive import (
+    form_alignment_spread,
     plot_monthly_violins,
     plot_observations_by_group,
     plot_repeat_measures_by_group,
     scatter_by_group,
     summarise_by_group,
     summary_table_by_group,
+    td_form_alignment_table,
 )
-from vocab_growth.models.definitions import Population
+from vocab_growth.models.definitions import ENGLISH_AND_ROMANCE_LANGUAGES, Population
 
 SCATTERS = [
     # (x, y, xlabel, ylabel, filename)
@@ -181,6 +183,24 @@ def main():
         {"understood": td_frames["understood"], "spoken": td_frames["spoken"]},
     ).to_csv(os.path.join(out_dir, "summary_table_td.csv"), index=False)
     print("Wrote summary_table_td")
+
+    # The cross-form alignment check behind the methods chapter's "raw counts
+    # versus proportions" reassurance. It uses the hierarchical models' full
+    # typically-developing scope (English plus Italian and Spanish), so the
+    # 309-item Spanish form is in the comparison, over the 8-15 month window
+    # the comprehension forms share; the frames above are English-only.
+    alignment = td_form_alignment_table(
+        load_data(
+            Population.TYPICALLY_DEVELOPING,
+            ["study", "subject_id", "form", "language", "age", "understood"],
+            languages=ENGLISH_AND_ROMANCE_LANGUAGES,
+        )
+    )
+    alignment.to_csv(os.path.join(out_dir, "td_form_alignment.csv"), index=False)
+    form_alignment_spread(alignment).to_csv(
+        os.path.join(out_dir, "td_form_alignment_spread.csv"), index=False
+    )
+    print("Wrote td_form_alignment")
     for outcome, ylabel in REPEAT_OUTCOMES:
         # The TD pool is too dense for a scatter (hundreds of administrations
         # at each integer age), so the by-age view is monthly violins. The

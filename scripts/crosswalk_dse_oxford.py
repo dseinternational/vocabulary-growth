@@ -11,8 +11,29 @@ logit-scale form offset as the crosswalk — and the age-adjusted count ratio
 R = DSE-count / Oxford-count is reported. Reference points: fixed n = 810 (the models'
 current choice) implies R = 1; a per-form ``n_trials`` implies R = 810/416 = 1.95.
 
+The two forms were mostly not completed together. The Oxford CDI was given at the
+study's first assessment, and for 24 of the 34 children the DSE checklist is recorded
+at a different age — up to four months apart, and usually later. Placing each form at
+its own age is what makes the crosswalk an estimate at matched age rather than a raw
+ratio inflated by growth over the gap; the raw ratio does rise with the gap. Because
+the DSE completion dates are not recorded, ``--variant`` re-fits under alternative
+treatments of that gap (see ``notes/202609021236-crosswalk-timing-sensitivity.md``):
+
+``base``
+    Every dual-form child, every row at its recorded age — the analysis of record.
+``concurrent``
+    Only children whose Oxford age equals one of their DSE ages, keeping all their rows.
+``strict``
+    Only the concurrent DSE/Oxford row pairs themselves.
+``realigned``
+    Every dual-form child, but the DSE row nearest each Oxford administration is given
+    the Oxford age — the bound in which the DSE checklist reflects the child at the
+    Oxford test date despite its later recorded age.
+``all``
+    Each of the four in turn.
+
 Usage:
-    python scripts/crosswalk_dse_oxford.py [--outcome understood|spoken|both]
+    python scripts/crosswalk_dse_oxford.py [--outcome understood|spoken|both] [--variant base|concurrent|strict|realigned|all]
 """
 
 import argparse
@@ -29,6 +50,7 @@ from vocab_growth.data_utils import VOCABULARY_DATA_PATH
 LEN_DSE, LEN_OXF = 810, 416
 AGE_CENTRE, AGE_SCALE = 36.0, 12.0  # z(age) = (age - 36) / 12
 REPORT_AGES = (25, 31, 37, 43, 49)
+VARIANTS = ("base", "concurrent", "strict", "realigned")
 
 
 def z_age(age):
@@ -56,6 +78,55 @@ def load_dualform() -> pd.DataFrame:
         ).df()
     df["form"] = np.where(df.n_form == LEN_DSE, "DSE", "OXF")
     return df
+
+
+def pair_forms(df: pd.DataFrame) -> pd.DataFrame:
+    """Pair each Oxford administration with the same child's nearest-in-age DSE row.
+
+    One row per Oxford administration: the index labels of both rows and the gap
+    ``dse_age - oxford_age`` in months (positive when the DSE checklist is recorded later).
+    """
+    pairs = []
+    for oxf_idx, oxf in df[df.form == "OXF"].iterrows():
+        dse = df[(df.subject_id == oxf.subject_id) & (df.form == "DSE")]
+        dse_idx = (dse.age - oxf.age).abs().idxmin()
+        pairs.append(
+            {
+                "subject_id": oxf.subject_id,
+                "oxf_idx": oxf_idx,
+                "dse_idx": dse_idx,
+                "gap": int(df.at[dse_idx, "age"] - oxf.age),
+            }
+        )
+    return pd.DataFrame(pairs)
+
+
+def describe_gaps(df: pd.DataFrame) -> None:
+    """Print how far apart in age each child's two forms are recorded."""
+    pairs = pair_forms(df)
+    counts = pairs.gap.value_counts().sort_index()
+    print(f"dual-form children: {pairs.subject_id.nunique()}; Oxford administrations: {len(pairs)}")
+    print("gap (nearest DSE age - Oxford age, months): "
+          + ", ".join(f"{int(g):+d}: {int(n)}" for g, n in counts.items()))
+
+
+def apply_variant(df: pd.DataFrame, variant: str) -> pd.DataFrame:
+    """Return the analysis frame for one timing variant (see the module docstring)."""
+    if variant == "base":
+        return df.copy()
+    pairs = pair_forms(df)
+    concurrent = pairs[pairs.gap == 0]
+    if variant == "concurrent":
+        return df[df.subject_id.isin(concurrent.subject_id)].copy()
+    if variant == "strict":
+        keep = sorted(set(concurrent.dse_idx) | set(concurrent.oxf_idx))
+        return df.loc[keep].copy()
+    if variant == "realigned":
+        out = df.copy()
+        for p in pairs.itertuples():
+            out.at[p.dse_idx, "age"] = df.at[p.oxf_idx, "age"]
+        return out
+    raise ValueError(f"unknown variant {variant!r}; expected one of {VARIANTS}")
 
 
 def fit(df: pd.DataFrame, outcome: str, age_varying: bool, seed: int, draws: int, tune: int):
@@ -108,15 +179,18 @@ def _eti_90(x):
     return lo, float(np.median(np.asarray(x)[np.isfinite(x)])), hi
 
 
-def report(df: pd.DataFrame, outcome: str, seed: int, draws: int, tune: int) -> None:
+def report(df: pd.DataFrame, outcome: str, variant: str, seed: int, draws: int, tune: int) -> None:
     n_obs = int(df[outcome].notna().sum())
-    print(f"\n===  {outcome.upper()}  (obs={n_obs}, children={df.subject_id.nunique()})  ===")
+    print(f"\n===  {outcome.upper()}  variant={variant}  "
+          f"(obs={n_obs}, children={df.subject_id.nunique()})  ===")
 
     idata, d = fit(df, outcome, age_varying=False, seed=seed, draws=draws, tune=tune)
     summ = az.summary(idata, var_names=["b0", "b1", "sigma_u", "delta", "log_kappa"])
     print(f"  max r-hat {float(summ['r_hat'].max()):.3f}   "
           f"min ess {float(summ['ess_bulk'].min()):.0f}")
 
+    lo, md, hi = _eti_90(idata.posterior["b1"].values.ravel())
+    print(f"  b1 (logit per 12 months): median {md:.3f}  90% ETI [{lo:.3f}, {hi:.3f}]")
     lo, md, hi = _eti_90(idata.posterior["delta"].values.ravel())
     print(f"  delta (logit offset): median {md:.3f}  90% ETI [{lo:.3f}, {hi:.3f}]  "
           f"(0 = per-form; {np.log(LEN_DSE / LEN_OXF):.3f} = length-only)")
@@ -139,15 +213,23 @@ def report(df: pd.DataFrame, outcome: str, seed: int, draws: int, tune: int) -> 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--outcome", choices=["understood", "spoken", "both"], default="both")
+    parser.add_argument(
+        "--variant", choices=[*VARIANTS, "all"], default="base",
+        help="timing-sensitivity variant (see the module docstring); 'all' runs each in turn",
+    )
     parser.add_argument("--seed", type=int, default=20260712)
     parser.add_argument("--draws", type=int, default=2000)
     parser.add_argument("--tune", type=int, default=2000)
     args = parser.parse_args()
 
     df = load_dualform()
+    describe_gaps(df)
     outcomes = ["understood", "spoken"] if args.outcome == "both" else [args.outcome]
-    for outcome in outcomes:
-        report(df, outcome, seed=args.seed, draws=args.draws, tune=args.tune)
+    variants = VARIANTS if args.variant == "all" else (args.variant,)
+    for variant in variants:
+        frame = apply_variant(df, variant)
+        for outcome in outcomes:
+            report(frame, outcome, variant, seed=args.seed, draws=args.draws, tune=args.tune)
 
 
 if __name__ == "__main__":
