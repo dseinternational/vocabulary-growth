@@ -474,41 +474,41 @@ The gaps in the numbering are deliberate. VG06, the original typically developin
 
 The main Down syndrome lineage runs VG05 → VG07 → VG08 → VG09 → VG10, adding one level of hierarchy at a time, with VG19, VG20 and VG22 as parallel refinements of VG10's child structure and VG16 as a single-purpose offshoot of VG09. The signing lineage runs VG14 → VG15. On the typically developing side, VG11 and VG12 are the single-outcome reference models, and VG13 -- with VG21 and VG23 derived from it -- the joint one. For the full statistical detail of any single model -- its priors, prior predictive evidence, diagnostics, sensitivity variants and findings -- see its technical report, published alongside this one; this section carries the shared machinery and what each model adds.
 
-## Estimation and validation {#sec-estimation}
+# Estimation and validation {#sec-estimation}
 
-### The iterative workflow
+## The iterative workflow
 
 We follow the iterative Bayesian workflow described by @gelmanBayesianWorkflow2020: specify a transparent model, simulate from its priors, fit it, inspect computation and predictive behaviour, identify a concrete inadequacy, and only then add structure. The numbered models preserve that development history. A later number is not automatically better: an extension must solve a named problem and survive the same checks as its predecessor, and @sec-models-of-record records which models currently carry reported numbers.
 
-### The fitting pipeline
+## The fitting pipeline
 
 Models are defined in PyMC and sampled with the NUTS sampler [@abril-plaPyMCModernComprehensive2023; @hoffmanNoUTurnSamplerAdaptively2014]. Every registered model runs the same ordered pipeline: prepare data; construct priors; build the model; prior predictive checks; sampling; convergence diagnostics; posterior predictive checks; posterior summaries, plots and the model report. Three sampling configurations exist -- a short development configuration, an intermediate testing one, and a reporting-quality one -- and only reporting-quality fits can source a numerical claim in this report. Each fit is written to an isolated staging area and promoted atomically only after the statistical pipeline succeeds, so a failed or interrupted run can never overwrite a good fit, and report rendering runs afterwards as a separate, retryable step.
 
-### Prior predictive checks {#sec-priorpredictive}
+## Prior predictive checks {#sec-priorpredictive}
 
 Before the models see the study outcomes, we draw trajectories and replicated scores from the priors alone. We require bounded scores, plausible levels at the youngest and oldest relevant ages, developmental change that is smooth on a realistic time scale, and enough dispersion to represent heterogeneous children without placing substantial probability on implausible extremes. A prior predictive failure is addressed by revising the assumptions or their parameterisation -- never by inspecting the posterior and selecting a prior that reproduces it.
 
-### Convergence diagnostics {#sec-convergence}
+## Convergence diagnostics {#sec-convergence}
 
 Every reported fit is screened against four diagnostics, in two tiers. The **hard tier** fails closed: a potential scale reduction factor $\hat{R} \le 1.01$ and bulk and tail effective sample sizes of at least 400 on every sampled parameter, vector-valued parameters included [@vehtariRankNormalizationFolding2021]. A fit that misses either is not summarised, rendered or published at all, because a chain that has not mixed cannot be summarised. One narrow, documented exception exists: a named nuisance parameter on which no reported quantity depends may miss the $\hat{R}$ threshold under a stated ceiling, recorded as a caveat in the same way as the soft tier below, and it never covers an effective-sample-size shortfall. One fit currently carries such an exception, VG11, for a single basis coefficient of its Gaussian-process approximation, accepted provisionally pending a longer refit. The **soft tier** -- no divergent transitions, and an energy BFMI of at least 0.3 on every chain -- is recorded rather than fail-closed: both diagnostics bear on how well the sampler reached the posterior's tails, so they qualify interval bounds more than point estimates, and a fit carrying a soft-tier caveat may be published only with the caveat attached wherever its numbers are read. Bulk and tail effective sample sizes are gated separately because they govern different summaries: bulk bounds the Monte Carlo error of the medians we tabulate, tail that of the interval limits we lead with (@sec-interval-convention).
 
-### Posterior predictive checks and calibration {#sec-predictive-calibration}
+## Posterior predictive checks and calibration {#sec-predictive-calibration}
 
 Posterior predictive checks generate replicated outcomes from the fitted model and compare them with the observations: distributional overlays, bounded-count behaviour across age and, for the joint models, the paired outcomes together, fallback rows included; the signing model additionally checks the sign-by-speech cells that identify $\psi$. Alongside the visual checks, every fit writes a numerical calibration table recording, for each outcome, overall and within age bands, the mean observed and predicted counts, the empirical coverage of the predictive interval at its stated width, and the distribution of the probability integral transform -- each observation's position within its own predictive distribution. Coverage near nominal and a near-uniform transform indicate a predictive distribution that is neither too wide nor overconfident, and departures are directional, so the table says not only whether but how a model misfits. These checks are in-sample -- the replications condition on parameters the same observations informed -- so their value is comparative, across models, outcomes and ages, and gross misfit is what they catch first; the out-of-sample counterpart is the comparison standard below (@sec-supersedes). A model can pass every sampler diagnostic and fail these checks: convergence shows that computation characterised the specified posterior, not that the specification represents the data.
 
-### Parameter recovery
+## Parameter recovery
 
 For the models that carry reported numbers, we simulate data from the model at known parameter values, refit the model to the simulation with the same pipeline, and score the recovered posterior against the truth. A replicate counts only if its own fit converges. A handful of replicates can expose a parameter the design cannot recover, or intervals that miss their nominal coverage badly; it cannot certify fine calibration, and it is read accordingly.
 
-### Sensitivity analyses
+## Sensitivity analyses
 
 Where a defensible alternative exists to a data rule, a prior or a structural choice, it is registered as a named variant and fitted with the same pipeline rather than argued about: each masked data-defect class has a reinstatement variant, the priors that carry real weight have widened counterparts, the young typically developing window has alternative widths, and the fallback likelihood has three registered alternatives (@sec-joint-outcomes). A variant's fit is compared with the baseline quantity by quantity against the baseline's own posterior intervals, so a robustness claim in this report is a measurement, not an impression.
 
-### Model comparison, and what 'supersedes' means {#sec-supersedes}
+## Model comparison, and what 'supersedes' means {#sec-supersedes}
 
 A later model supersedes an earlier one only on two grounds together: a tabulated out-of-sample comparison -- leave-one-out expected log predictive density, with the standard error of the difference, so the improvement is quantified rather than asserted -- and an identified structural issue in the earlier model that the later one resolves. Four statuses follow: a **model of record** is the current source for a stated estimand; a **development step** is retained to show how structure was added but supplies no headline number; a **reference** model is a typically developing comparison with a distinct population role; and a **superseded** model has been replaced after a documented structural or data problem. A superseded model never supplies a number in the findings.
 
-### Reporting conventions {#sec-interval-convention}
+## Reporting conventions {#sec-interval-convention}
 
 For every parameter and derived quantity we report the posterior median, an inner 50% and an outer 89% credible interval, and -- through the density and predictive plots -- the full posterior rather than an interval alone [@kruschkeBayesianAnalysisReporting2021]. Intervals are equal-tailed by default; a small named set of strongly skewed or boundary-censored estimands -- the sign--speech association $\psi$, the concentration $\kappa$, and milestone and peak ages -- is reported with highest-density intervals instead, and each table and figure states which kind it uses. The width is 89% rather than the familiar 95% deliberately: no width carries special epistemic status, a non-round one discourages reading an interval as a significance test [@mcelreathStatisticalRethinkingBayesian2020], and the 5.5th and 94.5th percentile limits of an 89% interval are almost exactly what the tail diagnostic in @sec-convergence certifies, where a 95% interval's more extreme limits are harder to estimate at the same effective sample size. Because the full posterior is reported, a reader who prefers another width can take it directly.
 
@@ -516,7 +516,7 @@ Several estimands rest on modest samples, and a point estimate selected for look
 
 Three kinds of uncertainty band appear in the findings, and their scopes differ. **Population-trajectory intervals** carry posterior uncertainty about the typical child's curve in an average study -- every offset set to zero -- and narrow as data accrue; they say nothing about how far individual children spread. **Population-level predictive intervals** keep the offsets at zero but add the scatter of administrations around that curve, so they describe the counts a typical child's administrations would return. **Subject-marginal predictive intervals** (new-child intervals) additionally draw a fresh child offset from the estimated between-child spread, holding the study offset at zero; they answer where one more child would fall, and are the ones to quote when setting expectations for an individual child. Milestone-age summaries describe the population trajectory's crossing age, not the spread of individual children's milestone ages. Which kind a number is, is stated wherever it is reported.
 
-### Provenance
+## Provenance
 
 Every fit records a manifest carrying the complete model definition, the sampling configuration, fingerprints of the raw inputs, an exact hash of the prepared analysis data, and the code revision and environment that produced it. Before any figure or table reaches this report, the fit behind it is re-validated field by field against the current definitions and data rules, so a posterior that predates a change to either is identified as stale and cannot be republished silently. The same checks gate the model-comparison outputs, and each model's technical report carries its per-fit diagnostic record.
 
