@@ -1551,7 +1551,7 @@ def test_dispersion_scope_reports_a_strained_legacy_curve_as_one_finding(tmp_pat
     assert "The shape of this curve" in out
     assert "`a_kappa_s`" in out and "`b_kappa_mag_s`" in out
     assert "one finding, not two" in out
-    assert "steeper decline than the slope prior allows" in out
+    assert "steeper decline with age than the slope prior allows" in out and "pulled down to compensate" in out
 
 
 def test_dispersion_scope_does_not_call_a_far_tail_posterior_uninformed(tmp_path, capsys):
@@ -1665,3 +1665,41 @@ def test_observed_production_ratio_at_levels_windows_and_thresholds():
     assert row["n"] == 11 and row["children"] == 10
     assert abs(row["median"] - 0.3) < 1e-9
     assert row["median_age"] == 40.0
+
+
+def test_dispersion_scope_pairs_only_two_pressing_parameters_and_reads_the_direction(
+    tmp_path, capsys
+):
+    """A mid-prior, barely-contracted intercept beside a pressing slope is two facts.
+
+    And the pair's sentence must follow the tails: a slope in its lower tail is a
+    gentler decline, not the steeper one VG08 happens to show.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "a_kappa_s", "posterior_mean": 2.0, "posterior_sd": 1.0,
+             "prior_cdf": 0.48, "contraction": 0.01, "flags": "uninformed"},
+            {"parameter": "b_kappa_mag_s", "posterior_mean": 1.4, "posterior_sd": 0.2,
+             "prior_cdf": 1.0, "contraction": -0.08, "flags": "pressing+uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "The shape of this curve" not in out
+    assert out.count("- **") == 2
+
+    (tmp_path / "low").mkdir()
+    fit = _kappa_fit(
+        tmp_path / "low",
+        contraction=[
+            {"parameter": "a_kappa_u", "posterior_mean": 3.5, "posterior_sd": 0.2,
+             "prior_cdf": 0.97, "contraction": 0.8, "flags": "pressing"},
+            {"parameter": "b_kappa_mag_u", "posterior_mean": 0.01, "posterior_sd": 0.01,
+             "prior_cdf": 0.02, "contraction": 0.9, "flags": ""},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "The shape of this curve" in out and "gentler decline" in out
+    assert "pulled up to compensate" in out

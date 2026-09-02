@@ -2374,7 +2374,7 @@ def _kappa_role_and_suffix(name: str):
             for candidate in ("_sign", "_u", "_s"):
                 if rest == candidate:
                     return role, candidate.lstrip("_")
-            return role, None if rest else None
+            return role, None
     return None, None
 
 
@@ -2564,26 +2564,45 @@ def _print_kappa_identification(directory: str, definition: dict, suffixes: list
     paired = set()
     for item in found:
         # The legacy intercept and slope move together; two separate caveats
-        # would read as two problems where the fit has one.
-        if item["role"] != "level":
+        # would read as two problems where the fit has one. The pair is formed
+        # only when both are *pressing*: a mid-prior, barely-contracted intercept
+        # beside a pressing slope is two different facts and is reported as such.
+        if item["role"] != "level" or not item["pressing"]:
             continue
         mate = next(
-            (o for o in found if o["role"] == "slope" and o["suffix"] == item["suffix"]),
+            (o for o in found
+             if o["role"] == "slope" and o["suffix"] == item["suffix"] and o["pressing"]),
             None,
         )
         if mate is None:
             continue
         paired |= {item["name"], mate["name"]}
         outcome = _OUTCOME_LABELS.get(item["suffix"], "words")
+        # Direction from the tails, not assumed: the slope parameter is a
+        # magnitude, so its upper tail is a steeper decline and its lower tail a
+        # gentler one, and the intercept moves the opposite way to compensate.
+        if mate["cdf"] >= 0.95:
+            reading = (
+                "the data wants a steeper decline with age than the slope prior allows, "
+                "and the height is pulled "
+                + ("down" if item["cdf"] <= 0.05 else "up")
+                + " to compensate"
+            )
+        else:
+            reading = (
+                "the data wants a gentler decline with age than the slope prior expects, "
+                "and the height is pulled "
+                + ("up" if item["cdf"] >= 0.95 else "down")
+                + " to compensate"
+            )
         notes.append(
             f"- **The shape of this curve** for {outcome} is set by a prior the data is "
             f"straining against on both sides. `{item['name']}` (its height at the pool's "
             f"mean age) sits at prior CDF {item['cdf']:.2f} and `{mate['name']}` (how "
             f"steeply it falls with age) at prior CDF {mate['cdf']:.2f}. The two are "
             "coupled — the curve is a floor plus an exponential in age — so this is one "
-            "finding, not two: the data wants a steeper decline than the slope prior "
-            "allows, and the height is pulled down to compensate. Read the curve's overall "
-            "level with more confidence than its steepness."
+            f"finding, not two: {reading}. Read the curve's overall level with more "
+            "confidence than its steepness."
         )
 
     for item in found:
