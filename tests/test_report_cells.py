@@ -1703,3 +1703,28 @@ def test_dispersion_scope_pairs_only_two_pressing_parameters_and_reads_the_direc
     out = capsys.readouterr().out
     assert "The shape of this curve" in out and "gentler decline" in out
     assert "pulled up to compensate" in out
+
+
+def test_reference_child_calibration_sets_the_curve_beside_the_sample(tmp_path, monkeypatch, capsys):
+    """The population curve is the child in the average study; the sample median is
+    the children in the data. At ages covered by one or two studies they can sit
+    far apart, and every milestone on the page is read off the former."""
+    fit = _fit(tmp_path)
+    ages = np.arange(8.0, 61.0)
+    pd.DataFrame({"age_months": ages, "Ey_median": ages * 5}).to_csv(fit / "posterior_summary_monthly_u.csv", index=False)
+    pd.DataFrame({"age_months": ages, "Ey_median": ages * 5 + 20}).to_csv(fit / "posterior_summary_monthly_weighted_u.csv", index=False)
+    rng = np.random.default_rng(1)
+    frame = pd.DataFrame({"age": rng.uniform(10, 58, 600)})
+    frame["understood"] = frame["age"] * 6
+    monkeypatch.setattr(report_cells, "_verified_frame", lambda manifest: (frame, None))
+    report_cells.render_reference_child_calibration(str(fit))
+    out = capsys.readouterr().out
+    assert "| Age | Outcome | Reference child | Administration-weighted child | Sample median |" in out
+    assert out.count("| understood |") == 3
+    assert "largest gap between the reference child and the sample" in out
+    assert "child in the *average study*" in out
+
+
+def test_reference_child_calibration_says_so_without_a_monthly_summary(tmp_path, capsys):
+    report_cells.render_reference_child_calibration(str(_fit(tmp_path)))
+    assert "no monthly summary" in capsys.readouterr().out

@@ -282,6 +282,7 @@ def run_outcome(outcome: str) -> None:
     A_ds = np.column_stack([C.first_crossing_age(w_ds, ages_ds, v) for v in N_GRID])
     A_td = np.column_stack([C.first_crossing_age(w_td, ages_td, v) for v in N_GRID])
     ad = C.summarise_draws(A_ds - A_td, N_GRID, "words", with_p_gt0=True)
+    _write_weighted_attainment(outcome, td_key)
 
     # ---- 4. Dispersion: kappa, implied SD, overdispersion factor ----
     # DS side uses the model whose kappa means the same thing as the TD models'
@@ -583,6 +584,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
           f"(capped at U={MAX_MATCHED_U:.0f} words) ===", flush=True)
     ages_ds, U_ds, S_ds = C.load_population_trajectory(ds_trace, ds_n)
     ages_td, U_td, S_td = C.load_population_trajectory(td_trace, td_n)
+    _write_weighted_comprehension(ds_key, td_key, ds_trace, td_trace, ds_n, td_n)
     print(f"  DS draws={U_ds.shape[0]} ages {ages_ds.min():.0f}-{ages_ds.max():.0f} | "
           f"TD draws={U_td.shape[0]} ages {ages_td.min():.0f}-{ages_td.max():.0f}",
           flush=True)
@@ -624,6 +626,82 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
               f"Δq(TD-DS)={r['dq_median']:+.2f} "
               f"[{r['dq_ci_lo']:+.2f}, {r['dq_ci_hi']:+.2f}]  "
               f"P(TD>DS)={r['dq_p_gt0']:.2f}")
+
+
+def _weighted_trajectory(key: str, trace_path: str, n: int):
+    """The administration-weighted child for ``key``, or ``None`` with a reason."""
+    from vocab_growth.report_cells import _verified_frame, read_manifest
+
+    frame, reason = _verified_frame(read_manifest(C.model_dir(key)))
+    if frame is None or "study_code" not in frame.columns:
+        return None, reason or "frame carries no study_code"
+    return C.load_population_trajectory_weighted(trace_path, n, frame), None
+
+
+def _write_weighted_comprehension(ds_key, td_key, ds_trace, td_trace, ds_n, td_n) -> None:
+    """``ds_td_comprehension_q_at_U_weighted.csv``: q(U) for the weighted child.
+
+    Same construction as the reference-child table, on the administration-
+    weighted trajectories, so the book can show both and the gap between them:
+    at 300 words the reference-child curves converge (0.43 in both populations)
+    at the typically developing window's edge, where the reference child sits 46
+    words above the only study sampled there.
+    """
+    ds, why_ds = _weighted_trajectory(ds_key, ds_trace, ds_n)
+    td, why_td = _weighted_trajectory(td_key, td_trace, td_n)
+    if ds is None or td is None:
+        print(f"  weighted comprehension-matched table not written: {why_ds or why_td}", flush=True)
+        return
+    (a_ds, U_ds, S_ds), (a_td, U_td, S_td) = ds, td
+    ia, ib = C.align_draws(U_ds.shape[0], U_td.shape[0], seed=SEED)
+    q_ds = C.compute_q_at_U(a_ds, U_ds, S_ds, N_GRID_Q)[ia]
+    q_td = C.compute_q_at_U(a_td, U_td, S_td, N_GRID_Q)[ib]
+    _merge(N_GRID_Q, "words",
+           q_TD=C.summarise_draws(q_td, N_GRID_Q, "words"),
+           q_DS=C.summarise_draws(q_ds, N_GRID_Q, "words"),
+           dq=C.summarise_draws(q_td - q_ds, N_GRID_Q, "words", with_p_gt0=True)).to_csv(
+        os.path.join(OUT_DIR, "ds_td_comprehension_q_at_U_weighted.csv"), index=False)
+    da_ds, _ = C.compute_latency(a_ds, U_ds[ia], S_ds[ia], N_GRID_Q)
+    da_td, _ = C.compute_latency(a_td, U_td[ib], S_td[ib], N_GRID_Q)
+    # compute_latency returns summarise_per_N frames, whose grid column is not
+    # ``words``, so they are stacked with a population label rather than merged.
+    pd.concat([da_td.assign(population="TD"), da_ds.assign(population="DS")],
+              ignore_index=True).to_csv(
+        os.path.join(OUT_DIR, "ds_td_comprehension_latency_weighted.csv"), index=False)
+    print("  Weighted child, q(U=N) and learn-to-say latency (months):", flush=True)
+    qt = _merge(N_GRID_Q, "words", q_TD=C.summarise_draws(q_td, N_GRID_Q, "words"),
+                q_DS=C.summarise_draws(q_ds, N_GRID_Q, "words"))
+    for _, r in qt[qt["words"].isin([100, 200, 300])].iterrows():
+        print(f"    U={int(r['words']):>3}: TD q={r['q_TD_median']:.2f}  DS q={r['q_DS_median']:.2f}", flush=True)
+
+
+
+def _write_weighted_attainment(outcome: str, td_key: str) -> None:
+    """``ds_td_<outcome>_re_attainment_delay_weighted.csv``: D(v) for the weighted child.
+
+    The reference-child delay to reach v words is the headline; this is the same
+    contrast on the administration-weighted trajectories. Both models here are
+    joint RE models (VG20 and VG21), so the weighted child is available on both
+    sides; the univariate TD comparators VG11/VG12 carry a single outcome and
+    are left to the reference child.
+    """
+    if td_key in TD_KEYS.values():
+        td_key = JOINT_TD_KEY
+    sides = {}
+    for pop, key in (("DS", DS_KEY), ("TD", td_key)):
+        traj, why = _weighted_trajectory(key, C.trace_path(key), C.n_trials(key))
+        if traj is None:
+            print(f"  weighted attainment ({outcome}) not written: {pop} {why}", flush=True)
+            return
+        a, U, S = traj
+        sides[pop] = (a, U if outcome == "understood" else S)
+    (a_ds, w_ds), (a_td, w_td) = sides["DS"], sides["TD"]
+    ia, ib = C.align_draws(w_ds.shape[0], w_td.shape[0], seed=SEED)
+    A_ds = np.column_stack([C.first_crossing_age(w_ds[ia], a_ds, v) for v in N_GRID])
+    A_td = np.column_stack([C.first_crossing_age(w_td[ib], a_td, v) for v in N_GRID])
+    C.summarise_draws(A_ds - A_td, N_GRID, "words", with_p_gt0=True).to_csv(
+        os.path.join(OUT_DIR, f"ds_td_{outcome}_re_attainment_delay_weighted.csv"), index=False)
+
 
 
 def _write_observed_children(ds_key: str, td_key: str) -> None:

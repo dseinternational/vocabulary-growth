@@ -43,6 +43,32 @@ Residuals scatter from −0.17 to +0.14 inside both pools, with no consistent si
 
 One further thing the check turned up. "Typical of their age" was judged against the sample: the observed median comprehension near 38 months in the Down syndrome pool is 286 words, but VG20's population curve puts the reference child at 232 there — 54 words below the sample's median child, where VG21's reference child at 17 months (185) sits close to its sample median (174). The population curve is the zero-study-effect child, and study effects are centred over studies rather than over children, so a pool whose large studies sit above the average study will have a reference child below its own median child. It does not change the decomposition above, which uses the model's $q(a)$ consistently, but it means "median child" is not a safe label for the Down syndrome population curve; the pages now say "reference child".
 
+## The reference child is not the pool's median child — and what it does to the milestones
+
+The calibration check above generalised. Comparing each model's reference-child curve with the sample median administration at several ages:
+
+|                                 |  TD 18 mo |      TD 21 mo |  DS 30 mo |      DS 38 mo |  DS 48 mo |
+| ------------------------------- | --------: | ------------: | --------: | ------------: | --------: |
+| Understood — reference / sample | 214 / 200 | **301 / 255** | 175 / 208 | **232 / 284** | 311 / 333 |
+| Spoken — reference / sample     |   52 / 35 |  **129 / 77** |   14 / 16 |       48 / 39 | 142 / 129 |
+
+The cause is the study effects and the pool's age coverage together. Study effects are centred over _studies_, unweighted; the reference child is the child in the average study. But studies are segregated by age: the three studies that sample children aged 30–40 months in the Down syndrome pool (`es_01` +0.45, `uk_02` +0.32, `it_01` +0.23 on the logit scale) all sit above the average study, and at 19–22 months the typically developing pool is one study (`Floccia`, −0.31) sitting below it. Where studies do not overlap in age the model has to split each age band's level between the trend and the studies present, and partial pooling does — so the reference child at 38 months is below every Down syndrome study sampled there and at 21 months above the only typically developing one. It is the trend-versus-study ridge the refit runbook already documents, showing up on the reporting side. The row-weighted mean study effect is near zero (+0.01 TD, +0.06 DS on comprehension), so the discrepancy is age-local, not a global offset. On production the study effects are far larger — `us_01` +1.10, `ie_02` −1.03, `uk_07` −0.70 — so the Down syndrome production ratio is extremely study-dependent.
+
+**This reaches the milestone story.** The delay factors in the discussion that led here used reference-child crossings. On sample medians (rolling window):
+
+| Milestone      | TD reference / sample | DS reference / sample | ratio, reference / sample |
+| -------------- | --------------------: | --------------------: | ------------------------: |
+| 100 understood |               14 / 14 |             23 / 21.5 |               1.64 / 1.54 |
+| 200 understood |               18 / 18 |           34 / **29** |           1.89 / **1.61** |
+| 300 understood |    21 / _not reached_ |         47 / **39.5** |                  2.24 / — |
+| 50 spoken      |               18 / 19 |             39 / 39.5 |               2.17 / 2.08 |
+
+The reading "the comprehension delay grows from 1.6× to 2.2× to meet a steady production delay" came from exactly the two places where the reference child and the sample diverge, and does not survive: on the sample the comprehension delay is about 1.6× throughout the measurable range and the production delay about 2.1× — a **constant differential delay**, which is a simpler statement and the one the data support. The "0.43 = 0.43" convergence of the production ratio at 300 words is likewise the reference child's, at the typically developing window's edge, where the sample's ratio at 21 months is 0.30 and the sample median never reaches 300 words in the window. Whether the comprehension delay grows with level cannot be settled in this pool, because the answer depends on which studies cover which ages.
+
+## Decision (2026-09-02)
+
+Agreed: **(a)** the reference child stays the estimand every population curve and milestone reports — it is what the model defines and it is comparable across models and populations — and is never again called the typical or median child; **(d)** every joint RE page carries a per-study fan (`study_fans.png`: one curve per study over its own ages, the reference child bold, the administration-weighted child dashed) and a calibration block (`render_reference_child_calibration`) setting the reference child beside the weighted child and the sample median at three ages; **(e)** milestones and DS/TD delays are reported under both the reference child and the administration-weighted child — the same fit re-weighted, with a Gaussian kernel in age, to the studies present at each age — and the gap is reported as the study-coverage sensitivity (`posterior_summary_monthly_weighted_{u,s}.csv` on the pages; `ds_td_*_attainment_delay_weighted.csv`, `ds_td_comprehension_q_at_U_weighted.csv` and `ds_td_comprehension_latency_weighted.csv` in the comparison). The limitation is recorded as a data-collection fact: trend and study offsets are separately identified only where studies overlap in age, and in this pool they mostly do not.
+
 ## What is and is not confident
 
 As a **population-stage statement** the agreement is real and reasonably well supported: both curves are estimated with narrow intervals that overlap, and each sits within about 0.05–0.08 of the empirical median ratio of all children at the corresponding age (0.35 in both pools). The typically developing value is at the very end of its curve — VG21's window is capped at 22 months and the curve's x-axis stops at 328 words — so it is an edge estimate rather than a mid-range one. As a **statement about children at a milestone** it is not supported, and the pages should not let a reader make it.

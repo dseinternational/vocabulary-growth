@@ -254,6 +254,14 @@ render_frame_composition()
 ```
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
 import pandas as pd
 
 descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)

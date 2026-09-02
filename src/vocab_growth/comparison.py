@@ -143,6 +143,55 @@ def load_population_trajectory(
     return ages, p_u * n_trials_, p_s * n_trials_
 
 
+def load_population_trajectory_weighted(
+    path: str, n_trials_: int, frame, *, bandwidth: float = 3.0
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``(ages, U, S)`` for the administration-weighted child of a joint RE model.
+
+    The counterpart of :func:`load_population_trajectory`, which returns the
+    reference child (zero study and child effects: the child in the *average
+    study*). Study effects are centred over studies, and studies are segregated
+    by age, so at a given age the reference child can sit above or below every
+    study sampled there -- 54 words below the Down syndrome pool's median child
+    at 38 months, 46 above the typically developing pool's at 21 -- and a
+    milestone or a delay read off it inherits that. This re-weights the same fit
+    to the studies present at each age (a Gaussian kernel over ``frame``'s
+    administrations, ``bandwidth`` months), which is the child the sample
+    medians describe. Report both; the gap is the study-coverage sensitivity.
+    """
+    d = az.from_netcdf(path)
+    post = _dataset(d, "posterior")
+    cdata = _dataset(d, "constant_data")
+    ages = np.asarray(cdata["X_plot"].values, dtype=float)
+    order = np.argsort(ages)
+
+    def flat(name):
+        arr = post[name].values
+        return arr.reshape(arr.shape[0] * arr.shape[1], arr.shape[2])
+
+    f_u, h = flat("f_u_plot")[:, order], flat("h_plot")[:, order]  # (S, n_age)
+    d_u, d_q = flat("delta_u"), flat("delta_q")  # (S, K)
+    codes = np.asarray(frame["study_code"], dtype=int)
+    obs_ages = np.asarray(frame["age"], dtype=float)
+    ages_sorted = ages[order]
+    kernel = np.exp(-0.5 * ((ages_sorted[:, None] - obs_ages[None, :]) / bandwidth) ** 2)
+    K = int(codes.max()) + 1
+    weights = np.stack([kernel[:, codes == k].sum(axis=1) for k in range(K)], axis=1)
+    weights /= np.where(weights.sum(axis=1, keepdims=True) > 0, weights.sum(axis=1, keepdims=True), 1.0)
+
+    sig = lambda x: 1.0 / (1.0 + np.exp(-x))  # noqa: E731
+    U = np.zeros_like(f_u)
+    S = np.zeros_like(f_u)
+    for k in range(K):
+        w = weights[:, k][None, :]
+        if not np.any(w):
+            continue
+        pu_k = sig(f_u + d_u[:, k][:, None])
+        U += w * pu_k
+        S += w * pu_k * sig(h + d_q[:, k][:, None])
+    return ages_sorted, U * n_trials_, S * n_trials_
+
+
 #: Series the joint sign/speech engine (VG15) reports on the plot grid, as
 #: fractions. ``pi_*`` are the four-cell composition **conditional on the word
 #: being understood**, so they are scaled by ``p_u`` — not by ``n_trials`` alone —

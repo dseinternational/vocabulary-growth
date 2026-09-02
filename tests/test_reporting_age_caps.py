@@ -346,3 +346,41 @@ def test_the_observed_overlay_is_optional(tmp_path, func):
     assert (table["n"] >= 10).all() and (table["q25"] <= table["median"]).all()
     if func == "plot_production_rate_by_understood":
         assert table["median"].between(0, 1).all()
+
+
+def test_administration_weights_sum_to_one_and_follow_age_coverage():
+    """Weights are the studies present at each age, so a study sampled only at 60
+    months gets no weight at 12 and all of it at 60."""
+    import pandas as pd
+
+    frame = pd.DataFrame({"study_code": [0] * 20 + [1] * 20, "age": [12.0] * 20 + [60.0] * 20})
+    X = np.array([12.0, 36.0, 60.0])
+    w = common_bivariate.administration_weights(frame, X, bandwidth=3.0)
+    assert np.allclose(w.sum(axis=1), 1.0)
+    assert w[0, 0] > 0.999 and w[2, 1] > 0.999
+    assert 0.4 < w[1, 0] < 0.6
+
+
+def test_weighted_curves_reduce_to_the_reference_child_with_zero_study_effects():
+    rng = np.random.default_rng(0)
+    f = rng.normal(-2, 1, (5, 40))
+    h = rng.normal(-1, 1, (5, 40))
+    w = np.full((5, 3), 1 / 3)
+    p_u, p_s = common_bivariate.weighted_population_curves(f, h, np.zeros((3, 40)), np.zeros((3, 40)), w)
+    sig = lambda x: 1 / (1 + np.exp(-x))  # noqa: E731
+    assert np.allclose(p_u, sig(f)) and np.allclose(p_s, sig(f) * sig(h))
+
+
+def test_study_fans_are_skipped_without_study_effects(tmp_path):
+    """VG05 carries no study effects; the fan and the weighted tables must not be
+    drawn from a curve the model does not have."""
+    import xarray as xr
+
+    class _Ctx:
+        trace = xr.DataTree.from_dict({"posterior": xr.Dataset({"f_u_plot": (("chain", "draw", "plot_id"), np.zeros((1, 2, 3)))}),
+                                       "constant_data": xr.Dataset({"X_plot": (("plot_id",), np.array([8.0, 9.0, 10.0]))})})
+        analysis_df = None
+
+    assert common_bivariate.study_marginal_inputs(_Ctx()) is None
+    assert common_bivariate.plot_study_fans(_Ctx(), n_trials=810, output_dir=str(tmp_path), filename="fans") is None
+    assert not (tmp_path / "fans.png").exists()

@@ -218,6 +218,14 @@ render_frame_composition()
 ```
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -330,6 +338,9 @@ Everything in this section is population-level: the study offsets are set to zer
 The two curves stop at different ages, and that is deliberate rather than an artefact. Comprehension and every ratio derived from it are reported only up to the comprehension reporting cap, while production runs on to the top of the query grid; the glance block at the top of this report records both caps. The reason is that the evidence for comprehension thins out earlier than the evidence for production, so the model declines to publish an understood curve where it would be carried almost entirely by the trend's smoothness.
 
 ![Median **posterior-predictive** words understood and words spoken against age for the average study, with the observed data. The curves are medians of predictive count draws, not the expected trajectory.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
 
 ![The same predictive medians with 50% inner and 89% outer equal-tailed intervals. The bands summarise posterior-predictive count draws for the average study, so they are intervals on where a single new fully-paired administration would fall — carrying between-administration dispersion as well as trajectory uncertainty — not the far narrower intervals on the mean trajectory, and not a prediction for a new study.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 

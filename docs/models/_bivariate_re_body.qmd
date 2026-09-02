@@ -17,6 +17,9 @@ models needs goes in that model's own template.
 
 ![Words understood and words spoken against age, as **subject-marginal** predictive counts: the band is where individual children fall, not uncertainty in the average. The understood line stops before the spoken line because the two outcomes carry different reporting caps, stated in the glance box at the top of this report.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
+
 ![The same subject-marginal predictive trajectories with an inner 50% and an outer 89% equal-tailed interval on each outcome.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 Read these two figures for the shape and the spread together: the two curves separate early and stay separated across the whole reported range, and the outer band on each is wide enough that a child well inside it is unremarkable. A child outside the inner band is not unusual.

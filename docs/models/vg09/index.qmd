@@ -239,6 +239,14 @@ from vocab_growth.report_cells import render_frame_composition
 render_frame_composition()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
 The fitted frame pools administrations from several international studies of children with Down syndrome onto the common reference inventory. Its size, the number of rows carrying each outcome, and the modelled age range are in the _Model at a glance_ block above, read from this fit's own manifest.
 
 Two features of the pool shape everything below. Comprehension is recorded on fewer administrations than production, so the understood curve rests on less data than the spoken one at every age. And the pool is weighted towards younger children with small spoken vocabularies, which is why the lower edge of the spoken predictive band sits near zero for a long stretch of the age range: at those ages a child saying almost nothing is an ordinary observation, not an outlier. Several classes of defective record — partial administrations, duplicated outcome columns, implausible production signatures, and children recorded only at their form's ceiling — are masked by default; the project's data documentation records each and the flag that reinstates it for sensitivity analysis.
@@ -354,6 +362,9 @@ Read this table together with the dispersion figures below rather than instead o
 ### Joint trajectory
 
 ![Predicted vocabulary for an unseen child: **subject-marginal**, with a fresh child's random effects drawn for each posterior draw and held across the whole age grid. Points are the observed administrations.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
 
 ![The same **subject-marginal** prediction with the 50% inner and 89% outer equal-tailed intervals drawn explicitly.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 

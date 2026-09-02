@@ -330,6 +330,14 @@ render_frame_composition()
 ```
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -522,6 +530,9 @@ The joint-trajectory figures below are **subject-marginal**; the production-rati
 ### Joint trajectory
 
 ![Words understood and words spoken against age, as **subject-marginal** predictive counts: the band is where individual children fall, not uncertainty in the average. The understood line stops before the spoken line for the reasons in @sec-clamp.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
 
 ![The same subject-marginal predictive trajectories with an inner 50% and an outer 89% equal-tailed interval on each outcome.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 

@@ -236,6 +236,14 @@ render_frame_composition()
 ```
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -370,6 +378,9 @@ render_family_notes()
 ## Joint trajectory {#sec-predictions}
 
 ![Expected words understood and words spoken on the same axes, across the modelled window. The vertical distance between the two curves is the comprehension-production gap, quantified below.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
 
 ![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are uncertainty intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children — not the range individual children occupy; for that, read the predictive figures and the monthly tables.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 

@@ -2811,3 +2811,96 @@ def render_conditional_production_check(directory: str = ".") -> None:
         "studies in view — the curves can agree where the children do not, and the "
         "children can differ for reasons that are not the population's."
     )
+
+
+def render_reference_child_calibration(directory: str = ".") -> None:
+    """Set the reference child beside the administration-weighted child and the sample.
+
+    Every population curve on a page is the reference child: zero study and
+    child effects, the child in the *average study*. Study effects are centred
+    over studies, not administrations, and studies are segregated by age in
+    this pool, so at a given age the reference child can sit above or below every
+    study actually sampled there -- 54 words below the Down syndrome pool's
+    median child at 38 months, 46 above the typically developing pool's at 21
+    (notes/202609021800-production-ratio-by-understood.md). This prints, at
+    three ages inside the data, the reference child, the administration-weighted
+    child (the same fit re-weighted to the studies present at each age) and the
+    sample median, so a reader knows how far "the population" is from "the
+    children in these data" before reading any milestone off the curve.
+    """
+    import pandas as pd
+
+    manifest = read_manifest(directory)
+    outcomes = []
+    for suffix, label in (("u", "understood"), ("s", "spoken"), (None, "words")):
+        stem = "posterior_summary_monthly" if suffix is None else f"posterior_summary_monthly_{suffix}"
+        table = _read(directory, stem)
+        if table is None:
+            continue
+        weighted = _read(directory, "posterior_summary_monthly_weighted" if suffix is None
+                         else f"posterior_summary_monthly_weighted_{suffix}")
+        outcomes.append((suffix, label, table, weighted))
+        if suffix is None:
+            break
+    if not outcomes:
+        print("_This fit writes no monthly summary, so the reference child cannot be set beside the sample._")
+        return
+
+    frame, reason = _verified_frame(manifest)
+    if frame is None or "age" not in frame.columns:
+        print(f"_The sample median is not shown because {reason or 'the frame carries no age'}._")
+        return
+
+    ages = pd.to_numeric(frame["age"], errors="coerce").dropna()
+    picks = sorted({int(round(float(ages.quantile(q)))) for q in (0.25, 0.5, 0.75)})
+    window = 2.0 if float(ages.max()) <= 30 else 3.0
+
+    def ey(table, age):
+        col = next((c for c in table.columns if c.startswith("Ey_median")), None)
+        if col is None or table.empty:
+            return None
+        i = int((table["age_months"] - age).abs().idxmin())
+        return None if abs(float(table["age_months"].iloc[i]) - age) > 0.6 else float(table[col].iloc[i])
+
+    has_weighted = any(w is not None for _, _, _, w in outcomes)
+    header = ["Age", "Outcome", "Reference child"]
+    if has_weighted:
+        header.append("Administration-weighted child")
+    header += ["Sample median", "Administrations in window"]
+    print("| " + " | ".join(header) + " |")
+    print("| ---: | --- | ---: |" + (" ---: |" if has_weighted else "") + " ---: | ---: |")
+    gaps = []
+    for age in picks:
+        near = (ages - age).abs() <= window
+        for suffix, label, table, weighted in outcomes:
+            col = {"u": "understood", "s": "spoken", None: None}[suffix]
+            col = col if col in frame.columns else next((c for c in ("understood", "spoken") if c in frame.columns), None)
+            if col is None:
+                continue
+            values = pd.to_numeric(frame.loc[near.values, col], errors="coerce").dropna()
+            ref = ey(table, age)
+            cells = [f"{age} mo", label, "—" if ref is None else f"{ref:.0f}"]
+            if has_weighted:
+                w = ey(weighted, age) if weighted is not None else None
+                cells.append("—" if w is None else f"{w:.0f}")
+            cells += ["—" if values.empty else f"{values.median():.0f}", f"{len(values):,}"]
+            print("| " + " | ".join(cells) + " |")
+            if ref is not None and not values.empty:
+                gaps.append(ref - float(values.median()))
+    print()
+    largest = max(gaps, key=abs) if gaps else None
+    print(
+        ": The reference child is the population curve every figure and table on this page "
+        "reports — zero study and child effects, the child in the *average study*. Studies "
+        "are segregated by age, so the average study need not be among those sampled at a "
+        "given age; the administration-weighted child re-weights the same fit to the studies "
+        "present at each age, and the sample median is the data. "
+        + (
+            f"The largest gap between the reference child and the sample here is "
+            f"{largest:+.0f} words. "
+            if largest is not None else ""
+        )
+        + "The weighted child closes the part of that gap that study coverage explains; "
+        "what remains is not study coverage. Read every milestone age on this page as the "
+        "reference child's, and the study fans figure for where each study sits."
+    )

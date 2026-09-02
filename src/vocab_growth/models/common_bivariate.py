@@ -2382,6 +2382,198 @@ def _run_bivariate_outcome_plots(
     )
 
 
+#: Kernel bandwidth, in months, for the administration weights that turn the
+#: reference child into the administration-weighted child at each age.
+_STUDY_WEIGHT_BANDWIDTH_MONTHS = 3.0
+
+
+def study_marginal_inputs(context):
+    """Everything the study fans and the weighted curves need, or ``None``.
+
+    ``None`` when the fit carries no study effects (VG05) or predates the stored
+    ``h_plot`` -- every consumer is then skipped rather than drawn from the wrong
+    curve. Returns ``(X_plot, f_u_plot, h_plot, delta_u, delta_q, frame)`` with
+    the draw axis aligned across the four arrays (``extract_posterior`` stacks
+    chains and draws identically for each).
+    """
+    trace = context.trace
+    post = trace.posterior
+    for name in ("f_u_plot", "h_plot", "delta_u", "delta_q"):
+        if name not in post:
+            return None
+    frame = context.analysis_df
+    if "study_code" not in frame.columns or "age" not in frame.columns:
+        return None
+    X_plot = np.asarray(trace.constant_data["X_plot"].values, dtype=float)
+    return (
+        X_plot,
+        posterior_analysis.extract_posterior(trace, "f_u_plot", "plot_id"),
+        posterior_analysis.extract_posterior(trace, "h_plot", "plot_id"),
+        posterior_analysis.extract_posterior(trace, "delta_u", "study_id"),
+        posterior_analysis.extract_posterior(trace, "delta_q", "study_id"),
+        frame,
+    )
+
+
+def administration_weights(frame, X_plot, *, bandwidth=_STUDY_WEIGHT_BANDWIDTH_MONTHS):
+    """Share of administrations from each study at each plot age: ``(n_plot, K)``.
+
+    A Gaussian kernel in age, so the weights are smooth and never empty. The
+    reference child is the average *study*; these weights make the average
+    *administration at that age*, which is the child the sample medians describe
+    -- and at ages covered by only one or two studies the two can sit far apart
+    (notes/202609021800-production-ratio-by-understood.md).
+    """
+    codes = frame["study_code"].to_numpy(dtype=int)
+    ages = frame["age"].to_numpy(dtype=float)
+    K = int(codes.max()) + 1
+    kernel = np.exp(-0.5 * ((X_plot[:, None] - ages[None, :]) / bandwidth) ** 2)  # (n_plot, n_rows)
+    weights = np.zeros((X_plot.size, K))
+    for k in range(K):
+        weights[:, k] = kernel[:, codes == k].sum(axis=1)
+    total = weights.sum(axis=1, keepdims=True)
+    return weights / np.where(total > 0, total, 1.0)
+
+
+def _sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def weighted_population_curves(f_u_plot, h_plot, delta_u, delta_q, weights):
+    """Administration-weighted ``(p_u, p_s)`` draws over the plot grid, ``(n_plot, S)`` each.
+
+    ``p_w(a) = sum_k w_k(a) sigmoid(f(a) + delta_k)``, summed study by study so
+    the ``(n_plot, S)`` working array is never multiplied by ``K``.
+    """
+    n_plot, n_samples = f_u_plot.shape
+    p_u = np.zeros((n_plot, n_samples))
+    p_s = np.zeros((n_plot, n_samples))
+    for k in range(weights.shape[1]):
+        w = weights[:, k][:, None]
+        if not np.any(w):
+            continue
+        pu_k = _sigmoid(f_u_plot + delta_u[k][None, :])
+        p_u += w * pu_k
+        p_s += w * pu_k * _sigmoid(h_plot + delta_q[k][None, :])
+    return p_u, p_s
+
+
+def write_weighted_monthly_summaries(context, n_trials, *, max_age_months_understood=None,
+                                     max_age_months_spoken=None):
+    """``posterior_summary_monthly_weighted_{u,s}.csv``: the weighted child, monthly.
+
+    The companion of the reference-child monthly tables, on the same grid and
+    under the same reporting caps, so any milestone read off one can be read off
+    the other and the difference reported as the study-coverage sensitivity.
+    """
+    inputs = study_marginal_inputs(context)
+    if inputs is None:
+        return None
+    X_plot, f_u, h, d_u, d_q, frame = inputs
+    weights = administration_weights(frame, X_plot)
+    p_u, p_s = weighted_population_curves(f_u, h, d_u, d_q, weights)
+    out = {}
+    for suffix, p, cap in (("u", p_u, max_age_months_understood), ("s", p_s, max_age_months_spoken)):
+        table = posterior_analysis.monthly_summary_table(
+            X_plot, p, None, n_trials, X_obs=context.analysis_df["age"],
+            ci_prob=context.reporting.ci_prob,
+        )
+        table = posterior_analysis.trim_reported_ages(table, cap)
+        stem = f"posterior_summary_monthly_weighted_{suffix}"
+        table.to_csv(os.path.join(context.reporting.output_dir, f"{stem}.csv"), index=False)
+        context.dataframes[stem] = table
+        out[suffix] = table
+    return out
+
+
+def plot_study_fans(context, n_trials, *, output_dir=None, filename=None,
+                    max_age_months_understood=None, max_age_months_spoken=None):
+    """One curve per study over its own ages, beside the reference child.
+
+    The population curve on every page is the reference child -- zero study and
+    child effects, the child in the *average study*. Studies are segregated by
+    age in this pool, so at any one age the average study may not be among those
+    sampled there: at 38 months the three studies present in the Down syndrome
+    pool all sit above the reference child, at 21 months the one study present in
+    the typically developing pool sits below it. This figure shows where each
+    study sits, over the ages it actually covers, with the administration-weighted
+    child dashed. It is the visible form of the trend-versus-study split that the
+    model has to make wherever studies do not overlap in age.
+    """
+    inputs = study_marginal_inputs(context)
+    if inputs is None:
+        return None
+    X_plot, f_u, h, d_u, d_q, frame = inputs
+    weights = administration_weights(frame, X_plot)
+    p_u_w, p_s_w = weighted_population_curves(f_u, h, d_u, d_q, weights)
+    ref_u = np.median(_sigmoid(f_u), axis=1) * n_trials
+    ref_s = np.median(_sigmoid(f_u) * _sigmoid(h), axis=1) * n_trials
+    w_u = np.median(p_u_w, axis=1) * n_trials
+    w_s = np.median(p_s_w, axis=1) * n_trials
+    names = frame.groupby("study_code")["study"].first()
+    spans = frame.groupby("study_code")["age"].agg(["min", "max"])
+
+    # The default cycle carries ten colours and the Down syndrome pool has
+    # fourteen studies, so the house palette is extended with its dark variants
+    # and, beyond twelve, a dotted line -- rather than letting two studies share
+    # a colour.
+    palette = [
+        plot_styles.COLOUR_BLUE, plot_styles.COLOUR_ORANGE, plot_styles.COLOUR_GREEN,
+        plot_styles.COLOUR_RED, plot_styles.COLOUR_PURPLE, plot_styles.COLOUR_YELLOW,
+        plot_styles.COLOUR_DARK_BLUE, plot_styles.COLOUR_DARK_ORANGE, plot_styles.COLOUR_DARK_GREEN,
+        plot_styles.COLOUR_DARK_RED, plot_styles.COLOUR_DARK_PURPLE, plot_styles.COLOUR_DARK_YELLOW,
+    ]
+    style_of = {
+        k: {"color": palette[i % len(palette)], "ls": "-" if i < len(palette) else ":"}
+        for i, k in enumerate(names.index)
+    }
+
+    fig, axes = plt.subplots(1, 2, figsize=plot_styles.FIGSIZE_XL, sharex=True)
+    rows = []
+    for panel, (ax, ref, wgt, cap, title) in enumerate((
+        (axes[0], ref_u, w_u, max_age_months_understood, "Words understood"),
+        (axes[1], ref_s, w_s, max_age_months_spoken, "Words spoken"),
+    )):
+        keep = np.ones_like(X_plot, dtype=bool) if cap is None else X_plot <= cap
+        for k in names.index:
+            lo, hi = float(spans.loc[k, "min"]), float(spans.loc[k, "max"])
+            inside = keep & (X_plot >= lo) & (X_plot <= hi)
+            if inside.sum() < 2:
+                continue
+            pu_k = _sigmoid(f_u + d_u[int(k)][None, :])
+            curve = pu_k if panel == 0 else pu_k * _sigmoid(h + d_q[int(k)][None, :])
+            median = np.median(curve, axis=1) * n_trials
+            ax.plot(X_plot[inside], median[inside], lw=1.2, alpha=0.9,
+                    label=str(names.loc[k]), **style_of[k])
+            if panel == 0:
+                for a, m_u in zip(X_plot[inside], median[inside], strict=True):
+                    rows.append({"study": str(names.loc[k]), "age_months": float(a), "understood_median": float(m_u)})
+        ax.plot(X_plot[keep], ref[keep], lw=3, color=plot_styles.TEXT_COLOUR, label="Reference child (average study)", zorder=4)
+        ax.plot(X_plot[keep], wgt[keep], lw=2, ls="--", color=plot_styles.TEXT_COLOUR,
+                label="Administration-weighted child", zorder=4)
+        ax.set_title(title)
+        ax.set_xlabel("Age (months)")
+        ax.set_ylabel("Expected word count")
+        ax.set_ylim(0, n_trials)
+    handles, labels = axes[0].get_legend_handles_labels()
+    ncol = min(4, max(2, -(-len(labels) // 4)))
+    fig.suptitle("Where each study sits: per-study curves over their own ages")
+    fig.tight_layout(rect=(0, 0.0, 1, 0.96))
+    # The legend goes in its own band below both panels, sized to its rows, so
+    # it cannot collide with the axis labels.
+    n_rows = -(-len(labels) // ncol)
+    fig.subplots_adjust(bottom=0.12 + 0.05 * n_rows)
+    fig.legend(handles, labels, loc="lower center", ncol=ncol, frameon=True, fontsize=9,
+               bbox_to_anchor=(0.5, 0.01))
+
+    if output_dir is not None and filename is not None:
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300, bbox_inches="tight")
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"), bbox_inches="tight")
+        if rows:
+            plot_io.save_plot_data(output_dir, filename, pd.DataFrame(rows))
+    return fig
+
+
 def run_bivariate_joint_plots(
     context: BivariateContext,
     definition: BivariateModelDefinition,
@@ -2432,6 +2624,34 @@ def run_bivariate_joint_plots(
     )
     context.plots["joint_trajectory_intervals"] = fig
     plt.close(fig)
+
+    # ---- Per-study fans and the administration-weighted child ----
+
+    fig = plot_study_fans(
+        context,
+        n_trials=context.model_data.n_trials,
+        output_dir=context.reporting.output_dir,
+        filename="study_fans",
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
+    )
+    if fig is not None:
+        context.plots["study_fans"] = fig
+        plt.close(fig)
+    write_weighted_monthly_summaries(
+        context,
+        context.model_data.n_trials,
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
+    )
 
     # ---- Production rate q(a) ----
 

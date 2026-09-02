@@ -193,6 +193,14 @@ render_frame_composition()
 ```
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
 import matplotlib.pyplot as plt
 import pandas as pd
 

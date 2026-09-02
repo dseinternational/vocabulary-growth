@@ -154,22 +154,41 @@ comprehension gap is large (~4× at 24 mo) but the **production** gap is far lar
 ```{python}
 ad_s = pd.read_csv("ds_td_spoken_re_attainment_delay.csv")
 ad_u = pd.read_csv("ds_td_understood_re_attainment_delay.csv")
+def _opt(name):
+    try:
+        return pd.read_csv(name)
+    except FileNotFoundError:
+        return None
+adw_s, adw_u = _opt("ds_td_spoken_re_attainment_delay_weighted.csv"), _opt("ds_td_understood_re_attainment_delay_weighted.csv")
 
 levels = [10, 50, 100, 200, 300]
 rows = []
 for v in levels:
-    rows.append({
+    row = {
         "Level v (words)": v,
         "Understood delay (mo)": plain_at(ad_u, "words", v, dec=0),
         "Spoken delay (mo)": plain_at(ad_s, "words", v, dec=0),
-    })
+    }
+    if adw_u is not None and adw_s is not None:
+        row["Understood, weighted child"] = plain_at(adw_u, "words", v, dec=0)
+        row["Spoken, weighted child"] = plain_at(adw_s, "words", v, dec=0)
+    rows.append(row)
 pd.DataFrame(rows).set_index("Level v (words)")
 ```
 
-The attainment delay $D(v)$ — months DS reaches level $v$ after TD — **grows with
-the level** on both outcomes. A flat $D(v)$ would mean a pure time-shift; the
-rising curve means the gap _widens_ with development, and production lags
-comprehension at every level.
+The attainment delay $D(v)$ — months DS reaches level $v$ after TD — is read off the
+**reference child** of each population: zero study and child effects, the child in
+the *average study*. Studies are segregated by age in both pools, so at a given age
+the reference child can sit above or below every study actually sampled there, and a
+crossing age inherits that. The **weighted child** columns re-weight the same fits to
+the studies present at each age (the child the sample medians describe); the gap
+between the two columns is the study-coverage sensitivity of the headline, and it is
+not small at the top of the range — on the reference child the comprehension delay
+reaches 26 months at 300 words, where the typically developing reference child sits
+46 words above the only study sampled at 21 months. On both readings $D(v)$ **grows
+with the level** on both outcomes — a flat $D(v)$ would mean a pure time-shift — and
+production lags comprehension at every level; how steeply the comprehension delay
+grows is what the two readings disagree about.
 
 ![Attainment delay D(v) — understood](ds_td_understood_re_attainment_delay.png){#fig-ad-u .lightbox fig-align="left"}
 
@@ -275,6 +294,10 @@ try:
     qo = pd.read_csv("ds_td_comprehension_q_observed.csv")
 except FileNotFoundError:
     qo = None
+try:
+    quw = pd.read_csv("ds_td_comprehension_q_at_U_weighted.csv")
+except FileNotFoundError:
+    quw = None
 
 def _observed(pop, N):
     if qo is None:
@@ -294,13 +317,15 @@ for N in [50, 100, 150, 200, 300]:
         "Curve q DS": band_at(qu, "words", N, "q_DS", dec=2, cov_col="dq_coverage"),
         "Curve Δq (TD−DS)": band_at(qu, "words", N, "dq", dec=2, cov_col="dq_coverage"),
         "P(Δq>0)": f"{r['dq_p_gt0']:.2f}",
+        "Weighted child q TD": "—" if quw is None else band_at(quw, "words", N, "q_TD", dec=2, cov_col="dq_coverage"),
+        "Weighted child q DS": "—" if quw is None else band_at(quw, "words", N, "q_DS", dec=2, cov_col="dq_coverage"),
         "Children TD: observed q": _observed("TD", N),
         "Children DS: observed q": _observed("DS", N),
     })
 pd.DataFrame(rows).set_index("Understood N (words)")
 ```
 
-Two columns, two different questions. The **curve** columns are the population production ratio read at the age each population's comprehension trajectory reaches N words — a population-curve contrast for the reference child (zero study and child effects), not E[q_i | U_i = N]. On that reading the DS population curve produces a smaller fraction of what the population trajectory understands at the lower levels (Δq ≈ +0.06 at N = 100, ≈ +0.09 at 150, ≈ +0.10 at 200, P(Δq > 0) ≈ 1.00) and the gap then closes: ≈ +0.04 at 250 and **0.00 [−0.07, +0.08] at 300, P(Δq > 0) = 0.50** — at the age each population's reference child understands 300 words, that child speaks about 43% of them in both populations. The **children** columns are the observed spoken-to-understood ratio among the administrations whose understood count fell within ±10% of N, rebuilt from each fit's own frame and verified against its recorded hash. They sit below the curves at every level: conditioning on N selects every child who reached it at *any* age, the ratio rises with age, and those children are younger than the age at which the reference child reaches N. At 300 words that age selection accounts for the same 0.23 in both populations. What is left — TD children 0.07 above their age's population ratio, DS children 0.07 below — is not a population property: split by study and adjusted for each study's own median age, the residuals scatter from −0.17 to +0.14 within *both* populations (TD: `Marchman` +0.13, `Thal` +0.02; DS: `uk_02` +0.14, `it_01` −0.17), and the pooled sign is whichever studies dominate at that level. At 200 words, where no residual remains on either side, the children's gap (0.16 against 0.10) is the population-stage gap. So the curves' convergence at 300 is a real statement about the two populations' developmental stages; the children columns show no Down-syndrome-specific shortfall in conversion at that level that survives age and study; and neither column supports the claim that a child with Down syndrome who understands 300 words speaks the same share as a typically developing child who does, because the children at that level are not comparable across the two pools. ![Population production ratio at matched comprehension q(U=N)](ds_td_comprehension_q_at_U.png){#fig-qatu .lightbox fig-align="left"}
+Two columns, two different questions. The **curve** columns are the population production ratio read at the age each population's comprehension trajectory reaches N words — a population-curve contrast for the reference child (zero study and child effects), not E[q_i | U_i = N]. On that reading the DS population curve produces a smaller fraction of what the population trajectory understands at the lower levels (Δq ≈ +0.06 at N = 100, ≈ +0.09 at 150, ≈ +0.10 at 200, P(Δq > 0) ≈ 1.00) and the gap then closes: ≈ +0.04 at 250 and **0.00 [−0.07, +0.08] at 300, P(Δq > 0) = 0.50** — at the age each population's reference child understands 300 words, that child speaks about 43% of them in both populations. That convergence is the reference child's and sits at the typically developing window's edge: at 21 months the TD reference child understands 301 words where the only study sampled there has a median of 255 and a spoken-to-understood ratio of 0.30, and the TD sample median does not reach 300 words inside the 22-month window. The **weighted child** columns re-weight the same fits to the studies present at each age; where they and the reference child disagree, the difference is study coverage, not development. The **children** columns are the observed spoken-to-understood ratio among the administrations whose understood count fell within ±10% of N, rebuilt from each fit's own frame and verified against its recorded hash. They sit below the curves at every level: conditioning on N selects every child who reached it at *any* age, the ratio rises with age, and those children are younger than the age at which the reference child reaches N. At 300 words that age selection accounts for the same 0.23 in both populations. What is left — TD children 0.07 above their age's population ratio, DS children 0.07 below — is not a population property: split by study and adjusted for each study's own median age, the residuals scatter from −0.17 to +0.14 within *both* populations (TD: `Marchman` +0.13, `Thal` +0.02; DS: `uk_02` +0.14, `it_01` −0.17), and the pooled sign is whichever studies dominate at that level. At 200 words, where no residual remains on either side, the children's gap (0.16 against 0.10) is the population-stage gap. So the curves' convergence at 300 is a real statement about the two populations' developmental stages; the children columns show no Down-syndrome-specific shortfall in conversion at that level that survives age and study; and neither column supports the claim that a child with Down syndrome who understands 300 words speaks the same share as a typically developing child who does, because the children at that level are not comparable across the two pools. ![Population production ratio at matched comprehension q(U=N)](ds_td_comprehension_q_at_U.png){#fig-qatu .lightbox fig-align="left"}
 
 ![Spoken-fraction gap at matched comprehension](ds_td_comprehension_dq.png){#fig-dq .lightbox fig-align="left"}
 
