@@ -122,6 +122,15 @@ def subject_scale_priors(value, name: str) -> dict:
     ratio. Plotting ``{name}`` against a HalfNormal it no longer has would be the
     same error the variance partition already documents just above.
     """
+    # VG19 puts a child intercept-and-rate block (`SubjectSlopePriorParams`)
+    # in the same field; the sampled scales are then `{name}_0` and `{name}_1`
+    # and the field itself is a deterministic alias. Passing the block to
+    # HalfNormal raised inside preliz and killed the whole registry sweep.
+    if getattr(value, "tau0_sigma", None) is not None:
+        return {
+            f"{name}_0": pz.HalfNormal(sigma=float(value.tau0_sigma)),
+            f"{name}_1": pz.HalfNormal(sigma=float(value.tau1_sigma)),
+        }
     spec = subject_scale_spec(value)
     if spec is None:
         return {name: pz.HalfNormal(sigma=value)}
@@ -331,8 +340,12 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
         if stored is not None and stored != normalise_for_json(definition):
             print(f"  {short}: SKIPPED — trace predates the current definition (refit needed)")
             return []
+    try:
+        priors = model_priors(definition)
+    except Exception as exc:  # a prior form this builder does not know yet
+        print(f"  {short}: SKIPPED — prior builder failed ({type(exc).__name__}: {exc})")
+        return []
     idata = az.from_netcdf(trace_path)
-    priors = model_priors(definition)
     rows = []
     for name, prior in priors.items():
         if name not in idata.posterior.data_vars:
