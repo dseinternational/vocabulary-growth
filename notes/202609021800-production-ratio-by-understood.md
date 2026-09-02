@@ -35,7 +35,16 @@ As a **population-stage statement** the agreement is real and reasonably well su
 - The three captions now say what the axis is and that the figure is not the conditional share.
 - A new shared block, `report_cells.render_conditional_production_check`, renders beneath the figure on all eight templates that carry it (VG10, VG19, VG20 and VG22 through the shared body). It states the reading, then sets the curve beside the observed children at each level the curve covers — count, median ratio, interquartile range, median age — from the hash-verified frame, and says that a comparison between populations at a comprehension milestone must be made in that column.
 
+## Follow-through into the DS/TD comparison
+
+Three surfaces carried the same curve into the cross-population contrast.
+
+- **The comparison book's "Comprehension-matched production ratio"** (`compare_ds_td_re.py comprehension`, VG20 vs VG13) already stated the #233 reading, but tabulated N = 50/100/150 and concluded "converging by N ≈ 200" — true of the population curves and opposite to the children. `run_comprehension_matched` now also writes `ds_td_comprehension_q_observed.csv` from the two hash-verified frames through the same `observed_production_ratio_at_levels` the model pages use, and the book's table runs to N = 300 with the observed children beside the curve in each population: at 300 words, curves near 0.4 in both, children 0.23 (TD, VG13's 8–18-month frame, 381 children) and 0.13 (DS, 97 children). The prose now says the curves converge and the children do not, and that a statement about children at a milestone is made from the children columns.
+- **`compare_models.ds_td_q_vs_understood`**, described in its docstring as a "headline matched-comprehension q overlay" (DS VG09 vs TD VG13, VG07 dashed), together with `ds_td_q_crossings.csv` — the words-understood at which q reaches 0.25/0.5/0.75/0.9 per population, the child-level reading bare — and the VG20 duplicate `ds_td_q_vs_understood_vg20` are retired. Neither carried a caveat and the first used a development model for the DS side. The book's figure is the one of record; `compare_ds_td.py`, the deprecated shim that still called the retired figure "canonical", now delegates to `compare_ds_td_re.run_comprehension_matched`. `ds_td_spoken_vs_understood_vg20`, the same contrast in words rather than a ratio, already carried the caveat and stays.
+- **The report book** does not narrate the DS/TD production ratio at all, so nothing there needed changing.
+
 ## Open
 
 - A model-derived $E[q \mid U]$ — integrating the joint child-effect posterior through the understood likelihood — is the quantity the reader wanted and does not exist as an output. The empirical column is the honest substitute until it does. #233 records the same gap.
 - The Down syndrome column at 300 words draws a third of its administrations from one study (`it_01`, 36 of 112); a per-study breakdown would say whether the 0.13 is a pool property or a study property.
+- The comparison book's children columns come from VG13's frame on the typically developing side (8–18 months, 381 children at 300 words), not VG21's (8–22 months, 464); the two agree to within 0.04 at 300 words, and the book names its source.

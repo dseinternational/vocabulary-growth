@@ -1646,3 +1646,22 @@ def test_conditional_production_check_says_why_when_the_frame_is_unavailable(
 def test_conditional_production_check_says_so_when_the_curve_is_absent(tmp_path, capsys):
     report_cells.render_conditional_production_check(str(_fit(tmp_path)))
     assert "no by-understood production curve" in capsys.readouterr().out
+
+
+def test_observed_production_ratio_at_levels_windows_and_thresholds():
+    """Shared by the page block and compare_ds_td_re, so one definition of "near"."""
+    frame = pd.DataFrame(
+        {
+            "understood": [95, 100, 105, 110, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300],
+            "spoken": [10, 20, 30, 40] + [30, 60, 90, 120, 150, 30, 60, 90, 120, 150, 90],
+            "age": [12, 12, 13, 13] + [40] * 11,
+            "subject_key": [f"c{i}" for i in range(14)] + ["c13"],
+        }
+    )
+    table = report_cells.observed_production_ratio_at_levels(frame, [100, 200, 300])
+    # 100 has four rows (below the ten-row floor); 200 has none; 300 has eleven.
+    assert table["level"].tolist() == [300.0]
+    row = table.iloc[0]
+    assert row["n"] == 11 and row["children"] == 10
+    assert abs(row["median"] - 0.3) < 1e-9
+    assert row["median_age"] == 40.0

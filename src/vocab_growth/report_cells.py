@@ -2643,6 +2643,50 @@ def _print_kappa_identification(directory: str, definition: dict, suffixes: list
 _CONDITIONAL_PRODUCTION_LEVELS = (50, 100, 200, 300, 400, 500, 600)
 
 
+def observed_production_ratio_at_levels(frame, levels, *, tolerance: float = 0.10):
+    """Observed spoken/understood among children whose understood count is near each level.
+
+    One row per level with at least ten qualifying administrations: ``level``,
+    ``n`` (administrations), ``children`` (distinct, where the frame has a child
+    key, else ``n``), ``median``, ``q25``, ``q75``, and ``median_age`` where the
+    frame has an age. Shared by the model page's conditional-production check and
+    ``compare_ds_td_re``'s comprehension-matched run so the two cannot define
+    "near" differently.
+    """
+    import pandas as pd
+
+    understood = pd.to_numeric(frame["understood"], errors="coerce")
+    spoken = pd.to_numeric(frame["spoken"], errors="coerce")
+    ratio = spoken / understood
+    rows = []
+    for level in levels:
+        window = (
+            (understood >= (1 - tolerance) * level)
+            & (understood <= (1 + tolerance) * level)
+            & spoken.notna()
+        )
+        n = int(window.sum())
+        if n < 10:
+            continue
+        observed = ratio[window]
+        rows.append(
+            {
+                "level": float(level),
+                "n": n,
+                "children": int(frame.loc[window, "subject_key"].nunique())
+                if "subject_key" in frame.columns
+                else n,
+                "median": float(observed.median()),
+                "q25": float(observed.quantile(0.25)),
+                "q75": float(observed.quantile(0.75)),
+                "median_age": float(frame.loc[window, "age"].median())
+                if "age" in frame.columns
+                else float("nan"),
+            }
+        )
+    return pd.DataFrame(rows, columns=["level", "n", "children", "median", "q25", "q75", "median_age"])
+
+
 def render_conditional_production_check(directory: str = ".") -> None:
     """Set the by-understood production curve beside the children who reached each level.
 
@@ -2667,7 +2711,6 @@ def render_conditional_production_check(directory: str = ".") -> None:
     comprehension milestone has to use the second column, and this block puts
     it on the page from the frame the fit recorded.
     """
-    import pandas as pd
 
     curve = _read(directory, "production_rate_by_understood")
     if curve is None or not {"words_understood", "q_median"} <= set(curve.columns):
@@ -2695,13 +2738,13 @@ def render_conditional_production_check(directory: str = ".") -> None:
         )
         return
 
-    understood = pd.to_numeric(frame["understood"], errors="coerce")
-    spoken = pd.to_numeric(frame["spoken"], errors="coerce")
-    ratio = spoken / understood
     has_child = "subject_key" in frame.columns
     ages = frame["age"] if "age" in frame.columns else None
     x_max = float(curve["words_understood"].max())
     has_ci = {"ci_lo", "ci_hi"} <= set(curve.columns)
+    observed_rows = observed_production_ratio_at_levels(
+        frame, [lv for lv in _CONDITIONAL_PRODUCTION_LEVELS if lv <= x_max]
+    ).set_index("level")
 
     header = ["Words understood", "Curve: population ratio"]
     if has_ci:
@@ -2714,26 +2757,22 @@ def render_conditional_production_check(directory: str = ".") -> None:
 
     shown = 0
     for level in _CONDITIONAL_PRODUCTION_LEVELS:
-        if level > x_max:
+        if level > x_max or float(level) not in observed_rows.index:
             continue
         row = curve.iloc[int((curve["words_understood"] - level).abs().idxmin())]
-        window = (understood >= 0.9 * level) & (understood <= 1.1 * level) & spoken.notna()
-        n = int(window.sum())
-        if n < 10:
-            continue
-        observed = ratio[window]
+        seen = observed_rows.loc[float(level)]
         curve_cell = f"{float(row['q_median']):.2f}"
         if has_ci:
             curve_cell += f" [{float(row['ci_lo']):.2f}, {float(row['ci_hi']):.2f}]"
-        who = f"{frame.loc[window, 'subject_key'].nunique():,} children" if has_child else f"{n:,} administrations"
+        who = f"{int(seen['children']):,} children" if has_child else f"{int(seen['n']):,} administrations"
         cells = [
             f"{level}",
             curve_cell,
             who,
-            f"{observed.median():.2f} ({observed.quantile(0.25):.2f}–{observed.quantile(0.75):.2f})",
+            f"{seen['median']:.2f} ({seen['q25']:.2f}–{seen['q75']:.2f})",
         ]
         if ages is not None:
-            cells.append(f"{ages[window].median():.0f} months")
+            cells.append(f"{seen['median_age']:.0f} months")
         print("| " + " | ".join(cells) + " |")
         shown += 1
     print()

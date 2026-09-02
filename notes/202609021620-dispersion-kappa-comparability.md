@@ -86,6 +86,12 @@ A new shared block, `report_cells.render_dispersion_scope`, renders immediately 
 
 Every claim is read from the fit, so a page cannot assert a scope its own fit contradicts, and `_verified_frame` is now shared with `render_frame_composition` so the two cannot apply the hash guard differently. The shared body's cross-outcome comparison was replaced.
 
+## Follow-through into the DS/TD comparison
+
+The denominator finding turned out to be live in a published contrast. `compare_ds_td_re.py` pairs VG20 with VG11 (spoken) and VG12 (understood) for its dispersion contrast, chosen so that κ carries the same thing on both sides — subject random effects on both. Its own comment recorded a "known residual, not addressed here": that VG20's $\kappa_s$ is the dispersion of the ratio conditional on understood while VG11's is marginal on the item pool. The book carried no such caveat, and the arithmetic went further than a caveat: the spoken block fed VG20's $\kappa_s$ into $(\kappa + n)/(\kappa + 1)$ and the implied-SD formula with $n = 810$, treating a concentration on the child's own understood count as one on the pool.
+
+The DS spoken side now uses `comparison.load_marginal_spoken_trajectory`, whose concentration is `comparison.product_marginal_kappa` — a NumPy port of the graph's own `product_marginal_concentration`, pinned to it by a test — so both sides of the spoken contrast are on the pool denominator. The correction inverts the published reading. With the conditional $\kappa_s$ the book said DS spoken counts were slightly _more_ overdispersed than TD in the first months and TD overtook during the second year; with the marginal concentration TD is the more overdispersed group at every age in the overlap, φ_TD/φ_DS ≈ 2.2 at 12 months, 3.9 at 18, 6.2 at 24 and 8.3 at 30. The DS marginal concentration is in the hundreds to thousands at the youngest ages, which is what a spoken proportion very close to zero looks like under a product of two Betas — the floor the book already warned about, now on the right scale. The understood contrast was marginal on both sides throughout and is unchanged. Every spoken dispersion contrast published before 2026-09-02 is superseded.
+
 ## Open
 
 - The `us01-implausible-reinstated` and `dse-native-only` sensitivity arms still need the successor variants recorded during this run; nothing here changes that.

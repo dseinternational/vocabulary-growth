@@ -8,13 +8,21 @@ Produces figures under ``output/comparisons/``:
 - ``ds_td_spoken_by_age.{png,svg}`` — VG01 (DS) vs VG03 (TD) — words spoken
 - ``ds_td_understood_by_age.{png,svg}`` — VG02 (DS) vs VG04 (TD) — understood
 - ``vg05_vs_vg07_{understood,spoken}.{png,svg}`` — study-RE effect in VG07
-- ``ds_td_q_vs_understood.{png,svg}`` (+ ``ds_td_q_crossings.csv``) — headline
-  matched-comprehension q overlay (DS VG09 / TD VG13, VG07 dashed reference)
 - ``vg07_vg09_vg10_q_by_age.{png,svg}`` — q(age) three-way overlay
 - ``ds_td_q_by_age_vg20.{png,svg}`` — q(age) DS (VG20) vs TD (VG13)
-- ``ds_td_q_vs_understood_vg20.{png,svg}`` — matched-comprehension q with VG20
 - ``ds_td_spoken_vs_understood_vg20.{png,svg}`` (+ ``.csv``) — the same
   matched-comprehension comparison in words spoken rather than the ratio
+
+The DS/TD production-ratio-against-comprehension overlays that used to live here
+(``ds_td_q_vs_understood`` with ``ds_td_q_crossings.csv``, and the VG20 variant)
+were retired on 2026-09-02. Both drew the population ratio at the age each
+population's median reaches U words and labelled it "matched-comprehension", and
+the crossings table read that curve as the words-understood at which children
+speak half of what they understand -- the conditional reading issue #233 rules
+out, and one the children contradict (0.27 TD against 0.13 DS at 300 words, where
+the curves both give 0.4). The book's version, ``compare_ds_td_re.py
+comprehension`` (VG20 vs VG13, with the observed children beside the curve), is
+the one figure of record for that contrast.
 
 Shared helpers (``first_crossing``, ``overlay_age_curves``) and model-path
 resolution (``model_dir``) come from ``vocab_growth.comparison``.
@@ -33,7 +41,7 @@ import pandas as pd
 
 from vocab_growth import environment as env
 from vocab_growth.analysis_frames import expected_analysis_frame_hash
-from vocab_growth.comparison import first_crossing, model_dir, overlay_age_curves
+from vocab_growth.comparison import model_dir, overlay_age_curves
 from vocab_growth.comparisons_provenance import write_comparison_manifest
 from vocab_growth.fit_artifacts import (
     fit_validation_kwargs,
@@ -121,57 +129,6 @@ def vg05_vs_vg07() -> None:
         )
 
 
-def _q_vs_understood_crossings(series: list[tuple[str, pd.DataFrame]]) -> pd.DataFrame:
-    rows = []
-    for pop, df in series:
-        for thresh in (0.25, 0.5, 0.75, 0.90):
-            rows.append({
-                "population": pop,
-                "threshold": thresh,
-                "n_understood_at_median": first_crossing(
-                    df["words_understood"].to_numpy(), df["q_median"].to_numpy(), thresh),
-                "n_understood_at_ci_lo": first_crossing(
-                    df["words_understood"].to_numpy(), df["ci_lo"].to_numpy(), thresh),
-                "n_understood_at_ci_hi": first_crossing(
-                    df["words_understood"].to_numpy(), df["ci_hi"].to_numpy(), thresh),
-            })
-    return pd.DataFrame(rows)
-
-
-def ds_td_q_vs_understood() -> None:
-    """Headline matched-comprehension q overlay: DS (VG09) vs TD (VG13), VG07 dashed."""
-    ds_vg09 = _read("vg09", "production_rate_by_understood.csv")
-    ds_vg07 = _read("vg07", "production_rate_by_understood.csv")
-    td = _read("vg13", "production_rate_by_understood.csv")
-
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    ax.fill_between(td["words_understood"], td["ci_lo"], td["ci_hi"],
-                    color=TD_COLOUR, alpha=0.18, linewidth=0, label="TD 89% interval")
-    ax.fill_between(ds_vg09["words_understood"], ds_vg09["ci_lo"], ds_vg09["ci_hi"],
-                    color=DS_COLOUR, alpha=0.18, linewidth=0, label="DS 89% interval")
-    ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5,
-            label="TD median q (VG13)")
-    ax.plot(ds_vg09["words_understood"], ds_vg09["q_median"], color=DS_COLOUR, lw=2.5,
-            label="DS median q (VG09)")
-    ax.plot(ds_vg07["words_understood"], ds_vg07["q_median"], color=DS_COLOUR,
-            lw=1.5, linestyle="--", alpha=0.7, label="DS median q (VG07, no subject RE)")
-    for thresh in (0.5, 0.9):
-        ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
-    ax.set_xlim(0, max(td["words_understood"].max(), ds_vg09["words_understood"].max()))
-    ax.set_ylim(0, 1)
-    ax.set_xlabel("Expected words understood")
-    ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
-    ax.set_title("Production ratio against words understood — DS (VG09) vs TD (VG13)")
-    ax.legend(loc="lower right", frameon=True)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood.png"))
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood.svg"))
-    plt.close(fig)
-
-    _q_vs_understood_crossings(
-        [("DS (VG09)", ds_vg09), ("DS (VG07)", ds_vg07), ("TD (VG13)", td)]
-    ).to_csv(os.path.join(OUT_DIR, "ds_td_q_crossings.csv"), index=False)
-
-
 def _merge_q_by_age(frames: list[tuple[str, pd.DataFrame]]) -> pd.DataFrame:
     merged = None
     for tag, df in frames:
@@ -235,49 +192,6 @@ def ds_td_q_by_age_vg20() -> None:
 
     _merge_q_by_age([("td", td), ("ds", ds)]).to_csv(
         os.path.join(OUT_DIR, "ds_td_q_by_age_vg20.csv"), index=False)
-
-
-def ds_td_q_vs_understood_vg20() -> None:
-    """DS (VG20) vs TD (VG13) production-ratio against words understood."""
-    ds = _read("vg20", "production_rate_by_understood.csv")
-    td = _read("vg13", "production_rate_by_understood.csv")
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-
-    ax.fill_between(td["words_understood"], td["ci_lo"], td["ci_hi"],
-                    color=TD_COLOUR, alpha=0.15, linewidth=0, label="TD (VG13) 89% interval")
-    ax.fill_between(td["words_understood"], td["ci50_lo"], td["ci50_hi"],
-                    color=TD_COLOUR, alpha=0.30, linewidth=0, label="TD (VG13) 50% interval")
-    ax.plot(td["words_understood"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD (VG13) median")
-
-    ax.fill_between(ds["words_understood"], ds["ci_lo"], ds["ci_hi"],
-                    color=DS_COLOUR, alpha=0.15, linewidth=0, label="DS (VG20) 89% interval")
-    ax.fill_between(ds["words_understood"], ds["ci50_lo"], ds["ci50_hi"],
-                    color=DS_COLOUR, alpha=0.30, linewidth=0, label="DS (VG20) 50% interval")
-    ax.plot(ds["words_understood"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS (VG20) median")
-
-    for thresh in (0.5, 0.9):
-        ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
-    ax.set_xlim(0, max(td["words_understood"].max(), ds["words_understood"].max()))
-    ax.set_ylim(0, 1.05)
-    ax.set_xlabel("Expected words understood")
-    ax.set_ylabel(r"Production ratio  q = $E[S] / E[U]$")
-    ax.set_title("Production ratio against words understood — DS (VG20) vs TD (VG13)")
-    ax.legend(loc="lower right", frameon=True, fontsize=10)
-    ax.grid(True, alpha=0.3)
-
-    fig.tight_layout()
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg20.png"), dpi=300)
-    fig.savefig(os.path.join(OUT_DIR, "ds_td_q_vs_understood_vg20.svg"))
-    plt.close(fig)
-
-    print(
-        f"DS (VG20) U range covered: {ds['words_understood'].min():.0f} – "
-        f"{ds['words_understood'].max():.0f}"
-    )
-    print(
-        f"TD (VG13) U range covered: {td['words_understood'].min():.0f} – "
-        f"{td['words_understood'].max():.0f}"
-    )
 
 
 def ds_td_spoken_vs_understood_vg20() -> None:
@@ -384,11 +298,8 @@ OUTPUTS = tuple(
         ("ds_td_understood_by_age", (".png", ".svg")),
         ("vg05_vs_vg07_understood", (".png", ".svg")),
         ("vg05_vs_vg07_spoken", (".png", ".svg")),
-        ("ds_td_q_vs_understood", (".png", ".svg")),
-        ("ds_td_q_crossings", (".csv",)),
         ("vg07_vg09_vg10_q_by_age", (".png", ".svg", ".csv")),
         ("ds_td_q_by_age_vg20", (".png", ".svg", ".csv")),
-        ("ds_td_q_vs_understood_vg20", (".png", ".svg")),
         ("ds_td_spoken_vs_understood_vg20", (".png", ".svg", ".csv")),
     )
     for ext in extensions
@@ -402,10 +313,8 @@ def main() -> None:
     ds_td_spoken_by_age()
     ds_td_understood_by_age()
     vg05_vs_vg07()
-    ds_td_q_vs_understood()
     vg07_vg09_vg10_q_by_age()
     ds_td_q_by_age_vg20()
-    ds_td_q_vs_understood_vg20()
     ds_td_spoken_vs_understood_vg20()
     write_comparison_manifest(
         OUT_DIR,

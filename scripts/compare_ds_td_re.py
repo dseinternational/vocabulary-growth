@@ -93,10 +93,20 @@ DS_KEY = "vg20"
 # criterion. Corrected 2026-08-05 during the full reporting refit; the July 2026
 # published dispersion contrast is affected and superseded.
 #
-# Known residual, not addressed here: VG10's kappa_s is the dispersion of the
-# production ratio q conditional on understood, whereas VG11's is the dispersion
-# of spoken counts marginally. That joint-vs-univariate difference predates this
-# correction and has not been audited — see the comparison book's caveat.
+# Third correction, 2026-09-02: VG20's kappa_s is the dispersion of the
+# production ratio q on the child's OWN UNDERSTOOD COUNT as denominator, whereas
+# VG11's kappa is the dispersion of spoken counts out of the 810-item pool. The
+# spoken block below used to feed kappa_s into (kappa + n)/(kappa + 1) with
+# n = 810 regardless, so phi_DS and sigma_Y,DS for spoken were computed as if a
+# conditional concentration were a marginal one. The DS spoken side now uses
+# comparison.load_marginal_spoken_trajectory, whose kappa is the concentration
+# of the Beta-Binomial matching the marginal spoken count's variance (the same
+# product-marginal form the graph's spoken fallback uses), which is on the pool
+# denominator and comparable with VG11's. The understood contrast was always
+# marginal on both sides and is unchanged. Every published spoken dispersion
+# contrast before this date is superseded; see
+# notes/202609021620-dispersion-kappa-comparability.md for the denominator
+# finding this follows from.
 #
 # (Mean/rate/delay keep the same model — subject REs are mean-zero, so the
 # population trajectory is unaffected.)
@@ -271,7 +281,12 @@ def run_outcome(outcome: str) -> None:
     # — i.e. one that also carries subject REs, so neither side's kappa absorbs
     # between-child variance (see DISP_DS_KEY note). Pair its draws with the same
     # TD subset; independence makes any pairing valid.
-    a_disp, p_disp, k_disp, _ = C.load_outcome_trajectory(DISP_DS_KEY, outcome)
+    if outcome == "spoken":
+        # Conditional kappa_s is not the object a marginal contrast needs; see
+        # the DISP_DS_KEY note (third correction).
+        a_disp, p_disp, k_disp, _ = C.load_marginal_spoken_trajectory(DISP_DS_KEY)
+    else:
+        a_disp, p_disp, k_disp, _ = C.load_outcome_trajectory(DISP_DS_KEY, outcome)
     i_disp = C.align_draws(p_disp.shape[0], p_td.shape[0], seed=SEED + 1)[0]
     P_ds = C.interp_draws(a_disp, p_disp[i_disp], grid)
     K_ds = C.interp_draws(a_disp, k_disp[i_disp], grid)
@@ -589,6 +604,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     os.makedirs(OUT_DIR, exist_ok=True)
     _merge(N_GRID_Q, "words", q_TD=q_td_s, q_DS=q_ds_s, dq=dq_s).to_csv(
         os.path.join(OUT_DIR, "ds_td_comprehension_q_at_U.csv"), index=False)
+    _write_observed_children(ds_key, td_key)
 
     _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s, da_td, da_ds, qa_td, qa_ds)
 
@@ -601,6 +617,48 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
               f"Δq(TD-DS)={r['dq_median']:+.2f} "
               f"[{r['dq_ci_lo']:+.2f}, {r['dq_ci_hi']:+.2f}]  "
               f"P(TD>DS)={r['dq_p_gt0']:.2f}")
+
+
+def _write_observed_children(ds_key: str, td_key: str) -> None:
+    """The children who actually understood ~N words, beside the population curve.
+
+    The curve is the population ratio at the age each population's median reaches
+    N -- a developmental-stage relationship, not E[q | U = N] (#233). The two
+    differ by a lot and in opposite directions to the curves' own convergence:
+    at 300 words the reporting-quality curves both give ~0.4, the observed
+    children 0.27 (TD) and 0.13 (DS). The book's table shows both columns so a
+    reader cannot take the curves' agreement as the children's. Each frame is
+    rebuilt through the loader rules the fit used and verified against the hash
+    the fit recorded; a population whose frame no longer verifies is omitted
+    with a message rather than described from data the fit did not see.
+    """
+    from vocab_growth.report_cells import (
+        _verified_frame,
+        observed_production_ratio_at_levels,
+        read_manifest,
+    )
+
+    parts = []
+    for pop, key in (("TD", td_key), ("DS", ds_key)):
+        frame, reason = _verified_frame(read_manifest(C.model_dir(key)))
+        if frame is None or not {"understood", "spoken"} <= set(frame.columns):
+            print(f"  observed children for {pop} ({key}) not written: "
+                  f"{reason or 'frame lacks understood/spoken'}", flush=True)
+            continue
+        table = observed_production_ratio_at_levels(frame, N_GRID_Q)
+        table.insert(0, "population", pop)
+        parts.append(table)
+    if not parts:
+        return
+    out = pd.concat(parts, ignore_index=True).rename(columns={"level": "words"})
+    out.to_csv(os.path.join(OUT_DIR, "ds_td_comprehension_q_observed.csv"), index=False)
+    print("  Observed children near each level (median q, IQR, n):")
+    for _, r in out.iterrows():
+        if r["words"] in (100.0, 200.0, 300.0):
+            print(f"    {r['population']} U={int(r['words']):>3}: median q={r['median']:.2f} "
+                  f"[{r['q25']:.2f}, {r['q75']:.2f}]  n={int(r['n'])}  "
+                  f"children={int(r['children'])}  median age={r['median_age']:.0f}", flush=True)
+
 
 
 # ----------------------------------------------------------------------------

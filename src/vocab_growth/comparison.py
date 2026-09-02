@@ -564,6 +564,65 @@ def load_outcome_trajectory(
     return ages, p, k, n_trials(key)
 
 
+def product_marginal_kappa(
+    p_u: np.ndarray, kappa_u: np.ndarray, q: np.ndarray, kappa_s: np.ndarray
+) -> np.ndarray:
+    """Concentration of the Beta-Binomial matching the marginal spoken count's variance.
+
+    NumPy port of ``likelihood_utils.product_marginal_concentration`` (the PyMC
+    form the ``product_marginal`` fallback uses in the graph), kept in step by
+    :func:`tests.test_comparison.test_product_marginal_kappa_matches_the_graph_form`.
+
+    The joint models draw ``theta_U ~ Beta(p_U kappa_U)`` and ``theta_S ~ Beta(q
+    kappa_S)`` independently, with ``S | U ~ Bin(U, theta_S)``, so the marginal
+    spoken count is a Binomial mixed over the *product* of two Betas. That
+    product has no Beta form but both moments are elementary::
+
+        m         = p_U q
+        E[theta^2] = p (p kappa + 1) / (kappa + 1)          for each factor
+        var       = E[theta_U^2] E[theta_S^2] - m^2
+        kappa_eff = m (1 - m) / var - 1
+
+    This is the quantity a DS/TD **spoken** dispersion contrast has to use. VG20's
+    ``kappa_s`` is the dispersion of the ratio ``q`` on the child's own understood
+    count as denominator, and feeding it into ``(kappa + n)/(kappa + 1)`` with
+    ``n = 810`` treats it as though it dispersed counts out of the item pool --
+    which is what VG11's ``kappa`` does, and what the contrast then compared it
+    with (``compare_ds_td_re.py``'s long-standing "known residual"). ``kappa_eff``
+    is on the item-pool denominator and is comparable. It reduces to ``kappa_s``
+    at ``kappa_U -> inf`` and ``p_U = 1``.
+    """
+    eps = 1e-9
+    pu = np.clip(np.asarray(p_u, dtype=float), eps, 1 - eps)
+    pc = np.clip(np.asarray(q, dtype=float), eps, 1 - eps)
+    ku = np.asarray(kappa_u, dtype=float)
+    ks = np.asarray(kappa_s, dtype=float)
+    m = pu * pc
+    e2_parent = pu * (pu * ku + 1.0) / (ku + 1.0)
+    e2_child = pc * (pc * ks + 1.0) / (ks + 1.0)
+    variance = np.maximum(e2_parent * e2_child - m * m, 1e-12)
+    return np.maximum(m * (1.0 - m) / variance - 1.0, 1e-6)
+
+
+def load_marginal_spoken_trajectory(
+    key: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """``(ages, p_s, kappa_eff, n_trials)`` for a joint model's marginal spoken count.
+
+    The bivariate counterpart of :func:`load_outcome_trajectory` for the one case
+    where that function's ``kappa_s_plot`` is the wrong object: ``p_s = p_u q`` is
+    already marginal, but ``kappa_s`` is conditional, and a dispersion contrast
+    against a univariate spoken model needs :func:`product_marginal_kappa`.
+    """
+    d = MODEL_REGISTRY[key]
+    if d.model_type is not ModelType.BIVARIATE:
+        raise ValueError(f"{key} is not a bivariate model; use load_outcome_trajectory.")
+    ages, (p_u, k_u, q, k_s), _ = _load_reshaped_draws(
+        trace_path(key), ("p_u_plot", "kappa_u_plot", "q_plot", "kappa_s_plot")
+    )
+    return ages, p_u * q, product_marginal_kappa(p_u, k_u, q, k_s), n_trials(key)
+
+
 def implied_sd_y(p: np.ndarray, kappa: np.ndarray, n: int) -> np.ndarray:
     """Beta-Binomial implied SD of the word count Y (words).
 

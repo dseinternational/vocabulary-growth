@@ -271,20 +271,36 @@ the _extra_ lag compresses. The level-indexed Δ_exp above is the cleaner statis
 
 ```{python}
 qu = pd.read_csv("ds_td_comprehension_q_at_U.csv")
+try:
+    qo = pd.read_csv("ds_td_comprehension_q_observed.csv")
+except FileNotFoundError:
+    qo = None
+
+def _observed(pop, N):
+    if qo is None:
+        return "—"
+    hit = qo[(qo["population"] == pop) & (qo["words"] == N)]
+    if hit.empty:
+        return "—"
+    r = hit.iloc[0]
+    return f"{r['median']:.2f} ({r['q25']:.2f}–{r['q75']:.2f}), n={int(r['children'])}"
+
 rows = []
-for N in [50, 100, 150]:
+for N in [50, 100, 150, 200, 300]:
     r = _nearest(qu, "words", N)
     rows.append({
         "Understood N (words)": N,
-        "q TD": band_at(qu, "words", N, "q_TD", dec=2, cov_col="dq_coverage"),
-        "q DS": band_at(qu, "words", N, "q_DS", dec=2, cov_col="dq_coverage"),
-        "Δq (TD−DS)": band_at(qu, "words", N, "dq", dec=2, cov_col="dq_coverage"),
+        "Curve q TD": band_at(qu, "words", N, "q_TD", dec=2, cov_col="dq_coverage"),
+        "Curve q DS": band_at(qu, "words", N, "q_DS", dec=2, cov_col="dq_coverage"),
+        "Curve Δq (TD−DS)": band_at(qu, "words", N, "dq", dec=2, cov_col="dq_coverage"),
         "P(Δq>0)": f"{r['dq_p_gt0']:.2f}",
+        "Children TD: observed q": _observed("TD", N),
+        "Children DS: observed q": _observed("DS", N),
     })
 pd.DataFrame(rows).set_index("Understood N (words)")
 ```
 
-At equal population comprehension, the DS population curve produces a smaller fraction of the words the population trajectory understands (Δq > 0, P ≈ 1.00 from N ≈ 50 to ≈ 150, converging by N ≈ 200). This q is the population production ratio read at the age each population's comprehension trajectory reaches N words — a population-curve contrast, not E[q_i | U_i = N]; a child-level "given a child understands N words" statement would need the subject random effects and (in VG20) their correlation rho_uq, which this transformation does not use. The TD comparator (VG13, 8–18 mo) already understands ~40 words at its youngest supported age, so q is **not identified below N ≈ 50 for TD** — those points are dropped by the coverage filter, and the curves begin where both populations genuinely reach that comprehension level within support.
+Two columns, two different questions. The **curve** columns are the population production ratio read at the age each population's comprehension trajectory reaches N words — a population-curve contrast, not E[q_i | U_i = N]. On that reading the DS population curve produces a smaller fraction of what the population trajectory understands (Δq > 0, P ≈ 1.00 from N ≈ 50 to ≈ 150) and the two curves converge by N ≈ 200–300. The **children** columns are the observed spoken-to-understood ratio among the administrations whose understood count fell within ±10% of N, rebuilt from each fit's own frame and verified against its recorded hash. They do not converge: at 300 words the curves both sit near 0.4 while the children who understood 300 words have median ratios of about 0.27 (TD) and 0.13 (DS). Conditioning on N selects every child who reached it at *any* age; the ratio rises with age; so those children are younger than the age at which the population median reaches N and speak a smaller share — increasingly so as N rises, and most where comprehension grows slowly over a long window, which is the DS pool. **A statement about children at a comprehension milestone must be made from the children columns.** A model-derived E[q_i | U_i = N] would need the subject random effects and (in VG20) their correlation rho_uq, which this transformation does not use; the observed column is the honest substitute until that exists (#233). The TD comparator (VG13, 8–18 mo) already understands ~40 words at its youngest supported age, so q is **not identified below N ≈ 50 for TD** — those points are dropped by the coverage filter, and the curves begin where both populations genuinely reach that comprehension level within support.
 
 ![Population production ratio at matched comprehension q(U=N)](ds_td_comprehension_q_at_U.png){#fig-qatu .lightbox fig-align="left"}
 
@@ -343,6 +359,15 @@ populations sit. A ratio $\varphi_{TD}/\varphi_{DS} > 1$ means TD counts are the
 more overdispersed *given the model's fitted means*, not that TD children vary
 more.
 
+For **spoken** the DS side is not VG20's fitted $\kappa_s$ but the concentration of
+the Beta-Binomial matching the *marginal* spoken count's variance. VG20's
+$\kappa_s$ disperses the production ratio on each child's own understood count as
+denominator, whereas VG11's $\kappa$ disperses spoken counts out of the 810-item
+pool; feeding the first into $(\kappa + n)/(\kappa + 1)$ with $n = 810$, as this
+contrast did until 2026-09-02, compared a conditional concentration with a
+marginal one and every spoken dispersion contrast published before that date is
+superseded. The understood contrast was always marginal on both sides.
+
 ```{python}
 ds_s = pd.read_csv("ds_td_spoken_re_dispersion.csv")
 ds_u = pd.read_csv("ds_td_understood_re_dispersion.csv")
@@ -367,17 +392,25 @@ Two distinct stories:
   ages (φ_TD/φ_DS ≈ 1) — the residual the Beta-Binomial layer carries is of similar
   relative size in both. TD's larger _absolute_ spread σ_Y is essentially a
   consequence of its larger mean.
-- **Production:** early DS spoken counts are slightly _more_ overdispersed than TD
-  (φ_TD/φ_DS < 1 in the first months), but the ordering **reverses during the
-  second year**: as TD production explodes its absolute spread balloons (σ_Y ~5 →
-  ~70+ words by ~18 mo) while DS production stays compressed near the floor, and
-  TD becomes the more overdispersed group. DS production is not just lower — it is
-  also far less variable in absolute terms across the overlap.
+- **Production:** with the DS side on the marginal concentration (see above),
+  TD spoken counts are the more overdispersed group *at every age in the
+  overlap*, and increasingly so: φ_TD/φ_DS ≈ 2 at 12 months, ≈ 4 at 18, ≈ 6 at
+  24 and ≈ 8 at 30. The reversal an earlier version of this section described
+  — DS slightly more overdispersed in the first months, TD overtaking in the
+  second year — was an artefact of feeding VG20's conditional κ_s into the
+  pool-denominator formula; it does not survive the correction. In absolute
+  terms TD production's spread balloons as it takes off (σ_Y ≈ 4 → 75 words
+  from 12 to 24 months) while DS production stays compressed near the floor
+  (σ_Y ≈ 1 → 5). DS production is not just lower — it is also far less
+  variable across the overlap, in both relative and absolute terms.
 
-Read the second bullet with the floor in mind. At 8 months almost every TD child
-produces no words at all, so TD counts are near-Binomial there and φ is close to
-its lower limit; that is a floor, not a population of unusually similar children.
-The same mechanism compresses DS production across the whole overlap window.
+Read the second bullet with the floor in mind. Where almost every child in a
+population produces no words at all, counts are near-Binomial and φ is close to
+its lower limit; that is a floor, not a population of unusually similar
+children. It compresses DS production across the whole overlap window, and TD
+production at 8 months. A marginal concentration in the hundreds or thousands
+at the youngest DS ages is what a proportion very close to zero looks like, not
+a statement about how alike those children are.
 
 ![Between-child spread σ_Y — spoken](ds_td_spoken_re_spread.png){#fig-sd-s .lightbox fig-align="left"}
 
