@@ -1503,3 +1503,88 @@ def test_prior_vs_posterior_presses_on_both_tails():
     source = (REPO_ROOT / "scripts" / "prior_vs_posterior.py").read_text(encoding="utf-8")
     assert "CONFLICT_CDF = 0.95" in source
     assert "if cdf >= CONFLICT_CDF or cdf <= 1.0 - CONFLICT_CDF:" in source
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("kappa_min_u", ("min", "u")),
+        ("kappa_min", ("min", None)),
+        ("kappa_excess_young_s", ("excess_young", "s")),
+        ("kappa_excess_old_sign", ("excess_old", "sign")),
+        ("a_kappa_s", ("level", "s")),
+        ("b_kappa_mag_sign", ("slope", "sign")),
+        ("eta_u", (None, None)),
+        ("ell_unit_q", (None, None)),
+    ],
+)
+def test_kappa_role_parsing_covers_the_legacy_names(name, expected):
+    """The defect: the first cut matched ``name.startswith("kappa")``.
+
+    The legacy intercept-and-slope form names its parameters ``a_kappa_s`` and
+    ``b_kappa_mag_s``, which do not begin with "kappa", so VG05, VG07 and VG08
+    had every dispersion caveat silently dropped -- including ``b_kappa_mag_s``
+    at 7.8 prior SDs, the strongest prior-data conflict in the suite.
+    """
+    assert report_cells._kappa_role_and_suffix(name) == expected
+
+
+def test_dispersion_scope_reports_a_strained_legacy_curve_as_one_finding(tmp_path, capsys):
+    """``kappa_min + exp(a - b_mag z)`` couples the intercept and the slope.
+
+    Reporting them as two caveats would read as two problems where the fit has
+    one, and would invite fixing the intercept prior when the slope prior is what
+    is binding.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "a_kappa_s", "posterior_mean": 0.361, "posterior_sd": 0.167,
+             "prior_cdf": 0.043, "contraction": 0.833, "flags": "pressing"},
+            {"parameter": "b_kappa_mag_s", "posterior_mean": 1.419, "posterior_sd": 0.195,
+             "prior_cdf": 1.0, "contraction": -0.080, "flags": "pressing+uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert out.count("- **") == 1, "the coupled pair must be one bullet"
+    assert "The shape of this curve" in out
+    assert "`a_kappa_s`" in out and "`b_kappa_mag_s`" in out
+    assert "one finding, not two" in out
+    assert "steeper decline than the slope prior allows" in out
+
+
+def test_dispersion_scope_does_not_call_a_far_tail_posterior_uninformed(tmp_path, capsys):
+    """Contraction cannot separate "data said nothing" from "said something far away".
+
+    ``b_kappa_mag_s`` is 7.8 prior SDs out with a 13% relative posterior spread,
+    and scores contraction -0.08. Reporting that as "not estimated from this
+    data" would be the opposite of the truth.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "b_kappa_mag_s", "posterior_mean": 1.419, "posterior_sd": 0.195,
+             "prior_cdf": 1.0, "contraction": -0.080, "flags": "pressing+uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "pressing against its prior" in out
+    assert "not estimated from this data" not in out
+    assert "does not** mean the data was silent" in out.replace("**not**", "not**")
+
+
+def test_dispersion_scope_still_calls_a_mid_prior_flat_posterior_unestimated(tmp_path, capsys):
+    fit = _kappa_fit(
+        tmp_path,
+        definition={"n_trials": 810, "kappa_s": {"anchor_ages": [18.0, 72.0]}},
+        contraction=[
+            {"parameter": "kappa_excess_young_s", "posterior_mean": 49.6, "posterior_sd": 27.6,
+             "prior_cdf": 0.62, "contraction": -0.2286, "flags": "uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "not estimated from this data" in out and "mid-prior" in out
+    assert "pressing against its prior" not in out

@@ -2340,7 +2340,42 @@ _KAPPA_ROLE_REGIONS = {
     "min": "the floor the curve cannot fall below, at every age",
     "excess_young": "the curve at and below the younger reference age",
     "excess_old": "the curve at and above the older reference age",
+    # The legacy intercept-and-slope form, still carried by VG05, VG07 and VG08
+    # on both outcomes and by VG14 and VG15 on signing. Its parameters are named
+    # `a_kappa_s` and `b_kappa_mag_s`, which do not begin with "kappa" -- the
+    # first cut of this block matched on that prefix and silently dropped them,
+    # so VG08's page reported one caveat and omitted the strongest prior-data
+    # conflict in the suite.
+    "level": "the height of the curve at the pool's mean age",
+    "slope": "how steeply the curve falls with age",
 }
+
+#: Name prefix to role. Ordered longest-first so `kappa_min` is not read as
+#: `kappa`.
+_KAPPA_ROLE_PREFIXES = (
+    ("kappa_excess_young", "excess_young"),
+    ("kappa_excess_old", "excess_old"),
+    ("kappa_min", "min"),
+    ("b_kappa_mag", "slope"),
+    ("a_kappa", "level"),
+)
+
+
+def _kappa_role_and_suffix(name: str):
+    """Split a dispersion parameter name into ``(role, outcome suffix)``.
+
+    Returns ``(None, None)`` for a name that is not a dispersion parameter.
+    """
+    if "kappa" not in name:
+        return None, None
+    for prefix, role in _KAPPA_ROLE_PREFIXES:
+        if name.startswith(prefix):
+            rest = name[len(prefix):]
+            for candidate in ("_sign", "_u", "_s"):
+                if rest == candidate:
+                    return role, candidate.lstrip("_")
+            return role, None if rest else None
+    return None, None
 
 
 def _kappa_curve_scope(suffix, n_trials) -> str:
@@ -2470,14 +2505,21 @@ def _print_nested_outcome_split(manifest: dict, directory: str) -> None:
 
 
 def _print_kappa_identification(directory: str, definition: dict, suffixes: list) -> None:
-    """Name the parts of each kappa curve the data did not inform.
+    """Name the parts of each kappa curve the data did not inform, or is straining.
 
-    A two-anchor kappa is three sampled parameters, and a fit can inform one end
-    of the curve and not the other -- VG22's ``kappa_excess_young_s`` contracts
-    to **-0.23** (the posterior is *wider* than the prior) because Down syndrome
-    children below the younger anchor produce almost nothing, so the ratio has
-    almost no denominator to disperse. The figure still draws a confident-looking
-    median there. This says which end not to read.
+    Two readings, and the order matters. A parameter sitting in the far tail of
+    its prior is **pressing**, whatever its contraction: contraction is
+    ``1 - posterior sd / prior sd``, so a posterior that is *tightly* determined a
+    long way outside its prior has a spread much like the prior's and scores as
+    though the data never touched it. VG05, VG07 and VG08 put ``b_kappa_mag_s``
+    7.6 to 7.9 prior standard deviations out with a relative posterior spread of
+    13%, and the contraction statistic labels all three ``uninformed``. Only a
+    parameter that is *both* barely contracted *and* sitting mid-prior is
+    genuinely unestimated -- VG22's ``kappa_excess_young_s`` is that case.
+
+    The legacy form's intercept and slope are coupled through
+    ``kappa_min + exp(a - b_mag z)``, so when both are straining they are one
+    finding and are reported as one.
     """
     table = _read(directory, "prior_posterior_contraction")
     if table is None or "flags" not in table.columns:
@@ -2490,51 +2532,88 @@ def _print_kappa_identification(directory: str, definition: dict, suffixes: list
         if isinstance(block, dict) and block.get("anchor_ages"):
             anchor_ages[suffix] = tuple(block["anchor_ages"])
 
-    notes = []
+    found = []
     for row in table.itertuples(index=False):
         name = str(row.parameter)
-        if not name.startswith("kappa"):
+        role, suffix = _kappa_role_and_suffix(name)
+        if role is None:
             continue
         contraction = float(row.contraction)
         cdf = float(row.prior_cdf)
-        # The two-sided test, applied to the numbers rather than to the CSV's
-        # `flags` column: a prior acting as a floor is the same finding as one
-        # acting as a ceiling, and tables written before 2026-09-02 carry a
-        # one-sided flag. Reading the numbers means a page is right either way.
-        uninformed = contraction <= 0.05
+        # The two-sided test, on the numbers rather than the CSV's `flags`
+        # column: a prior acting as a floor is the same finding as one acting as
+        # a ceiling, and tables written before 2026-09-02 carry a one-sided flag.
         pressing = cdf >= 0.95 or cdf <= 0.05
-        if not (uninformed or pressing):
+        unestimated = contraction <= 0.05 and not pressing
+        if not (pressing or unestimated):
             continue
-        stem = name.removeprefix("kappa_")
-        suffix = None
-        for candidate in ("_u", "_s", "_sign"):
-            if stem.endswith(candidate):
-                suffix, stem = candidate.lstrip("_"), stem[: -len(candidate)]
-                break
-        region = _KAPPA_ROLE_REGIONS.get(stem, "this curve")
-        if suffix in anchor_ages and stem in ("excess_young", "excess_old"):
+        region = _KAPPA_ROLE_REGIONS.get(role, "this curve")
+        if suffix in anchor_ages and role in ("excess_young", "excess_old"):
             young, old = anchor_ages[suffix][0], anchor_ages[suffix][-1]
-            age = young if stem == "excess_young" else old
+            age = young if role == "excess_young" else old
             region = (
-                f"the curve at and {'below' if stem == 'excess_young' else 'above'} "
+                f"the curve at and {'below' if role == 'excess_young' else 'above'} "
                 f"{age:.0f} months"
             )
-        outcome = _OUTCOME_LABELS.get(suffix, "words")
-        if uninformed:
-            notes.append(
-                f"- **{region}** for {outcome} is **not estimated from this data**: "
-                f"`{name}` has contraction {contraction:.2f}, so the posterior is "
-                "no narrower than the prior it started from. The figure draws a median "
-                "there because the curve is continuous, not because the data placed it."
+        found.append(
+            {"name": name, "role": role, "suffix": suffix, "region": region,
+             "cdf": cdf, "contraction": contraction, "pressing": pressing}
+        )
+
+    notes = []
+    paired = set()
+    for item in found:
+        # The legacy intercept and slope move together; two separate caveats
+        # would read as two problems where the fit has one.
+        if item["role"] != "level":
+            continue
+        mate = next(
+            (o for o in found if o["role"] == "slope" and o["suffix"] == item["suffix"]),
+            None,
+        )
+        if mate is None:
+            continue
+        paired |= {item["name"], mate["name"]}
+        outcome = _OUTCOME_LABELS.get(item["suffix"], "words")
+        notes.append(
+            f"- **The shape of this curve** for {outcome} is set by a prior the data is "
+            f"straining against on both sides. `{item['name']}` (its height at the pool's "
+            f"mean age) sits at prior CDF {item['cdf']:.2f} and `{mate['name']}` (how "
+            f"steeply it falls with age) at prior CDF {mate['cdf']:.2f}. The two are "
+            "coupled — the curve is a floor plus an exponential in age — so this is one "
+            "finding, not two: the data wants a steeper decline than the slope prior "
+            "allows, and the height is pulled down to compensate. Read the curve's overall "
+            "level with more confidence than its steepness."
+        )
+
+    for item in found:
+        if item["name"] in paired:
+            continue
+        outcome = _OUTCOME_LABELS.get(item["suffix"], "words")
+        if item["pressing"]:
+            direction = "above" if item["cdf"] >= 0.95 else "below"
+            note = (
+                f"- **{item['region']}** for {outcome} is **pressing against its prior**: "
+                f"`{item['name']}` sits at prior CDF {item['cdf']:.2f}, so the data wants a "
+                f"value {direction} what the prior comfortably allows. Read the level as a "
+                "bound the prior is setting rather than as an estimate, and see the "
+                "sensitivity analysis."
             )
+            if item["contraction"] <= 0.05:
+                note += (
+                    f" Its contraction ({item['contraction']:.2f}) is low, which here does "
+                    "**not** mean the data was silent: a posterior held tightly a long way "
+                    "outside its prior has a spread much like the prior's, and the "
+                    "contraction statistic cannot tell the two apart."
+                )
+            notes.append(note)
         else:
-            direction = "above" if cdf >= 0.95 else "below"
             notes.append(
-                f"- **{region}** for {outcome} is **pressing against its prior**: "
-                f"`{name}` sits at prior CDF {cdf:.2f}, so the data wants a value "
-                f"{direction} what the prior comfortably allows. Read the level as a bound "
-                "the prior is setting rather than as an estimate, and see the sensitivity "
-                "analysis."
+                f"- **{item['region']}** for {outcome} is **not estimated from this data**: "
+                f"`{item['name']}` has contraction {item['contraction']:.2f} while sitting "
+                f"mid-prior (CDF {item['cdf']:.2f}), so the posterior is no narrower than "
+                "the prior it started from. The figure draws a median there because the "
+                "curve is continuous, not because the data placed it."
             )
 
     if not notes:
