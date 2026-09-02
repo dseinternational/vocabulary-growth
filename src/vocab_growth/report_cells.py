@@ -2738,13 +2738,14 @@ def render_conditional_production_check(directory: str = ".") -> None:
 
     print(
         "**What the curve above is, and is not.** Its horizontal axis is age re-expressed "
-        "as the population median's expected comprehension, and its vertical axis is the "
-        "population ratio at that same age. It describes how the two population "
-        "trajectories move together as children get older. It is **not** the share of "
-        "their comprehension that children who understand a given number of words "
-        "actually speak: that quantity conditions on the child's own count, mixes every "
-        "child who reached it at any age, and — because the ratio rises with age — sits "
-        "below the curve, increasingly so as the level rises."
+        "as the reference child's expected comprehension (zero study and child effects), "
+        "and its vertical axis is the population ratio at that same age. It describes how "
+        "the two population trajectories move together as children get older. It is "
+        "**not** the share of their comprehension that children who understand a given "
+        "number of words actually speak: that quantity conditions on the child's own "
+        "count, mixes every child who reached it at any age and every study that "
+        "contributed one, and — because the ratio rises with age — sits below the curve, "
+        "increasingly so as the level rises."
     )
     print()
 
@@ -2802,9 +2803,11 @@ def render_conditional_production_check(directory: str = ".") -> None:
         ": Observed children are those with a usable spoken count and an understood count "
         "within ±10% of the level, rebuilt from the current data through the loader rules "
         "the fit used and verified to hash to the frame this fit recorded. Where the two "
-        "columns disagree, the right-hand one is what a child at that level typically does; "
-        "the curve is what the population's median child does at the age it typically "
-        "reaches that level. **A comparison between populations at a comprehension "
-        "milestone must be made in the right-hand column** — the curves can agree where "
-        "the children do not."
+        "columns disagree, the right-hand one is what the children in this data at that "
+        "level did — mixing ages and studies, and at any one level a single study can "
+        "dominate — and the curve is what the reference child does at the age it reaches "
+        "that level. **A comparison between populations at a comprehension milestone must "
+        "be made in the right-hand column**, and then only with the two groups' ages and "
+        "studies in view — the curves can agree where the children do not, and the "
+        "children can differ for reasons that are not the population's."
     )

@@ -27,7 +27,7 @@ The production ratio $q(a) = p_S(a) / p_U(a)$ is the fraction of understood word
 
 ![The population-level production ratio against age, with uncertainty intervals. It rises across the reported range: older children say a larger share of what they understand.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
-![The same population-level ratio plotted against the population's expected words understood instead of against age. The horizontal axis is age re-expressed as the median child's comprehension, so this shows how the two population trajectories move together as children get older. It is **not** the share that children who understand a given number of words actually speak — see the check beneath it.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+![The same population-level ratio plotted against the population's expected words understood instead of against age. The horizontal axis is age re-expressed as the reference child's expected comprehension (zero study and child effects — approximately the median child in the average study, not necessarily the median child in the data), so this shows how the two population trajectories move together as children get older. It is **not** the share that children who understand a given number of words actually speak — see the check beneath it.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
 
 ```{python}
 #| echo: false
@@ -55,11 +55,11 @@ Conclude from this figure that the gap is a phase rather than a permanent state:
 
 ### Words understood versus words spoken {#sec-spoken-given-understood}
 
-This is the most practitioner-facing figure this model produces, and it carries two different things that must be read separately. The **blue path** is the population: at each age, the expected words understood and the expected words spoken for the median child, with a dot every year so the path can be read as a journey through age rather than as a rule about levels. The **grey points** are the observed administrations, and the **orange marks** summarise them: among the children whose understood count fell in each 50-word bin, the median spoken count and the interquartile range. The dashed line is the ceiling — a child cannot say more distinct words than they understand.
+This is the most practitioner-facing figure this model produces, and it carries two different things that must be read separately. The **blue path** is the population: at each age, the expected words understood and the expected words spoken for the reference child — zero study and child effects, approximately the median child in the average study — with a dot every year so the path can be read as a journey through age rather than as a rule about levels. The **grey points** are the observed administrations, and the **orange marks** summarise them: among the children whose understood count fell in each 50-word bin, the median spoken count and the interquartile range. The dashed line is the ceiling — a child cannot say more distinct words than they understand.
 
 ![Words spoken against words understood. The population path with age markers, the observed administrations, and the children's own median spoken count at each comprehension level.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
 
-Read the two apart. The path says what the typical child says *at the age they typically reach* a comprehension level. The orange marks say what children who *are at* that level say, whatever their age — and they sit below the path at every level above the first few hundred words, because reaching a level selects every child who got there at any age, the conversion ratio rises with age, and those children are younger than the age at which the population median arrives. A statement about a child at a comprehension level belongs to the orange marks, not the path.
+Read the two apart. The path says what the reference child says *at the age that child reaches* a comprehension level. The orange marks say what the children in this data who *were at* that level said, whatever their age or study — and they sit below the path at every level above the first few hundred words, because reaching a level selects every child who got there at any age, the conversion ratio rises with age, and those children are younger than the age at which the population path arrives. The orange marks mix ages and studies, and at any one level a single study can dominate them, so they describe this sample rather than a child; but a statement about children at a comprehension level belongs to them, not to the path.
 
 ![Where a single child may fall: predicted (understood, spoken) pairs for a freshly drawn child across ages, with the observed administrations. The cloud's width is between-child variation, which the population path excludes.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
@@ -142,7 +142,7 @@ render_dispersion_scope()
 
 ![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
-Lower $\kappa$ means **greater** between-child variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so read this figure as _falling $\kappa$ = children becoming more spread out_, and read the findings table above, which restates the same thing as a variance inflation factor where a larger number means a wider spread. Conclude that residual spread grows with age even after each child's own level is accounted for.
+Lower $\kappa$ means **greater** residual variability relative to the mean; higher $\kappa$ means less. On this page $\kappa$ is not between-child spread: both trajectories carry a child effect, so what $\kappa$ measures is what is left once a child's own level is known — the spread between same-age administrations *within* a child, plus whatever the child effect's fixed scale cannot follow. Between-child spread is $\tau$, in the variation table under Findings. The direction is easy to misread, so read this figure as _falling $\kappa$ = wider residual spread_, and read the findings table above, which restates the same thing as a variance inflation factor where a larger number means a wider spread. Conclude that residual spread grows with age even after each child's own level is accounted for.
 
 ## Posterior predictions -- words spoken {#sec-predictions-spoken}
 
@@ -205,7 +205,7 @@ Compare the peak here with the peak in the understood derivative above: the fast
 
 ![How the spoken dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
 
-Again, falling $\kappa$ means children becoming more spread out. Read this curve's *shape* across age, not its level against the understood curve's: as the scope table above the understood figure sets out, this $\kappa$ disperses the production ratio on each child's own understood count while that one disperses counts out of the whole item pool. Whether one number here is larger than one there says nothing about which outcome varies more.
+Again, falling $\kappa$ means wider residual spread, not children becoming more different from one another — that is $\tau_q$'s job. Read this curve's *shape* across age, not its level against the understood curve's: as the scope table above the understood figure sets out, this $\kappa$ disperses the production ratio on each child's own understood count while that one disperses counts out of the whole item pool. Whether one number here is larger than one there says nothing about which outcome varies more.
 
 ## Expected vocabulary by month {#sec-monthly}
 
