@@ -346,6 +346,15 @@ The production ratio $q(a)$ is the fraction of the words a child understands at 
 
 ![The same **population-level** ratio, plotted against expected words understood rather than against age.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_conditional_production_check
+
+render_conditional_production_check()
+```
+
+
 @fig-production-rate-by-understood re-plots the identical quantity with comprehension on the horizontal axis. It answers a different question from the age plot: not _how old is this child?_ but _how far along in comprehension is this child?_ — which is the more useful framing when children of the same age are at very different stages. Note that the horizontal axis compresses towards the right, because expected comprehension grows slowly at the top of the reported range.
 
 ![The ratio of **subject-marginal** predicted spoken to predicted understood counts.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}

@@ -36,29 +36,30 @@ Consequences for authors:
 
 All in `vocab_growth.report_cells`, all for a cell with `#| echo: false` and `#| output: asis`:
 
-| Block                                  | Replaces                                        | Reads                                  |
-| -------------------------------------- | ----------------------------------------------- | -------------------------------------- |
-| `render_sampling_banner()`             | the hard-coded `{(chains, draws): label}` table | `fit_manifest.json`                    |
-| `render_model_at_a_glance()`           | the hand-written glance callout                 | `fit_manifest.json`                    |
-| `render_priors_table()`                | hand-written prior prose                        | manifest + `diagnostics.csv`           |
-| `render_convergence_caveats()`         | a per-template reimplementation of the gate     | `diagnostics_summary.json`             |
-| `render_headline_quantities()`         | nothing — this is new                           | the summary CSVs                       |
-| `render_variation_table()`             | nothing — this is new                           | `diagnostics.csv`                      |
-| `render_glossary([...])`               | nothing — this is new                           | static definitions                     |
-| `render_calibration_section()`         | _(already in use)_                              | `posterior_predictive_calibration.csv` |
-| `ppc_count_distribution_gallery()`     | _(already in use)_                              | the count-distribution figures         |
-| `render_reading_routes(role, ...)`     | nothing — this is new                           | the role the template states           |
-| `render_family_notes()`                | nothing — this is new                           | manifest + `diagnostics.csv`           |
-| `render_expectations_table(...)`       | the raw `posterior_summary*` DataFrame display  | `posterior_summary*` + monthly tables  |
-| `render_diagnostic_verdict()`          | the reader scanning the styled table            | `diagnostics_summary.json` + manifest  |
-| `render_prior_posterior_contraction()` | "compare each posterior with its prior figure"  | `prior_posterior_contraction.csv`      |
-| `render_frame_composition()`           | `describe()` plus normality tests               | manifest, then an exact frame rebuild  |
-| `render_dispersion_scope()`            | two $\kappa$ figures with no stated scope       | manifest + contraction + frame rebuild |
-| `render_loo_section()`                 | _(already in use)_                              | `loo_summary.csv`                      |
+| Block                                   | Replaces                                        | Reads                                               |
+| --------------------------------------- | ----------------------------------------------- | --------------------------------------------------- |
+| `render_sampling_banner()`              | the hard-coded `{(chains, draws): label}` table | `fit_manifest.json`                                 |
+| `render_model_at_a_glance()`            | the hand-written glance callout                 | `fit_manifest.json`                                 |
+| `render_priors_table()`                 | hand-written prior prose                        | manifest + `diagnostics.csv`                        |
+| `render_convergence_caveats()`          | a per-template reimplementation of the gate     | `diagnostics_summary.json`                          |
+| `render_headline_quantities()`          | nothing — this is new                           | the summary CSVs                                    |
+| `render_variation_table()`              | nothing — this is new                           | `diagnostics.csv`                                   |
+| `render_glossary([...])`                | nothing — this is new                           | static definitions                                  |
+| `render_calibration_section()`          | _(already in use)_                              | `posterior_predictive_calibration.csv`              |
+| `ppc_count_distribution_gallery()`      | _(already in use)_                              | the count-distribution figures                      |
+| `render_reading_routes(role, ...)`      | nothing — this is new                           | the role the template states                        |
+| `render_family_notes()`                 | nothing — this is new                           | manifest + `diagnostics.csv`                        |
+| `render_expectations_table(...)`        | the raw `posterior_summary*` DataFrame display  | `posterior_summary*` + monthly tables               |
+| `render_diagnostic_verdict()`           | the reader scanning the styled table            | `diagnostics_summary.json` + manifest               |
+| `render_prior_posterior_contraction()`  | "compare each posterior with its prior figure"  | `prior_posterior_contraction.csv`                   |
+| `render_frame_composition()`            | `describe()` plus normality tests               | manifest, then an exact frame rebuild               |
+| `render_dispersion_scope()`             | two $\kappa$ figures with no stated scope       | manifest + contraction + frame rebuild              |
+| `render_conditional_production_check()` | a caption reading the curve as $E[q \mid U]$    | `production_rate_by_understood.csv` + frame rebuild |
+| `render_loo_section()`                  | _(already in use)_                              | `loo_summary.csv`                                   |
 
 The six blocks added on 2026-09-02 came from a review of all twenty templates against a reporting-quality run (`notes/202609021200-report-template-review.md`). Two of them read artefacts a fit does not write and are fail-soft until those exist: `render_prior_posterior_contraction()` reads the per-fit CSV that `scripts/prior_vs_posterior.py --table --model <key>` writes from the trace, and VG22's implied correlation matrix reads `subject_factor_corr.csv` from `scripts/emit_factor_correlation.py`. Run both after a fit and before `--render-only`; each block prints how to produce its file when it is absent.
 
-`render_dispersion_scope()` was added later the same day, after a reader compared the $\kappa$ figures across VG21 and VG22 and asked whether the differences were a model artefact. They largely are, in three ways the pages did not state: $\kappa_u$ is marginal on the item pool while $\kappa_s$ is conditional on the child's own understood count, so their **levels** are not comparable with each other; $\kappa$ is residual after whatever child structure a model carries, so it is never comparable **across** models; and a two-anchor $\kappa$ can have one end the data never informed while the figure still draws a confident median there (VG22's `kappa_excess_young_s` contracts to -0.23). The block renders immediately above the first $\kappa$ figure on every template that has one, and states all three from the fit's own record. See `notes/202609021620-dispersion-kappa-comparability.md`. **Never write a sentence comparing one $\kappa$ curve's level with another's** — the shared body carried one until that note.
+`render_dispersion_scope()` was added later the same day, after a reader compared the $\kappa$ figures across VG21 and VG22 and asked whether the differences were a model artefact. They largely are, in three ways the pages did not state: $\kappa_u$ is marginal on the item pool while $\kappa_s$ is conditional on the child's own understood count, so their **levels** are not comparable with each other; $\kappa$ is residual after whatever child structure a model carries, so it is never comparable **across** models; and a two-anchor $\kappa$ can have one end the data never informed while the figure still draws a confident median there (VG22's `kappa_excess_young_s` contracts to -0.23). The block renders immediately above the first $\kappa$ figure on every template that has one, and states all three from the fit's own record. See `notes/202609021620-dispersion-kappa-comparability.md`. **Never write a sentence comparing one $\kappa$ curve's level with another's** — the shared body carried one until that note. `render_conditional_production_check()` followed the same afternoon, after a reader set the by-understood production curves of VG21 and VG22 side by side and read their agreement at 300 words as children in both populations converting comprehension identically at that milestone. The curve is the population ratio at the age the population median reaches $U$, not the share children who understand $U$ words speak (#233); the children give 0.27 and 0.13 where the curves both give 0.4. The block sets the curve beside the observed children at each level. **Never caption the by-understood figure as a statement about children at a comprehension level.** See `notes/202609021800-production-ratio-by-understood.md`.
 
 **The bivariate random-effects family shares one prediction body.** VG10, VG19, VG20 and VG22 transclude `docs/models/_bivariate_re_body.qmd` (`{{< include _bivariate_re_body.qmd >}}`) rather than each carrying a copy: before it existed VG20's template referenced 23 of the 90 artefacts its fit wrote and sent the reader to VG10 — a development step — for the rest. `reporting.stage_report_sources` copies every `docs/models/_*.qmd` into the output directory beside `index.qmd` at fit time and on `--render-only`, because a Quarto include resolves relative to the rendered document. Nothing model-specific belongs in the include.
 

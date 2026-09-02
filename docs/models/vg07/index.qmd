@@ -343,6 +343,15 @@ Above the high age anchor, $q$'s mean is held level rather than extrapolated (se
 
 ![The same ratio plotted against expected words understood rather than against age. The horizontal axis is age re-expressed as comprehension, so it is stretched where vocabulary grows fast and compressed where it does not; it is not an independent variable the model conditions on.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_conditional_production_check
+
+render_conditional_production_check()
+```
+
+
 The figure below is a different quantity from the two above. $q(a)$ is a ratio of expectations — one smooth curve divided by another. The predictive figure is a distribution of ratios of _drawn counts_, and the spoken count is drawn from a Beta-Binomial whose denominator is itself a drawn understood count. At young ages, where a draw may produce very few understood words, that makes the ratio of counts far more variable than $q(a)$. Read it as "what ratio might one observation show", not as an estimate of $q$.
 
 ![The ratio of posterior predictive spoken counts to posterior predictive understood counts, by age.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}

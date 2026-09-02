@@ -391,7 +391,16 @@ The first figure shows the latent $q(a) = P(\text{speak} \mid \text{understood})
 
 ![The fitted production ratio against age, with uncertainty intervals. Rising means children are saying a larger share of what they understand, not merely understanding more.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
-![The production ratio plotted against how many words a child understands rather than against age. Useful for asking what share of a given comprehension vocabulary is typically spoken.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+![The population production ratio plotted against the population's expected words understood rather than against age. The horizontal axis is age re-expressed as the median child's comprehension. It is **not** the share of a given comprehension vocabulary that a child at that level typically speaks — the check beneath it sets the curve beside those children.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_conditional_production_check
+
+render_conditional_production_check()
+```
+
 
 ![The posterior predictive ratio of spoken to understood counts. Wider than the latent curve above, and the difference between them is outcome-level noise rather than uncertainty about development.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
 

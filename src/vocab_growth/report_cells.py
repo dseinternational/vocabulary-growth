@@ -2635,3 +2635,118 @@ def _print_kappa_identification(directory: str, definition: dict, suffixes: list
     print()
     print(":::")
     print()
+
+
+#: Comprehension levels at which the by-understood curve is set beside the
+#: children who actually understood that many words. Filtered at render time to
+#: the range the curve covers.
+_CONDITIONAL_PRODUCTION_LEVELS = (50, 100, 200, 300, 400, 500, 600)
+
+
+def render_conditional_production_check(directory: str = ".") -> None:
+    """Set the by-understood production curve beside the children who reached each level.
+
+    The figure this sits under plots the *population* ratio ``q`` against the
+    *population* expected words understood, both read off the age curves at
+    zero study and zero child effects. Its x value at a point is the median
+    child's comprehension AT SOME AGE and its y value is the median child's
+    ratio AT THAT AGE -- a developmental-stage relationship, and explicitly not
+    ``E[q | understood = U]`` (issue #233, and the plotting function's own
+    docstring). Three templates captioned it as the conditional anyway.
+
+    The two differ in a known direction and, it turns out, by a lot. Conditioning
+    on ``U`` selects every child who reached ``U`` at *any* age, and ``q`` rises
+    with age, so the selected children are younger than the age at which the
+    population median reaches ``U`` and speak a smaller share. At 300 words
+    understood the reporting-quality VG21 and VG22 curves both sit near 0.4 --
+    an apparent finding that Down syndrome and typically developing children
+    convert comprehension identically at that milestone -- while the children
+    who actually understood 300 words have median observed ratios of 0.27 and
+    0.13. The gap grows with ``U`` and is widest where comprehension grows
+    slowly, which is the Down syndrome pool. A cross-population comparison at a
+    comprehension milestone has to use the second column, and this block puts
+    it on the page from the frame the fit recorded.
+    """
+    import pandas as pd
+
+    curve = _read(directory, "production_rate_by_understood")
+    if curve is None or not {"words_understood", "q_median"} <= set(curve.columns):
+        print("_This fit writes no by-understood production curve, so there is nothing to check it against._")
+        return
+
+    print(
+        "**What the curve above is, and is not.** Its horizontal axis is age re-expressed "
+        "as the population median's expected comprehension, and its vertical axis is the "
+        "population ratio at that same age. It describes how the two population "
+        "trajectories move together as children get older. It is **not** the share of "
+        "their comprehension that children who understand a given number of words "
+        "actually speak: that quantity conditions on the child's own count, mixes every "
+        "child who reached it at any age, and — because the ratio rises with age — sits "
+        "below the curve, increasingly so as the level rises."
+    )
+    print()
+
+    manifest = read_manifest(directory)
+    frame, reason = _verified_frame(manifest)
+    if frame is None or not {"understood", "spoken"} <= set(frame.columns):
+        print(
+            f"_The observed children are not shown beside the curve because "
+            f"{reason or 'the frame carries no understood and spoken counts'}._"
+        )
+        return
+
+    understood = pd.to_numeric(frame["understood"], errors="coerce")
+    spoken = pd.to_numeric(frame["spoken"], errors="coerce")
+    ratio = spoken / understood
+    has_child = "subject_key" in frame.columns
+    ages = frame["age"] if "age" in frame.columns else None
+    x_max = float(curve["words_understood"].max())
+    has_ci = {"ci_lo", "ci_hi"} <= set(curve.columns)
+
+    header = ["Words understood", "Curve: population ratio"]
+    if has_ci:
+        header[-1] += " (89%)"
+    header += ["Children observed near that level", "Their observed ratio, median (IQR)"]
+    if ages is not None:
+        header.append("Their median age")
+    print("| " + " | ".join(header) + " |")
+    print("| ---: | ---: | ---: | ---: |" + (" ---: |" if ages is not None else ""))
+
+    shown = 0
+    for level in _CONDITIONAL_PRODUCTION_LEVELS:
+        if level > x_max:
+            continue
+        row = curve.iloc[int((curve["words_understood"] - level).abs().idxmin())]
+        window = (understood >= 0.9 * level) & (understood <= 1.1 * level) & spoken.notna()
+        n = int(window.sum())
+        if n < 10:
+            continue
+        observed = ratio[window]
+        curve_cell = f"{float(row['q_median']):.2f}"
+        if has_ci:
+            curve_cell += f" [{float(row['ci_lo']):.2f}, {float(row['ci_hi']):.2f}]"
+        who = f"{frame.loc[window, 'subject_key'].nunique():,} children" if has_child else f"{n:,} administrations"
+        cells = [
+            f"{level}",
+            curve_cell,
+            who,
+            f"{observed.median():.2f} ({observed.quantile(0.25):.2f}–{observed.quantile(0.75):.2f})",
+        ]
+        if ages is not None:
+            cells.append(f"{ages[window].median():.0f} months")
+        print("| " + " | ".join(cells) + " |")
+        shown += 1
+    print()
+    if not shown:
+        print("_Too few observed children near any level the curve covers to set beside it._")
+        return
+    print(
+        ": Observed children are those with a usable spoken count and an understood count "
+        "within ±10% of the level, rebuilt from the current data through the loader rules "
+        "the fit used and verified to hash to the frame this fit recorded. Where the two "
+        "columns disagree, the right-hand one is what a child at that level typically does; "
+        "the curve is what the population's median child does at the age it typically "
+        "reaches that level. **A comparison between populations at a comprehension "
+        "milestone must be made in the right-hand column** — the curves can agree where "
+        "the children do not."
+    )

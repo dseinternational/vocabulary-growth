@@ -27,7 +27,16 @@ The production ratio $q(a) = p_S(a) / p_U(a)$ is the fraction of understood word
 
 ![The population-level production ratio against age, with uncertainty intervals. It rises across the reported range: older children say a larger share of what they understand.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
-![The same population-level ratio plotted against expected words understood instead of against age. Read it as: children at this level of comprehension convert this fraction of it — the evidence for the claim that conversion improves as comprehension grows.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+![The same population-level ratio plotted against the population's expected words understood instead of against age. The horizontal axis is age re-expressed as the median child's comprehension, so this shows how the two population trajectories move together as children get older. It is **not** the share that children who understand a given number of words actually speak — see the check beneath it.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_conditional_production_check
+
+render_conditional_production_check()
+```
+
 
 ![The ratio of **posterior predictive spoken and understood counts**, which is a different quantity from $q(a)$ above and should be read separately. It is a ratio of two noisy counts for individual children rather than a ratio of two means, so it is both noisier and, at young ages where the denominator is small, biased in ways $q(a)$ is not.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
 

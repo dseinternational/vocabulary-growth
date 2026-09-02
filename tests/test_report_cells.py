@@ -1588,3 +1588,61 @@ def test_dispersion_scope_still_calls_a_mid_prior_flat_posterior_unestimated(tmp
     out = capsys.readouterr().out
     assert "not estimated from this data" in out and "mid-prior" in out
     assert "pressing against its prior" not in out
+
+
+# --------------------------------------------------------------------------
+# Conditional production check
+# --------------------------------------------------------------------------
+
+
+def _by_understood_fit(tmp_path, monkeypatch, *, frame):
+    fit = _fit(tmp_path, definition={"n_trials": 810})
+    pd.DataFrame(
+        {"words_understood": [50.0, 100.0, 200.0, 300.0], "q_median": [0.05, 0.10, 0.22, 0.43],
+         "ci_lo": [0.04, 0.09, 0.21, 0.40], "ci_hi": [0.06, 0.11, 0.23, 0.45]}
+    ).to_csv(fit / "production_rate_by_understood.csv", index=False)
+    monkeypatch.setattr(report_cells, "_verified_frame", lambda manifest: (frame, None))
+    return fit
+
+
+def test_conditional_production_check_sets_the_children_beside_the_curve(
+    tmp_path, monkeypatch, capsys
+):
+    """The defect (#233): the curve is population q at the age where the population
+    median reaches U, and three captions read it as E[q | understood = U]. At 300
+    words the VG21 and VG22 curves both sit near 0.4 while the children who
+    understood 300 words have median ratios of 0.27 and 0.13.
+    """
+    rng = np.random.default_rng(0)
+    n = 60
+    frame = pd.DataFrame(
+        {"understood": np.full(n, 300.0), "spoken": 300.0 * rng.uniform(0.1, 0.4, n),
+         "age": np.full(n, 38.0), "subject_key": [f"c{i}" for i in range(n)]}
+    )
+    report_cells.render_conditional_production_check(str(_by_understood_fit(tmp_path, monkeypatch, frame=frame)))
+    out = capsys.readouterr().out
+    assert "is **not** the share" in out
+    assert "| 300 | 0.43 [0.40, 0.45] | 60 children |" in out
+    assert "| 38 months |" in out
+    # No children near 50, 100 or 200, so those rows are not shown.
+    assert "| 50 |" not in out and "| 200 |" not in out
+    assert "must be made in the right-hand column" in out
+
+
+def test_conditional_production_check_says_why_when_the_frame_is_unavailable(
+    tmp_path, monkeypatch, capsys
+):
+    fit = _fit(tmp_path)
+    pd.DataFrame({"words_understood": [300.0], "q_median": [0.43]}).to_csv(
+        fit / "production_rate_by_understood.csv", index=False
+    )
+    monkeypatch.setattr(report_cells, "_verified_frame", lambda manifest: (None, "the hash moved"))
+    report_cells.render_conditional_production_check(str(fit))
+    out = capsys.readouterr().out
+    assert "is **not** the share" in out
+    assert "because the hash moved" in out
+
+
+def test_conditional_production_check_says_so_when_the_curve_is_absent(tmp_path, capsys):
+    report_cells.render_conditional_production_check(str(_fit(tmp_path)))
+    assert "no by-understood production curve" in capsys.readouterr().out
