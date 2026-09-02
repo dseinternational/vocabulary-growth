@@ -274,3 +274,4 @@ zygosity
 Babylab
 HMAC
 colwidths
+spkn

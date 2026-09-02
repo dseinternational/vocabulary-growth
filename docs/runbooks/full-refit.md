@@ -574,9 +574,10 @@ for c in loo_compare loso_compare compare_models compare_ds_td \
   python scripts/$c.py
 done
 python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re-sync comparison artefacts
-# `sync_report_figures` ATOMICALLY REPLACES docs/report/figures/, which destroys
-# the illustrative figures the introduction uses (bayes_update*.png). They are not
-# model output, so nothing regenerates them. Regenerate AFTER every sync, or
+# Everything the report needs that is NOT model output -- the descriptives, the
+# introduction's illustrations (bayes_update*.png), the methods chapter's prior
+# figures and a placeholder for any figure still absent -- comes from one script
+# that the sync neither validates nor regenerates. Run it AFTER the sync, or
 # `quarto render docs/report` fails on a missing file:
 python scripts/prepare_report_figures.py
 quarto render docs/report

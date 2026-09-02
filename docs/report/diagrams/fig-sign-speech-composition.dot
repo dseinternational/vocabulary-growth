@@ -1,0 +1,34 @@
+// Source for fig-sign-speech-composition (how VG15 scores production in both
+// modalities, methods-models.qmd, @sec-speech-sign-association). Boxes are
+// observed quantities, rounded nodes latent ones, matching the other diagrams
+// here; dashed elements are observed only for the word-level sources (the
+// composition) or are VG15's addition over VG14 (the association psi).
+// Pre-rendered to a static PNG so PDF/DOCX rendering does not require headless
+// Chrome. Regenerate after editing:
+//   dot -Tpng -Gdpi=300 diagrams/fig-sign-speech-composition.dot -o diagrams/fig-sign-speech-composition.png
+digraph SignSpeechComposition {
+    graph [rankdir=LR]
+    edge [arrowsize=0.75]
+    node [fontsize=12]
+    z   [label="age (z)", shape=box]
+    pU  [label=<p<SUB>und</SUB>(z)>, shape=ellipse]
+    q   [label=<q(z)>, shape=ellipse]
+    r   [label=<r(z)>, shape=ellipse]
+    psi [label=<&psi;>, shape=ellipse, style=dashed]
+    WU  [label=<W<SUB>und</SUB>>, shape=box]
+    C   [label=<composition of understood words<BR/><FONT POINT-SIZE="10">neither &middot; spoken only &middot; signed only &middot; both</FONT>>, shape=box, style=dashed]
+    WS  [label=<W<SUB>spkn</SUB>>, shape=box]
+    WG  [label=<W<SUB>sign</SUB>>, shape=box]
+    { rank=same; pU -> q -> r -> psi [style=invis] }
+    { rank=same; WS -> WG [style=invis] }
+    z -> pU
+    z -> q
+    z -> r
+    pU -> WU
+    WU -> C
+    q -> C
+    r -> C
+    psi -> C [style=dashed]
+    C -> WS
+    C -> WG
+}

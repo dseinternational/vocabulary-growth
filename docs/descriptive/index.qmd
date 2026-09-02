@@ -27,7 +27,7 @@ Drafted by an LLM-based AI tool (Claude Code/Opus 4.8; repeated-measures traject
 :::
 
 ::: {.callout-warning title="Warning: Describes the observed data, not model output"}
-This report summarises the **raw observed data only** — no fitted model output. The inventory table and scatter plots are regenerated from the prepared dataset by `scripts/generate_descriptive_report.py` (run after `scripts/prepare_data.py`); as studies are added or corrected, the numbers below will change. Figures are cached under `docs/descriptive/figures/` and are not version-controlled.
+This report summarises the **raw observed data only** — no fitted model output. The inventory table and scatter plots are regenerated from the prepared dataset by `scripts/prepare_report_figures.py descriptives` (run after `scripts/prepare_data.py`); as studies are added or corrected, the numbers below will change. Figures are cached under `docs/descriptive/figures/` and are not version-controlled.
 :::
 
 This report inventories the pooled Down syndrome vocabulary data before any modelling: how much data each contributing study provides, over what ages, and how words understood, spoken and signed are distributed. It is deliberately separate from the [modelling report](../report/) and the [model pages](../models/) — a plain description of what we are fitting to.
@@ -46,7 +46,7 @@ import pandas as pd
 
 _p = Path("figures/dataset_summary_ds.csv")
 if not _p.exists():
-    _out = pd.DataFrame({"note": ["Run scripts/generate_descriptive_report.py first."]})
+    _out = pd.DataFrame({"note": ["Run scripts/prepare_report_figures.py descriptives first."]})
 else:
     _d = pd.read_csv(_p)
 

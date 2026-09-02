@@ -7,7 +7,8 @@ The Quarto chapters call these from ``#| output: asis`` cells. A table is emitte
 as Markdown rather than returned as a DataFrame so that the pandas index never
 renders, the size can be set per format (a styled div for HTML, a LaTeX size
 group for PDF), and the caption carries the cross-reference label. The builders
-read the CSV artefacts ``scripts/generate_descriptive_report.py`` writes into
+read the CSV artefacts the ``descriptives`` stage of
+``scripts/prepare_report_figures.py`` writes into
 the report's figure cache and return display-ready frames of strings.
 """
 
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-PENDING_NOTE = "Run scripts/generate_descriptive_report.py first."
+PENDING_NOTE = "Run scripts/prepare_report_figures.py descriptives first."
 
 
 def print_table(df, caption, label, colwidths="false"):

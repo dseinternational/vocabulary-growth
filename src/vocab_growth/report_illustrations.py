@@ -1,53 +1,67 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Generate the methods chapter's prior-structure illustrations.
+"""Illustrative figures for the report that are simulated rather than fitted.
 
-Two figures, both simulated from the registered model definitions' own priors —
-no fitted output is read, so they can be regenerated at any time:
+Nothing here reads fitted output, so every figure can be regenerated at any
+time, and none of it is validated by ``scripts/sync_report_figures.py``, which
+covers fit artefacts only. ``scripts/prepare_report_figures.py`` is the entry
+point that writes them into the report figure cache.
+
+Two families.
+
+**Introduction** (:func:`write_intro_illustrations`, into the cache root):
+
+``bayes_update``, ``bayes_update_2``, ``bayes_update_3``
+    A Beta prior on a proportion updated by 20, 100 and 250 simulated Bernoulli
+    trials, with the scaled likelihood between them.
+``binomial_betabinomial_draws``
+    Simulated counts under a Binomial and a mean-matched Beta-Binomial, so the
+    only difference on display is the dispersion.
+
+**Model structure** (:func:`write_prior_illustrations`, into ``methods/``),
+simulated from the registered model definitions' own priors so that a
+recalibrated prior moves the figure with it:
 
 ``model_structure_prior_vg01``
     VG01's prior trajectories with the two slope anchors, their 50% and 89%
     intervals, and the median trend joining them. One draw is shown against its
     own trend so the Gaussian-process contribution is a visible gap rather than
-    something inferred from the spread of the bundle. Supports @sec-mean.
-
+    something inferred from the spread of the bundle. The methods chapter embeds
+    it as ``@fig-prior-structure`` at the end of ``@sec-anchors``; it carries no
+    title because the figure caption is one.
 ``gp_anchoring_vg10``
     VG10's per-draw GP anchor at 54 months, as a like-for-like comparison: both
     columns share one set of draws and differ only in whether the GP is
-    orthogonalised and pinned. Supports @sec-gpanchor.
+    orthogonalised and pinned. Supports ``@sec-gpanchor``.
 
-Both are written into the report figure cache
-(``docs/report/figures/methods/``), which is gitignored and rebuilt on demand,
-alongside the descriptives written by ``generate_descriptive_report.py``. They
-are not produced by ``sync_report_figures.py`` because they are not fit
-artefacts and have no model output to validate against.
-
-    python scripts/generate_prior_figures.py            # both
-    python scripts/generate_prior_figures.py structure  # just VG01
-    python scripts/generate_prior_figures.py anchoring  # just VG10
-
-Ages are handled in months rather than standardised units throughout. The models
-standardise age before building the kernel, the trend and the soft clamp, and
-the standardisation cancels in all three, so the simulated prior is identical
-and the plotted axis stays readable. Population trajectories set every random
-effect to zero, following @sec-randomeffects.
+Ages in the model-structure figures are handled in months rather than
+standardised units. The models standardise age before building the kernel, the
+trend and the soft clamp, and the standardisation cancels in all three, so the
+simulated prior is identical and the plotted axis stays readable
+(``tests/test_build_utils.py`` pins the clamp equality). Population trajectories
+set every random effect to zero. The GP is drawn exactly rather than via the
+HSGP, which is the same prior and avoids reproducing the basis approximation in
+a figure about model structure.
 """
 
-import argparse
+from __future__ import annotations
+
 import os
 
-import dse_research_utils.environment.setup as setup
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy.special import expit, logit
 from scipy.stats import beta as beta_dist
+from scipy.stats import binom
 
-import vocab_growth.environment as local_env
 from vocab_growth.data_utils import load_combined_data
 from vocab_growth.intervals import DEFAULT_CI_PROB, INNER_CI_PROB
 from vocab_growth.models.build_utils import CLAMP_SOFTNESS
 from vocab_growth.models.definitions import MODEL_REGISTRY
+
+RANDOM_SEED = 47
 
 N_TRIALS = 810
 GP_DOMAIN_MONTHS = (8.0, 115.0)
@@ -59,9 +73,172 @@ C_HIGHLIGHT = "#B4450E"
 C_ANCHOR = "#0F447A"
 C_TREND = "#111111"
 
-RANDOM_SEED = 47
+
+def _save(fig, out_dir: str, filename: str) -> str:
+    """Write ``filename`` as PNG and SVG into ``out_dir`` and return the stem."""
+    os.makedirs(out_dir, exist_ok=True)
+    for ext, kw in (("png", {"dpi": 300}), ("svg", {})):
+        fig.savefig(os.path.join(out_dir, f"{filename}.{ext}"),
+                    bbox_inches="tight", **kw)
+    plt.close(fig)
+    print(f"Wrote {filename}.png/.svg to {out_dir}")
+    return filename
 
 
+# --------------------------------------------------------------------------- #
+# Introduction — Bayesian updating and count dispersion
+# --------------------------------------------------------------------------- #
+def plot_bayes_update(out_dir, n, rng, true_p, alpha0, beta0, filename):
+    """A Beta(alpha0, beta0) prior updated by ``n`` simulated Bernoulli trials."""
+    data = rng.binomial(n=1, p=true_p, size=n)
+    k = int(data.sum())
+
+    print(f"Simulated data: {k} successes out of {n} trials (true p = {true_p:.2f})")
+
+    alpha_post = alpha0 + k
+    beta_post = beta0 + (n - k)
+
+    p_grid = np.linspace(0.0, 1.0, 1000)
+
+    prior_pdf = beta_dist.pdf(p_grid, alpha0, beta0)
+    post_pdf = beta_dist.pdf(p_grid, alpha_post, beta_post)
+
+    likelihood = binom.pmf(k, n, p_grid)
+    likelihood_norm = likelihood / np.trapezoid(likelihood, p_grid)
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+
+    ax.plot(p_grid, prior_pdf, label="Prior", c="#0080e0")
+    ax.plot(
+        p_grid, likelihood_norm, label=f"Observed ($n = {n}$, $k = {k}$)", c="#009900"
+    )
+    ax.plot(p_grid, post_pdf, label="Posterior", c="#ff7800")
+
+    ax.axvline(
+        k / n,
+        linestyle="--",
+        linewidth=1,
+        c="#009900",
+        label=f"Observed mean = {k/n:.2f}",
+    )
+    ax.axvline(
+        true_p,
+        linestyle=":",
+        linewidth=1,
+        c="#ff0033",
+        label=f"True $p$ (simulated) = {true_p:.2f}",
+    )
+
+    prior_mean = alpha0 / (alpha0 + beta0)
+    ax.axvline(
+        prior_mean,
+        linestyle="--",
+        linewidth=1,
+        c="#0080e0",
+        label=f"Prior mean = {prior_mean:.2f}",
+    )
+
+    posterior_mean = alpha_post / (alpha_post + beta_post)
+    ax.axvline(
+        posterior_mean,
+        linestyle="-.",
+        linewidth=1,
+        c="#ff7800",
+        label=f"Posterior mean = {posterior_mean:.2f}",
+    )
+
+    ax.set_xlabel("$p$")
+    ax.set_ylabel("Density / scaled likelihood")
+
+    ax.set_ylim(0, 9)
+
+    ax.legend()
+
+    pd.DataFrame({
+        "p": p_grid,
+        "prior_pdf": prior_pdf,
+        "likelihood_norm": likelihood_norm,
+        "posterior_pdf": post_pdf,
+    }).to_csv(os.path.join(out_dir, f"{filename}.csv"), index=False)
+    return _save(fig, out_dir, filename)
+
+
+def plot_count_dispersion(out_dir, rng, n, p, kappa, n_draws, filename):
+    """Simulated counts under a Binomial and a mean-matched Beta-Binomial.
+
+    Both panels share the mean np; the Beta-Binomial splits the concentration
+    kappa as alpha = p * kappa, beta = (1 - p) * kappa, the parameterisation the
+    models use, so the only difference on display is the dispersion.
+    """
+    alpha_bb = p * kappa
+    beta_bb = (1.0 - p) * kappa
+
+    y_binom = rng.binomial(n=n, p=p, size=n_draws)
+    p_obs = rng.beta(alpha_bb, beta_bb, size=n_draws)
+    y_betabinom = rng.binomial(n=n, p=p_obs)
+
+    print(
+        f"Binomial(n={n}, p={p}): mean {y_binom.mean():.1f}, sd {y_binom.std():.1f}; "
+        f"Beta-Binomial(alpha={alpha_bb:g}, beta={beta_bb:g}): "
+        f"mean {y_betabinom.mean():.1f}, sd {y_betabinom.std():.1f}"
+    )
+
+    bins = np.arange(0, n + 16, 15)
+    fig, axes = plt.subplots(2, 1, figsize=(7, 5), sharex=True)
+
+    for ax, draws, label, colour in (
+        (axes[0], y_binom, f"Binomial($n = {n}$, $p = {p}$)", "#0080e0"),
+        (
+            axes[1],
+            y_betabinom,
+            f"Beta-Binomial($n = {n}$, $p = {p}$, $\\kappa = {kappa:g}$)",
+            "#ff7800",
+        ),
+    ):
+        ax.hist(draws, bins=bins, color=colour, label=label)
+        ax.axvline(
+            n * p,
+            linestyle="--",
+            linewidth=1,
+            c="#555555",
+            label=f"Mean $np = {n * p:.0f}$",
+        )
+        ax.set_ylabel(f"Draws (of {n_draws})")
+        ax.legend()
+
+    axes[1].set_xlabel(f"Count of words checked (out of $n = {n}$)")
+    axes[1].set_xlim(0, n)
+
+    pd.DataFrame({
+        "binomial": y_binom,
+        "beta_binomial": y_betabinom,
+    }).to_csv(os.path.join(out_dir, f"{filename}.csv"), index=False)
+    return _save(fig, out_dir, filename)
+
+
+def write_intro_illustrations(out_dir: str, seed: int = RANDOM_SEED) -> list[str]:
+    """Write the introduction's four simulated figures; returns their stems.
+
+    One generator is threaded through all four in this order, so the figures
+    are reproducible as a set from ``seed``.
+    """
+    rng = np.random.default_rng(seed)
+    true_p = 0.65
+    alpha0, beta0 = 2.0, 2.0
+    return [
+        plot_bayes_update(out_dir, 20, rng, true_p, alpha0, beta0, "bayes_update"),
+        plot_bayes_update(out_dir, 100, rng, true_p, alpha0, beta0, "bayes_update_2"),
+        plot_bayes_update(out_dir, 250, rng, true_p, alpha0, beta0, "bayes_update_3"),
+        plot_count_dispersion(
+            out_dir, rng, n=810, p=0.3, kappa=4.0, n_draws=1000,
+            filename="binomial_betabinomial_draws",
+        ),
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# Model structure — shared helpers, in months
+# --------------------------------------------------------------------------- #
 def _definition(model_id):
     """The registered definition, so the priors here cannot drift from the models."""
     return MODEL_REGISTRY[model_id.lower()]
@@ -121,20 +298,15 @@ def _draw_anchor_priors(ax, anchors, dists, callouts=None):
         )
 
 
-def _save(fig, out_dir, filename):
-    os.makedirs(out_dir, exist_ok=True)
-    for ext, kw in (("png", {"dpi": 300}), ("svg", {})):
-        fig.savefig(os.path.join(out_dir, f"{filename}.{ext}"),
-                    bbox_inches="tight", **kw)
-    plt.close(fig)
-    print(f"Wrote {filename}.png/.svg to {out_dir}")
-
-
 # --------------------------------------------------------------------------- #
 # Figure 1 — VG01 prior structure
 # --------------------------------------------------------------------------- #
-def build_structure(out_dir, filename="model_structure_prior_vg01",
-                    n_draws=250, n_grid=260, seed=RANDOM_SEED):
+def build_prior_structure(out_dir, filename="model_structure_prior_vg01",
+                          n_draws=250, n_grid=260, seed=RANDOM_SEED):
+    """Prior trajectories, anchors and one draw's GP departure, for VG01.
+
+    No title: the report's figure caption carries it.
+    """
     d = _definition("vg01")
     anchors = tuple(float(a) for a in d.slope_anchors)
     d_lo = beta_dist(d.p_slope_low_alpha, d.p_slope_low_beta)
@@ -193,11 +365,10 @@ def build_structure(out_dir, filename="model_structure_prior_vg01",
     ax.set_ylim(-15, N_TRIALS + 15)
     ax.set_xlabel("Age (months)")
     ax.set_ylabel(f"Words spoken (of {N_TRIALS})")
-    ax.set_title("VG01 prior: anchored logit-linear trend with Gaussian-process departures")
     ax.legend(loc="upper left", frameon=True, fontsize="small", framealpha=0.95)
     ax.grid(True, color="0.92", lw=0.8)
     ax.set_axisbelow(True)
-    _save(fig, out_dir, filename)
+    return _save(fig, out_dir, filename)
 
 
 # --------------------------------------------------------------------------- #
@@ -210,8 +381,9 @@ def _observed_ages():
     return frame["age"].to_numpy(dtype=float)
 
 
-def build_anchoring(out_dir, filename="gp_anchoring_vg10",
-                    n_draws=250, n_grid=240, seed=RANDOM_SEED):
+def build_gp_anchoring(out_dir, filename="gp_anchoring_vg10",
+                       n_draws=250, n_grid=240, seed=RANDOM_SEED):
+    """The same prior draws with and without VG10's per-draw GP anchor."""
     d = _definition("vg10")
     anchors = tuple(float(a) for a in d.slope_anchors)
     ref = float(d.gp_anchor_age_months)
@@ -304,27 +476,18 @@ def build_anchoring(out_dir, filename="gp_anchoring_vg10",
     k = int(np.argmin(np.abs(plot_ages - ref)))
     print(f"  GP contribution at {ref:.0f} mo — free sd {g_free[:, k].std():.3f} logits; "
           f"anchored max |g| {np.abs(g_anch[:, k]).max():.2e}")
-    _save(fig, out_dir, filename)
+    return _save(fig, out_dir, filename)
 
 
-FIGURES = {"structure": build_structure, "anchoring": build_anchoring}
+PRIOR_FIGURES = {"structure": build_prior_structure, "anchoring": build_gp_anchoring}
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("figure", nargs="?", default="all",
-                    choices=["all", *FIGURES], help="Which figure to build.")
-    ap.add_argument("--output-dir", default=None,
-                    help="Override the report figure cache destination.")
-    ap.add_argument("--draws", type=int, default=250)
-    ap.add_argument("--seed", type=int, default=RANDOM_SEED)
-    args = ap.parse_args()
-
-    setup.init_script()
-    out_dir = args.output_dir or os.path.join(local_env.REPORT_FIGS_DIR, "methods")
-    for name in (FIGURES if args.figure == "all" else [args.figure]):
-        FIGURES[name](out_dir, n_draws=args.draws, seed=args.seed)
-
-
-if __name__ == "__main__":
-    main()
+def write_prior_illustrations(
+    out_dir: str,
+    figures: list[str] | None = None,
+    n_draws: int = 250,
+    seed: int = RANDOM_SEED,
+) -> list[str]:
+    """Write the model-structure figures (all of :data:`PRIOR_FIGURES` by default)."""
+    names = list(PRIOR_FIGURES) if figures is None else list(figures)
+    return [PRIOR_FIGURES[name](out_dir, n_draws=n_draws, seed=seed) for name in names]

@@ -1,166 +1,81 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+"""Prepare everything the Quarto report needs that is not fitted model output.
+
+Four stages, run in this order by default or named individually on the command
+line (the order given does not matter; ``pending`` always runs last):
+
+``descriptives``
+    Per-study summary tables and observed-data figures, written to
+    ``docs/descriptive/figures/`` for the standalone descriptive report and
+    mirrored into ``docs/report/figures/descriptives/`` for the "Data" chapter.
+    Reads the prepared dataset, so ``prepare_data.py`` must have run.
+``illustrations``
+    The introduction's Bayesian-updating and Binomial-versus-Beta-Binomial
+    figures, simulated, into ``docs/report/figures/``.
+``priors``
+    The methods chapter's prior-trajectory and GP-anchoring figures, simulated
+    from the registered definitions' own priors, into
+    ``docs/report/figures/methods/``. The anchoring figure projects onto the
+    observed ages, so this stage also needs the prepared dataset.
+``pending``
+    A labelled placeholder for every figure a report chapter references that is
+    still absent, so ``quarto render`` never fails on a missing file.
+
+    python scripts/prepare_report_figures.py                      # all four
+    python scripts/prepare_report_figures.py descriptives         # after prepare_data.py
+    python scripts/prepare_report_figures.py illustrations priors pending
+
+None of this is validated by ``sync_report_figures.py``, which covers fit
+artefacts only; the sync replaces the per-model and comparison directories and
+leaves these alone, but nothing else regenerates them either. The figure code
+lives in :mod:`vocab_growth.descriptive` and
+:mod:`vocab_growth.report_illustrations`; this script only routes it to the
+figure cache.
+"""
+
+import argparse
 import os
 import re
+import shutil
 from pathlib import Path
 
 import dse_research_utils.environment.setup as setup
+import dse_research_utils.plot.styles as plot_styles
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from rich import print
-from scipy.stats import beta, binom
 
 import vocab_growth.environment as local_env
+from vocab_growth.descriptive import write_descriptive_artefacts
+from vocab_growth.report_illustrations import (
+    RANDOM_SEED,
+    write_intro_illustrations,
+    write_prior_illustrations,
+)
 
-RANDOM_SEED = 47
 FIGURE_REF_RE = re.compile(r"!\[[^\n]*?\]\((figures/[^)\s]+)\)")
 
 
-def plot_bayes_update(n, rng, true_p, alpha0, beta0, filename):
-    data = rng.binomial(n=1, p=true_p, size=n)
-    k = int(data.sum())
-
-    print(f"Simulated data: {k} successes out of {n} trials (true p = {true_p:.2f})")
-
-    alpha_post = alpha0 + k
-    beta_post = beta0 + (n - k)
-
-    p_grid = np.linspace(0.0, 1.0, 1000)
-
-    prior_pdf = beta.pdf(p_grid, alpha0, beta0)
-    post_pdf = beta.pdf(p_grid, alpha_post, beta_post)
-
-    likelihood = binom.pmf(k, n, p_grid)
-    likelihood_norm = likelihood / np.trapezoid(likelihood, p_grid)
-
-    fig, ax = plt.subplots(figsize=(7, 4))
-
-    ax.plot(p_grid, prior_pdf, label="Prior", c="#0080e0")
-    ax.plot(
-        p_grid, likelihood_norm, label=f"Observed ($n = {n}$, $k = {k}$)", c="#009900"
-    )
-    ax.plot(p_grid, post_pdf, label="Posterior", c="#ff7800")
-
-    ax.axvline(
-        k / n,
-        linestyle="--",
-        linewidth=1,
-        c="#009900",
-        label=f"Observed mean = {k/n:.2f}",
-    )
-    ax.axvline(
-        true_p,
-        linestyle=":",
-        linewidth=1,
-        c="#ff0033",
-        label=f"True $p$ (simulated) = {true_p:.2f}",
-    )
-
-    prior_mean = alpha0 / (alpha0 + beta0)
-    ax.axvline(
-        prior_mean,
-        linestyle="--",
-        linewidth=1,
-        c="#0080e0",
-        label=f"Prior mean = {prior_mean:.2f}",
-    )
-
-    posterior_mean = alpha_post / (alpha_post + beta_post)
-    ax.axvline(
-        posterior_mean,
-        linestyle="-.",
-        linewidth=1,
-        c="#ff7800",
-        label=f"Posterior mean = {posterior_mean:.2f}",
-    )
-
-    ax.set_xlabel("$p$")
-    ax.set_ylabel("Density / scaled likelihood")
-
-    ax.set_ylim(0, 9)
-
-    ax.legend()
-
-    fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.png"), dpi=300)
-    fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.svg"))
-    pd.DataFrame({
-        "p": p_grid,
-        "prior_pdf": prior_pdf,
-        "likelihood_norm": likelihood_norm,
-        "posterior_pdf": post_pdf,
-    }).to_csv(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.csv"), index=False)
+def run_descriptives() -> None:
+    # Primary home: the standalone descriptive report (docs/descriptive/).
+    out_dir = os.path.join(local_env.DOCS_DIR, "descriptive", "figures")
+    # Mirror: the main report's figure cache, so methods-data.qmd keeps rendering.
+    mirror = os.path.join(local_env.REPORT_FIGS_DIR, "descriptives")
+    os.makedirs(mirror, exist_ok=True)
+    write_descriptive_artefacts(out_dir)
+    artefacts = sorted(os.listdir(out_dir))
+    for name in artefacts:
+        shutil.copy2(os.path.join(out_dir, name), os.path.join(mirror, name))
+    print(f"Mirrored {len(artefacts)} artefacts into {mirror}")
 
 
-def plot_count_dispersion(rng, n, p, kappa, n_draws, filename):
-    """Simulated counts under a Binomial and a mean-matched Beta-Binomial.
-
-    Both panels share the mean np; the Beta-Binomial splits the concentration
-    kappa as alpha = p * kappa, beta = (1 - p) * kappa, the parameterisation the
-    models use, so the only difference on display is the dispersion.
-    """
-    alpha_bb = p * kappa
-    beta_bb = (1.0 - p) * kappa
-
-    y_binom = rng.binomial(n=n, p=p, size=n_draws)
-    p_obs = rng.beta(alpha_bb, beta_bb, size=n_draws)
-    y_betabinom = rng.binomial(n=n, p=p_obs)
-
-    print(
-        f"Binomial(n={n}, p={p}): mean {y_binom.mean():.1f}, sd {y_binom.std():.1f}; "
-        f"Beta-Binomial(alpha={alpha_bb:g}, beta={beta_bb:g}): "
-        f"mean {y_betabinom.mean():.1f}, sd {y_betabinom.std():.1f}"
-    )
-
-    bins = np.arange(0, n + 16, 15)
-    fig, axes = plt.subplots(2, 1, figsize=(7, 5), sharex=True)
-
-    for ax, draws, label, colour in (
-        (axes[0], y_binom, f"Binomial($n = {n}$, $p = {p}$)", "#0080e0"),
-        (
-            axes[1],
-            y_betabinom,
-            f"Beta-Binomial($n = {n}$, $p = {p}$, $\\kappa = {kappa:g}$)",
-            "#ff7800",
-        ),
-    ):
-        ax.hist(draws, bins=bins, color=colour, label=label)
-        ax.axvline(
-            n * p,
-            linestyle="--",
-            linewidth=1,
-            c="#555555",
-            label=f"Mean $np = {n * p:.0f}$",
-        )
-        ax.set_ylabel(f"Draws (of {n_draws})")
-        ax.legend()
-
-    axes[1].set_xlabel(f"Count of words checked (out of $n = {n}$)")
-    axes[1].set_xlim(0, n)
-
-    fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.png"), dpi=300)
-    fig.savefig(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.svg"))
-    pd.DataFrame({
-        "binomial": y_binom,
-        "beta_binomial": y_betabinom,
-    }).to_csv(os.path.join(local_env.REPORT_FIGS_DIR, f"{filename}.csv"), index=False)
+def run_illustrations(seed: int) -> None:
+    write_intro_illustrations(local_env.REPORT_FIGS_DIR, seed=seed)
 
 
-def prepare_report_figures():
-    rng = np.random.default_rng(RANDOM_SEED)
-    true_p = 0.65
-    alpha0, beta0 = 2.0, 2.0
-
-    plot_bayes_update(20, rng, true_p, alpha0, beta0, "bayes_update")
-
-    plot_bayes_update(100, rng, true_p, alpha0, beta0, "bayes_update_2")
-
-    plot_bayes_update(250, rng, true_p, alpha0, beta0, "bayes_update_3")
-
-    plot_count_dispersion(
-        rng, n=810, p=0.3, kappa=4.0, n_draws=1000,
-        filename="binomial_betabinomial_draws",
+def run_priors(n_draws: int, seed: int) -> None:
+    write_prior_illustrations(
+        os.path.join(local_env.REPORT_FIGS_DIR, "methods"), n_draws=n_draws, seed=seed
     )
 
 
@@ -229,24 +144,51 @@ def write_pending_figure(path: Path) -> None:
     plt.close(fig)
 
 
-def prepare_pending_figures() -> int:
+def run_pending() -> None:
     """Create placeholders for report figures that are not available locally."""
     written = 0
     for path in report_figure_refs():
         if not path.exists():
             write_pending_figure(path)
             written += 1
-    return written
+    print(f"Pending figure placeholders written: {written}")
+
+
+STAGES = ("descriptives", "illustrations", "priors", "pending")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument("stages", nargs="*", choices=STAGES, metavar="stage",
+                    help=f"Any of {', '.join(STAGES)}; default all, in that order.")
+    ap.add_argument("--draws", type=int, default=250,
+                    help="Prior draws per model-structure figure.")
+    ap.add_argument("--seed", type=int, default=RANDOM_SEED,
+                    help="Seed for every simulated figure.")
+    args = ap.parse_args()
+    selected = [s for s in STAGES if not args.stages or s in args.stages]
+
+    setup.init_script()
+    # The 12pt base font the figures render at comes from the shared style
+    # (dse-research-utils FONT_SIZE_DEFAULT), applied explicitly so the output
+    # does not depend on init_script's defaults.
+    plot_styles.set_matplotlib_default_style()
+    os.makedirs(local_env.REPORT_FIGS_DIR, exist_ok=True)
+    print(f"Report figure cache: {local_env.REPORT_FIGS_DIR}")
+
+    for stage in selected:
+        print(f"\n== {stage} ==")
+        if stage == "descriptives":
+            run_descriptives()
+        elif stage == "illustrations":
+            run_illustrations(args.seed)
+        elif stage == "priors":
+            run_priors(args.draws, args.seed)
+        elif stage == "pending":
+            run_pending()
 
 
 if __name__ == "__main__":
-    setup.init_script()
-
-    os.makedirs(local_env.REPORT_FIGS_DIR, exist_ok=True)
-
-    print(f"Writing figures to: {local_env.REPORT_FIGS_DIR}")
-    print()
-
-    prepare_report_figures()
-    n_pending = prepare_pending_figures()
-    print(f"Pending figure placeholders written: {n_pending}")
+    main()
