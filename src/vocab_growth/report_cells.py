@@ -1620,3 +1620,703 @@ def render_loo_section(directory: str = ".") -> None:
             "nothing to the estimate. The exclusion is deterministic, so the "
             "per-outcome values stay comparable across models."
         )
+
+
+# ---------------------------------------------------------------------------
+# Reader-facing blocks (2026-09-02 template review)
+# ---------------------------------------------------------------------------
+#
+# A review of all twenty templates against this run's fitted output found the
+# same shape of gap on every page: the numbers a family or a practitioner would
+# use exist in the summary CSVs and are shown as raw DataFrames, the checks a
+# researcher would want are delegated to the reader ("compare each posterior
+# with its prior figure earlier in this report"), and no page says which of
+# the report's three audiences it serves. Each block below turns one of those
+# into something computed from the fit on disk. All are fail-soft: a fit that
+# predates an artefact gets a sentence saying so, never an empty section.
+
+#: How a report describes its own role. Owner decisions live in
+#: `docs/models/README.md`; a template passes the role it already states.
+READING_ROLES = frozenset({"record", "reference", "candidate", "development"})
+
+
+def _has_child_effects(present: set[str]) -> bool:
+    return any(
+        name in present
+        for name in ("tau_subject", "tau_subj_u", "tau_subj_q", "tau_subj_sign", "tau_subj_u_0")
+    ) or "subject_variance_share" in present
+
+
+def render_reading_routes(
+    role: str,
+    *,
+    instead: str | None = None,
+    joint: bool = False,
+    signing: bool = False,
+    robustness: bool = False,
+    recovery: bool = False,
+    loo: bool = True,
+) -> None:
+    """Print a "three ways to read this page" callout for the report's audiences.
+
+    The technical report says it is written for families, practitioners and
+    researchers, and each model page renders standalone, so a reader who lands
+    on one gets no other routing. ``role`` is the page's own stated role;
+    a development step or candidate routes every non-research reader to the
+    model of record named in ``instead`` rather than offering them numbers a
+    superseded page should not supply.
+    """
+    if role not in READING_ROLES:
+        raise ValueError(f"unknown reading role {role!r}; expected one of {sorted(READING_ROLES)}")
+
+    print('::: {.callout-tip title="Three ways to read this page"}')
+    print()
+    if role in {"development", "candidate"}:
+        what = (
+            "a development step" if role == "development" else "a candidate that is not yet a model of record"
+        )
+        target = f" **{instead}**" if instead else " the model of record named in the inventory"
+        print(
+            f"This page describes {what}. It is written for **researchers** following how the "
+            f"model family was built. **Families and practitioners** should read{target} instead: "
+            "nothing on this page is a reported number, and its own callouts say so."
+        )
+        print()
+        print(":::")
+        return
+
+    reference = role == "reference"
+    if reference:
+        print(
+            "**Families.** This is a typically-developing *reference* curve — a comparison "
+            "scale for the Down syndrome pages, not a target any child should meet. If you "
+            "are here from one of those pages, the [expectations table](#sec-predictions) "
+            "shows the same quantities on the same scale; the note "
+            "[Reading this page for one child](#sec-one-child) says what the ranges mean."
+        )
+    else:
+        print(
+            "**Families.** Start with the [expectations tables](#sec-predictions): expected "
+            "words at each age, and the range a single child might fall in. Then read "
+            "[Reading this page for one child](#sec-one-child), which says what those "
+            "ranges do and do not mean for the child you know. Everything else on this "
+            "page is how the numbers were made."
+        )
+    print()
+    practitioner = [
+        "**Practitioners.** The [expectations tables](#sec-predictions) carry the "
+        "single-child ranges and the probability of scoring at or below common "
+        "thresholds"
+    ]
+    if joint:
+        practitioner.append(
+            "; [Receptive to expressive](#sec-spoken-given-understood) maps a child's "
+            "words understood to the words spoken the model expects"
+        )
+    if signing:
+        practitioner.append(
+            "; [What signing is worth to the child](#what-signing-is-worth-to-the-child) gives the "
+            "sign-only vocabulary and what counting sign adds"
+        )
+    practitioner.append(
+        ". The [monthly tables](#sec-monthly) show, in their `n_obs` column, where the "
+        "evidence runs out."
+    )
+    print("".join(practitioner))
+    print()
+    researcher = [
+        "**Researchers.** [Priors](#sec-priors) (the table is read from the fit's manifest), "
+        "[Diagnostics](#sec-diagnostics) with the rendered verdict and the prior-to-posterior "
+        "contraction table"
+    ]
+    if loo:
+        researcher.append(", [Out-of-sample prediction](#sec-loo)")
+    if robustness:
+        researcher.append(", [Robustness](#sec-robustness)")
+    if recovery:
+        researcher.append(" and parameter recovery")
+    researcher.append(", then [Limits](#sec-limits).")
+    print("".join(researcher))
+    print()
+    print(":::")
+
+
+def render_family_notes(directory: str = ".") -> None:
+    """Print the three things a non-specialist needs before reading any table.
+
+    What a count is (a parent-report checklist harmonised to the reference
+    inventory), what the spread means for one child, and that nobody is being
+    ranked. The typically-developing pages already carried the last of these
+    ("a reference, not a target"); the Down syndrome pages carried none.
+    """
+    manifest = read_manifest(directory)
+    definition = (manifest.get("model") or {}).get("definition") or {}
+    population = definition.get("population")
+    n_trials = definition.get("n_trials")
+    present = fitted_parameters(directory)
+    child = _has_child_effects(present)
+
+    inventory = f"the {n_trials:,}-word reference inventory" if n_trials else "a common reference inventory"
+    # An id on a callout is read by Quarto as a cross-reference and must carry
+    # one of its own prefixes (`nte-`, `wrn-`, ...); anything else is a fatal
+    # filter error. The anchor the reading routes link to therefore goes on a
+    # plain wrapping div, and the callout inside it stays unlabelled.
+    print("::: {#sec-one-child}")
+    print('::: {.callout-note title="Reading this page for one child"}')
+    print()
+    print(
+        f"**What a count is.** Every number here is a parent- or carer-reported checklist "
+        f"count, placed on {inventory} so that different studies' checklists can be "
+        "compared. No child was given that whole inventory; it is a unit of measurement, "
+        "not a test they sat."
+    )
+    print()
+    if child:
+        print(
+            "**What the spread means.** Two kinds of range appear below. The narrower one is "
+            "uncertainty about the *typical* child's curve. The wider one — the single-child "
+            "range — is where individual children actually fall, and it is the one to read for "
+            "a child you know. Children of the same age differ from one another far more than "
+            "the average curve moves between ages, so a child outside the inner range is not "
+            "unusual, and a child outside the outer range is uncommon rather than wrong."
+        )
+    else:
+        print(
+            "**What the spread means.** The ranges below describe where one more checklist "
+            "from this pooled sample might fall. This model does not separate differences "
+            "between children from differences between studies or between visits, so read "
+            "the width as the spread of administrations, not as a clean statement about "
+            "how much children differ."
+        )
+    print()
+    if population == "td":
+        print(
+            "**Nobody is being ranked.** This is a typically-developing *reference*, not a "
+            "target — what a different population did. It is not a norm any child is "
+            "expected to meet and not a goal for an individual child; a gap between the two "
+            "curves is a description, not a deficit to be closed on a timetable."
+        )
+    else:
+        print(
+            "**Nobody is being ranked.** These curves describe a pooled research sample of "
+            "children with Down syndrome from several countries and studies — not the "
+            "population, and not a norm. A child below the curve is not behind a standard; "
+            "a child above it is not ahead of one. The curves say what these children did, "
+            "with the range that came with it."
+        )
+    print()
+    print(":::")
+    print(":::")
+
+
+def _first_present(columns, candidates):
+    for candidate in candidates:
+        if candidate in columns:
+            return candidate
+    return None
+
+
+def render_expectations_table(
+    outcome: str | None = None,
+    *,
+    directory: str = ".",
+    thresholds: tuple[int, ...] = (0, 10, 50),
+) -> None:
+    """Print expected words at the reported ages in plain-language columns.
+
+    The summary CSVs carry up to forty columns and the templates displayed them
+    as raw DataFrames — float64 to sixteen places under ``P(Y<=5)``. This reads
+    the same file and prints the columns a reader asks for: expected words, the
+    single-child ranges, the probability of scoring at or below a threshold,
+    and the number of nearby observations from the monthly table.
+
+    ``outcome`` is the engine's suffix: ``None`` for a single-outcome fit,
+    ``"u"``, ``"s"`` or ``"sign"`` otherwise. Columns are resolved by name, so an
+    engine that writes ``Ey_u_median`` (the joint modality engine) is read the
+    same way as one that writes ``Ey_median``; a column the engine does not
+    write is left out and the caption says so.
+    """
+    suffix = "" if outcome is None else f"_{outcome}"
+    summary = _read(directory, f"posterior_summary{suffix}")
+    if summary is None or "age_months" not in summary.columns:
+        print(
+            f"_No `posterior_summary{suffix}.csv` for this fit, so the expectations table "
+            "cannot be shown._"
+        )
+        return
+    monthly = _read(directory, f"posterior_summary_monthly{suffix}")
+    columns = list(summary.columns)
+    label = _OUTCOME_LABELS.get(outcome, "words")
+
+    expected = _first_present(
+        columns, ["Ey_population_median", f"Ey{suffix}_median", "Ey_median"]
+    )
+    population = expected == "Ey_population_median"
+    inner = (_first_present(columns, ["Y_ci50_lo"]), _first_present(columns, ["Y_ci50_hi"]))
+    outer = (_first_present(columns, ["Y_ci_lo"]), _first_present(columns, ["Y_ci_hi"]))
+    subject_marginal = all(inner) and all(outer)
+    if not subject_marginal:
+        # The joint modality engine writes no predictive count columns for its
+        # per-outcome tables; fall back to the expected-count interval and say so.
+        inner = (
+            _first_present(columns, [f"Ey{suffix}_ci50_lo", "Ey_ci50_lo"]),
+            _first_present(columns, [f"Ey{suffix}_ci50_hi", "Ey_ci50_hi"]),
+        )
+        outer = (
+            _first_present(columns, [f"Ey{suffix}_ci_lo", "Ey_ci_lo"]),
+            _first_present(columns, [f"Ey{suffix}_ci_hi", "Ey_ci_hi"]),
+        )
+    threshold_columns = []
+    for k in thresholds:
+        name = "P(Y=0)" if k == 0 else f"P(Y<={k})"
+        if name in columns:
+            threshold_columns.append((k, name))
+
+    n_obs_by_age: dict[int, int] = {}
+    last_observed = None
+    if monthly is not None and {"age_months", "n_obs"} <= set(monthly.columns):
+        for age, n in zip(monthly["age_months"], monthly["n_obs"], strict=True):
+            try:
+                n_obs_by_age[int(round(float(age)))] = int(n)
+            except (TypeError, ValueError):
+                continue
+        observed = [a for a, n in n_obs_by_age.items() if n > 0]
+        last_observed = max(observed) if observed else None
+
+    header = ["Age (months)", f"Expected {label}"]
+    if all(inner):
+        header.append("Half of children" if subject_marginal else "50% interval")
+    if all(outer):
+        header.append("Nine in ten children" if subject_marginal else "89% interval")
+    for k, _ in threshold_columns:
+        header.append("P(no words)" if k == 0 else f"P(≤{k} words)")
+    if n_obs_by_age:
+        header.append("Observations nearby")
+
+    print("| " + " | ".join(header) + " |")
+    print("|" + " ---: |" * len(header))
+    beyond = False
+    for _, row in summary.iterrows():
+        try:
+            age = int(round(float(row["age_months"])))
+        except (TypeError, ValueError):
+            continue
+        n_here = n_obs_by_age.get(age)
+        extrapolated = last_observed is not None and age > last_observed
+        beyond = beyond or extrapolated
+        cells = [f"{age}†" if extrapolated else f"{age}"]
+        cells.append(f"{float(row[expected]):.0f}" if expected else "—")
+        if all(inner):
+            cells.append(f"{float(row[inner[0]]):.0f}–{float(row[inner[1]]):.0f}")
+        if all(outer):
+            cells.append(f"{float(row[outer[0]]):.0f}–{float(row[outer[1]]):.0f}")
+        for _, name in threshold_columns:
+            cells.append(f"{100 * float(row[name]):.0f}%")
+        if n_obs_by_age:
+            cells.append("—" if n_here is None else f"{n_here:,}")
+        print("| " + " | ".join(cells) + " |")
+    print()
+
+    caption = [": "]
+    if population:
+        caption.append(
+            f"Expected {label} is the **population-level** median — the typical child in the "
+            "average study, with study and child effects at zero. "
+        )
+    else:
+        caption.append(f"Expected {label} is the median of the fitted trajectory. ")
+    if subject_marginal:
+        caption.append(
+            "The two ranges are **single-child** ranges: where half, and where nine in ten, "
+            "of individual children of that age are expected to fall, counting both how much "
+            "children differ and the uncertainty in the curve. "
+        )
+    elif all(outer):
+        caption.append(
+            "This engine writes no single-child predictive columns for this outcome, so the "
+            "ranges are 50% and 89% intervals on the *expected* count — uncertainty about the "
+            "curve, not the spread of children, and narrower than a single-child range would be. "
+        )
+    if threshold_columns:
+        caption.append(
+            "Threshold columns give the probability that a single child scores at or below "
+            "that count. "
+        )
+    if n_obs_by_age:
+        caption.append(
+            "*Observations nearby* is the number of administrations within the monthly "
+            "window around that age, read from the monthly table — the honest guide to where "
+            "these expectations rest on data. "
+        )
+    if beyond and last_observed is not None:
+        caption.append(
+            f"† Ages above {last_observed} months lie beyond the last observation for this "
+            "outcome: those rows are the model extrapolating, not evidence."
+        )
+    print("".join(caption).rstrip())
+
+
+def render_diagnostic_verdict(directory: str = ".") -> None:
+    """Print the gate result as one table and one sentence.
+
+    The caveats block discloses exceptions and the styled table colours cells,
+    but a reader has to scan thirty rows to learn the worst R-hat, the smallest
+    effective sample size, the divergence count and the minimum BFMI, and no
+    page states the sampling effort beyond chains and draws. This reads
+    ``diagnostics_summary.json``, the manifest's sampling parameters and
+    ``diagnostics.csv`` (for which parameter set each extreme) and says it.
+    """
+    path = os.path.join(directory, "diagnostics_summary.json")
+    if not os.path.isfile(path):
+        print("_No `diagnostics_summary.json` for this fit, so the gate verdict cannot be shown._")
+        return
+    try:
+        with open(path, encoding="utf-8") as handle:
+            summary = json.load(handle)
+    except (OSError, ValueError):
+        print("_The diagnostics summary for this fit could not be read._")
+        return
+
+    thresholds = summary.get("thresholds") or {}
+    rhat_max = thresholds.get("rhat_max", 1.01)
+    ess_min = thresholds.get("ess_threshold", 400)
+    bfmi_min = thresholds.get("bfmi_threshold", 0.3)
+    checks = summary.get("checks") or {}
+
+    max_rhat = summary.get("max_rhat")
+    min_ess = summary.get("min_ess")
+
+    # The gate screens every parameter, including the per-child and per-study
+    # random-effect elements the diagnostics table does not list. The table's
+    # own extreme is named only when it is the gate's extreme; otherwise the
+    # value belongs to an element the table omits, and saying so is the honest
+    # reading rather than attaching the nearest listed name.
+    unlisted = "an element the table does not list"
+    worst_rhat_name = best_ess_name = None
+    table = _read(directory, "diagnostics")
+    if table is not None:
+        import pandas as pd
+
+        try:
+            named = pd.read_csv(os.path.join(directory, "diagnostics.csv"), index_col=0)
+            if "r_hat" in named.columns and max_rhat is not None:
+                column = named["r_hat"].astype(float)
+                worst_rhat_name = (
+                    str(column.idxmax())
+                    if abs(float(column.max()) - float(max_rhat)) <= 5e-4
+                    else unlisted
+                )
+            ess_columns = [c for c in ("ess_bulk", "ess_tail") if c in named.columns]
+            if ess_columns and min_ess is not None:
+                stacked = named[ess_columns].astype(float)
+                table_min = float(stacked.min().min())
+                if abs(table_min - float(min_ess)) <= 0.01 * max(float(min_ess), 1.0):
+                    best_ess_name = str(stacked.stack().idxmin()[0])
+                else:
+                    best_ess_name = unlisted
+        except (OSError, ValueError, TypeError, IndexError):
+            pass
+
+    divergences = summary.get("divergences")
+    bfmi = summary.get("bfmi_per_chain") or []
+    min_bfmi = min(bfmi) if bfmi else None
+
+    def mark(ok):
+        return "pass" if ok else "**fail**"
+
+    print("| Check | This fit | Threshold | Tier | Result |")
+    print("| --- | --- | --- | --- | --- |")
+    if max_rhat is not None:
+        where = (
+            f" ({worst_rhat_name})" if worst_rhat_name == unlisted
+            else f" (`{worst_rhat_name}`)" if worst_rhat_name else ""
+        )
+        print(
+            f"| Largest R-hat | {max_rhat:.6f}{where} | ≤ {rhat_max:g} | hard | "
+            f"{mark(checks.get('rhat', max_rhat <= rhat_max))} |"
+        )
+    if min_ess is not None:
+        where = (
+            f" ({best_ess_name})" if best_ess_name == unlisted
+            else f" (`{best_ess_name}`)" if best_ess_name else ""
+        )
+        print(
+            f"| Smallest effective sample size | {min_ess:,.0f}{where} | ≥ {ess_min:,} | hard | "
+            f"{mark(checks.get('ess', min_ess >= ess_min))} |"
+        )
+    if divergences is not None:
+        print(
+            f"| Divergent transitions | {divergences:,} | 0 | soft | "
+            f"{mark(checks.get('divergences', divergences == 0))} |"
+        )
+    if min_bfmi is not None:
+        print(
+            f"| Smallest energy BFMI across chains | {min_bfmi:.3f} | ≥ {bfmi_min:g} | soft | "
+            f"{mark(checks.get('bfmi', min_bfmi >= bfmi_min))} |"
+        )
+    unassessable = summary.get("unassessable_parameters") or []
+    if unassessable:
+        print(f"| Parameters the gate could not assess | {len(unassessable):,} | 0 | — | noted |")
+    print()
+
+    manifest = read_manifest(directory)
+    params = (manifest.get("sampling") or {}).get("parameters") or {}
+    effort = []
+    if params.get("chains") and params.get("draws"):
+        effort.append(f"{params['chains']:,} chains × {params['draws']:,} draws")
+    if params.get("tune"):
+        effort.append(f"after {params['tune']:,} tuning draws")
+    if params.get("target_accept"):
+        effort.append(f"at target acceptance {params['target_accept']:g}")
+    hard = bool(checks.get("rhat", True)) and bool(checks.get("ess", True))
+    soft = bool(checks.get("divergences", True)) and bool(checks.get("bfmi", True))
+    if hard and soft:
+        verdict = "This fit clears both tiers of the convergence gate."
+    elif hard:
+        verdict = (
+            "This fit clears the **hard** tier (R-hat and effective sample size) but not the "
+            "**soft** tier; the caveat block above says what was recorded and the reported "
+            "intervals should be read with that in mind."
+        )
+    else:
+        verdict = (
+            "This fit **does not clear the hard tier** and reaches this page only under a "
+            "recorded exception, which the caveat block above states."
+        )
+    sentence = verdict
+    if effort:
+        sentence += " Sampled with " + ", ".join(effort) + "."
+    print(": " + sentence + " Read from `diagnostics_summary.json` and the fit manifest.")
+
+
+def render_prior_posterior_contraction(directory: str = ".") -> None:
+    """Print how much each prior was narrowed by the data, from the fit's own table.
+
+    Every template asks the reader to "compare the marginal posteriors above with
+    the prior figures earlier in this report", across fifteen to thirty
+    parameters, by eye. Where a page then states the answer it states it from
+    memory. ``scripts/prior_vs_posterior.py --table`` computes contraction
+    (1 − posterior SD / prior SD) and the prior CDF at the posterior mean from
+    the trace and the definition; this renders the copy it writes into the fit
+    directory. Fail-soft, like the LOO section.
+    """
+    table = _read(directory, "prior_posterior_contraction")
+    if table is None:
+        print(
+            "_No prior-to-posterior contraction table for this fit "
+            "(`prior_posterior_contraction.csv` absent — run "
+            "`scripts/prior_vs_posterior.py --table` against the fitted output to produce it)._"
+        )
+        return
+    needed = {"parameter", "posterior_mean", "posterior_sd", "prior_cdf", "contraction"}
+    if not needed <= set(table.columns):
+        print("_The contraction table for this fit does not carry the expected columns._")
+        return
+
+    descriptions = {parameter: description for parameter, description, _, _ in _PRIOR_SPECS}
+    has_prior = {"prior_median", "prior_sd"} <= set(table.columns)
+    rows = table.sort_values("contraction").itertuples(index=False)
+
+    header = ["Parameter", "Prior median", "Prior SD"] if has_prior else ["Parameter"]
+    header += ["Posterior mean", "Posterior SD", "Contraction", "Prior CDF at the mean", "Reading"]
+    print("| " + " | ".join(header) + " |")
+    print("| --- |" + " ---: |" * (len(header) - 2) + " --- |")
+    prior_driven = []
+    pressing = []
+    for row in rows:
+        name = str(row.parameter)
+        label = descriptions.get(name, f"`{name}`")
+        contraction = float(row.contraction)
+        cdf = float(row.prior_cdf)
+        if contraction <= 0.1:
+            reading = "prior-driven"
+            prior_driven.append(name)
+        elif cdf >= 0.95 or cdf <= 0.05:
+            reading = "pressing against the prior"
+            pressing.append(name)
+        else:
+            reading = "informed by the data"
+        cells = [label]
+        if has_prior:
+            cells += [f"{float(row.prior_median):.3g}", f"{float(row.prior_sd):.3g}"]
+        cells += [
+            f"{float(row.posterior_mean):.3g}",
+            f"{float(row.posterior_sd):.3g}",
+            f"{contraction:.2f}",
+            f"{cdf:.2f}",
+            reading,
+        ]
+        print("| " + " | ".join(cells) + " |")
+    print()
+    summary = (
+        ": Contraction is 1 − posterior SD / prior SD: 1 means the data fixed the parameter, "
+        "0 means the posterior is no narrower than the prior, and a value at or below 0.1 "
+        "is marked **prior-driven** — the reported value restates the prior rather than "
+        "estimating anything. The prior CDF at the posterior mean says where inside the "
+        "prior the data landed; near 0 or 1 the prior is a wall the likelihood is pushing "
+        "against. Computed from this fit's trace and its recorded definition by "
+        "`scripts/prior_vs_posterior.py`."
+    )
+    if prior_driven:
+        summary += (
+            f" Prior-driven here: {', '.join(f'`{n}`' for n in prior_driven)} — any "
+            "conclusion resting on one of these is a restatement of its prior."
+        )
+    if pressing:
+        summary += f" Pressing against the prior: {', '.join(f'`{n}`' for n in pressing)}."
+    print(summary)
+
+
+def _print_age_band_coverage(detail) -> None:
+    """The administrations carrying each outcome, by age band, from a rebuilt frame."""
+    outcomes = [c for c in ("understood", "spoken", "signed") if c in detail.columns]
+    if not outcomes or "age" not in detail.columns:
+        return
+    bands = [(0, 24), (24, 48), (48, 72), (72, 96), (96, 1000)]
+    print()
+    print("| Age band (months) | " + " | ".join(outcomes) + " |")
+    print("| --- |" + " ---: |" * len(outcomes))
+    for lo, hi in bands:
+        band = detail[(detail["age"] >= lo) & (detail["age"] < hi)]
+        if band.empty:
+            continue
+        label = f"{lo}–{hi}" if hi < 1000 else f"{lo} and above"
+        print(
+            f"| {label} | "
+            + " | ".join(f"{int(band[c].notna().sum()):,}" for c in outcomes)
+            + " |"
+        )
+    print()
+    print(
+        ": Administrations carrying each outcome, by age band. The bands with few rows "
+        "are where the curves rest on the model rather than on observations."
+    )
+
+
+def render_frame_composition(directory: str = ".") -> None:
+    """Print what the fitted frame is made of, exactly, from the manifest.
+
+    The Data section on every page was ``describe()`` with normality tests
+    appended, followed by a callout apologising for the normality tests. What a
+    reader needs is the number of children and administrations, the share of
+    children seen more than once (the quantity that decides child-effect
+    identification on every hierarchical page), and rows per study. The manifest
+    records the first three exactly; the per-study children and age spans need
+    the frame, which is rebuilt through :mod:`vocab_growth.analysis_frames` and
+    used **only if its hash matches the one the fit recorded** — otherwise the
+    manifest-only table is printed and the page says why.
+    """
+    manifest = read_manifest(directory)
+    data = manifest.get("data") or {}
+    rows = data.get("rows")
+    children = data.get("children")
+    counts = data.get("observed_outcome_counts") or {}
+    per_study = data.get("source_row_counts") or {}
+    if not rows and not per_study:
+        print("_No fit manifest for this fit, so the frame composition cannot be read._")
+        return
+
+    facts = []
+    if rows:
+        facts.append(f"**{rows:,} administrations**")
+    if children:
+        facts.append(f"from **{children:,} children**")
+        if rows:
+            facts.append(f"({rows / children:.2f} administrations per child on average)")
+    if counts:
+        facts.append(
+            "; outcome rows: " + ", ".join(f"{k} {v:,}" for k, v in counts.items())
+        )
+    print(" ".join(facts).replace(" ;", ";") + ".")
+    print()
+
+    detail = None
+    reason = None
+    try:
+        from vocab_growth.analysis_frames import (
+            analysis_frame_hash,
+            build_analysis_frame,
+        )
+        from vocab_growth.models.definitions import MODEL_REGISTRY
+
+        model_id = str((manifest.get("model") or {}).get("model_id") or "").lower()
+        recorded = data.get("analysis_frame_hash")
+        registered = MODEL_REGISTRY.get(model_id)
+        if registered is None or not recorded:
+            reason = "the registered definition or the recorded frame hash is unavailable"
+        else:
+            frame, _ = build_analysis_frame(model_id, registered)
+            if analysis_frame_hash(frame) != recorded:
+                reason = "the frame the current loader rules build no longer hashes to the fitted one"
+            else:
+                detail = frame
+    except Exception as exc:  # pragma: no cover - render robustness, not model logic
+        reason = f"it could not be rebuilt here (`{type(exc).__name__}`)"
+
+    if detail is not None and "age" in detail.columns and "subject_id" not in detail.columns:
+        # The engines without child effects build a frame with no child key --
+        # which is a fact about the model, not a gap in the record: every row
+        # enters the likelihood as an independent administration. The plain
+        # bivariate frame carries no study key either; the trivariate one keeps
+        # `study` for its signing-source masks. Say which, and give what the
+        # frame does carry.
+        if "study" in detail.columns:
+            print("| Study | Administrations | Ages (months) |")
+            print("| --- | ---: | --- |")
+            for study, group in sorted(detail.groupby("study"), key=lambda kv: -len(kv[1])):
+                print(f"| `{study}` | {len(group):,} | {group['age'].min():.0f}–{group['age'].max():.0f} |")
+            print()
+            print(
+                ": Rebuilt from the current data through the same loader rules the fit used, and "
+                "verified to hash to the frame this fit recorded. **This frame carries no child "
+                "key**: the model treats every administration as independent, so the share of "
+                "children seen more than once is not part of what it fitted, and the study "
+                "column above labels rows without entering the likelihood."
+            )
+        else:
+            print(
+                ": Rebuilt from the current data through the same loader rules the fit used, and "
+                "verified to hash to the frame this fit recorded. **This frame carries no study "
+                "or child key**: the model treats every administration as independent, so "
+                "neither a per-study breakdown nor the share of children seen more than once is "
+                "part of what it fitted."
+            )
+        _print_age_band_coverage(detail)
+        return
+
+    if detail is not None and {"study", "subject_id"} <= set(detail.columns):
+        by_study = detail.groupby("study")
+        print("| Study | Administrations | Children | Ages (months) |")
+        print("| --- | ---: | ---: | --- |")
+        for study, group in sorted(by_study, key=lambda kv: -len(kv[1])):
+            ages = group["age"] if "age" in group.columns else None
+            span = f"{ages.min():.0f}–{ages.max():.0f}" if ages is not None else "—"
+            print(
+                f"| `{study}` | {len(group):,} | {group['subject_id'].nunique():,} | {span} |"
+            )
+        print()
+        visits = detail.groupby("subject_id").size()
+        repeaters = visits[visits > 1]
+        repeat = float((visits > 1).mean()) if len(visits) else float("nan")
+        typical = f" (median {repeaters.median():.0f} visits for those who were)" if len(repeaters) else ""
+        print(
+            f": Rebuilt from the current data through the same loader rules the fit used, and "
+            f"verified to hash to the frame this fit recorded. "
+            f"**{repeat:.0%} of children were seen more than once**{typical}; that share is "
+            "what identifies persistent between-child differences separately from residual "
+            "spread."
+        )
+        _print_age_band_coverage(detail)
+    elif per_study:
+        print("| Study | Administrations |")
+        print("| --- | ---: |")
+        for study, n in sorted(per_study.items(), key=lambda kv: -int(kv[1])):
+            print(f"| `{study}` | {int(n):,} |")
+        print()
+        note = ": Rows per contributing study, as this fit's manifest records them."
+        if reason:
+            note += (
+                f" Children and age spans per study are not shown because {reason}; "
+                "the totals above are exact."
+            )
+        print(note)

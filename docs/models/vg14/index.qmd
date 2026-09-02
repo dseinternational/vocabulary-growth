@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('development', instead='VG15')
+```
+
 ::: {.callout-important title="Superseded: read VG15 instead for any total-expressive number"}
 
 **VG14 is a development step, not a source for reported numbers.** The study owner confirmed on 2026-08-06 that it is wholly replaced by [VG15](../vg15/index.qmd) for reporting; see the role table in [the model inventory](../README.md). VG15 supplies everything VG14 does — including this model's independence-based total, which VG15 emits alongside its own as `p_any_indep` — on a better-specified model. This page is retained to show how the signing structure was built.
@@ -180,7 +188,7 @@ print(
 )
 ```
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -236,7 +244,7 @@ The empirical signed fraction of understood words is a **hump** — near zero in
 
 ![Prior on the fraction of understood words that are spoken at the high age anchor.](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
 
-## Prior predictive checks
+## Prior predictive checks {#sec-prior-predictive}
 
 These simulate vocabularies from the priors alone, before the data are seen. For VG14 the question specific to this model is whether signing can rise and fall across the observed age range **without** implying substantial signing before the signing data begin, while leaving the understood and spoken trajectories broad enough that the signed pathway does not indirectly force the total. Read the signed-count and signed-ratio panels together: a usable prior allows near-floor signing at the youngest ages, a preschool rise, and a later decline, and stays wide where signing observations are sparse. These panels do that; a prior that forced a hump of a particular height, or that put appreciable signing at 12 months, would be shaping the answer rather than permitting it.
 
@@ -250,7 +258,15 @@ These simulate vocabularies from the priors alone, before the data are seen. For
 
 ![Signed ratio $r(a)$ drawn from the priors — the fraction of understood words that are signed, showing the prior hump.](prior_samples_r.png){#fig-prior-samples-r .lightbox fig-align="left"}
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
 
 ```{python}
 descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
@@ -343,7 +359,7 @@ except Exception as _exc:  # pragma: no cover - report robustness, not model log
 
 Three things follow, and they govern how the rest of this page should be read. Signing is recorded by a minority of the contributing studies, and those studies differ in whether signing was taught — with no study random effect in this model, that difference lands in the age curve. The oldest and youngest bands rest on very few children, so the shape of the curve at the edges is carried by the prior tent rather than by observations. And the independence assumption behind $p_\text{any}$ is checked against a **single** study, `uk_02`, which is the only source recording each understood word as sign-only, sign-and-speech, speech-only, or understood-only; it contributes a small fraction of the signed rows over a narrow age window, and the check cannot speak to ages outside it.
 
-## Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 ```{python}
 #| label: convergence-caveats
@@ -352,6 +368,14 @@ Three things follow, and they govern how the rest of this page should be read. S
 from vocab_growth.report_cells import render_convergence_caveats
 
 render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
 ```
 
 ```{python}
@@ -371,13 +395,25 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the sampled and derived parameters, including the two segment slopes of the signed tent.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 ::: {.callout-note title="What to watch in this model"}
 
 The sparse signing pathway is the diagnostic pressure point: the signed Gaussian-process length-scale and amplitude, the signed dispersion, and any pair-plot ridge showing the signed level, the signed Gaussian process and dispersion trading off against one another. Compare the marginal posteriors above with the prior figures earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it restates the prior rather than the evidence — which for the signed Gaussian process means the fitted signed curve is closer to the three-anchor tent prior than to a shape the data chose.
 
 :::
 
-## Findings
+## Findings {#sec-findings}
 
 ```{python}
 #| echo: false
@@ -399,7 +435,7 @@ This model carries no random effects, so there are no between-study or between-c
 
 Of the quantities below, the signed trajectory, the signed ratio's rise and fall, and the comprehension-production gap are properties this model can speak to subject to that caveat. Anything built from the **union** of signing and speech is not, and is marked where it appears.
 
-## Joint trajectory
+## Joint trajectory {#sec-predictions}
 
 ![Expected words understood, spoken and signed on one axis, with uncertainty intervals, against the observed data.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
@@ -497,6 +533,16 @@ The gap widens and then narrows: comprehension pulls ahead first, and speech clo
 $p$ is the latent proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and is the one to quote when asking where a single child might fall. The `P(Y<=k)` columns give the probability that a single child scores at or below each threshold. Intervals are 89% outer and 50% inner equal-tailed intervals throughout.
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("u")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
 posterior_summary_u
 ```
@@ -544,6 +590,16 @@ Lower $\kappa$ means **greater** between-child variability relative to the mean;
 ### Summary at selected ages
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("s")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
 posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
 posterior_summary_s
 ```
@@ -589,6 +645,16 @@ Spoken vocabulary grows fastest later than understood vocabulary does; the two p
 The signed counts are the most heterogeneous outcome in this model: at a given age the interval on $Y$ — where a single child might fall — spans most of the plausible range. That spread is the practical headline of this chapter, and the `P(Y<=k)` columns are the most directly usable numbers on this page for anyone asking what to expect.
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("sign")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
 posterior_summary_sign = pd.read_csv("posterior_summary_sign.csv")
 posterior_summary_sign
 ```
@@ -627,7 +693,42 @@ The count of signed words does **not** peak at the same age as the signed _ratio
 
 ![How the signed dispersion parameter changes with age, with uncertainty intervals. Larger $\kappa$ means *less* spread between children.](posterior_kappa_sign.png){#fig-kappa-sign .lightbox fig-align="left"}
 
-## Predictive calibration
+## Robustness {#sec-robustness}
+
+A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+
+```{python}
+from pathlib import Path
+
+import pandas as pd
+from IPython.display import Markdown, display
+
+
+def comparison_path(name):
+    """Locate a comparison artefact from wherever this report is rendered."""
+    for base in (Path("../../comparisons"), Path("comparisons"), Path("../comparisons")):
+        candidate = base / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+robustness_path = comparison_path("sensitivity/robustness_matrix_vg14.csv")
+if robustness_path is None:
+    display(Markdown(
+        "_The sensitivity comparison has not been computed into this output root, "
+        "so no robustness matrix is available for this render._"
+    ))
+else:
+    robustness = pd.read_csv(robustness_path)
+    wanted = ["variant", "status", "n_within_ci", "n_checked", "max_abs_delta",
+              "quantities_outside_ci", "verdict", "variant_fit_utc"]
+    display(robustness[[c for c in wanted if c in robustness.columns]])
+```
+
+Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run.
+
+## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
@@ -639,7 +740,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Out-of-sample prediction
+## Out-of-sample prediction {#sec-loo}
 
 ```{python}
 #| echo: false
@@ -650,7 +751,7 @@ render_loo_section()
 ```
 
 
-## Limits
+## Limits {#sec-limits}
 
 - **Superseded for reporting.** VG15 replaces this model for every total-expressive number, for the signed peak age, and for the sign-to-speech hand-over. This page is a record of how the signing structure was built.
 - **No hierarchy.** No study effects and no repeated-child effects, so the age curves absorb source composition and the uncertainty is not a fair estimate of uncertainty about a new child.

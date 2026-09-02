@@ -6,7 +6,6 @@ Fits the specified model to the latest data. Saves plots and data, and report to
 
 import argparse
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -81,12 +80,11 @@ def _render_output(output_dir: str, model_id: str | None = None) -> None:
     """
     qmd_path = os.path.join(output_dir, "index.qmd")
     if model_id is not None:
-        template = os.path.join(
-            env.DOCS_DIR, "models", model_id.lower(), "index.qmd"
-        )
-        if not os.path.isfile(template):
-            raise FileNotFoundError(f"Report template is missing: {template}")
-        shutil.copy(template, qmd_path)
+        # The template and the shared includes it may transclude, staged together
+        # so a `{{< include >}}` resolves in the output directory it renders in.
+        from vocab_growth.reporting import stage_report_sources
+
+        stage_report_sources(model_id, output_dir)
     if not os.path.isfile(qmd_path):
         raise FileNotFoundError(f"Quarto source is missing: {qmd_path}")
     # Quarto otherwise resolves the Jupyter kernel for the report's python cells

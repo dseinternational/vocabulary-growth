@@ -30,22 +30,36 @@ Consequences for authors:
 - Never type a frame size, study count or age range. Call `render_model_at_a_glance()`.
 - Prose may state **structure** ("this model has no random effects", "signing is modelled as a rise and fall"), **direction** ("comprehension leads production"), and **caveats**. It may not state magnitudes.
 - Where a figure needs a magnitude to be interpretable, put the magnitude in an adjacent table, not in the sentence.
+- Where a historical magnitude must stay in prose — a gate record, an earlier fit's recovery z-scores — date it in the sentence ("on the 2026-08-19 fits"), so that staleness is visible rather than silent. The 2026-09-02 review found a dozen such numbers in Limits sections, one of which that run had already falsified.
 
 ## Shared blocks
 
 All in `vocab_growth.report_cells`, all for a cell with `#| echo: false` and `#| output: asis`:
 
-| Block                              | Replaces                                        | Reads                                  |
-| ---------------------------------- | ----------------------------------------------- | -------------------------------------- |
-| `render_sampling_banner()`         | the hard-coded `{(chains, draws): label}` table | `fit_manifest.json`                    |
-| `render_model_at_a_glance()`       | the hand-written glance callout                 | `fit_manifest.json`                    |
-| `render_priors_table()`            | hand-written prior prose                        | manifest + `diagnostics.csv`           |
-| `render_convergence_caveats()`     | a per-template reimplementation of the gate     | `diagnostics_summary.json`             |
-| `render_headline_quantities()`     | nothing — this is new                           | the summary CSVs                       |
-| `render_variation_table()`         | nothing — this is new                           | `diagnostics.csv`                      |
-| `render_glossary([...])`           | nothing — this is new                           | static definitions                     |
-| `render_calibration_section()`     | _(already in use)_                              | `posterior_predictive_calibration.csv` |
-| `ppc_count_distribution_gallery()` | _(already in use)_                              | the count-distribution figures         |
+| Block                                  | Replaces                                        | Reads                                  |
+| -------------------------------------- | ----------------------------------------------- | -------------------------------------- |
+| `render_sampling_banner()`             | the hard-coded `{(chains, draws): label}` table | `fit_manifest.json`                    |
+| `render_model_at_a_glance()`           | the hand-written glance callout                 | `fit_manifest.json`                    |
+| `render_priors_table()`                | hand-written prior prose                        | manifest + `diagnostics.csv`           |
+| `render_convergence_caveats()`         | a per-template reimplementation of the gate     | `diagnostics_summary.json`             |
+| `render_headline_quantities()`         | nothing — this is new                           | the summary CSVs                       |
+| `render_variation_table()`             | nothing — this is new                           | `diagnostics.csv`                      |
+| `render_glossary([...])`               | nothing — this is new                           | static definitions                     |
+| `render_calibration_section()`         | _(already in use)_                              | `posterior_predictive_calibration.csv` |
+| `ppc_count_distribution_gallery()`     | _(already in use)_                              | the count-distribution figures         |
+| `render_reading_routes(role, ...)`     | nothing — this is new                           | the role the template states           |
+| `render_family_notes()`                | nothing — this is new                           | manifest + `diagnostics.csv`           |
+| `render_expectations_table(...)`       | the raw `posterior_summary*` DataFrame display  | `posterior_summary*` + monthly tables  |
+| `render_diagnostic_verdict()`          | the reader scanning the styled table            | `diagnostics_summary.json` + manifest  |
+| `render_prior_posterior_contraction()` | "compare each posterior with its prior figure"  | `prior_posterior_contraction.csv`      |
+| `render_frame_composition()`           | `describe()` plus normality tests               | manifest, then an exact frame rebuild  |
+| `render_loo_section()`                 | _(already in use)_                              | `loo_summary.csv`                      |
+
+The six blocks added on 2026-09-02 came from a review of all twenty templates against a reporting-quality run (`notes/202609021200-report-template-review.md`). Two of them read artefacts a fit does not write and are fail-soft until those exist: `render_prior_posterior_contraction()` reads the per-fit CSV that `scripts/prior_vs_posterior.py --table --model <key>` writes from the trace, and VG22's implied correlation matrix reads `subject_factor_corr.csv` from `scripts/emit_factor_correlation.py`. Run both after a fit and before `--render-only`; each block prints how to produce its file when it is absent.
+
+**The bivariate random-effects family shares one prediction body.** VG10, VG19, VG20 and VG22 transclude `docs/models/_bivariate_re_body.qmd` (`{{< include _bivariate_re_body.qmd >}}`) rather than each carrying a copy: before it existed VG20's template referenced 23 of the 90 artefacts its fit wrote and sent the reader to VG10 — a development step — for the rest. `reporting.stage_report_sources` copies every `docs/models/_*.qmd` into the output directory beside `index.qmd` at fit time and on `--render-only`, because a Quarto include resolves relative to the rendered document. Nothing model-specific belongs in the include.
+
+**Section anchors are fixed.** The reading-routes block links to `#sec-priors`, `#sec-prior-predictive`, `#sec-frame`, `#sec-diagnostics`, `#sec-findings`, `#sec-predictions`, `#sec-monthly`, `#sec-calibration`, `#sec-loo`, `#sec-robustness`, `#sec-limits` and, on joint pages, `#sec-spoken-given-understood`; a template renames a heading but keeps its id. An id on a callout is a Quarto cross-reference and must carry one of Quarto's own prefixes, so `render_family_notes()` puts its `#sec-one-child` anchor on a plain wrapping div.
 
 Two of these fixed live defects rather than tidying: the banner told VG08, VG09, VG11, VG12 and VG13 they were "not fitted in reporting mode" when each was fitted at _more_ than the default reporting effort, and the caveats block told VG11 it had cleared a convergence gate it is published under a recorded exception to.
 
@@ -54,19 +68,21 @@ Two of these fixed live defects rather than tidying: the banner told VG08, VG09,
 1. AI attribution callout
 2. `render_sampling_banner()`
 3. One sentence: what this model asks
-4. `render_model_at_a_glance()`
+4. `render_model_at_a_glance()`, then `render_reading_routes(role, ...)` with the role the page states — a development step or candidate names the model of record its non-research readers should use instead
 5. Model diagram (`gp_model_graph.svg`)
-6. **How to read this report** — `render_glossary([...])`, collapsed, listing only the terms this model uses
+6. **How to read this report** — `render_glossary([...])`, collapsed, listing only the terms this model uses; a "Terms specific to this model" callout where the page introduces any
 7. **Statistical model** — structure only
 8. **Priors** — `render_priors_table()`, then the prior figures, then qualitative rationale
 9. **Prior predictive checks** — with an evaluative sentence, not just the figures
-10. **Data** — descriptives
-11. **Diagnostics** — `render_convergence_caveats()`, the styled table, figures, and a verdict
+10. **Data** — `render_frame_composition()` first, then descriptives
+11. **Diagnostics** — `render_convergence_caveats()`, `render_diagnostic_verdict()`, the styled table, figures, then `render_prior_posterior_contraction()` under "Prior to posterior"
 12. **Findings** — `render_headline_quantities()`, `render_variation_table()` where applicable
-13. **Posterior predictions** — every figure gets one sentence saying what to conclude
+13. **Posterior predictions** — preceded by `render_family_notes()` on any page a family or practitioner is routed to; `render_expectations_table(outcome)` above each raw summary table; every figure gets one sentence saying what to conclude
 14. **Expected vocabulary by month** — `posterior_summary_monthly_*` / `expected_counts_by_month_*`
-15. **Predictive calibration** — `render_calibration_section()`
-16. **Limits** — what this model must not be used for
+15. **Robustness** — the conditional robustness and recovery cells, on every model of record, reference and candidate
+16. **Predictive calibration** — `render_calibration_section()`
+17. **Out-of-sample prediction** — `render_loo_section()`
+18. **Limits** — what this model must not be used for
 
 ## Accessibility
 

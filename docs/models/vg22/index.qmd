@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('candidate', instead='VG20')
+```
+
 ![The model graph. VG22 replaces VG10's two independent child intercepts with a rank-3 factor over four child effects — a level and a rate on each outcome.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
 
 ## How to read this report
@@ -151,7 +159,7 @@ $\rho_{uq}$ is emitted as a deterministic: the element of the implied correlatio
 
 **VG20 is the special case of this model with both rate loadings at zero.** **Neither VG10 nor VG19 is nested here at any rank below 4**: two independent per-outcome blocks are a full-rank $4 \times 4$ with cross terms at zero, and a factor form reaches zero cross-correlation only by giving the two outcomes orthogonal directions, which at $k < 4$ it cannot do for all four effects at once. The comparisons with VG10 and VG19 are therefore between models rather than within one.
 
-**The rank is a definition field because the data cannot choose it.** Gate 1 puts rank 2 within 2.60 on 2 df of rank 3, and rank 3 within 0.0000 of the free $4 \times 4$, so rank 4 is excluded outright and 2 and 3 are both defensible on the residual likelihood. Ranks 1, 2 and 3 are fitted as a registered sensitivity family. Rank 1 forces $\lvert\rho_{uq}\rvert = 1$ by construction — one factor cannot express anything else — and its fit failed the hard convergence gate (838 parameters over the R-hat threshold, max 2.305, min ESS 7); it is retained under `output/failed/` as the record of that. The registered default moved from 2 to 3 on 2026-08-24, decided by the fits rather than the gate: rank 3 cleared the convergence gate on the plain `rep` configuration with 8 divergences where rank 2 needed a hightune to reach 18 (178 without one) — the larger factor model is the easier geometry, rank 2 having to press four child effects into a two-dimensional space — and the two disagree on the spoken child-slope scale, 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at rank 3, about 2.8 combined standard errors on shared data, so the rank is not a free choice for any reading about how differently children's spoken trajectories steepen.
+**The rank is a definition field because the data cannot choose it.** Gate 1 puts rank 2 within 2.60 on 2 df of rank 3, and rank 3 within 0.0000 of the free $4 \times 4$, so rank 4 is excluded outright and 2 and 3 are both defensible on the residual likelihood. Ranks 1, 2 and 3 are fitted as a registered sensitivity family. Rank 1 forces $\lvert\rho_{uq}\rvert = 1$ by construction — one factor cannot express anything else — and its fit failed the hard convergence gate (838 parameters over the R-hat threshold, max 2.305, min ESS 7); it is retained under `output/failed/` as the record of that. The registered default moved from 2 to 3 on 2026-08-24, decided by the fits of that date (made under the earlier induced prior) rather than by the gate: rank 3 cleared the convergence gate on the plain `rep` configuration with 8 divergences where rank 2 needed a hightune to reach 18 (178 without one) — the larger factor model is the easier geometry, rank 2 having to press four child effects into a two-dimensional space — and the two disagreed on the spoken child-slope scale on those fits — 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at rank 3, about 2.8 combined standard errors on shared data — so the rank is not a free choice for any reading about how differently children's spoken trajectories steepen.
 
 ### Why the assumption was worth replacing
 
@@ -165,7 +173,7 @@ Two things make this more than a tidy generalisation.
 
 VG16 answers a related question through a lagged predictor, which restricts it to the children who have an earlier wave to lag from, and attenuates the coefficient because that predictor is an observed count carrying sampling noise. VG22 uses **every child in the frame**, is indifferent to whether a study happened to be longitudinal, and has no attenuation to correct for. The two are complements: VG16 asks whether earlier comprehension predicts later conversion, VG22 asks whether persistent comprehension standing and persistent conversion standing go together.
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -195,7 +203,7 @@ Removing the first row's entry also fixed a small defect in the tail. That row h
 
 **Rank 1 is exempt from all of this.** One latent dimension makes every child's four effects one deviate scaled four ways, so every implied correlation is $\pm 1$ by construction and no prior over $(-1, 1)$ can be placed on one. The registered `rank-1` variant reports that rather than a prior.
 
-**What still needs doing.** The rank family must be refitted under the designed prior before the default rank is re-selected, with parameter recovery and a whole-child predictive comparison. Every number on this page predates that refit and was fitted under the induced arcsine prior; it is tracked in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
+**What still needs doing.** The fit shown on this page was made under the designed prior, so the level–level correlation below is estimated under the same $\mathrm{LKJ}(2)$ VG20 uses and the two are directly comparable. What remains before the default rank is re-selected is the rest of the rank family under the same prior, a parameter-recovery run of this model's own structure, and a whole-child predictive comparison against VG20; all three are tracked in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
 
 ### Understood trajectory
 
@@ -213,7 +221,29 @@ Removing the first row's entry also fixed a small defect in the tail. That row h
 
 ![How far the flexible term may depart from the straight-line production-ratio trend.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
-## Prior predictive checks
+### Length-scales
+
+![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+
+![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+
+### Dispersion -- understood
+
+![Prior on the floor of the understood dispersion parameter.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the younger reference age.](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the older reference age.](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
+
+### Dispersion -- spoken
+
+![Prior on the floor of the spoken dispersion parameter.](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the younger reference age.](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the older reference age.](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
+
+## Prior predictive checks {#sec-prior-predictive}
 
 ![Words understood drawn from the prior alone, before any data.](prior_samples_u.png){#fig-prior-u .lightbox fig-align="left"}
 
@@ -223,7 +253,15 @@ Removing the first row's entry also fixed a small defect in the tail. That row h
 
 The check to make here is the usual one — that the prior admits the range of vocabularies real children have without concentrating on any part of it — and one specific to this model: the level scales are VG10's, but the child block reduces to a pair of level offsets **only at the 36-month reference age**. Away from it, the rate loadings widen the child spread with distance from 36 months, so the prior predictive should sit close to VG10's near the reference age and wider than VG10's at the age extremes — by design rather than by defect.
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
 
 ```{python}
 import pandas as pd
@@ -252,6 +290,14 @@ render_convergence_caveats()
 ```
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
+```
+
+```{python}
 #| label: diagnostics-table
 from dse_research_utils.statistics.diagnostics import style_diagnostics_table
 
@@ -269,9 +315,21 @@ The table reports, for each parameter, whether the chains agree with one another
 
 ![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure above: a posterior indistinguishable from its prior has not been informed by the data — which for the four never-identified loading magnitudes (see Priors) is the expected result rather than a warning.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 Replacing two independent child intercepts with a rank-3 factor is a change to the posterior geometry, not only to its dimension, so the diagnostics deserve reading against VG10's rather than only against the thresholds. Two behaviours are specific to the factor form. A weakly identified loading direction shows itself as a low effective sample size on `subject_factor_w_*` entries while the rest of the model looks healthy. And four of the sampled loading magnitudes never reach the likelihood at all (see Priors), so those chains explore pure prior — they clear R-hat and ESS easily when the sampler is healthy, but they enlarge the parameter set the convergence gate must clear without adding information.
 
-## Findings
+## Findings {#sec-findings}
 
 ### The correlation between child effects
 
@@ -317,7 +375,7 @@ else:
     print("_This fit's `diagnostics.csv` carries no `rho_uq` row._")
 ```
 
-**This is the implied level–level correlation, read at the 36-month reference age.** Under VG10 it is exactly zero by construction; VG20 estimates it directly under a deliberately chosen $\mathrm{LKJ}(2)$ prior; here it is now sampled under **the same $\mathrm{LKJ}(2)$**, so the two are prior-comparable by construction (see Priors). **The posterior quoted below is not, however, from that prior**: it predates the design and was fitted under the induced arcsine prior the Priors section describes, so it is not yet a like-for-like comparison with VG20's. The refit that makes it one is tracked in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
+**This is the implied level–level correlation, read at the 36-month reference age.** Under VG10 it is exactly zero by construction; VG20 estimates it directly under a deliberately chosen $\mathrm{LKJ}(2)$ prior; here it is sampled under **the same $\mathrm{LKJ}(2)$** (see Priors), and the fit on this page was made under that prior, so the value above is a like-for-like comparison with VG20's — a difference between the two models is a difference between models, not between priors.
 
 Three qualifications belong with it.
 
@@ -326,6 +384,54 @@ Three qualifications belong with it.
 **It describes children, not occasions.** Both level effects are persistent, per-child quantities. The correlation says something about how children differ from one another, and nothing about what happens within a child over time — a distinction VG16 was built to probe from the other side.
 
 **A correlation is not a mechanism, and the marginal spreads carry more of the story.** The variation table below is the comparison to make: how far children differ from one another on each dimension separately is a larger fact about this population than how those differences line up.
+
+### The implied correlation matrix {#sec-factor-corr}
+
+The four child effects — comprehension level, comprehension rate, production-ratio level, production-ratio rate — and every pairwise correlation the factor implies between them, read at the 36-month reference age. This is the table the model exists to produce: $\rho_{uq}$ above is one cell of it, and the cell no other model estimates is the one linking a child's comprehension *level* to their production-ratio *rate*.
+
+```{python}
+#| echo: false
+#| output: asis
+import os as _os
+
+import pandas as _pd
+
+if _os.path.isfile("subject_factor_corr.csv"):
+    _corr = _pd.read_csv("subject_factor_corr.csv")
+    _labels = list(_pd.unique(_corr["row"]))
+    # The trace names the four effects by role; the symbols are the paper's.
+    _names = {
+        "u_intercept": "$b^{0u}$ understood level",
+        "u_slope": "$b^{1u}$ understood rate",
+        "q_intercept": "$b^{0q}$ ratio $q$ level",
+        "q_slope": "$b^{1q}$ ratio $q$ rate",
+    }
+    print("| | " + " | ".join(_names.get(l, l) for l in _labels) + " |")
+    print("| --- |" + " ---: |" * len(_labels))
+    for _r in _labels:
+        _cells = []
+        for _c in _labels:
+            _m = _corr[(_corr["row"] == _r) & (_corr["column"] == _c)].iloc[0]
+            _cells.append(
+                "1" if _r == _c
+                else f"{_m['mean']:+.2f} [{_m['eti89_lb']:+.2f}, {_m['eti89_ub']:+.2f}]"
+            )
+        print(f"| {_names.get(_r, _r)} | " + " | ".join(_cells) + " |")
+    print()
+    print(
+        ": Posterior mean and 89% equal-tailed interval of each implied correlation, from "
+        "`subject_factor_corr.csv`, written from this fit's trace by "
+        "`scripts/emit_factor_correlation.py`. Only $\\rho_{uq}$ (understood level against "
+        "ratio level) carries a designed prior; the other five are induced by the loading "
+        "directions and flat, as the Priors section says."
+    )
+else:
+    print(
+        "_No `subject_factor_corr.csv` for this fit — run "
+        "`scripts/emit_factor_correlation.py` on the fitted output to write it from the "
+        "trace._"
+    )
+```
 
 ### Between-child variation
 
@@ -351,23 +457,69 @@ render_headline_quantities()
 
 The reported trajectories should match VG10's. In a model whose structural difference is confined to the child-effect block, **movement in a population-level trajectory is a red flag rather than a benefit** — it would mean the added structure is doing something other than what it was added for. The comparison against VG10 is the check, and it is made in the comparison report rather than here.
 
-## Posterior predictions
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
 
-![Words understood and words spoken by age, on one set of axes.](joint_trajectory.png){#fig-joint .lightbox fig-align="left"}
+render_family_notes()
+```
 
-![The same trajectories with their credible intervals.](joint_trajectory_intervals.png){#fig-joint-intervals .lightbox fig-align="left"}
+{{< include _bivariate_re_body.qmd >}}
 
-![The production ratio $q$ by age: the share of understood words a child says.](production_rate.png){#fig-q .lightbox fig-align="left"}
+## Robustness {#sec-robustness}
 
-![Words spoken against words understood, the relationship $q$ describes.](understood_vs_spoken.png){#fig-uvs .lightbox fig-align="left"}
+A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
 
-Each of these should be read as VG10's answer, because it is. They are reproduced here so that this report stands on its own and so that the match can be seen rather than asserted.
+```{python}
+from pathlib import Path
 
-## Expected vocabulary by month
+import pandas as pd
+from IPython.display import Markdown, display
 
-The monthly tables and figures carry the same content as VG10's, at the same per-quantity reporting caps: comprehension and the quantities derived from it to 72 months, production to 90. Production stops where its own evidence stops; comprehension stops earlier than that, at the age above which the 25 remaining observations can no longer distinguish one child-effect structure from another — see `notes/202608221200-reporting-source-by-quantity.md`.
 
-## Predictive calibration
+def comparison_path(name):
+    """Locate a comparison artefact from wherever this report is rendered."""
+    for base in (Path("../../comparisons"), Path("comparisons"), Path("../comparisons")):
+        candidate = base / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+robustness_path = comparison_path("sensitivity/robustness_matrix_vg22.csv")
+if robustness_path is None:
+    display(Markdown(
+        "_The sensitivity comparison has not been computed into this output root, "
+        "so no robustness matrix is available for this render._"
+    ))
+else:
+    robustness = pd.read_csv(robustness_path)
+    wanted = ["variant", "status", "n_within_ci", "n_checked", "max_abs_delta",
+              "quantities_outside_ci", "verdict", "variant_fit_utc"]
+    display(robustness[[c for c in wanted if c in robustness.columns]])
+```
+
+Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run.
+
+### Parameter recovery
+
+Parameter recovery simulates a dataset from the model at a known parameter draw, refits the model to it through the same pipeline, and asks whether the posterior covers the truth it was generated from. A replicate is scored only if its own fit's convergence is confirmed. A handful of replicates is indicative only: it can reveal a gross problem, and it cannot certify that the posterior is calibrated.
+
+```{python}
+recovery_path = comparison_path("recovery/recovery_matrix_vg22.csv")
+if recovery_path is None:
+    display(Markdown(
+        "_No parameter-recovery comparison is available in this output root._"
+    ))
+else:
+    recovery = pd.read_csv(recovery_path)
+    wanted = ["replicate", "truth_source", "converged", "n_targets", "n_within_ci89",
+              "coverage_ci89", "coverage_ci50", "max_abs_z", "verdict"]
+    display(recovery[[c for c in wanted if c in recovery.columns]])
+```
+
+## Predictive calibration {#sec-calibration}
 
 ```{python}
 #| echo: false
@@ -377,15 +529,25 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Limits
+## Out-of-sample prediction {#sec-loo}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+## Limits {#sec-limits}
 
 - **This is not a causal claim.** The factor describes how four persistent child-level quantities line up in this pool. It licenses no statement about what would happen if a child's comprehension were raised.
 - **The child block varies with age; the headline correlation is read at one age.** Each child's effects include rates, so the between-child covariance — and every implied correlation — changes with age by construction. $\rho_{uq}$ as reported is the level–level correlation **at the 36-month reference age**, not a constant of the model and not an average over ages.
 - **It is one structure for the whole pool.** No study-level or subgroup variation in the loadings is estimated, and the pool spans several countries and languages.
-- **The quoted $\rho_{uq}$ posteriors were fitted under the superseded arcsine prior.** The prior has since been designed — $\mathrm{LKJ}(2)$, matching VG20's on the same quantity — but the numbers on this page predate it: VG22's $\rho_{uq}$ of 0.340 at rank 3 and 0.322 at rank 2 sat on the arcsine, while VG20's +0.368, 89% ETI [0.287, 0.447], sat on $\mathrm{LKJ}(2)$, so **that particular comparison was between priors as well as between models**. It will not be after the refit, which is what makes the refit a precondition for reading the two together rather than a tidying step. Two loading magnitudes still never enter the likelihood and so inflate the convergence-gate parameter set, down from four; the Priors section says why they are kept. The rank family must be refitted under the designed prior, with parameter recovery and a whole-child predictive comparison, before the default rank is re-selected — tracked in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
-- **The rank is declared, not inferred.** The data cannot choose between ranks 2 and 3, and the two disagree on the spoken child-slope scale — 0.348 (sd 0.047) against 0.576 (sd 0.066), about 2.8 combined standard errors — so any reading about how differently children's spoken trajectories steepen is rank-conditional. Intercept-level quantities agree closely across both.
+- **The prior on $\rho_{uq}$ is designed; the other five implied correlations are not.** The level–level correlation is sampled under $\mathrm{LKJ}(2)$, matching VG20's, so that comparison is between models rather than between priors. The remaining five correlations carry whatever the unit-row geometry induces — the flat $\mathrm{LKJ}(1)$ marginal — and two loading magnitudes never enter the likelihood and inflate the convergence-gate parameter set, down from four; the Priors section says why they are kept. The rest of the rank family has not yet been refitted under the designed prior, so the rank comparison below still mixes priors until it is — tracked in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
+- **The rank is declared, not inferred.** The data cannot choose between ranks 2 and 3, and on the 2026-08-24 fits the two disagreed on the spoken child-slope scale — 0.348 (sd 0.047) against 0.576 (sd 0.066), about 2.8 combined standard errors — so any reading about how differently children's spoken trajectories steepen is rank-conditional. Intercept-level quantities agree closely across both.
 - **The reported population trajectories are VG10's to check against, not to supersede.** VG22 is gated against VG10: any movement in the reported population trajectories is a red flag rather than a benefit, and what this model changes is the child-level structure.
-- **Provenance.** Registered 2026-08-23; refitted under the current identities at `rep` on 2026-08-24 — the canonical rank 3 on the plain configuration (11 divergences, max R-hat 1.0072, min ESS 887) and the rank-2 sensitivity variant at its recorded hightune (18 divergences, max R-hat 1.0064, min ESS 1,913), both validating field-for-field against the registered definitions. **The model of record for the Down syndrome joint understood + spoken estimands remains VG20**; this model supplies no reported headline number.
+- **Provenance.** Registered 2026-08-23. The rank-2 and rank-3 fits recorded against the induced prior on 2026-08-24 — the numbers the rank comparison in this report's Statistical-model section quotes — are historical and were made under a prior this page no longer uses; the sampling banner and diagnostics above describe the fit actually shown. **The model of record for the Down syndrome joint understood + spoken estimands remains VG20**; this model supplies no reported headline number.
 - **No VG22-specific parameter-recovery run exists yet.** Recovery evidence quoted in an earlier version of this page belonged to VG20 and has been removed. Nothing here is backed by a recovery check of this model's own structure, and the induced-prior issue above means a recovery run should follow the prior redesign rather than precede it.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common 810-word scale; it is a unit of measurement, not an instrument any child sat.

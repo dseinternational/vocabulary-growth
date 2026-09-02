@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('reference', robustness=True)
+```
+
 ::: {.callout-important title="What this model is for"}
 
 VG11 is a **reference model**. It exists to give the Down syndrome spoken-vocabulary models — VG01 without hierarchy, VG20 with it — a typically-developing curve to be read against, and it is consumed by the Down-syndrome-versus-typically-developing comparison outputs rather than being an end in itself.
@@ -126,7 +134,7 @@ Population-level trajectories set both random effects to zero. Predictive count 
 
 Contributing datasets below a minimum observation count are dropped before fitting. This is a substantive inclusion decision, not routine hygiene: it removes a sizeable fraction of the contributing studies while retaining almost all of the observations. The retained studies are listed in the Data section below; the dropped ones are printed to the fit console and are not currently written to any artefact.
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -178,17 +186,25 @@ One consequence for the table above: the priors block reports the standalone chi
 
 ![Prior on the excess dispersion at the older reference age.](kappa_excess_old_dist.png){#fig-kappa-excess-old .lightbox fig-align="left"}
 
-## Prior predictive checks
+## Prior predictive checks {#sec-prior-predictive}
 
-::: {.callout-warning title="Not available for this fit"}
+These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria: young children should usually sit near the floor, older trajectories should not be forced towards the ceiling, and the simulated spread should leave room for genuine differences between datasets. A prior that fails any of these would be shaping the answer rather than permitting it. One caveat: these figures are population mean functions with the study and child effects at zero, so they test the trend and the flexible term, not the random-effect scales or the dispersion priors.
 
-A prior predictive check simulates vocabularies from the priors alone, before the data are seen, and asks three things of them: that young children usually sit near the floor, that older trajectories are not forced towards the ceiling, and that the simulated spread leaves room for genuine differences between datasets. A prior that fails any of these would be shaping the answer rather than permitting it.
+![Trajectories drawn from the priors.](prior_samples.png){#fig-prior-samples .lightbox fig-align="left"}
 
-**This fit wrote no prior predictive figures, so none of those checks can be shown here.** The comprehension counterpart, VG12, publishes all of them; this output directory has none. That is a gap in the evidence this report can present, not a check that was run and passed, and it needs a change in the fitting engine rather than in this template to close. Until it is closed, the priors in the section above are documented but not visually validated for this model, and any reader wanting reassurance on that point should read the priors table and prior figures directly.
+![Word counts simulated from those trajectories.](prior_predictions.png){#fig-prior-predictions .lightbox fig-align="left"}
 
-:::
+![Simulated counts compared with the range the observed data occupy.](prior_predictive_checks.png){#fig-prior-predictive-checks .lightbox width=640 fig-align="left"}
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -221,7 +237,7 @@ The study table above does not label each dataset with its language, which would
 
 :::
 
-## Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 ```{python}
 #| label: convergence-caveats
@@ -230,6 +246,14 @@ The study table above does not label each dataset with its language, which would
 from vocab_growth.report_cells import render_convergence_caveats
 
 render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
 ```
 
 ```{python}
@@ -249,6 +273,18 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the fitted parameters, including the study and child scales and the two variance-partition parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 ::: {.callout-note title="What to watch in this model"}
 
 The study-effect scale, the child-effect scale and the two variance-partition parameters first; then the GP length-scale and amplitude, and the age-varying dispersion. VG11 exists to use the whole typically-developing pool while absorbing between-dataset variation, so weak behaviour in the hierarchy terms is substantively important rather than merely technical.
@@ -259,7 +295,7 @@ Repeated observations of the same child are uncommon in this pool, which limits 
 
 :::
 
-## Findings
+## Findings {#sec-findings}
 
 ```{python}
 #| echo: false
@@ -295,11 +331,29 @@ Several deliberate one-change variants of this model are registered and can be r
 
 :::
 
-## Posterior predictions
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
+
+render_family_notes()
+```
+
+## Posterior predictions {#sec-predictions}
 
 ### Summary at selected ages
 
 $p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to produce at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table(None)
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
@@ -338,7 +392,7 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 Lower $\kappa$ means **greater** variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. In this model $\kappa$ is a residual: differences between children that persist across ages have already been taken up by the child offset, so what remains here is the spread left at a given age once a child's own level is known.
 
-## Expected vocabulary by month
+## Expected vocabulary by month {#sec-monthly}
 
 A finer companion to the table above: one row per whole month, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
 
@@ -349,7 +403,42 @@ monthly = pd.read_csv("posterior_summary_monthly.csv")
 monthly
 ```
 
-## Predictive calibration
+## Robustness {#sec-robustness}
+
+A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+
+```{python}
+from pathlib import Path
+
+import pandas as pd
+from IPython.display import Markdown, display
+
+
+def comparison_path(name):
+    """Locate a comparison artefact from wherever this report is rendered."""
+    for base in (Path("../../comparisons"), Path("comparisons"), Path("../comparisons")):
+        candidate = base / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+robustness_path = comparison_path("sensitivity/robustness_matrix_vg11.csv")
+if robustness_path is None:
+    display(Markdown(
+        "_The sensitivity comparison has not been computed into this output root, "
+        "so no robustness matrix is available for this render._"
+    ))
+else:
+    robustness = pd.read_csv(robustness_path)
+    wanted = ["variant", "status", "n_within_ci", "n_checked", "max_abs_delta",
+              "quantities_outside_ci", "verdict", "variant_fit_utc"]
+    display(robustness[[c for c in wanted if c in robustness.columns]])
+```
+
+Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run.
+
+## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
@@ -361,7 +450,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Out-of-sample prediction
+## Out-of-sample prediction {#sec-loo}
 
 ```{python}
 #| echo: false
@@ -372,12 +461,11 @@ render_loo_section()
 ```
 
 
-## Limits
+## Limits {#sec-limits}
 
 - **A reference, not a target.** This curve describes typically-developing children in these datasets. It is the baseline the Down syndrome models are compared against, and it must not be read as a standard an individual child is failing to meet.
 - **The population curve is the average study.** It is not the curve of any contributing dataset, and the between-study row in the Findings section says how far individual datasets sit from it.
 - **Language and dataset cannot be separated.** The pool spans English, Italian and Spanish (European), and each non-English language enters through a single dataset, so any language effect is reported as between-dataset heterogeneity and cannot be isolated.
-- **No prior predictive check is available for this fit.** The priors are documented but not visually validated here.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat, and no instrument reaches its top.
 - **Repeated measurement is sparse.** Few children in this pool were assessed more than once, which limits how well persistent between-child differences can be separated from residual dispersion, and is the recorded structural reason this model strains the energy diagnostic.

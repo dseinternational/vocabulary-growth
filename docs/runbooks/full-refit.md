@@ -565,6 +565,15 @@ Back up the non-converged output first; the refit becomes the model of record.
 
 ## 3. Render + comparisons
 
+Two report blocks read artefacts the fit itself does not write, and print a "run this" note until they exist. Produce them per fit **before** rendering (each opens the trace, so run them one model at a time rather than as a sweep while a heavy fit is on the box):
+
+```bash
+python scripts/prior_vs_posterior.py --table --model vg20 --model vg15   # writes prior_posterior_contraction.csv into each fit dir
+python scripts/emit_factor_correlation.py <output>/models/VG22-*/         # writes subject_factor_corr.csv for the factor model
+```
+
+A template change is applied to an existing fit with `--render-only`, which re-stages `docs/models/<model>/index.qmd` **and** every `docs/models/_*.qmd` include beside it (the bivariate random-effects family transcludes one). Since 2026-09-02 that is a fresh render of every page, not only the changed ones, because the shared blocks changed.
+
 ```bash
 python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # validates fits, then feeds docs/report/figures/
 # comparisons (consume fitted traces/summaries):

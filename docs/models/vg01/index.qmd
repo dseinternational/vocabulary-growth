@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('development', instead='VG20')
+```
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -104,7 +112,7 @@ This model has no study effects and no repeated-child effects. The pool contains
 
 :::
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -140,7 +148,7 @@ Dispersion follows `kappa(age) = kappa_min + exp(a_kappa + b_kappa * z)`. The ag
 
 ![Prior on the excess dispersion at the older reference age.](kappa_excess_old_dist.png){#fig-kappa-excess-old .lightbox fig-align="left"}
 
-## Prior predictive checks
+## Prior predictive checks {#sec-prior-predictive}
 
 These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria: young children should usually sit near the floor, older trajectories should not be forced towards the ceiling, and simulated counts should show realistic spread. A prior that fails any of these would be shaping the answer rather than permitting it. One caveat: the dispersion priors were calibrated against this model's own analysis frame, so on the spread criterion these checks pass partly by construction — they test internal consistency of the specification, not independent prior plausibility.
 
@@ -150,7 +158,15 @@ These simulate vocabularies from the priors alone, before the data are seen. Rea
 
 ![Simulated counts compared with the range the observed data occupy.](prior_predictive_checks.png){#fig-prior-predictive-checks .lightbox width=640 fig-align="left"}
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -166,7 +182,7 @@ The normality tests in this table are reported for completeness. They are not a 
 
 :::
 
-## Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 ```{python}
 #| label: convergence-caveats
@@ -175,6 +191,14 @@ The normality tests in this table are reported for completeness. They are not a 
 from vocab_growth.report_cells import render_convergence_caveats
 
 render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
 ```
 
 ```{python}
@@ -194,13 +218,25 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the fitted parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 ::: {.callout-note title="What to watch in this model"}
 
 The anchors, the GP length-scale and amplitude, and the age-varying dispersion parameters. Poor behaviour in any of them would propagate directly into the spoken trajectory and its age derivative. Compare the marginal posteriors above with the prior figures earlier in this report: a parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior.
 
 :::
 
-## Findings
+## Findings {#sec-findings}
 
 ```{python}
 #| echo: false
@@ -212,11 +248,21 @@ render_headline_quantities()
 
 Read these alongside the caveat above: with no study or child effects in the model, the spread reported here mixes genuine differences between children with differences between the studies they came from, and repeated observations of the same child are counted as though they were different children. VG20 separates those sources; this model cannot.
 
-## Posterior predictions
+## Posterior predictions {#sec-predictions}
 
 ### Summary at selected ages
 
 $p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to produce at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** the marginal spread between same-age administrations. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a new administration — one more checklist from this pooled population, not a specific child tracked over time — might fall.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table(None)
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
@@ -255,7 +301,7 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 Lower $\kappa$ means **greater** spread between same-age administrations relative to the mean; higher $\kappa$ means less. In this model that spread mixes between-child, between-study and repeat-visit variation — it is marginal count dispersion, not a between-child quantity. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread.
 
-## Expected vocabulary by month
+## Expected vocabulary by month {#sec-monthly}
 
 A finer companion to the six-monthly table above: one row per whole month, with the expected count, the range a new administration might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
 
@@ -266,7 +312,7 @@ monthly = pd.read_csv("posterior_summary_monthly.csv")
 monthly
 ```
 
-## Predictive calibration
+## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
@@ -278,7 +324,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Out-of-sample prediction
+## Out-of-sample prediction {#sec-loo}
 
 ```{python}
 #| echo: false
@@ -289,7 +335,7 @@ render_loo_section()
 ```
 
 
-## Limits
+## Limits {#sec-limits}
 
 - **No hierarchy.** Study and repeated-child structure are absent, so uncertainty here is not a fair estimate of uncertainty about a new child. Use VG20 for that.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.

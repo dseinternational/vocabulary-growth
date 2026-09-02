@@ -45,6 +45,9 @@ from vocab_growth.models.definitions import (
 
 MODELS_DIR = env.models_output_dir()
 
+#: Per-fit copy of the conflict rows, read by the report's contraction block.
+PER_FIT_CONTRACTION_FILENAME = "prior_posterior_contraction.csv"
+
 # Registry-derived: every registered model. Trivariate (VG14) and joint (VG15)
 # were excluded until 2026-08-06 because their signed-ratio, psi and
 # concentration priors were not reconstructed here. That exclusion hid a real
@@ -341,6 +344,10 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
         except Exception:
             continue
         contraction = 1.0 - float(x.std()) / prior_sd if prior_sd > 0 else float("nan")
+        try:
+            prior_median = float(prior.ppf(0.5))
+        except Exception:
+            prior_median = float("nan")
         flags = []
         if cdf >= CONFLICT_CDF:
             flags.append("pressing")
@@ -352,19 +359,34 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
                 parameter=name,
                 posterior_mean=round(float(x.mean()), 4),
                 posterior_sd=round(float(x.std()), 4),
+                prior_median=round(prior_median, 4),
+                prior_sd=round(prior_sd, 4),
                 prior_cdf=round(cdf, 4),
                 contraction=round(contraction, 4),
                 flags="+".join(flags),
             )
         )
+    # The same rows, written into the fit's own directory so its report can
+    # render them: every template tells the reader to compare each posterior
+    # with its prior figure by eye, across twenty-odd parameters, and states the
+    # answer from memory where it states one at all. `render_prior_posterior_
+    # contraction` reads this file fail-soft, the way `loo_summary.csv` is read.
+    if rows:
+        import csv
+
+        fit_path = os.path.join(MODELS_DIR, label, PER_FIT_CONTRACTION_FILENAME)
+        with open(fit_path, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
     return rows
 
 
-def write_conflict_table() -> None:
+def write_conflict_table(models: dict | None = None) -> None:
     import csv
 
     rows = []
-    for short, (label, definition) in MODEL_LABELS.items():
+    for short, (label, definition) in (models or MODEL_LABELS).items():
         rows.extend(conflict_table(short, label, definition))
     if not rows:
         print("No fitted traces found.")
@@ -377,7 +399,7 @@ def write_conflict_table() -> None:
         writer.writeheader()
         writer.writerows(rows)
     flagged = [r for r in rows if r["flags"]]
-    print(f"{len(rows)} parameters checked across {len(MODEL_LABELS)} models -> {path}")
+    print(f"{len(rows)} parameters checked across {len(models or MODEL_LABELS)} models -> {path}")
     print(f"\n{len(flagged)} FLAGGED:\n")
     print(f"  {'model':7s} {'parameter':24s} {'post mean':>10s} {'priorCDF':>9s} {'contract':>9s}  flags")
     for r in sorted(flagged, key=lambda r: (-r["prior_cdf"], r["contraction"])):
@@ -396,12 +418,30 @@ def main() -> None:
         action="store_true",
         help="Emit the prior-data conflict table (review R3) instead of the plots.",
     )
+    parser.add_argument(
+        "--model",
+        action="append",
+        default=None,
+        metavar="MODEL",
+        help=(
+            "Restrict to one model key (repeatable, e.g. --model vg20 --model vg15). "
+            "Each model's trace is loaded whole, so the default sweep over the registry "
+            "is a large transient memory cost; use this to backfill a single fit."
+        ),
+    )
     args = parser.parse_args()
+    selected = MODEL_LABELS
+    if args.model:
+        wanted = {m.lower() for m in args.model}
+        selected = {k: v for k, v in MODEL_LABELS.items() if k.lower() in wanted}
+        missing = wanted - {k.lower() for k in selected}
+        if missing:
+            parser.error(f"unknown model key(s): {sorted(missing)}")
     if args.table:
-        write_conflict_table()
+        write_conflict_table(selected)
         return
     plot_styles.set_matplotlib_default_style()
-    for short, (label, definition) in MODEL_LABELS.items():
+    for short, (label, definition) in selected.items():
         overlay_model(short, label, definition)
 
 
