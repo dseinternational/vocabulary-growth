@@ -391,8 +391,6 @@ The slopes here are the **population-level** production ratio, with the study of
 
 :::
 
-![Expected words spoken as a function of words understood, at several ages, for the average study.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
-
 ## Posterior predictions -- words understood
 
 ### Summary at selected ages

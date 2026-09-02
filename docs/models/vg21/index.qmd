@@ -437,8 +437,6 @@ Each line runs across the full width of the reference inventory, but at the youn
 
 :::
 
-![Predicted words spoken given words understood, by age.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
-
 ## Posterior predictions -- words understood
 
 ### Summary at selected ages

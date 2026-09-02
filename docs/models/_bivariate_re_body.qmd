@@ -53,25 +53,25 @@ That table is the population-level production ratio at the query ages, with an i
 
 Conclude from this figure that the gap is a phase rather than a permanent state: it widens through the preschool years, peaks, and then narrows as the production ratio climbs. The peak's size and the age it occurs at are in the findings table above, computed from the same CSV this figure is drawn from. The narrowing does not mean the two vocabularies converge within the reported range — they do not — only that production is catching up.
 
-### Words understood versus words spoken
+### Words understood versus words spoken {#sec-spoken-given-understood}
 
-![Expected words understood against expected words spoken, as **population-level** curves. Each line is one posterior draw; age runs along each curve rather than being an axis.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
+This is the most practitioner-facing figure this model produces, and it carries two different things that must be read separately. The **blue path** is the population: at each age, the expected words understood and the expected words spoken for the median child, with a dot every year so the path can be read as a journey through age rather than as a rule about levels. The **grey points** are the observed administrations, and the **orange marks** summarise them: among the children whose understood count fell in each 50-word bin, the median spoken count and the interquartile range. The dashed line is the ceiling — a child cannot say more distinct words than they understand.
 
-![The same pairing as **subject-marginal predictive counts**. The spread between the curves here includes between-child variation, which the population-level figure above excludes.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+![Words spoken against words understood. The population path with age markers, the observed administrations, and the children's own median spoken count at each comprehension level.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
 
-Conclude from the pair that the relationship between the two vocabularies is not a fixed proportion: the curves bend upward, so each additional understood word is converted to speech at a higher rate later than earlier.
+Read the two apart. The path says what the typical child says *at the age they typically reach* a comprehension level. The orange marks say what children who *are at* that level say, whatever their age — and they sit below the path at every level above the first few hundred words, because reaching a level selects every child who got there at any age, the conversion ratio rises with age, and those children are younger than the age at which the population median arrives. A statement about a child at a comprehension level belongs to the orange marks, not the path.
 
-### Receptive to expressive (cross-sectional) {#sec-spoken-given-understood}
+![Where a single child may fall: predicted (understood, spoken) pairs for a freshly drawn child across ages, with the observed administrations. The cloud's width is between-child variation, which the population path excludes.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+
+Conclude from the pair that the relationship between the two vocabularies is not a fixed proportion: the path bends upward, so each additional understood word is converted to speech at a higher rate later than earlier — and that individual children scatter widely around it.
+
+### Receptive to expressive (cross-sectional)
 
 **How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child _says_ is the number they _understand_ scaled by $q(a)$,
 
 $$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
 
-Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — **not** evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. Most of these data are cross-sectional, and the comparison is between different children of different ages, not within one child over time.
-
-The figure below reads the fitted association directly, and is the most practitioner-facing thing this model produces: for children with Down syndrome at several ages, it maps words understood on the x axis to expected words spoken on the y axis, with the shaded band the 89% interval on $q(a)$ and the dashed line the ceiling that no child can exceed. Each fan line is straight because its slope is a single number — the **population** production ratio at that age. It is therefore an expectation for the zero-effect reference child in the average study at that age and comprehension level, not a prediction for a named child, whose own conversion rate carries the child random effect reported in the variation table under Findings above. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#sec-production-ratio) above.
-
-![Predicted words spoken given words understood, at several ages. The fan opens with age: the same comprehension converts to more speech in an older child.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
+Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — **not** evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. Most of these data are cross-sectional, and the comparison is between different children of different ages, not within one child over time. The ratio is the population's, for the zero-effect reference child in the average study; a named child's own conversion rate carries the child random effect reported in the variation table under Findings above. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#sec-production-ratio) above, and the figure above shows what it implies in words. A figure that drew $N \cdot q(a)$ as a straight line out to the full inventory at several ages used to sit here; it was retired on 2026-09-02 because a straight line to 810 words invites a prediction for a child who is not in the data, and the figure above answers the same question with the children in view.
 
 ## Posterior predictions -- words understood {#sec-predictions-understood}
 

@@ -60,7 +60,6 @@ BY_STEM = {
     "production_rate": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "production_rate_predictive": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "production_rate_by_understood": ReportedQuantity.RATIO_OF_UNDERSTOOD,
-    "spoken_given_understood": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "comprehension_production_gap": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "understood_vs_spoken": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "understood_vs_spoken_predictive": ReportedQuantity.RATIO_OF_UNDERSTOOD,

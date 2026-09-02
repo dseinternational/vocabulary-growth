@@ -386,8 +386,6 @@ The pair differ in estimand, not just in scatter. The first shows what the model
 
 $$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
 
-![Predicted words spoken given words understood, at several representative ages. Each line's slope is the **population-level** median $q$ at that age, shaded by its 89% interval; the dashed line is the ceiling at which a child says everything they understand.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
-
 Read across from a child's comprehension score to the line for their age, and the vertical position is the number of words the model expects them to say. Two cautions attach to it. First, $q(a)$ is a cross-sectional conversion proportion, not a mechanism: this figure is **not** evidence that raising a particular child's receptive vocabulary would cause a matching expressive gain. Second, the slopes are the _population_ production ratio — the zero-effect reference child's conversion rate, not this child's. Children differ substantially in how much of their comprehension they speak, and this model has no child effect on $q$ with which to describe that spread, so the band around each line understates how far an individual child may sit from the line.
 
 ## Posterior predictions -- words understood

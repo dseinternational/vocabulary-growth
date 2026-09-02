@@ -340,8 +340,6 @@ Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the ex
 
 Each line's slope is $q(a)$ at that age, so the fan of lines is the same information as the production-ratio figure above, expressed in the units a practitioner actually works in: given a child who understands this many words, how many would the model expect them to say? The per-age posterior of $q(a)$ is tabulated under [Production ratio](#production-ratio) above.
 
-![Expected words spoken as a function of words understood, at several ages.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
-
 ## Posterior predictions -- words understood
 
 ### Summary at selected ages
