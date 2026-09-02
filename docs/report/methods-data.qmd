@@ -49,64 +49,27 @@ In the first study, 18 children with Down syndrome were studied longitudinally, 
 ## Study summaries {#sec-study-summaries}
 
 ```{python}
-#| label: tbl-summary-ds
 #| echo: false
-#| tbl-cap: "Pooled Down syndrome data, by study: children, checklist administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Blank cells mean the study records no such measure (or the loader masks it). The All row pools every observation."
-from pathlib import Path
+#| output: asis
+from vocab_growth.report_tables import SUMMARY_TABLE_COLWIDTHS, print_wide_table, summary_table
 
-import pandas as pd
-
-
-def _summary_display(path, group_label):
-    p = Path(path)
-    if not p.exists():
-        return pd.DataFrame({"note": ["Run scripts/generate_descriptive_report.py first."]})
-    d = pd.read_csv(p)
-
-    def rng(prefix):
-        return [
-            "" if pd.isna(lo) else f"{lo:.0f}–{hi:.0f}"
-            for lo, hi in zip(d[f"{prefix}_min"], d[f"{prefix}_max"])
-        ]
-
-    def med(prefix):
-        return [
-            "" if pd.isna(v) else (f"{v:.0f}" if float(v).is_integer() else f"{v:.1f}")
-            for v in d[f"{prefix}_median"]
-        ]
-
-    def mean_sd(prefix):
-        return [
-            "" if pd.isna(m) else (f"{m:.1f} ({s:.1f})" if pd.notna(s) else f"{m:.1f}")
-            for m, s in zip(d[f"{prefix}_mean"], d[f"{prefix}_sd"])
-        ]
-
-    return pd.DataFrame(
-        {
-            group_label: d["study"],
-            "Children": d["n_subjects"].astype(int),
-            "Obs.": d["n_observations"].astype(int),
-            "Age range": rng("age"),
-            "Age mdn": med("age"),
-            "Age mean (SD)": mean_sd("age"),
-            "Und. range": rng("understood"),
-            "Und. mdn": med("understood"),
-            "Und. mean (SD)": mean_sd("understood"),
-            "Spoken range": rng("spoken"),
-            "Spoken mdn": med("spoken"),
-            "Spoken mean (SD)": mean_sd("spoken"),
-        }
-    )
-
-
-_summary_display("figures/descriptives/summary_table_ds.csv", "Study")
+print_wide_table(
+    summary_table("figures/descriptives/summary_table_ds.csv", "Study"),
+    "Pooled Down syndrome data, by study: children, checklist administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Blank cells mean the study records no such measure (or the loader masks it). The All row pools every observation.",
+    "tbl-summary-ds",
+    colwidths=SUMMARY_TABLE_COLWIDTHS,
+)
 ```
 
 ```{python}
-#| label: tbl-summary-td
 #| echo: false
-#| tbl-cap: "Typically-developing Wordbank reference pool, by dataset: children, administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Comprehension is measured only on the bivariate forms, so its columns cover fewer administrations than the spoken ones. The All row pools every observation."
-_summary_display("figures/descriptives/summary_table_td.csv", "Dataset")
+#| output: asis
+print_wide_table(
+    summary_table("figures/descriptives/summary_table_td.csv", "Dataset"),
+    "Typically-developing Wordbank reference pool, by dataset: children, administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Comprehension is measured only on the bivariate forms, so its columns cover fewer administrations than the spoken ones. The All row pools every observation.",
+    "tbl-summary-td",
+    colwidths=SUMMARY_TABLE_COLWIDTHS,
+)
 ```
 
 ## Vocabulary by age {#sec-vocabulary-by-age}
