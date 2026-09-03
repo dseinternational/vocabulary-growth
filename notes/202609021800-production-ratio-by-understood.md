@@ -86,6 +86,39 @@ Three surfaces carried the same curve into the cross-population contrast.
 - **`compare_models.ds_td_q_vs_understood`**, described in its docstring as a "headline matched-comprehension q overlay" (DS VG09 vs TD VG13, VG07 dashed), together with `ds_td_q_crossings.csv` — the words-understood at which q reaches 0.25/0.5/0.75/0.9 per population, the child-level reading bare — and the VG20 duplicate `ds_td_q_vs_understood_vg20` are retired. Neither carried a caveat and the first used a development model for the DS side. The book's figure is the one of record; `compare_ds_td.py`, the deprecated shim that still called the retired figure "canonical", now delegates to `compare_ds_td_re.run_comprehension_matched`. `ds_td_spoken_vs_understood_vg20`, the same contrast in words rather than a ratio, already carried the caveat and stays.
 - **The report book** does not narrate the DS/TD production ratio at all, so nothing there needed changing.
 
+## Age and comprehension are separable, and the decomposition is the finding (2026-09-03)
+
+Prompted by a reader's objection: if children with Down syndrome are simply developing more slowly, is matching on chronological age helpful at all? Matching on age _alone_ would indeed be the bad design the objection describes. What follows holds age and comprehension together, and the point of doing so is what the difference between the two designs reveals. All figures are counted from the VG20 and VG21 prepared frames, not from the fitted curves.
+
+**The uniform-slowing hypothesis is testable and it fails.** If Down syndrome were the same process at a slower rate, position along the trajectory would fix the production ratio and age would add nothing once comprehension is known. Match on comprehension and let age run free:
+
+| Words understood | DS ratio (n) | TD ratio (n) | DS median age | TD median age | DS share of TD |
+| ---------------- | ------------ | ------------ | ------------- | ------------- | -------------- |
+| 20-50            | 0.00 (88)    | 0.08 (1,006) | 18 mo         | 12 mo         | at the floor   |
+| 50-100           | 0.07 (115)   | 0.09 (1,373) | 24 mo         | 13 mo         | 0.79           |
+| 100-200          | 0.07 (190)   | 0.12 (1,919) | 27 mo         | 15 mo         | 0.60           |
+| 200-300          | 0.12 (176)   | 0.19 (1,160) | 35 mo         | 16 mo         | 0.64           |
+| 300-450          | 0.24 (212)   | 0.31 (560)   | 42 mo         | 17 mo         | 0.76           |
+
+At every level the Down syndrome children convert less while being six to twenty-five months older. **The shortfall does not depend on age matching**; age matching sharpens it rather than creating it. This also supersedes the reading that the two populations reach parity at a comprehension milestone: the reference-child curves showed 0.43 against 0.43 at 300 words, but the observed children at 300-450 words show 0.24 against 0.31, and the parity was an artefact of the reference child already recorded above.
+
+**Holding comprehension fixed, age still moves production a long way.** Within Down syndrome:
+
+| DS children understanding 300-450 words | Median ratio (n) |
+| --------------------------------------- | ---------------- |
+| 16-29 months                            | 0.05 (23)        |
+| 30-41 months                            | 0.16 (83)        |
+| 42-59 months                            | 0.39 (80)        |
+| 60 months and over                      | 0.62 (25)        |
+
+Identical vocabulary knowledge, a twelvefold spread in how much of it is spoken. Fitting age and comprehension together on the log-odds of the ratio confirms it is not a banding artefact: in Down syndrome the age term is +0.045 per month (se 0.005) with comprehension at +0.516 (se 0.063), n = 899; in the typically developing pool age is +0.230 per month (se 0.007) with comprehension at +0.067 (se 0.023), n = 6,018. Age is redundant with comprehension in neither population. Within the 200-300 and 300-450 bands separately the Down syndrome age coefficient is +0.062 and +0.064 per month.
+
+**Age is measuring elapsed time here, not developmental level.** Comprehension is the better index of where a child has reached in language. Age indexes what accrues with time irrespective of vocabulary: vocal tract growth, oral-motor control, hearing history, practice. Uniform slowing assumes the two are locked together; these data separate them.
+
+**The decomposition.** Matched on comprehension alone, Down syndrome children convert at 60-80% of the typically developing rate. Matched on comprehension _and_ age, in the 16-22 month overlap, they convert at 18-27% of it (0.041 vs 0.207, 0.031 vs 0.176, 0.050 vs 0.187 across the 20-50, 50-100 and 100-200 bands). The difference between the two designs is the part of the shortfall that additional months repay, and it is most of it. Neither design alone yields that statement, which is the argument for reporting both.
+
+**Both designs carry selection, in opposite directions.** The comprehension-only comparison is contaminated by the typically developing window ending at 22 months, so its high-comprehension bands hold children precocious for their group, which inflates the typically developing ratio. The age-matched comparison is confined to the overlap, where the Down syndrome children sit at the 20th to 62nd percentile of their own population and the typically developing children at the 3rd to 31st of theirs. A residual worry survives both: comprehension may not fully index developmental level, and if the Down syndrome children at matched comprehension are behind on a broader cognitive dimension, part of the age-matched gap is that rather than speech. These data cannot settle it, though the percentile asymmetry runs against it.
+
 ## Open
 
 - A model-derived $E[q \mid U]$ — integrating the joint child-effect posterior through the understood likelihood — is the quantity the reader wanted and does not exist as an output. The empirical column is the honest substitute until it does. #233 records the same gap.
