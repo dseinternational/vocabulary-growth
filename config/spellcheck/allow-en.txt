@@ -25,6 +25,7 @@ EOWPVT
 ESRC
 Edgin
 Fenson
+Fidler
 Figshare
 Floccia
 GLMM
