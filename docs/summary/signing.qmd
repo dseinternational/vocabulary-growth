@@ -1,0 +1,27 @@
+<!--
+Page 7 of 10. Exported to dsegroup/content as content-en-gb.md; the page's
+folder name is this file's stem. No front matter here: this page is also
+included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+-->
+
+{{< include _summary_data.qmd >}}
+
+# Signing
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+:::
+
+<!--
+Outline (sketch note §9, item 7): what signs add for a child who signs (VG15's
+say-or-sign expected count against spoken), and that signing children are not
+ahead of non-signers overall — the compensation reading from
+notes/202607131325 §4, updated to the current fits. Static figure until VG15
+has a predictive path; the pack block is `total_expressive_by_age`.
+-->
+
+[TODO: for a child who signs, what signs add.]
+
+[TODO: signing children are not ahead of non-signing children overall; signs compensate rather than confer a surplus.]
+
+![Words spoken and words spoken or signed, by age.](../report/figures/VG15-age-joint-signspeech-ds/expected_counts_by_month_s){#fig-signing}

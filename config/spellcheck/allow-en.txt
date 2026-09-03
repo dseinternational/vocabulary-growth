@@ -121,6 +121,7 @@ centered
 centile
 centiles
 color
+colwidths
 compr
 conftest
 crosswalk
@@ -247,6 +248,7 @@ sens
 setsid
 signspeech
 spanos
+spkn
 stales
 startswith
 subj

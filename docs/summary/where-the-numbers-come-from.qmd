@@ -1,0 +1,25 @@
+<!--
+Page 10 of 10. Exported to dsegroup/content as content-en-gb.md; the page's
+folder name is this file's stem. No front matter here: this page is also
+included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+-->
+
+{{< include _summary_data.qmd >}}
+
+# Where the numbers come from
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+:::
+
+<!--
+Outline (sketch note §9, item 10): the technical report, the repository, the
+model of record, how to cite, how the page updates. A citation is included so
+that the reference machinery is exercised in every format.
+-->
+
+The full technical report describes the data, the models and their checks, following a Bayesian workflow [@mcelreathStatisticalRethinkingBayesian2020].
+
+[TODO: the repository and the model of record — `{python} generated_from()`.]
+
+[TODO: how to cite this summary, and how the page updates when the models are refitted.]

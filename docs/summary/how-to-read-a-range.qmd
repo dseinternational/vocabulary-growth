@@ -1,0 +1,37 @@
+<!--
+Page 2 of 10. Exported to dsegroup/content as content-en-gb.md; the page's
+folder name is this file's stem. No front matter here: this page is also
+included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+-->
+
+{{< include _summary_data.qmd >}}
+
+# How to read a range
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+:::
+
+<!--
+Outline (sketch note §9, item 2): why one number misleads; what "half of
+children" and "1 in 20" mean; the expected-average line and why it is narrow.
+Component 6.1 introduced here at one fixed age.
+-->
+
+[TODO: why one number misleads.]
+
+[TODO: "half of children" and "1 in 20", in words.]
+
+[TODO: the average line, and why it is narrow when the range is wide.]
+
+<!-- Component 6.1 at one fixed age; static figure in DOCX and PDF. -->
+
+::: {.content-visible when-format="gfm"}
+<div data-chart-id="0.0.0/charts/vocabulary-growth/words-by-age" data-chart-outcome="understood" data-chart-age="36" data-chart-fixed="true">
+Please enable JavaScript to see the range of words understood at three years.
+</div>
+:::
+
+::: {.content-visible unless-format="gfm"}
+[TODO: static figure for the review document.]
+:::

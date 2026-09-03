@@ -1,0 +1,29 @@
+// Source for fig-signing-generative (the signing models' generative structure in
+// methods-models.qmd, @sec-signed-words): fig-joint-generative with the third
+// outcome. Boxes are observed quantities, rounded nodes latent ones, matching the
+// other diagrams here. Pre-rendered to a static PNG so PDF/DOCX rendering does
+// not require headless Chrome.
+// Regenerate after editing:
+//   dot -Tpng -Gdpi=300 diagrams/fig-signing-generative.dot -o diagrams/fig-signing-generative.png
+digraph SigningGenerative {
+    graph [rankdir=LR]
+    edge [arrowsize=0.75]
+    node [fontsize=12]
+    z  [label="age (z)", shape=box]
+    pU [label=<p<SUB>und</SUB>(z)>, shape=ellipse]
+    q  [label=<q(z)>, shape=ellipse]
+    r  [label=<r(z)>, shape=ellipse]
+    WU [label=<W<SUB>und</SUB>>, shape=box]
+    WS [label=<W<SUB>spkn</SUB>>, shape=box]
+    WG [label=<W<SUB>sign</SUB>>, shape=box]
+    { rank=same; pU -> q -> r [style=invis] }
+    { rank=same; WS -> WG [style=invis] }
+    z -> pU
+    z -> q
+    z -> r
+    pU -> WU
+    WU -> WS
+    q -> WS
+    WU -> WG
+    r -> WG
+}

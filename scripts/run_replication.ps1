@@ -328,7 +328,7 @@ Write-Log ("phases: descriptives={0} fit={1} compare={2} render={3} upload={4} k
 # 1. Data prep + descriptives
 if (-not $NoDescriptives) {
     Invoke-Step 'prepare_data'       'uv' @('run', 'python', 'scripts/prepare_data.py')                | Out-Null
-    Invoke-Step 'descriptive_report' 'uv' @('run', 'python', 'scripts/generate_descriptive_report.py') | Out-Null
+    Invoke-Step 'descriptive_report' 'uv' @('run', 'python', 'scripts/prepare_report_figures.py', 'descriptives') | Out-Null
     Stop-IfFailed
 }
 
@@ -421,6 +421,10 @@ if (-not $NoRender) {
     $syncArgs = @('run', 'python', 'scripts/sync_report_figures.py', '--config', $Config, '--output-dir', $OutRoot)
     if ($ProvisionalSync) { $syncArgs += '--allow-provisional' }
     Invoke-Step 'sync_figures'      'uv'     $syncArgs                                | Out-Null
+    # Everything the report needs that is not model output (introduction
+    # illustrations, the methods chapter's prior figures, placeholders for any
+    # figure still absent): the sync neither validates nor regenerates these.
+    Invoke-Step 'prepare_figures'   'uv'     @('run', 'python', 'scripts/prepare_report_figures.py', 'illustrations', 'priors', 'pending') | Out-Null
     Invoke-Step 'render_report'     'quarto' @('render', 'docs/report')               | Out-Null
     Invoke-Step 'render_comparison' 'quarto' @('render', 'docs/comparison/index.qmd') | Out-Null
     Stop-IfFailed

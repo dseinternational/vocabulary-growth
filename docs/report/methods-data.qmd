@@ -32,7 +32,7 @@ This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Co
 
 ### The development of vocabulary in Spanish children with Down syndrome: comprehension, production, and gestures (es_01)
 
-This data was collected as part of a study on the development of vocabulary in Spanish children with Down syndrome [@galeoteDevelopmentVocabularySpanish2011]. The participants included 186 children with Down syndrome aged 11 to 71 months. All children had a monolingual Spanish background. The participating families were contacted through early intervention units and Down syndrome parent associations from different cities in Spain (mainly in the South). The study used an adapted CDI form consisting of 651 words organised into 21 categories, with options to record "understands" and "understands and says". In addition, the form included a third column to assess the comprehension and production of gestures representing specific lexical items. Symbolic gestures were defined as those gestures that, when properly taught or spontaneously learnt, substitute specific lexical items (e.g., closing the hand with tight fingers and moving it towards the mouth to simulate "to eat"). The gesture column therefore records the child's symbolic-gesture repertoire — taught signs and spontaneously learnt gestures undifferentiated — rather than a pure measure of taught lexical signing: it applies the same per-word coding as the studies that record signs, but to a broader construct. The study's own typically developing comparison group, with no sign instruction reported, nonetheless averaged 23.6 gestured words, confirming that the measure captures spontaneous symbolic gesture.
+This data was collected as part of a study on the development of vocabulary in Spanish children with Down syndrome [@galeoteDevelopmentVocabularySpanish2011]. The participants included 186 children with Down syndrome aged 11 to 71 months. All children had a monolingual Spanish background. The participating families were contacted through early intervention units and Down syndrome parent associations from different cities in Spain (mainly in the South). The study used an adapted CDI form consisting of 651 words organised into 21 categories, with options to record "understands" and "understands and says". In addition, the form included a third column to assess the comprehension and production of gestures representing specific lexical items. Symbolic gestures were defined as those gestures that, when properly taught or spontaneously learnt, substitute specific lexical items (e.g., closing the hand with tight fingers and moving it towards the mouth to simulate "to eat"). The gesture column is therefore a per-word record of manual expression, taught signs and spontaneously learnt gestures alike, which the source does not separate; the authors use *signed* and *gestured* interchangeably, and parents were asked to mark only words "produced or signed referentially and spontaneously". The study's own typically developing comparison group, with no sign instruction reported, averaged 23.6 gestured words, so spontaneous symbolic gesture is captured. No other signing source in the pool records what its parents were told a sign is, so the column is read as this study's signed count on the same footing as the others, with one measurement caveat: after a validity check the authors eliminated eleven of the form's 21 word categories from the gesture data, and whether the totals supplied to us carry that elimination is being confirmed with the author.
 
 ### See and Learn, Down Syndrome Ireland (ie_01)
 
@@ -49,64 +49,27 @@ In the first study, 18 children with Down syndrome were studied longitudinally, 
 ## Study summaries {#sec-study-summaries}
 
 ```{python}
-#| label: tbl-summary-ds
 #| echo: false
-#| tbl-cap: "Pooled Down syndrome data, by study: children, checklist administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Blank cells mean the study records no such measure (or the loader masks it). The All row pools every observation."
-from pathlib import Path
+#| output: asis
+from vocab_growth.report_tables import SUMMARY_TABLE_COLWIDTHS, print_wide_table, summary_table
 
-import pandas as pd
-
-
-def _summary_display(path, group_label):
-    p = Path(path)
-    if not p.exists():
-        return pd.DataFrame({"note": ["Run scripts/generate_descriptive_report.py first."]})
-    d = pd.read_csv(p)
-
-    def rng(prefix):
-        return [
-            "" if pd.isna(lo) else f"{lo:.0f}–{hi:.0f}"
-            for lo, hi in zip(d[f"{prefix}_min"], d[f"{prefix}_max"])
-        ]
-
-    def med(prefix):
-        return [
-            "" if pd.isna(v) else (f"{v:.0f}" if float(v).is_integer() else f"{v:.1f}")
-            for v in d[f"{prefix}_median"]
-        ]
-
-    def mean_sd(prefix):
-        return [
-            "" if pd.isna(m) else (f"{m:.1f} ({s:.1f})" if pd.notna(s) else f"{m:.1f}")
-            for m, s in zip(d[f"{prefix}_mean"], d[f"{prefix}_sd"])
-        ]
-
-    return pd.DataFrame(
-        {
-            group_label: d["study"],
-            "Children": d["n_subjects"].astype(int),
-            "Obs.": d["n_observations"].astype(int),
-            "Age range": rng("age"),
-            "Age mdn": med("age"),
-            "Age mean (SD)": mean_sd("age"),
-            "Und. range": rng("understood"),
-            "Und. mdn": med("understood"),
-            "Und. mean (SD)": mean_sd("understood"),
-            "Spoken range": rng("spoken"),
-            "Spoken mdn": med("spoken"),
-            "Spoken mean (SD)": mean_sd("spoken"),
-        }
-    )
-
-
-_summary_display("figures/descriptives/summary_table_ds.csv", "Study")
+print_wide_table(
+    summary_table("figures/descriptives/summary_table_ds.csv", "Study"),
+    "Pooled Down syndrome data, by study: children, checklist administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Blank cells mean the study records no such measure (or the loader masks it). The All row pools every observation.",
+    "tbl-summary-ds",
+    colwidths=SUMMARY_TABLE_COLWIDTHS,
+)
 ```
 
 ```{python}
-#| label: tbl-summary-td
 #| echo: false
-#| tbl-cap: "Typically-developing Wordbank reference pool, by dataset: children, administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Comprehension is measured only on the bivariate forms, so its columns cover fewer administrations than the spoken ones. The All row pools every observation."
-_summary_display("figures/descriptives/summary_table_td.csv", "Dataset")
+#| output: asis
+print_wide_table(
+    summary_table("figures/descriptives/summary_table_td.csv", "Dataset"),
+    "Typically-developing Wordbank reference pool, by dataset: children, administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Comprehension is measured only on the bivariate forms, so its columns cover fewer administrations than the spoken ones. The All row pools every observation.",
+    "tbl-summary-td",
+    colwidths=SUMMARY_TABLE_COLWIDTHS,
+)
 ```
 
 ## Vocabulary by age {#sec-vocabulary-by-age}

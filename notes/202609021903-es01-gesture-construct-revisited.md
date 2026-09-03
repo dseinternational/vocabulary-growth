@@ -1,0 +1,65 @@
+# es_01 (Galeote): the gesture column revisited — same coding, no established construct difference, and an untested category artefact
+
+> [!NOTE]
+> Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+
+**2026-09-02.** Third examination of what es_01's third column measures, prompted by the study owner re-reading the report's signing caveats and asking whether we are reading too much into "gestures": the paper states that the column assesses "the comprehension and production of gestures representing specific lexical items", so even where these are gestures rather than formal signs they are explicitly mapped to lexical meanings. This note **supersedes [202608271551](202608271551-es01-gesture-construct.md) and the construct half of [202608121030 §2](202608121030-psi-heterogeneity-and-age-invariance.md)**; both now carry a flagged pointer here, per the notes policy of appending corrections rather than editing decision records. Galeote et al. (2011) was re-read in full from the shared Zotero library for this note. The 2016 CDI-Down validity paper (Galeote, Checa, Sánchez-Palacios, Sebastián & Soto) has no attachment in the library and was not read.
+
+## 1. The position, in one paragraph
+
+Three things in the previous notes were right and stand: es_01's column is a per-word lexical marker with the same coding the sign sources use; it includes spontaneous symbolic gestures, as the typically developing group's non-zero totals show; and the study-level terms are what license pooling it ([202608281147](202608281147-study-term-pooling-licence.md), unaffected). One thing was wrong: the conclusion that es_01 therefore measures "a related but broader construct than the taught signing the UK and New Zealand sources record". That comparison has no support on either side — the source's definition includes taught signs, its authors treat signed and gestured as one thing, and no other source records what its parents were told a sign is — so it is retracted to _not established_. And one thing was under-weighted: the eleven-category elimination, which [202608271551 §2](202608271551-es01-gesture-construct.md) bounded at a factor of about two and called "a smaller artefact on top", is a mechanism that needs no construct difference, is plausibly directional, and is not bounded by the eliminated share alone.
+
+## 2. What the source says, re-read
+
+- **Definition** (Predictions): "Symbolic gestures are defined as those gestures that, when properly taught or spontaneously learnt, substitute specific lexical items (e.g., closing the hand with tight fingers and moving it towards the mouth to simulate 'to eat')." Taught signs are inside the definition, not outside it.
+- **Instrument** (Method): "A further significant modification concerns the assessment of symbolic or referential gestures: we added a third column to assess the comprehension and production of gestures representing specific lexical items."
+- **Parents' instruction:** "Only words produced or signed referentially and spontaneously were marked." _Signed_ — and _spontaneously_ here means not imitated or elicited, which is a stricter production criterion than uk_06's, whose column is ticked "for imitated signs as well as for spontaneous signs".
+- **Usage throughout:** the introduction says children with DS "spontaneously produce numerous gestures and signs to substitute words", describes Galeote et al. (2008) as having "added words signed to oral vocabulary", and takes Miller's (1992) _signed_ vocabulary as the direct comparator for its gestural results. The authors do not draw the sign/gesture distinction the previous note drew on their behalf.
+- **Context:** "All children received regular therapy from birth (this is common practice in Spain)", recruited through early intervention units and parent associations. Whether that therapy used a sign-supported communication programme is not stated and is a question for the author (§6).
+- **Procedure:** examples of symbolic gestures were given at the initial interview, parents were asked to describe gestures they had seen their children use, a sheet of photographs of gestures by word category was supplied, answers were checked at a second interview, and a validity exercise was run on 66 parents. No other source in the pool documents its sign assessment to this standard.
+- **The typically developing group:** 23.6 gestured words on average (Table 2), gesturing 6.5 words at MA 9 months against 1.9 spoken. This shows the column is sensitive to spontaneous gesture. It does not show that a UK "signs" column would be blind to it: the CDI gesture literature finds representational gestures in typically developing toddlers on parent report (Caselli et al., 1998), and no UK or New Zealand source has a typically developing group to compare.
+
+## 3. What the sign sources record
+
+- `uk_02`: field names only (`vocabusign`, `says_or_signs`); no definition on record.
+- `nz_01`: "[Description to follow]"; its coding partitions all items into word-only, sign-only and both (`cross_tab_sources.py`).
+- `uk_06`: "understands and signs", ticked for imitated as well as spontaneous signs.
+- `uk_07` (PACT-DS): says only / signs only / both on the 674-item Reading CDI; an intervention trial whose _control_ arm carries the higher association.
+- `uk_01`: an adapted CDI with a "signs" option, masked as sign-only.
+
+None states that parents were told to exclude natural iconic gestures, and none records instruction. The asymmetry the previous note drew — es_01 "broader", the others "taught signing" — was an artefact of es_01 being the only source that wrote its definition down. The report's own outcome name, "words signed or gestured", already spans both, and the question of provenance (a taught conventional sign or a home-grown iconic one for the same word) is unobserved in every source alike.
+
+## 4. The category elimination, reconsidered
+
+The paper's validity exercise identified categories whose gesture reports "frequently presented problems" — words for people, body parts, food and drink, clothes, objects and places at home, objects and places away from home, questions, prepositions, auxiliary verbs, periphrasis, and sentence connectors — and the authors "decided to be conservative and eliminate these categories from the data": eleven of the instrument's 21. Our four totals reproduce Table 2's group means to the second decimal, so we hold whatever the published analysis holds; whether that is the eliminated gesture data is pending the author, and the DS `gestured` maximum of 214 against a comprehension maximum of 651 is consistent with it.
+
+**The mechanism.** `understood` and `spoken` span all 651 items; `gestured` spans the retained categories only. For an item in an eliminated category, a word the child signs and says is recorded as spoken-only, and a word the child gestures without saying is recorded as neither (understood-only). The within-understood odds ratio is (both × neither) / (spoken-only × gestured-only): the first move lowers the numerator and raises the denominator, the second does the reverse, and the net direction depends on where the child's manual words in the eliminated categories truly fall — which is what [202608271551 §2](202608271551-es01-gesture-construct.md) said.
+
+**Why the factor-of-two bound fails.** That bound assumed the affected items are spread evenly across the cells. A worked example with a concentration that is modest for these categories: true cells both 40, spoken-only 60, gestured-only 20, neither 100 (odds ratio 3.33), with 30 of the 40 "both" items, 20 of the 60 spoken-only, 10 of the 20 gestured-only and 20 of the 100 neither falling in eliminated categories. Observed cells are then both 10, spoken-only 90, gestured-only 10, neither 110: odds ratio 1.22, a factor of 2.7 downward. Concentrate "both" further in the eliminated categories and the factor grows without bound. The eliminated set is people, body parts, food and drink, clothes and household objects — the first words children sign _and_ say — so concentration of the "both" cell there is the expectation, not the exception.
+
+**What follows.** es_01's low share of non-vocal words also spoken (30.8% against 45–72% in the sign sources), its small manual lexicon (mean 50.7 at 34–56 months against 81–187), and its independence on the cross-tab (Mantel-Haenszel 0.90) are each what the elimination would produce on a sign source, with no construct difference required. The previous note's "no correction of that size bridges 0.90 to 6–14" therefore does not hold; a factor of five to ten is reachable once "both" is concentrated in the eliminated categories. What the elimination cannot touch is the DS-versus-TD contrast _within_ es_01 (0.90 against 2.13 on the identical instrument), since both groups share the elimination; the observation that Spanish children with DS gesture words they cannot yet say more than their matched typically developing peers stands.
+
+## 5. What changes
+
+The report, the data documentation and the definitions docstring no longer assert a construct difference. Each now says: es_01's column is defined to include spontaneous symbolic gestures alongside taught signs, which the source does not separate; the other sources' sign columns carry no recorded definition, so the distinction cannot be drawn on either side; and the between-source spread in $\psi$ is unexplained, with three candidates of unknown size — what parents counted, es_01's category coverage, and signing instruction.
+
+- `docs/report/methods-data.qmd`, the es_01 study description.
+- `docs/report/_caveats-signing.qmd`, the "sources disagree" paragraph (no chapter includes the file yet, so no freeze directory needs deleting).
+- `docs/report/methods-models.qmd`, the two clauses in the signed-words and association sections.
+- `docs/models/vg15/index.qmd`, the hypothesis callout and the composition bullet.
+- `data/vocab_data_es_01.md`, the construct paragraph, the analysis-pool paragraph, the heterogeneity paragraph and the Known-issues entry, which now records the direction argument of §4.
+- `src/vocab_growth/models/definitions.py`, the `include_es01_cells` docstring.
+- [202608271551](202608271551-es01-gesture-construct.md) and [202608121030 §2](202608121030-psi-heterogeneity-and-age-invariance.md): flagged superseding blocks appended.
+
+What does not change: the data preparation, the union semantics and the 185 valid partitions; `delta_psi` and the study-level structure; `include_es01_cells = True`, now on the stated ground that es_01's differences from the sign sources in what was counted are unmeasured rather than established; and no fit is invalidated, because nothing here touches the graph, the data rules or the priors.
+
+## 6. What would settle it
+
+- **The author**, extending the query pending since [202608271551 §5](202608271551-es01-gesture-construct.md): (a) confirm parents were not asked to distinguish taught signs from spontaneous gestures; (b) whether the supplied totals carry the eleven-category elimination; (c) whether TOTAL GESTURES counts production only, given the column assessed "the comprehension and production" of gestures; (d) whether item- or category-level data survive; and, new here, (e) whether the children with Down syndrome were using a sign-supported communication programme in early intervention, and which; (f) whether parents were told to include natural iconic gestures, or only conventional signs, when the photographs were shown.
+- **A simulation on `uk_07`'s item-level deposit**, which codes each of 674 items says only / signs only / both: drop the eleven categories from the sign coding only, recompute the within-understood odds ratio, and read the observed-to-true ratio as the artefact's size under a UK sign profile. Not run here — the repository holds uk_07 totals only; the item-level data are in the `research-data-analysis` preparation record.
+- **A sensitivity fit** of VG15 with `include_es01_cells = False`, cited in the report if the population $\psi$ moves outside the model of record's interval. Listed as optional in the previous note; it is now the fit that shows how much of the headline rests on the source whose cells carry the unresolved artefact.
+- **If the elimination is confirmed**, es_01's cells should carry it explicitly rather than as a caveat: restrict the cross-tab to the retained categories if category-level data survive, or otherwise route es_01's rows to the marginal set and keep its `signed` total informing $r$ only. That is a decision for after the author replies, and either form is a data-rule change that would stale VG15.
+
+## 7. Reproduction
+
+The quotations are from the Zotero full text of Galeote et al. (2011), doi:10.3109/13668250.2011.599317 (group library `dseinternational`, item `MF6X4AME`). The Mantel-Haenszel table and the pool statistics quoted in §4 are unchanged from [202608271551 §3](202608271551-es01-gesture-construct.md) and reproduce with `uv run python scripts/psi_heterogeneity_audit.py`. The worked example in §4 is arithmetic on the stated cells.

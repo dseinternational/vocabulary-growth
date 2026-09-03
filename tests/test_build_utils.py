@@ -293,7 +293,7 @@ def test_the_months_and_standardised_soft_clamps_are_exactly_equal():
     """One constant, two implementations, and they must not merely be close.
 
     `gp_utils._soft_clamp_z` works in standardised age for the graph;
-    `scripts/generate_prior_figures.py` works in months for the methods chapter's
+    `vocab_growth.report_illustrations` works in months for the methods chapter's
     figures, which `sync_report_figures.py` does not validate. Because
     CLAMP_SOFTNESS is expressed per unit of anchor span, the standard deviation
     cancels: `beta_z * (hi_z - z)` reduces to `CLAMP_SOFTNESS * (hi - age) / span`.
@@ -310,7 +310,7 @@ def test_the_months_and_standardised_soft_clamps_are_exactly_equal():
     mean, std = 30.0, 12.0
     ages = np.array([8.0, 24.0, 48.0, 84.0, 96.0, 115.0])
 
-    # Months form, as the figure script computes it.
+    # Months form, as the figure module computes it.
     beta_months = CLAMP_SOFTNESS / (hi - lo)
     months = hi - np.logaddexp(0.0, beta_months * (hi - ages)) / beta_months
 
@@ -328,24 +328,10 @@ def test_the_months_and_standardised_soft_clamps_are_exactly_equal():
 
 
 def test_the_soft_clamp_constant_has_one_home():
-    """The figure script and the graph builder must read the same object.
-
-    Loaded by path because `scripts/` is not an importable package -- the pattern
-    `tests/test_regenerate_plots_engines.py` uses.
-    """
-    import importlib.util
-    import sys
-    from pathlib import Path
-
+    """The figure module and the graph builder must read the same object."""
+    from vocab_growth import report_illustrations
     from vocab_growth.models import gp_utils
 
     assert gp_utils.CLAMP_SOFTNESS is CLAMP_SOFTNESS
-
-    path = Path(__file__).parents[1] / "scripts" / "generate_prior_figures.py"
-    spec = importlib.util.spec_from_file_location("generate_prior_figures_script", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    assert module.CLAMP_SOFTNESS is CLAMP_SOFTNESS
+    assert report_illustrations.CLAMP_SOFTNESS is CLAMP_SOFTNESS
 

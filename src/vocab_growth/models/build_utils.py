@@ -35,7 +35,7 @@ import numpy as np
 #:
 #: It lives here, in the pymc-free module, because two implementations need it and
 #: only one of them builds a graph: ``gp_utils._soft_clamp_z`` works in standardised
-#: age, and ``scripts/generate_prior_figures.py`` works in months for the methods
+#: age, and ``vocab_growth.report_illustrations`` works in months for the methods
 #: chapter's figures. Because the constant is expressed per unit of span, the two are
 #: *exactly* equal, not merely close -- ``beta_z * (hi_z - z)`` reduces to
 #: ``CLAMP_SOFTNESS * (hi - age) / span`` with the standard deviation cancelling.

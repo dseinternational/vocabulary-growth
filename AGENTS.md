@@ -113,6 +113,14 @@ uv run python scripts/fit_recovery.py <model|headline|all> [--config <config>] [
 
 Simulates a dataset from a model at a known parameter draw, refits the model to it with the engine's own pipeline, and scores the recovered posterior against the truth. `headline` is `vg20`, `vg12`, `vg15`; `all` is every model `recovery.spec.supported_models()` returns, today `vg07`-`vg13`, `vg15` and `vg19`-`vg23`; the seven it excludes carry their reason in `recovery.spec.UNSUPPORTED_REASONS` (VG16, for instance, because its cross-lag predictor is a function of the outcome). The two are checked to partition `MODEL_REGISTRY`, so read them there rather than trusting a list here. Truth defaults to the model of record's posterior (requires a fitted model of record); `--truth prior` needs no trace but tests parameter settings far from the reported regime. Recovery fits land in `<output-root>/models/<model_id>-<config>-recovery-rNN/` and never touch a model of record; tables land in `<output-root>/comparisons/recovery/`. A replicate is only assessed if its fit's convergence is confirmed. See `docs/runbooks/parameter-recovery.md`, including what a handful of replicates can and cannot establish.
 
+### Prepare report figures
+
+```bash
+uv run python scripts/prepare_report_figures.py [descriptives] [illustrations] [priors] [pending] [--draws <n>] [--seed <n>]
+```
+
+Writes everything the Quarto report needs that is _not_ fitted model output, so all of it can be regenerated at any time: `descriptives` (per-study summary tables and observed-data figures, into `docs/descriptive/figures/` for the standalone descriptive report and mirrored into `docs/report/figures/descriptives/`; needs `prepare_data.py` to have run), `illustrations` (the introduction's Bayesian-updating and Binomial-versus-Beta-Binomial figures, into `docs/report/figures/`), `priors` (the methods chapter's prior-trajectory and GP-anchoring figures, simulated from the registered definitions' own priors, into `docs/report/figures/methods/`), and `pending` (a labelled placeholder for every figure a chapter references that is still absent, so a render never fails on a missing file). With no stage named, all four run in that order. The figure code lives in `vocab_growth.descriptive` and `vocab_growth.report_illustrations`. None of it is validated by `sync_report_figures.py`, which covers fit artefacts only; run this after `prepare_data.py`, and again after any figure sync, before rendering.
+
 ### Sync report figures
 
 ```bash

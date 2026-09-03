@@ -590,9 +590,10 @@ for m in vg10 vg14 vg15; do python scripts/compare_sensitivity.py $m --variant a
 # ds_subject_effect_correlation.csv, which the comparison book reads; it was missing
 # from this list until the 2026-09-03 tail failed on it.
 python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re-sync comparison artefacts
-# `sync_report_figures` ATOMICALLY REPLACES docs/report/figures/, which destroys
-# the illustrative figures the introduction uses (bayes_update*.png). They are not
-# model output, so nothing regenerates them. Regenerate AFTER every sync, or
+# Everything the report needs that is NOT model output -- the descriptives, the
+# introduction's illustrations (bayes_update*.png), the methods chapter's prior
+# figures and a placeholder for any figure still absent -- comes from one script
+# that the sync neither validates nor regenerates. Run it AFTER the sync, or
 # `quarto render docs/report` fails on a missing file:
 python scripts/prepare_report_figures.py
 # Pin Quarto's Python interpreter to the project environment for BOTH book renders: a bare `quarto render`

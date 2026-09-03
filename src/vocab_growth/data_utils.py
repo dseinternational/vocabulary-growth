@@ -44,6 +44,30 @@ to the us_01/Edgin DS block of the ``vocab_combined`` view
 WORDBANK_SPOKEN_ONLY_FORMS = ("WS",)
 """Wordbank forms that contribute production observations only."""
 
+WORDBANK_FORM_ITEMS: dict[tuple[str, str], int] = {
+    ("English (American)", "WG"): 396,
+    ("English (British)", "Oxford CDI"): 416,
+    ("Italian", "WG"): 408,
+    ("Spanish (European)", "WG"): 309,
+    ("Catalan", "WG"): 423,
+    ("Portuguese (European)", "WG"): 317,
+}
+"""Word-item counts of the Wordbank comprehension forms, keyed by ``(language, form)``.
+
+The typically-developing loader carries no ``survey_vocab_max`` -- Wordbank's
+by-child export does not record one -- so this is the ceiling a count on each of
+these forms can be expressed against. The counts come from each instrument's
+definition file in ``langcog/wordbank`` (``type == "word"`` rows; the method
+reproduces English (American) 396 exactly), as tabulated in
+``notes/202608031500-td-romance-extension.md``, with one deliberate exception: the
+Oxford CDI is entered at **416**, the ceiling every Oxford-form source in
+``vocab_combined`` carries (see the native-ceiling comment beside the view SQL),
+where the definition file counts 418 word rows. The two unadmitted Romance forms
+(Catalan, Portuguese) are included so the cross-language nesting check can be rerun
+on the candidate set that note reported. Consumer:
+:func:`vocab_growth.descriptive.td_form_alignment_table`.
+"""
+
 US01_WS_VOCAB_MAX = 680
 """Native vocabulary ceiling of the us_01 Words & Sentences form."""
 

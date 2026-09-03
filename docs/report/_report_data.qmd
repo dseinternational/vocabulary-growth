@@ -18,7 +18,8 @@ from dse_research_utils.report.data import show_or_pending as _show_or_pending
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 FIG_ROOT = Path("figures")
-_DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
+_DIR_BY_ID = {
+    m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
 
 # Shared per-model artefact reader (dse_research_utils) over this report's curated
 # figures/<MODEL_ID>-<config_name> store; the directory is fixed per model (registry-
@@ -63,8 +64,8 @@ def num(value, fmt="{:.0f}"):
     """Format a value for prose, or an em dash when it is missing."""
     return _num(value, fmt)
 
-
 # --- Report-specific helpers (kept local) -----------------------------------
+
 
 # Cross-model DS/TD comparison artefacts (figures/comparisons/, synced from
 # output/comparisons/). Schemas vary per file, so access is by (match_col, value).
@@ -149,7 +150,8 @@ def dq_facts(name="ds_td_comprehension_q_at_U", **kwargs):
 
 # Column names `summarise_draws` writes with no prefix (the attainment-delay
 # tables), mapped onto a prefix so the shared helper can read them.
-_BARE_COLS = ("median", "ci50_lo", "ci50_hi", "ci_lo", "ci_hi", "coverage", "p_gt0")
+_BARE_COLS = ("median", "ci50_lo", "ci50_hi",
+              "ci_lo", "ci_hi", "coverage", "p_gt0")
 
 
 def comp_facts(name, *, grid_col="age_months", prefix="d", bare=False, **kwargs):
@@ -158,7 +160,8 @@ def comp_facts(name, *, grid_col="age_months", prefix="d", bare=False, **kwargs)
 
     df = comp_load(name)
     if df is not None and bare:
-        df = df.rename(columns={c: f"{prefix}_{c}" for c in _BARE_COLS if c in df.columns})
+        df = df.rename(
+            columns={c: f"{prefix}_{c}" for c in _BARE_COLS if c in df.columns})
     return dq_contrast_facts(df, grid_col=grid_col, prefix=prefix, **kwargs)
 
 
@@ -172,7 +175,8 @@ def comp_row(name, grid_col, grid_val, *, prefix="d", bare=False):
     if df is None or grid_col not in df.columns:
         return None
     if bare:
-        df = df.rename(columns={c: f"{prefix}_{c}" for c in _BARE_COLS if c in df.columns})
+        df = df.rename(
+            columns={c: f"{prefix}_{c}" for c in _BARE_COLS if c in df.columns})
     return df.iloc[int((df[grid_col] - grid_val).abs().argmin())]
 
 
@@ -292,13 +296,15 @@ def loo_table(models):
         df = load_summary(model_id, "loo_summary")
         if df is None:
             continue
-        keep = df[["outcome", "elpd_loo", "se", "p_loo", "n_data_points"]].copy()
+        keep = df[["outcome", "elpd_loo", "se",
+                   "p_loo", "n_data_points"]].copy()
         keep.insert(0, "Model", model_id)
         frames.append(keep)
     if not frames:
         return None
     out = pd.concat(frames, ignore_index=True)
-    out.columns = ["Model", "Outcome", "ELPD", "SE", "Effective parameters", "Observations"]
+    out.columns = ["Model", "Outcome", "ELPD", "SE",
+                   "Effective parameters", "Observations"]
     out[["ELPD", "SE", "Effective parameters"]] = out[
         ["ELPD", "SE", "Effective parameters"]
     ].round(1)
@@ -338,7 +344,8 @@ def dq_peak():
 def dq_at(words_understood, column="dq_median", fmt="{:+.3f}"):
     """A Δq column at the nearest tabulated comprehension level, for prose."""
     return num(
-        comp_at("ds_td_comprehension_q_at_U", "words", words_understood, column), fmt
+        comp_at("ds_td_comprehension_q_at_U", "words",
+                words_understood, column), fmt
     )
 
 

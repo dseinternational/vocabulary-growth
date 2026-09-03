@@ -1,6 +1,6 @@
 // Source for fig-joint-generative (the joint models' generative structure in
 // methods-models.qmd). Boxes are observed quantities, rounded nodes latent ones,
-// matching fig-core-dag. Pre-rendered to a static PNG so PDF/DOCX rendering does
+// matching the other diagrams here. Pre-rendered to a static PNG so PDF/DOCX rendering does
 // not require headless Chrome.
 // Regenerate after editing:
 //   dot -Tpng -Gdpi=300 diagrams/fig-joint-generative.dot -o diagrams/fig-joint-generative.png
@@ -9,10 +9,10 @@ digraph JointGenerative {
     edge [arrowsize=0.75]
     node [fontsize=12]
     z  [label="age (z)", shape=box]
-    pU [label=<p<SUB>understood</SUB>(z)>, shape=ellipse]
+    pU [label=<p<SUB>und</SUB>(z)>, shape=ellipse]
     q  [label=<q(z)>, shape=ellipse]
-    WU [label=<W<SUB>understood</SUB>>, shape=box]
-    WS [label=<W<SUB>spoken</SUB>>, shape=box]
+    WU [label=<W<SUB>und</SUB>>, shape=box]
+    WS [label=<W<SUB>spkn</SUB>>, shape=box]
     z -> pU
     z -> q
     pU -> WU
