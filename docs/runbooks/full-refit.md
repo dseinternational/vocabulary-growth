@@ -578,11 +578,17 @@ A template change is applied to an existing fit with `--render-only`, which re-s
 ```bash
 python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # validates fits, then feeds docs/report/figures/
 # comparisons (consume fitted traces/summaries):
-for c in loo_compare loso_compare compare_models compare_ds_td \
+for c in loo_compare loso_compare compare_models \
          compare_ds_td_trajectories compare_ds_td_expressive \
-         compare_ds_td_latency compare_ds_td_q_overlap compare_ds_td_re; do
+         compare_ds_td_latency subject_effect_correlation; do
   python scripts/$c.py
 done
+python scripts/compare_ds_td_re.py spoken understood comprehension   # the joint contrasts, incl. the weighted child
+for m in vg10 vg14 vg15; do python scripts/compare_sensitivity.py $m --variant all; done
+# `compare_ds_td` and `compare_ds_td_q_overlap` are deprecated shims that delegate to
+# compare_ds_td_re and need not run. `subject_effect_correlation.py` writes
+# ds_subject_effect_correlation.csv, which the comparison book reads; it was missing
+# from this list until the 2026-09-03 tail failed on it.
 python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re-sync comparison artefacts
 # `sync_report_figures` ATOMICALLY REPLACES docs/report/figures/, which destroys
 # the illustrative figures the introduction uses (bayes_update*.png). They are not
