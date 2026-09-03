@@ -583,24 +583,40 @@ _rr = [
     for f in sorted(glob.glob("recovery_vg12_r*.csv"))
     if "aggregates" not in f
 ]
-_ts = pd.concat([d[d["quantity"] == "tau_subject"] for d in _rr])
-_sh = pd.concat([d[d["quantity"] == "subject_variance_share"] for d in _rr])
-_vt = pd.concat([d[d["quantity"] == "v_total"] for d in _rr])
-_miss = int((~_ts["within_ci89"]).sum())
-_bias = float((_ts["posterior_mean"] / _ts["truth"] - 1.0).mean())
-_zs = ", ".join(f"{z:+.2f}" for z in _ts["z"])
-print(
-    f"Refitting VG12 to data simulated from its own posterior returns "
-    f"`tau_subject` below the truth in {len(_ts)} replicates of {len(_ts)} "
-    f"(z = {_zs}), a bias of {_bias:+.1%}, with the truth outside the 89% "
-    f"interval {_miss} of {len(_ts)} times. The budget is not what is "
-    f"mis-estimated — `v_total` recovers with z = "
-    f"{', '.join(f'{z:+.2f}' for z in _vt['z'])} — but the split is, with "
-    f"`subject_variance_share` low at z = "
-    f"{', '.join(f'{z:+.2f}' for z in _sh['z'])}. "
-    f"$\\tau_{{subject}} = \\sqrt{{share \\cdot v_{{total}}}}$ inherits that "
-    f"amplified, because the transformation concentrates its posterior."
-)
+if not _rr:
+    # Parameter recovery is a separate multi-hour job (fit_recovery.py), not part
+    # of the fit-and-publish tail; a cycle that has not run it must say so rather
+    # than fail the whole book here, and must not quote a previous cycle's
+    # recovery against this cycle's fits.
+    print(
+        "**Parameter recovery was not run in this cycle.** The recovery check on "
+        "`tau_subject` (`fit_recovery.py vg12`) writes `recovery_vg12_r*.csv`, and "
+        "none exists for these fits, so the finding this callout normally quantifies "
+        "— that VG12's between-child scale recovers below the truth while the total "
+        "variance budget recovers — is not restated here from an earlier cycle's fits. "
+        "It stands as a known property of the model until this cycle's recovery run "
+        "confirms or revises it."
+    )
+    _rr = None
+_ts = None if _rr is None else pd.concat([d[d["quantity"] == "tau_subject"] for d in _rr])
+if _rr is not None:
+    _sh = pd.concat([d[d["quantity"] == "subject_variance_share"] for d in _rr])
+    _vt = pd.concat([d[d["quantity"] == "v_total"] for d in _rr])
+    _miss = int((~_ts["within_ci89"]).sum())
+    _bias = float((_ts["posterior_mean"] / _ts["truth"] - 1.0).mean())
+    _zs = ", ".join(f"{z:+.2f}" for z in _ts["z"])
+    print(
+        f"Refitting VG12 to data simulated from its own posterior returns "
+        f"`tau_subject` below the truth in {len(_ts)} replicates of {len(_ts)} "
+        f"(z = {_zs}), a bias of {_bias:+.1%}, with the truth outside the 89% "
+        f"interval {_miss} of {len(_ts)} times. The budget is not what is "
+        f"mis-estimated — `v_total` recovers with z = "
+        f"{', '.join(f'{z:+.2f}' for z in _vt['z'])} — but the split is, with "
+        f"`subject_variance_share` low at z = "
+        f"{', '.join(f'{z:+.2f}' for z in _sh['z'])}. "
+        f"$\\tau_{{subject}} = \\sqrt{{share \\cdot v_{{total}}}}$ inherits that "
+        f"amplified, because the transformation concentrates its posterior."
+    )
 ```
 
 ```{python}
