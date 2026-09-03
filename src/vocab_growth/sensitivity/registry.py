@@ -204,7 +204,13 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # item composition. The assumption is therefore probed by deleting the rows
     # that need it, not by re-running the model differently.
     #
-    # This is the widest-scoped variant registered: 278 of 1,521 rows survive.
+    # This is the widest-scoped variant registered. Two figures, at two stages,
+    # because they differ and both get quoted: the loader keeps 277 of 1,516
+    # administrations and the fit log prints the 1,239 it excluded, while the
+    # prepared analysis frame that is actually fitted keeps 264 of 1,424. Both
+    # are pool-dependent -- the comment said "278 of 1,521" until 2026-09-03,
+    # correct for the pool of the day it was written -- so read the fit log for
+    # the live figure rather than trusting a number here.
     # On vg15 it also collapses psi to its single-study branch, because uk_02's
     # DSE arm is the only cross-tab source native to 810 — so read it for the
     # trajectory shapes, not for the association. Both engines print the excluded
@@ -688,8 +694,8 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # use. The lag predictor is a logit of a *proportion*, understood / 810, so
     # a short-form source enters it already deflated -- the harmonisation acts
     # directly on the regressor here, not only on the outcome. Expect partial
-    # coverage rather than a clean verdict: the same restriction keeps 278 of
-    # VG10's 1,521 rows, and it changes study composition as well as size.
+    # coverage rather than a clean verdict: the same restriction keeps 264 of
+    # VG10's 1,424 fitted rows, and it changes study composition as well as size.
     ("vg16", "dse-native-only"): {
         "suffix": "dse-native-only",
         "scalar": {"dse_native_only": True},
