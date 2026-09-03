@@ -571,13 +571,50 @@ The direction is what saved the earlier finding. DS was already the more variabl
 One caveat survives, pointing the other way. 432 of the 767 children are seen once, and 342 of those inform the correlation only through the agreement between two counts on a single questionnaire completed by one parent — where shared reporter bias is not separable from shared child ability. So **+0.368 leans high**. VG16's cross-lag, which reads the child's comprehension from a *different* administration and is therefore immune to that artefact, implies about **+0.24** (89% interval +0.11 to +0.38) once corrected for the unreliability of its predictor. The two overlap; the truth is more likely in the lower half of VG20's interval, which would put the correction at somewhat less than the 15% quoted above.
 :::
 
-::: {.callout-important title="Both sides of this contrast carry the same measured bias, so the ratio is barely affected"}
-The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate: parameter recovery returns the between-child scale below the value that generated it. **This was first reported here as a typically-developing-side bias, and it is not one** — the same-sized bias is present in the Down syndrome models, which is what the correction below turns on.
+::: {.callout-important title="The between-child scale recovers low; whether that cancels out of the TD/DS contrast is unresolved"}
+The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate: parameter recovery returns the typically developing between-child scale below the value that generated it. Whether the Down syndrome side carries the same bias, and therefore whether it cancels out of the contrast, is measured from this cycle's own recovery run below rather than asserted.
 
 ```{python}
 #| echo: false
 #| output: asis
 import glob
+def _assessed_count(_key, _default):
+    """Replicates of `_key` whose convergence the recovery gate confirmed."""
+    try:
+        _m = pd.read_csv(f"recovery_matrix_{_key}.csv")
+    except (FileNotFoundError, OSError):
+        return _default
+    _m = _m[~_m["replicate"].astype(str).str.startswith("POOLED")]
+    return int((~_m["verdict"].astype(str).str.contains("not assessed")).sum())
+
+
+def _scale_bias(_key, _names):
+    """Mean and spread of the between-child scale's recovery bias, assessed only."""
+    try:
+        _m = pd.read_csv(f"recovery_matrix_{_key}.csv")
+    except (FileNotFoundError, OSError):
+        return None
+    _keep = {
+        str(r.replicate)
+        for r in _m.itertuples()
+        if not str(r.replicate).startswith("POOLED")
+        and "not assessed" not in str(r.verdict)
+    }
+    _vals = []
+    for _f in sorted(glob.glob(f"recovery_{_key}_r*.csv")):
+        if "aggregates" in _f:
+            continue
+        _rep = _f[len(f"recovery_{_key}_"):-len(".csv")]
+        if _rep not in _keep:
+            continue
+        _d = pd.read_csv(_f)
+        _s = _d[_d["quantity"].isin(_names)]
+        if _s.empty:
+            continue
+        _r = _s.iloc[0]
+        _vals.append(float(_r["posterior_mean"] / _r["truth"] - 1.0))
+    return _vals or None
+
 _rr = [
     pd.read_csv(f)
     for f in sorted(glob.glob("recovery_vg12_r*.csv"))
@@ -605,11 +642,21 @@ if _rr is not None:
     _miss = int((~_ts["within_ci89"]).sum())
     _bias = float((_ts["posterior_mean"] / _ts["truth"] - 1.0).mean())
     _zs = ", ".join(f"{z:+.2f}" for z in _ts["z"])
+    # A replicate the convergence gate did not assess is still shown for
+    # direction, but must not be counted as evidence: `recovery/compare.py`
+    # reserves a recovery claim for a fit whose convergence is confirmed.
+    _n_ass = _assessed_count("vg12", len(_ts))
+    _asstxt = (
+        f" The convergence gate assessed {_n_ass} of them; the rest are shown for "
+        f"direction only."
+        if _n_ass < len(_ts)
+        else ""
+    )
     print(
         f"Refitting VG12 to data simulated from its own posterior returns "
         f"`tau_subject` below the truth in {len(_ts)} replicates of {len(_ts)} "
-        f"(z = {_zs}), a bias of {_bias:+.1%}, with the truth outside the 89% "
-        f"interval {_miss} of {len(_ts)} times. The budget is not what is "
+        f"(z = {_zs}), a mean bias of {_bias:+.1%}, with the truth outside the 89% "
+        f"interval {_miss} of {len(_ts)} times.{_asstxt} The budget is not what is "
         f"mis-estimated — `v_total` recovers with z = "
         f"{', '.join(f'{z:+.2f}' for z in _vt['z'])} — but the split is, with "
         f"`subject_variance_share` low at z = "
@@ -636,25 +683,58 @@ if _rr is None:
         "stands."
     )
 else:
-    # The DS comprehension scale is `tau_subj_u`, which is the parameter recovery
-    # measures as biased: -5.81% on VG20 (model of record) and -5.57% on VG10.
-    # Neither carries `subject_variance_partition`. See issue #225.
-    _ds_bias = -0.0581
+    # The DS comprehension scale is `tau_subj_u` in the same engine. Its bias is
+    # read from this cycle's assessed VG20 replicates rather than restated from
+    # the #225 baseline (-5.81% on VG20, -5.57% on VG10): the cancellation
+    # argument below turns on the two sides being the same size, so quoting an
+    # earlier cycle's DS figure against this cycle's TD figure would beg the
+    # question the callout exists to answer.
+    _ds_vals = _scale_bias("vg20", ("tau_subj_u",))
     _one_sided = (_r0["tau_TD_median"] / (1.0 + _bias)) / _r0["tau_DS_median"]
-    _both_sides = (_r0["tau_TD_median"] / (1.0 + _bias)) / (_r0["tau_DS_median"] / (1.0 + _ds_bias))
-    print(
+    _lead = (
         f"$\\tau_{{subject}}$ is the typically-developing side of this contrast, and "
-        f"the Down syndrome side is the same quantity in the same engine — which "
-        f"recovery finds low by {_ds_bias:+.1%} on the model of record and -5.6% on "
-        f"its predecessor, against {_bias:+.1%} here. Correcting only the "
-        f"typically-developing side would move the ratio TD/DS from "
-        f"{_r0['tau_ratio_median']:.3f} to {_one_sided:.2f} and make the reported "
-        f"difference look overstated. Correcting **both** leaves it at "
-        f"{_both_sides:.3f}: a proportional bias shared by numerator and denominator "
-        f"cancels, and only the difference between the two sides survives. So the "
-        f"caveat falls on the absolute between-child standard deviations, not on the "
-        f"contrast between them."
+        f"the Down syndrome side is the same quantity in the same engine. Correcting "
+        f"only the typically-developing side would move the ratio TD/DS from "
+        f"{_r0['tau_ratio_median']:.3f} to {_one_sided:.2f}. Whether that correction "
+        f"is the right one depends on the Down syndrome side carrying the same bias."
     )
+    if not _ds_vals:
+        print(
+            _lead
+            + " No assessed VG20 recovery replicate is staged in this cycle, so the "
+            "Down syndrome side is unmeasured here and neither the one-sided nor the "
+            "two-sided correction can be preferred on this cycle's evidence."
+        )
+    else:
+        _ds_bias = sum(_ds_vals) / len(_ds_vals)
+        _both_sides = (_r0["tau_TD_median"] / (1.0 + _bias)) / (
+            _r0["tau_DS_median"] / (1.0 + _ds_bias)
+        )
+        _spans_zero = min(_ds_vals) < 0.0 < max(_ds_vals)
+        _detail = (
+            f" This cycle measures it at {_ds_bias:+.1%} over {len(_ds_vals)} assessed "
+            f"replicate{'s' if len(_ds_vals) != 1 else ''}, spanning {min(_ds_vals):+.1%} "
+            f"to {max(_ds_vals):+.1%}, against {_bias:+.1%} on the typically developing "
+            f"side. Correcting **both** leaves the ratio at {_both_sides:.3f}."
+        )
+        if _spans_zero:
+            _verdict = (
+                " Because the Down syndrome replicates straddle zero, this cycle does "
+                "**not** establish a Down syndrome bias, and therefore does not support "
+                "the cancellation argument this callout previously made. On these "
+                "numbers the contrast between the two scales is itself affected, not "
+                "only the absolute standard deviations. The #225 baseline cycle measured "
+                "the Down syndrome side at -5.81%, which would restore the cancellation; "
+                "the two cycles disagree and the discrepancy is unresolved."
+            )
+        else:
+            _verdict = (
+                " A proportional bias shared by numerator and denominator cancels, and "
+                "only the difference between the two sides survives, so the caveat falls "
+                "on the absolute between-child standard deviations rather than on the "
+                "contrast between them."
+            )
+        print(_lead + _detail + _verdict)
 ```
 
 ```{python}
@@ -710,11 +790,12 @@ else:
         f"replicates across {_models} models, spanning {_rng}. {_asstxt} "
         f"The nine-of-nine result quoted for this bias is the reporting-tier "
         f"evidence of the #225 baseline cycle, not this one; at the reporting "
-        f"tier estimates move by at most 0.19% of the truth. The magnitude is "
-        f"roughly 3\u20136% and should not be quoted more precisely than that."
+        f"tier estimates move by at most 0.19% of the truth. That cycle put the "
+        f"magnitude at roughly 3\u20136%; this one spans a wider range, and neither "
+        f"supports quoting it more precisely."
     )
 ```
- **The mechanism is not established.** The reparameterisation this was first attributed to is carried by only one of the three models that show it, and the sampling tier, the priors' location, the operating proportion and the dispersion parameterisation have each been tested and eliminated. One limit on the cancellation argument above: it holds for comprehension, where both sides read the same parameter. The spoken Down syndrome scale is derived through the $p_U \times q$ product and has not been measured, so the cross-outcome reading is not established either way. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md` and the issue thread.
+ **The mechanism is not established.** The reparameterisation this was first attributed to is carried by only one of the three models that show it, and the sampling tier, the priors' location, the operating proportion and the dispersion parameterisation have each been tested and eliminated. A further limit on the cancellation argument, over and above this cycle's failure to reproduce the Down syndrome side of it: even where it holds, it holds only for comprehension, where both sides read the same parameter. The spoken Down syndrome scale is derived through the $p_U \times q$ product and has not been measured, so the cross-outcome reading is not established either way. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md` and the issue thread.
 :::
 
 Two further caveats bound how far this contrast can be pushed. First, the priors
