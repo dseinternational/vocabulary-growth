@@ -111,6 +111,7 @@ asstxt
 autodiff
 autouse
 azcopy
+bandings
 baselining
 bimodality
 blobfuse
@@ -235,6 +236,7 @@ rescoring
 residualised
 respecification
 resumable
+reweighted
 reweighting
 reweights
 rhat

@@ -28,13 +28,21 @@ things are scored, in increasing order of what they test:
    conditioned on and the second predicted. This is the only test here of the
    between-child scales and of the correlation between a child's comprehension
    standing and their conversion of comprehension into speech, which the fitted
-   pool identifies largely through its own repeat visits. The study offset is
-   absorbed into the child effect for this item, because both visits carry it and
-   only their sum is identified from one visit.
+   pool identifies largely through its own repeat visits. Each child is
+   conditioned on their own first visit alone; the study offset is carried in
+   the candidate set rather than estimated from the other children, because
+   both visits share it and only its sum with the child effect is identified
+   from one visit. The per-child log predictive density of the second visit is
+   written alongside the coverage, under two conditionings -- on both visit-1
+   outcomes, and on visit-1 comprehension alone -- so that models with and
+   without a child-effect correlation can be compared on the task the
+   correlation exists for.
 
 Nothing is refitted. The frame is never written into ``data/``; registering it
 there would change every Down syndrome prepared-frame hash and destroy the
-out-of-sample property this script exists to exploit. See issue #288.
+out-of-sample property this script exists to exploit. See issue #288. The
+controls and null simulations that say how these scores should be read live in
+``scripts/predict_new_study_checks.py``.
 """
 
 from __future__ import annotations
@@ -51,6 +59,7 @@ import pandas as pd
 from scipy.special import expit
 from scipy.stats import betabinom
 
+from vocab_growth.comparisons_provenance import fit_manifest_fingerprint
 from vocab_growth.environment import output_root, set_output_root
 from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import MODEL_REGISTRY
@@ -58,6 +67,12 @@ from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
 
 EPSILON = 1e-6
 AGE_BANDS = [0, 20, 24, 30, 36, 200]
+LPD_COLUMNS = (
+    "lpd_understood_given_both",
+    "lpd_spoken_given_both",
+    "lpd_understood_given_understood",
+    "lpd_spoken_given_understood",
+)
 
 
 def _model_dir(model_key: str, root: str) -> str:
@@ -65,7 +80,9 @@ def _model_dir(model_key: str, root: str) -> str:
     return os.path.join(root, "models", f"{d.model_id}-{d.config_name}")
 
 
-def _interp_draws(x_plot: np.ndarray, values: np.ndarray, ages: np.ndarray) -> np.ndarray:
+def _interp_draws(
+    x_plot: np.ndarray, values: np.ndarray, ages: np.ndarray
+) -> np.ndarray:
     """Interpolate ``values`` (draws x plot_id) onto ``ages``; returns draws x n."""
     out = np.empty((values.shape[0], ages.size), dtype=float)
     for i in range(values.shape[0]):
@@ -233,10 +250,12 @@ def engine_profile(posterior) -> dict:
     }
 
 
-def _study_draw(posterior, name, draws, rng, n_draw):
+def _study_draw(posterior, name, draws, rng, shape):
+    """Study offsets at the fitted between-study scale, leading axis the draws."""
     if name is None:
-        return np.zeros((n_draw, 1))
-    return rng.standard_normal((n_draw, 1)) * _flat(posterior, name)[draws][:, None]
+        return np.zeros(shape)
+    scale = _flat(posterior, name)[draws].reshape(-1, *([1] * (len(shape) - 1)))
+    return rng.standard_normal(shape) * scale
 
 
 def marginal_prediction(post, x_plot, frame, draws, rng, n_trials, definition):
@@ -251,9 +270,11 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials, definition):
     codes, _ = pd.factorize(frame["subject_id"])
     n_child = int(codes.max()) + 1
 
-    params = draw_child_params(post, definition, structure, draws, rng, (n_draw, n_child))
+    params = draw_child_params(
+        post, definition, structure, draws, rng, (n_draw, n_child)
+    )
     du_child, dq_child = child_deltas(params[:, codes, :], ages, ref)
-    du_study = _study_draw(post, prof["tau_u"], draws, rng, n_draw)
+    du_study = _study_draw(post, prof["tau_u"], draws, rng, (n_draw, 1))
     p_u = expit(f_u + du_study + du_child)
     y_u = _betabinom_draw(rng, n_trials, p_u, k_u)
 
@@ -261,8 +282,16 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials, definition):
     if prof["bivariate"]:
         h = _interp_draws(x_plot, _flat(post, prof["h"])[draws], ages)
         k_s = _interp_draws(x_plot, _flat(post, prof["ks"])[draws], ages)
-        q = expit(h + _study_draw(post, prof["tau_q"], draws, rng, n_draw) + dq_child)
-        series.append(("spoken_joint", _betabinom_draw(rng, y_u, q, k_s), frame["spoken"].to_numpy()))
+        q = expit(
+            h + _study_draw(post, prof["tau_q"], draws, rng, (n_draw, 1)) + dq_child
+        )
+        series.append(
+            (
+                "spoken_joint",
+                _betabinom_draw(rng, y_u, q, k_s),
+                frame["spoken"].to_numpy(),
+            )
+        )
         series.append(
             (
                 "spoken_given_observed_understood",
@@ -293,7 +322,10 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials, definition):
                     "hi89": hi89,
                     "in50": (observed >= lo50) & (observed <= hi50),
                     "in89": (observed >= lo89) & (observed <= hi89),
-                    "pit": [_pit(sample[:, i], observed[i], rng) for i in range(len(observed))],
+                    "pit": [
+                        _pit(sample[:, i], observed[i], rng)
+                        for i in range(len(observed))
+                    ],
                     "pred_over_form": np.mean(
                         sample > frame["survey_vocab_max"].to_numpy(), axis=0
                     ),
@@ -315,10 +347,15 @@ def study_offset(post, x_plot, frame, draws, n_trials, definition, n_nodes=25):
     the child effect integrated out by Gauss-Hermite quadrature, which handles a
     zero count as the ordinary Beta-Binomial event it is.
 
-    The child effect is integrated as a single Gaussian at its marginal scale for
-    the frame's median age. For a slope or factor model that scale is age-varying,
-    so this is an approximation to their exact marginal; it is the offset that is
-    being estimated, not the child structure.
+    Two approximations, both deliberate. The child effect is integrated as a
+    single Gaussian at its marginal scale for the frame's median age; for a
+    slope or factor model that scale is age-varying, so this is inexact for
+    them. And every row is integrated independently, so two visits of one child
+    are treated as two children: the point estimate is unaffected, but the
+    profile interval is narrower than the sampling error of the estimate on a
+    frame with repeat visits. The reference for that sampling error is the
+    simulation in ``predict_new_study_checks.py null``, which carries the
+    frame's own visit structure, not the interval reported here.
     """
     prof = engine_profile(post)
     structure = child_structure(post, definition)
@@ -328,7 +365,9 @@ def study_offset(post, x_plot, frame, draws, n_trials, definition, n_nodes=25):
     k_u = _interp_draws(x_plot, _flat(post, prof["ku"])[draws], ages).mean(axis=0)
 
     rng0 = np.random.default_rng(0)
-    probe = draw_child_params(post, definition, structure, draws, rng0, (len(draws), 400))
+    probe = draw_child_params(
+        post, definition, structure, draws, rng0, (len(draws), 400)
+    )
     du_probe, dq_probe = child_deltas(probe, np.full(400, float(np.median(ages))), ref)
     t_su = float(du_probe.std()) if structure != "none" else 0.0
     t_sq = float(dq_probe.std()) if structure != "none" else 0.0
@@ -343,12 +382,15 @@ def study_offset(post, x_plot, frame, draws, n_trials, definition, n_nodes=25):
             p = expit(centre[None, :] + delta + tau * nodes[:, None])
             p = np.clip(p, EPSILON, 1 - EPSILON)
             lp = betabinom.logpmf(
-                counts[None, :], trials[None, :], p * kappa[None, :], (1 - p) * kappa[None, :]
+                counts[None, :],
+                trials[None, :],
+                p * kappa[None, :],
+                (1 - p) * kappa[None, :],
             )
             ll[j] = np.sum(np.log(np.einsum("i,ij->j", weights, np.exp(lp)) + 1e-300))
         best = int(np.argmax(ll))
         keep = grid[ll >= ll[best] - 1.92]
-        return float(grid[best]), float(keep.min()), float(keep.max())
+        return float(grid[best]), float(keep.min()), float(keep.max()), float(ll[best])
 
     y_u = frame["understood"].to_numpy(dtype=np.int64)
     trials_u = np.full(y_u.size, n_trials, dtype=np.int64)
@@ -372,13 +414,14 @@ def study_offset(post, x_plot, frame, draws, n_trials, definition, n_nodes=25):
 
     rows = []
     for name, centre, kappa, counts, trials, tau, _scale, fitted_name in jobs:
-        est, lo, hi = profile(centre, kappa, counts, trials, tau)
+        est, lo, hi, ll_max = profile(centre, kappa, counts, trials, tau)
         row = {
             "quantity": name,
             "n_rows": int(counts.size),
             "estimated_offset": round(est, 3),
             "ci95_lo": round(lo, 3),
             "ci95_hi": round(hi, 3),
+            "max_loglik": round(ll_max, 3),
         }
         if fitted_name in post.data_vars:
             fitted = _flat(post, fitted_name).mean(axis=0)
@@ -398,8 +441,28 @@ def study_offset(post, x_plot, frame, draws, n_trials, definition, n_nodes=25):
     return pd.DataFrame(rows)
 
 
-def within_child(post, x_plot, frame, draws, rng, n_trials, definition, n_candidates=160):
-    """Item 3: condition on a child's first visit and predict their second."""
+def _normalised(logw):
+    logw = logw - logw.max(axis=2, keepdims=True)
+    w = np.exp(logw)
+    return w / w.sum(axis=2, keepdims=True)
+
+
+def within_child(
+    post, x_plot, frame, draws, rng, n_trials, definition, n_candidates=160, chunk=250
+):
+    """Item 3: condition on a child's first visit and predict their second.
+
+    Importance sampling over a candidate set of unseen children. Each candidate
+    carries its own study offset, drawn independently for the two outcomes at
+    the fitted between-study scales, on top of a child effect drawn from the
+    model's child structure. That makes the candidate set the exact per-child
+    prior of the quantity one visit identifies -- the sum of study and child
+    effect -- with the correlation applying to the child part only, as in the
+    model. Candidates are weighted by the visit-1 likelihood and one is
+    resampled per posterior draw for the visit-2 predictive sample; the
+    visit-2 log predictive density is the weighted average of the visit-2
+    likelihood over the same candidates.
+    """
     prof = engine_profile(post)
     if not prof["bivariate"]:
         return pd.DataFrame(), pd.DataFrame()
@@ -421,57 +484,78 @@ def within_child(post, x_plot, frame, draws, rng, n_trials, definition, n_candid
 
     a1 = first["age"].to_numpy(dtype=float)
     a2 = second["age"].to_numpy(dtype=float)
-    d = draws
-    f1 = _interp_draws(x_plot, _flat(post, prof["f"])[d], a1)
-    f2 = _interp_draws(x_plot, _flat(post, prof["f"])[d], a2)
-    h1 = _interp_draws(x_plot, _flat(post, prof["h"])[d], a1)
-    h2 = _interp_draws(x_plot, _flat(post, prof["h"])[d], a2)
-    ku1 = _interp_draws(x_plot, _flat(post, prof["ku"])[d], a1)
-    ku2 = _interp_draws(x_plot, _flat(post, prof["ku"])[d], a2)
-    ks1 = _interp_draws(x_plot, _flat(post, prof["ks"])[d], a1)
-    ks2 = _interp_draws(x_plot, _flat(post, prof["ks"])[d], a2)
-
-    nd, nc, nk = len(d), len(first), n_candidates
-    params = draw_child_params(post, definition, structure, d, rng, (nd, nc, nk))
-    # The study offset is common to both visits and only its sum with the child
-    # effect is identified from one visit, so it is folded into the intercepts.
-    params = params.copy()
-    params[..., 0] += _study_draw(post, prof["tau_u"], d, rng, nd)[..., None]
-    params[..., 2] += _study_draw(post, prof["tau_q"], d, rng, nd)[..., None]
-    cu1, cq1 = child_deltas(params, a1[:, None], ref)
-    cu2, cq2 = child_deltas(params, a2[:, None], ref)
-
     y_u1 = first["understood"].to_numpy()[None, :, None]
     y_s1 = first["spoken"].to_numpy()[None, :, None]
-    p1 = np.clip(expit(f1[:, :, None] + cu1), EPSILON, 1 - EPSILON)
-    q1 = np.clip(expit(h1[:, :, None] + cq1), EPSILON, 1 - EPSILON)
-    k_u1 = ku1[:, :, None]
-    k_s1 = ks1[:, :, None]
+    y_u2 = second["understood"].to_numpy()[None, :, None]
+    y_s2 = second["spoken"].to_numpy()[None, :, None]
+    curves = {k: _flat(post, prof[k]) for k in ("f", "h", "ku", "ks")}
 
-    logw = betabinom.logpmf(y_u1, n_trials, p1 * k_u1, (1 - p1) * k_u1)
-    logw += betabinom.logpmf(y_s1, y_u1, q1 * k_s1, (1 - q1) * k_s1)
-    logw -= logw.max(axis=2, keepdims=True)
-    w = np.exp(logw)
-    w /= w.sum(axis=2, keepdims=True)
+    nd, nc, nk = len(draws), len(first), n_candidates
+    sample_u = np.empty((nd, nc), dtype=np.int64)
+    sample_s = np.empty((nd, nc), dtype=np.int64)
+    sample_s_cond = np.empty((nd, nc), dtype=np.int64)
+    dens = {name: np.zeros(nc) for name in LPD_COLUMNS}
 
-    cum = np.cumsum(w, axis=2)
-    pick = (cum < rng.random((nd, nc, 1))).sum(axis=2).clip(0, nk - 1)
-    idx = np.take_along_axis(cu2, pick[:, :, None], axis=2)[:, :, 0]
-    idq = np.take_along_axis(cq2, pick[:, :, None], axis=2)[:, :, 0]
+    for start in range(0, nd, chunk):
+        d = draws[start : start + chunk]
+        m = len(d)
+        f1, f2 = (_interp_draws(x_plot, curves["f"][d], a) for a in (a1, a2))
+        h1, h2 = (_interp_draws(x_plot, curves["h"][d], a) for a in (a1, a2))
+        ku1, ku2 = (
+            _interp_draws(x_plot, curves["ku"][d], a)[:, :, None] for a in (a1, a2)
+        )
+        ks1, ks2 = (
+            _interp_draws(x_plot, curves["ks"][d], a)[:, :, None] for a in (a1, a2)
+        )
 
-    p2 = expit(f2 + idx)
-    q2 = expit(h2 + idq)
-    pu2 = _betabinom_draw(rng, n_trials, p2, ku2)
-    ps2 = _betabinom_draw(rng, pu2, q2, ks2)
-    ps2_cond = _betabinom_draw(
-        rng, np.broadcast_to(second["understood"].to_numpy()[None, :], q2.shape), q2, ks2
-    )
+        params = draw_child_params(post, definition, structure, d, rng, (m, nc, nk))
+        params[..., 0] += _study_draw(post, prof["tau_u"], d, rng, (m, nc, nk))
+        params[..., 2] += _study_draw(post, prof["tau_q"], d, rng, (m, nc, nk))
+        cu1, cq1 = child_deltas(params, a1[:, None], ref)
+        cu2, cq2 = child_deltas(params, a2[:, None], ref)
+
+        p1 = np.clip(expit(f1[:, :, None] + cu1), EPSILON, 1 - EPSILON)
+        q1 = np.clip(expit(h1[:, :, None] + cq1), EPSILON, 1 - EPSILON)
+        ll_u1 = betabinom.logpmf(y_u1, n_trials, p1 * ku1, (1 - p1) * ku1)
+        ll_s1 = betabinom.logpmf(y_s1, y_u1, q1 * ks1, (1 - q1) * ks1)
+        w_both = _normalised(ll_u1 + ll_s1)
+        w_u = _normalised(ll_u1)
+
+        p2 = np.clip(expit(f2[:, :, None] + cu2), EPSILON, 1 - EPSILON)
+        q2 = np.clip(expit(h2[:, :, None] + cq2), EPSILON, 1 - EPSILON)
+        pm_u2 = np.exp(betabinom.logpmf(y_u2, n_trials, p2 * ku2, (1 - p2) * ku2))
+        pm_s2 = np.exp(betabinom.logpmf(y_s2, y_u2, q2 * ks2, (1 - q2) * ks2))
+        dens["lpd_understood_given_both"] += (w_both * pm_u2).sum(axis=2).sum(axis=0)
+        dens["lpd_spoken_given_both"] += (w_both * pm_s2).sum(axis=2).sum(axis=0)
+        dens["lpd_understood_given_understood"] += (w_u * pm_u2).sum(axis=2).sum(axis=0)
+        dens["lpd_spoken_given_understood"] += (w_u * pm_s2).sum(axis=2).sum(axis=0)
+
+        cum = np.cumsum(w_both, axis=2)
+        pick = (cum < rng.random((m, nc, 1))).sum(axis=2).clip(0, nk - 1)
+        idu = np.take_along_axis(cu2, pick[:, :, None], axis=2)[:, :, 0]
+        idq = np.take_along_axis(cq2, pick[:, :, None], axis=2)[:, :, 0]
+        pu2 = _betabinom_draw(rng, n_trials, expit(f2 + idu), ku2[:, :, 0])
+        sample_u[start : start + m] = pu2
+        sample_s[start : start + m] = _betabinom_draw(
+            rng, pu2, expit(h2 + idq), ks2[:, :, 0]
+        )
+        sample_s_cond[start : start + m] = _betabinom_draw(
+            rng,
+            np.broadcast_to(y_u2[0, :, 0][None, :], (m, nc)),
+            expit(h2 + idq),
+            ks2[:, :, 0],
+        )
 
     out = []
     for name, t1_column, sample, observed in (
-        ("understood", "understood", pu2, second["understood"].to_numpy()),
-        ("spoken_joint", "spoken", ps2, second["spoken"].to_numpy()),
-        ("spoken_given_observed_understood", "spoken", ps2_cond, second["spoken"].to_numpy()),
+        ("understood", "understood", sample_u, second["understood"].to_numpy()),
+        ("spoken_joint", "spoken", sample_s, second["spoken"].to_numpy()),
+        (
+            "spoken_given_observed_understood",
+            "spoken",
+            sample_s_cond,
+            second["spoken"].to_numpy(),
+        ),
     ):
         lo50, hi50 = np.percentile(sample, [25, 75], axis=0)
         lo89, hi89 = np.percentile(sample, [5.5, 94.5], axis=0)
@@ -487,11 +571,64 @@ def within_child(post, x_plot, frame, draws, rng, n_trials, definition, n_candid
                     "pred_median": np.median(sample, axis=0),
                     "in50": (observed >= lo50) & (observed <= hi50),
                     "in89": (observed >= lo89) & (observed <= hi89),
-                    "pit": [_pit(sample[:, i], observed[i], rng) for i in range(len(observed))],
+                    "pit": [
+                        _pit(sample[:, i], observed[i], rng)
+                        for i in range(len(observed))
+                    ],
                 }
             )
         )
-    return pd.concat(out, ignore_index=True), first
+    lpd = pd.DataFrame(
+        {
+            "subject_id": second["subject_id"].to_numpy(),
+            "age_t1": a1,
+            "age_t2": a2,
+            **{name: np.log(dens[name] / nd + 1e-300) for name in LPD_COLUMNS},
+        }
+    )
+    return pd.concat(out, ignore_index=True), lpd
+
+
+def load_frame(path: str) -> tuple[pd.DataFrame, dict]:
+    """Read an external frame and apply the two admissibility rules.
+
+    Rows whose comprehension count exceeds the form are dropped (they are the
+    source's own flagged errors), and so are rows missing either outcome. The
+    fitted Down syndrome pool carries 448 spoken-only rows on a fallback
+    likelihood; a frame holding any would otherwise be compared against NaN,
+    which silently reads as a miss and deflates every coverage figure. Scoring
+    the fallback branch is separate work.
+    """
+    frame = pd.read_csv(path)
+    kept = frame[frame["understood"] <= frame["survey_vocab_max"]].copy()
+    over_form = len(frame) - len(kept)
+    complete = kept["understood"].notna() & kept["spoken"].notna()
+    incomplete = int((~complete).sum())
+    kept = kept[complete].copy()
+    kept["understood"] = kept["understood"].astype(np.int64)
+    kept["spoken"] = kept["spoken"].astype(np.int64)
+    if "timepoint" not in kept:
+        kept["timepoint"] = "t1"
+    counts = {
+        "rows_in_file": int(len(frame)),
+        "rows_dropped_exceeding_form": int(over_form),
+        "rows_dropped_missing_outcome": incomplete,
+        "rows_scored": int(len(kept)),
+        "children": int(kept["subject_id"].nunique()),
+    }
+    return kept.reset_index(drop=True), counts
+
+
+def load_posterior(model_key: str, root: str):
+    """The model of record's posterior, its plot grid and its total draw count."""
+    mdir = _model_dir(model_key, root)
+    tree = az.from_netcdf(os.path.join(mdir, "trace.nc"))
+    post = tree["posterior"]
+    x_plot = np.asarray(tree["constant_data"]["X_plot"]).ravel()
+    # Any sampled variable gives the draw count; univariate models carry no tau_u.
+    first = np.asarray(post[next(iter(post.data_vars))])
+    total = int(first.shape[0]) * int(first.shape[1])
+    return mdir, post, x_plot, total
 
 
 def main() -> None:
@@ -508,37 +645,20 @@ def main() -> None:
         raise SystemExit(f"unknown model {args.model!r}")
     set_output_root(args.out)
     root = output_root()
-    mdir = _model_dir(args.model, root)
     definition = MODEL_REGISTRY[args.model]
     n_trials = definition.n_trials
 
-    frame = pd.read_csv(args.frame)
-    kept = frame[frame["understood"] <= frame["survey_vocab_max"]].copy()
-    over_form = len(frame) - len(kept)
-    # Both outcomes must be present. The fitted Down syndrome pool carries 448
-    # spoken-only rows on a fallback likelihood; a frame holding any would
-    # otherwise be compared against NaN, which silently reads as a miss and
-    # deflates every coverage figure. Scoring the fallback branch is separate work.
-    complete = kept["understood"].notna() & kept["spoken"].notna()
-    incomplete = int((~complete).sum())
-    kept = kept[complete].copy()
-    kept["understood"] = kept["understood"].astype(np.int64)
-    kept["spoken"] = kept["spoken"].astype(np.int64)
-    if "timepoint" not in kept:
-        kept["timepoint"] = "t1"
+    kept, counts = load_frame(args.frame)
     print(
-        f"[frame] {args.frame}: {len(frame)} rows; dropped {over_form} exceeding the form "
-        f"and {incomplete} missing an outcome"
+        f"[frame] {args.frame}: {counts['rows_in_file']} rows; dropped "
+        f"{counts['rows_dropped_exceeding_form']} exceeding the form and "
+        f"{counts['rows_dropped_missing_outcome']} missing an outcome"
     )
-    print(f"[frame] scoring {len(kept)} rows, {kept['subject_id'].nunique()} children")
+    print(
+        f"[frame] scoring {counts['rows_scored']} rows, {counts['children']} children"
+    )
 
-    tree = az.from_netcdf(os.path.join(mdir, "trace.nc"))
-    post = tree["posterior"]
-    x_plot = np.asarray(tree["constant_data"]["X_plot"]).ravel()
-    # Any scalar parameter gives the draw count; univariate models carry no tau_u.
-    total = int(np.asarray(post[next(iter(post.data_vars))]).shape[0]) * int(
-        np.asarray(post[next(iter(post.data_vars))]).shape[1]
-    )
+    mdir, post, x_plot, total = load_posterior(args.model, root)
     rng = np.random.default_rng(args.seed)
     draws = rng.choice(total, size=min(args.draws, total), replace=False)
     print(f"[trace] {mdir}: {total} draws, using {draws.size}")
@@ -566,11 +686,19 @@ def main() -> None:
     off = study_offset(post, x_plot, kept, draws, n_trials, definition)
     off.to_csv(os.path.join(odir, f"oos_study_offset_{args.model}.csv"), index=False)
 
-    cond, _ = within_child(post, x_plot, kept, draws, rng, n_trials, definition)
+    cond, lpd = within_child(post, x_plot, kept, draws, rng, n_trials, definition)
     if not cond.empty:
-        cond.to_csv(os.path.join(odir, f"oos_within_child_{args.model}.csv"), index=False)
-        cond_cov = _coverage_table(cond.assign(subject_id=cond["subject_id"]), "outcome")
-        cond_cov.to_csv(os.path.join(odir, f"oos_within_child_coverage_{args.model}.csv"), index=False)
+        cond.to_csv(
+            os.path.join(odir, f"oos_within_child_{args.model}.csv"), index=False
+        )
+        cond_cov = _coverage_table(cond, "outcome")
+        cond_cov.to_csv(
+            os.path.join(odir, f"oos_within_child_coverage_{args.model}.csv"),
+            index=False,
+        )
+        lpd.to_csv(
+            os.path.join(odir, f"oos_within_child_lpd_{args.model}.csv"), index=False
+        )
 
     manifest = {
         "generated_at_utc": datetime.now(UTC).isoformat(),
@@ -578,24 +706,24 @@ def main() -> None:
         "model_dir": mdir,
         "frame": os.path.abspath(args.frame),
         "frame_sha256": hashlib.sha256(open(args.frame, "rb").read()).hexdigest(),
-        "rows_in_file": int(len(frame)),
-        "rows_dropped_exceeding_form": int(over_form),
-        "rows_dropped_missing_outcome": int(incomplete),
-        "rows_scored": int(len(kept)),
-        "children": int(kept["subject_id"].nunique()),
+        **counts,
         "posterior_draws_used": int(draws.size),
         "seed": args.seed,
         "n_trials": int(n_trials),
+        "coverage_age_bands": AGE_BANDS,
+        "within_child_candidates": 160,
     }
     fit_manifest = os.path.join(mdir, "fit_manifest.json")
     if os.path.exists(fit_manifest):
         with open(fit_manifest, encoding="utf-8") as fh:
             fm = json.load(fh)
         manifest["contributing_fit"] = {
-            "analysis_frame_hash": fm.get("data", {}).get("analysis_frame_hash"),
-            "sampling_config": fm.get("sampling", {}).get("config_name"),
+            **fit_manifest_fingerprint(mdir),
+            "sampling_config": fm.get("sampling", {}).get("configuration_name"),
         }
-    with open(os.path.join(odir, f"oos_manifest_{args.model}.json"), "w", encoding="utf-8") as fh:
+    with open(
+        os.path.join(odir, f"oos_manifest_{args.model}.json"), "w", encoding="utf-8"
+    ) as fh:
         json.dump(manifest, fh, indent=2)
 
     print(f"\n[written] {odir}")
@@ -606,6 +734,8 @@ def main() -> None:
     if not cond.empty:
         print("\n=== second visit predicted from the first")
         print(cond_cov.to_string(index=False))
+        print("\n=== second-visit log predictive density, summed over children")
+        print(lpd[list(LPD_COLUMNS)].sum().round(2).to_string())
 
 
 if __name__ == "__main__":
