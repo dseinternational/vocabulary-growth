@@ -570,6 +570,7 @@ Two report blocks read artefacts the fit itself does not write, and print a "run
 ```bash
 python scripts/prior_vs_posterior.py --table --model vg20 --model vg15   # writes prior_posterior_contraction.csv into each fit dir
 python scripts/emit_factor_correlation.py <output>/models/VG22-*/         # writes subject_factor_corr.csv for the factor model
+python scripts/regenerate_plots.py all --config rep --output-dir <scratch>   # re-runs the plot stage: since 2026-09-03 the joint RE pages reference study_fans.png and posterior_summary_monthly_weighted_{u,s}.csv, and the words/ratio figures carry the observed children, none of which a fit made before that date wrote
 ```
 
 A template change is applied to an existing fit with `--render-only`, which re-stages `docs/models/<model>/index.qmd` **and** every `docs/models/_*.qmd` include beside it (the bivariate random-effects family transcludes one). Since 2026-09-02 that is a fresh render of every page, not only the changed ones, because the shared blocks changed.
