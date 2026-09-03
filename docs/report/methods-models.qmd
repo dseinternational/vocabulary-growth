@@ -100,7 +100,7 @@ print_small_table(
 
 #### Sensitivity analysis
 
-Finally, we conducted a sensitivity analysis where models were refitted using only the administrations recorded natively on the 810-item DSE checklists, so that no count is scored against a maximum its form did not use. This restriction keeps 278 of the 1,521 administrations in the Down syndrome pool (194 children from four sources, spanning 9 to 115 months), so the restricted fits inform the comparison only where their coverage overlaps the full pool's.
+Finally, we conducted a sensitivity analysis where models were refitted using only the administrations recorded natively on the 810-item DSE checklists, so that no count is scored against a maximum its form did not use. This restriction keeps 277 of the 1,516 administrations in the Down syndrome pool (194 children from four sources, spanning 9 to 115 months), so the restricted fits inform the comparison only where their coverage overlaps the full pool's.
 
 [**TODO**: figures from latest refit]
 
