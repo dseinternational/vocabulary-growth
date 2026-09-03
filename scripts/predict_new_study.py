@@ -77,6 +77,18 @@ def _flat(posterior, name: str) -> np.ndarray:
     return v.reshape(-1, *v.shape[2:])
 
 
+def _rho(posterior, draws) -> np.ndarray:
+    """Child-effect correlation, or zero for a model that does not carry one.
+
+    VG09, VG10 and VG16 give a child independent comprehension and conversion
+    effects; VG20 and VG22 estimate the correlation between them. Treating an
+    absent ``rho_uq`` as zero is what those models assume, not a convenience.
+    """
+    if "rho_uq" in posterior.data_vars:
+        return np.clip(_flat(posterior, "rho_uq")[draws], -0.999, 0.999)
+    return np.zeros(len(draws))
+
+
 def _betabinom_draw(rng, n, p, kappa):
     p = np.clip(p, EPSILON, 1.0 - EPSILON)
     theta = rng.beta(p * kappa, (1.0 - p) * kappa)
@@ -120,7 +132,7 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials):
     tau_q = _flat(post, "tau_q")[draws][:, None]
     t_su = _flat(post, "tau_subj_u")[draws][:, None]
     t_sq = _flat(post, "tau_subj_q")[draws][:, None]
-    rho = _flat(post, "rho_uq")[draws][:, None]
+    rho = _rho(post, draws)[:, None]
 
     n_draw = f_u.shape[0]
     codes, _ = pd.factorize(frame["subject_id"])
@@ -133,7 +145,7 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials):
     # One correlated child-effect pair per child per draw.
     zu = rng.standard_normal((n_draw, n_child))
     zq = rng.standard_normal((n_draw, n_child))
-    rho_c = np.clip(rho, -0.999, 0.999)
+    rho_c = rho
     du_child = (zu * t_su)[:, codes]
     dq_child = ((rho_c * zu + np.sqrt(1.0 - rho_c**2) * zq) * t_sq)[:, codes]
 
@@ -274,7 +286,7 @@ def within_child(post, x_plot, frame, draws, rng, n_trials, n_candidates=160):
     # effect is identified from one visit, so it is absorbed here.
     su = np.sqrt(_flat(post, "tau_subj_u")[d] ** 2 + _flat(post, "tau_u")[d] ** 2)[:, None, None]
     sq = np.sqrt(_flat(post, "tau_subj_q")[d] ** 2 + _flat(post, "tau_q")[d] ** 2)[:, None, None]
-    rho = np.clip(_flat(post, "rho_uq")[d], -0.999, 0.999)[:, None, None]
+    rho = _rho(post, d)[:, None, None]
 
     nd, nc, nk = len(d), len(first), n_candidates
     zu = rng.standard_normal((nd, nc, nk))
