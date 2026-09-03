@@ -1,0 +1,39 @@
+<!--
+Page 3 of 10. Exported to dsegroup/content as content-en-gb.md; the page's
+folder name is this file's stem. No front matter here: this page is also
+included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+
+This page is the worked example: one sentence whose numbers are computed from
+the fitted output through the helpers in _summary_data.qmd, and the component
+placeholder that stands in for the static figure on the site.
+-->
+
+{{< include _summary_data.qmd >}}
+
+# Words understood
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure and one worked sentence.
+:::
+
+<!--
+Outline (sketch note §9, item 3): component 6.1, understood; number-bearing
+sentences at 2, 3, 4 and 5 years. Nothing below is typed: every number is a
+helper call, exported with a binding the site component refreshes live.
+-->
+
+At `{python} years_months(36)`, half of the children in these studies understood `{python} interval_at(36, "understood")` of the `{python} N_WORDS` words on the list, and the middle estimate is `{python} median_at(36, "understood")` words. About `{python} one_in_below(36, "understood", 50)` understood fewer than 50.
+
+[TODO: the same at 2, 4 and 5 years, and the 1-in-20 tails via `interval_at(age, "understood", 0.89)`.]
+
+::: {.content-visible when-format="gfm"}
+<div data-chart-id="0.0.0/charts/vocabulary-growth/words-by-age" data-chart-outcome="understood">
+Please enable JavaScript to explore how many words children understand at each age.
+</div>
+:::
+
+::: {.content-visible unless-format="gfm"}
+![Words understood by age: the expected count for a child not in the data, with its 50% and 89% bands, from the model of record.](../report/figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/expected_counts_by_month_u){#fig-words-understood}
+:::
+
+<!-- Reporting cap: comprehension is reported to `{python} cap("understood")` months (vocab_growth.reporting_ages). -->

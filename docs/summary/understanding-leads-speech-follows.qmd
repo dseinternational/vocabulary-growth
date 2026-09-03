@@ -1,0 +1,33 @@
+<!--
+Page 5 of 10. Exported to dsegroup/content as content-en-gb.md; the page's
+folder name is this file's stem. No front matter here: this page is also
+included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+-->
+
+{{< include _summary_data.qmd >}}
+
+# Understanding leads, speech follows
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+:::
+
+<!--
+Outline (sketch note §9, item 5): component 6.2 — the gap between words
+understood and words spoken, the production ratio, and that the early
+bottleneck is expressive rather than receptive.
+-->
+
+[TODO: the gap, and how it closes.]
+
+[TODO: the share of understood words a child says, by age.]
+
+::: {.content-visible when-format="gfm"}
+<div data-chart-id="0.0.0/charts/vocabulary-growth/understood-and-spoken">
+Please enable JavaScript to see words understood and words spoken together.
+</div>
+:::
+
+::: {.content-visible unless-format="gfm"}
+![Words understood and words spoken by age, with their credible intervals.](../report/figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/joint_trajectory_intervals){#fig-joint}
+:::

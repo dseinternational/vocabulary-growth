@@ -1,0 +1,179 @@
+<!--
+Shared data helpers for the summary pages. Included via
+{{< include _summary_data.qmd >}} at the top of every page, so that no number in
+the prose is typed: each is computed from the fitted output and exported with a
+binding the site component refreshes live (sketch note
+notes/202609031500-parent-practitioner-report-sketch.md, §6.4 and §8).
+
+The cell is deliberately unlabelled. all.qmd includes every page, and a labelled
+cell included ten times is a duplicate-label error; an unlabelled one is simply
+re-run, which costs nothing.
+
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+-->
+
+```{python}
+#| echo: false
+#| include: false
+import math
+from pathlib import Path
+
+from IPython.display import Markdown
+from dse_research_utils.report.data import ReportData
+from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.reporting_ages import ReportedQuantity, max_age_for
+
+# --- Source ------------------------------------------------------------------
+# The sketch note (§5) specifies a prediction pack exported from the models of
+# record. Until scripts/export_prediction_pack.py exists, the pack is assembled
+# here from the report figure cache (docs/report/figures/<MODEL_ID>-<config>/),
+# the validated store the technical report reads, through the same resolver as
+# docs/report/_report_data.qmd. Only this section changes when the pack lands;
+# the vocabulary below is the pack's, and it is all the pages use.
+
+FIG_ROOT = Path("../report/figures")
+_DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
+_report = ReportData(lambda model_id, _config: FIG_ROOT / _DIR_BY_ID[model_id])
+
+DS_MODEL = "VG20"  # model of record for the Down syndrome joint estimands
+N_WORDS = 810  # every count on every page is out of this reference list
+MISSING = "—"
+
+_OUTCOME_SUFFIX = {"understood": "u", "spoken": "s"}
+_QUANTITY = {"understood": ReportedQuantity.UNDERSTOOD, "spoken": ReportedQuantity.SPOKEN}
+_DEFINITION = MODEL_REGISTRY[DS_MODEL.lower()]
+
+
+def _by_age(outcome):
+    """Monthly predictive table for an outcome, indexed by whole month.
+
+    Trimmed to the outcome's reporting cap (vocab_growth.reporting_ages): the
+    monthly companions run the full observed age range, and the cap is the
+    project's decision about where the evidence stops.
+    """
+    name = f"posterior_summary_monthly_{_OUTCOME_SUFFIX[outcome]}"
+    df = _report.load_summary(DS_MODEL, name)
+    if df is None:
+        return None
+    cap = max_age_for(_DEFINITION, _QUANTITY[outcome])
+    if cap is not None:
+        df = df[df["age_months"] <= cap]
+    return df.set_index(df["age_months"].round().astype(int))
+
+
+PACK = {
+    "understood_by_age": _by_age("understood"),
+    "spoken_by_age": _by_age("spoken"),
+    "manifest": {"model": DS_MODEL, "label": _DIR_BY_ID[DS_MODEL], "n_words": N_WORDS},
+}
+
+# --- Vocabulary --------------------------------------------------------------
+# Every helper returns a Markdown object carrying <span data-vg="key">value</span>.
+# The value is baked into the Markdown export, the DOCX and the PDF; on the site
+# the component re-renders each bound span from the pack it loaded. A plain
+# string containing HTML would be escaped and smart-quoted by the Markdown
+# export, so the Markdown object is what passes it through. Keys read
+# "<statistic>:<age in months>:<outcome>[:<argument>]"; the component parses
+# the same grammar, and the two must stay in step.
+
+
+def bound(key, value):
+    """A number for prose: baked here, refreshed live on the site."""
+    return Markdown(f'<span data-vg="{key}">{value}</span>')
+
+
+def _row(age, outcome):
+    table = PACK[f"{outcome}_by_age"]
+    if table is None or age not in table.index:
+        return None
+    return table.loc[age]
+
+
+def _count(value):
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return MISSING
+    return f"{int(round(value)):d}"
+
+
+_BANDS = {0.5: ("Y_ci50_lo", "Y_ci50_hi"), 0.89: ("Y_ci_lo", "Y_ci_hi")}
+
+
+def median_at(age, outcome):
+    """The predictive median count for a child not in the data."""
+    row = _row(age, outcome)
+    return bound(f"median:{age}:{outcome}", MISSING if row is None else _count(row["Y_median"]))
+
+
+def lower_at(age, outcome, prob=0.5):
+    """Lower end of the 50% (default) or 89% predictive interval."""
+    row = _row(age, outcome)
+    pct = int(round(prob * 100))
+    value = MISSING if row is None else _count(row[_BANDS[prob][0]])
+    return bound(f"lower{pct}:{age}:{outcome}", value)
+
+
+def upper_at(age, outcome, prob=0.5):
+    """Upper end of the 50% (default) or 89% predictive interval."""
+    row = _row(age, outcome)
+    pct = int(round(prob * 100))
+    value = MISSING if row is None else _count(row[_BANDS[prob][1]])
+    return bound(f"upper{pct}:{age}:{outcome}", value)
+
+
+def interval_at(age, outcome, prob=0.5):
+    """'between X and Y', both ends bound, for the 50% (default) or 89% interval."""
+    lo, hi = lower_at(age, outcome, prob), upper_at(age, outcome, prob)
+    return Markdown(f"between {lo.data} and {hi.data}")
+
+
+def share_below(age, outcome, k):
+    """P(count <= k) as a percentage; k must be one of the pack's thresholds."""
+    row = _row(age, outcome)
+    col = f"P(Y<={k})"
+    value = MISSING if row is None or col not in row.index else f"{100 * row[col]:.0f}%"
+    return bound(f"share_below:{age}:{outcome}:{k}", value)
+
+
+def one_in_below(age, outcome, k):
+    """'1 in N' for P(count <= k), for prose that avoids percentages."""
+    row = _row(age, outcome)
+    col = f"P(Y<={k})"
+    if row is None or col not in row.index or row[col] <= 0:
+        value = MISSING
+    else:
+        value = f"1 in {round(1 / row[col]):d}"
+    return bound(f"one_in_below:{age}:{outcome}:{k}", value)
+
+
+def n_obs(age, outcome):
+    """Administrations observing this outcome in that month (the sparse-data guard)."""
+    row = _row(age, outcome)
+    return bound(f"n_obs:{age}:{outcome}", MISSING if row is None else _count(row["n_obs"]))
+
+
+def cap(outcome):
+    """The age, in months, to which the outcome is reported."""
+    value = max_age_for(_DEFINITION, _QUANTITY[outcome])
+    return MISSING if value is None else f"{value:.0f}"
+
+
+def years_months(age):
+    """An age in months as words: '3 years', '2 years 6 months', '18 months'."""
+    years, months = divmod(int(age), 12)
+    if years == 0:
+        return f"{months} months"
+    text = f"{years} year" + ("" if years == 1 else "s")
+    if months:
+        text += f" {months} month" + ("" if months == 1 else "s")
+    return text
+
+
+def generated_from():
+    """One phrase naming the fit behind every number on the page.
+
+    The pack manifest will carry the fit's identity, sampling configuration and
+    creation time; until then this names the model of record and its output.
+    """
+    manifest = PACK["manifest"]
+    return bound("generated_from", f"{manifest['label']} (model of record {manifest['model']})")
+```

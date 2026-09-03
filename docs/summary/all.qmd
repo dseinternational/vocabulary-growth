@@ -1,0 +1,83 @@
+---
+title: "Vocabulary growth in children with Down syndrome"
+subtitle: "A summary for parents and practitioners"
+date: now
+author:
+  - name: Frank Buckley
+    orcid: 0000-0002-9708-2705
+    affiliations:
+      - name: Down Syndrome Education International
+        state: Cumbria
+        country: UK
+  - name: Sue Buckley
+    orcid: 0000-0002-9044-3088
+    affiliations:
+      - name: Down Syndrome Education International
+        state: Cumbria
+        country: UK
+      - name: University of Portsmouth
+        city: Portsmouth
+        state: Hampshire
+        country: UK
+toc: true
+number-sections: false
+format:
+  docx:
+    reference-doc: ../template.docx
+    default-image-extension: png
+  pdf:
+    documentclass: article
+    papersize: a4
+    colorlinks: true
+    link-citations: true
+    fontsize: 11pt
+    mainfont: "Source Sans 3"
+    sansfont: "Source Sans 3"
+    monofont: "Monaspace Neon"
+    monofontoptions: "Scale=0.8125"
+    linestretch: 1.25
+    geometry:
+      - top=25mm
+      - left=25mm
+      - right=25mm
+      - bottom=25mm
+    include-in-header: footer.tex
+    default-image-extension: png
+---
+
+<!--
+The combined review document: every site page, in order, as one DOCX or PDF
+for partners to read before publication. Not rendered by a bare `quarto render`
+(see _quarto.yml); use `quarto render all.qmd --to docx` or `--to pdf`.
+The pages carry no front matter of their own so that they can be included here
+and exported on their own to Markdown. Keep this list in step with README.md.
+-->
+
+::: {.callout-important title="Skeleton"}
+This is the structure of the summary report, not a draft of it. Every page is a placeholder except where a sentence demonstrates how quoted numbers are computed from the fitted output. Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+:::
+
+{{< include what-this-is.qmd >}}
+
+{{< include how-to-read-a-range.qmd >}}
+
+{{< include words-understood.qmd >}}
+
+{{< include words-spoken.qmd >}}
+
+{{< include understanding-leads-speech-follows.qmd >}}
+
+{{< include if-you-know-words-understood.qmd >}}
+
+{{< include signing.qmd >}}
+
+{{< include compared-with-typically-developing-children.qmd >}}
+
+{{< include what-these-numbers-are-not.qmd >}}
+
+{{< include where-the-numbers-come-from.qmd >}}
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

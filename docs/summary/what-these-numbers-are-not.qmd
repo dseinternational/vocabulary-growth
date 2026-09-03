@@ -1,0 +1,25 @@
+<!--
+Page 9 of 10. Exported to dsegroup/content as content-en-gb.md; the page's
+folder name is this file's stem. No front matter here: this page is also
+included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+-->
+
+{{< include _summary_data.qmd >}}
+
+# What these numbers are not
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+:::
+
+<!--
+Outline (sketch note §9, item 9): not a diagnosis, not a target, not a
+description of any one child; what the studies are (countries, years,
+instruments, that several are intervention cohorts); what the models leave out.
+-->
+
+[TODO: not a diagnosis, not a target, not a description of any one child.]
+
+[TODO: what the studies are.]
+
+[TODO: what the models leave out.]

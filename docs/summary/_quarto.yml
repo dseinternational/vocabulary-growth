@@ -1,0 +1,41 @@
+project:
+  type: default
+  output-dir: ../../output/summary
+  # Everything renders into output/summary/: the pages to Markdown (the
+  # project format below) and all.qmd, which declares its own DOCX and PDF
+  # formats, to those. `quarto render docs/summary --to gfm` is the quick site
+  # export; a bare render also builds the review document, which needs LaTeX.
+  # (Excluding all.qmd from the project made Quarto treat it as a standalone
+  # document and write its output beside the source.)
+
+jupyter: python3
+
+execute:
+  # The cells here read a small pack and cost nothing, so nothing is frozen.
+  # `freeze: auto` cannot see edits to included files, and `_summary_data.qmd`
+  # is included by every page (the report hit this: docs/report/_quarto.yml).
+  freeze: false
+  echo: false
+  warning: false
+
+bibliography: ../report/references.bib
+csl: ../report/apa.csl
+
+# Figures are referenced without an extension; the report figure cache holds
+# both PNG and SVG, and PNG is what DOCX and PDF want.
+default-image-extension: png
+
+format:
+  gfm:
+    # The published format: one Markdown body per site page, imported into
+    # dsegroup/content as content-en-gb.md. Quarto would export callouts as
+    # GitHub alert syntax, which the content system's Markdig pipeline does not
+    # parse; the filter rewrites them as the raw-HTML alert blocks the site's
+    # own pages use. It is listed before `quarto` so it sees the callout Div
+    # before Quarto's own filters rewrite it.
+    filters:
+      - filters/callouts-to-html.lua
+      - quarto
+    # One line per paragraph, matching the project's Markdown convention and
+    # the content repository's (prose is never hard-wrapped).
+    wrap: none
