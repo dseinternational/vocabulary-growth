@@ -589,8 +589,8 @@ python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re
 # model output, so nothing regenerates them. Regenerate AFTER every sync, or
 # `quarto render docs/report` fails on a missing file:
 python scripts/prepare_report_figures.py
-# Pin Quarto's python to the project venv for BOTH book renders: a bare `quarto render`
-# resolved a python without pyyaml on 2026-09-03 and both books died in their first
+# Pin Quarto's Python interpreter to the project environment for BOTH book renders: a bare `quarto render`
+# resolved a Python interpreter without the `yaml` package on 2026-09-03 and both books died in their first
 # cell with `ModuleNotFoundError: No module named 'yaml'`. fit_model.py pins this for
 # the per-model pages; nothing pins it for the books.
 export QUARTO_PYTHON="$(python -c 'import sys; print(sys.executable)')"
