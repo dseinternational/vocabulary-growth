@@ -589,13 +589,23 @@ python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re
 # model output, so nothing regenerates them. Regenerate AFTER every sync, or
 # `quarto render docs/report` fails on a missing file:
 python scripts/prepare_report_figures.py
+# Pin Quarto's python to the project venv for BOTH book renders: a bare `quarto render`
+# resolved a python without pyyaml on 2026-09-03 and both books died in their first
+# cell with `ModuleNotFoundError: No module named 'yaml'`. fit_model.py pins this for
+# the per-model pages; nothing pins it for the books.
+export QUARTO_PYTHON="$(python -c 'import sys; print(sys.executable)')"
 quarto render docs/report
 # the comparison book reads its CSV/PNG artefacts by BARE filename from its own dir,
-# and sync_report_figures only populates docs/report/figures/ — so stage them first:
-cp <scratch>/comparisons/* docs/comparison/                    # (gitignored)
+# and sync_report_figures only populates docs/report/figures/ — so stage them first.
+# Files only: `cp <scratch>/comparisons/*` exits non-zero on the `sensitivity/`
+# subdirectory (`cp: -r not specified`) after copying everything else, which reads
+# as a failed step.
+find <scratch>/comparisons -maxdepth 1 -type f -exec cp -a {} docs/comparison/ \;   # (gitignored)
 cp <scratch>/comparisons/recovery/*.csv docs/comparison/       # only if a chapter cites recovery
 quarto render docs/comparison/index.qmd
 ```
+
+Two more things the 2026-09-03 tail found. The **first** `sync_report_figures` in the block above fails with "comparison_manifest.json is missing" whenever `output/comparisons/` already holds artefacts from a script run outside the tail (a smoke run of `compare_ds_td_re.py`, say) and no comparison script that writes a manifest has run since: the sync validates the comparison directory as a whole, and a directory with artefacts and no manifest is invalid. Either clear the directory first or accept that the first sync validates the fits and fails on the comparisons, and rely on the second. And `check_fit.py all --purpose publish` has no caveat allowance: a fit that cleared R-hat and ESS but carries a divergence or a BFMI below 0.3 is reported `[invalid]` there even though `sync_report_figures --allow-caveats` and `upload.py --allow-caveats` accept it. On 2026-09-03 six fits were in that state (VG11, VG12, VG13, VG21, VG22, VG23); the decision to publish them under `--allow-caveats` is recorded in `output/run-record.md`, and the checklist item below is therefore not met by them.
 
 **A provisional fit of _any_ registered model blocks the whole sync.** `sync_report_figures` validates every directory under `output/models/` whose name resolves to a registered model, and one failure aborts the run for all of them — by design, so a half-valid figure cache never reaches the report. The trap is that **registering a new model makes its output subject to that check immediately**, long before anyone intends to publish it. A `dev` fit of VG20, made only to prove its pipeline ran, failed with `Sampling configuration mismatch: found 'dev', expected 'rep'` and took the other fifteen models' sync down with it.
 
