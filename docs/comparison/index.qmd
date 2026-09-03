@@ -623,28 +623,41 @@ if _rr is not None:
 #| echo: false
 #| output: asis
 _r0 = he_u.iloc[0]
-# The DS comprehension scale is `tau_subj_u`, which is the parameter recovery
-# measures as biased: -5.81% on VG20 (model of record) and -5.57% on VG10.
-# Neither carries `subject_variance_partition`. See issue #225.
-_ds_bias = -0.0581
-_one_sided = (_r0["tau_TD_median"] / (1.0 + _bias)) / _r0["tau_DS_median"]
-_both_sides = (_r0["tau_TD_median"] / (1.0 + _bias)) / (_r0["tau_DS_median"] / (1.0 + _ds_bias))
-print(
-    f"$\\tau_{{subject}}$ is the typically-developing side of this contrast, and "
-    f"the Down syndrome side is the same quantity in the same engine — which "
-    f"recovery finds low by {_ds_bias:+.1%} on the model of record and -5.6% on "
-    f"its predecessor, against {_bias:+.1%} here. Correcting only the "
-    f"typically-developing side would move the ratio TD/DS from "
-    f"{_r0['tau_ratio_median']:.3f} to {_one_sided:.2f} and make the reported "
-    f"difference look overstated. Correcting **both** leaves it at "
-    f"{_both_sides:.3f}: a proportional bias shared by numerator and denominator "
-    f"cancels, and only the difference between the two sides survives. So the "
-    f"caveat falls on the absolute between-child standard deviations, not on the "
-    f"contrast between them."
-)
+if _rr is None:
+    print(
+        "The bias-corrected form of this ratio — the typically developing side "
+        "divided by (1 + the VG12 recovery bias) against the Down syndrome side "
+        "divided by (1 + the VG20 recovery bias) — is not computed in a cycle that "
+        "has not run parameter recovery, and the recovery biases of an earlier "
+        "cycle's fits are not restated against these. The argument that a "
+        "proportional bias shared by numerator and denominator cancels, so that "
+        "the caveat falls on the absolute between-child standard deviations and "
+        "not on the contrast between them, does not depend on the numbers and "
+        "stands."
+    )
+else:
+    # The DS comprehension scale is `tau_subj_u`, which is the parameter recovery
+    # measures as biased: -5.81% on VG20 (model of record) and -5.57% on VG10.
+    # Neither carries `subject_variance_partition`. See issue #225.
+    _ds_bias = -0.0581
+    _one_sided = (_r0["tau_TD_median"] / (1.0 + _bias)) / _r0["tau_DS_median"]
+    _both_sides = (_r0["tau_TD_median"] / (1.0 + _bias)) / (_r0["tau_DS_median"] / (1.0 + _ds_bias))
+    print(
+        f"$\\tau_{{subject}}$ is the typically-developing side of this contrast, and "
+        f"the Down syndrome side is the same quantity in the same engine — which "
+        f"recovery finds low by {_ds_bias:+.1%} on the model of record and -5.6% on "
+        f"its predecessor, against {_bias:+.1%} here. Correcting only the "
+        f"typically-developing side would move the ratio TD/DS from "
+        f"{_r0['tau_ratio_median']:.3f} to {_one_sided:.2f} and make the reported "
+        f"difference look overstated. Correcting **both** leaves it at "
+        f"{_both_sides:.3f}: a proportional bias shared by numerator and denominator "
+        f"cancels, and only the difference between the two sides survives. So the "
+        f"caveat falls on the absolute between-child standard deviations, not on the "
+        f"contrast between them."
+    )
 ```
 
-The direction is solid — the between-child scale comes back low in nine of nine replicates across three models, and it survives at the reporting tier, where estimates move by at most 0.19% of the truth. The magnitude is roughly 3–6% and should not be quoted more precisely than that. **The mechanism is not established.** The reparameterisation this was first attributed to is carried by only one of the three models that show it, and the sampling tier, the priors' location, the operating proportion and the dispersion parameterisation have each been tested and eliminated. One limit on the cancellation argument above: it holds for comprehension, where both sides read the same parameter. The spoken Down syndrome scale is derived through the $p_U \times q$ product and has not been measured, so the cross-outcome reading is not established either way. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md` and the issue thread.
+Where parameter recovery has run, the direction is solid — the between-child scale comes back low in nine of nine replicates across three models, and it survives at the reporting tier, where estimates move by at most 0.19% of the truth. The magnitude is roughly 3–6% and should not be quoted more precisely than that. **The mechanism is not established.** The reparameterisation this was first attributed to is carried by only one of the three models that show it, and the sampling tier, the priors' location, the operating proportion and the dispersion parameterisation have each been tested and eliminated. One limit on the cancellation argument above: it holds for comprehension, where both sides read the same parameter. The spoken Down syndrome scale is derived through the $p_U \times q$ product and has not been measured, so the cross-outcome reading is not established either way. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md` and the issue thread.
 :::
 
 Two further caveats bound how far this contrast can be pushed. First, the priors
