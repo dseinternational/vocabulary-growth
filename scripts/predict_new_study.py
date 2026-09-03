@@ -309,10 +309,10 @@ def within_child(post, x_plot, frame, draws, rng, n_trials, n_candidates=160):
     )
 
     out = []
-    for name, sample, observed in (
-        ("understood", pu2, second["understood"].to_numpy()),
-        ("spoken_joint", ps2, second["spoken"].to_numpy()),
-        ("spoken_given_observed_understood", ps2_cond, second["spoken"].to_numpy()),
+    for name, t1_column, sample, observed in (
+        ("understood", "understood", pu2, second["understood"].to_numpy()),
+        ("spoken_joint", "spoken", ps2, second["spoken"].to_numpy()),
+        ("spoken_given_observed_understood", "spoken", ps2_cond, second["spoken"].to_numpy()),
     ):
         lo50, hi50 = np.percentile(sample, [25, 75], axis=0)
         lo89, hi89 = np.percentile(sample, [5.5, 94.5], axis=0)
@@ -323,7 +323,7 @@ def within_child(post, x_plot, frame, draws, rng, n_trials, n_candidates=160):
                     "subject_id": second["subject_id"].to_numpy(),
                     "age_t1": a1,
                     "age_t2": a2,
-                    "observed_t1": first["understood" if "understood" in name else "spoken"].to_numpy(),
+                    "observed_t1": first[t1_column].to_numpy(),
                     "observed": observed,
                     "pred_median": np.median(sample, axis=0),
                     "in50": (observed >= lo50) & (observed <= hi50),
@@ -355,10 +355,22 @@ def main() -> None:
 
     frame = pd.read_csv(args.frame)
     kept = frame[frame["understood"] <= frame["survey_vocab_max"]].copy()
-    dropped = len(frame) - len(kept)
+    over_form = len(frame) - len(kept)
+    # Both outcomes must be present. The fitted Down syndrome pool carries 448
+    # spoken-only rows on a fallback likelihood; a frame holding any would
+    # otherwise be compared against NaN, which silently reads as a miss and
+    # deflates every coverage figure. Scoring the fallback branch is separate work.
+    complete = kept["understood"].notna() & kept["spoken"].notna()
+    incomplete = int((~complete).sum())
+    kept = kept[complete].copy()
+    kept["understood"] = kept["understood"].astype(np.int64)
+    kept["spoken"] = kept["spoken"].astype(np.int64)
     if "timepoint" not in kept:
         kept["timepoint"] = "t1"
-    print(f"[frame] {args.frame}: {len(frame)} rows, dropped {dropped} exceeding the form")
+    print(
+        f"[frame] {args.frame}: {len(frame)} rows; dropped {over_form} exceeding the form "
+        f"and {incomplete} missing an outcome"
+    )
     print(f"[frame] scoring {len(kept)} rows, {kept['subject_id'].nunique()} children")
 
     tree = az.from_netcdf(os.path.join(mdir, "trace.nc"))
@@ -405,7 +417,8 @@ def main() -> None:
         "frame": os.path.abspath(args.frame),
         "frame_sha256": hashlib.sha256(open(args.frame, "rb").read()).hexdigest(),
         "rows_in_file": int(len(frame)),
-        "rows_dropped_exceeding_form": int(dropped),
+        "rows_dropped_exceeding_form": int(over_form),
+        "rows_dropped_missing_outcome": int(incomplete),
         "rows_scored": int(len(kept)),
         "children": int(kept["subject_id"].nunique()),
         "posterior_draws_used": int(draws.size),
