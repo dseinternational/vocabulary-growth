@@ -601,14 +601,10 @@ python scripts/prepare_report_figures.py
 # the per-model pages; nothing pins it for the books.
 export QUARTO_PYTHON="$(python -c 'import sys; print(sys.executable)')"
 quarto render docs/report
-# the comparison book reads its CSV/PNG artefacts by BARE filename from its own dir,
-# and sync_report_figures only populates docs/report/figures/ — so stage them first.
-# Files only: `cp <scratch>/comparisons/*` exits non-zero on the `sensitivity/`
-# subdirectory (`cp: -r not specified`) after copying everything else, which reads
-# as a failed step.
-find <scratch>/comparisons -maxdepth 1 -type f -exec cp -a {} docs/comparison/ \;   # (gitignored)
-cp <scratch>/comparisons/recovery/*.csv docs/comparison/       # only if a chapter cites recovery
-quarto render docs/comparison/index.qmd
+# The comparison book stages, renders, publishes and VERIFIES itself in one step.
+# Do not stage and render it by hand; `publish_comparison.py` exists because both
+# halves of doing so failed on 2026-09-03 (see below).
+python scripts/publish_comparison.py --output-dir <scratch>
 ```
 
 Two more things the 2026-09-03 tail found. The **first** `sync_report_figures` in the block above fails with "comparison_manifest.json is missing" whenever `output/comparisons/` already holds artefacts from a script run outside the tail (a smoke run of `compare_ds_td_re.py`, say) and no comparison script that writes a manifest has run since: the sync validates the comparison directory as a whole, and a directory with artefacts and no manifest is invalid. Either clear the directory first or accept that the first sync validates the fits and fails on the comparisons, and rely on the second. And `check_fit.py all --purpose publish` has no caveat allowance: a fit that cleared R-hat and ESS but carries a divergence or a BFMI below 0.3 is reported `[invalid]` there even though `sync_report_figures --allow-caveats` and `upload.py --allow-caveats` accept it. On 2026-09-03 six fits were in that state (VG11, VG12, VG13, VG21, VG22, VG23); the decision to publish them under `--allow-caveats` is recorded in `output/run-record.md`, and the checklist item below is therefore not met by them.
@@ -617,7 +613,11 @@ Two more things the 2026-09-03 tail found. The **first** `sync_report_figures` i
 
 So when a new model is added mid-run, either delete its provisional output before syncing, or point it at a different output root. `--allow-provisional` relaxes the check but is for local dev work, not for a publication sync. Note also that the publication sync needs `--allow-caveats` regardless: VG10, VG11, VG12 and VG13 all carry recorded soft-tier caveats, and without the flag the sync fails on those four with no mention of sampling configuration at all — which reads as a different problem than it is.
 
-**Nothing enforces the comparison staging step, and it fails quietly in both directions.** `docs/comparison/` is gitignored, so a stale copy survives indefinitely and renders without complaint against artefacts from a previous run — on 2026-08-16 the comparison book was published against figures 20 hours older than the report beside it, and the only reason it was noticed is that a _newly cited_ file was absent, which fails loudly with a `KeyError` where an _outdated_ one does not. Treat a comparison-book render as invalid unless the copy immediately precedes it in the same shell.
+**The comparison book has its own publishing script, and hand-staging it is what the script exists to prevent.** `scripts/publish_comparison.py` clears the staged inputs before restaging them, renders with `QUARTO_PYTHON` pinned, collects the assets **the rendered page actually references** rather than a remembered list, uploads them as a unit, and then requests every published file over HTTP and fails on anything that does not return 200. Pass `--run-id <id>` to republish over an existing publication instead of minting a new URL, which is how a broken publication is repaired without invalidating a link already circulated. Both failure modes it guards were hit on 2026-09-03: a hand-assembled upload carried `index.html` and `index_files/` but **none of the 24 figures**, and the page published with every image broken because only `index.html` was checked for a 200; and the staging `cp` overwrote without removing, so a quarantined recovery replicate survived in `docs/comparison/` and the book rendered a table that included it.
+
+**The report book is not published to public storage.** It was uploaded once on 2026-09-03 and removed the same day on the study owner's instruction. Render it — the render is what validates the figure cache and it must still pass — but do not upload it. Only the twenty model reports and the comparison book are published publicly.
+
+**Nothing enforced the comparison staging step before that script, and it failed quietly in both directions.** `docs/comparison/` is gitignored, so a stale copy survives indefinitely and renders without complaint against artefacts from a previous run — on 2026-08-16 the comparison book was published against figures 20 hours older than the report beside it, and the only reason it was noticed is that a _newly cited_ file was absent, which fails loudly with a `KeyError` where an _outdated_ one does not. Treat a comparison-book render as invalid unless the copy immediately precedes it in the same shell.
 
 Note also that `sync_report_figures._sync_dir` is flat: it copies files, not sub-directories. `comparisons/recovery/` and `comparisons/sensitivity/` are synced by an explicit loop, and anything else nested under `comparisons/` will silently not reach the report unless it is added there too.
 
