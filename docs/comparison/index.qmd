@@ -657,7 +657,64 @@ else:
     )
 ```
 
-Where parameter recovery has run, the direction is solid — the between-child scale comes back low in nine of nine replicates across three models, and it survives at the reporting tier, where estimates move by at most 0.19% of the truth. The magnitude is roughly 3–6% and should not be quoted more precisely than that. **The mechanism is not established.** The reparameterisation this was first attributed to is carried by only one of the three models that show it, and the sampling tier, the priors' location, the operating proportion and the dispersion parameterisation have each been tested and eliminated. One limit on the cancellation argument above: it holds for comprehension, where both sides read the same parameter. The spoken Down syndrome scale is derived through the $p_U \times q$ product and has not been measured, so the cross-outcome reading is not established either way. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md` and the issue thread.
+```{python}
+#| echo: false
+#| output: asis
+# This cycle's tally, computed rather than restated: the between-child
+# comprehension scale is `tau_subject` under VG12's shared-budget
+# reparameterisation and `tau_subj_u` elsewhere. Replicates the harness did not
+# assess are counted separately, because a non-converged fit's miss is not
+# evidence either way (`recovery/compare.py::summarise`).
+import glob as _glob
+
+_names = ("tau_subject", "tau_subj_u")
+_verdicts = {}
+for _m in _glob.glob("recovery_matrix_*.csv"):
+    _key = _m[len("recovery_matrix_"):-len(".csv")]
+    for _row in pd.read_csv(_m).itertuples():
+        _verdicts[(_key, str(_row.replicate))] = str(_row.verdict)
+
+_tally = []
+for _f in sorted(_glob.glob("recovery_*_r*.csv")):
+    if "aggregates" in _f:
+        continue
+    _stem = _f[len("recovery_"):-len(".csv")]
+    _key, _rep = _stem.rsplit("_", 1)
+    _d = pd.read_csv(_f)
+    _sel = _d[_d["quantity"].isin(_names)]
+    if _sel.empty:
+        continue
+    _r = _sel.iloc[0]
+    _assessed = "not assessed" not in _verdicts.get((_key, _rep), "")
+    _tally.append((_key, _rep, float(_r["posterior_mean"] / _r["truth"] - 1.0), _assessed))
+
+if not _tally:
+    print(
+        "Parameter recovery has not run in this cycle, so the direction of the "
+        "between-child scale is not restated here from an earlier cycle's fits."
+    )
+else:
+    _low = sum(1 for *_x, _b, _a in _tally if _b < 0)
+    _n = len(_tally)
+    _ass = [(_b) for *_x, _b, _a in _tally if _a]
+    _ass_low = sum(1 for _b in _ass if _b < 0)
+    _models = len({_k for _k, *_x in _tally})
+    _rng = f"{min(_b for *_x, _b, _a in _tally):+.1%} to {max(_b for *_x, _b, _a in _tally):+.1%}"
+    _asstxt = (
+        f"Among the {len(_ass)} the convergence gate assessed it is low in {_ass_low}."
+        if _ass
+        else "The convergence gate assessed none of them, so this cycle adds direction only."
+    )
+    print(
+        f"**This cycle.** The between-child scale comes back low in {_low} of {_n} "
+        f"replicates across {_models} models, spanning {_rng}. {_asstxt} "
+        f"The nine-of-nine result quoted for this bias is the reporting-tier "
+        f"evidence of the #225 baseline cycle, not this one; at the reporting "
+        f"tier estimates move by at most 0.19% of the truth. The magnitude is "
+        f"roughly 3\u20136% and should not be quoted more precisely than that."
+    )
+```
+ **The mechanism is not established.** The reparameterisation this was first attributed to is carried by only one of the three models that show it, and the sampling tier, the priors' location, the operating proportion and the dispersion parameterisation have each been tested and eliminated. One limit on the cancellation argument above: it holds for comprehension, where both sides read the same parameter. The spoken Down syndrome scale is derived through the $p_U \times q$ product and has not been measured, so the cross-outcome reading is not established either way. Tracked as issue #225; the evidence is in `notes/202608161700-recovery-baseline-215.md` and the issue thread.
 :::
 
 Two further caveats bound how far this contrast can be pushed. First, the priors
