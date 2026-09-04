@@ -283,3 +283,9 @@ worktree
 worktrees
 xarray
 zygosity
+Wates
+wates
+Vocabolario
+Bambino
+Gesti
+Frasi
