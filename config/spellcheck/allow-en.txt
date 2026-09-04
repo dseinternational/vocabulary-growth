@@ -1,6 +1,7 @@
 ArviZ
 BFGS
 BFMI
+BPVS
 Babylab
 Bello
 Berglund
@@ -52,6 +53,7 @@ LOSO
 Laudanska
 Laudańska
 Lewandowsky
+Lexi
 Lézine
 MCMC
 MCSE
@@ -75,8 +77,10 @@ Poustka
 Preis
 Psychometrika
 PyMC
+ROWPVT
 Rasch
 Reparameterise
+SECDI
 Savitzky
 Schaaf
 Soto
@@ -93,6 +97,7 @@ UKRI
 Uhlenbeck
 Vehtari
 Venne
+WPPSI
 Wainer
 Walle
 Wilcoxon
