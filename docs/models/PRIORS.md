@@ -598,14 +598,19 @@ Not every published cohort is independent of the fitted data. Where a prior is
 anchored on a study whose participants are already in `vocab_data_merged.csv`,
 it is regularisation, not independent prior evidence.
 
-| Source                                                                                                                      | Role for priors                                 | Independent of training data?                                                                                           |
-| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Wordbank by-child data (`wordbank_administration_data.csv`)                                                                 | TD anchors, `q`, dispersion                     | **No** — it _is_ the TD training data. Use the published normative percentiles as the non-circular check, not the rows. |
-| Berglund et al. (2001), n=330, Sweden                                                                                       | DS anchors, growth shape, heterogeneity         | Yes                                                                                                                     |
-| Næss et al. (2021), Norway; Galeote et al. (2008), Spain; Deckers et al. (2016), Kaat-van den Os et al. (2017), Netherlands | DS anchors, `q`, signed `r`                     | Yes                                                                                                                     |
-| Miller et al. (1995); Mervis & Robinson (2000), US                                                                          | DS anchors, parent-report validity              | Yes                                                                                                                     |
-| Oliver & Buckley (1994), UK                                                                                                 | DS low-age spoken anchor (10-word stage ~27 mo) | Yes — confirmed **not** to overlap `uk_01`                                                                              |
-| Caselli et al. (1998); Zampini & D'Odorico (2013); Bello & Caselli (2014), Italy                                            | DS trajectory, gesture, dispersion              | **No** — overlap the `it_01` Italian-CDI-DS cohort; treat as regularisation                                             |
+| Source                                                                           | Role for priors                                                                                                                    | Independent of training data?                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wordbank by-child data (`wordbank_administration_data.csv`)                      | TD anchors, `q`, dispersion                                                                                                        | **No** — it _is_ the TD training data. Use the published normative percentiles as the non-circular check, not the rows.                                                                                                                                                     |
+| Berglund et al. (2001), n=330, Sweden                                            | DS _spoken_ anchors, growth shape, heterogeneity — the SECDI Words & Sentences form is production-only, so no comprehension anchor | Yes                                                                                                                                                                                                                                                                         |
+| Galeote et al. (2008, 2011), Spain                                               | DS spoken-versus-TD comparison by mental age; symbolic-gesture `r`                                                                 | **No** — the 186-child cohort _is_ `es_01`, supplied by the author (see `data/vocab_data_es_01.md`); treat as regularisation                                                                                                                                                |
+| Næss et al. (2021), Norway                                                       | Qualitative corroboration only (receptive ahead of expressive; slower expressive growth than TD)                                   | Yes — but not on the CDI scale: 43 children tested at 6, 7 and 8 years with the BPVS-II and WPPSI-III Picture Naming, no parent report. Supplies no CDI anchor and no `q`                                                                                                   |
+| Deckers et al. (2016, 2019), Netherlands                                         | Signed `r` corroboration; N-CDI validity in DS                                                                                     | Yes — 25–36 children aged 2;0–7;6, two waves 1.5 years apart, N-CDI Words & Sentences (702 words) with an added sign column. A production-only form; the 2019 receptive measure is a composite with the ROWPVT test, and no parent-report comprehension column is described |
+| Kaat-van den Os et al. (2017), Netherlands                                       | Signed `r` corroboration; spurt heterogeneity; sign-to-speech modality shift                                                       | Yes — 26 children followed monthly from 18–24 months for 18 months on the Lexi questionnaire (263 words, a Language Development Survey adaptation, not a CDI); production only, no comprehension                                                                            |
+| Miller et al. (1995); Mervis & Robinson (2000), US                               | DS anchors, parent-report validity                                                                                                 | Yes                                                                                                                                                                                                                                                                         |
+| Oliver & Buckley (1994), UK                                                      | DS low-age spoken anchor (10-word stage ~27 mo)                                                                                    | Yes — confirmed **not** to overlap `uk_01`                                                                                                                                                                                                                                  |
+| Caselli et al. (1998); Zampini & D'Odorico (2013); Bello & Caselli (2014), Italy | DS trajectory, gesture, dispersion                                                                                                 | **No** — overlap the `it_01` Italian-CDI-DS cohort; treat as regularisation                                                                                                                                                                                                 |
+
+Corrected on 2026-09-04 after reading the papers: the Norwegian and Dutch cohorts had been listed together as independent sources of DS anchors and `q`, but none of them reports a parent-report comprehension count at chronological age, and the Galeote cohort is `es_01`. Every DS source in the table that is both independent and on the CDI scale is therefore production-only, which is why the DS understood anchors below rest on the project's own data.
 
 ### Instrument scale (Fenson et al., 2007, via Hutchins, 2013)
 
@@ -697,7 +702,9 @@ The DS anchors (24 and 84 months) can be checked against the independent DS CDI
 cohorts — those not overlapping the training data. Only expressive (spoken)
 vocabulary can be anchored this way: the usable cohorts report production, and DS
 comprehension at chronological age has no independent source here (Berglund's
-form is production-only, Galeote et al. (2008) is mental-age-based, and the
+form is production-only, Galeote et al. (2008) is reported by mental age and is
+in any case the `es_01` cohort, the Dutch and Norwegian cohorts carry no
+parent-report comprehension (see the independence table), and the
 Italian comprehension cohorts overlap `it_01`).
 
 Berglund et al. (2001) — 330 DS children on a 710-item Swedish CDI — give a full
@@ -738,11 +745,11 @@ Comparison with the DS spoken prior (VG01, `Beta(1, 25)` at 24 months, median 0.
   [`notes/202608041216-ds-understood-trajectory-prior.md`](../../notes/202608041216-ds-understood-trajectory-prior.md).
 
 Milestone timing corroborates the shape: the 50-word level is reached by ~25% of
-DS children at age 3, ~50% at age 4, and ~75% at age 5 (Berglund et al., 2001;
-consistent with Næss et al., 2021). Galeote et al. (2008) add that, matched on
-mental age, DS spoken vocabulary is comparable to TD while gesture use is
-superior — evidence for the signed ratio `r(a)` rather than a chronological-age
-anchor.
+DS children at age 3, ~50% at age 4, and ~75% at age 5 (Berglund et al., 2001).
+Galeote et al. (2008, 2011) add that, matched on mental age, DS spoken vocabulary
+is comparable to TD while gesture use is superior — evidence for the signed ratio
+`r(a)` rather than a chronological-age anchor, and in-sample evidence at that,
+since the cohort is `es_01`.
 
 ### Dispersion (`kappa`)
 
@@ -770,9 +777,10 @@ Against the shared prior (`kappa` median ~13–17, 5–95% ~5–60; `b_kappa < 0
   `kappa` clearly falls with age — dispersion rises with age, exactly the sign the
   prior encodes. Comprehension is roughly flat, and on the typically-developing
   random-effects frame very slightly rising, which the shared prior's
-  `b_kappa_mag >= 0` cannot represent at all. Independently, Zampini & D'Odorico
-  (2013) report DS vocabulary variability _increasing_ from 36 months, the same
-  direction.
+  `b_kappa_mag >= 0` cannot represent at all. Zampini & D'Odorico (2013) report DS
+  vocabulary variability _increasing_ from 36 months, the same direction — but as
+  corroboration rather than independent evidence, since that cohort overlaps
+  `it_01`.
 - **The floor is real and is about 3.** Three independent pools (DS spoken, and
   the two typically-developing spoken frames) put `kappa_min` at 3.08–3.54,
   against a shared prior centred at 5 whose 5th percentile was 1.86. Dropping the
@@ -888,9 +896,10 @@ are not neutral defaults and need explicit labelling.
   reference ages), so its prior median is a hill — replacing the intercept-only mean
   (flat median) and avoiding the monotone-slope young-extrapolation failure. The
   anchor ages/levels come from the independent DS sign literature (peak ~mental age
-  17 mo ≈ chronological ~36 mo; Miller/Clibbens, Zampini, Te Kaat-van den Os), not
-  the in-sample data; `eta_sign` reverts to the standard ~0.4 since the mean now
-  carries the hump.
+  17 mo ≈ chronological ~36 mo, Miller/Clibbens; longer sign retention, Te
+  Kaat-van den Os), not the in-sample data; Zampini corroborates the inverted-U
+  _shape_ only, since that cohort overlaps `it_01`. `eta_sign` reverts to the
+  standard ~0.4 since the mean now carries the hump.
 - The shared kappa prior encodes substantial extra-binomial heterogeneity and a
   monotone increase in heterogeneity with age.
 - Random-effect scale priors allow meaningful study and subject differences and

@@ -1304,8 +1304,9 @@ class TrivariateModelDefinition:
     # Anchor ages/levels come from the INDEPENDENT DS sign literature, not the fitted
     # data: signing peaks ~mental age 17 mo (Miller 1992 via Clibbens: signed = 2x
     # spoken there, declining by MA ~26 mo) which at a DS DQ ~0.5 is chronological
-    # ~34 mo; the inverted-U shape is confirmed by Zampini (parabolic gesture
-    # trajectory); DS retain signs longer than TD (Te Kaat-van den Os review), so the
+    # ~34 mo; the inverted-U shape is corroborated by Zampini (parabolic gesture
+    # trajectory -- shape only, since that cohort overlaps it_01); DS retain signs
+    # longer than TD (Te Kaat-van den Os review), so the
     # old anchor stays modest (not near-zero) and uk_06 has real 60-115 mo signers.
     # The peak LEVEL is kept broad because the peak AGE is only weakly identifiable.
     sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
@@ -1500,8 +1501,9 @@ class JointModelDefinition:
     # reference ages (sign_anchor_ages) and built as a tent meeting at the peak
     # anchor (gp_utils.tent_and_gp) so the prior median is a hill. Anchor ages/levels
     # come from the independent DS sign literature (peak ~MA 17 mo ~= chronological
-    # ~34 mo, Miller/Clibbens; inverted-U shape, Zampini; DS retain signs longer,
-    # Te Kaat) — see the VG14 (TrivariateModelDefinition) comment for the full
+    # ~34 mo, Miller/Clibbens; inverted-U shape, Zampini, whose cohort overlaps
+    # it_01 so shape only; DS retain signs longer, Te Kaat) — see the VG14
+    # (TrivariateModelDefinition) comment for the full
     # rationale. Study REs carry between-study level; the GP (anchored at 54 mo,
     # below) carries smooth departures.
     sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
