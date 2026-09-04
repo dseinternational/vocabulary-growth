@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('development', instead='VG20')
+```
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -131,7 +139,7 @@ The reported curves are population-level: they set the study offsets to zero and
 
 :::
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -187,7 +195,7 @@ Above the high age anchor the straight-line part of the production ratio's trend
 
 The between-study scales have no prior figure of their own. Their posteriors appear among the marginal densities under Diagnostics, which is where to compare them with the priors tabulated above.
 
-## Prior predictive checks
+## Prior predictive checks {#sec-prior-predictive}
 
 These simulate vocabularies from the priors alone, before the data are seen. They are drawn across the whole modelled age range recorded in the glance block above — wider than the ages the model reports on, so the ends of these figures are the part where the priors, and not the data, do all the work. Read them as a plausibility test with three criteria: young children should usually sit near the floor on both outcomes, older trajectories should not be forced towards the ceiling, and the production ratio should be free to rise across development without being pinned near zero or near one.
 
@@ -199,7 +207,23 @@ These three figures are **population mean functions**: they set the study offset
 
 ![Population mean-function trajectories for the production ratio, drawn from the priors alone: the fraction of understood words that are also spoken.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -215,7 +239,7 @@ The normality tests in this table are reported for completeness. They are not a 
 
 :::
 
-## Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 ```{python}
 #| label: convergence-caveats
@@ -224,6 +248,14 @@ The normality tests in this table are reported for completeness. They are not a 
 from vocab_growth.report_cells import render_convergence_caveats
 
 render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
 ```
 
 ```{python}
@@ -243,6 +275,18 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the fitted parameters, each with its median and interval. The two between-study scales appear here.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 ::: {.callout-note title="What to watch in this model"}
 
 The pair plot is capped so the grid stays legible, and shows only the first few parameters — the understood anchors and the understood GP length-scale and amplitude, together with the leading production-ratio anchors. The between-study scales are not in it, and the individual study offsets appear in no figure in this report, so neither can be inspected there.
@@ -251,7 +295,7 @@ Where they can be inspected is the marginal posteriors above and the diagnostics
 
 :::
 
-## Findings
+## Findings {#sec-findings}
 
 ```{python}
 #| echo: false
@@ -285,7 +329,7 @@ Two further consequences follow, and both can be read off the tables in the two 
 
 Neither model carries repeated-child effects, so neither answers the question of how much _children_ differ. That requires VG20.
 
-## Posterior predictions
+## Posterior predictions {#sec-predictions}
 
 Everything in this section is population-level: the study offsets are set to zero, so each curve describes the average study.
 
@@ -294,6 +338,9 @@ Everything in this section is population-level: the study offsets are set to zer
 The two curves stop at different ages, and that is deliberate rather than an artefact. Comprehension and every ratio derived from it are reported only up to the comprehension reporting cap, while production runs on to the top of the query grid; the glance block at the top of this report records both caps. The reason is that the evidence for comprehension thins out earlier than the evidence for production, so the model declines to publish an understood curve where it would be carried almost entirely by the trend's smoothness.
 
 ![Median **posterior-predictive** words understood and words spoken against age for the average study, with the observed data. The curves are medians of predictive count draws, not the expected trajectory.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
 
 ![The same predictive medians with 50% inner and 89% outer equal-tailed intervals. The bands summarise posterior-predictive count draws for the average study, so they are intervals on where a single new fully-paired administration would fall — carrying between-administration dispersion as well as trajectory uncertainty — not the far narrower intervals on the mean trajectory, and not a prediction for a new study.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
@@ -306,6 +353,15 @@ Above the high age anchor, $q$'s mean is held level rather than extrapolated (se
 ![The fitted production ratio for the average study against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
 ![The same ratio plotted against expected words understood rather than against age. The horizontal axis is age re-expressed as comprehension, so it is stretched where vocabulary grows fast and compressed where it does not; it is not an independent variable the model conditions on.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_conditional_production_check
+
+render_conditional_production_check()
+```
+
 
 The figure below is a different quantity from the two above. $q(a)$ is a ratio of expectations — one smooth curve divided by another. The predictive figure is a distribution of ratios of _drawn counts_, and the spoken count is drawn from a Beta-Binomial whose denominator is itself a drawn understood count. At young ages, where a draw may produce very few understood words, that makes the ratio of counts far more variable than $q(a)$. Read it as "what ratio might one observation show", not as an estimate of $q$.
 
@@ -330,7 +386,7 @@ These two figures show the same relationship at two different levels, and the di
 
 ![Simulated spoken counts against simulated understood counts, alongside the observed data.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
-### Receptive to expressive vocabulary
+### Receptive to expressive vocabulary {#sec-spoken-given-understood}
 
 **How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child _says_ is the number they _understand_ scaled by $q(a)$,
 
@@ -346,13 +402,21 @@ The slopes here are the **population-level** production ratio, with the study of
 
 :::
 
-![Expected words spoken as a function of words understood, at several ages, for the average study.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
-
 ## Posterior predictions -- words understood
 
 ### Summary at selected ages
 
 $p$ is the latent success probability — the underlying proportion of the reference inventory a child in the average study is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** how much observations at the same age differ. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single observation might fall. Columns labelled `ci` are the 89% outer interval and those labelled `ci50` the 50% inner interval, both equal-tailed.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("u")
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
@@ -389,6 +453,14 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 ### Dispersion
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the dispersion parameter for words understood changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** variability between observations relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. With study effects in the model, systematic differences between studies are carried by the study offsets and $\kappa$ describes what remains — but repeated observations of the same child are still counted as independent, so $\kappa$ here is not a clean measure of how much children differ.
@@ -398,6 +470,16 @@ Lower $\kappa$ means **greater** variability between observations relative to th
 ### Summary at selected ages
 
 The columns mean the same as in the understood table above, with two differences worth knowing. This table runs to a later age, because production is reported past the comprehension cap. And the predictive draws behind $Y$ are nested: each spoken count is drawn out of a _drawn_ understood count, not out of the full reference inventory, so at young ages a large share of the probability at zero comes from small drawn comprehension rather than from the production ratio alone. These predictions therefore describe a hypothetical **fully paired** administration; roughly a third of the fitted spoken records instead used the marginal fallback described under Statistical model, whose observation process the nested generator does not reproduce.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("s")
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
@@ -438,7 +520,7 @@ Comparing this figure with its comprehension counterpart is the clearest stateme
 
 Read this against the understood dispersion figure above: lower $\kappa$ at the same age means observations are more spread out around the mean for that outcome.
 
-## Expected vocabulary by month
+## Expected vocabulary by month {#sec-monthly}
 
 A finer companion to the tables above: one row per whole month, with the expected count, the range a single observation might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
 
@@ -462,7 +544,7 @@ monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
 monthly_s
 ```
 
-## Predictive calibration
+## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
@@ -474,7 +556,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Out-of-sample prediction
+## Out-of-sample prediction {#sec-loo}
 
 ```{python}
 #| echo: false
@@ -485,7 +567,7 @@ render_loo_section()
 ```
 
 
-## Limits
+## Limits {#sec-limits}
 
 - **This is a development step, not a result.** VG07 exists to establish how much of the pooled spread is between studies rather than within them. Its numbers should not be quoted as findings about children with Down syndrome; use VG20 for that.
 - **No repeated-child effects.** Children observed more than once are counted as though they were different children, so uncertainty here is not a fair estimate of uncertainty about a new child.

@@ -722,3 +722,48 @@ def test_subject_heterogeneity_spoken_carries_both_rates(tmp_path, monkeypatch):
 
     flat, _ = comparison.child_spread_product(f_u, h, tu[0], tq[0], n)
     assert not np.allclose(tau_logit, flat), "spoken scale ignored the rates"
+
+
+def test_product_marginal_kappa_matches_the_graph_form_and_its_limits():
+    """The NumPy port must agree with ``likelihood_utils.product_marginal_concentration``.
+
+    That is the form the graph's ``product_marginal`` spoken fallback uses, and
+    the DS side of the spoken dispersion contrast now depends on this port
+    reproducing it. Also the documented limit: at kappa_U -> inf and p_U = 1 the
+    marginal concentration is kappa_S itself.
+    """
+    import pytensor
+
+    from vocab_growth.models.likelihood_utils import product_marginal_concentration
+
+    p_u = np.array([0.05, 0.30, 0.60, 0.95])
+    k_u = np.array([8.0, 40.0, 120.0, 30.0])
+    q = np.array([0.10, 0.40, 0.70, 0.99])
+    k_s = np.array([5.0, 20.0, 60.0, 15.0])
+    graph = product_marginal_concentration(p_u, k_u, q, k_s, epsilon=1e-9)
+    want = np.asarray(pytensor.function([], graph)())
+    got = comparison.product_marginal_kappa(p_u, k_u, q, k_s)
+    assert np.allclose(got, want, rtol=1e-9), (got, want)
+
+    limit = comparison.product_marginal_kappa(
+        np.array([1.0]), np.array([1e12]), np.array([0.4]), np.array([20.0])
+    )
+    assert np.allclose(limit, 20.0, rtol=1e-4), limit
+
+
+def test_product_marginal_kappa_matches_monte_carlo_moments():
+    """kappa_eff is the concentration of the Beta with the product's mean and variance."""
+    rng = np.random.default_rng(3)
+    p_u, k_u, q, k_s = 0.30, 25.0, 0.45, 12.0
+    theta_u = rng.beta(p_u * k_u, (1 - p_u) * k_u, 2_000_000)
+    theta_s = rng.beta(q * k_s, (1 - q) * k_s, 2_000_000)
+    prod = theta_u * theta_s
+    m, v = prod.mean(), prod.var()
+    want = m * (1 - m) / v - 1
+    got = float(comparison.product_marginal_kappa(p_u, k_u, q, k_s))
+    assert abs(got - want) / want < 0.01, (got, want)
+
+
+def test_load_marginal_spoken_trajectory_rejects_a_univariate_model():
+    with pytest.raises(ValueError, match="not a bivariate model"):
+        comparison.load_marginal_spoken_trajectory("vg11")

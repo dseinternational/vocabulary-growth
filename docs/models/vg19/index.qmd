@@ -41,6 +41,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('candidate', instead='VG20')
+```
+
 Every model in this family from VG08 onward gives each child a **constant** offset from the population trajectory: a child who is 30 words ahead at two years is assumed to be the same distance ahead, on the model's scale, at six. VG19 relaxes that. Each child gets a **rate** as well as an offset, so a child can pull away from the population curve, or drift toward it, as they grow.
 
 ![The model graph. VG19 differs from VG10 by replacing each child's single offset with an offset and a rate.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
@@ -52,8 +60,67 @@ Every model in this family from VG08 onward gives each child a **constant** offs
 #| output: asis
 from vocab_growth.report_cells import render_glossary
 
-render_glossary()
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Estimand",
+    "Reference inventory",
+    "Logit",
+    "Odds and odds ratio",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Overdispersion and variance inflation",
+    "Conditional probability",
+    "Production ratio ($q$)",
+    "Age anchor",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "GP length-scale ($\\ell$)",
+    "GP amplitude ($\\eta$)",
+    "GP anchor",
+    "Mean clamp",
+    "Random intercept",
+    "Partial pooling",
+    "Between-child heterogeneity ($\\tau$)",
+    "Non-centred parameterisation",
+    "Sum-to-zero study effects",
+    "Population-level and subject-marginal",
+    "Credible interval",
+    "Equal-tailed interval (ETI)",
+    "Cross-sectional age derivative",
+    "Prior predictive check",
+    "Posterior predictive check",
+    "PMF and CDF",
+    "PIT (probability integral transform)",
+    "LOO and ELPD",
+    "MCMC (Markov chain Monte Carlo)",
+    "NUTS (No-U-Turn Sampler)",
+    "Chain",
+    "R-hat ($\\hat{R}$)",
+    "Effective sample size (ESS)",
+    "Divergent transition",
+    "BFMI (Bayesian fraction of missing information)",
+    "Sensitivity analysis",
+])
 ```
+
+::: {.callout-note collapse="true" title="Terms specific to this model"}
+
+**Offset and rate**
+
+: Each child carries two numbers per outcome instead of one: an offset, how far their curve sits from the population trajectory at the reference age, and a rate, how fast that distance changes per year of age. Under a constant offset every child's curve is parallel to the population's; under a rate the curves fan, converge and can cross.
+
+**Reference age**
+
+: The age at which the offset is read — the pool's median age — so that the offset and the rate do not trade off against each other in the sampler, and so that $\tau_0$ is a spread at a stated age rather than an extrapolation to age zero.
+
+**Offset–rate correlation ($\rho_{01}$)**
+
+: Whether children who sit above the population curve at the reference age also tend to pull further away from it (positive) or to drift back towards it (negative). Estimated separately for each outcome; it lives on $(-1, 1)$ with prior mass on both sides of zero, so its interval does carry evidence about its sign.
+
+:::
 
 ## Statistical model
 
@@ -78,7 +145,7 @@ Four things about this are deliberate.
 
 **$\tau_0$ is the spread at a stated age, not at age zero.** $a_{\text{ref}}$ is 36 months, the pool's median age. Centring at the design's centre is what stops the offset and the rate trading off against each other in the sampler, and it makes $\tau_0$ a quantity with a meaning rather than an extrapolation.
 
-**Both outcomes carry a rate, because the evidence that motivated one cannot say which curve owns it.** Gate 1 measured the drift on the *spoken proportion*, and spoken is $p_U \cdot q$: a child drifting upward there is equally consistent with drifting on comprehension, on conversion, or on both, so putting the rate on one curve alone would assume the answer. The likelihood itself is less confounded than that measurement was. On a paired row $U$ observes $p_U$ and $S \mid U$ observes $q$ separately, and only the 455 of 1,428 spoken observations that take the marginal fallback branch — 444 with no usable comprehension count and 11 recording more words spoken than understood — see the product alone. So expect the two $\tau_1$ values to be correlated and individually less well resolved than the drift they jointly imply on spoken, but not structurally unidentified.
+**Both outcomes carry a rate, because the evidence that motivated one cannot say which curve owns it.** Gate 1 measured the drift on the *spoken proportion*, and spoken is $p_U \cdot q$: a child drifting upward there is equally consistent with drifting on comprehension, on conversion, or on both, so putting the rate on one curve alone would assume the answer. The likelihood itself is less confounded than that measurement was. On a paired row $U$ observes $p_U$ and $S \mid U$ observes $q$ separately, and only the spoken observations that take the marginal fallback branch — those with no usable comprehension count, or more words spoken than understood; the branch rows of the calibration table count them — see the product alone. So expect the two $\tau_1$ values to be correlated and individually less well resolved than the drift they jointly imply on spoken, but not structurally unidentified.
 
 ### Why a slope, and not something else
 
@@ -96,7 +163,7 @@ Three readings, and each shaped the specification. The mean-reverting alternativ
 
 Pinning $\rho_{01} = 1$ leaves one deviate scaled by an age function — a rank-one covariance. It is **not** Proposal A1, although the two are easily conflated. A1 scales by $\tau_{\text{young}}\exp(\lambda t)$, which is strictly positive at every age, and holds the paired $\kappa$ constant besides; this special case scales by the affine $\tau_0 + \tau_1 D$, which vanishes at $D = -\tau_0/\tau_1$ and changes sign beyond it. They share rank-one covariance and nothing else. The difference is visible in the behaviour usually quoted for A1: under a strictly positive scale children can never cross, whereas under the affine one every child coincides at the zero and their ordering inverts past it. Pinning $\rho_{01} = 1$ costs 6.28 on 1 df on the repeats-only production fit, so it is free here.
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -108,7 +175,45 @@ render_priors_table()
 
 $\tau_0$ keeps VG10's own prior on both outcomes, so the offset is unchanged and the model is one-factor against its parent. $\tau_1 \sim \text{HalfNormal}(0.5)$ has median 0.34 per year, covering both maximum-likelihood values comfortably while keeping mass near zero, so a rate the data do not support shrinks away rather than being asserted. The correlation uses $(\rho_{01}+1)/2 \sim \text{Beta}(2,2)$, which for a $2 \times 2$ matrix is exactly LKJ(2) — a gentle pull toward zero, against a maximum-likelihood value of $+0.43$ to compare with.
 
-## Prior predictive checks
+### Understood trajectory
+
+![Prior on the proportion of words understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+
+![Prior on the proportion of words understood at the high age anchor.](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
+
+### Production ratio
+
+![Prior on the production ratio at the low age anchor.](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+
+![Prior on the production ratio at the high age anchor.](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line production-ratio trend.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
+
+### Length-scales
+
+![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+
+![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+
+### Dispersion -- understood
+
+![Prior on the floor of the understood dispersion parameter.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the younger reference age.](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the older reference age.](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
+
+### Dispersion -- spoken
+
+![Prior on the floor of the spoken dispersion parameter.](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the younger reference age.](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the older reference age.](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
+
+## Prior predictive checks {#sec-prior-predictive}
 
 ![Words understood drawn from the prior alone, before any data.](prior_samples_u.png){#fig-prior-u .lightbox fig-align="left"}
 
@@ -130,7 +235,23 @@ This is the figure that tests $\tau_1$. Under VG10's constant offset the curves 
 
 The nesting is the point of the second figure. A prior can imply a perfectly reasonable expected trajectory and still put a real administration at an impossible count once the child effect and the dispersion are both in play, and only a count figure can show that.
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
 
 ```{python}
 import pandas as pd
@@ -159,6 +280,14 @@ render_convergence_caveats()
 ```
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
+```
+
+```{python}
 #| label: diagnostics-table
 from dse_research_utils.statistics.diagnostics import style_diagnostics_table
 
@@ -174,11 +303,23 @@ style_diagnostics_table(diagnostics)
 
 ![Marginal posterior distributions. A posterior indistinguishable from its prior has not been informed by the data.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 The specific risk in this model is a **funnel on $\tau_1$**: a large share of the pool contributes one observation each, so those children's *own* rates are pinned almost entirely by the prior — even though, as above, their distance from the reference age still speaks to $\tau_1$ through the marginal spread. Non-centring and a prior with mass near zero are the mitigations. The signature to watch for is low effective sample size on $\tau_1$ specifically while the rest of the model looks healthy.
 
-A second risk sits on the same parameter and is not about geometry. The rate enters the between-child variance as $\tau_1^2 D^2$, so an observation's weight grows with its distance from the reference age — and the pool's ages are heavily left-massed, with a median of 36 months but a tail to 115. The 50 spoken observations above 84 months are 3.5% of the rows and carry roughly a third of the cross-sectional information about $\tau_1$; on comprehension, 12 rows carry about a fifth. Because $\tau_1$ is a single global parameter, it sets the between-child spread at *every* age, so leverage sitting in that sparse tail propagates back into the well-populated range this report actually shows. The gate for it is a refit capped at 84 months, checking whether $\tau_1$ moves materially; see [the implementation plan](../../../notes/202608141900-child-slope-implementation-plan.md) §G5b.
+A second risk sits on the same parameter and is not about geometry. The rate enters the between-child variance as $\tau_1^2 D^2$, so an observation's weight grows with its distance from the reference age — and the pool's ages are heavily left-massed, with a median of 36 months but a tail to 115. The few dozen spoken observations above 84 months are a few per cent of the rows and carried roughly a third of the cross-sectional information about $\tau_1$ on the 2026-08 frame; on comprehension, a dozen rows carried about a fifth. Because $\tau_1$ is a single global parameter, it sets the between-child spread at *every* age, so leverage sitting in that sparse tail propagates back into the well-populated range this report actually shows. The gate for it is a refit capped at 84 months, checking whether $\tau_1$ moves materially; see [the implementation plan](../../../notes/202608141900-child-slope-implementation-plan.md) §G5b.
 
-## Findings
+## Findings {#sec-findings}
 
 ### How much do children differ in their own rate of growth?
 
@@ -221,7 +362,7 @@ else:
 
 **This is what the model exists to produce**, and under every earlier model in the family both rate spreads are exactly zero by construction.
 
-**Whether a rate exists at all is answered elsewhere, and more weakly than this table looks.** As above, neither $\tau_1$ interval can bear on it. The evidence that does is predictive: refitting with a whole fold of children removed from the likelihood — leave-one-*child*-out rather than leave-one-observation-out — puts VG19 **+2.10 SE** above VG10 across 767 children at the `test` tier. That supports the slope block as a whole, both rates and both offset-rate correlations together. It is not a per-outcome result, and the per-outcome PSIS-LOO margins that once looked like one were leakage: with 1.86 spoken observations per child, leave-one-observation-out was largely scoring each model's ability to predict a child's second visit from their first, which is exactly the comparison four per-child parameters win. Against VG20 on the whole-child criterion the margin is **+0.93 SE** — indistinguishable. See [the gate record](../../../notes/202608212000-vg19-gates-g2-g4-g5.md) §4e.
+**Whether a rate exists at all is answered elsewhere, and more weakly than this table looks.** As above, neither $\tau_1$ interval can bear on it. The evidence that does is predictive: refitting with a whole fold of children removed from the likelihood — leave-one-*child*-out rather than leave-one-observation-out — put VG19 **+2.10 SE** above VG10 across the frame's children at the `test` tier, as recorded in the gate record of 2026-08-21. That supports the slope block as a whole, both rates and both offset-rate correlations together. It is not a per-outcome result, and the per-outcome PSIS-LOO margins that once looked like one were leakage: with 1.86 spoken observations per child, leave-one-observation-out was largely scoring each model's ability to predict a child's second visit from their first, which is exactly the comparison four per-child parameters win. Against VG20 on the whole-child criterion the margin was **+0.93 SE** — indistinguishable — on the same record. See [the gate record](../../../notes/202608212000-vg19-gates-g2-g4-g5.md) §4e.
 
 Four qualifications belong with the numbers.
 
@@ -257,35 +398,17 @@ render_headline_quantities()
 
 The population trajectories should be close to VG10's. This model adds structure at the **child** level, so a large movement in a population-level curve would be a flag that the rate is absorbing something it was not added for — most plausibly curvature that belongs to the mean function.
 
-## Posterior predictions
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
 
-![Words understood and words spoken by age, on one set of axes.](joint_trajectory.png){#fig-joint .lightbox fig-align="left"}
+render_family_notes()
+```
 
-![The same trajectories with their credible intervals.](joint_trajectory_intervals.png){#fig-joint-intervals .lightbox fig-align="left"}
+{{< include _bivariate_re_body.qmd >}}
 
-![The production ratio $q$ by age.](production_rate.png){#fig-q .lightbox fig-align="left"}
-
-::: {.callout-note}
-**Every $q$ figure and table here is population-level.** The posterior-predictive
-path persists subject-marginal comprehension and subject-marginal spoken words,
-but not a subject-marginal $q$ — the quantity is computed inside the predictive
-block and then consumed into the spoken product rather than stored. So there is
-no "where would one more child's conversion rate fall?" interval in this report,
-and the intervals shown are uncertainty in the population curve. Persisting it is
-tracked in [#233](https://github.com/dseinternational/vocabulary-growth/issues/233)
-and needs a refit to take effect.
-:::
-
-
-![Words spoken against words understood.](understood_vs_spoken.png){#fig-uvs .lightbox fig-align="left"}
-
-The subject-marginal intervals here are the ones this model changes. An unseen child is drawn as an offset **and** a rate from the fitted joint, so the predicted trajectory fans with age and one child's can cross another's — which a constant offset, or an offset scaled by an age function, cannot represent.
-
-## Expected vocabulary by month
-
-Reported at the project's per-quantity caps: comprehension and the quantities derived from it to 72 months, production to 90. Production stops where its own evidence stops; comprehension stops earlier than that, at the age above which the 25 remaining observations can no longer distinguish one child-effect structure from another — see `notes/202608221200-reporting-source-by-quantity.md`.
-
-## Predictive calibration
+## Predictive calibration {#sec-calibration}
 
 ```{python}
 #| echo: false
@@ -295,7 +418,17 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Limits
+## Out-of-sample prediction {#sec-loo}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+## Limits {#sec-limits}
 
 - **Gated against VG10, not VG20.** VG19 and VG20 are parallel refinements of the same parent and are not composable as written: VG20 estimates one correlation between the two outcomes' constant offsets, VG19 estimates two different ones between each outcome's own offset and rate. Their union is a $4 \times 4$ covariance whose most interesting element — whether children who gain comprehension faster also convert faster — is estimated by neither. This model therefore does **not** carry $\rho_{uq}$, and its child-level intervals are not directly comparable with VG20's.
 - **Neither this model nor VG20 is the end of the line, and VG22 is the successor to both.** Each holds half of the same structure — VG19 gives children rates but decouples the two outcomes, VG20 couples them but freezes the spread in age — so the cross-outcome element Gate 1 found strongest, a child's comprehension *level* predicting their production-ratio *rate*, is estimated by neither. The answer is not an unrestricted $4 \times 4$: Gate 1 found that singular at maximum likelihood, with rank 3 reaching the identical likelihood. VG22 is the registered low-rank factor form, with `rank` fitted as a sensitivity family because the residual likelihood cannot choose it. Read the results here as one half of a comparison that VG22's fits will complete ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233), [`notes/202608221000`](../../../notes/202608221000-four-by-four-gate1.md)).

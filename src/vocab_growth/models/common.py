@@ -1718,18 +1718,15 @@ def report(context: AnyModelFitContext):
     changing the report cache.
     """
 
-    model_output_md_source = os.path.join(
-        local_env.DOCS_DIR, "models", context.reporting.model_name.lower(), "index.qmd"
+    # The template and every shared include it may transclude, staged together:
+    # a Quarto include resolves relative to the rendered document, which is the
+    # copy in the output directory (see `reporting.stage_report_sources`).
+    from vocab_growth.reporting import stage_report_sources
+
+    staged = stage_report_sources(
+        context.reporting.model_name, context.reporting.output_dir
     )
-
-    model_output_md_dest = os.path.join(context.reporting.output_dir, "index.qmd")
-
-    if os.path.exists(model_output_md_source):
-        shutil.copy(model_output_md_source, model_output_md_dest)
-    else:
-        raise FileNotFoundError(
-            f"Source model output markdown file not found: {model_output_md_source}"
-        )
+    model_output_md_dest = staged[0]
 
     key_value_table(
         "Artefacts",

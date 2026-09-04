@@ -165,3 +165,34 @@ __all__ = [
     "run_banner",
     "section",
 ]
+
+
+def stage_report_sources(model_key: str, output_dir: str, *, docs_dir: str | None = None) -> list[str]:
+    """Copy a model's report template and the shared includes into ``output_dir``.
+
+    The report stage copies ``docs/models/<model>/index.qmd`` into the fitted
+    output directory and renders it there, so a Quarto ``{{< include >}}`` in the
+    template resolves relative to that directory, not to the repository. The
+    shared prediction body the bivariate random-effects family transcludes
+    (``docs/models/_bivariate_re_body.qmd``) therefore has to travel with the
+    template, or every page that uses it renders with a missing-include error.
+    Every ``_*.qmd`` under ``docs/models/`` is copied, so a second include needs
+    no change here. Returns the destination paths, the template first.
+    """
+    import glob
+    import os
+    import shutil
+
+    from vocab_growth import environment as local_env
+
+    root = docs_dir or local_env.DOCS_DIR
+    template = os.path.join(root, "models", model_key.lower(), "index.qmd")
+    if not os.path.isfile(template):
+        raise FileNotFoundError(f"Report template is missing: {template}")
+    destinations = [os.path.join(output_dir, "index.qmd")]
+    shutil.copy(template, destinations[0])
+    for include in sorted(glob.glob(os.path.join(root, "models", "_*.qmd"))):
+        destination = os.path.join(output_dir, os.path.basename(include))
+        shutil.copy(include, destination)
+        destinations.append(destination)
+    return destinations

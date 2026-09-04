@@ -1,0 +1,229 @@
+<!--
+Shared prediction body for the Down syndrome bivariate random-effects family:
+VG10, VG19, VG20 and VG22 all fit through `common_bivariate_re` and write the
+same prediction artefacts, so their reports transclude this file rather than
+each carrying a copy. VG20's page once referenced 23 of the 90 artefacts its
+fit wrote and sent the reader to VG10 -- a development step -- for every one
+it omitted. Every path here is relative to the fit's output directory, into
+which the report stage copies this file alongside `index.qmd`.
+
+Nothing model-specific belongs here. A section that only one of the four
+models needs goes in that model's own template.
+-->
+
+## Posterior predictions {#sec-predictions}
+
+### Joint trajectory
+
+![Words understood and words spoken against age, as **subject-marginal** predictive counts: the band is where individual children fall, not uncertainty in the average. The understood line stops before the spoken line because the two outcomes carry different reporting caps, stated in the glance box at the top of this report.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
+
+![The same subject-marginal predictive trajectories with an inner 50% and an outer 89% equal-tailed interval on each outcome.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+
+Read these two figures for the shape and the spread together: the two curves separate early and stay separated across the whole reported range, and the outer band on each is wide enough that a child well inside it is unremarkable. A child outside the inner band is not unusual.
+
+### Production ratio {#sec-production-ratio}
+
+The production ratio $q(a) = p_S(a) / p_U(a)$ is the fraction of understood words expected also to be spoken at age $a$ — equivalently, the expected number of words spoken per word understood. A value of one half means that half of the words a child understands are words they also say.
+
+![The population-level production ratio against age, with uncertainty intervals. It rises across the reported range: older children say a larger share of what they understand.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+
+![The same population-level ratio plotted against the population's expected words understood instead of against age. The horizontal axis is age re-expressed as the reference child's expected comprehension (zero study and child effects — approximately the median child in the average study, not necessarily the median child in the data), so this shows how the two population trajectories move together as children get older. It is **not** the share that children who understand a given number of words actually speak — see the check beneath it.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_conditional_production_check
+
+render_conditional_production_check()
+```
+
+
+![The ratio of **posterior predictive spoken and understood counts**, which is a different quantity from $q(a)$ above and should be read separately. It is a ratio of two noisy counts for individual children rather than a ratio of two means, so it is both noisier and, at young ages where the denominator is small, biased in ways $q(a)$ is not.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
+
+```{python}
+summary_q = pd.read_csv("posterior_summary_q.csv")
+summary_q
+```
+
+That table is the population-level production ratio at the query ages, with an inner 50% and an outer 89% equal-tailed interval; the `interval_kind` column records the convention.
+
+### Comprehension-production gap
+
+![The expected difference in word counts between understanding and production, against age. It rises to a peak and then closes.](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
+
+Conclude from this figure that the gap is a phase rather than a permanent state: it widens through the preschool years, peaks, and then narrows as the production ratio climbs. The peak's size and the age it occurs at are in the findings table above, computed from the same CSV this figure is drawn from. The narrowing does not mean the two vocabularies converge within the reported range — they do not — only that production is catching up.
+
+### Words understood versus words spoken {#sec-spoken-given-understood}
+
+This is the most practitioner-facing figure this model produces, and it carries two different things that must be read separately. The **blue path** is the population: at each age, the expected words understood and the expected words spoken for the reference child — zero study and child effects, approximately the median child in the average study — with a dot every year so the path can be read as a journey through age rather than as a rule about levels. The **grey points** are the observed administrations, and the **orange marks** summarise them: among the children whose understood count fell in each 50-word bin, the median spoken count and the interquartile range. The dashed line is the ceiling — a child cannot say more distinct words than they understand.
+
+![Words spoken against words understood. The population path with age markers, the observed administrations, and the children's own median spoken count at each comprehension level.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
+
+Read the two apart. The path says what the reference child says *at the age that child reaches* a comprehension level. The orange marks say what the children in this data who *were at* that level said, whatever their age or study — and they sit below the path at every level above the first few hundred words, because reaching a level selects every child who got there at any age, the conversion ratio rises with age, and those children are younger than the age at which the population path arrives. The orange marks mix ages and studies, and at any one level a single study can dominate them, so they describe this sample rather than a child; but a statement about children at a comprehension level belongs to them, not to the path.
+
+![Where a single child may fall: predicted (understood, spoken) pairs for a freshly drawn child across ages, with the observed administrations. The cloud's width is between-child variation, which the population path excludes.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
+
+Conclude from the pair that the relationship between the two vocabularies is not a fixed proportion: the path bends upward, so each additional understood word is converted to speech at a higher rate later than earlier — and that individual children scatter widely around it.
+
+### Receptive to expressive (cross-sectional)
+
+**How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child _says_ is the number they _understand_ scaled by $q(a)$,
+
+$$\mathbb{E}[\,\text{spoken} \mid \text{understood} = N,\ \text{age} = a\,] \approx N \cdot q(a).$$
+
+Thus $q(a)$ is an age-dependent cross-sectional conversion proportion — the expected number of words spoken per word understood under the model — **not** evidence that increasing a particular child's receptive vocabulary causes a corresponding expressive gain. Most of these data are cross-sectional, and the comparison is between different children of different ages, not within one child over time. The ratio is the population's, for the zero-effect reference child in the average study; a named child's own conversion rate carries the child random effect reported in the variation table under Findings above. The per-age posterior of $q(a)$ is tabulated under [Production ratio](#sec-production-ratio) above, and the figure above shows what it implies in words. A figure that drew $N \cdot q(a)$ as a straight line out to the full inventory at several ages used to sit here; it was retired on 2026-09-02 because a straight line to 810 words invites a prediction for a child who is not in the data, and the figure above answers the same question with the children in view.
+
+## Posterior predictions -- words understood {#sec-predictions-understood}
+
+### Summary at selected ages
+
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$. $Y$ is a draw from the posterior predictive distribution. Read the `*_population_*` columns for the zero-effect reference child in the average study (approximately the median child, not the mean of children), and the `*_subject_marginal_*` and `Y_*` columns for where a single unseen child might fall; the latter are much the wider, and are the ones to quote about an individual.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("u")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
+posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
+posterior_summary_u
+```
+
+### Posterior predictive PMF
+
+![The probability of each exact understood-word count for a **new, unseen** child, at selected ages.](posterior_predictive_pmf_u.png){#fig-pmf-u .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![The probability of a given understood-word count **or fewer** for a new, unseen child. Read this one for questions of the form "what fraction of children understand 100 words or fewer at this age?"](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
+
+### Count distributions by age
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.plotting import ppc_count_distribution_gallery
+
+ppc_count_distribution_gallery("posterior_predictive_count_distributions_u")
+```
+
+These compare simulated counts with the observations at each age. Conclude that the model is adequate where the simulated and observed distributions overlap across the whole range of counts; a systematic shift or a missing mode would be evidence the mean structure is wrong.
+
+### Median trend
+
+![Median predicted words understood with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+
+![The same trend, smoothed for presentation. The underlying numbers are unchanged.](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
+
+Conclude that the fitted trend tracks the observations across the range where they are dense, and that the observed points scatter widely around it — the scatter, not the line, is what a single child's outcome resembles.
+
+### Cross-sectional age derivative
+
+![Rate of change of expected words understood with age, in words gained per month.](expected_learning_rate_u.png){#fig-rate-u .lightbox fig-align="left"}
+
+![The same derivative, smoothed for presentation.](expected_learning_rate_u_smoothed.png){#fig-rate-u-smooth .lightbox fig-align="left"}
+
+This is the slope of the fitted age trajectory: it describes how expected vocabulary differs between children of different ages. It is **not** a within-child learning rate. Conclude that comprehension growth is fastest in the early part of the range and slows thereafter — the peak rate and its age are in the findings table above — and that where the interval spans zero at the top of the range, the model cannot distinguish continued growth from a plateau. The unsmoothed curve carries wiggles from the Gaussian process that the smoothed version damps; do not read a small local dip in the raw curve as a developmental stage.
+
+### Dispersion $\kappa$ -- understood
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
+![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
+
+Lower $\kappa$ means **greater** residual variability relative to the mean; higher $\kappa$ means less. On this page $\kappa$ is not between-child spread: both trajectories carry a child effect, so what $\kappa$ measures is what is left once a child's own level is known — the spread between same-age administrations *within* a child, plus whatever the child effect's fixed scale cannot follow. Between-child spread is $\tau$, in the variation table under Findings. The direction is easy to misread, so read this figure as _falling $\kappa$ = wider residual spread_, and read the findings table above, which restates the same thing as a variance inflation factor where a larger number means a wider spread. Conclude that residual spread grows with age even after each child's own level is accounted for.
+
+## Posterior predictions -- words spoken {#sec-predictions-spoken}
+
+### Summary at selected ages
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("s")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
+posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
+posterior_summary_s
+```
+
+The same column convention as the understood table above. Note that this table runs to a later age than the understood one, because production is reported past the comprehension cap stated in the glance box.
+
+### Posterior predictive PMF
+
+![The probability of each exact spoken-word count for a **new, unseen** child, at selected ages.](posterior_predictive_pmf_s.png){#fig-pmf-s .lightbox fig-align="left"}
+
+### Posterior predictive CDF
+
+![The probability of a given spoken-word count **or fewer** for a new, unseen child. This is the figure to read for "what fraction of children say 50 words or fewer at this age?"](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
+
+### Count distributions by age
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.plotting import ppc_count_distribution_gallery
+
+ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
+```
+
+As for comprehension: overlap between simulated and observed counts at each age is what adequacy looks like here.
+
+### Median trend
+
+![Median predicted words spoken with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+
+![The same trend, smoothed for presentation. The underlying numbers are unchanged.](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
+
+Conclude that spoken vocabulary starts near the floor and stays there far longer than comprehension does, then accelerates — the delay, not the eventual level, is the finding.
+
+### Cross-sectional age derivative
+
+![Rate of change of expected words spoken with age, in words gained per month.](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
+
+![The same derivative, smoothed for presentation.](expected_learning_rate_s_smoothed.png){#fig-rate-s-smooth .lightbox fig-align="left"}
+
+Compare the peak here with the peak in the understood derivative above: the fastest expressive growth arrives substantially later than the fastest receptive growth, and the findings table above gives both ages. That lag is the single clearest expression of comprehension leading production in this model.
+
+### Dispersion $\kappa$ -- spoken
+
+![How the spoken dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+
+Again, falling $\kappa$ means wider residual spread, not children becoming more different from one another — that is $\tau_q$'s job. Read this curve's *shape* across age, not its level against the understood curve's: as the scope table above the understood figure sets out, this $\kappa$ disperses the production ratio on each child's own understood count while that one disperses counts out of the whole item pool. Whether one number here is larger than one there says nothing about which outcome varies more.
+
+## Expected vocabulary by month {#sec-monthly}
+
+A finer companion to the tables above: one row per whole month rather than per query age, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds. The `n_obs` column is the one to read alongside every interval on this page — it gives the number of observations contributing near each age, and it is the honest guide to where these expectations rest on data and where they rest on the model. It falls sharply towards the top of both ranges.
+
+![Expected words understood by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_u.png){#fig-expected-counts-by-month-u .lightbox fig-align="left"}
+
+```{python}
+monthly_u = pd.read_csv("posterior_summary_monthly_u.csv")
+monthly_u
+```
+
+![Expected words spoken by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_s.png){#fig-expected-counts-by-month-s .lightbox fig-align="left"}
+
+```{python}
+monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
+monthly_s
+```

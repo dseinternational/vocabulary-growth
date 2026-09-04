@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Side-by-side DS (VG10) vs TD (VG13) comparison plots for the joint
+Side-by-side DS (VG20) vs TD (VG21) comparison plots for the joint
 trajectory (Figure 22 equivalent) and the comprehension-production gap
 (Figure 27 equivalent).
 
@@ -31,7 +31,7 @@ from vocab_growth import comparison
 from vocab_growth import environment as env
 
 DS_DIR = comparison.model_dir("vg20")
-TD_DIR = comparison.model_dir("vg13")
+TD_DIR = comparison.model_dir("vg21")  # VG13 (8-18 mo) until 2026-09-02
 OUT_DIR = env.comparisons_output_dir()
 
 UNDERSTOOD_COLOUR = "C0"
@@ -109,7 +109,7 @@ def main() -> None:
     # ---- Joint trajectory: DS vs TD ----
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
     plot_joint_panel(axes[0], ds_joint, "Down syndrome (VG10)")
-    plot_joint_panel(axes[1], td_joint, "Typically developing (VG13)")
+    plot_joint_panel(axes[1], td_joint, "Typically developing (VG21)")
     fig.suptitle(
         "Joint posterior predictive trajectory — words understood vs words spoken",
         fontsize=12,
@@ -122,7 +122,7 @@ def main() -> None:
     # ---- Comprehension-production gap: DS vs TD ----
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     plot_gap_panel(axes[0], ds_gap, "Down syndrome (VG10)")
-    plot_gap_panel(axes[1], td_gap, "Typically developing (VG13)")
+    plot_gap_panel(axes[1], td_gap, "Typically developing (VG21)")
     fig.suptitle(
         "Comprehension-production gap — E[understood] - E[spoken]",
         fontsize=12,

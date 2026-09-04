@@ -189,3 +189,5 @@ Desktop.ini
 
 /.quarto/
 *.pdf
+# Staged beside the comparison artefacts by the publication tail; provenance for the sync, not book input.
+docs/comparison/comparison_manifest.json

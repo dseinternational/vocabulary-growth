@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('reference', joint=True, robustness=True)
+```
+
 ::: {.callout-important title="What this model is for"}
 
 VG21 is a **reference model**. It exists to give the Down syndrome joint models — VG05 without hierarchy, VG20 with it — a typically-developing comprehension-and-production picture to be read against, and it supersedes the retired VG06.
@@ -129,7 +137,7 @@ Population-level trajectories set both random effects to zero, so the plotted cu
 
 Contributing datasets below a minimum observation count are dropped before fitting. This removes a sizeable fraction of the contributing studies while retaining almost all of the observations; the dropped names are printed to the fit console and are not currently written to any artefact, and this engine writes no per-study count table at all.
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -207,7 +215,7 @@ The production ratio shows none of this, and that is the check on the explanatio
 
 ![Prior on the excess production-ratio dispersion at the older reference age.](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
 
-## Prior predictive checks
+## Prior predictive checks {#sec-prior-predictive}
 
 These simulate vocabularies from the priors alone, before the data are seen, and should be read against this model's deliberately narrow target window. The test has four criteria: rapid early comprehension growth should be permitted but not forced; spoken counts should stay low to moderate; trajectories should be smooth; and $q(a)$ should stay within the range a young typically-developing child could plausibly occupy. The last of these is the one that failed under the family's baseline ratio priors and drove the change described in the Priors section, so these figures are the direct evidence for that decision.
 
@@ -217,7 +225,23 @@ These simulate vocabularies from the priors alone, before the data are seen, and
 
 ![Trajectories for the production ratio $q(a)$ drawn from the priors.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -245,7 +269,7 @@ This engine writes no per-study table, so the datasets and their languages are n
 
 :::
 
-## Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 ```{python}
 #| label: convergence-caveats
@@ -254,6 +278,14 @@ This engine writes no per-study table, so the datasets and their languages are n
 from vocab_growth.report_cells import render_convergence_caveats
 
 render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
 ```
 
 ```{python}
@@ -273,6 +305,18 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the fitted parameters, including the study and child scales, the GP hyperparameters and the dispersion terms.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 ::: {.callout-important title="What the energy diagnostic caveat means for this report"}
 
 Where the caveat block above reports an energy (BFMI) shortfall, it should not be read as incidental. In this model it appears on every chain rather than on one unlucky one, which makes it a property of the posterior's geometry rather than of an individual run.
@@ -289,11 +333,11 @@ The parameters to watch here are the two study-effect scales, the anchored GP hy
 
 **The hierarchy terms are the weakest part of the fit and still clear the gate.** The lowest effective sample sizes and the highest R-hat values in the diagnostics table sit on the study-effect scales rather than on the trajectory parameters — which is what the sparse-replication problem above predicts — but they sit inside the thresholds, and the caveat block above states whether any exception was needed.
 
-**If the Gaussian processes come back close to inert, that is a limit on what this model can detect rather than evidence of linearity.** Compare the amplitude and length-scale panels in the posterior figure with their prior figures in the Priors section. VG13 showed them barely moved, and the same reading applies here: the shared length-scale prior spans roughly 6–18 months against a fourteen-month window, and the anchored GP is additionally stripped of the components that mimic its mean's basis, so the model has little effective capacity to bend inside the frame in the first place — a shorter-length-scale experiment left the length scale prior-driven while costing divergences (`notes/202608060900-three-prior-conflicts.md`). The defensible reading would therefore be that curvature was **not identified** under this graph: straight lines on the logit scale describe these data adequately over this window, but the fit does not demonstrate that the trajectories are straight, and the GP's inertness must not be quoted as evidence for it. Four more months than VG13 brings more of the production-ratio S-curve into the frame, which is why this model widens `eta_q` from 0.20 to 0.5 — so the amplitude has room to move here in a way it did not there, and an inert GP would be more informative than it was under the narrower window. It follows that the anchor priors are load-bearing, which is why the production-ratio anchor discussion above matters.
+**If the Gaussian processes come back close to inert, that is a limit on what this model can detect rather than evidence of linearity.** Read the amplitude and length-scale rows of the contraction table above. VG13's were barely moved, and if this fit's contractions are near zero the same reading applies here: the shared length-scale prior spans roughly 6–18 months against a fourteen-month window, and the anchored GP is additionally stripped of the components that mimic its mean's basis, so the model has little effective capacity to bend inside the frame in the first place — a shorter-length-scale experiment left the length scale prior-driven while costing divergences (`notes/202608060900-three-prior-conflicts.md`). The defensible reading would therefore be that curvature was **not identified** under this graph: straight lines on the logit scale describe these data adequately over this window, but the fit does not demonstrate that the trajectories are straight, and the GP's inertness must not be quoted as evidence for it. Four more months than VG13 brings more of the production-ratio S-curve into the frame, which is why this model widens the production-ratio GP amplitude relative to VG13's (both values are in the two models' priors tables) — so the amplitude has room to move here in a way it did not there, and an inert GP would be more informative than it was under the narrower window. It follows that the anchor priors are load-bearing, which is why the production-ratio anchor discussion above matters.
 
 :::
 
-## Findings
+## Findings {#sec-findings}
 
 ```{python}
 #| echo: false
@@ -323,9 +367,20 @@ No sensitivity variant is registered against VG21 itself. The evidence that woul
 
 :::
 
-## Joint trajectory
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
+
+render_family_notes()
+```
+
+## Joint trajectory {#sec-predictions}
 
 ![Expected words understood and words spoken on the same axes, across the modelled window. The vertical distance between the two curves is the comprehension-production gap, quantified below.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
 
 ![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are uncertainty intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children — not the range individual children occupy; for that, read the predictive figures and the monthly tables.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
@@ -333,7 +388,7 @@ No sensitivity variant is registered against VG21 itself. The evidence that woul
 
 VG21 is restricted to a narrow young window and **should not be used as a general typically-developing trajectory beyond it**. The upper bound is this model's own choice; the lower bound is not — it is the age floor of the typically-developing pool as a whole, so nothing here says anything about what happens below it either way.
 
-**Why 22 and not further.** The restriction is a measurement argument, not a coverage one, and it is worth stating exactly because VG13's version of this paragraph gave a reason that no longer holds. VG13 capped at 18 months on the ground that only a single dataset contributed usable paired observations above it; the Romance-language extension retired that, since Italian Words & Gestures supplies paired rows to 24 months. What binds here is the Oxford CDI's 418-item ceiling. The share of administrations sitting within 10% of their form's ceiling runs at 1–5% below 19 months and 7–8% over 19–22, then jumps to 20.2%, 27.7% and 36.1% at 23, 24 and 25. Compressing understood at the ceiling while spoken keeps rising inflates $q = S/U$, so a contaminated window reads **high** — and the fitted `window-25` variant does, by 0.098 at 328 understood words. That variant remains on disk as the measurement of the exposure and must not supply a reported number. See `notes/202608211100-window-22-adopted.md`.
+**Why 22 and not further.** The restriction is a measurement argument, not a coverage one, and it is worth stating exactly because VG13's version of this paragraph gave a reason that no longer holds. VG13 capped at 18 months on the ground that only a single dataset contributed usable paired observations above it; the Romance-language extension retired that, since Italian Words & Gestures supplies paired rows to 24 months. What binds here is the Oxford CDI's 418-item ceiling. The share of administrations sitting within 10% of their form's ceiling is small below 19 months, modest over 19–22, and jumps sharply from 23 months (measured in `notes/202608211100-window-22-adopted.md`, where the percentages are tabulated). Compressing understood at the ceiling while spoken keeps rising inflates $q = S/U$, so a contaminated window reads **high** — and the fitted `window-25` variant does, by an amount that note records at the matched-comprehension level. That variant remains on disk as the measurement of the exposure and must not supply a reported number. See `notes/202608211100-window-22-adopted.md`.
 
 **What the restriction buys**, which matters just as much and is the reason the model exists at all: inside the window every row is fully paired, drawn from several laboratories, and dense at every month. That is what makes $q(a)$ identifiable — a conditional probability needs both outcomes on the same administration, and this window is where the pool supplies them without the marginal fallback ever being used.
 
@@ -347,7 +402,16 @@ The first figure shows the latent $q(a) = P(\text{speak} \mid \text{understood})
 
 ![The fitted production ratio against age, with uncertainty intervals. Rising means children are saying a larger share of what they understand, not merely understanding more.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
-![The production ratio plotted against how many words a child understands rather than against age. Useful for asking what share of a given comprehension vocabulary is typically spoken.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+![The population production ratio plotted against the population's expected words understood rather than against age. The horizontal axis is age re-expressed as the reference child's expected comprehension (zero study and child effects). It is **not** the share of a given comprehension vocabulary that a child at that level typically speaks — the check beneath it sets the curve beside those children.](production_rate_by_understood.png){#fig-production-rate-by-understood .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_conditional_production_check
+
+render_conditional_production_check()
+```
+
 
 ![The posterior predictive ratio of spoken to understood counts. Wider than the latent curve above, and the difference between them is outcome-level noise rather than uncertainty about development.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
 
@@ -370,7 +434,7 @@ The headline table above gives where this gap is largest within the modelled win
 
 ![The same relationship in predictive terms, so the scatter reflects where a single child might fall rather than where the zero-effect curve sits.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
-## Receptive to expressive (cross-sectional)
+## Receptive to expressive (cross-sectional) {#sec-spoken-given-understood}
 
 **How are receptive and expressive vocabulary related cross-sectionally?** The joint model links the two structurally through the production ratio $q(a) = P(\text{speak} \mid \text{understood})$: the expected number of words a child _says_ is the number they _understand_ scaled by $q(a)$,
 
@@ -384,13 +448,21 @@ Each line runs across the full width of the reference inventory, but at the youn
 
 :::
 
-![Predicted words spoken given words understood, by age.](spoken_given_understood.png){#fig-spoken-given-understood .lightbox fig-align="left"}
-
 ## Posterior predictions -- words understood
 
 ### Summary at selected ages
 
 $p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — the typical (median) child in the average study, which on the count scale is not the same thing as the average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("u")
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
@@ -425,6 +497,14 @@ This is the slope of the fitted age trajectory: it describes how expected vocabu
 
 ### Dispersion $\kappa$ -- understood
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** variability relative to the mean; higher $\kappa$ means less. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. Read the direction this curve moves against the callout in the Priors section: on the understood outcome it is driven by the form-versus-inventory scaling, not by children becoming more or less alike.
@@ -434,6 +514,16 @@ Lower $\kappa$ means **greater** variability relative to the mean; higher $\kapp
 ### Summary at selected ages
 
 The same conventions apply as for words understood above. Note that spoken counts here are not modelled directly: they are the understood trajectory scaled by the production ratio, so uncertainty in both propagates into this table.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("s")
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
@@ -472,7 +562,7 @@ As above, this is a between-children comparison at adjacent ages, not a within-c
 
 This one is the control case for the Priors-section callout: the production ratio's denominator is the child's own understood count, so the form's ceiling cancels and the scaling artefact that drives the understood curve does not arise here. If the interval on its age trend spans zero, the data establish no age trend in this outcome's dispersion at all.
 
-## Expected vocabulary by month
+## Expected vocabulary by month {#sec-monthly}
 
 A finer companion to the query-age tables above: one row per whole month, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds — the columns most directly usable for setting expectations. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
 
@@ -494,7 +584,44 @@ monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
 monthly_s
 ```
 
-## Predictive calibration
+## Robustness {#sec-robustness}
+
+A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+
+No sensitivity variant is registered against VG21 itself; the evidence the window-22 promotion rests on is VG13's registered `window-*` variants, so the matrix shown is **VG13's**.
+
+```{python}
+from pathlib import Path
+
+import pandas as pd
+from IPython.display import Markdown, display
+
+
+def comparison_path(name):
+    """Locate a comparison artefact from wherever this report is rendered."""
+    for base in (Path("../../comparisons"), Path("comparisons"), Path("../comparisons")):
+        candidate = base / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+robustness_path = comparison_path("sensitivity/robustness_matrix_vg13.csv")
+if robustness_path is None:
+    display(Markdown(
+        "_The sensitivity comparison has not been computed into this output root, "
+        "so no robustness matrix is available for this render._"
+    ))
+else:
+    robustness = pd.read_csv(robustness_path)
+    wanted = ["variant", "status", "n_within_ci", "n_checked", "max_abs_delta",
+              "quantities_outside_ci", "verdict", "variant_fit_utc"]
+    display(robustness[[c for c in wanted if c in robustness.columns]])
+```
+
+Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run.
+
+## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
@@ -506,7 +633,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Out-of-sample prediction
+## Out-of-sample prediction {#sec-loo}
 
 ```{python}
 #| echo: false
@@ -519,7 +646,7 @@ render_loo_section()
 
 Read any over-coverage here alongside the between-child scales in the Findings section rather than as a separate finding. The predictive distribution integrates over a **new** child's offset, so it is necessarily wider than the scatter of the observed rows, which come from children the model has already seen. The larger the between-child scale, the larger that difference — so a hierarchical model of this kind is expected to over-cover in-sample, and the calibration section's own caveat says so.
 
-## Limits
+## Limits {#sec-limits}
 
 - **A reference, not a target.** These curves describe typically-developing children in these datasets. They are the baseline the Down syndrome models are compared against, and must not be read as a standard an individual child is failing to meet.
 - **A narrow window, deliberately.** This model says nothing about ages outside the range in the glance callout above, in either direction, and should not be extended to them. For the comprehension trajectory over a much wider range, use VG12; VG04 is the no-hierarchy, English-only, subsampled predecessor of both.

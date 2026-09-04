@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('reference')
+```
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -120,7 +128,7 @@ VG12 is the full-data successor, and it differs on more than data volume: it add
 
 :::
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -166,7 +174,7 @@ Because this model carries no random effects, its `kappa` has to absorb every so
 
 ![Prior on the excess dispersion at the older reference age.](kappa_excess_old_dist.png){#fig-kappa-excess-old .lightbox fig-align="left"}
 
-## Prior predictive checks
+## Prior predictive checks {#sec-prior-predictive}
 
 These simulate vocabularies from the priors alone, before the data are seen. Read them as a plausibility test with three criteria over the typically-developing age window: simulated comprehension should already be appreciable around the first birthday rather than sitting at zero, the priors should permit rapid growth across the second year, and later trajectories should not be mechanically pinned to the inventory ceiling. A prior that fails any of these would be shaping the answer rather than permitting it. One caveat: the dispersion priors were calibrated marginally against this model's own analysis frame, so on the spread criterion these checks pass partly by construction — they test internal consistency of the specification, not independent prior plausibility.
 
@@ -176,7 +184,23 @@ These simulate vocabularies from the priors alone, before the data are seen. Rea
 
 ![Simulated counts compared with the range the observed data occupy.](prior_predictive_checks.png){#fig-prior-predictive-checks .lightbox width=640 fig-align="left"}
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -198,7 +222,7 @@ These descriptives are of the fitted subsample, not of the whole typically-devel
 
 :::
 
-## Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 ```{python}
 #| label: convergence-caveats
@@ -207,6 +231,14 @@ These descriptives are of the fitted subsample, not of the whole typically-devel
 from vocab_growth.report_cells import render_convergence_caveats
 
 render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
 ```
 
 ```{python}
@@ -226,6 +258,18 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the fitted parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 ::: {.callout-note title="What to watch in this model"}
 
 The understood anchors, the GP length-scale and amplitude, and the age-varying dispersion parameters. Poor behaviour in any of them would propagate directly into the comprehension trajectory and its age derivative. Compare the marginal posteriors above with the prior figures earlier in this report: a parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. The dispersion slope `b_kappa` is worth a specific look, since the prior deliberately left the direction open — an interval straddling zero is the flat dispersion curve the calibration expected, not a failure to estimate.
@@ -234,7 +278,7 @@ Diagnostics here should also be read together with the fixed sampling seed, sinc
 
 :::
 
-## Findings
+## Findings {#sec-findings}
 
 ```{python}
 #| echo: false
@@ -246,11 +290,29 @@ render_headline_quantities()
 
 Read these alongside the caveats above: with no study or child effects in the model, the spread reported here mixes genuine differences between children with differences between the datasets they came from, and repeated observations of the same child are counted as though they were different children. VG12 separates those sources; this model cannot. These are also the numbers to hold against the Down syndrome model's, VG02 — but as a comparison of populations, not as a standard.
 
-## Posterior predictions
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
+
+render_family_notes()
+```
+
+## Posterior predictions {#sec-predictions}
 
 ### Summary at selected ages
 
 $p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** the marginal spread between same-age administrations. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a new administration — one more checklist from this pooled population, not a specific child tracked over time — might fall.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table(None)
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 posterior_summary = pd.read_csv("posterior_summary.csv", index_col=0)
@@ -293,11 +355,19 @@ The right-hand edge of this figure needs particular care. It sits at the last ob
 
 ### Dispersion
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
 ![How the dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa.png){#fig-posterior-kappa .lightbox fig-align="left"}
 
 Lower $\kappa$ means **greater** spread between same-age administrations relative to the mean; higher $\kappa$ means less. In this model that spread mixes between-child, between-dataset and repeat-visit variation — it is marginal count dispersion, not a between-child quantity. The direction is easy to misread, so the findings table above restates it as a variance inflation factor, where a larger number means a wider spread. This is the model whose dispersion prior expected no trend with age, so the thing to check here is whether the fitted curve is flat and whether its interval is wide enough to admit a trend anyway.
 
-## Expected vocabulary by month
+## Expected vocabulary by month {#sec-monthly}
 
 A finer companion to the table above: one row per whole month, with the expected count, the range a new administration might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model. Read a row with a small or zero `n_obs` as the model interpolating, not as evidence — and note that in this model the counts fall away sharply in the upper part of the range, well before the table ends.
 
@@ -308,7 +378,7 @@ monthly = pd.read_csv("posterior_summary_monthly.csv")
 monthly
 ```
 
-## Predictive calibration
+## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
@@ -320,7 +390,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Out-of-sample prediction
+## Out-of-sample prediction {#sec-loo}
 
 ```{python}
 #| echo: false
@@ -331,7 +401,7 @@ render_loo_section()
 ```
 
 
-## Limits
+## Limits {#sec-limits}
 
 - **A reference, not a target.** This curve describes a different population. It is not a norm any individual child is expected to meet, and it is not an intervention goal.
 - **The query grid runs past the evidence, so reporting is capped.** Comprehension observations stop at 25 months, and this outcome's reporting cap trims the 27- and 30-month query ages, which would otherwise be pure extrapolation. The monthly table stops at the last observation and should be preferred.

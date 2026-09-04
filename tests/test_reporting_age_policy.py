@@ -60,7 +60,6 @@ BY_STEM = {
     "production_rate": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "production_rate_predictive": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "production_rate_by_understood": ReportedQuantity.RATIO_OF_UNDERSTOOD,
-    "spoken_given_understood": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "comprehension_production_gap": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "understood_vs_spoken": ReportedQuantity.RATIO_OF_UNDERSTOOD,
     "understood_vs_spoken_predictive": ReportedQuantity.RATIO_OF_UNDERSTOOD,
@@ -83,57 +82,15 @@ def _cap_for(config, quantity):
         return max_age_for_sign_ratio(config)
     return max_age_for(config, quantity)
 
-# Artefacts written by the *summary* stage rather than the plot stage, which
-# ``regenerate_plots.py`` cannot refresh because it re-runs the plot stage only.
-# When the 84/90 reporting-age policy landed on 2026-08-14 the code that writes
-# them was corrected immediately, but the tables already on disk stayed stale
-# until their models were refitted; everything else in the family was fixed by
-# regeneration alone.
-#
-# VG15's six entries cleared when its clamp-q-only refit landed at 14:32 on
-# 2026-08-14 and VG14's two when its refit landed at 17:11, each caught by
-# ``test_known_stale_entries_are_still_needed`` within the hour. Keep the
-# mechanism: it is the only thing that distinguishes "this artefact is stale and
-# we know it" from "this artefact violates the policy".
-#
-# The VG14 entry below has a different cause from the summary-stage ones above,
-# and it is worth naming. ``modality_trajectories`` *is* a plot-stage artefact,
-# so ``regenerate_plots.py`` would normally refresh it -- but VG14's trace was
-# written under the ``compact`` persistence tier, and regeneration refuses a
-# compacted trace rather than producing silently wrong output. Clearing it
-# therefore needs a full refit of VG14, which is **deferred to the next full
-# replication run** (study owner, 2026-08-16). VG14 is superseded by VG15 for
-# every quantity this figure shows, and the figure is the ``p_any`` union its
-# own report now warns readers not to use, so a reporting-quality refit and
-# several gigabytes spent on a retired model's retired figure is the wrong
-# trade. Do not clear it by writing the artefact by hand either: producing a
-# figure outside the fit pipeline would break the provenance the publication
-# gate checks, which is the same reason ``regenerate_plots.py`` refuses in the
-# first place. The code is fixed, so the first time VG14 is refitted this entry
-# will fail as unnecessary and
-# should be deleted then.
-# Emptied on 2026-08-18 when VG14 was refitted, exactly as the note above said it
-# should be. Keep the mechanism: it is what distinguishes "this artefact is stale
-# and we know it" from "this artefact violates the policy".
-#
-# Refilled on 2026-08-26 for the same reason and with the same expiry. The
-# sign-ratio cap tightened to 72 months after VG14's and VG15's current fits were
-# written (22 August), so both models' `posterior_summary_r` and
-# `posterior_summary_p_any` on disk still run to 84 months. This is stale output,
-# not a live defect: both writers apply `trim_reported_ages(..., sign_ratio_cap)`
-# before the CSV is written (`common_trivariate.py` and `common_joint_modality.py`),
-# so a fresh fit cannot produce these rows. Clearing them needs a reporting-quality
-# refit of VG14 and VG15, which is the refit run recorded in
-# `notes/202608261000-models-review.md` and is out of scope for the issue #266
-# remediation; writing the artefacts by hand instead would break the provenance the
-# publication gate checks. Nothing can publish from them in the meantime — since
-# #266 the publication path also compares the exact prepared-frame hash, and both
-# fits fail it. `test_known_stale_entries_are_still_needed` deletes these entries
-# for us: the first refit makes them fail as unnecessary.
-KNOWN_STALE: dict[str, set[str]] = {
-    "vg14": {"posterior_summary_r", "posterior_summary_p_any"},
-    "vg15": {"posterior_summary_r", "posterior_summary_p_any"},
-}
+# Artefacts a fitted model writes past its reporting cap, by model id, that the
+# policy check is told to excuse. Empty by design: an entry is a stale artefact
+# on disk that a fresh fit cannot reproduce, and
+# `test_known_stale_entries_are_still_needed` deletes entries the moment a refit
+# makes them unnecessary. The VG14 and VG15 84-month sign-ratio and `p_any`
+# tables (fitted 2026-08-22 in the gap before the sign-ratio cap followed the
+# understood cap) were the last entries, cleared by the 2026-09-01 reporting-
+# quality refit (#281).
+KNOWN_STALE: dict[str, set[str]] = {}
 
 # Not age-indexed reports: descriptive frames, diagnostics, provenance.
 IGNORE_STEMS = {

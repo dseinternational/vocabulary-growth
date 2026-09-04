@@ -13,6 +13,7 @@ VG10 and VG15 described amplitudes that had been changed months earlier.
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,8 @@ import pytest
 
 from vocab_growth import glossary, report_cells
 from vocab_growth.models.diagnostics_utils import render_convergence_caveats
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _fit(tmp_path, *, definition=None, config="rep", parameters=("eta_u",), gate=None):
@@ -1042,3 +1045,686 @@ def test_variation_table_is_unchanged_for_a_constant_offset_model(tmp_path, caps
     assert "Between children, understood |" in out
     assert "(at " not in out
     assert "Plug-in" not in out
+
+
+# --------------------------------------------------------------------------
+# Reader-facing blocks (2026-09-02 template review)
+# --------------------------------------------------------------------------
+
+
+def _summary_frame(ages, *, population=True, predictive=True, prefix=""):
+    """A posterior_summary table in the shape the engines write."""
+    rows = []
+    for i, age in enumerate(ages):
+        row = {"age_months": age, f"Ey{prefix}_median": 10.0 * (i + 1)}
+        row[f"Ey{prefix}_ci50_lo"] = 8.0 * (i + 1)
+        row[f"Ey{prefix}_ci50_hi"] = 12.0 * (i + 1)
+        row[f"Ey{prefix}_ci_lo"] = 5.0 * (i + 1)
+        row[f"Ey{prefix}_ci_hi"] = 15.0 * (i + 1)
+        if population:
+            row["Ey_population_median"] = 11.0 * (i + 1)
+        if predictive:
+            row.update(
+                {
+                    "Y_ci50_lo": 4.0 * (i + 1),
+                    "Y_ci50_hi": 20.0 * (i + 1),
+                    "Y_ci_lo": 0.0,
+                    "Y_ci_hi": 40.0 * (i + 1),
+                    "P(Y=0)": 0.5 / (i + 1),
+                    "P(Y<=10)": 0.7 / (i + 1),
+                    "P(Y<=50)": 0.9,
+                }
+            )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def test_expectations_table_prefers_population_and_single_child_columns(tmp_path, capsys):
+    fit = _fit(tmp_path, parameters=("eta_u", "tau_subj_u"))
+    _summary_frame([12, 24, 36]).to_csv(fit / "posterior_summary_s.csv", index=False)
+    pd.DataFrame({"age_months": [12, 24, 36], "n_obs": [30, 12, 0]}).to_csv(
+        fit / "posterior_summary_monthly_s.csv", index=False
+    )
+    report_cells.render_expectations_table("s", directory=str(fit))
+    out = capsys.readouterr().out
+    assert "| 12 | 11 | 4–20 | 0–40 | 50% | 70% | 90% | 30 |" in out
+    assert "Half of children" in out and "Nine in ten children" in out
+    assert "**population-level** median" in out
+    assert "**single-child** ranges" in out
+    # 36 months has no nearby observations and is the last row: beyond the data.
+    assert "| 36† |" in out
+    assert "† Ages above 24 months" in out
+
+
+def test_expectations_table_falls_back_when_the_engine_writes_no_predictive_columns(
+    tmp_path, capsys
+):
+    """The joint modality engine writes `Ey_u_*` and no `Y_*`; say so rather than omit."""
+    fit = _fit(tmp_path)
+    _summary_frame([18, 30], population=False, predictive=False, prefix="_u").to_csv(
+        fit / "posterior_summary_u.csv", index=False
+    )
+    report_cells.render_expectations_table("u", directory=str(fit))
+    out = capsys.readouterr().out
+    assert "| 18 | 10 | 8–12 | 5–15 |" in out
+    assert "50% interval" in out and "89% interval" in out
+    assert "no single-child predictive columns" in out
+    assert "P(no words)" not in out
+
+
+def test_expectations_table_says_so_when_the_summary_is_absent(tmp_path, capsys):
+    report_cells.render_expectations_table(None, directory=str(_fit(tmp_path)))
+    assert "cannot be shown" in capsys.readouterr().out
+
+
+def test_diagnostic_verdict_names_the_extremes_and_the_effort(tmp_path, capsys):
+    gate = {
+        "passed": True,
+        "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
+        "divergences": 0,
+        "max_rhat": 1.00421,
+        "min_ess": 1416.08,
+        "bfmi_per_chain": [0.44, 0.47, 0.51],
+        "thresholds": {"rhat_max": 1.01, "ess_threshold": 400, "bfmi_threshold": 0.3},
+    }
+    fit = _fit(tmp_path, gate=gate, parameters=("eta_u", "tau_subj_q"))
+    pd.DataFrame(
+        index=["eta_u", "tau_subj_q"],
+        data={"r_hat": [1.00421, 1.001], "ess_bulk": [2017.0, 1416.08], "ess_tail": [3000.0, 2500.0]},
+    ).to_csv(fit / "diagnostics.csv")
+    manifest = json.loads((fit / "fit_manifest.json").read_text())
+    manifest["sampling"]["parameters"] = {
+        "chains": 6, "draws": 8000, "tune": 12000, "target_accept": 0.97
+    }
+    (fit / "fit_manifest.json").write_text(json.dumps(manifest))
+    report_cells.render_diagnostic_verdict(str(fit))
+    out = capsys.readouterr().out
+    assert "| Largest R-hat | 1.004210 (`eta_u`) | ≤ 1.01 | hard | pass |" in out
+    assert "| Smallest effective sample size | 1,416 (`tau_subj_q`) | ≥ 400 | hard | pass |" in out
+    assert "| Smallest energy BFMI across chains | 0.440 | ≥ 0.3 | soft | pass |" in out
+    assert "clears both tiers" in out
+    assert "6 chains × 8,000 draws, after 12,000 tuning draws, at target acceptance 0.97" in out
+
+
+def test_diagnostic_verdict_distinguishes_the_soft_tier(tmp_path, capsys):
+    gate = {
+        "passed": False,
+        "checks": {"rhat": True, "ess": True, "divergences": False, "bfmi": False},
+        "divergences": 4,
+        "max_rhat": 1.0022,
+        "min_ess": 2695.0,
+        "bfmi_per_chain": [0.208, 0.31],
+        "thresholds": {"rhat_max": 1.01, "ess_threshold": 400, "bfmi_threshold": 0.3},
+    }
+    report_cells.render_diagnostic_verdict(str(_fit(tmp_path, gate=gate)))
+    out = capsys.readouterr().out
+    assert "| Divergent transitions | 4 | 0 | soft | **fail** |" in out
+    assert "| Smallest energy BFMI across chains | 0.208 | ≥ 0.3 | soft | **fail** |" in out
+    assert "clears the **hard** tier" in out and "not the **soft** tier" in out
+
+
+def test_diagnostic_verdict_says_so_when_the_summary_is_absent(tmp_path, capsys):
+    report_cells.render_diagnostic_verdict(str(_fit(tmp_path)))
+    assert "cannot be shown" in capsys.readouterr().out
+
+
+def test_contraction_table_marks_prior_driven_and_pressing_parameters(tmp_path, capsys):
+    fit = _fit(tmp_path)
+    pd.DataFrame(
+        [
+            {"parameter": "eta_u", "posterior_mean": 0.9, "posterior_sd": 0.45,
+             "prior_median": 0.4, "prior_sd": 0.36, "prior_cdf": 0.96, "contraction": -0.25},
+            {"parameter": "p_slope_low_u", "posterior_mean": 0.14, "posterior_sd": 0.01,
+             "prior_median": 0.134, "prior_sd": 0.11, "prior_cdf": 0.55, "contraction": 0.91},
+            {"parameter": "ell_unit_sign", "posterior_mean": 0.5, "posterior_sd": 0.19,
+             "prior_median": 0.5, "prior_sd": 0.19, "prior_cdf": 0.5, "contraction": 0.03},
+        ]
+    ).to_csv(fit / "prior_posterior_contraction.csv", index=False)
+    report_cells.render_prior_posterior_contraction(str(fit))
+    out = capsys.readouterr().out
+    assert "| GP amplitude, understood | 0.4 | 0.36 | 0.9 | 0.45 | -0.25 | 0.96 | prior-driven |" in out
+    assert "Understood proportion at the low age anchor" in out and "informed by the data" in out
+    assert "Prior-driven here: `eta_u`, `ell_unit_sign`" in out
+    # Sorted by contraction, so the least-informed parameter comes first.
+    assert out.index("GP amplitude, understood") < out.index("GP length-scale, signing")
+
+
+def test_contraction_table_says_how_to_produce_it_when_absent(tmp_path, capsys):
+    report_cells.render_prior_posterior_contraction(str(_fit(tmp_path)))
+    assert "prior_vs_posterior.py --table" in capsys.readouterr().out
+
+
+def test_family_notes_read_population_and_hierarchy_from_the_fit(tmp_path, capsys):
+    fit = _fit(
+        tmp_path,
+        definition={"population": "ds", "n_trials": 810},
+        parameters=("eta_u", "tau_subj_u"),
+    )
+    report_cells.render_family_notes(str(fit))
+    out = capsys.readouterr().out
+    assert "810-word reference inventory" in out
+    assert "single-child range" in out and "not unusual" in out
+    assert "pooled research sample" in out and "not a norm" in out
+
+    (tmp_path / "td").mkdir()
+    fit = _fit(tmp_path / "td", definition={"population": "td", "n_trials": 810})
+    report_cells.render_family_notes(str(fit))
+    out = capsys.readouterr().out
+    assert "spread of administrations" in out
+    assert "*reference*" in out and "not a target" in out
+
+
+def test_reading_routes_send_non_researchers_away_from_a_development_step(capsys):
+    report_cells.render_reading_routes("development", instead="VG20")
+    out = capsys.readouterr().out
+    assert "**VG20**" in out
+    assert "#sec-predictions" not in out
+
+
+def test_reading_routes_offer_three_routes_on_a_model_of_record(capsys):
+    report_cells.render_reading_routes(
+        "record", joint=True, signing=True, robustness=True, recovery=True
+    )
+    out = capsys.readouterr().out
+    for anchor in (
+        "#sec-predictions", "#sec-one-child", "#sec-spoken-given-understood",
+        "#what-signing-is-worth-to-the-child", "#sec-monthly", "#sec-priors", "#sec-diagnostics",
+        "#sec-loo", "#sec-robustness", "#sec-limits",
+    ):
+        assert anchor in out, anchor
+    assert "parameter recovery" in out
+
+
+def test_reading_routes_reject_an_unknown_role():
+    with pytest.raises(ValueError):
+        report_cells.render_reading_routes("headline")
+
+
+def test_frame_composition_prints_the_manifest_totals_without_a_rebuild(tmp_path, capsys, monkeypatch):
+    fit = _fit(tmp_path)
+    manifest = json.loads((fit / "fit_manifest.json").read_text())
+    manifest["data"].update(
+        {
+            "rows": 1424,
+            "children": 763,
+            "observed_outcome_counts": {"spoken": 1421, "understood": 976},
+            "source_row_counts": {"uk_01": 214, "es_01": 186, "it_01": 173},
+            "analysis_frame_hash": "sha256:not-the-current-frame",
+        }
+    )
+    (fit / "fit_manifest.json").write_text(json.dumps(manifest))
+    report_cells.render_frame_composition(str(fit))
+    out = capsys.readouterr().out
+    assert "**1,424 administrations** from **763 children** (1.87 administrations per child" in out
+    assert "spoken 1,421, understood 976" in out
+    assert "| `uk_01` | 214 |" in out
+    assert out.index("`uk_01`") < out.index("`es_01`") < out.index("`it_01`")
+    assert "the totals above are exact" in out
+
+
+def test_stage_report_sources_copies_the_template_and_every_shared_include(tmp_path):
+    from vocab_growth.reporting import stage_report_sources
+
+    docs = tmp_path / "docs"
+    (docs / "models" / "vg99").mkdir(parents=True)
+    (docs / "models" / "vg99" / "index.qmd").write_text("{{< include _shared.qmd >}}\n")
+    (docs / "models" / "_shared.qmd").write_text("shared body\n")
+    (docs / "models" / "_other.qmd").write_text("another include\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    staged = stage_report_sources("VG99", str(out), docs_dir=str(docs))
+    assert [os.path.basename(p) for p in staged] == ["index.qmd", "_other.qmd", "_shared.qmd"]
+    assert (out / "_shared.qmd").read_text() == "shared body\n"
+
+
+def test_stage_report_sources_raises_when_the_template_is_missing(tmp_path):
+    from vocab_growth.reporting import stage_report_sources
+
+    (tmp_path / "docs" / "models").mkdir(parents=True)
+    with pytest.raises(FileNotFoundError):
+        stage_report_sources("VG99", str(tmp_path), docs_dir=str(tmp_path / "docs"))
+
+
+def test_diagnostic_verdict_does_not_name_a_listed_parameter_for_an_unlisted_extreme(tmp_path, capsys):
+    """The gate screens random-effect elements the table omits (VG20's min ESS)."""
+    gate = {
+        "passed": True,
+        "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
+        "divergences": 0, "max_rhat": 1.0042, "min_ess": 1416.0, "bfmi_per_chain": [0.5],
+        "thresholds": {"rhat_max": 1.01, "ess_threshold": 400, "bfmi_threshold": 0.3},
+    }
+    fit = _fit(tmp_path, gate=gate)
+    pd.DataFrame(index=["eta_u"], data={"r_hat": [1.0042], "ess_bulk": [2017.0], "ess_tail": [3367.0]}).to_csv(
+        fit / "diagnostics.csv"
+    )
+    report_cells.render_diagnostic_verdict(str(fit))
+    out = capsys.readouterr().out
+    assert "1,416 (an element the table does not list)" in out
+    assert "1.004200 (`eta_u`)" in out
+
+
+def test_emit_factor_correlation_summarises_the_trace_variable(tmp_path):
+    """The 4x4 the factor model exists to estimate reaches a CSV the report can render."""
+    import runpy
+
+    import h5netcdf
+
+    module = runpy.run_path(
+        os.path.join(os.path.dirname(__file__), "..", "scripts", "emit_factor_correlation.py")
+    )
+    rng = np.random.default_rng(0)
+    values = np.tile(np.eye(4), (2, 5, 1, 1))
+    values[..., 0, 2] = values[..., 2, 0] = 0.3 + rng.normal(0, 0.01, size=(2, 5))
+    with h5netcdf.File(tmp_path / "trace.nc", "w") as handle:
+        group = handle.create_group("posterior")
+        group.dimensions = {"chain": 2, "draw": 5, "child_effect4": 4, "child_effect4_b": 4}
+        var = group.create_variable(
+            "subject_factor_corr", ("chain", "draw", "child_effect4", "child_effect4_b"), float
+        )
+        var[...] = values
+        labels = group.create_variable("child_effect4", ("child_effect4",), dtype="S4")
+        labels[...] = np.array([b"b0u", b"b1u", b"b0q", b"b1q"])
+    path = module["summarise"](str(tmp_path))
+    table = pd.read_csv(path)
+    assert set(table["row"]) == {"b0u", "b1u", "b0q", "b1q"}
+    cell = table[(table["row"] == "b0u") & (table["column"] == "b0q")].iloc[0]
+    assert abs(cell["mean"] - 0.3) < 0.02
+    diagonal = table[table["row"] == table["column"]]
+    assert (diagonal["mean"] == 1.0).all()
+
+
+def test_frame_composition_says_when_the_frame_carries_no_study_or_child_key(tmp_path, capsys, monkeypatch):
+    """The plain bivariate engine's frame has age and outcomes only; that is a fact to state."""
+    from vocab_growth import analysis_frames
+
+    fit = _fit(tmp_path)
+    manifest = json.loads((fit / "fit_manifest.json").read_text())
+    manifest["model"]["model_id"] = "VG05"
+    manifest["data"].update({"rows": 3, "analysis_frame_hash": "sha256:stub"})
+    (fit / "fit_manifest.json").write_text(json.dumps(manifest))
+    frame = pd.DataFrame({"age": [12.0, 30.0, 50.0], "understood": [5, 80, None], "spoken": [0, 20, 300]})
+    monkeypatch.setattr(analysis_frames, "build_analysis_frame", lambda key, definition: (frame, {}))
+    monkeypatch.setattr(analysis_frames, "analysis_frame_hash", lambda df: "sha256:stub")
+    report_cells.render_frame_composition(str(fit))
+    out = capsys.readouterr().out
+    assert "**This frame carries no study or child key**" in out
+    assert "| 0–24 | 1 | 1 |" in out
+    assert "| 48–72 | 0 | 1 |" in out
+    assert "seen more than once" not in out.split("**This frame")[0]
+
+
+def test_frame_composition_tabulates_studies_when_only_the_child_key_is_absent(tmp_path, capsys, monkeypatch):
+    """The trivariate frame keeps `study` for its signing masks but has no child key."""
+    from vocab_growth import analysis_frames
+
+    fit = _fit(tmp_path)
+    manifest = json.loads((fit / "fit_manifest.json").read_text())
+    manifest["model"]["model_id"] = "VG14"
+    manifest["data"].update({"rows": 3, "analysis_frame_hash": "sha256:stub"})
+    (fit / "fit_manifest.json").write_text(json.dumps(manifest))
+    frame = pd.DataFrame(
+        {"study": ["uk_02", "uk_02", "es_01"], "age": [20.0, 40.0, 30.0], "understood": [50, 200, 90], "spoken": [5, 60, 20]}
+    )
+    monkeypatch.setattr(analysis_frames, "build_analysis_frame", lambda key, definition: (frame, {}))
+    monkeypatch.setattr(analysis_frames, "analysis_frame_hash", lambda df: "sha256:stub")
+    report_cells.render_frame_composition(str(fit))
+    out = capsys.readouterr().out
+    assert "| `uk_02` | 2 | 20–40 |" in out
+    assert "**This frame carries no child key**" in out
+    assert "no study or child key" not in out
+
+
+# --------------------------------------------------------------------------
+# Dispersion scope
+# --------------------------------------------------------------------------
+
+
+def _kappa_fit(tmp_path, *, definition=None, contraction=None, curves=("u", "s")):
+    """A fit directory carrying posterior kappa curves and a contraction table."""
+    fit = _fit(tmp_path, definition=definition or {"n_trials": 810})
+    for suffix in curves:
+        name = "posterior_kappa" if suffix is None else f"posterior_kappa_{suffix}"
+        pd.DataFrame(
+            {"age_months": [8.0, 24.0], "kappa_median": [30.0, 60.0], "vif_median": [20.0, 10.0]}
+        ).to_csv(fit / f"{name}.csv", index=False)
+    if contraction is not None:
+        pd.DataFrame(contraction).to_csv(fit / "prior_posterior_contraction.csv", index=False)
+    return fit
+
+
+def test_dispersion_scope_names_the_denominator_of_each_curve(tmp_path, capsys):
+    """The defect: two kappa figures under near-identical headings, no scope stated.
+
+    ``kappa_u`` disperses counts out of the item pool; ``kappa_s`` disperses the
+    production ratio on the child's own understood count. Nothing on the page
+    said so, which invited reading one level against the other.
+    """
+    report_cells.render_dispersion_scope(str(_kappa_fit(tmp_path)))
+    out = capsys.readouterr().out
+    assert "810-item reference inventory" in out
+    assert "**conditional** ratio" in out
+    assert "spoken among the words that child understands" in out
+    assert "different denominators" in out and "These two curves" in out
+    assert "never against another model's curve" in out
+
+
+def test_dispersion_scope_counts_a_third_curve_in_words(tmp_path, capsys):
+    report_cells.render_dispersion_scope(
+        str(_kappa_fit(tmp_path, curves=("u", "s", "sign")))
+    )
+    out = capsys.readouterr().out
+    assert "These three curves" in out
+    assert "signed among the words that child understands" in out
+
+
+def test_dispersion_scope_omits_the_comparison_for_a_single_outcome(tmp_path, capsys):
+    report_cells.render_dispersion_scope(str(_kappa_fit(tmp_path, curves=(None,))))
+    out = capsys.readouterr().out
+    assert "810-item reference inventory" in out
+    assert "different denominators" not in out
+
+
+def test_dispersion_scope_maps_an_uninformed_kappa_to_its_anchor_age(tmp_path, capsys):
+    """VG22's ``kappa_excess_young_s`` contracts to -0.23 on real data.
+
+    The curve is still drawn there, so the page has to say which *end* of it the
+    data never placed -- which means resolving the parameter to the reference age
+    its prior is anchored at, not just naming the parameter.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        definition={"n_trials": 810, "kappa_s": {"anchor_ages": [18.0, 72.0]}},
+        contraction=[
+            {"parameter": "kappa_min_u", "posterior_mean": 8.6, "posterior_sd": 5.1,
+             "prior_cdf": 0.55, "contraction": 0.50, "flags": ""},
+            {"parameter": "kappa_excess_young_s", "posterior_mean": 49.6, "posterior_sd": 27.6,
+             "prior_cdf": 0.94, "contraction": -0.2286, "flags": "uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "the curve at and below 18 months" in out
+    assert "not estimated from this data" in out and "-0.23" in out
+    assert "callout-warning" in out
+    # The informed parameter is not listed as a caveat.
+    assert "kappa_min_u" not in out
+
+
+def test_dispersion_scope_flags_a_prior_acting_as_a_floor(tmp_path, capsys):
+    """The two-sided test. VG14's kappa parameters press the *lower* tail.
+
+    ``prior_vs_posterior.py`` flagged only ``cdf >= 0.95`` until 2026-09-02, so a
+    fit whose data wants a smaller dispersion than the prior offers carried an
+    empty ``flags`` column. This block reads the numbers, so it is right against
+    a table written either side of that fix.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        definition={"n_trials": 810, "kappa_u": {"anchor_ages": [18.0, 72.0]}},
+        contraction=[
+            {"parameter": "kappa_excess_young_u", "posterior_mean": 8.7, "posterior_sd": 1.15,
+             "prior_cdf": 0.0114, "contraction": 0.9937, "flags": ""},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "pressing against its prior" in out
+    assert "below what the prior comfortably allows" in out
+    assert "the curve at and below 18 months" in out
+
+
+def test_dispersion_scope_reports_every_curve_readable_when_nothing_is_flagged(
+    tmp_path, capsys
+):
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "kappa_min_u", "posterior_mean": 8.6, "posterior_sd": 5.1,
+             "prior_cdf": 0.55, "contraction": 0.50, "flags": ""},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "both ends of each curve can be read" in out
+    assert "callout-warning" not in out
+
+
+def test_dispersion_scope_says_so_when_the_fit_writes_no_curve(tmp_path, capsys):
+    report_cells.render_dispersion_scope(str(_fit(tmp_path)))
+    assert "no posterior dispersion curve" in capsys.readouterr().out
+
+
+def test_prior_vs_posterior_presses_on_both_tails():
+    """A prior acting as a floor is the same finding as one acting as a ceiling.
+
+    ``scripts/`` is not importable from the test run, and the assertion is about
+    one condition, so this reads the source rather than adding path plumbing.
+    """
+    source = (REPO_ROOT / "scripts" / "prior_vs_posterior.py").read_text(encoding="utf-8")
+    assert "CONFLICT_CDF = 0.95" in source
+    assert "if cdf >= CONFLICT_CDF or cdf <= 1.0 - CONFLICT_CDF:" in source
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("kappa_min_u", ("min", "u")),
+        ("kappa_min", ("min", None)),
+        ("kappa_excess_young_s", ("excess_young", "s")),
+        ("kappa_excess_old_sign", ("excess_old", "sign")),
+        ("a_kappa_s", ("level", "s")),
+        ("b_kappa_mag_sign", ("slope", "sign")),
+        ("eta_u", (None, None)),
+        ("ell_unit_q", (None, None)),
+    ],
+)
+def test_kappa_role_parsing_covers_the_legacy_names(name, expected):
+    """The defect: the first cut matched ``name.startswith("kappa")``.
+
+    The legacy intercept-and-slope form names its parameters ``a_kappa_s`` and
+    ``b_kappa_mag_s``, which do not begin with "kappa", so VG05, VG07 and VG08
+    had every dispersion caveat silently dropped -- including ``b_kappa_mag_s``
+    at 7.8 prior SDs, the strongest prior-data conflict in the suite.
+    """
+    assert report_cells._kappa_role_and_suffix(name) == expected
+
+
+def test_dispersion_scope_reports_a_strained_legacy_curve_as_one_finding(tmp_path, capsys):
+    """``kappa_min + exp(a - b_mag z)`` couples the intercept and the slope.
+
+    Reporting them as two caveats would read as two problems where the fit has
+    one, and would invite fixing the intercept prior when the slope prior is what
+    is binding.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "a_kappa_s", "posterior_mean": 0.361, "posterior_sd": 0.167,
+             "prior_cdf": 0.043, "contraction": 0.833, "flags": "pressing"},
+            {"parameter": "b_kappa_mag_s", "posterior_mean": 1.419, "posterior_sd": 0.195,
+             "prior_cdf": 1.0, "contraction": -0.080, "flags": "pressing+uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert out.count("- **") == 1, "the coupled pair must be one bullet"
+    assert "The shape of this curve" in out
+    assert "`a_kappa_s`" in out and "`b_kappa_mag_s`" in out
+    assert "one finding, not two" in out
+    assert "steeper decline with age than the slope prior allows" in out and "pulled down to compensate" in out
+
+
+def test_dispersion_scope_does_not_call_a_far_tail_posterior_uninformed(tmp_path, capsys):
+    """Contraction cannot separate "data said nothing" from "said something far away".
+
+    ``b_kappa_mag_s`` is 7.8 prior SDs out with a 13% relative posterior spread,
+    and scores contraction -0.08. Reporting that as "not estimated from this
+    data" would be the opposite of the truth.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "b_kappa_mag_s", "posterior_mean": 1.419, "posterior_sd": 0.195,
+             "prior_cdf": 1.0, "contraction": -0.080, "flags": "pressing+uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "pressing against its prior" in out
+    assert "not estimated from this data" not in out
+    assert "does not** mean the data was silent" in out.replace("**not**", "not**")
+
+
+def test_dispersion_scope_still_calls_a_mid_prior_flat_posterior_unestimated(tmp_path, capsys):
+    fit = _kappa_fit(
+        tmp_path,
+        definition={"n_trials": 810, "kappa_s": {"anchor_ages": [18.0, 72.0]}},
+        contraction=[
+            {"parameter": "kappa_excess_young_s", "posterior_mean": 49.6, "posterior_sd": 27.6,
+             "prior_cdf": 0.62, "contraction": -0.2286, "flags": "uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "not estimated from this data" in out and "mid-prior" in out
+    assert "pressing against its prior" not in out
+
+
+# --------------------------------------------------------------------------
+# Conditional production check
+# --------------------------------------------------------------------------
+
+
+def _by_understood_fit(tmp_path, monkeypatch, *, frame):
+    fit = _fit(tmp_path, definition={"n_trials": 810})
+    pd.DataFrame(
+        {"words_understood": [50.0, 100.0, 200.0, 300.0], "q_median": [0.05, 0.10, 0.22, 0.43],
+         "ci_lo": [0.04, 0.09, 0.21, 0.40], "ci_hi": [0.06, 0.11, 0.23, 0.45]}
+    ).to_csv(fit / "production_rate_by_understood.csv", index=False)
+    monkeypatch.setattr(report_cells, "_verified_frame", lambda manifest: (frame, None))
+    return fit
+
+
+def test_conditional_production_check_sets_the_children_beside_the_curve(
+    tmp_path, monkeypatch, capsys
+):
+    """The defect (#233): the curve is population q at the age where the population
+    median reaches U, and three captions read it as E[q | understood = U]. At 300
+    words the VG21 and VG22 curves both sit near 0.4 while the children who
+    understood 300 words have median ratios of 0.27 and 0.13.
+    """
+    rng = np.random.default_rng(0)
+    n = 60
+    frame = pd.DataFrame(
+        {"understood": np.full(n, 300.0), "spoken": 300.0 * rng.uniform(0.1, 0.4, n),
+         "age": np.full(n, 38.0), "subject_key": [f"c{i}" for i in range(n)]}
+    )
+    report_cells.render_conditional_production_check(str(_by_understood_fit(tmp_path, monkeypatch, frame=frame)))
+    out = capsys.readouterr().out
+    assert "is **not** the share" in out
+    assert "| 300 | 0.43 [0.40, 0.45] | 60 children |" in out
+    assert "| 38 months |" in out
+    # No children near 50, 100 or 200, so those rows are not shown.
+    assert "| 50 |" not in out and "| 200 |" not in out
+    assert "must be made in the right-hand column" in out
+
+
+def test_conditional_production_check_says_why_when_the_frame_is_unavailable(
+    tmp_path, monkeypatch, capsys
+):
+    fit = _fit(tmp_path)
+    pd.DataFrame({"words_understood": [300.0], "q_median": [0.43]}).to_csv(
+        fit / "production_rate_by_understood.csv", index=False
+    )
+    monkeypatch.setattr(report_cells, "_verified_frame", lambda manifest: (None, "the hash moved"))
+    report_cells.render_conditional_production_check(str(fit))
+    out = capsys.readouterr().out
+    assert "is **not** the share" in out
+    assert "because the hash moved" in out
+
+
+def test_conditional_production_check_says_so_when_the_curve_is_absent(tmp_path, capsys):
+    report_cells.render_conditional_production_check(str(_fit(tmp_path)))
+    assert "no by-understood production curve" in capsys.readouterr().out
+
+
+def test_observed_production_ratio_at_levels_windows_and_thresholds():
+    """Shared by the page block and compare_ds_td_re, so one definition of "near"."""
+    frame = pd.DataFrame(
+        {
+            "understood": [95, 100, 105, 110, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300],
+            "spoken": [10, 20, 30, 40] + [30, 60, 90, 120, 150, 30, 60, 90, 120, 150, 90],
+            "age": [12, 12, 13, 13] + [40] * 11,
+            "subject_key": [f"c{i}" for i in range(14)] + ["c13"],
+        }
+    )
+    table = report_cells.observed_production_ratio_at_levels(frame, [100, 200, 300])
+    # 100 has four rows (below the ten-row floor); 200 has none; 300 has eleven.
+    assert table["level"].tolist() == [300.0]
+    row = table.iloc[0]
+    assert row["n"] == 11 and row["children"] == 10
+    assert abs(row["median"] - 0.3) < 1e-9
+    assert row["median_age"] == 40.0
+
+
+def test_dispersion_scope_pairs_only_two_pressing_parameters_and_reads_the_direction(
+    tmp_path, capsys
+):
+    """A mid-prior, barely-contracted intercept beside a pressing slope is two facts.
+
+    And the pair's sentence must follow the tails: a slope in its lower tail is a
+    gentler decline, not the steeper one VG08 happens to show.
+    """
+    fit = _kappa_fit(
+        tmp_path,
+        contraction=[
+            {"parameter": "a_kappa_s", "posterior_mean": 2.0, "posterior_sd": 1.0,
+             "prior_cdf": 0.48, "contraction": 0.01, "flags": "uninformed"},
+            {"parameter": "b_kappa_mag_s", "posterior_mean": 1.4, "posterior_sd": 0.2,
+             "prior_cdf": 1.0, "contraction": -0.08, "flags": "pressing+uninformed"},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "The shape of this curve" not in out
+    assert out.count("- **") == 2
+
+    (tmp_path / "low").mkdir()
+    fit = _kappa_fit(
+        tmp_path / "low",
+        contraction=[
+            {"parameter": "a_kappa_u", "posterior_mean": 3.5, "posterior_sd": 0.2,
+             "prior_cdf": 0.97, "contraction": 0.8, "flags": "pressing"},
+            {"parameter": "b_kappa_mag_u", "posterior_mean": 0.01, "posterior_sd": 0.01,
+             "prior_cdf": 0.02, "contraction": 0.9, "flags": ""},
+        ],
+    )
+    report_cells.render_dispersion_scope(str(fit))
+    out = capsys.readouterr().out
+    assert "The shape of this curve" in out and "gentler decline" in out
+    assert "pulled up to compensate" in out
+
+
+def test_reference_child_calibration_sets_the_curve_beside_the_sample(tmp_path, monkeypatch, capsys):
+    """The population curve is the child in the average study; the sample median is
+    the children in the data. At ages covered by one or two studies they can sit
+    far apart, and every milestone on the page is read off the former."""
+    fit = _fit(tmp_path)
+    ages = np.arange(8.0, 61.0)
+    pd.DataFrame({"age_months": ages, "Ey_median": ages * 5}).to_csv(fit / "posterior_summary_monthly_u.csv", index=False)
+    pd.DataFrame({"age_months": ages, "Ey_median": ages * 5 + 20}).to_csv(fit / "posterior_summary_monthly_weighted_u.csv", index=False)
+    rng = np.random.default_rng(1)
+    frame = pd.DataFrame({"age": rng.uniform(10, 58, 600)})
+    frame["understood"] = frame["age"] * 6
+    monkeypatch.setattr(report_cells, "_verified_frame", lambda manifest: (frame, None))
+    report_cells.render_reference_child_calibration(str(fit))
+    out = capsys.readouterr().out
+    assert "| Age | Outcome | Reference child | Administration-weighted child | Sample median |" in out
+    assert out.count("| understood |") == 3
+    assert "largest gap between the reference child and the sample" in out
+    assert "child in the *average study*" in out
+
+
+def test_reference_child_calibration_says_so_without_a_monthly_summary(tmp_path, capsys):
+    report_cells.render_reference_child_calibration(str(_fit(tmp_path)))
+    assert "no monthly summary" in capsys.readouterr().out

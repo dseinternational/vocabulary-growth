@@ -565,14 +565,30 @@ Back up the non-converged output first; the refit becomes the model of record.
 
 ## 3. Render + comparisons
 
+Two report blocks read artefacts the fit itself does not write, and print a "run this" note until they exist. Produce them per fit **before** rendering (each opens the trace, so run them one model at a time rather than as a sweep while a heavy fit is on the box):
+
+```bash
+python scripts/prior_vs_posterior.py --table --model vg20 --model vg15   # writes prior_posterior_contraction.csv into each fit dir
+python scripts/emit_factor_correlation.py <output>/models/VG22-*/         # writes subject_factor_corr.csv for the factor model
+python scripts/regenerate_plots.py all --config rep --output-dir <scratch>   # re-runs the plot stage: since 2026-09-03 the joint RE pages reference study_fans.png and posterior_summary_monthly_weighted_{u,s}.csv, and the words/ratio figures carry the observed children, none of which a fit made before that date wrote
+```
+
+A template change is applied to an existing fit with `--render-only`, which re-stages `docs/models/<model>/index.qmd` **and** every `docs/models/_*.qmd` include beside it (the bivariate random-effects family transcludes one). Since 2026-09-02 that is a fresh render of every page, not only the changed ones, because the shared blocks changed.
+
 ```bash
 python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # validates fits, then feeds docs/report/figures/
 # comparisons (consume fitted traces/summaries):
-for c in loo_compare loso_compare compare_models compare_ds_td \
+for c in loo_compare loso_compare compare_models \
          compare_ds_td_trajectories compare_ds_td_expressive \
-         compare_ds_td_latency compare_ds_td_q_overlap compare_ds_td_re; do
+         compare_ds_td_latency subject_effect_correlation; do
   python scripts/$c.py
 done
+python scripts/compare_ds_td_re.py spoken understood comprehension   # the joint contrasts, incl. the weighted child
+for m in vg10 vg14 vg15; do python scripts/compare_sensitivity.py $m --variant all; done
+# `compare_ds_td` and `compare_ds_td_q_overlap` are deprecated shims that delegate to
+# compare_ds_td_re and need not run. `subject_effect_correlation.py` writes
+# ds_subject_effect_correlation.csv, which the comparison book reads; it was missing
+# from this list until the 2026-09-03 tail failed on it.
 python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re-sync comparison artefacts
 # Everything the report needs that is NOT model output -- the descriptives, the
 # introduction's illustrations (bayes_update*.png), the methods chapter's prior
@@ -580,19 +596,29 @@ python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re
 # that the sync neither validates nor regenerates. Run it AFTER the sync, or
 # `quarto render docs/report` fails on a missing file:
 python scripts/prepare_report_figures.py
+# Pin Quarto's Python interpreter to the project environment for BOTH book renders: a bare `quarto render`
+# resolved a Python interpreter without the `yaml` package on 2026-09-03 and both books died in their first
+# cell with `ModuleNotFoundError: No module named 'yaml'`. fit_model.py pins this for
+# the per-model pages; nothing pins it for the books.
+export QUARTO_PYTHON="$(python -c 'import sys; print(sys.executable)')"
 quarto render docs/report
-# the comparison book reads its CSV/PNG artefacts by BARE filename from its own dir,
-# and sync_report_figures only populates docs/report/figures/ — so stage them first:
-cp <scratch>/comparisons/* docs/comparison/                    # (gitignored)
-cp <scratch>/comparisons/recovery/*.csv docs/comparison/       # only if a chapter cites recovery
-quarto render docs/comparison/index.qmd
+# The comparison book stages, renders, publishes and VERIFIES itself in one step.
+# Do not stage and render it by hand; `publish_comparison.py` exists because both
+# halves of doing so failed on 2026-09-03 (see below).
+python scripts/publish_comparison.py --output-dir <scratch>
 ```
+
+Two more things the 2026-09-03 tail found. The **first** `sync_report_figures` in the block above fails with "comparison_manifest.json is missing" whenever `output/comparisons/` already holds artefacts from a script run outside the tail (a smoke run of `compare_ds_td_re.py`, say) and no comparison script that writes a manifest has run since: the sync validates the comparison directory as a whole, and a directory with artefacts and no manifest is invalid. Either clear the directory first or accept that the first sync validates the fits and fails on the comparisons, and rely on the second. And `check_fit.py all --purpose publish` has no caveat allowance: a fit that cleared R-hat and ESS but carries a divergence or a BFMI below 0.3 is reported `[invalid]` there even though `sync_report_figures --allow-caveats` and `upload.py --allow-caveats` accept it. On 2026-09-03 six fits were in that state (VG11, VG12, VG13, VG21, VG22, VG23); the decision to publish them under `--allow-caveats` is recorded in `output/run-record.md`, and the checklist item below is therefore not met by them.
 
 **A provisional fit of _any_ registered model blocks the whole sync.** `sync_report_figures` validates every directory under `output/models/` whose name resolves to a registered model, and one failure aborts the run for all of them — by design, so a half-valid figure cache never reaches the report. The trap is that **registering a new model makes its output subject to that check immediately**, long before anyone intends to publish it. A `dev` fit of VG20, made only to prove its pipeline ran, failed with `Sampling configuration mismatch: found 'dev', expected 'rep'` and took the other fifteen models' sync down with it.
 
 So when a new model is added mid-run, either delete its provisional output before syncing, or point it at a different output root. `--allow-provisional` relaxes the check but is for local dev work, not for a publication sync. Note also that the publication sync needs `--allow-caveats` regardless: VG10, VG11, VG12 and VG13 all carry recorded soft-tier caveats, and without the flag the sync fails on those four with no mention of sampling configuration at all — which reads as a different problem than it is.
 
-**Nothing enforces the comparison staging step, and it fails quietly in both directions.** `docs/comparison/` is gitignored, so a stale copy survives indefinitely and renders without complaint against artefacts from a previous run — on 2026-08-16 the comparison book was published against figures 20 hours older than the report beside it, and the only reason it was noticed is that a _newly cited_ file was absent, which fails loudly with a `KeyError` where an _outdated_ one does not. Treat a comparison-book render as invalid unless the copy immediately precedes it in the same shell.
+**The comparison book has its own publishing script, and hand-staging it is what the script exists to prevent.** `scripts/publish_comparison.py` clears the staged inputs before restaging them, renders with `QUARTO_PYTHON` pinned, collects the assets **the rendered page actually references** rather than a remembered list, uploads them as a unit, and then requests every published file over HTTP and fails on anything that does not return 200. Pass `--run-id <id>` to republish over an existing publication instead of minting a new URL, which is how a broken publication is repaired without invalidating a link already circulated. Both failure modes it guards were hit on 2026-09-03: a hand-assembled upload carried `index.html` and `index_files/` but **none of the 24 figures**, and the page published with every image broken because only `index.html` was checked for a 200; and the staging `cp` overwrote without removing, so a quarantined recovery replicate survived in `docs/comparison/` and the book rendered a table that included it.
+
+**The report book is not published to public storage.** It was uploaded once on 2026-09-03 and removed the same day on the study owner's instruction. Render it — the render is what validates the figure cache and it must still pass — but do not upload it. Only the twenty model reports and the comparison book are published publicly.
+
+**Nothing enforced the comparison staging step before that script, and it failed quietly in both directions.** `docs/comparison/` is gitignored, so a stale copy survives indefinitely and renders without complaint against artefacts from a previous run — on 2026-08-16 the comparison book was published against figures 20 hours older than the report beside it, and the only reason it was noticed is that a _newly cited_ file was absent, which fails loudly with a `KeyError` where an _outdated_ one does not. Treat a comparison-book render as invalid unless the copy immediately precedes it in the same shell.
 
 Note also that `sync_report_figures._sync_dir` is flat: it copies files, not sub-directories. `comparisons/recovery/` and `comparisons/sensitivity/` are synced by an explicit loop, and anything else nested under `comparisons/` will silently not reach the report unless it is added there too.
 

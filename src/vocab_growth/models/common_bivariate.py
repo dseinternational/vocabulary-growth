@@ -1767,6 +1767,86 @@ def plot_understood_spoken_trajectory_intervals(
     return fig
 
 
+#: Ages marked along a path whose x axis is comprehension rather than age. The
+#: reparameterised figures hid age entirely, which is what let a reader take the
+#: population path for a statement about children at a level (issue #233); a
+#: marker every year restores it without changing the curve.
+_AGE_MARKER_STEP_MONTHS = 12.0
+
+#: Width of the comprehension bins the observed children are summarised in, and
+#: the fewest administrations a bin needs before it is drawn.
+_OBSERVED_BIN_WORDS = 50
+_OBSERVED_BIN_MIN = 10
+
+
+def _observed_pairs(samples):
+    """``(understood, spoken)`` for every administration carrying both counts, or ``None``.
+
+    Read from the samples object rather than the frame so a plot hook needs no
+    data rebuild: the engines store each outcome NaN-padded over one ``X_obs``.
+    Returns ``None`` when the samples carry no observed counts (the age-cap tests
+    build stubs without them), so every overlay is optional.
+    """
+    y_u = getattr(samples, "y_u_obs", None)
+    y_s = getattr(samples, "y_s_obs", None)
+    if y_u is None or y_s is None:
+        return None
+    y_u = np.asarray(y_u, dtype=float)
+    y_s = np.asarray(y_s, dtype=float)
+    keep = ~np.isnan(y_u) & ~np.isnan(y_s)
+    if not keep.any():
+        return None
+    return y_u[keep], y_s[keep]
+
+
+def _observed_by_level(understood, values):
+    """Median and quartiles of ``values`` within bins of observed comprehension.
+
+    One row per ``_OBSERVED_BIN_WORDS``-wide bin holding at least
+    ``_OBSERVED_BIN_MIN`` administrations: ``level`` (bin centre), ``n``,
+    ``median``, ``q25``, ``q75``. This is the same summary
+    :func:`vocab_growth.report_cells.observed_production_ratio_at_levels` prints
+    beside the curve, binned rather than windowed so the marks tile the axis.
+    """
+    edges = np.arange(0, np.nanmax(understood) + _OBSERVED_BIN_WORDS, _OBSERVED_BIN_WORDS)
+    rows = []
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        inside = (understood >= lo) & (understood < hi)
+        if inside.sum() < _OBSERVED_BIN_MIN:
+            continue
+        v = values[inside]
+        rows.append({
+            "level": (lo + hi) / 2.0, "n": int(inside.sum()),
+            "median": float(np.median(v)),
+            "q25": float(np.quantile(v, 0.25)), "q75": float(np.quantile(v, 0.75)),
+        })
+    return pd.DataFrame(rows, columns=["level", "n", "median", "q25", "q75"])
+
+
+def _draw_observed_levels(ax, table, *, label):
+    """Binned observed medians with interquartile bars, in the observed colour."""
+    if table.empty:
+        return
+    ax.errorbar(
+        table["level"], table["median"],
+        yerr=[table["median"] - table["q25"], table["q75"] - table["median"]],
+        fmt="s", ms=6, capsize=3, lw=1.2, color=plot_styles.COLOUR_ORANGE, label=label,
+    )
+
+
+def _draw_age_markers(ax, ages, x, y, *, colour="C0"):
+    """A dot and an age label on a path every ``_AGE_MARKER_STEP_MONTHS``."""
+    ages = np.asarray(ages, dtype=float)
+    first = np.ceil(ages.min() / _AGE_MARKER_STEP_MONTHS) * _AGE_MARKER_STEP_MONTHS
+    for a in np.arange(first, ages.max() + 1e-9, _AGE_MARKER_STEP_MONTHS):
+        i = int(np.argmin(np.abs(ages - a)))
+        ax.plot(x[i], y[i], "o", ms=6, color=colour, zorder=4)
+        ax.annotate(
+            f"{a:.0f} mo", (x[i], y[i]), xytext=(6, -11), textcoords="offset points",
+            fontsize=9, color=plot_styles.TEXT_COLOUR,
+        )
+
+
 def plot_production_rate_by_understood(
     samples: BivariateModelSamples,
     n_trials: int,
@@ -1808,8 +1888,10 @@ def plot_production_rate_by_understood(
     p_u_plot = samples.p_u_plot  # (n_plot, n_samples)
     q_plot = samples.q_plot  # (n_plot, n_samples)
 
+    X_plot_kept = np.asarray(samples.X_plot)
     if max_age_months is not None:
-        keep = np.asarray(samples.X_plot) <= max_age_months
+        keep = X_plot_kept <= max_age_months
+        X_plot_kept = X_plot_kept[keep]
         p_u_plot = p_u_plot[keep, :]
         q_plot = q_plot[keep, :]
 
@@ -1835,13 +1917,28 @@ def plot_production_rate_by_understood(
         alpha=0.30,
         label="50% interval",
     )
-    ax.plot(x_words, q_median, lw=3, label="Median q")
+    ax.plot(
+        x_words, q_median, lw=3,
+        label="Population ratio at the age the median child reaches this level",
+    )
+    _draw_age_markers(ax, X_plot_kept, x_words, q_median)
 
-    ax.set_xlabel("Population expected words understood (by age)")
-    ax.set_ylabel("q = p_S / p_U")
+    observed = _observed_pairs(samples)
+    observed_table = pd.DataFrame(columns=["level", "n", "median", "q25", "q75"])
+    if observed is not None:
+        u_obs, s_obs = observed
+        positive = u_obs > 0
+        observed_table = _observed_by_level(u_obs[positive], s_obs[positive] / u_obs[positive])
+        _draw_observed_levels(
+            ax, observed_table,
+            label="Children who understood about this many words: median ratio, IQR",
+        )
+
+    ax.set_xlabel("Words understood")
+    ax.set_ylabel("Share of understood words that are spoken")
     ax.set_ylim(0, 1)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Population production ratio by developmental stage")
+    ax.set_title("Production ratio: the population's path through age, and the children at each level")
 
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
@@ -1854,6 +1951,8 @@ def plot_production_rate_by_understood(
             "ci_lo": q_ci[:, 0],
             "ci_hi": q_ci[:, 1],
         }))
+        if not observed_table.empty:
+            plot_io.save_plot_data(output_dir, f"{filename}_observed", observed_table)
 
     return fig
 
@@ -1976,18 +2075,39 @@ def plot_understood_vs_spoken(
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
+    observed = _observed_pairs(samples)
+    observed_table = pd.DataFrame(columns=["level", "n", "median", "q25", "q75"])
+    limit = float(n_trials)
+    if observed is not None:
+        u_obs, s_obs = observed
+        ax.scatter(
+            u_obs, s_obs, s=8, alpha=0.25, color=plot_styles.LINE_COLOUR, zorder=1,
+            label=f"Observed administrations (n={u_obs.size:,})",
+        )
+        observed_table = _observed_by_level(u_obs, s_obs)
+
     for i in idx:
         ax.plot(E_u[:, i], E_s[:, i], lw=0.3, alpha=0.15, color="C0")
 
-    ax.plot(E_u_median, E_s_median, lw=3, color="C0", label="Median")
+    ax.plot(
+        E_u_median, E_s_median, lw=3, color="C0", zorder=3,
+        label="Population path by age (median child)",
+    )
+    _draw_age_markers(ax, X_plot, E_u_median, E_s_median)
+    _draw_observed_levels(
+        ax, observed_table,
+        label="Children who understood about this many words: median spoken, IQR",
+    )
 
-    # Reference line: understood = spoken
-    limit = max(E_u_median.max(), E_s_median.max()) * 1.05
-    ax.plot([0, limit], [0, limit], ls="--", lw=1, color="grey", label="y = x")
+    # Reference line: understood = spoken, the ceiling no child can exceed.
+    ax.plot([0, limit], [0, limit], ls="--", lw=1, color=plot_styles.LINE_COLOUR,
+            label="Spoken = understood")
 
-    ax.set_xlabel("E[words understood]")
-    ax.set_ylabel("E[words spoken]")
-    ax.set_title("Expected words understood vs spoken")
+    ax.set_xlabel("Words understood")
+    ax.set_ylabel("Words spoken")
+    ax.set_xlim(0, limit)
+    ax.set_ylim(0, limit)
+    ax.set_title("Words spoken against words understood: the population path and the children")
     ax.legend(loc="upper left", frameon=True)
 
     if output_dir is not None and filename is not None:
@@ -1998,6 +2118,8 @@ def plot_understood_vs_spoken(
             "understood_median": E_u_median,
             "spoken_median": E_s_median,
         }))
+        if not observed_table.empty:
+            plot_io.save_plot_data(output_dir, f"{filename}_observed", observed_table)
 
     return fig
 
@@ -2034,18 +2156,34 @@ def plot_understood_vs_spoken_predictive(
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
 
-    for i in idx:
-        ax.plot(y_u[:, i], y_s[:, i], lw=0.3, alpha=0.10, color="C0")
+    # Each draw is a pair of counts for a freshly drawn child at an age; joining
+    # a draw's pairs across ages with a line drew a solid wedge that read as
+    # nothing. They are points.
+    ax.scatter(
+        y_u[:, idx].ravel(), y_s[:, idx].ravel(), s=4, alpha=0.08, color="C0",
+        zorder=1, label="Predicted (understood, spoken) for a new child, across ages",
+    )
+    observed = _observed_pairs(samples)
+    if observed is not None:
+        u_obs, s_obs = observed
+        ax.scatter(
+            u_obs, s_obs, s=8, alpha=0.35, color=plot_styles.COLOUR_ORANGE, zorder=2,
+            label=f"Observed administrations (n={u_obs.size:,})",
+        )
 
-    ax.plot(y_u_median, y_s_median, lw=3, color="C0", label="Median")
+    ax.plot(y_u_median, y_s_median, lw=3, color="C0", zorder=3,
+            label="Population path by age (median child)")
+    _draw_age_markers(ax, X_plot, y_u_median, y_s_median)
 
-    # Reference line: understood = spoken
-    limit = max(y_u_median.max(), y_s_median.max()) * 1.05
-    ax.plot([0, limit], [0, limit], ls="--", lw=1, color="grey", label="y = x")
+    limit = float(n_trials)
+    ax.plot([0, limit], [0, limit], ls="--", lw=1, color=plot_styles.LINE_COLOUR,
+            label="Spoken = understood")
 
     ax.set_xlabel("Words understood")
     ax.set_ylabel("Words spoken")
-    ax.set_title("Posterior predictive words understood vs spoken")
+    ax.set_xlim(0, limit)
+    ax.set_ylim(0, limit)
+    ax.set_title("Where a single child may fall: predicted pairs and the observed administrations")
     ax.legend(loc="upper left", frameon=True)
 
     if output_dir is not None and filename is not None:
@@ -2058,105 +2196,6 @@ def plot_understood_vs_spoken_predictive(
         }))
 
     return fig
-
-
-def plot_spoken_given_understood(
-    samples: BivariateModelSamples,
-    n_trials: int,
-    ci_prob: float = intervals.DEFAULT_CI_PROB,
-    interval_kind: intervals.IntervalKind = "eti",
-    output_dir: str | None = None,
-    filename: str | None = None,
-    max_age_months: float | None = None,
-):
-    """Words spoken implied by the POPULATION conversion ratio, by age (issue #112, Q1).
-
-    A fan of lines, one per representative age, each with slope the population
-    ``q(a)`` from ``q_query`` and shaded by that ratio's posterior interval. The
-    dashed y = x line is the ceiling: a child cannot say more distinct words than
-    they understand.
-
-    **The estimand is population-level, and the line is not a conditional
-    expectation (issue #233).** ``q_query`` is evaluated at zero study and zero
-    child effects, so ``U * q(a)`` is "U words converted at the rate a typical
-    child of age a converts at" -- not ``E[spoken | understood = U, age a]``.
-    The nested likelihood does give ``E[S | U, a, child] = U * q(a, child)``
-    exactly, but the child's own conversion effect is missing from ``q(a)``, and
-    it is not independent of U: a child understanding more words than typical for
-    their age has a positive understood child effect, which under VG20's
-    ``rho_uq`` = +0.368 comes with a positive conversion effect. So the genuine
-    conditional line is steeper than this one at high U and shallower at low U,
-    and this plot understates the spread besides, showing only the uncertainty in
-    ``q(a)`` and none of the between-child variation in it.
-
-    Read a line as "what the population rate implies at this comprehension
-    level", and read the caveat with it wherever it is published.
-    """
-    q_query = samples.q_query  # (n_query, n_samples)
-    ages = np.asarray(samples.X_query)  # (n_query,)
-
-    # q is a ratio of comprehension, so ages past the comprehension reporting age
-    # are extrapolation. Drop them before selecting the fan, or the fan spends one
-    # of its five lines on an age the model declines to report q for elsewhere.
-    if max_age_months is not None:
-        keep = ages <= max_age_months
-        ages = ages[keep]
-        q_query = q_query[keep, :]
-
-    # A few representative ages spanning the query range (keeps the fan legible).
-    n_age = len(ages)
-    sel = np.unique(np.linspace(0, n_age - 1, num=min(5, n_age)).round().astype(int))
-
-    understood = np.linspace(0, n_trials, 100)
-
-    fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    rows = []
-    for k, j in enumerate(sel):
-        q_samps = q_query[j, :]
-        q_med = float(np.median(q_samps))
-        q_lo, q_hi = intervals.interval_1d(q_samps, ci_prob, interval_kind)
-        color = f"C{k}"
-        ax.fill_between(
-            understood, understood * q_lo, understood * q_hi, alpha=0.15, color=color
-        )
-        ax.plot(
-            understood,
-            understood * q_med,
-            lw=2.5,
-            color=color,
-            label=f"{int(round(float(ages[j])))} mo (q={q_med:.2f})",
-        )
-        rows.append(pd.DataFrame({
-            "age_months": int(round(float(ages[j]))),
-            "words_understood": understood,
-            "spoken_median": understood * q_med,
-            "spoken_ci_lo": understood * q_lo,
-            "spoken_ci_hi": understood * q_hi,
-        }))
-
-    ax.plot(
-        [0, n_trials], [0, n_trials], ls="--", lw=1, color="grey",
-        label="spoken = understood",
-    )
-
-    ax.set_xlabel("Words understood")
-    ax.set_ylabel("Words spoken at the population rate")
-    ax.set_xlim(0, n_trials)
-    ax.set_ylim(0, n_trials)
-    ax.set_title("Words spoken implied by the population conversion ratio")
-    ax.legend(loc="upper left", frameon=True, title="Age")
-
-    if output_dir is not None and filename is not None:
-        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)
-        fig.savefig(os.path.join(output_dir, f"{filename}.svg"))
-        plot_io.save_plot_data(output_dir, filename, pd.concat(rows, ignore_index=True))
-
-    return fig
-
-
-# ============================================================
-# Shared bivariate plotting pipeline
-# ============================================================
 
 
 def _expected_counts(probabilities, n_trials: int):
@@ -2343,6 +2382,198 @@ def _run_bivariate_outcome_plots(
     )
 
 
+#: Kernel bandwidth, in months, for the administration weights that turn the
+#: reference child into the administration-weighted child at each age.
+_STUDY_WEIGHT_BANDWIDTH_MONTHS = 3.0
+
+
+def study_marginal_inputs(context):
+    """Everything the study fans and the weighted curves need, or ``None``.
+
+    ``None`` when the fit carries no study effects (VG05) or predates the stored
+    ``h_plot`` -- every consumer is then skipped rather than drawn from the wrong
+    curve. Returns ``(X_plot, f_u_plot, h_plot, delta_u, delta_q, frame)`` with
+    the draw axis aligned across the four arrays (``extract_posterior`` stacks
+    chains and draws identically for each).
+    """
+    trace = context.trace
+    post = trace.posterior
+    for name in ("f_u_plot", "h_plot", "delta_u", "delta_q"):
+        if name not in post:
+            return None
+    frame = context.analysis_df
+    if "study_code" not in frame.columns or "age" not in frame.columns:
+        return None
+    X_plot = np.asarray(trace.constant_data["X_plot"].values, dtype=float)
+    return (
+        X_plot,
+        posterior_analysis.extract_posterior(trace, "f_u_plot", "plot_id"),
+        posterior_analysis.extract_posterior(trace, "h_plot", "plot_id"),
+        posterior_analysis.extract_posterior(trace, "delta_u", "study_id"),
+        posterior_analysis.extract_posterior(trace, "delta_q", "study_id"),
+        frame,
+    )
+
+
+def administration_weights(frame, X_plot, *, bandwidth=_STUDY_WEIGHT_BANDWIDTH_MONTHS):
+    """Share of administrations from each study at each plot age: ``(n_plot, K)``.
+
+    A Gaussian kernel in age, so the weights are smooth and never empty. The
+    reference child is the average *study*; these weights make the average
+    *administration at that age*, which is the child the sample medians describe
+    -- and at ages covered by only one or two studies the two can sit far apart
+    (notes/202609021800-production-ratio-by-understood.md).
+    """
+    codes = frame["study_code"].to_numpy(dtype=int)
+    ages = frame["age"].to_numpy(dtype=float)
+    K = int(codes.max()) + 1
+    kernel = np.exp(-0.5 * ((X_plot[:, None] - ages[None, :]) / bandwidth) ** 2)  # (n_plot, n_rows)
+    weights = np.zeros((X_plot.size, K))
+    for k in range(K):
+        weights[:, k] = kernel[:, codes == k].sum(axis=1)
+    total = weights.sum(axis=1, keepdims=True)
+    return weights / np.where(total > 0, total, 1.0)
+
+
+def _sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def weighted_population_curves(f_u_plot, h_plot, delta_u, delta_q, weights):
+    """Administration-weighted ``(p_u, p_s)`` draws over the plot grid, ``(n_plot, S)`` each.
+
+    ``p_w(a) = sum_k w_k(a) sigmoid(f(a) + delta_k)``, summed study by study so
+    the ``(n_plot, S)`` working array is never multiplied by ``K``.
+    """
+    n_plot, n_samples = f_u_plot.shape
+    p_u = np.zeros((n_plot, n_samples))
+    p_s = np.zeros((n_plot, n_samples))
+    for k in range(weights.shape[1]):
+        w = weights[:, k][:, None]
+        if not np.any(w):
+            continue
+        pu_k = _sigmoid(f_u_plot + delta_u[k][None, :])
+        p_u += w * pu_k
+        p_s += w * pu_k * _sigmoid(h_plot + delta_q[k][None, :])
+    return p_u, p_s
+
+
+def write_weighted_monthly_summaries(context, n_trials, *, max_age_months_understood=None,
+                                     max_age_months_spoken=None):
+    """``posterior_summary_monthly_weighted_{u,s}.csv``: the weighted child, monthly.
+
+    The companion of the reference-child monthly tables, on the same grid and
+    under the same reporting caps, so any milestone read off one can be read off
+    the other and the difference reported as the study-coverage sensitivity.
+    """
+    inputs = study_marginal_inputs(context)
+    if inputs is None:
+        return None
+    X_plot, f_u, h, d_u, d_q, frame = inputs
+    weights = administration_weights(frame, X_plot)
+    p_u, p_s = weighted_population_curves(f_u, h, d_u, d_q, weights)
+    out = {}
+    for suffix, p, cap in (("u", p_u, max_age_months_understood), ("s", p_s, max_age_months_spoken)):
+        table = posterior_analysis.monthly_summary_table(
+            X_plot, p, None, n_trials, X_obs=context.analysis_df["age"],
+            ci_prob=context.reporting.ci_prob,
+        )
+        table = posterior_analysis.trim_reported_ages(table, cap)
+        stem = f"posterior_summary_monthly_weighted_{suffix}"
+        table.to_csv(os.path.join(context.reporting.output_dir, f"{stem}.csv"), index=False)
+        context.dataframes[stem] = table
+        out[suffix] = table
+    return out
+
+
+def plot_study_fans(context, n_trials, *, output_dir=None, filename=None,
+                    max_age_months_understood=None, max_age_months_spoken=None):
+    """One curve per study over its own ages, beside the reference child.
+
+    The population curve on every page is the reference child -- zero study and
+    child effects, the child in the *average study*. Studies are segregated by
+    age in this pool, so at any one age the average study may not be among those
+    sampled there: at 38 months the three studies present in the Down syndrome
+    pool all sit above the reference child, at 21 months the one study present in
+    the typically developing pool sits below it. This figure shows where each
+    study sits, over the ages it actually covers, with the administration-weighted
+    child dashed. It is the visible form of the trend-versus-study split that the
+    model has to make wherever studies do not overlap in age.
+    """
+    inputs = study_marginal_inputs(context)
+    if inputs is None:
+        return None
+    X_plot, f_u, h, d_u, d_q, frame = inputs
+    weights = administration_weights(frame, X_plot)
+    p_u_w, p_s_w = weighted_population_curves(f_u, h, d_u, d_q, weights)
+    ref_u = np.median(_sigmoid(f_u), axis=1) * n_trials
+    ref_s = np.median(_sigmoid(f_u) * _sigmoid(h), axis=1) * n_trials
+    w_u = np.median(p_u_w, axis=1) * n_trials
+    w_s = np.median(p_s_w, axis=1) * n_trials
+    names = frame.groupby("study_code")["study"].first()
+    spans = frame.groupby("study_code")["age"].agg(["min", "max"])
+
+    # The default cycle carries ten colours and the Down syndrome pool has
+    # fourteen studies, so the house palette is extended with its dark variants
+    # and, beyond twelve, a dotted line -- rather than letting two studies share
+    # a colour.
+    palette = [
+        plot_styles.COLOUR_BLUE, plot_styles.COLOUR_ORANGE, plot_styles.COLOUR_GREEN,
+        plot_styles.COLOUR_RED, plot_styles.COLOUR_PURPLE, plot_styles.COLOUR_YELLOW,
+        plot_styles.COLOUR_DARK_BLUE, plot_styles.COLOUR_DARK_ORANGE, plot_styles.COLOUR_DARK_GREEN,
+        plot_styles.COLOUR_DARK_RED, plot_styles.COLOUR_DARK_PURPLE, plot_styles.COLOUR_DARK_YELLOW,
+    ]
+    style_of = {
+        k: {"color": palette[i % len(palette)], "ls": "-" if i < len(palette) else ":"}
+        for i, k in enumerate(names.index)
+    }
+
+    fig, axes = plt.subplots(1, 2, figsize=plot_styles.FIGSIZE_XL, sharex=True)
+    rows = []
+    for panel, (ax, ref, wgt, cap, title) in enumerate((
+        (axes[0], ref_u, w_u, max_age_months_understood, "Words understood"),
+        (axes[1], ref_s, w_s, max_age_months_spoken, "Words spoken"),
+    )):
+        keep = np.ones_like(X_plot, dtype=bool) if cap is None else X_plot <= cap
+        for k in names.index:
+            lo, hi = float(spans.loc[k, "min"]), float(spans.loc[k, "max"])
+            inside = keep & (X_plot >= lo) & (X_plot <= hi)
+            if inside.sum() < 2:
+                continue
+            pu_k = _sigmoid(f_u + d_u[int(k)][None, :])
+            curve = pu_k if panel == 0 else pu_k * _sigmoid(h + d_q[int(k)][None, :])
+            median = np.median(curve, axis=1) * n_trials
+            ax.plot(X_plot[inside], median[inside], lw=1.2, alpha=0.9,
+                    label=str(names.loc[k]), **style_of[k])
+            if panel == 0:
+                for a, m_u in zip(X_plot[inside], median[inside], strict=True):
+                    rows.append({"study": str(names.loc[k]), "age_months": float(a), "understood_median": float(m_u)})
+        ax.plot(X_plot[keep], ref[keep], lw=3, color=plot_styles.TEXT_COLOUR, label="Reference child (average study)", zorder=4)
+        ax.plot(X_plot[keep], wgt[keep], lw=2, ls="--", color=plot_styles.TEXT_COLOUR,
+                label="Administration-weighted child", zorder=4)
+        ax.set_title(title)
+        ax.set_xlabel("Age (months)")
+        ax.set_ylabel("Expected word count")
+        ax.set_ylim(0, n_trials)
+    handles, labels = axes[0].get_legend_handles_labels()
+    ncol = min(4, max(2, -(-len(labels) // 4)))
+    fig.suptitle("Where each study sits: per-study curves over their own ages")
+    fig.tight_layout(rect=(0, 0.0, 1, 0.96))
+    # The legend goes in its own band below both panels, sized to its rows, so
+    # it cannot collide with the axis labels.
+    n_rows = -(-len(labels) // ncol)
+    fig.subplots_adjust(bottom=0.12 + 0.05 * n_rows)
+    fig.legend(handles, labels, loc="lower center", ncol=ncol, frameon=True, fontsize=9,
+               bbox_to_anchor=(0.5, 0.01))
+
+    if output_dir is not None and filename is not None:
+        fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300, bbox_inches="tight")
+        fig.savefig(os.path.join(output_dir, f"{filename}.svg"), bbox_inches="tight")
+        if rows:
+            plot_io.save_plot_data(output_dir, filename, pd.DataFrame(rows))
+    return fig
+
+
 def run_bivariate_joint_plots(
     context: BivariateContext,
     definition: BivariateModelDefinition,
@@ -2393,6 +2624,34 @@ def run_bivariate_joint_plots(
     )
     context.plots["joint_trajectory_intervals"] = fig
     plt.close(fig)
+
+    # ---- Per-study fans and the administration-weighted child ----
+
+    fig = plot_study_fans(
+        context,
+        n_trials=context.model_data.n_trials,
+        output_dir=context.reporting.output_dir,
+        filename="study_fans",
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
+    )
+    if fig is not None:
+        context.plots["study_fans"] = fig
+        plt.close(fig)
+    write_weighted_monthly_summaries(
+        context,
+        context.model_data.n_trials,
+        max_age_months_understood=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.UNDERSTOOD
+        ),
+        max_age_months_spoken=reporting_ages.max_age_for(
+            context.model_config, reporting_ages.ReportedQuantity.SPOKEN
+        ),
+    )
 
     # ---- Production rate q(a) ----
 
@@ -2467,18 +2726,6 @@ def run_bivariate_joint_plots(
     context.plots["understood_vs_spoken_predictive"] = fig
     plt.close(fig)
 
-    # ---- Predicted spoken given understood, by age (issue #112, Q1) ----
-
-    fig = plot_spoken_given_understood(
-        samples,
-        n_trials=context.model_data.n_trials,
-        ci_prob=context.reporting.ci_prob,
-        output_dir=context.reporting.output_dir,
-        filename="spoken_given_understood",
-        max_age_months=context.model_config.report_max_age_understood,
-    )
-    context.plots["spoken_given_understood"] = fig
-    plt.close(fig)
 
     # ---- Per-outcome plots: understood ----
 

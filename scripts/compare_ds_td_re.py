@@ -93,10 +93,20 @@ DS_KEY = "vg20"
 # criterion. Corrected 2026-08-05 during the full reporting refit; the July 2026
 # published dispersion contrast is affected and superseded.
 #
-# Known residual, not addressed here: VG10's kappa_s is the dispersion of the
-# production ratio q conditional on understood, whereas VG11's is the dispersion
-# of spoken counts marginally. That joint-vs-univariate difference predates this
-# correction and has not been audited — see the comparison book's caveat.
+# Third correction, 2026-09-02: VG20's kappa_s is the dispersion of the
+# production ratio q on the child's OWN UNDERSTOOD COUNT as denominator, whereas
+# VG11's kappa is the dispersion of spoken counts out of the 810-item pool. The
+# spoken block below used to feed kappa_s into (kappa + n)/(kappa + 1) with
+# n = 810 regardless, so phi_DS and sigma_Y,DS for spoken were computed as if a
+# conditional concentration were a marginal one. The DS spoken side now uses
+# comparison.load_marginal_spoken_trajectory, whose kappa is the concentration
+# of the Beta-Binomial matching the marginal spoken count's variance (the same
+# product-marginal form the graph's spoken fallback uses), which is on the pool
+# denominator and comparable with VG11's. The understood contrast was always
+# marginal on both sides and is unchanged. Every published spoken dispersion
+# contrast before this date is superseded; see
+# notes/202609021620-dispersion-kappa-comparability.md for the denominator
+# finding this follows from.
 #
 # (Mean/rate/delay keep the same model — subject REs are mean-zero, so the
 # population trajectory is unaffected.)
@@ -127,17 +137,24 @@ MIN_COVERAGE = 0.80
 KEY_AGES = [12, 18, 24, 30]
 
 # Comprehension-matched lens needs JOINT models (U and S coupled per draw): the
-# DS joint VG20 vs the TD joint VG13 (RE-based, 8-18 mo). VG13 is the only valid
-# TD joint model (wide-age TD comprehension is not validly measured; VG06 was
-# excluded as invalid).
+# DS joint VG20 vs the TD joint VG21 (RE-based, 8-22 mo). The TD comparator was
+# VG13 (8-18 mo) until 2026-09-02, with the 22-month window reachable only as the
+# `vg13:window-22` sensitivity variant through `resolve_joint`; VG21 is that
+# window as a registered model of its own, adopted on 2026-08-21 precisely so the
+# matched-comprehension contrast could reach the levels MAX_MATCHED_U below was
+# already set for. Under VG13 the TD curve's population median never reached 250
+# words within support, so every q(U) cell above N = 200 was blank on the TD
+# side and the contrast could say nothing about the 300-word milestone. VG06 --
+# wide-age TD comprehension, not validly measured -- remains excluded.
 JOINT_DS_KEY = "vg20"
-JOINT_TD_KEY = "vg13"
+JOINT_TD_KEY = "vg21"
 # Hard ceiling on every comprehension-matched contrast, in words understood.
 #
 # Set by the TD side's support, not by the DS side or by taste. The TD joint
 # model's q-by-understood grid reaches 220.9 words at VG13's 8-18 month window,
-# 328.0 under `window-22` (8-22) and 355.8 under `window-25` (8-25). 320 sits
-# just inside `window-22`, which is the extension adopted on 2026-08-21 --
+# 328.0 under VG21's 8-22 (formerly the `window-22` variant) and 355.8 under
+# `window-25` (8-25). 320 sits just inside VG21's reach, the extension adopted on
+# 2026-08-21 --
 # `window-25`'s extra reach comes from the 23-25 month rows where 20-36% of
 # Oxford CDI administrations sit within 10% of the form's 418-item cap, and its
 # q reads visibly high there (0.602 against `window-22`'s 0.504 at 328 words,
@@ -159,7 +176,7 @@ N_GRID_Q = np.array(
 def resolve_joint(key: str) -> tuple[str, int, str]:
     """Resolve a joint-model key that may name a registered sensitivity variant.
 
-    Accepts ``vg13`` or ``vg13:window-22``. The suffix selects the variant's own
+    Accepts ``vg21`` or ``vg13:window-22``. The suffix selects the variant's own
     fit directory (``<model_id>-<config_name>-<suffix>``); the trial count and
     population come from the base registry entry, which a window variant does
     not change. Returns ``(trace_path, n_trials, label)``.
@@ -265,13 +282,19 @@ def run_outcome(outcome: str) -> None:
     A_ds = np.column_stack([C.first_crossing_age(w_ds, ages_ds, v) for v in N_GRID])
     A_td = np.column_stack([C.first_crossing_age(w_td, ages_td, v) for v in N_GRID])
     ad = C.summarise_draws(A_ds - A_td, N_GRID, "words", with_p_gt0=True)
+    _write_weighted_attainment(outcome, td_key)
 
     # ---- 4. Dispersion: kappa, implied SD, overdispersion factor ----
     # DS side uses the model whose kappa means the same thing as the TD models'
     # — i.e. one that also carries subject REs, so neither side's kappa absorbs
     # between-child variance (see DISP_DS_KEY note). Pair its draws with the same
     # TD subset; independence makes any pairing valid.
-    a_disp, p_disp, k_disp, _ = C.load_outcome_trajectory(DISP_DS_KEY, outcome)
+    if outcome == "spoken":
+        # Conditional kappa_s is not the object a marginal contrast needs; see
+        # the DISP_DS_KEY note (third correction).
+        a_disp, p_disp, k_disp, _ = C.load_marginal_spoken_trajectory(DISP_DS_KEY)
+    else:
+        a_disp, p_disp, k_disp, _ = C.load_outcome_trajectory(DISP_DS_KEY, outcome)
     i_disp = C.align_draws(p_disp.shape[0], p_td.shape[0], seed=SEED + 1)[0]
     P_ds = C.interp_draws(a_disp, p_disp[i_disp], grid)
     K_ds = C.interp_draws(a_disp, k_disp[i_disp], grid)
@@ -553,7 +576,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     each population's comprehension trajectory reaches N words. It is a
     population-curve contrast, not a child-level conditional — it uses no
     subject effects and no rho_uq, so it is not E[q_i | U_i = N]. Requires JOINT
-    models so U and S are coupled per draw (VG20 DS vs VG13 TD).
+    models so U and S are coupled per draw (VG20 DS vs VG21 TD).
     """
     ds_trace, ds_n, ds_lab = resolve_joint(ds_key)
     td_trace, td_n, td_lab = resolve_joint(td_key)
@@ -561,6 +584,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
           f"(capped at U={MAX_MATCHED_U:.0f} words) ===", flush=True)
     ages_ds, U_ds, S_ds = C.load_population_trajectory(ds_trace, ds_n)
     ages_td, U_td, S_td = C.load_population_trajectory(td_trace, td_n)
+    _write_weighted_comprehension(ds_key, td_key, ds_trace, td_trace, ds_n, td_n)
     print(f"  DS draws={U_ds.shape[0]} ages {ages_ds.min():.0f}-{ages_ds.max():.0f} | "
           f"TD draws={U_td.shape[0]} ages {ages_td.min():.0f}-{ages_td.max():.0f}",
           flush=True)
@@ -589,6 +613,7 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     os.makedirs(OUT_DIR, exist_ok=True)
     _merge(N_GRID_Q, "words", q_TD=q_td_s, q_DS=q_ds_s, dq=dq_s).to_csv(
         os.path.join(OUT_DIR, "ds_td_comprehension_q_at_U.csv"), index=False)
+    _write_observed_children(ds_key, td_key)
 
     _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s, da_td, da_ds, qa_td, qa_ds)
 
@@ -601,6 +626,124 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
               f"Δq(TD-DS)={r['dq_median']:+.2f} "
               f"[{r['dq_ci_lo']:+.2f}, {r['dq_ci_hi']:+.2f}]  "
               f"P(TD>DS)={r['dq_p_gt0']:.2f}")
+
+
+def _weighted_trajectory(key: str, trace_path: str, n: int):
+    """The administration-weighted child for ``key``, or ``None`` with a reason."""
+    from vocab_growth.report_cells import _verified_frame, read_manifest
+
+    frame, reason = _verified_frame(read_manifest(C.model_dir(key)))
+    if frame is None or "study_code" not in frame.columns:
+        return None, reason or "frame carries no study_code"
+    return C.load_population_trajectory_weighted(trace_path, n, frame), None
+
+
+def _write_weighted_comprehension(ds_key, td_key, ds_trace, td_trace, ds_n, td_n) -> None:
+    """``ds_td_comprehension_q_at_U_weighted.csv``: q(U) for the weighted child.
+
+    Same construction as the reference-child table, on the administration-
+    weighted trajectories, so the book can show both and the gap between them:
+    at 300 words the reference-child curves converge (0.43 in both populations)
+    at the typically developing window's edge, where the reference child sits 46
+    words above the only study sampled there.
+    """
+    ds, why_ds = _weighted_trajectory(ds_key, ds_trace, ds_n)
+    td, why_td = _weighted_trajectory(td_key, td_trace, td_n)
+    if ds is None or td is None:
+        print(f"  weighted comprehension-matched table not written: {why_ds or why_td}", flush=True)
+        return
+    (a_ds, U_ds, S_ds), (a_td, U_td, S_td) = ds, td
+    ia, ib = C.align_draws(U_ds.shape[0], U_td.shape[0], seed=SEED)
+    q_ds = C.compute_q_at_U(a_ds, U_ds, S_ds, N_GRID_Q)[ia]
+    q_td = C.compute_q_at_U(a_td, U_td, S_td, N_GRID_Q)[ib]
+    _merge(N_GRID_Q, "words",
+           q_TD=C.summarise_draws(q_td, N_GRID_Q, "words"),
+           q_DS=C.summarise_draws(q_ds, N_GRID_Q, "words"),
+           dq=C.summarise_draws(q_td - q_ds, N_GRID_Q, "words", with_p_gt0=True)).to_csv(
+        os.path.join(OUT_DIR, "ds_td_comprehension_q_at_U_weighted.csv"), index=False)
+    da_ds, _ = C.compute_latency(a_ds, U_ds[ia], S_ds[ia], N_GRID_Q)
+    da_td, _ = C.compute_latency(a_td, U_td[ib], S_td[ib], N_GRID_Q)
+    # compute_latency returns summarise_per_N frames, whose grid column is not
+    # ``words``, so they are stacked with a population label rather than merged.
+    pd.concat([da_td.assign(population="TD"), da_ds.assign(population="DS")],
+              ignore_index=True).to_csv(
+        os.path.join(OUT_DIR, "ds_td_comprehension_latency_weighted.csv"), index=False)
+    print("  Weighted child, q(U=N) and learn-to-say latency (months):", flush=True)
+    qt = _merge(N_GRID_Q, "words", q_TD=C.summarise_draws(q_td, N_GRID_Q, "words"),
+                q_DS=C.summarise_draws(q_ds, N_GRID_Q, "words"))
+    for _, r in qt[qt["words"].isin([100, 200, 300])].iterrows():
+        print(f"    U={int(r['words']):>3}: TD q={r['q_TD_median']:.2f}  DS q={r['q_DS_median']:.2f}", flush=True)
+
+
+
+def _write_weighted_attainment(outcome: str, td_key: str) -> None:
+    """``ds_td_<outcome>_re_attainment_delay_weighted.csv``: D(v) for the weighted child.
+
+    The reference-child delay to reach v words is the headline; this is the same
+    contrast on the administration-weighted trajectories. Both models here are
+    joint RE models (VG20 and VG21), so the weighted child is available on both
+    sides; the univariate TD comparators VG11/VG12 carry a single outcome and
+    are left to the reference child.
+    """
+    if td_key in TD_KEYS.values():
+        td_key = JOINT_TD_KEY
+    sides = {}
+    for pop, key in (("DS", DS_KEY), ("TD", td_key)):
+        traj, why = _weighted_trajectory(key, C.trace_path(key), C.n_trials(key))
+        if traj is None:
+            print(f"  weighted attainment ({outcome}) not written: {pop} {why}", flush=True)
+            return
+        a, U, S = traj
+        sides[pop] = (a, U if outcome == "understood" else S)
+    (a_ds, w_ds), (a_td, w_td) = sides["DS"], sides["TD"]
+    ia, ib = C.align_draws(w_ds.shape[0], w_td.shape[0], seed=SEED)
+    A_ds = np.column_stack([C.first_crossing_age(w_ds[ia], a_ds, v) for v in N_GRID])
+    A_td = np.column_stack([C.first_crossing_age(w_td[ib], a_td, v) for v in N_GRID])
+    C.summarise_draws(A_ds - A_td, N_GRID, "words", with_p_gt0=True).to_csv(
+        os.path.join(OUT_DIR, f"ds_td_{outcome}_re_attainment_delay_weighted.csv"), index=False)
+
+
+
+def _write_observed_children(ds_key: str, td_key: str) -> None:
+    """The children who actually understood ~N words, beside the population curve.
+
+    The curve is the population ratio at the age each population's median reaches
+    N -- a developmental-stage relationship, not E[q | U = N] (#233). The two
+    differ by a lot and in opposite directions to the curves' own convergence:
+    at 300 words the reporting-quality curves both give ~0.4, the observed
+    children 0.27 (TD) and 0.13 (DS). The book's table shows both columns so a
+    reader cannot take the curves' agreement as the children's. Each frame is
+    rebuilt through the loader rules the fit used and verified against the hash
+    the fit recorded; a population whose frame no longer verifies is omitted
+    with a message rather than described from data the fit did not see.
+    """
+    from vocab_growth.report_cells import (
+        _verified_frame,
+        observed_production_ratio_at_levels,
+        read_manifest,
+    )
+
+    parts = []
+    for pop, key in (("TD", td_key), ("DS", ds_key)):
+        frame, reason = _verified_frame(read_manifest(C.model_dir(key)))
+        if frame is None or not {"understood", "spoken"} <= set(frame.columns):
+            print(f"  observed children for {pop} ({key}) not written: "
+                  f"{reason or 'frame lacks understood/spoken'}", flush=True)
+            continue
+        table = observed_production_ratio_at_levels(frame, N_GRID_Q)
+        table.insert(0, "population", pop)
+        parts.append(table)
+    if not parts:
+        return
+    out = pd.concat(parts, ignore_index=True).rename(columns={"level": "words"})
+    out.to_csv(os.path.join(OUT_DIR, "ds_td_comprehension_q_observed.csv"), index=False)
+    print("  Observed children near each level (median q, IQR, n):")
+    for _, r in out.iterrows():
+        if r["words"] in (100.0, 200.0, 300.0):
+            print(f"    {r['population']} U={int(r['words']):>3}: median q={r['median']:.2f} "
+                  f"[{r['q25']:.2f}, {r['q75']:.2f}]  n={int(r['n'])}  "
+                  f"children={int(r['children'])}  median age={r['median_age']:.0f}", flush=True)
+
 
 
 # ----------------------------------------------------------------------------

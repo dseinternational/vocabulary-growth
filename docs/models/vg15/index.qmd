@@ -44,6 +44,14 @@ from vocab_growth.report_cells import render_model_at_a_glance
 render_model_at_a_glance()
 ```
 
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('record', signing=True, robustness=True, recovery=True)
+```
+
 ::: {.callout-note}
 
 For full details and discussion, please refer to the technical report.
@@ -136,7 +144,7 @@ which sits _below_ VG14's independence upper bound $p_U\bigl(1-(1-r)(1-q)\bigr)$
 
 **Study random intercepts** sit on all three trajectories at the observation level, so the reported age curves are separated from study composition — which is what made VG14's signed peak uninterpretable. **Subject random intercepts** are added on all three as well, non-centred, so repeated measurements of the same child are not treated as independent observations **in the three marginal likelihoods**. The composition likelihood is the deliberate exception, described two paragraphs below: repeated cross-tabulation visits by the same child enter it as conditionally independent rows. With a third level term on each predictor, each Gaussian process is additionally **anchored to pass through zero at the reference age for every draw** (the age is in the model-at-a-glance box), which removes the redundancy that otherwise lets the linear term, the Gaussian process and the random effects all encode the same overall level. The reported population-level curves set every random effect to zero.
 
-The association $\psi$ is deliberately **decoupled** from the subject random effects: the four-cell likelihood is fed the population-plus-study marginals only. $\psi$ is identified from the cross-tabulation rows, and the per-child sign offset is co-identified with $\psi$ from those same rows; letting it into the four-cell composition would make the headline association pivot on a thinly identified random effect. $\psi$ is therefore a **population-plus-study composition association** — the within-understood odds ratio for a reference child of a given study (random effects at zero), not an average of within-child associations, and not an association adjusted for child modality propensities. Two consequences follow and are stated rather than implied. Repeated cross-tabulation visits by the same child are conditionally independent in this likelihood — 249 of the 434 cross-tab administrations come from 91 longitudinal children — so children with more visits carry more weight and the uncertainty on $\psi$ may be understated; the Dirichlet-Multinomial concentration absorbs extra variation *within* an administration, not serial correlation *between* a child's visits. And because odds ratios are non-collapsible, a population-level odds ratio can differ from a child-conditioned one even without confounding. A child-shifted composition sensitivity is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
+The association $\psi$ is deliberately **decoupled** from the subject random effects: the four-cell likelihood is fed the population-plus-study marginals only. $\psi$ is identified from the cross-tabulation rows, and the per-child sign offset is co-identified with $\psi$ from those same rows; letting it into the four-cell composition would make the headline association pivot on a thinly identified random effect. $\psi$ is therefore a **population-plus-study composition association** — the within-understood odds ratio for a reference child of a given study (random effects at zero), not an average of within-child associations, and not an association adjusted for child modality propensities. Two consequences follow and are stated rather than implied. Repeated cross-tabulation visits by the same child are conditionally independent in this likelihood — the support table under Data gives the share of cross-tabulation administrations that come from children seen more than once — so children with more visits carry more weight and the uncertainty on $\psi$ may be understated; the Dirichlet-Multinomial concentration absorbs extra variation *within* an administration, not serial correlation *between* a child's visits. And because odds ratios are non-collapsible, a population-level odds ratio can differ from a child-conditioned one even without confounding. A child-shifted composition sensitivity is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 
 ### Likelihoods
 
@@ -145,7 +153,7 @@ The association $\psi$ is deliberately **decoupled** from the subject random eff
 - **Four-cell cross-tabulation rows** (`uk_02`, `uk_07`, `es_01`): a Dirichlet-Multinomial over the four states above — a multinomial that permits extra variation. Rows with complete four-cell data use this composition term _instead of_ separate spoken and signed contributions, so nothing is counted twice, and the four-cell sum is treated as the authoritative understood total for that occasion. **This is what identifies $\psi$.**
 - **Three-cell produced rows** (`nz_01`): this source records no comprehension total at all, so the unobservable "neither" cell is dropped and the composition is renormalised over the remaining three. It identifies $\psi$ through the sign/speak overlap alone, with no comprehension denominator involved.
 
-The Dirichlet-Multinomial terms are excluded from LOO-CV by design: they are not per-observation Beta-Binomials like the three word-count components, so LOO-CV is reported for words understood, spoken and signed only, matching every other model's scope, and the spoken and signed LOO components exclude rows already represented by a composition term. The consequence should be stated rather than left to be inferred: **the quantitative out-of-sample and calibration machinery on this page covers the marginal count likelihoods only, and therefore does not validate $\psi$, the cell composition, or new-child association performance.** The observations that identify the association enter no LOO, no PIT calibration and no held-out check here; the composition is checked only by the posterior predictive panels below. Pointwise cell-likelihood calibration, per-source age-banded checks and child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
+The Dirichlet-Multinomial terms are not per-observation Beta-Binomials like the three word-count components, so they are excluded from every **per-outcome** leave-one-out row, and the spoken and signed rows exclude the administrations already represented by a composition term. They **are** included in the **administration-level** row, which sums every likelihood factor belonging to one administration into a single held-out case — so that row is the first predictive score this model's association $\psi$ has ever had, and the one to read for it. What the quantitative machinery still does not cover should be stated rather than inferred: PIT calibration and the parameter-recovery harness run on the marginal count likelihoods only, so the cell composition is checked there only by the posterior predictive panels below. Pointwise cell-likelihood calibration, per-source age-banded checks and child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 
 ::: {.callout-important title="psi is heterogeneous across studies — descriptive / exploratory"}
 
@@ -159,7 +167,7 @@ The parameter stays **descriptive/exploratory**. The four-cell composition at th
 
 :::
 
-## Priors
+## Priors {#sec-priors}
 
 ```{python}
 #| echo: false
@@ -225,13 +233,13 @@ This is the only model carrying both dispersion parameterisations, which the pri
 
 The two anchored blocks are **conditional** estimates: this model carries study and child random intercepts, so their $\kappa$ describes what is left over once a child's own level is known, not how much children differ. The Down syndrome joint frame is the thinnest the calibration covers, and on it the estimator recovers a known $\kappa$ with a one-directional downward bias, so the prior medians are lower bounds corrected upward by the measured bias, and the prior widths are wider than anywhere else in the family. See `docs/models/PRIORS.md`.
 
-![`kappa_min_u_dist`](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+![Prior on the floor of the understood dispersion parameter.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
 ![Prior on the excess understood dispersion at the younger reference age.](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
 
 ![Prior on the excess understood dispersion at the older reference age.](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
 
-![`kappa_min_s_dist`](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
+![Prior on the floor of the spoken dispersion parameter.](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
 
 ![Prior on the excess spoken dispersion at the younger reference age.](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
 
@@ -255,7 +263,7 @@ Prior sensitivity should focus on the production-ratio anchors (especially the h
 
 :::
 
-## Prior predictive checks
+## Prior predictive checks {#sec-prior-predictive}
 
 These simulate vocabularies from the priors alone, before the data are seen. Three questions are specific to VG15: can the prior produce a signing hump without asserting one; does it leave the total expressive quantity undecided before any association has been estimated; and does the production ratio stay plausible under the shared anchors and the per-draw Gaussian-process anchor? The panels below say yes to all three. The signed-ratio draws contain flat, rising and humped trajectories alike, with humps at a range of ages rather than at one — permitting a hump, not asserting it. The total-expressive draws start near the floor in infancy and fan out to cover almost the whole range by school age, so nothing about the total is settled in advance. And the production-ratio draws do the same, staying near zero in infancy and spreading across the unit interval later. A prior that failed any of these would be shaping the answer rather than permitting it.
 
@@ -271,7 +279,23 @@ These simulate vocabularies from the priors alone, before the data are seen. Thr
 
 ![Total expressive probability drawn from the priors, before any association has been estimated.](prior_samples_p_any.png){#fig-prior-p-any .lightbox fig-align="left"}
 
-## Data
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
 
 ```{python}
 descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
@@ -333,6 +357,18 @@ try:
         ": Sources identifying the sign–speech association, computed at render time. "
         "Each has its own association estimate, reported below."
     )
+    _visits = {}
+    for _name, _frame, _ in _sources:
+        for _sid, _n in _frame.groupby("subject_id").size().items():
+            _visits[(_name, _sid)] = _n
+    _from_repeaters = sum(_n for _n in _visits.values() if _n > 1)
+    _repeaters = sum(1 for _n in _visits.values() if _n > 1)
+    print()
+    print(
+        f"{_from_repeaters:,} of the {_total_rows:,} cross-tabulation administrations come "
+        f"from {_repeaters:,} children seen more than once, and enter the composition "
+        "likelihood as conditionally independent rows (see Statistical model)."
+    )
 
     if _sdh(_env.DATA_DIR) != (_manifest.get("data") or {}).get("source_data_hash"):
         print()
@@ -349,7 +385,7 @@ except Exception as _exc:  # pragma: no cover - report robustness, not model log
 
 Read that table alongside the per-study estimates below: the sources differ severalfold in size, differ in age span, and differ in what kind of cross-tabulation they supply — and they do not agree about the association.
 
-## Diagnostics
+## Diagnostics {#sec-diagnostics}
 
 ```{python}
 #| label: convergence-caveats
@@ -358,6 +394,14 @@ Read that table alongside the per-study estimates below: the sources differ seve
 from vocab_growth.report_cells import render_convergence_caveats
 
 render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
 ```
 
 ```{python}
@@ -377,6 +421,18 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Marginal posterior distributions for the sampled and derived parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
 ::: {.callout-note title="The question the sparse four-cell data raise, and how this model handles it"}
 
 With only four sources informing the association, the worry is that association strength could be traded against child-level signing heterogeneity: a model can explain the same cross-tabulation either by saying signing and speaking co-occur or by saying children differ a lot in how much they sign. **This model prevents the two from competing rather than separating them empirically**: the cell likelihood is deliberately fed the population-plus-study marginals with no child term (see the decoupling note under [Statistical model](#statistical-model)), so the composition rows cannot pull $\psi$ against the child effects at all. The child-level signing scale is sharply identified — its posterior is far narrower than its half-normal prior — but that identification comes from the *marginal* signed counts, not from the cells, so it is not evidence that the cross-tabulations themselves distinguish association from child heterogeneity. A model that let child modality propensities into the composition could report a different association; that sensitivity is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
@@ -385,7 +441,7 @@ The parameters still worth watching are the association and the concentration to
 
 :::
 
-## Findings
+## Findings {#sec-findings}
 
 ```{python}
 #| echo: false
@@ -469,11 +525,29 @@ except Exception as _exc:  # pragma: no cover - report robustness, not model log
 
 The remaining findings are stated where the quantity they belong to is reported: the trajectories immediately below, the association in [Association $\psi$](#association-psi), the total in [Total expressive vocabulary](#total-expressive-vocabulary-data-identified), and the sign-to-speech hand-over in [What signing is worth to the child](#what-signing-is-worth-to-the-child).
 
-## Posterior vocabulary summaries
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
+
+render_family_notes()
+```
+
+## Posterior vocabulary summaries {#sec-predictions}
 
 These tables report **population-level** query-age summaries, with study and child random effects set to zero. Because those effects are symmetric around zero on the logit scale, that is the *typical* (median) child in the typical study — **not** the arithmetic average of children's counts, which the nonlinear link shifts away from the median wherever children differ. They are also not the predictive distribution for a new child, which — given the child-level scales in the variation table above — is much wider. Intervals are 89% outer and 50% inner equal-tailed intervals.
 
 ### Words understood
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("u")
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 summary_u = pd.read_csv("posterior_summary_u.csv")
@@ -485,6 +559,16 @@ Comprehension rises steadily across the whole reported range, with no plateau in
 ### Words spoken
 
 ```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("s")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
 summary_s = pd.read_csv("posterior_summary_s.csv")
 summary_s
 ```
@@ -492,6 +576,16 @@ summary_s
 Spoken vocabulary starts far behind comprehension and accelerates sharply through the preschool years, multiplying many times over between the youngest query ages and the middle of the table.
 
 ### Words signed
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("sign")
+```
+
+The full table behind it, with every interval and threshold column:
 
 ```{python}
 summary_sign = pd.read_csv("posterior_summary_sign.csv")
@@ -710,13 +804,23 @@ Each within-understood source gets its own panel. An earlier version of this fig
 
 This is the model's only genuinely single-study check of the composition, and it is a structurally different test: `nz_01` has no comprehension data at all, so its three cells are conditioned on produced words alone and there is no comprehension denominator to absorb a misfit in the overlap. The sign-only and speech-only totals fall inside their predictive intervals; the **both** cell — the one the association parameter governs directly — is the cell the model reproduces least well here, and it is the cell to watch in future fits, because it is where a pooled association that does not fit this cohort would show first.
 
-## Expected vocabulary by month
+## Expected vocabulary by month {#sec-monthly}
 
 A finer companion to the query-age tables above: one row per whole month. The `n_obs` column gives the number of observations near each age and is the honest guide to where these expectations rest on data and where they rest on the model — for signing in particular, it thins sharply at the top of the range.
 
 ![Expected words understood by month.](expected_counts_by_month_u.png){#fig-monthly-u .lightbox fig-align="left"}
 
+```{python}
+monthly_u = pd.read_csv("posterior_summary_monthly_u.csv")
+monthly_u
+```
+
 ![Expected words spoken by month.](expected_counts_by_month_s.png){#fig-monthly-s .lightbox fig-align="left"}
+
+```{python}
+monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
+monthly_s
+```
 
 ![Expected words signed by month, showing the rise and turnover at monthly resolution.](expected_counts_by_month_sign.png){#fig-monthly-sign .lightbox fig-align="left"}
 
@@ -725,7 +829,59 @@ monthly_sign = pd.read_csv("posterior_summary_monthly_sign.csv")
 monthly_sign
 ```
 
-## Predictive calibration
+## Robustness {#sec-robustness}
+
+A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+
+```{python}
+from pathlib import Path
+
+import pandas as pd
+from IPython.display import Markdown, display
+
+
+def comparison_path(name):
+    """Locate a comparison artefact from wherever this report is rendered."""
+    for base in (Path("../../comparisons"), Path("comparisons"), Path("../comparisons")):
+        candidate = base / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+robustness_path = comparison_path("sensitivity/robustness_matrix_vg15.csv")
+if robustness_path is None:
+    display(Markdown(
+        "_The sensitivity comparison has not been computed into this output root, "
+        "so no robustness matrix is available for this render._"
+    ))
+else:
+    robustness = pd.read_csv(robustness_path)
+    wanted = ["variant", "status", "n_within_ci", "n_checked", "max_abs_delta",
+              "quantities_outside_ci", "verdict", "variant_fit_utc"]
+    display(robustness[[c for c in wanted if c in robustness.columns]])
+```
+
+Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run.
+
+### Parameter recovery
+
+Parameter recovery simulates a dataset from the model at a known parameter draw, refits the model to it through the same pipeline, and asks whether the posterior covers the truth it was generated from. A replicate is scored only if its own fit's convergence is confirmed. A handful of replicates is indicative only: it can reveal a gross problem, and it cannot certify that the posterior is calibrated.
+
+```{python}
+recovery_path = comparison_path("recovery/recovery_matrix_vg15.csv")
+if recovery_path is None:
+    display(Markdown(
+        "_No parameter-recovery comparison is available in this output root._"
+    ))
+else:
+    recovery = pd.read_csv(recovery_path)
+    wanted = ["replicate", "truth_source", "converged", "n_targets", "n_within_ci89",
+              "coverage_ci89", "coverage_ci50", "max_abs_z", "verdict"]
+    display(recovery[[c for c in wanted if c in recovery.columns]])
+```
+
+## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
 
@@ -737,7 +893,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-## Out-of-sample prediction
+## Out-of-sample prediction {#sec-loo}
 
 ```{python}
 #| echo: false
@@ -748,13 +904,13 @@ render_loo_section()
 ```
 
 
-## Limits
+## Limits {#sec-limits}
 
 - **The association is heterogeneous, and everything downstream uses its pooled value.** The per-study table is the primary read; the composition, the total, the uplift and the milestones are all computed at the shrunk centre.
 - **Four sources identify the association, and they may not measure the same thing.** One defines its column to include spontaneous symbolic gesture alongside taught signs and may cover only ten of its form's 21 word categories; the other three carry no recorded definition of a sign. Either could explain part of the disagreement, and neither is tested here.
 - **The association is assumed constant with age.** That was tested against a study-level explanation and survives, but it is an assumption, not a measurement at every age.
-- **Repeated children are not clustered in the composition likelihood.** The cell rows deliberately carry no child term (that is what keeps $\psi$ decoupled from the thinly identified child sign effect), so a child's repeated cross-tabulation visits enter as independent rows: 249 of the 434 cross-tab administrations come from 91 longitudinal children. $\psi$'s intervals may therefore be too narrow, and frequently measured children weigh more. The child-shifted sensitivity that would size this is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
-- **The quantitative validation does not cover the association.** LOO, PIT calibration and the parameter-recovery harness's convergence gates run on the marginal count likelihoods; the composition rows that identify $\psi$ are checked only by the posterior predictive panels. Cell-likelihood calibration, per-source age-banded checks and honest child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
+- **Repeated children are not clustered in the composition likelihood.** The cell rows deliberately carry no child term (that is what keeps $\psi$ decoupled from the thinly identified child sign effect), so a child's repeated cross-tabulation visits enter as independent rows; the support table under Data gives how many administrations that is. $\psi$'s intervals may therefore be too narrow, and frequently measured children weigh more. The child-shifted sensitivity that would size this is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
+- **Only the administration-level LOO row scores the association.** The per-outcome LOO rows, PIT calibration and the parameter-recovery harness run on the marginal count likelihoods; the composition rows that identify $\psi$ enter the administration row of the out-of-sample section and the posterior predictive panels, and nothing else. Cell-likelihood calibration, per-source age-banded checks and honest child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 - **Population-level, not subject-marginal.** The reported curves set every random effect to zero — the typical (median) child in the typical study, which the nonlinear link separates from the arithmetic average of children's counts. Given the child-level scales in the variation table, the range a single child might fall in is much wider than any interval on this page.
 - **Signing is nearly a study-level property in these data.** Nothing here supports a causal reading of signing on later speech.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.

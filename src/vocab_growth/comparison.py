@@ -143,6 +143,55 @@ def load_population_trajectory(
     return ages, p_u * n_trials_, p_s * n_trials_
 
 
+def load_population_trajectory_weighted(
+    path: str, n_trials_: int, frame, *, bandwidth: float = 3.0
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``(ages, U, S)`` for the administration-weighted child of a joint RE model.
+
+    The counterpart of :func:`load_population_trajectory`, which returns the
+    reference child (zero study and child effects: the child in the *average
+    study*). Study effects are centred over studies, and studies are segregated
+    by age, so at a given age the reference child can sit above or below every
+    study sampled there -- 54 words below the Down syndrome pool's median child
+    at 38 months, 46 above the typically developing pool's at 21 -- and a
+    milestone or a delay read off it inherits that. This re-weights the same fit
+    to the studies present at each age (a Gaussian kernel over ``frame``'s
+    administrations, ``bandwidth`` months), which is the child the sample
+    medians describe. Report both; the gap is the study-coverage sensitivity.
+    """
+    d = az.from_netcdf(path)
+    post = _dataset(d, "posterior")
+    cdata = _dataset(d, "constant_data")
+    ages = np.asarray(cdata["X_plot"].values, dtype=float)
+    order = np.argsort(ages)
+
+    def flat(name):
+        arr = post[name].values
+        return arr.reshape(arr.shape[0] * arr.shape[1], arr.shape[2])
+
+    f_u, h = flat("f_u_plot")[:, order], flat("h_plot")[:, order]  # (S, n_age)
+    d_u, d_q = flat("delta_u"), flat("delta_q")  # (S, K)
+    codes = np.asarray(frame["study_code"], dtype=int)
+    obs_ages = np.asarray(frame["age"], dtype=float)
+    ages_sorted = ages[order]
+    kernel = np.exp(-0.5 * ((ages_sorted[:, None] - obs_ages[None, :]) / bandwidth) ** 2)
+    K = int(codes.max()) + 1
+    weights = np.stack([kernel[:, codes == k].sum(axis=1) for k in range(K)], axis=1)
+    weights /= np.where(weights.sum(axis=1, keepdims=True) > 0, weights.sum(axis=1, keepdims=True), 1.0)
+
+    sig = lambda x: 1.0 / (1.0 + np.exp(-x))  # noqa: E731
+    U = np.zeros_like(f_u)
+    S = np.zeros_like(f_u)
+    for k in range(K):
+        w = weights[:, k][None, :]
+        if not np.any(w):
+            continue
+        pu_k = sig(f_u + d_u[:, k][:, None])
+        U += w * pu_k
+        S += w * pu_k * sig(h + d_q[:, k][:, None])
+    return ages_sorted, U * n_trials_, S * n_trials_
+
+
 #: Series the joint sign/speech engine (VG15) reports on the plot grid, as
 #: fractions. ``pi_*`` are the four-cell composition **conditional on the word
 #: being understood**, so they are scaled by ``p_u`` — not by ``n_trials`` alone —
@@ -562,6 +611,65 @@ def load_outcome_trajectory(
 
     ages, (p, k), _ = _load_reshaped_draws(trace_path(key), (p_name, k_name))
     return ages, p, k, n_trials(key)
+
+
+def product_marginal_kappa(
+    p_u: np.ndarray, kappa_u: np.ndarray, q: np.ndarray, kappa_s: np.ndarray
+) -> np.ndarray:
+    """Concentration of the Beta-Binomial matching the marginal spoken count's variance.
+
+    NumPy port of ``likelihood_utils.product_marginal_concentration`` (the PyMC
+    form the ``product_marginal`` fallback uses in the graph), kept in step by
+    :func:`tests.test_comparison.test_product_marginal_kappa_matches_the_graph_form`.
+
+    The joint models draw ``theta_U ~ Beta(p_U kappa_U)`` and ``theta_S ~ Beta(q
+    kappa_S)`` independently, with ``S | U ~ Bin(U, theta_S)``, so the marginal
+    spoken count is a Binomial mixed over the *product* of two Betas. That
+    product has no Beta form but both moments are elementary::
+
+        m         = p_U q
+        E[theta^2] = p (p kappa + 1) / (kappa + 1)          for each factor
+        var       = E[theta_U^2] E[theta_S^2] - m^2
+        kappa_eff = m (1 - m) / var - 1
+
+    This is the quantity a DS/TD **spoken** dispersion contrast has to use. VG20's
+    ``kappa_s`` is the dispersion of the ratio ``q`` on the child's own understood
+    count as denominator, and feeding it into ``(kappa + n)/(kappa + 1)`` with
+    ``n = 810`` treats it as though it dispersed counts out of the item pool --
+    which is what VG11's ``kappa`` does, and what the contrast then compared it
+    with (``compare_ds_td_re.py``'s long-standing "known residual"). ``kappa_eff``
+    is on the item-pool denominator and is comparable. It reduces to ``kappa_s``
+    at ``kappa_U -> inf`` and ``p_U = 1``.
+    """
+    eps = 1e-9
+    pu = np.clip(np.asarray(p_u, dtype=float), eps, 1 - eps)
+    pc = np.clip(np.asarray(q, dtype=float), eps, 1 - eps)
+    ku = np.asarray(kappa_u, dtype=float)
+    ks = np.asarray(kappa_s, dtype=float)
+    m = pu * pc
+    e2_parent = pu * (pu * ku + 1.0) / (ku + 1.0)
+    e2_child = pc * (pc * ks + 1.0) / (ks + 1.0)
+    variance = np.maximum(e2_parent * e2_child - m * m, 1e-12)
+    return np.maximum(m * (1.0 - m) / variance - 1.0, 1e-6)
+
+
+def load_marginal_spoken_trajectory(
+    key: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """``(ages, p_s, kappa_eff, n_trials)`` for a joint model's marginal spoken count.
+
+    The bivariate counterpart of :func:`load_outcome_trajectory` for the one case
+    where that function's ``kappa_s_plot`` is the wrong object: ``p_s = p_u q`` is
+    already marginal, but ``kappa_s`` is conditional, and a dispersion contrast
+    against a univariate spoken model needs :func:`product_marginal_kappa`.
+    """
+    d = MODEL_REGISTRY[key]
+    if d.model_type is not ModelType.BIVARIATE:
+        raise ValueError(f"{key} is not a bivariate model; use load_outcome_trajectory.")
+    ages, (p_u, k_u, q, k_s), _ = _load_reshaped_draws(
+        trace_path(key), ("p_u_plot", "kappa_u_plot", "q_plot", "kappa_s_plot")
+    )
+    return ages, p_u * q, product_marginal_kappa(p_u, k_u, q, k_s), n_trials(key)
 
 
 def implied_sd_y(p: np.ndarray, kappa: np.ndarray, n: int) -> np.ndarray:

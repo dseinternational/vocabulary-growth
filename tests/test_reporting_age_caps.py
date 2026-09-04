@@ -42,7 +42,6 @@ CAPPED_BIVARIATE_CALLS = [
     "plot_comprehension_production_gap",
     "plot_understood_vs_spoken",
     "plot_understood_vs_spoken_predictive",
-    "plot_spoken_given_understood",
 ]
 
 CAPPED_TRIVARIATE_CALLS = [
@@ -76,7 +75,6 @@ EXPECTED_CAP = {
     (common_bivariate, "plot_comprehension_production_gap"): ("attr", "report_max_age_understood"),
     (common_bivariate, "plot_understood_vs_spoken"): ("attr", "report_max_age_understood"),
     (common_bivariate, "plot_understood_vs_spoken_predictive"): ("attr", "report_max_age_understood"),
-    (common_bivariate, "plot_spoken_given_understood"): ("attr", "report_max_age_understood"),
     (common_trivariate, "plot_production_rate"): ("name", "ratio_cap"),
     (common_trivariate, "plot_comprehension_production_gap"): ("name", "ratio_cap"),
     (common_trivariate, "plot_signed_rate"): ("name", "sign_ratio_cap"),
@@ -216,35 +214,6 @@ def test_the_cap_actually_truncates_a_reparameterised_axis(tmp_path):
     assert uncapped["words_understood"].max() > capped["words_understood"].max()
 
 
-def test_the_age_fan_drops_ages_past_the_cap(tmp_path):
-    """``plot_spoken_given_understood`` selects representative ages from the query
-    grid; the cap has to be applied before that selection, or the fan spends a
-    line on an age the model declines to report ``q`` for elsewhere."""
-    import pandas as pd
-
-    rng = np.random.default_rng(1)
-    ages = np.array([12.0, 30.0, 48.0, 72.0, 90.0])
-    q_query = np.clip(
-        np.linspace(0.1, 0.8, len(ages))[:, None] + rng.normal(0, 0.01, (len(ages), 50)),
-        1e-4,
-        0.999,
-    )
-
-    class _Samples:
-        pass
-
-    s = _Samples()
-    s.X_query = ages
-    s.q_query = q_query
-
-    common_bivariate.plot_spoken_given_understood(
-        s, n_trials=810, output_dir=str(tmp_path), filename="fan", max_age_months=72.0
-    )
-    fan = pd.read_csv(tmp_path / "fan.csv")
-    assert fan["age_months"].max() <= 72
-    assert 90 not in set(fan["age_months"].unique())
-
-
 def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
     """The per-outcome caps must not give the CSV columns of different lengths.
 
@@ -320,3 +289,98 @@ def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
         outside = frame.loc[frame.age_months > cap, column]
         assert inside.notna().all(), f"{column} is missing values inside its cap"
         assert outside.isna().all(), f"{column} reports past its {cap}-month cap"
+
+
+def test_the_age_fan_is_retired():
+    """``plot_spoken_given_understood`` drew a population rate as a straight line to
+    810 words -- E[q | U] by construction, the reading issue #233 rules out --
+    and was retired on 2026-09-02 in favour of ``plot_understood_vs_spoken``
+    carrying the observed children."""
+    assert not hasattr(common_bivariate, "plot_spoken_given_understood")
+
+
+def _stub_samples(*, with_observed: bool):
+    rng = np.random.default_rng(3)
+    n_plot, n_samples = 60, 30
+    X_plot = np.linspace(8.0, 72.0, n_plot)
+    p_u = np.clip(np.linspace(0.02, 0.6, n_plot)[:, None] + rng.normal(0, 0.003, (n_plot, n_samples)), 1e-4, 0.999)
+    q = np.clip(np.linspace(0.02, 0.8, n_plot)[:, None] + rng.normal(0, 0.003, (n_plot, n_samples)), 1e-4, 0.999)
+
+    class _S:
+        pass
+
+    s = _S()
+    s.X_plot = X_plot
+    s.p_u_plot = p_u
+    s.q_plot = q
+    s.p_s_plot = p_u * q
+    s.y_u_plot = np.round(p_u * 810)
+    s.y_s_plot = np.round(p_u * q * 810)
+    if with_observed:
+        n_obs = 400
+        s.X_obs = rng.uniform(8, 72, n_obs)
+        u = rng.integers(0, 700, n_obs).astype(float)
+        u[:20] = np.nan
+        s.y_u_obs = u
+        s.y_s_obs = np.where(np.isnan(u), np.nan, np.round(u * rng.uniform(0.05, 0.6, n_obs)))
+    return s
+
+
+@pytest.mark.parametrize("func", ["plot_understood_vs_spoken", "plot_production_rate_by_understood",
+                                  "plot_understood_vs_spoken_predictive"])
+def test_the_observed_overlay_is_optional(tmp_path, func):
+    """The age-cap tests build stubs without observed counts; the overlay must not
+    demand them, and must write its own CSV only when it drew something."""
+    import pandas as pd
+
+    plot = getattr(common_bivariate, func)
+    plot(_stub_samples(with_observed=False), n_trials=810, output_dir=str(tmp_path), filename="bare")
+    assert (tmp_path / "bare.csv").exists()
+    assert not (tmp_path / "bare_observed.csv").exists()
+
+    plot(_stub_samples(with_observed=True), n_trials=810, output_dir=str(tmp_path), filename="obs")
+    if func == "plot_understood_vs_spoken_predictive":
+        return  # the predictive figure draws the observed points but summarises nothing
+    table = pd.read_csv(tmp_path / "obs_observed.csv")
+    assert list(table.columns) == ["level", "n", "median", "q25", "q75"]
+    assert (table["n"] >= 10).all() and (table["q25"] <= table["median"]).all()
+    if func == "plot_production_rate_by_understood":
+        assert table["median"].between(0, 1).all()
+
+
+def test_administration_weights_sum_to_one_and_follow_age_coverage():
+    """Weights are the studies present at each age, so a study sampled only at 60
+    months gets no weight at 12 and all of it at 60."""
+    import pandas as pd
+
+    frame = pd.DataFrame({"study_code": [0] * 20 + [1] * 20, "age": [12.0] * 20 + [60.0] * 20})
+    X = np.array([12.0, 36.0, 60.0])
+    w = common_bivariate.administration_weights(frame, X, bandwidth=3.0)
+    assert np.allclose(w.sum(axis=1), 1.0)
+    assert w[0, 0] > 0.999 and w[2, 1] > 0.999
+    assert 0.4 < w[1, 0] < 0.6
+
+
+def test_weighted_curves_reduce_to_the_reference_child_with_zero_study_effects():
+    rng = np.random.default_rng(0)
+    f = rng.normal(-2, 1, (5, 40))
+    h = rng.normal(-1, 1, (5, 40))
+    w = np.full((5, 3), 1 / 3)
+    p_u, p_s = common_bivariate.weighted_population_curves(f, h, np.zeros((3, 40)), np.zeros((3, 40)), w)
+    sig = lambda x: 1 / (1 + np.exp(-x))  # noqa: E731
+    assert np.allclose(p_u, sig(f)) and np.allclose(p_s, sig(f) * sig(h))
+
+
+def test_study_fans_are_skipped_without_study_effects(tmp_path):
+    """VG05 carries no study effects; the fan and the weighted tables must not be
+    drawn from a curve the model does not have."""
+    import xarray as xr
+
+    class _Ctx:
+        trace = xr.DataTree.from_dict({"posterior": xr.Dataset({"f_u_plot": (("chain", "draw", "plot_id"), np.zeros((1, 2, 3)))}),
+                                       "constant_data": xr.Dataset({"X_plot": (("plot_id",), np.array([8.0, 9.0, 10.0]))})})
+        analysis_df = None
+
+    assert common_bivariate.study_marginal_inputs(_Ctx()) is None
+    assert common_bivariate.plot_study_fans(_Ctx(), n_trials=810, output_dir=str(tmp_path), filename="fans") is None
+    assert not (tmp_path / "fans.png").exists()
