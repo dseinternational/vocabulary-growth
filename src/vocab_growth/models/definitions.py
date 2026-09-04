@@ -1164,6 +1164,62 @@ class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
 
 
 @dataclass(frozen=True)
+class BivariateSexShiftModelDefinition(BivariateCorrelatedSubjectREModelDefinition):
+    """VG20 plus a constant sex shift on the understood and production-ratio logits.
+
+    **Exploratory and unregistered** (issue #295,
+    ``notes/202609041206-sex-differences-in-vocabulary.md``). No entry in
+    ``MODEL_REGISTRY`` or the catalogue instantiates this class; the only
+    consumer is ``scripts/experiments/vg20_sex_arm.py``, which derives its arms
+    from ``VG20`` through ``_as_definition_subclass`` and fits them into a
+    separate output root. It lives here rather than in the harness so the engine
+    seam it drives is typed and visible beside the other sibling subclasses, and
+    so registering it later is a one-line change rather than a move.
+
+    Two fields, both inert at their defaults, so a definition of this class with
+    neither set is VG20 op for op:
+
+    * ``sex_known_only`` restricts the frame to administrations with a recorded
+      sex. That is a **data** change: the six studies with no sex column leave
+      the pool (ie_01, it_01, nz_01, uk_03, uk_04, us_02 — a quarter of VG20's
+      children), and the frame gains a ``sex`` column, so its hash moves. It is
+      what makes the control arm and the effect arm comparable: both see the
+      same rows.
+    * ``sex_effect_sigma`` adds ``beta_sex_u`` and ``beta_sex_q``, each
+      ``Normal(0, sigma)``, multiplying a girls ``+1/2`` / boys ``-1/2`` contrast
+      on the understood and production-ratio logits. The contrast coding keeps
+      the population curves the sex-balanced average rather than the boys'
+      curve, so the ``*_query`` outputs stay comparable with the control arm's,
+      and each coefficient reads directly as the girl-minus-boy difference in
+      logits. Requires ``sex_known_only``: a coefficient on a covariate a
+      quarter of the rows lack has nothing to multiply.
+
+    The effect is **constant in age** by design. The note's age-by-sex
+    interaction test found nothing on the logit scale in either population, and a
+    fixed logit shift already opens up in words and in months along a rising
+    curve, which is what the literature's "growing gap" describes. Check the
+    assumption after the fit, by residual means by sex within age band, rather
+    than build a sex-specific curve in.
+
+    Neither field is in ``fit_identity.FIELD_ROLES``, because that registry is
+    tested against the fields registered models carry and this class has none.
+    ``role_of`` therefore classifies both as graph-affecting, which fails closed
+    and is the strictest reading; ``sex_known_only`` is really a data field and
+    should be classified as one if the class is ever registered.
+    """
+
+    sex_known_only: bool = False
+    """Keep only administrations whose child has a recorded sex, and carry the
+    ``sex`` column (``'F'``/``'M'``) in the frame. Down syndrome pool only."""
+
+    sex_effect_sigma: float | None = None
+    """Prior SD of the two sex coefficients, ``Normal(0, sigma)`` on the logit
+    scale, or ``None`` for no coefficient. The note recommends 0.5: the
+    descriptive estimates are 0.2 to 0.35 logits, and the typically developing
+    CDI norms put the whole effect well inside one such SD."""
+
+
+@dataclass(frozen=True)
 class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
     """Bivariate definition that gives each child a rate as well as an offset.
 

@@ -384,6 +384,15 @@ def configure_bivariate_priors(
         )
         plot_and_print_dist(context, beta_lag_dist, "beta_lag_dist")
 
+    # --- Sex shift prior (exploratory VG20 variant, issue #295) ---
+    # One prior serves both coefficients; the engine draws `beta_sex_u` and
+    # `beta_sex_q` from it independently.
+    sex_sigma = getattr(definition, "sex_effect_sigma", None)
+    if sex_sigma is not None:
+        heading("Sex shift prior", style="bold cyan")
+        beta_sex_dist = pz.Normal(mu=0.0, sigma=sex_sigma)
+        plot_and_print_dist(context, beta_sex_dist, "beta_sex_dist")
+
     # --- Kappa priors — understood ---
     heading("Kappa priors — understood", style="bold cyan")
     kappa_u_fields = configure_kappa_priors(context, definition.kappa_u, "_u")
@@ -1162,6 +1171,11 @@ def pair_plot_priority(definition) -> tuple[str, ...]:
     is declared by the model, not inferred from what happened to be sampled.
     """
     priority: list[str] = []
+
+    # Exploratory sex-shift variant of VG20 (issue #295): the two coefficients
+    # it exists to estimate, ahead of the correlation it inherits.
+    if getattr(definition, "sex_effect_sigma", None) is not None:
+        priority += ["beta_sex_u", "beta_sex_q"]
 
     if getattr(definition, "use_cross_lag", False):
         priority.append("beta_lag")

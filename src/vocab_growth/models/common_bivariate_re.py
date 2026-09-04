@@ -88,7 +88,10 @@ from vocab_growth.models.gp_utils import (
     trend_and_gp,
 )
 from vocab_growth.models.likelihood_utils import nested_outcome_alpha_beta
-from vocab_growth.models.observation_arrays import prepare_bivariate_observations
+from vocab_growth.models.observation_arrays import (
+    prepare_bivariate_observations,
+    sex_contrast_codes,
+)
 from vocab_growth.reporting import (
     dataframe_table,
     key_value_table,
@@ -145,6 +148,22 @@ def build_bivariate_re_analysis_frame(
     ):
         columns = columns + ["survey_vocab_max"]
 
+    # Sex-shift variant (exploratory, issue #295): carry the recorded sex and,
+    # below, keep only the administrations that have one. Read through
+    # `getattr` because the field lives on `BivariateSexShiftModelDefinition`,
+    # a sibling subclass no registered model instantiates, so every model of
+    # record takes the `False` branch and its frame is untouched. Down syndrome
+    # only: the Wordbank query never produces this column, and the variant is a
+    # question about the Down syndrome pool.
+    sex_known_only = bool(getattr(definition, "sex_known_only", False))
+    if sex_known_only:
+        if definition.population is not vocab_data_utils.Population.DOWN_SYNDROME:
+            raise ValueError(
+                "sex_known_only applies to the Down syndrome pool only; the "
+                f"typically developing frame carries no sex column ({definition.model_id})."
+            )
+        columns = columns + ["sex"]
+
     df = vocab_data_utils.load_data(
         population=definition.population,
         columns=columns,
@@ -176,6 +195,22 @@ def build_bivariate_re_analysis_frame(
                 f"exclude_studies={definition.exclude_studies!r} matched no rows. "
                 "A leave-one-study-out check that removes nothing cannot fail, "
                 "which is worse than not running it -- check the study codes."
+            )
+        df = df[keep]
+    sex_unknown_rows_excluded = 0
+    if sex_known_only:
+        # Row-wise rather than child-wise: sex is recorded per administration in
+        # the source files, and the loader has already dropped the one batch in
+        # which a child's rows disagreed (the ceiling-saturated us_01
+        # preparation batch, see the note). `build_model_re` still refuses a
+        # frame in which any retained child carries two values.
+        keep = df["sex"].notna()
+        sex_unknown_rows_excluded = int((~keep).sum())
+        if sex_unknown_rows_excluded == 0:
+            raise ValueError(
+                "sex_known_only removed no rows. A quarter of the Down syndrome "
+                "pool has no recorded sex, so a restriction that removes nothing "
+                "is reading the wrong column or the wrong database."
             )
         df = df[keep]
     analysis_df = df[columns].copy()
@@ -225,6 +260,7 @@ def build_bivariate_re_analysis_frame(
         "n_before_single_administration": n_before_single_administration,
         "unique_studies": unique_studies,
         "n_subjects": n_subjects,
+        "sex_unknown_rows_excluded": sex_unknown_rows_excluded,
     }
 
 
@@ -305,6 +341,17 @@ def prepare_bivariate_re_data(
                 definition.max_age_months
             ),
         ))
+    if getattr(definition, "sex_known_only", False):
+        counts.append(
+            ("Rows without recorded sex excluded", info["sex_unknown_rows_excluded"])
+        )
+        by_sex = analysis_df.drop_duplicates(["study", "subject_id"])["sex"].value_counts()
+        counts.append(
+            (
+                "Children by sex (girls / boys)",
+                f"{int(by_sex.get('F', 0))} / {int(by_sex.get('M', 0))}",
+            )
+        )
     key_value_table("Observation counts", counts)
     dataframe_table(desc, title="Descriptive statistics")
 
@@ -414,6 +461,28 @@ def build_model_re(
                 spoken_spec.is_conditional,
             ),
             n_obs=n,
+        )
+
+    # Sex shift (exploratory VG20 variant, issue #295): one girl-minus-boy
+    # difference on each logit, constant in age, multiplying a +1/2 (girls) /
+    # -1/2 (boys) contrast so the population curve stays the sex-balanced
+    # average. The field lives on `BivariateSexShiftModelDefinition`, which no
+    # registered model instantiates, and the term is added to the graph only
+    # when it is set -- so every model of record's graph is emitted op for op as
+    # before, rather than gaining a `+ 0.0`.
+    sex_sigma = getattr(definition, "sex_effect_sigma", None)
+    use_sex_effect = sex_sigma is not None
+    if use_sex_effect:
+        if not getattr(definition, "sex_known_only", False):
+            raise ValueError(
+                "sex_effect_sigma needs sex_known_only: a coefficient on a covariate "
+                "a quarter of the rows lack has nothing to multiply."
+            )
+        x_sex = sex_contrast_codes(analysis_df)
+        n_girl_rows = int((x_sex > 0).sum())
+        print(
+            f"Sex shift: {n_girl_rows} girl rows (+1/2) and {n - n_girl_rows} boy "
+            f"rows (-1/2); beta_sex_u, beta_sex_q ~ Normal(0, {sex_sigma:g})."
         )
 
     # Range validation happens ONCE, before the integer cast, and not here: the cast
@@ -837,11 +906,28 @@ def build_model_re(
             subject_shift_q = 0.0
 
         # ============================================================
+        # Sex shift (exploratory VG20 variant, issue #295)
+        # ============================================================
+
+        # Emitted only when the definition carries the field, so the graphs of
+        # the models of record are unchanged. `beta_sex_*` read as the
+        # girl-minus-boy difference in logits; the contrast is stored as data so
+        # a reader of the trace can recover which rows were which.
+        if use_sex_effect:
+            x_sex_data = pm.Data("x_sex", x_sex, dims=("obs_id",))
+            beta_sex_u = pm.Normal("beta_sex_u", mu=0.0, sigma=sex_sigma)
+            beta_sex_q = pm.Normal("beta_sex_q", mu=0.0, sigma=sex_sigma)
+
+        # ============================================================
         # Observation-level quantities (with study effects)
         # ============================================================
 
         # Understood — obs level includes study shift (and optional subject shift)
         f_u_obs_re = f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + subject_shift_u
+        if use_sex_effect:
+            # Before the cross-lag block reads `f_u_obs_re`, so a child's
+            # expected prior-wave logit would include their sex shift.
+            f_u_obs_re = f_u_obs_re + beta_sex_u * x_sex_data
         p_u_obs = pm.Deterministic(
             "p_u_obs", pm.math.sigmoid(f_u_obs_re), dims=("obs_id",)
         )
@@ -868,6 +954,8 @@ def build_model_re(
 
         # Production ratio — obs level includes study shift (and optional subject shift)
         h_obs_re = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q + q_lag_term
+        if use_sex_effect:
+            h_obs_re = h_obs_re + beta_sex_q * x_sex_data
         q_obs = pm.Deterministic(
             "q_obs", pm.math.sigmoid(h_obs_re), dims=("obs_id",)
         )
