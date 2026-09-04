@@ -871,7 +871,7 @@ _SOURCE_TABLE_SCHEMAS = {
     "vocab_uk_05": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
     "vocab_us_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER",
     "vocab_uk_06": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
-    "vocab_ie_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
+    "vocab_ie_02": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
     "vocab_nz_01": "subject_id VARCHAR, age BIGINT, not_spoken_or_signed BIGINT, signed BIGINT, spoken_signed BIGINT, spoken BIGINT",
     "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex INTEGER, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
     "vocab_uk_07": 'subject_id VARCHAR, "group" VARCHAR, sex INTEGER, timepoint VARCHAR, age BIGINT, understood INTEGER, spoken INTEGER, signed INTEGER, spoken_signed INTEGER, produced INTEGER, survey_vocab_max INTEGER',

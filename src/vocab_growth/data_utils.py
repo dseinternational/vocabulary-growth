@@ -1376,8 +1376,12 @@ def vocab_combined_view_sql() -> str:
     -- never reached its CSV at all. us_01 is unaffected either way -- it is
     -- built in this repo, not taken from research-data-analysis.
     --
-    -- ie_02 stays NULL: its source codes 1/2 but the mapping to male/female is
-    -- undocumented, so it emits `sex_source_code` rather than `sex` upstream.
+    -- ie_02 is decoded the same way, but its coding is the one resting on a
+    -- confirmation rather than on the file: its source carries 1/2 with no
+    -- value label saying which is which. It was carried upstream as
+    -- `sex_source_code` and NULL here until the contributor confirmed, on
+    -- 2026-09-04, that it is the same 1 = male / 2 = female coding as every
+    -- other source; upstream then renamed the column to plain `sex`.
     SELECT 'uk_01' as study,
            vuk1.subject_id,
            CASE vuk1.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
@@ -1560,7 +1564,7 @@ def vocab_combined_view_sql() -> str:
         UNION ALL
     SELECT 'ie_02'                           as study,
         vie2.subject_id,
-        NULL                                as sex,
+        CASE vie2.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
         vie2.age,
         vie2.understood,
         vie2.spoken,
