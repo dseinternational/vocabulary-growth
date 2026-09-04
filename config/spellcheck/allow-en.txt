@@ -1,3 +1,4 @@
+Abbeduto
 ArviZ
 BFGS
 BFMI
@@ -7,8 +8,11 @@ Berglund
 Bergmann
 Birnbaum
 Borjon
+Braginsky
+Brunet
 Buckley
 Burgoyne
+Chapman
 CLEX
 CLPM
 COMPREHENSIÓN
@@ -148,6 +152,7 @@ elementwise
 elif
 elpd
 empiricalmodelling
+Eriksson
 estimand
 estimands
 etiologically
@@ -187,6 +192,7 @@ modeling
 monkeypatch
 monkeypatched
 monkeypatches
+Mullen
 multiset
 mypy
 negll
@@ -250,6 +256,7 @@ signspeech
 spanos
 spkn
 stales
+Startin
 startswith
 subj
 swapfile
@@ -258,6 +265,7 @@ tanh
 timepoint
 toddlerhood
 trigamma
+Udhnani
 unassessable
 unbiasedness
 unbuildable
@@ -282,4 +290,5 @@ workstream
 worktree
 worktrees
 xarray
+Yurovsky
 zygosity
