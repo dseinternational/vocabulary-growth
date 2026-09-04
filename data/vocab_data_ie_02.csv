@@ -1,4 +1,4 @@
-subject_id,group,gender,english_speaking,timepoint,age,understood,signed,imitates,spoken,says_clearly,v_adapt_bhv_comp,v_communication,v_daily_living,v_socialisation
+subject_id,group,sex_source_code,english_speaking,timepoint,age,understood,signed,imitates,spoken,says_clearly,v_adapt_bhv_comp,v_communication,v_daily_living,v_socialisation
 ID_014C63F83E164894,1,1,yes,t1,12,0,0,0,0,0,,,,
 ID_0561804C7599F4CF,2,2,yes,t1,27,135,22,7,6,5,74,72,69,84
 ID_0561804C7599F4CF,2,2,yes,t2,30,189,66,16,13,6,,,,

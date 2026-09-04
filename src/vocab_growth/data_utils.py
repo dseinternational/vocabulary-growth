@@ -1366,9 +1366,21 @@ def vocab_combined_view_sql() -> str:
     return f"""
     CREATE VIEW vocab_combined AS
     SELECT * FROM (
+    -- `sex` in the per-source CSVs is the canonical 1 = male / 2 = female
+    -- coding (research-data-analysis prepare/readme.md, "Sex coding"). It is
+    -- decoded to M/F here, which is the representation this view has always
+    -- exposed and which `us_01` — built in this repo by scripts/build_us01_source.py
+    -- — already produces. Before that standardisation each source arrived in its
+    -- own coding and this view handled them one at a time: uk_02's 0/1 was
+    -- decoded here, uk_06's boy/girl was discarded as NULL, and uk_05's sex
+    -- never reached its CSV at all. us_01 is unaffected either way -- it is
+    -- built in this repo, not taken from research-data-analysis.
+    --
+    -- ie_02 stays NULL: its source codes 1/2 but the mapping to male/female is
+    -- undocumented, so it emits `sex_source_code` rather than `sex` upstream.
     SELECT 'uk_01' as study,
            vuk1.subject_id,
-           vuk1.sex,
+           CASE vuk1.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
            vuk1.age,
            vuk1.understood,
            vuk1.spoken,
@@ -1379,11 +1391,7 @@ def vocab_combined_view_sql() -> str:
     UNION ALL
     SELECT 'uk_02'          as study,
            vuk2.subject_id,
-           CASE
-               WHEN vuk2.gender = 0 THEN 'M'
-               WHEN vuk2.gender = 1 THEN 'F'
-               ELSE NULL
-           END            as sex,
+           CASE vuk2.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
            vuk2.age age,
            vuk2.comprehension as understood,
            vuk2.spoken,
@@ -1519,7 +1527,7 @@ def vocab_combined_view_sql() -> str:
         UNION ALL
     SELECT 'uk_05'                           as study,
         vuk05.subject_id,
-        NULL                                as sex,
+        CASE vuk05.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
         vuk05.age,
         vuk05.understood,
         vuk05.spoken,
@@ -1541,7 +1549,7 @@ def vocab_combined_view_sql() -> str:
         UNION ALL
     SELECT 'uk_06'                           as study,
         vuk06.subject_id,
-        NULL                                as sex,
+        CASE vuk06.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
         vuk06.age,
         vuk06.understood,
         vuk06.spoken,
@@ -1611,7 +1619,7 @@ def vocab_combined_view_sql() -> str:
     -- spoken and produced values are unaffected. See data/vocab_data_es_01.md.
     SELECT 'es_01'                           as study,
         ves01.subject_id,
-        ves01.sex,
+        CASE ves01.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
         ves01.age,
         ves01.understood,
         ves01.spoken,
@@ -1660,7 +1668,7 @@ def vocab_combined_view_sql() -> str:
     -- understood_only cross-tab cell would be negative. 82 rows remain.
     SELECT 'uk_07'                                        as study,
         vuk07.subject_id,
-        vuk07.sex,
+        CASE vuk07.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
         vuk07.age,
         vuk07.understood,
         vuk07.spoken + vuk07.spoken_signed                as spoken,
