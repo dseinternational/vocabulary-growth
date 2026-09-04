@@ -862,19 +862,19 @@ def test_filter_studies_dropped_list_is_sorted():
 # vocab_combined view. The DS regression tests populate wordbank_child only,
 # so these stay empty; they exist so the view binds.
 _SOURCE_TABLE_SCHEMAS = {
-    "vocab_uk_01": "subject_id VARCHAR, sex VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, produced INTEGER, survey_vocab_max INTEGER",
-    "vocab_uk_02": "subject_id VARCHAR, gender INTEGER, age DOUBLE, comprehension INTEGER, spoken INTEGER, signed INTEGER, production INTEGER, form VARCHAR",
+    "vocab_uk_01": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, produced INTEGER, survey_vocab_max INTEGER",
+    "vocab_uk_02": "subject_id VARCHAR, sex INTEGER, age DOUBLE, comprehension INTEGER, spoken INTEGER, signed INTEGER, production INTEGER, form VARCHAR",
     "vocab_ie_01": "subject_id VARCHAR, age_months_start DOUBLE, understands_total_start INTEGER, says_total_start INTEGER, age_months_end DOUBLE, understands_total_end INTEGER, says_total_end INTEGER",
     "vocab_uk_03": "subject_id VARCHAR, age DOUBLE, comprehension INTEGER, production INTEGER",
     "vocab_it_01": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, form_max_spoken INTEGER",
     "vocab_uk_04": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
-    "vocab_uk_05": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
+    "vocab_uk_05": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
     "vocab_us_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER",
-    "vocab_uk_06": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
-    "vocab_ie_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
+    "vocab_uk_06": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
+    "vocab_ie_02": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
     "vocab_nz_01": "subject_id VARCHAR, age BIGINT, not_spoken_or_signed BIGINT, signed BIGINT, spoken_signed BIGINT, spoken BIGINT",
-    "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex VARCHAR, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
-    "vocab_uk_07": 'subject_id VARCHAR, "group" VARCHAR, sex VARCHAR, timepoint VARCHAR, age BIGINT, understood INTEGER, spoken INTEGER, signed INTEGER, spoken_signed INTEGER, produced INTEGER, survey_vocab_max INTEGER',
+    "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex INTEGER, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
+    "vocab_uk_07": 'subject_id VARCHAR, "group" VARCHAR, sex INTEGER, timepoint VARCHAR, age BIGINT, understood INTEGER, spoken INTEGER, signed INTEGER, spoken_signed INTEGER, produced INTEGER, survey_vocab_max INTEGER',
     "vocab_us_01": "subject_id VARCHAR, form VARCHAR, age DOUBLE, sex VARCHAR, dev_status VARCHAR, comprehension INTEGER, production INTEGER, survey_vocab_max INTEGER, in_norming_window BOOLEAN",
 }
 
@@ -1070,8 +1070,8 @@ def test_es01_admits_only_the_down_syndrome_group(tmp_path, monkeypatch):
     db_path = _es01_db(
         tmp_path,
         [
-            ("ds1", 1, "DS", "M", 60, 1800, 28.0, 7, 500, 300, 40, 320),
-            ("td1", 1, "TD", "M", 28, 840, 28.0, 7, 480, 290, 30, 300),
+            ("ds1", 1, "DS", 1, 60, 1800, 28.0, 7, 500, 300, 40, 320),
+            ("td1", 1, "TD", 1, 28, 840, 28.0, 7, 480, 290, 30, 300),
         ],
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
@@ -1089,7 +1089,7 @@ def test_es01_symbolic_gestures_are_the_signed_lexicon(tmp_path, monkeypatch):
     # source's own spoken-or-gestured union (320) is `produced`, de-duplicated, so
     # it must not be recomputed as spoken + gestured (which would be 340).
     db_path = _es01_db(
-        tmp_path, [("ds1", 1, "DS", "F", 60, 1800, 28.0, 7, 500, 300, 40, 320)]
+        tmp_path, [("ds1", 1, "DS", 2, 60, 1800, 28.0, 7, 500, 300, 40, 320)]
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
@@ -1117,8 +1117,8 @@ def test_es01_masks_a_gestural_total_above_its_own_union(tmp_path, monkeypatch):
     db_path = _es01_db(
         tmp_path,
         [
-            ("ok", 1, "DS", "F", 60, 1800, 28.0, 7, 500, 300, 40, 320),
-            ("bad", 2, "DS", "M", 24, 720, 12.7, 2, 82, 1, 15, 11),
+            ("ok", 1, "DS", 2, 60, 1800, 28.0, 7, 500, 300, 40, 320),
+            ("bad", 2, "DS", 1, 24, 720, 12.7, 2, 82, 1, 15, 11),
         ],
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
@@ -1140,8 +1140,8 @@ def test_es01_carries_the_651_item_cdi_down_ceiling(tmp_path, monkeypatch):
     db_path = _es01_db(
         tmp_path,
         [
-            ("at_ceiling", 1, "DS", "F", 60, 1800, 28.0, 7, 651, 300, 40, 320),
-            ("impossible", 2, "DS", "M", 60, 1800, 28.0, 7, 652, 300, 40, 320),
+            ("at_ceiling", 1, "DS", 2, 60, 1800, 28.0, 7, 651, 300, 40, 320),
+            ("impossible", 2, "DS", 1, 60, 1800, 28.0, 7, 652, 300, 40, 320),
         ],
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
@@ -1185,7 +1185,7 @@ def test_uk07_exclusive_cells_become_any_modality_marginals(tmp_path, monkeypatc
     # source's own union of all three (320), not spoken + signed.
     db_path = _uk07_db(
         tmp_path,
-        [("c1", "control", "F", "t1", 60, 500, 200, 30, 90, 320, 674)],
+        [("c1", "control", 2, "t1", 60, 500, 200, 30, 90, 320, 674)],
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
@@ -1213,10 +1213,10 @@ def test_uk07_pools_both_trial_arms_and_keeps_repeat_visits(tmp_path, monkeypatc
     db_path = _uk07_db(
         tmp_path,
         [
-            ("c1", "control", "M", "t1", 40, 200, 50, 10, 20, 80, 674),
-            ("c1", "control", "M", "t2", 50, 300, 90, 10, 30, 130, 674),
-            ("c1", "control", "M", "t3", 55, 350, 120, 5, 40, 165, 674),
-            ("c2", "intervention", "F", "t1", 44, 210, 60, 12, 18, 90, 674),
+            ("c1", "control", 1, "t1", 40, 200, 50, 10, 20, 80, 674),
+            ("c1", "control", 1, "t2", 50, 300, 90, 10, 30, 130, 674),
+            ("c1", "control", 1, "t3", 55, 350, 120, 5, 40, 165, 674),
+            ("c2", "intervention", 2, "t1", 44, 210, 60, 12, 18, 90, 674),
         ],
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
@@ -1234,8 +1234,8 @@ def test_uk07_carries_the_674_item_reading_cdi_ceiling(tmp_path, monkeypatch):
     db_path = _uk07_db(
         tmp_path,
         [
-            ("at_ceiling", "control", "F", "t3", 90, 674, 400, 20, 100, 520, 674),
-            ("impossible", "control", "M", "t3", 90, 675, 400, 20, 100, 520, 674),
+            ("at_ceiling", "control", 2, "t3", 90, 674, 400, 20, 100, 520, 674),
+            ("impossible", "control", 1, "t3", 90, 675, 400, 20, 100, 520, 674),
         ],
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
@@ -1256,7 +1256,7 @@ def test_uk07_signing_is_a_total_and_is_not_masked(tmp_path, monkeypatch):
 
     db_path = _uk07_db(
         tmp_path,
-        [("c1", "intervention", "M", "t2", 66, 400, 100, 25, 60, 185, 674)],
+        [("c1", "intervention", 1, "t2", 66, 400, 100, 25, 60, 185, 674)],
     )
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
