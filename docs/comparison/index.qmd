@@ -572,7 +572,7 @@ One caveat survives, pointing the other way. 432 of the 767 children are seen on
 :::
 
 ::: {.callout-important title="The between-child scale recovers low; whether that cancels out of the TD/DS contrast is unresolved"}
-The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate: parameter recovery returns the typically developing between-child scale below the value that generated it. Whether the Down syndrome side carries the same bias, and therefore whether it cancels out of the contrast, is measured from this cycle's own recovery run below rather than asserted.
+The section above calls the comprehension contrast the like-for-like one, and structurally it is. But structural symmetry is not the same as an unbiased estimate: parameter recovery returns the typically developing between-child scale below the value that generated it. Whether the Down syndrome side carries the same bias, and therefore whether it cancels out of the contrast, is answered from this cycle's own recovery run below rather than asserted.
 
 ```{python}
 #| echo: false
@@ -622,17 +622,32 @@ _rr = [
 ]
 if not _rr:
     # Parameter recovery is a separate multi-hour job (fit_recovery.py), not part
-    # of the fit-and-publish tail; a cycle that has not run it must say so rather
-    # than fail the whole book here, and must not quote a previous cycle's
-    # recovery against this cycle's fits.
+    # of the fit-and-publish tail, so its matrices can be absent for two quite
+    # different reasons: the run was never made, or it was made and its scored
+    # output did not travel with the fits (2026-09-05 -- the 09-03 run's truths
+    # and matrices stayed on the fitting VM's scratch disk). Either way the book
+    # must say so rather than fail here, and must never quote a PREVIOUS cycle's
+    # recovery against this cycle's fits. Citing a run made against these same
+    # fits of record is not that, provided it is named as quoted rather than
+    # measured -- which is what the text below does.
     print(
-        "**Parameter recovery was not run in this cycle.** The recovery check on "
-        "`tau_subject` (`fit_recovery.py vg12`) writes `recovery_vg12_r*.csv`, and "
-        "none exists for these fits, so the finding this callout normally quantifies "
-        "— that VG12's between-child scale recovers below the truth while the total "
-        "variance budget recovers — is not restated here from an earlier cycle's fits. "
-        "It stands as a known property of the model until this cycle's recovery run "
-        "confirms or revises it."
+        "**The scored recovery matrices are not staged in this render.** The "
+        "recovery check on `tau_subject` (`fit_recovery.py vg12`) writes "
+        "`recovery_vg12_r*.csv`, and none is present, so nothing in this callout "
+        "is computed from artefacts in this book. **The run itself was made.** A "
+        "reporting-tier study of 2026-09-03 drew its truths from this cycle's own "
+        "VG12 fit of record and is written up in "
+        "`notes/202609031825-recovery-vg15-vg12-vg11.md`. It reports `tau_subject` "
+        "recovered below the truth in both assessed replicates — 0.662 against "
+        "0.627 (z = -2.99, -5.3%) and 0.708 against 0.651 (z = -4.70, -8.0%), "
+        "outside the 89% interval both times — while the variance budget "
+        "`v_total` recovered cleanly (z = +0.45, +0.04) and "
+        "`subject_variance_share` carried the miss (z = -2.20, -2.96). Clean "
+        "sampling did not reduce the bias: against the `test` tier the z-scores "
+        "are larger, because the posteriors are tighter around the same value. "
+        "Those figures are quoted from that note, not recomputed here; restaging "
+        "`output/comparisons/recovery/` replaces this paragraph with the measured "
+        "table."
     )
     _rr = None
 _ts = None if _rr is None else pd.concat([d[d["quantity"] == "tau_subject"] for d in _rr])
@@ -770,8 +785,18 @@ for _f in sorted(_glob.glob("recovery_*_r*.csv")):
 
 if not _tally:
     print(
-        "Parameter recovery has not run in this cycle, so the direction of the "
-        "between-child scale is not restated here from an earlier cycle's fits."
+        "The scored recovery matrices are not staged in this render, so this "
+        "tally is not computed here. The reporting-tier run of 2026-09-03 "
+        "(`notes/202609031825-recovery-vg15-vg12-vg11.md`), made against this "
+        "cycle's own fits of record, found the between-child scale biased **low** "
+        "on VG12 (-5.3% and -8.0%, both replicates assessed) and **high** on VG11 "
+        "(z = +3.23, +2.74, +1.78; one of three assessed, at the `test` tier) "
+        "— and by different routes: VG12's variance budget recovers while its "
+        "split does not, whereas VG11's split recovers while its budget does not. "
+        "Two typically developing models biased in opposite directions means "
+        "“the typically developing side's bias” is not a single number, "
+        "which limits the cancellation argument further than this book's existing "
+        "withdrawal of the Down syndrome side does."
     )
 else:
     _low = sum(1 for *_x, _b, _a in _tally if _b < 0)
