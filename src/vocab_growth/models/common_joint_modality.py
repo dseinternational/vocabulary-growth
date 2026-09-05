@@ -796,6 +796,18 @@ def _plackett_pi_both(r, q, psi):
 # ============================================================
 
 
+def _composition_probabilities(r, q, psi):
+    """Four Plackett cell probabilities in neither/sign/speech/both order.
+
+    Floor and normalise once so every marginal and conditional composition
+    uses the same Dirichlet parameters, including near the probability limits.
+    """
+    both = _plackett_pi_both(r, q, psi)
+    cells = pm.math.stack([1 - r - q + both, r - both, q - both, both], axis=1)
+    cells = pm.math.maximum(cells, EPSILON)
+    return cells / cells.sum(axis=1, keepdims=True)
+
+
 def build_model(context: JointContext, definition: JointModelDefinition):
     """Build the joint sign/speech PyMC model with study + subject random intercepts."""
     config = context.model_config
@@ -1082,7 +1094,8 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # Latent full-grid trajectories (plain tensors), built by the shared
         # gp_utils helpers. Option D anchors each GP (per-draw zero at the
         # reference age) when the matching flag is set.
-        gp_grid = GPGrid(
+        gp_grid = GPGrid.from_age_grids(
+            grids,
             sa_z=sa_z,
             sb_z=sb_z,
             ell_low_z=ell_low_z,
@@ -1412,36 +1425,21 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         r_c = pm.math.clip(r_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
         q_c = pm.math.clip(q_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
         psi_c = pm.math.exp(log_psi_obs[idx_cells])
-        pi_both_c = _plackett_pi_both(r_c, q_c, psi_c)
-        pi_sign_c = pm.math.maximum(r_c - pi_both_c, EPSILON)
-        pi_speak_c = pm.math.maximum(q_c - pi_both_c, EPSILON)
-        pi_neither_c = pm.math.maximum(1 - r_c - q_c + pi_both_c, EPSILON)
-        pi_both_c = pm.math.maximum(pi_both_c, EPSILON)
-        pi_stack = pm.math.stack([pi_neither_c, pi_sign_c, pi_speak_c, pi_both_c], axis=1)
-        pi_stack = pi_stack / pi_stack.sum(axis=1, keepdims=True)
+        pi_stack = _composition_probabilities(r_c, q_c, psi_c)
         pm.DirichletMultinomial(
             "cells_obs", n=cell_total, a=conc * pi_stack, observed=cell_counts,
             dims=("obs_cells_id", "cell_id"),
         )
 
-        # nz_01 produced three cells (Dirichlet-Multinomial), within-PRODUCED
-        # composition. nz_01 has no comprehension, so we condition on produced:
-        # drop the unobservable "neither" (understood_only) cell from the Plackett
-        # within-understood composition and renormalise over {sign_only, speak_only,
-        # both}. Same conc and population+study marginals as the within-understood DM
-        # above, and the same per-study psi construction, so every cross-tab source
-        # identifies its own psi and they share the population level through the
-        # zero-sum.
+        # Conditional on the produced total, drop the neither cell but retain
+        # the other Dirichlet parameters. Their concentration sums to
+        # conc * P(produced | understood), rather than conc. Renormalising the
+        # probabilities and restoring conc would define a different model.
         if idx_prod.size:
             r_p = pm.math.clip(r_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
             q_p = pm.math.clip(q_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
             psi_p = pm.math.exp(log_psi_obs[idx_prod])
-            pi_both_p = _plackett_pi_both(r_p, q_p, psi_p)
-            pi_sign_p = pm.math.maximum(r_p - pi_both_p, EPSILON)
-            pi_speak_p = pm.math.maximum(q_p - pi_both_p, EPSILON)
-            pi_both_p = pm.math.maximum(pi_both_p, EPSILON)
-            pi_prod = pm.math.stack([pi_sign_p, pi_speak_p, pi_both_p], axis=1)
-            pi_prod = pi_prod / pi_prod.sum(axis=1, keepdims=True)
+            pi_prod = _composition_probabilities(r_p, q_p, psi_p)[:, 1:]
             pm.DirichletMultinomial(
                 "nz_prod_cells_obs", n=prod_total, a=conc * pi_prod, observed=prod_counts,
                 dims=("obs_prod_id", "prod_cell_id"),
@@ -1552,21 +1550,14 @@ sample = _shared_sample
 def diagnostics(context: JointContext):
     """Run diagnostics on the posterior samples.
 
-    Thin wrapper over the shared engine (common.py): joint prioritises
-    ``psi``/``conc`` first in the pair/trace/posterior-density plots (they are
-    the headline association/concentration parameters) and reports per-outcome
-    LOO-CV for the three marginal likelihoods (the four-cell
-    Dirichlet-Multinomial ``cells_obs`` is not a per-observation Beta-Binomial
-    and is left out of LOO-CV, matching every other engine's scope).
+    The shared engine prioritises ``psi`` and ``conc`` in parameter plots.
+    Per-outcome LOO scores cover the three marginal count likelihoods. They
+    hold out one likelihood term, with the other terms' denominators fixed.
+    They therefore do not hold out a complete administration.
 
-    Each per-outcome score is leave-one-likelihood-term-out, not
-    leave-one-administration-out: the spoken and signed likelihoods take the
-    same administration's observed understood count as their trial count, so a
-    held-out expressive term is scored conditional on that observed
-    comprehension and a held-out understood term leaves its own observed value
-    in the expressive terms' denominators. Excluding ``cells_obs`` and
-    ``nz_prod_cells_obs`` also means the association ``psi`` -- which only those
-    two terms identify -- is not scored by LOO-CV at all (#266).
+    The separate administration-level score includes every factor, including
+    ``cells_obs`` and ``nz_prod_cells_obs``. It assesses the predictive
+    contribution of the composition association as well as the count models.
     """
     posterior_vars = set(context.trace.posterior.data_vars)
 

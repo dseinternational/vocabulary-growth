@@ -636,15 +636,10 @@ class GPGrid:
     straight to ``pm.gp.HSGP``). Bundling them keeps the helper signatures small and
     identical across engines.
 
-    ``x_center_z`` optionally pins the HSGP basis centre (on the standardised age
-    scale). Left ``None``, PyMC centres the basis on the midpoint of the min/max
-    of whatever ``X`` reaches ``hsgp.prior`` — for these engines the stacked
-    ``[obs, plot, query]`` grid, so a reporting query that extends past the
-    observed range silently moves the approximation's accuracy region. Passing
-    the declared GP domain's midpoint here decouples the basis from the
-    reporting grid (#234). For every current model of record the two midpoints
-    coincide, so pinning is a numerical no-op that removes latent regression
-    debt rather than changing any fitted graph.
+    Registered engines use :meth:`from_age_grids` to pin the basis centre to
+    the declared GP domain. The evaluation grid includes reporting ages and
+    must not set the prior. The optional centre on the low-level constructor
+    exists for experiments that explicitly test PyMC's default centring.
     """
 
     sa_z: float
@@ -654,6 +649,11 @@ class GPGrid:
     M: list[int]
     L: list[float]
     x_center_z: float | None = None
+
+    @classmethod
+    def from_age_grids(cls, grids, **kwargs) -> GPGrid:
+        """Use the fixed domain midpoint, independent of queried or plotted ages."""
+        return cls(x_center_z=float(np.mean(grids.X_gp_domain_z)), **kwargs)
 
 
 def _soft_clamp_z(z, grid):

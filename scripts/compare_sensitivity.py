@@ -37,13 +37,14 @@ from vocab_growth.reporting import console, dataframe_table, heading
 from vocab_growth.sensitivity.compare import (
     compare_dirs,
     coverage_report,
-    definition_mismatch,
     failed_fit_dir,
     fit_created_at,
+    pairing_errors,
+    required_quantities,
     summarise,
     summarise_absent,
 )
-from vocab_growth.sensitivity.registry import VARIANTS, variants_for
+from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
 MATRIX_COLUMNS = [
     "variant",
@@ -56,6 +57,9 @@ MATRIX_COLUMNS = [
     "caveats",
     "max_rhat",
     "min_ess",
+    "baseline_converged",
+    "baseline_max_rhat",
+    "baseline_min_ess",
     "n_within_ci",
     "n_checked",
     "coverage",
@@ -72,18 +76,6 @@ def _model_dir(model_key: str, suffix: str | None = None) -> str:
     d = MODEL_REGISTRY[model_key]
     name = f"{d.model_id}-{d.config_name}" + (f"-{suffix}" if suffix else "")
     return os.path.join(env.models_output_dir(), name)
-
-
-def _override_keys(spec: dict) -> set[str]:
-    """Definition fields this variant is allowed to change.
-
-    ``scalar`` overrides name definition fields directly. ``kappa`` overrides
-    rebuild a nested prior block, so the field that changes is the block itself
-    (``kappa``, ``kappa_u``, ``kappa_q``, …) rather than the inner names.
-    """
-    keys = set(spec.get("scalar") or {})
-    keys |= set(spec.get("kappa") or {})
-    return keys
 
 
 if __name__ == "__main__":
@@ -154,11 +146,21 @@ if __name__ == "__main__":
             rows.append(row)
             continue
 
-        mismatch = definition_mismatch(baseline, vdir, _override_keys(spec))
-        coverage = coverage_report(baseline, vdir)
-        comparison = compare_dirs(baseline, vdir)
+        errors = pairing_errors(baseline, vdir, args.model, name)
+        variant_definition, = build_variant(args.model, name)
+        required = (required_quantities(args.model, definition)
+                    | required_quantities(args.model, variant_definition))
+        try:
+            coverage = coverage_report(baseline, vdir, required=required)
+            comparison = compare_dirs(baseline, vdir)
+            row = summarise(
+                comparison, vdir, label=name, baseline_dir=baseline,
+                validation_errors=errors, coverage=coverage,
+            )
+        except (OSError, ValueError, KeyError) as exc:
+            comparison = pd.DataFrame()
+            row = summarise_absent(name, "invalid-summary", f"NOT ASSESSED: {exc}")
         comparison.to_csv(os.path.join(detail_dir, f"{args.model}-{name}.csv"), index=False)
-        row = summarise(comparison, vdir, label=name, mismatch=mismatch, coverage=coverage)
         row["baseline_fit_utc"] = baseline_fit_utc
         row["variant_fit_utc"] = fit_created_at(vdir)
         row["computed_at_utc"] = now

@@ -678,7 +678,8 @@ def build_model_re(
         # Shared trend + HSGP builder (gp_utils); graph byte-identical to the
         # inlined form: stores g_u/f_u_all and g_q/h_all (+ slope/intercept/ell),
         # population-level latents (no study effect), Option-D anchor per outcome.
-        gp_grid = GPGrid(
+        gp_grid = GPGrid.from_age_grids(
+            grids,
             sa_z=slope_age_a_z,
             sb_z=slope_age_b_z,
             ell_low_z=ell_low_z,

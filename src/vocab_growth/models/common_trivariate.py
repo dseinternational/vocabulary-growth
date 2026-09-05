@@ -692,7 +692,8 @@ def build_model(
         # (not stored Deterministics): only the obs/plot/query slices below are
         # extracted, so storing the full arrays for every draw would waste a large
         # amount of trace memory.
-        gp_grid = GPGrid(
+        gp_grid = GPGrid.from_age_grids(
+            grids,
             sa_z=slope_age_a_z,
             sb_z=slope_age_b_z,
             ell_low_z=ell_low_z,

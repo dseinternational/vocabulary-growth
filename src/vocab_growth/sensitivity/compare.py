@@ -1,39 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Compare a prior-sensitivity variant fit against its baseline (issue #89 §7).
+"""Compare registered sensitivity fits with their model of record.
 
-The robustness criterion is: does each headline quantity of the variant stay
-within the *baseline's* 89% interval (the engines report an 89% interval by
-default; see :mod:`vocab_growth.intervals`)? The loader is
-spec-driven and tolerant of absent files, so it handles both CSV dialects with no
-special-casing — the bivariate/univariate engines write ``Ey``/``q``/``gap``
-series, the joint engine writes ``q``/``r``/``p_any``/``psi`` + the four-cell
-composition. A variant whose fit did not converge is never reported as "robust":
-a shifted estimate from a bad fit is sampler noise, not prior sensitivity. The
-verdict comes from the fit's own gate payload (``diagnostics_summary.json``),
-which also carries the soft tier — divergences, energy BFMI and unassessable
-parameters — so "robust" is reserved for a cleanly passing payload and a
-caveated fit is reported as ``converged-with-caveats``; only a fit that predates
-the payload falls back to the rounded, scalars-only ``diagnostics.csv``, and the
-fallback is itself recorded as a caveat.
-
-Three ways a comparison can be worthless while still producing numbers, each
-detected here rather than left for a reader to notice:
-
-* **A stale pairing.** The baseline is a *moving* target — the model of record
-  gets refitted. Comparing a variant fitted before that against the new baseline
-  silently reports a mixture of the variant's effect and whatever else changed.
-  :func:`definition_mismatch` diffs the two recorded definitions and expects them
-  to differ only in the variant's own override keys (plus the naming fields), so
-  an intervening definition change is caught by name.
-* **Collapsed coverage.** The series are merged on ``age_months``, so a variant
-  whose grid differs contributes only the intersection. That reads as a normal
-  comparison over fewer points. :func:`coverage_report` measures the shortfall
-  against the baseline's own rows and names the series that went missing.
-* **A variant that never reported at all** — not fitted, or fitted and stopped by
-  the convergence gate. Those used to be skipped with a console note, leaving the
-  matrix silent about them; they are now rows with a status.
+A robustness verdict requires compatible definitions, executable code and
+prepared data, complete fit lifecycles, clean convergence of both fits, and
+coverage of the engine's expected quantities. Structural parameters are checked
+alongside age trajectories. The criterion is descriptive containment within the
+baseline's 89% intervals, not proof that a model is insensitive to every prior.
 """
 
 from __future__ import annotations
@@ -41,6 +15,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -51,6 +26,7 @@ from vocab_growth.fit_artifacts import (
     ACCEPTED_EXCEPTION_KEY,
     DIAGNOSTICS_SUMMARY_FILENAME,
     convergence_caveats,
+    validate_fit_output,
 )
 
 #: Definition fields that always differ between a baseline and its variant, and
@@ -62,12 +38,13 @@ NAMING_FIELDS = frozenset({"config_name", "banner", "model_id"})
 #: age grids disagree badly enough that the verdict is not about priors.
 MIN_COVERAGE = 0.9
 
-# (quantity, filename, median_col, ci_lo_col | None, ci_hi_col | None).
-# A series is loaded only if its file exists and carries the median column, so
-# each engine contributes exactly the series it emits.
-_SERIES: tuple[tuple[str, str, str, str | None, str | None], ...] = (
+# (quantity, filename, median_col, ci_lo_col, ci_hi_col).
+# Missing files are left for the required-quantity coverage check. Present files
+# must carry complete, finite summaries.
+_SERIES: tuple[tuple[str, str, str, str, str], ...] = (
     ("Ey_understood", "posterior_summary_u.csv", "Ey_median", "Ey_ci_lo", "Ey_ci_hi"),
     ("Ey_spoken", "posterior_summary_s.csv", "Ey_median", "Ey_ci_lo", "Ey_ci_hi"),
+    ("Ey_signed", "posterior_summary_sign.csv", "Ey_median", "Ey_ci_lo", "Ey_ci_hi"),
     ("Ey", "posterior_summary.csv", "Ey_median", "Ey_ci_lo", "Ey_ci_hi"),
     ("q", "posterior_summary_q.csv", "q_median", "q_ci_lo", "q_ci_hi"),
     ("r", "posterior_summary_r.csv", "r_median", "r_ci_lo", "r_ci_hi"),
@@ -75,11 +52,6 @@ _SERIES: tuple[tuple[str, str, str, str | None, str | None], ...] = (
     ("Ey_any", "posterior_summary_p_any.csv", "Ey_any_median", "Ey_any_ci_lo", "Ey_any_ci_hi"),
     ("gap", "comprehension_production_gap.csv", "gap_median", "ci_lo", "ci_hi"),
 )
-
-# All loaded series are equal-tailed; only the psi scalar (loaded separately) is
-# reported with a highest-density interval, so the comparison table carries an
-# ``interval_kind`` column to keep the mixed table honest.
-_SERIES_INTERVAL_KIND = "eti"
 
 
 def _read(dirpath: str, name: str) -> pd.DataFrame | None:
@@ -93,11 +65,18 @@ def load_headlines(dirpath: str) -> dict[str, pd.DataFrame]:
     out: dict[str, pd.DataFrame] = {}
     for qty, fname, mcol, lo, hi in _SERIES:
         df = _read(dirpath, fname)
-        if df is None or mcol not in df.columns or "age_months" not in df.columns:
+        if df is None:
             continue
-        frame = pd.DataFrame({"age_months": df["age_months"], "median": df[mcol]})
-        frame["ci_lo"] = df[lo] if (lo and lo in df.columns) else np.nan
-        frame["ci_hi"] = df[hi] if (hi and hi in df.columns) else np.nan
+        # VG15 prefixes the count columns by outcome; older engines do not.
+        prefix = {"Ey_understood": "u", "Ey_spoken": "s", "Ey_signed": "sign"}.get(qty)
+        if mcol not in df and prefix:
+            mcol, lo, hi = (f"Ey_{prefix}_{part}" for part in ("median", "ci_lo", "ci_hi"))
+        required = {"age_months", mcol, lo, hi}
+        if not required.issubset(df.columns):
+            raise ValueError(f"{fname} lacks required columns: {sorted(required - set(df.columns))}")
+        frame = pd.DataFrame({"age_months": df["age_months"], "median": df[mcol],
+                              "ci_lo": df[lo], "ci_hi": df[hi]})
+        _validate_values(frame, f"{dirpath}/{fname}")
         out[qty] = frame
     return out
 
@@ -105,8 +84,13 @@ def load_headlines(dirpath: str) -> dict[str, pd.DataFrame]:
 def load_psi(dirpath: str) -> dict[str, float] | None:
     """The VG15 association scalar summary, or ``None`` if not present."""
     df = _read(dirpath, "posterior_summary_psi.csv")
-    if df is None or "psi_median" not in df.columns:
+    if df is None:
         return None
+    columns = ["psi_median", "psi_ci_lo", "psi_ci_hi", "P_psi_gt_1"]
+    if len(df) != 1 or not set(columns).issubset(df.columns):
+        raise ValueError("posterior_summary_psi.csv must contain one complete scalar summary")
+    if not np.isfinite(df[columns].to_numpy(dtype=float)).all():
+        raise ValueError("posterior_summary_psi.csv contains non-finite values")
     r = df.iloc[0]
     return {
         "psi_median": float(r["psi_median"]),
@@ -116,38 +100,149 @@ def load_psi(dirpath: str) -> dict[str, float] | None:
     }
 
 
-def load_beta_lag(dirpath: str) -> dict[str, float] | None:
-    """The VG16 cross-lag coefficient, or ``None`` if the fit carries no lag.
+def _validate_values(frame: pd.DataFrame, label: str) -> None:
+    if frame.empty or not np.isfinite(frame.to_numpy(dtype=float)).all():
+        raise ValueError(f"{label} contains empty or non-finite summary values")
+    if frame["age_months"].duplicated().any():
+        raise ValueError(f"{label} contains duplicate ages")
+    if (frame["ci_lo"] > frame["ci_hi"]).any():
+        raise ValueError(f"{label} contains reversed intervals")
 
-    Read from ``diagnostics.csv`` rather than from a ``posterior_summary_*``
-    file, because no engine persists ``beta_lag`` as a summary series -- it is a
-    scalar on the model, not a curve over ages. Every fit writes
-    ``diagnostics.csv``, so this works on fits made before this function
-    existed.
 
-    Without this, a VG16 sensitivity compares only the eight trajectory series
-    in ``_SERIES`` and returns a verdict that says nothing about the one
-    quantity VG16 exists to estimate: a prior or scope change could halve the
-    cross-lag and still be scored **robust** because the trajectories did not
-    move. The interval is the equal-tailed 89% ``diagnostics.csv`` reports.
+_PARAMETER = re.compile(
+    r"^(beta_lag|rho_uq|conc|tau_psi|v_total(?:_[uq])?|subject_variance_share(?:_[uq])?|"
+    r"tau_subject(?:_(?:young|old))?|tau_subj_(?:u|q|s|sign)(?:_(?:0|1|rho|young|old))?|"
+    r"log_tau_(?:subject|subj_(?:u|q))_ratio)$"
+)
+
+
+def load_parameters(dirpath: str) -> dict[str, pd.DataFrame]:
+    """Structural parameters from diagnostics, explicitly compared as means.
+
+    The existing scalar summary stores means, not medians. Retaining that
+    distinction lets historical summaries be inspected without inventing a
+    posterior median from the mean. Both members of a pair use the same statistic.
     """
     df = _read(dirpath, "diagnostics.csv")
-    if df is None or not len(df.columns):
-        return None
-    # ``_read`` does a plain ``read_csv``, so the parameter names arrive as the
-    # first (unnamed) column rather than as the index.
-    df = df.set_index(df.columns[0])
-    for column in ("mean", "eti89_lb", "eti89_ub"):
-        if column not in df.columns:
-            return None
-    if "beta_lag" not in df.index:
-        return None
-    r = df.loc["beta_lag"]
-    return {
-        "beta_lag_median": float(r["mean"]),
-        "beta_lag_ci_lo": float(r["eti89_lb"]),
-        "beta_lag_ci_hi": float(r["eti89_ub"]),
+    if df is None or not {"mean", "eti89_lb", "eti89_ub"}.issubset(df.columns):
+        return {}
+    out = {}
+    for _, row in df.iterrows():
+        name = str(row.iloc[0])
+        if not _PARAMETER.fullmatch(name):
+            continue
+        if name in out:
+            raise ValueError(f"Duplicate parameter {name} in {dirpath}/diagnostics.csv")
+        frame = pd.DataFrame({"age_months": [-1], "estimate": [row["mean"]],
+                              "ci_lo": [row["eti89_lb"]], "ci_hi": [row["eti89_ub"]]})
+        _validate_values(frame, f"{dirpath}/diagnostics.csv: {name}")
+        out[name] = frame.assign(
+            estimate_kind="mean", interval_kind="eti")
+    return out
+
+
+def required_quantities(model_key: str, definition) -> set[str]:
+    """Expected outputs, derived from the engine and the child-effect plan.
+
+    Coverage must check this schema even when both fits omit the same output.
+    """
+    from vocab_growth.models.catalogue import CATALOGUE
+    from vocab_growth.models.subject_effects import SubjectEffectKind, resolve
+
+    engine = CATALOGUE[model_key].engine.name
+    required = ({"Ey"} if engine.startswith("univariate")
+                else {"Ey_understood", "Ey_spoken", "q"})
+    if engine in {"trivariate", "joint"}:
+        required |= {"Ey_signed", "r", "p_any", "Ey_any"}
+    if engine == "joint":
+        required |= {"psi", "conc"}
+    if getattr(definition, "use_cross_lag", False):
+        required.add("beta_lag")
+    plan = resolve(definition)
+    if plan.correlation_eta is not None or plan.factor is not None:
+        required.add("rho_uq")
+    if plan.variance_partition is not None:
+        required |= {"v_total", "subject_variance_share"}
+    for effect in plan.effects:
+        if not effect.is_active:
+            continue
+        name = effect.scale_name
+        required.add(name)
+        if effect.kind in {SubjectEffectKind.CHILD_SLOPE, SubjectEffectKind.FACTOR}:
+            required |= {f"{name}_0", f"{name}_1"}
+        if effect.kind is SubjectEffectKind.CHILD_SLOPE:
+            required.add(f"{name}_rho")
+        if effect.kind is SubjectEffectKind.AGE_VARYING:
+            required |= {f"{name}_young", f"{name}_old", f"log_{name}_ratio"}
+    return required
+
+
+def _comparable(dirpath: str) -> dict[str, pd.DataFrame]:
+    out = {
+        name: frame.rename(columns={"median": "estimate"}).assign(
+            estimate_kind="median", interval_kind="eti")
+        for name, frame in load_headlines(dirpath).items()
     }
+    out.update(load_parameters(dirpath))
+    psi = load_psi(dirpath)
+    if psi is not None:
+        frame = pd.DataFrame({"age_months": [-1], "estimate": [psi["psi_median"]],
+                              "ci_lo": [psi["psi_ci_lo"]], "ci_hi": [psi["psi_ci_hi"]]})
+        _validate_values(frame, f"{dirpath}/posterior_summary_psi.csv")
+        out["psi"] = frame.assign(estimate_kind="median", interval_kind="hdi")
+        out["P_psi_gt_1"] = pd.DataFrame({
+            "age_months": [-1], "estimate": [psi["P_psi_gt_1"]],
+            "ci_lo": [np.nan], "ci_hi": [np.nan],
+            "estimate_kind": ["probability"], "interval_kind": [None],
+        })
+    return out
+
+
+def pairing_errors(baseline_dir: str, variant_dir: str, model_key: str, name: str) -> list[str]:
+    """Validate both fits against current definitions and their own prepared data.
+
+    Rebuilding each frame admits a registered data restriction while rejecting
+    unrelated changes to that frame. For prior-only variants the rebuilt frames
+    coincide. This checks actual override values, not just permitted field names.
+    """
+    from dse_research_utils.statistics.models.sampling import get_sampling_configuration
+
+    from vocab_growth.analysis_frames import expected_analysis_frame_hash
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.implementation_identity import implementation_signature
+    from vocab_growth.sensitivity.registry import build_variant
+
+    errors = []
+    signature = implementation_signature()
+    base = MODEL_REGISTRY[model_key]
+    variant, = build_variant(model_key, name)
+    sampling_names = []
+    for label, directory, definition in (("baseline", baseline_dir, base),
+                                          ("variant", variant_dir, variant)):
+        try:
+            manifest = _manifest(directory) or {}
+            config = manifest.get("sampling", {}).get("configuration_name")
+            sampling_names.append(config)
+            if not config:
+                raise ValueError("sampling configuration is missing")
+            if not manifest.get("code", {}).get("commit"):
+                errors.append(f"{label}: fit commit is missing")
+            parameters = get_sampling_configuration(config)
+            frame_hash = expected_analysis_frame_hash(model_key, definition)
+            problems = validate_fit_output(
+                directory, expected_definition=definition,
+                expected_implementation=signature,
+                expected_sampling_config_name=config,
+                expected_sampling_parameters=parameters,
+                expected_analysis_frame_hash=frame_hash,
+                require_clean_fit=True,
+            )
+            errors.extend(f"{label}: {problem}" for problem in problems)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f"{label}: cannot verify fit: {exc}")
+    if len(sampling_names) == 2 and sampling_names[0] != sampling_names[1]:
+        errors.append("baseline and variant use different sampling configurations")
+    return errors
 
 
 #: Separator for the ``caveats`` column. Not ``"; "`` because the caveat strings
@@ -294,7 +389,8 @@ def definition_mismatch(
     which produces a perfectly well-formed and completely misleading matrix row.
 
     Returns ``[]`` when either manifest is unreadable: an unverifiable pairing is
-    reported through the status column rather than as a false mismatch.
+    reported through :func:`pairing_errors` rather than as a false mismatch.
+    This helper alone is not a pairing validator.
     """
     base_m, var_m = _manifest(baseline_dir), _manifest(variant_dir)
     if base_m is None or var_m is None:
@@ -311,7 +407,7 @@ def definition_mismatch(
     )
 
 
-def coverage_report(baseline_dir: str, variant_dir: str) -> tuple[int, int, list[str]]:
+def coverage_report(baseline_dir: str, variant_dir: str, *, required: set[str] | None = None) -> tuple[int, int, list[str]]:
     """``(baseline_rows, shared_rows, missing_series)`` for a variant pairing.
 
     ``baseline_rows`` counts every age the baseline reports across its headline
@@ -331,7 +427,7 @@ def coverage_report(baseline_dir: str, variant_dir: str) -> tuple[int, int, list
     "sensitive: gap" verdict. Measuring coverage the same way turns that into the
     partial-coverage status it is.
     """
-    base, var = load_headlines(baseline_dir), load_headlines(variant_dir)
+    base, var = _comparable(baseline_dir), _comparable(variant_dir)
     baseline_rows = sum(len(frame) for frame in base.values())
     shared_rows = 0
     for qty, frame in base.items():
@@ -340,7 +436,7 @@ def coverage_report(baseline_dir: str, variant_dir: str) -> tuple[int, int, list
         b_ages = pd.Index(frame["age_months"])
         v_ages = pd.Index(var[qty]["age_months"])
         shared_rows += len(b_ages.intersection(v_ages))
-    missing = sorted(set(base) - set(var))
+    missing = sorted((set(base) | (required or set())) - (set(base) & set(var)))
     return baseline_rows, shared_rows, missing
 
 
@@ -391,63 +487,34 @@ def summarise_absent(label: str, status: str, reason: str, variant_dir: str | No
 
 
 def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
-    """Per-quantity, per-age comparison of a variant against its baseline.
+    """Compare shared ages and parameters, with the point statistic labelled.
 
-    Columns: ``quantity, age_months, base_median, var_median, delta,
-    base_ci_lo, base_ci_hi, within_baseline_ci, interval_kind`` (``age_months =
-    -1`` for the ψ / P(ψ>1) scalars). ``within_baseline_ci`` is ``None`` where the
-    series carries no interval (``P_psi_gt_1``, four-cell). ``interval_kind`` is
-    ``"eti"`` for the equal-tailed series and ``"hdi"`` for the ψ scalar.
+    ``age_months=-1`` marks a scalar. Parameter estimates from diagnostics are
+    means; trajectory and psi summaries are medians. Fractional ages are retained.
+    This calculates differences only; :func:`summarise` requires validation
+    evidence before making a robustness claim.
     """
-    base, var = load_headlines(baseline_dir), load_headlines(variant_dir)
-    rows: list[dict] = []
+    base, var = _comparable(baseline_dir), _comparable(variant_dir)
+    rows = []
     for qty in sorted(set(base) & set(var)):
-        b = base[qty].set_index("age_months")
-        v = var[qty].set_index("age_months")
+        b, v = base[qty].set_index("age_months"), var[qty].set_index("age_months")
         for age in b.index.intersection(v.index):
-            bm, vm = float(b.loc[age, "median"]), float(v.loc[age, "median"])
+            bm, vm = float(b.loc[age, "estimate"]), float(v.loc[age, "estimate"])
             lo, hi = b.loc[age, "ci_lo"], b.loc[age, "ci_hi"]
+            kind = b.loc[age, "estimate_kind"]
+            if kind != v.loc[age, "estimate_kind"]:
+                raise ValueError(f"{qty} uses different point statistics")
             within = bool(lo <= vm <= hi) if pd.notna(lo) and pd.notna(hi) else None
             rows.append({
-                "quantity": qty, "age_months": int(age),
-                "base_median": bm, "var_median": vm, "delta": vm - bm,
-                "base_ci_lo": lo, "base_ci_hi": hi, "within_baseline_ci": within,
-                "interval_kind": _SERIES_INTERVAL_KIND,
+                "quantity": qty, "age_months": float(age),
+                "base_estimate": bm, "var_estimate": vm, "estimate_kind": kind,
+                "delta": vm - bm, "base_ci_lo": lo, "base_ci_hi": hi,
+                "within_baseline_ci": within, "interval_kind": b.loc[age, "interval_kind"],
             })
-    pb, pv = load_psi(baseline_dir), load_psi(variant_dir)
-    if pb and pv:
-        rows.append({
-            "quantity": "psi", "age_months": -1,
-            "base_median": pb["psi_median"], "var_median": pv["psi_median"],
-            "delta": pv["psi_median"] - pb["psi_median"],
-            "base_ci_lo": pb["psi_ci_lo"], "base_ci_hi": pb["psi_ci_hi"],
-            "within_baseline_ci": bool(
-                pb["psi_ci_lo"] <= pv["psi_median"] <= pb["psi_ci_hi"]
-            ),
-            "interval_kind": "hdi",
-        })
-        rows.append({
-            "quantity": "P_psi_gt_1", "age_months": -1,
-            "base_median": pb["P_psi_gt_1"], "var_median": pv["P_psi_gt_1"],
-            "delta": pv["P_psi_gt_1"] - pb["P_psi_gt_1"],
-            "base_ci_lo": np.nan, "base_ci_hi": np.nan, "within_baseline_ci": None,
-            "interval_kind": None,
-        })
-    bb, bv = load_beta_lag(baseline_dir), load_beta_lag(variant_dir)
-    if bb and bv:
-        rows.append({
-            "quantity": "beta_lag", "age_months": -1,
-            "base_median": bb["beta_lag_median"], "var_median": bv["beta_lag_median"],
-            "delta": bv["beta_lag_median"] - bb["beta_lag_median"],
-            "base_ci_lo": bb["beta_lag_ci_lo"], "base_ci_hi": bb["beta_lag_ci_hi"],
-            "within_baseline_ci": bool(
-                bb["beta_lag_ci_lo"]
-                <= bv["beta_lag_median"]
-                <= bb["beta_lag_ci_hi"]
-            ),
-            "interval_kind": _SERIES_INTERVAL_KIND,
-        })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=[
+        "quantity", "age_months", "base_estimate", "var_estimate", "estimate_kind",
+        "delta", "base_ci_lo", "base_ci_hi", "within_baseline_ci", "interval_kind",
+    ])
 
 
 def summarise(
@@ -455,26 +522,21 @@ def summarise(
     variant_dir: str,
     label: str,
     *,
+    baseline_dir: str | None = None,
+    validation_errors: list[str] | None = None,
     mismatch: list[str] | None = None,
     coverage: tuple[int, int, list[str]] | None = None,
 ) -> dict:
     """One-row robustness verdict for a variant (feeds the §7 matrix).
 
-    The verdict is decided in a fixed order of severity, because a lower-severity
-    reading of a higher-severity problem is exactly the failure this function is
-    for: a stale pairing or collapsed coverage would otherwise be reported as
-    "robust", which is the most confident thing the matrix can say and the least
-    warranted. ``mismatch`` and ``coverage`` come from
-    :func:`definition_mismatch` and :func:`coverage_report`; both default to "not
-    checked" so an older caller keeps its behaviour.
-
-    "robust" is reserved for a variant whose gate payload passed cleanly. A fit
-    that cleared the hard R-hat/ESS tier but recorded soft-tier caveats
-    (divergences, low BFMI, unassessable parameters) — or one so old that only
-    ``diagnostics.csv`` exists — is assessed, but reported under the
-    ``converged-with-caveats`` status with the caveats spelled out.
+    ``validation_errors`` must come from :func:`pairing_errors`, and
+    ``baseline_dir`` supplies the other fit's convergence gate. Missing checks
+    cannot yield a robustness verdict. ``coverage`` includes required quantities
+    even when both fits omit them. Soft convergence caveats from either fit are
+    carried into the verdict; hard failures prevent assessment.
     """
     gate = diagnostics_gate(variant_dir)
+    base_gate = diagnostics_gate(baseline_dir) if baseline_dir else None
     converged, max_rhat, min_ess = gate
     checked = comparison.dropna(subset=["within_baseline_ci"])
     # The column mixes Python bools with None (P_psi_gt_1 / four-cell rows), so it
@@ -491,7 +553,10 @@ def summarise(
         baseline_rows, shared_rows, missing = coverage
         coverage_frac = (shared_rows / baseline_rows) if baseline_rows else None
 
-    caveated = converged is True and bool(gate.caveats)
+    caveats = list(gate.caveats)
+    if base_gate:
+        caveats.extend(f"baseline: {caveat}" for caveat in base_gate.caveats)
+    caveated = converged is True and bool(caveats)
     status = "compared"
     if mismatch:
         status = "stale-pairing"
@@ -500,10 +565,10 @@ def summarise(
             + ", ".join(mismatch)
             + " — refit the variant against the current model of record"
         )
-    elif converged is False:
+    elif converged is False or (base_gate and base_gate.converged is False):
         status = "non-converged"
-        verdict = "NON-CONVERGED (not assessed)"
-    elif coverage_frac is not None and coverage_frac < MIN_COVERAGE:
+        verdict = "NON-CONVERGED (not assessed): baseline or variant failed the gate"
+    elif coverage is not None and (coverage[2] or (coverage_frac is not None and coverage_frac < MIN_COVERAGE)):
         status = "partial-coverage"
         missing_note = (
             f"; missing series: {', '.join(coverage[2])}" if coverage[2] else ""
@@ -512,6 +577,16 @@ def summarise(
             f"PARTIAL COVERAGE (not assessed): only {coverage[1]} of "
             f"{coverage[0]} baseline rows are shared{missing_note}"
         )
+    elif validation_errors is None or validation_errors or base_gate is None:
+        status = "unverified-pairing"
+        verdict = "UNVERIFIED PAIRING (not assessed): " + "; ".join(
+            validation_errors or ["both fits require provenance and convergence checks"])
+    elif converged is None or base_gate.converged is None:
+        status = "unverified-convergence"
+        verdict = "CONVERGENCE NOT VERIFIED (not assessed): baseline or variant has no gate"
+    elif not n_checked:
+        status = "no-comparable-output"
+        verdict = "NO COMPARABLE OUTPUT (not assessed)"
     else:
         if caveated:
             status = "converged-with-caveats"
@@ -519,7 +594,7 @@ def summarise(
             verdict = "sensitive: " + ", ".join(outside)
             if caveated:
                 verdict += " (converged with caveats)"
-        elif gate.clean is True:
+        elif gate.clean is True and base_gate.clean is True and coverage is not None:
             verdict = "robust (all within baseline 89% interval)"
         elif caveated:
             verdict = (
@@ -544,6 +619,9 @@ def summarise(
         "coverage": coverage_frac,
         "quantities_outside_ci": ", ".join(outside),
         "max_abs_delta": max_abs_delta,
-        "caveats": gate.caveats_text,
+        "baseline_converged": base_gate.converged if base_gate else None,
+        "baseline_max_rhat": base_gate.max_rhat if base_gate else None,
+        "baseline_min_ess": base_gate.min_ess if base_gate else None,
+        "caveats": CAVEATS_SEPARATOR.join(caveats),
         "verdict": verdict,
     }

@@ -10,8 +10,10 @@ sees it, so it can be integrated out in closed form up to quadrature error:
     p(y | eta, kappa, tau) = INT phi(u) BetaBinom(y | sigmoid(eta + tau u), kappa) du
 
 Children with repeated administrations keep an explicit ``delta_subject``: their
-rows are coupled through it, and integrating a shared latent out of several
-terms is not a one-dimensional integral.
+rows are coupled through it. Integrating a shared scalar intercept still needs
+only a one-dimensional integral, but its integrand is the product of all the
+child's likelihood terms. That requires a joint child likelihood and changes
+the unit of the pointwise likelihood used for leave-one-out assessment.
 
 **This is not the removal of the subject random effect.** The marginal
 likelihood still contains ``tau_subject`` -- the mixing is integrated, not

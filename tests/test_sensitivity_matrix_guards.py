@@ -171,15 +171,16 @@ def test_full_coverage_reaches_a_real_verdict(tmp_path):
         "within_baseline_ci": True, "interval_kind": "eti",
     }])
     _write_clean_gate_payload(tmp_path)
-    row = summarise(comparison, str(tmp_path), "v", mismatch=[], coverage=(1, 1, []))
+    row = summarise(comparison, str(tmp_path), "v", mismatch=[], coverage=(1, 1, []),
+                    baseline_dir=str(tmp_path), validation_errors=[])
     assert row["status"] == "compared"
     assert row["verdict"].startswith("robust")
 
     # Without any recorded convergence gate the containment is still reported,
     # but "robust" is reserved for a fit with a cleanly passing payload.
     row = summarise(comparison, "/nonexistent", "v", mismatch=[], coverage=(1, 1, []))
-    assert row["status"] == "compared"
-    assert "not scored robust" in row["verdict"]
+    assert row["status"] == "unverified-pairing"
+    assert not row["verdict"].startswith("robust")
 
 
 # -------------------------------------------------------- variants that vanish

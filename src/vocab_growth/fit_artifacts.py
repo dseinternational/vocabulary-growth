@@ -294,10 +294,11 @@ def fit_validation_kwargs(
 
     Resume is intentionally strict about the current code and raw data because
     downstream computations would otherwise mix revisions. Publication instead
-    checks that the fit itself came from a clean revision; later documentation
-    commits do not invalidate an already complete fit. Provisional local syncs
-    retain lifecycle/model/sampling checks while allowing exploratory code and
-    data changes.
+    checks that the fit itself came from a clean revision and carries the current
+    executable-code signature. Later documentation commits do not invalidate an
+    already complete fit. Provisional local syncs retain lifecycle, definition,
+    implementation and sampling checks while allowing dirty provenance and
+    relaxed data checks.
 
     Publication also requires clean convergence: a fit carrying soft-tier
     sampling caveats (divergences, low energy BFMI) stays usable for development
@@ -327,8 +328,11 @@ def fit_validation_kwargs(
     cache, which Appendix B renders. Prefer plain ``publish``/``sync`` whenever a
     fit is clean; reach for these only for a fit whose caveats are being shown.
     """
+    from vocab_growth.models.implementation_identity import implementation_signature
+
     kwargs: dict[str, Any] = {
         "expected_definition": expected_definition,
+        "expected_implementation": implementation_signature(),
         "expected_sampling_config_name": expected_sampling_config_name,
         "expected_sampling_parameters": expected_sampling_parameters,
     }
@@ -532,6 +536,7 @@ def validate_fit_output(
     expected_definition: Any | None = None,
     expected_sampling_config_name: str | None = None,
     expected_sampling_parameters: Any | None = None,
+    expected_implementation: dict | None = None,
     expected_git: dict[str, object] | None = None,
     expected_source_data_hash: str | None = None,
     expected_analysis_frame_hash: str | None = None,
@@ -608,6 +613,19 @@ def validate_fit_output(
             errors.append(
                 "The model definition differs from the current registered "
                 f"definition: {summary}."
+            )
+
+    if expected_implementation is None and expected_definition is not None:
+        from vocab_growth.models.implementation_identity import implementation_signature
+
+        expected_implementation = implementation_signature()
+    if expected_implementation is not None:
+        recorded = manifest.get("model", {}).get("implementation")
+        if recorded != expected_implementation:
+            errors.append(
+                "The fitted implementation signature is missing or differs from "
+                "the current executable code or numerical libraries; refit before "
+                "using this output."
             )
 
     sampling_payload = manifest.get("sampling", {})

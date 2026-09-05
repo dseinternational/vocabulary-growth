@@ -1793,7 +1793,7 @@
    "kappa_min",
    "kappa_excess_old"
   ],
-  "logp_at_fixed_point": -1900.8460509867532,
+  "logp_at_fixed_point": -1900.8200783760753,
   "observed_RVs": [
    "y_obs"
   ]
@@ -1927,7 +1927,7 @@
    "kappa_min",
    "kappa_excess_old"
   ],
-  "logp_at_fixed_point": -5140.310199186562,
+  "logp_at_fixed_point": -5140.179783617352,
   "observed_RVs": [
    "y_obs"
   ]
@@ -2801,7 +2801,7 @@
    "a_kappa_sign",
    "b_kappa_mag_sign"
   ],
-  "logp_at_fixed_point": -7308.0536799546635,
+  "logp_at_fixed_point": -7201.386020532208,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs",

@@ -675,7 +675,7 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # 2026-08-25 `compare.py` scored only the eight trajectory series, so a
     # variant could halve the coefficient and still be called robust; the
     # coefficient is now loaded as a scalar from `diagnostics.csv`
-    # (`compare.load_beta_lag`) alongside VG15's `psi`.
+    # (`compare.load_parameters`) alongside VG15's `psi`.
     #
     # `conditional-only` is the sharper of the two. VG16's cross-lag is a claim
     # about children whose earlier comprehension was measured, but 455 of 1,428

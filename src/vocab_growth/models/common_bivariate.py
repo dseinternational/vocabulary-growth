@@ -601,7 +601,8 @@ def build_model(
 
         # Shared trend + HSGP builder (gp_utils); graph byte-identical to the
         # inlined form (stores g_u/f_u_all and g_q/h_all + the slope/intercept/ell).
-        gp_grid = GPGrid(
+        gp_grid = GPGrid.from_age_grids(
+            grids,
             sa_z=slope_age_a_z,
             sb_z=slope_age_b_z,
             ell_low_z=ell_low_z,
