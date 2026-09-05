@@ -124,6 +124,63 @@ def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
 # --- The VG16 cross-lag coefficient (issue #242) -------------------------------
 
 
+def _write_grid_outputs(dirpath, *, gap_ages, gap_offset, q_ages):
+    """A query-grid series (`q`) and the plot-grid `gap` series, both readable."""
+    dirpath.mkdir(exist_ok=True)
+    pd.DataFrame({
+        "age_months": gap_ages,
+        "gap_median": 2.0 * gap_ages + gap_offset,
+        "ci_lo": 2.0 * gap_ages - 5.0,
+        "ci_hi": 2.0 * gap_ages + 5.0,
+    }).to_csv(dirpath / "comprehension_production_gap.csv", index=False)
+    pd.DataFrame({
+        "age_months": q_ages,
+        "q_median": 0.5,
+        "q_ci_lo": 0.4,
+        "q_ci_hi": 0.6,
+    }).to_csv(dirpath / "posterior_summary_q.csv", index=False)
+
+
+def test_plot_grid_series_are_compared_as_curves_inside_the_variant_support(tmp_path):
+    """#289 task 4.2: a restricted pool gets a different linspace for `gap`.
+
+    Matched on exact ages, VG10 `dse-native-only` shared 39 of 335 baseline
+    rows and was reported as partial coverage with nothing to compare. The
+    variant's curve is now interpolated onto the baseline's plot ages inside
+    the variant's own support, while the query-grid series still match
+    exactly, so a genuinely narrower support still counts against coverage.
+    """
+    import numpy as np
+
+    base_dir, var_dir = tmp_path / "base", tmp_path / "var"
+    base_gap = np.linspace(8.0, 72.0, 65)
+    var_gap = np.linspace(9.0, 71.9, 57)  # a restricted pool's own linspace
+    q_ages = [12.0, 18.0, 24.0, 30.0]
+    _write_grid_outputs(base_dir, gap_ages=base_gap, gap_offset=0.0, q_ages=q_ages)
+    _write_grid_outputs(var_dir, gap_ages=var_gap, gap_offset=1.0, q_ages=q_ages[:-1])
+    # Exact matching would keep only the ages that coincide by accident.
+    assert len(set(base_gap) & set(var_gap)) <= 2
+
+    baseline_rows, shared_rows, missing = coverage_report(str(base_dir), str(var_dir))
+    inside = int(((base_gap >= 9.0) & (base_gap <= 71.9)).sum())
+    assert baseline_rows == 65 + 4
+    # The plot-grid series is covered inside the variant's support; the
+    # query-grid series loses exactly the age the variant does not report.
+    assert shared_rows == inside + 3
+    assert missing == []
+
+    comparison = compare_dirs(str(base_dir), str(var_dir))
+    gap = comparison[comparison["quantity"] == "gap"]
+    assert len(gap) == inside
+    assert gap["age_months"].min() >= 9.0
+    # A linear curve interpolates exactly: the variant sits 1.0 above the
+    # baseline at every compared age, inside the baseline's interval.
+    assert np.allclose(gap["delta"], 1.0)
+    assert gap["within_baseline_ci"].all()
+    q = comparison[comparison["quantity"] == "q"]
+    assert sorted(q["age_months"]) == q_ages[:-1]
+
+
 def _write_diagnostics(dirpath, *, beta_lag=None, r_hat=1.005):
     """A diagnostics.csv in the shape every fit writes: params in column 0."""
     index = ["tau_u", "kappa_min_u"]
