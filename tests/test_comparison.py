@@ -1,16 +1,25 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import os
+
 import numpy as np
 import pytest
 
 from vocab_growth import comparison
+from vocab_growth import environment as env
 
 
 # ---- registry resolution ----
 def test_registry_resolution():
+    # The output root is resolved at call time (an explicit override, then
+    # DSE_VOCAB_GROWTH_OUTPUT_DIR, then the repo-local default), so the expected
+    # directory is derived from the same resolution rather than assuming the
+    # default; the test then holds wherever the fits have been redirected.
+    expected = os.path.join(env.models_output_dir(), "VG11-age-spoken-td-re")
+    assert os.path.normcase(comparison.model_dir("vg11")) == os.path.normcase(expected)
     assert comparison.model_dir("vg11").replace("\\", "/").endswith(
-        "output/models/VG11-age-spoken-td-re"
+        "/models/VG11-age-spoken-td-re"
     )
     assert comparison.n_trials("vg11") == 810
     assert comparison.n_trials("vg10") == 810
