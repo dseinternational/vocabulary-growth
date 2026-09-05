@@ -44,13 +44,12 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import shutil
 import subprocess
 import sys
-import urllib.request
 
 from vocab_growth import environment as env
+from vocab_growth.publication_checks import referenced_assets, verify_published
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOK_DIR = os.path.join(REPO_ROOT, "docs", "comparison")
@@ -62,9 +61,6 @@ PROJECT = "vocabulary-growth"
 #: Files in the staged directory that are inputs, not outputs, and must survive
 #: the clear. Everything else there is copied in from the comparisons directory.
 KEEP = ("index.qmd",)
-
-#: ``src``/``href`` targets in the rendered HTML that point at a local file.
-_ASSET = re.compile(r'(?:src|href)="([^"#?][^"]*?)"')
 
 
 def stage_inputs(comparisons_dir: str) -> int:
@@ -109,24 +105,6 @@ def render() -> None:
     )
 
 
-def referenced_assets(html_path: str) -> list[str]:
-    """Every local file the rendered page references, as relative paths.
-
-    Derived from the page rather than from a list, because the failure this
-    guards against is precisely a list that omits something.
-    """
-    with open(html_path, encoding="utf-8") as handle:
-        html = handle.read()
-    assets = set()
-    for target in _ASSET.findall(html):
-        if target.startswith(("http://", "https://", "//", "data:", "mailto:")):
-            continue
-        candidate = os.path.normpath(os.path.join(os.path.dirname(html_path), target))
-        if os.path.isfile(candidate):
-            assets.add(os.path.relpath(candidate, os.path.dirname(html_path)))
-    return sorted(assets)
-
-
 def collect(destination: str) -> list[str]:
     """Assemble exactly the page and the assets it references."""
     if os.path.isdir(destination):
@@ -143,17 +121,15 @@ def collect(destination: str) -> list[str]:
 
 
 def verify(base_url: str, assets: list[str], timeout: float = 30.0) -> list[str]:
-    """Request every published asset; return the ones that did not return 200."""
-    failures = []
-    for relative in ["index.html", *assets]:
-        url = f"{base_url.rsplit('/', 1)[0]}/{relative}"
-        try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:
-                if response.status != 200:
-                    failures.append(f"{response.status} {relative}")
-        except Exception as exc:  # noqa: BLE001 - reported, not raised
-            failures.append(f"{type(exc).__name__} {relative}")
-    return failures
+    """Request every published asset; return the ones that did not return 200.
+
+    ``base_url`` is the published page's own URL; the assets sit beside it.
+    Shared with the model-report upload through ``publication_checks`` since
+    #289 task 4.10, so the two paths cannot drift.
+    """
+    return verify_published(
+        base_url.rsplit("/", 1)[0], ["index.html", *assets], timeout=timeout
+    )
 
 
 def main() -> None:
