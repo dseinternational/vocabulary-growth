@@ -540,11 +540,34 @@ def engine_for(model_key: str) -> EngineAdapter:
     return get(model_key).engine
 
 
+def publication_models() -> list[str]:
+    """Registry keys whose role requires a refit-current, publication-valid fit.
+
+    The refit driver's default scope. ``run_replication.ps1`` used to derive its
+    list from ``MODEL_REGISTRY``, so a full run refitted every registered model
+    whether or not it supplies a reported number -- 15-25 hours of sampling, of
+    which the development steps buy nothing publishable. This is the same list
+    ``sync_report_figures.py`` refuses to publish without.
+
+    Includes ``UNCLASSIFIED`` by way of :attr:`ModelRole.publication_required`,
+    so an undecided model is still refitted rather than quietly dropped.
+    """
+    return [key for key, model in CATALOGUE.items() if model.role.publication_required]
+
+
+def models_with_role(role: ModelRole) -> list[str]:
+    """Registry keys declared with ``role``, in registry order."""
+    return [key for key, model in CATALOGUE.items() if model.role is role]
+
+
 __all__ = [
     "CATALOGUE",
     "ENGINES",
     "EngineAdapter",
+    "ModelRole",
     "RegisteredModel",
     "engine_for",
     "get",
+    "models_with_role",
+    "publication_models",
 ]

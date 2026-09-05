@@ -12,6 +12,10 @@ naive run hits. Distilled from the 2026-07-12 run
 
 - Canonical, resumable path: `scripts/run_replication.ps1 -Config rep`. It needs
   PowerShell Core 7+ and runs unchanged on Linux, macOS and Windows.
+- **It no longer refits every registered model by default.** `-Scope publication`
+  (the default) covers the models whose catalogue role requires a
+  publication-valid fit; `-Scope all` restores the full registry. See
+  [Which models a run covers](#which-models-a-run-covers).
 - On a many-core VM, fit the **DS models concurrently** and the **TD models one at
   a time** (see [Parallel fitting](#parallel-fitting-on-a-large-vm)) — pass
   `-MaxParallel` rather than driving a pool by hand.
@@ -144,6 +148,35 @@ Four further VG15 variants exist for the 2026-08-12 changes and cost a fit each.
 Idempotent: a model is skipped only when its state is `complete` and its model definition, requested sampling tier and minimum statistical effort, raw-data fingerprint, and Git commit match the current run (`--fresh` forces a refit). Host-dependent `cores` is ignored; a documented high-tuning refit is compatible when its draws, tuning iterations, chains and target acceptance meet or exceed the tier. A trace file by itself is never treated as complete. The script refuses to start from a dirty checkout, fits models, validates the set once, retries per-model rendering without resampling, runs comparisons, atomically synchronises figures, renders the report and comparison book, and optionally uploads. Development/test runs use provisional figure sync and do not upload. Any required-step failure stops all downstream comparison and publication phases and leaves a `FAILED` marker in the run log directory; an entirely successful run leaves `SUCCESS`. Estimate approximately 15–25 hours sequentially.
 
 The dirty-checkout refusal is not fussiness, and `-AllowDirty` is a development-only escape. `write_fit_manifest` records `git_metadata` when the manifest is written — at the **end** of each fit, not its start — so editing the working tree mid-run stamps `dirty: true` on every fit still in flight, and `check_fit.py --purpose publish` then refuses them as "produced from a dirty or unverifiable checkout". Land any code or documentation change as a commit **before** starting a run, not during one; a run interrupted for a repository change has to be restarted, not resumed, because `--purpose resume` also compares the current commit against each fit's.
+
+### Which models a run covers
+
+`-Models` is unchanged and still wins. When it is omitted the default list now
+comes from the **catalogue's roles** rather than from `MODEL_REGISTRY`:
+
+| `-Scope`      | covers                                                                                    |
+| ------------- | ----------------------------------------------------------------------------------------- |
+| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 13 today |
+| `all`         | every registered model, including development steps — 20 today                            |
+
+A development step supplies no reported number, and a superseded model never
+supplies one at all, so refitting them buys nothing publishable. Dropping the
+seven takes a sequential `rep` run from twenty models to thirteen.
+
+**Unclassified fails closed**, so a model whose role has not been decided is
+still refitted. Narrowing happens only when someone declares a role, in
+`src/vocab_growth/models/catalogue.py` alongside the roles table in
+[`docs/models/README.md`](../models/README.md) that justifies it.
+
+The run log names the scope and lists what it left out, with each model's role —
+`excluded by role: vg05:development-step …`. A run that silently fitted a subset
+is the defect `tests/test_runbook_model_lists.py` exists for, and narrowing the
+default deliberately must not reintroduce it quietly.
+
+**Use `-Scope all` for a true replication run**, or whenever a lineage figure
+comparing a development step against a model of record has to be regenerated
+from consistent fits. The parallel recipe below passes explicit `-Models` lists
+covering the whole registry and is unaffected by the default.
 
 ### Parallel fitting on a large VM
 

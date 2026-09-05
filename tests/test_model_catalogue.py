@@ -36,6 +36,8 @@ from vocab_growth.models.catalogue import (
     ModelRole,
     engine_for,
     get,
+    models_with_role,
+    publication_models,
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
@@ -527,3 +529,32 @@ def test_the_roles_that_supply_no_number_are_not_publication_required(role):
 def test_at_least_one_model_of_record_is_declared():
     """A catalogue with no model of record would publish nothing, silently."""
     assert any(m.role is ModelRole.MODEL_OF_RECORD for m in CATALOGUE.values())
+
+
+def test_the_publication_scope_is_exactly_the_publication_required_models():
+    """What the refit driver defaults to, and what the sync refuses without."""
+    assert set(publication_models()) == {
+        key for key, model in CATALOGUE.items() if model.role.publication_required
+    }
+
+
+def test_the_publication_scope_is_a_strict_subset_of_the_registry():
+    """If it were the whole registry the role wiring would be doing nothing."""
+    scope = set(publication_models())
+    assert scope < set(MODEL_REGISTRY)
+
+
+def test_an_unclassified_model_is_still_in_the_publication_scope():
+    """Fail closed end to end: undecided must mean refitted, not dropped."""
+    unclassified = models_with_role(ModelRole.UNCLASSIFIED)
+    assert set(unclassified) <= set(publication_models())
+
+
+def test_no_development_step_is_in_the_publication_scope():
+    steps = set(models_with_role(ModelRole.DEVELOPMENT_STEP))
+    assert steps and not (steps & set(publication_models()))
+
+
+def test_the_scope_helpers_return_registry_keys():
+    for key in publication_models() + models_with_role(ModelRole.DEVELOPMENT_STEP):
+        assert key in MODEL_REGISTRY
