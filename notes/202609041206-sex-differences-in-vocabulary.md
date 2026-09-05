@@ -11,7 +11,7 @@ Prompted by the question of whether sex should be a predictor in the models. The
 
 **Girls are ahead of boys on CDI vocabulary counts at the same age, in Down syndrome as in typical development, by about 0.2 logits on words understood and 0.35 on words spoken, with the two populations agreeing on both sizes.** That is a real and cross-linguistically replicated effect, and a small one against the between-child spread: it explains about 1% of the between-child variance the models carry in their child scales. For a new child of known age and sex it moves the centre of VG20's predictive by 4 to 8% of the 89% interval's width and leaves the width essentially unchanged.
 
-**Recommendation: not in the model of record; one exploratory variant of VG20 on the sex-known subset, reported in the discussion as heterogeneity.** The reasons are in the last two sections.
+**Recommendation: not in the model of record; one exploratory variant of VG20 on the sex-known subset, reported in the discussion as heterogeneity.** The reasons are in the last two sections. _Update, same day:_ the variant has been fitted under [#295](https://github.com/dseinternational/vocabulary-growth/issues/295); see `notes/202609041530-vg20-sex-shift-arm.md` for what it returned.
 
 ## What the literature says
 

@@ -224,3 +224,42 @@ def prepare_bivariate_observations(
         subject_codes=subject_codes,
         n_subjects=n_subjects,
     )
+
+
+#: Contrast coding for the exploratory sex-shift variant of VG20 (issue #295):
+#: girls ``+1/2``, boys ``-1/2``. Centred so the population curve is the
+#: sex-balanced average and each coefficient is the girl-minus-boy difference.
+SEX_CONTRAST: dict[str, float] = {"F": 0.5, "M": -0.5}
+
+
+def sex_contrast_codes(analysis_df: pd.DataFrame) -> np.ndarray:
+    """The per-row sex contrast the sex-shift variant multiplies its coefficients by.
+
+    Refuses a frame with any row lacking a recorded sex, or carrying a value other
+    than the loader's ``'F'``/``'M'``, and a frame in which a retained child
+    carries two values: the frame builder's ``sex_known_only`` restriction is what
+    guarantees the first two, and the loader's provenance rule (which drops the one
+    batch of us_01 rows whose sex disagreed within a child) the third. Each would
+    otherwise fit silently with a covariate that is zero, or wrong, for some rows.
+    """
+    if "sex" not in analysis_df.columns:
+        raise KeyError(
+            "The frame carries no `sex` column; the sex-shift variant needs "
+            "`sex_known_only` on its definition so the frame builder loads it."
+        )
+    sex = analysis_df["sex"]
+    missing = int(sex.isna().sum())
+    if missing:
+        raise ValueError(f"{missing} rows have no recorded sex; the contrast is undefined for them.")
+    unexpected = sorted(set(sex.unique()) - set(SEX_CONTRAST))
+    if unexpected:
+        raise ValueError(f"Unexpected sex codes {unexpected}; expected {sorted(SEX_CONTRAST)}.")
+    if {"study", "subject_id"}.issubset(analysis_df.columns):
+        per_child = analysis_df.groupby(["study", "subject_id"], sort=False)["sex"].nunique()
+        inconsistent = int((per_child > 1).sum())
+        if inconsistent:
+            raise ValueError(
+                f"{inconsistent} children carry more than one sex value across their "
+                "administrations; sex is a child-level covariate."
+            )
+    return sex.map(SEX_CONTRAST).to_numpy(dtype=float)
