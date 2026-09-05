@@ -29,11 +29,6 @@ from vocab_growth.fit_artifacts import (
     validate_fit_output,
 )
 
-#: Definition fields that always differ between a baseline and its variant, and
-#: whose difference carries no information: the variant's directory name and the
-#: banner printed at the top of its fit log.
-NAMING_FIELDS = frozenset({"config_name", "banner", "model_id"})
-
 #: Coverage below this fraction of the baseline's own comparable rows means the
 #: age grids disagree badly enough that the verdict is not about priors.
 MIN_COVERAGE = 0.9
@@ -59,24 +54,45 @@ def _read(dirpath: str, name: str) -> pd.DataFrame | None:
     return pd.read_csv(path) if os.path.exists(path) else None
 
 
-def load_headlines(dirpath: str) -> dict[str, pd.DataFrame]:
+def load_headlines(dirpath: str, *, unreadable: list[str] | None = None) -> dict[str, pd.DataFrame]:
     """Return ``{quantity: DataFrame[age_months, median, ci_lo, ci_hi]}`` for
-    every headline series present in ``dirpath`` (missing series are skipped)."""
+    every headline series present in ``dirpath`` (missing series are skipped).
+
+    A series whose file is present but unusable — missing columns, empty,
+    non-finite, duplicated ages, reversed intervals — raises, so a partial
+    summary cannot quietly shrink the comparison.
+
+    Passing ``unreadable`` collects those quantity names instead and skips only
+    the series that could not be read. One bad file then costs its own series
+    rather than every readable one: ``posterior_summary_p_any.csv`` carries both
+    ``p_any`` and ``Ey_any``, so a fit missing the ``Ey_any`` block used to
+    discard the eight trajectories, ``psi`` and every structural parameter with
+    it. The collected names reach :func:`coverage_report`'s ``missing`` list, so
+    the pairing is still reported as unassessable rather than silently smaller.
+    """
     out: dict[str, pd.DataFrame] = {}
     for qty, fname, mcol, lo, hi in _SERIES:
         df = _read(dirpath, fname)
         if df is None:
             continue
-        # VG15 prefixes the count columns by outcome; older engines do not.
-        prefix = {"Ey_understood": "u", "Ey_spoken": "s", "Ey_signed": "sign"}.get(qty)
-        if mcol not in df and prefix:
-            mcol, lo, hi = (f"Ey_{prefix}_{part}" for part in ("median", "ci_lo", "ci_hi"))
-        required = {"age_months", mcol, lo, hi}
-        if not required.issubset(df.columns):
-            raise ValueError(f"{fname} lacks required columns: {sorted(required - set(df.columns))}")
-        frame = pd.DataFrame({"age_months": df["age_months"], "median": df[mcol],
-                              "ci_lo": df[lo], "ci_hi": df[hi]})
-        _validate_values(frame, f"{dirpath}/{fname}")
+        try:
+            # VG15 prefixes the count columns by outcome; older engines do not.
+            prefix = {"Ey_understood": "u", "Ey_spoken": "s", "Ey_signed": "sign"}.get(qty)
+            if mcol not in df and prefix:
+                mcol, lo, hi = (f"Ey_{prefix}_{part}" for part in ("median", "ci_lo", "ci_hi"))
+            required = {"age_months", mcol, lo, hi}
+            if not required.issubset(df.columns):
+                raise ValueError(
+                    f"{fname} lacks required columns: {sorted(required - set(df.columns))}"
+                )
+            frame = pd.DataFrame({"age_months": df["age_months"], "median": df[mcol],
+                                  "ci_lo": df[lo], "ci_hi": df[hi]})
+            _validate_values(frame, f"{dirpath}/{fname}")
+        except ValueError:
+            if unreadable is None:
+                raise
+            unreadable.append(qty)
+            continue
         out[qty] = frame
     return out
 
@@ -116,12 +132,15 @@ _PARAMETER = re.compile(
 )
 
 
-def load_parameters(dirpath: str) -> dict[str, pd.DataFrame]:
+def load_parameters(dirpath: str, *, unreadable: list[str] | None = None) -> dict[str, pd.DataFrame]:
     """Structural parameters from diagnostics, explicitly compared as means.
 
     The existing scalar summary stores means, not medians. Retaining that
     distinction lets historical summaries be inspected without inventing a
     posterior median from the mean. Both members of a pair use the same statistic.
+
+    ``unreadable`` behaves as it does in :func:`load_headlines`: one malformed
+    row costs its own parameter rather than every other one in the file.
     """
     df = _read(dirpath, "diagnostics.csv")
     if df is None or not {"mean", "eti89_lb", "eti89_ub"}.issubset(df.columns):
@@ -131,11 +150,18 @@ def load_parameters(dirpath: str) -> dict[str, pd.DataFrame]:
         name = str(row.iloc[0])
         if not _PARAMETER.fullmatch(name):
             continue
-        if name in out:
-            raise ValueError(f"Duplicate parameter {name} in {dirpath}/diagnostics.csv")
-        frame = pd.DataFrame({"age_months": [-1], "estimate": [row["mean"]],
-                              "ci_lo": [row["eti89_lb"]], "ci_hi": [row["eti89_ub"]]})
-        _validate_values(frame, f"{dirpath}/diagnostics.csv: {name}")
+        try:
+            if name in out:
+                raise ValueError(f"Duplicate parameter {name} in {dirpath}/diagnostics.csv")
+            frame = pd.DataFrame({"age_months": [-1], "estimate": [row["mean"]],
+                                  "ci_lo": [row["eti89_lb"]], "ci_hi": [row["eti89_ub"]]})
+            _validate_values(frame, f"{dirpath}/diagnostics.csv: {name}")
+        except ValueError:
+            if unreadable is None:
+                raise
+            unreadable.append(name)
+            out.pop(name, None)
+            continue
         out[name] = frame.assign(
             estimate_kind="mean", interval_kind="eti")
     return out
@@ -177,14 +203,36 @@ def required_quantities(model_key: str, definition) -> set[str]:
     return required
 
 
-def _comparable(dirpath: str) -> dict[str, pd.DataFrame]:
+@dataclass(frozen=True)
+class FitSummaries:
+    """Everything comparable in one fit directory, read once.
+
+    ``quantities`` maps a quantity to its ``age_months``/``estimate``/interval
+    frame; ``unreadable`` names the quantities whose file was present but
+    unusable, which :func:`coverage_report` folds into its ``missing`` list so
+    they cannot pass for absent output. Both consumers of a pairing --
+    :func:`coverage_report` and :func:`compare_dirs` -- take the same record, so
+    a directory is read once per run rather than once per consumer.
+    """
+
+    quantities: dict[str, pd.DataFrame]
+    unreadable: tuple[str, ...] = ()
+
+
+def load_comparable(dirpath: str) -> FitSummaries:
+    """Read every comparable quantity in ``dirpath``, isolating unusable ones."""
+    unreadable: list[str] = []
     out = {
         name: frame.rename(columns={"median": "estimate"}).assign(
             estimate_kind="median", interval_kind="eti")
-        for name, frame in load_headlines(dirpath).items()
+        for name, frame in load_headlines(dirpath, unreadable=unreadable).items()
     }
-    out.update(load_parameters(dirpath))
-    psi = load_psi(dirpath)
+    out.update(load_parameters(dirpath, unreadable=unreadable))
+    try:
+        psi = load_psi(dirpath)
+    except ValueError:
+        psi = None
+        unreadable.append("psi")
     if psi is not None:
         frame = pd.DataFrame({"age_months": [-1], "estimate": [psi["psi_median"]],
                               "ci_lo": [psi["psi_ci_lo"]], "ci_hi": [psi["psi_ci_hi"]]})
@@ -195,15 +243,45 @@ def _comparable(dirpath: str) -> dict[str, pd.DataFrame]:
             "ci_lo": [np.nan], "ci_hi": [np.nan],
             "estimate_kind": ["probability"], "interval_kind": [None],
         })
-    return out
+    return FitSummaries(out, tuple(unreadable))
 
 
-def pairing_errors(baseline_dir: str, variant_dir: str, model_key: str, name: str) -> list[str]:
+def _pair(
+    baseline_dir: str,
+    variant_dir: str,
+    summaries: tuple[FitSummaries, FitSummaries] | None,
+) -> tuple[FitSummaries, FitSummaries]:
+    """The pairing's two summary records, reusing prebuilt ones when given."""
+    if summaries is not None:
+        return summaries
+    return load_comparable(baseline_dir), load_comparable(variant_dir)
+
+
+def pairing_errors(
+    baseline_dir: str,
+    variant_dir: str,
+    model_key: str,
+    name: str,
+    *,
+    signature: dict | None = None,
+    baseline_frame_hash: str | None = None,
+) -> list[str]:
     """Validate both fits against current definitions and their own prepared data.
 
     Rebuilding each frame admits a registered data restriction while rejecting
     unrelated changes to that frame. For prior-only variants the rebuilt frames
     coincide. This checks actual override values, not just permitted field names.
+
+    The **baseline's** recorded sampling configuration is the reference both
+    fits are checked against. Reading each fit's own configuration back and
+    passing it as the expected one would make that check unfalsifiable: a
+    variant sampled at ``dev`` against a baseline sampled at ``rep`` would pass,
+    because each was compared with itself.
+
+    ``signature`` and ``baseline_frame_hash`` are the two expensive inputs and
+    are identical for every variant of one model, so a caller looping over
+    variants computes them once and passes them in; omitted, they are computed
+    here.
     """
     from dse_research_utils.statistics.models.sampling import get_sampling_configuration
 
@@ -213,35 +291,50 @@ def pairing_errors(baseline_dir: str, variant_dir: str, model_key: str, name: st
     from vocab_growth.sensitivity.registry import build_variant
 
     errors = []
-    signature = implementation_signature()
+    if signature is None:
+        signature = implementation_signature()
     base = MODEL_REGISTRY[model_key]
     variant, = build_variant(model_key, name)
-    sampling_names = []
+
+    try:
+        expected_config = (
+            (_manifest(baseline_dir) or {}).get("sampling", {}).get("configuration_name")
+        )
+    except (OSError, ValueError) as exc:
+        expected_config = None
+        errors.append(f"baseline: cannot read the fit manifest: {exc}")
+    if expected_config:
+        try:
+            expected_parameters = get_sampling_configuration(expected_config)
+        except (KeyError, ValueError) as exc:
+            expected_config, expected_parameters = None, None
+            errors.append(f"baseline: unknown sampling configuration: {exc}")
+    else:
+        expected_parameters = None
+        errors.append("baseline: sampling configuration is missing")
+
     for label, directory, definition in (("baseline", baseline_dir, base),
-                                          ("variant", variant_dir, variant)):
+                                         ("variant", variant_dir, variant)):
         try:
             manifest = _manifest(directory) or {}
-            config = manifest.get("sampling", {}).get("configuration_name")
-            sampling_names.append(config)
-            if not config:
-                raise ValueError("sampling configuration is missing")
             if not manifest.get("code", {}).get("commit"):
                 errors.append(f"{label}: fit commit is missing")
-            parameters = get_sampling_configuration(config)
-            frame_hash = expected_analysis_frame_hash(model_key, definition)
+            frame_hash = (
+                baseline_frame_hash
+                if label == "baseline" and baseline_frame_hash is not None
+                else expected_analysis_frame_hash(model_key, definition)
+            )
             problems = validate_fit_output(
                 directory, expected_definition=definition,
                 expected_implementation=signature,
-                expected_sampling_config_name=config,
-                expected_sampling_parameters=parameters,
+                expected_sampling_config_name=expected_config,
+                expected_sampling_parameters=expected_parameters,
                 expected_analysis_frame_hash=frame_hash,
                 require_clean_fit=True,
             )
             errors.extend(f"{label}: {problem}" for problem in problems)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             errors.append(f"{label}: cannot verify fit: {exc}")
-    if len(sampling_names) == 2 and sampling_names[0] != sampling_names[1]:
-        errors.append("baseline and variant use different sampling configurations")
     return errors
 
 
@@ -375,39 +468,13 @@ def fit_created_at(dirpath: str) -> str | None:
     return None if manifest is None else manifest.get("created_at_utc")
 
 
-def definition_mismatch(
-    baseline_dir: str, variant_dir: str, override_keys: set[str]
-) -> list[str]:
-    """Definition fields that differ but should not — empty when the pair is sound.
-
-    A variant fit is only a controlled comparison if it differs from the baseline
-    in the fields the registry overrides and nothing else. ``override_keys`` is
-    that expected set; anything else in the diff means the two fits were made
-    under different model definitions, so the delta is not attributable to the
-    variant. This is the check that catches a **stale pairing** — a variant
-    fitted before the model of record was refitted under a changed definition,
-    which produces a perfectly well-formed and completely misleading matrix row.
-
-    Returns ``[]`` when either manifest is unreadable: an unverifiable pairing is
-    reported through :func:`pairing_errors` rather than as a false mismatch.
-    This helper alone is not a pairing validator.
-    """
-    base_m, var_m = _manifest(baseline_dir), _manifest(variant_dir)
-    if base_m is None or var_m is None:
-        return []
-    base = (base_m.get("model") or {}).get("definition") or {}
-    var = (var_m.get("model") or {}).get("definition") or {}
-    if not base or not var:
-        return []
-    allowed = NAMING_FIELDS | set(override_keys)
-    return sorted(
-        k
-        for k in set(base) | set(var)
-        if k not in allowed and base.get(k) != var.get(k)
-    )
-
-
-def coverage_report(baseline_dir: str, variant_dir: str, *, required: set[str] | None = None) -> tuple[int, int, list[str]]:
+def coverage_report(
+    baseline_dir: str,
+    variant_dir: str,
+    *,
+    required: set[str] | None = None,
+    summaries: tuple[FitSummaries, FitSummaries] | None = None,
+) -> tuple[int, int, list[str]]:
     """``(baseline_rows, shared_rows, missing_series)`` for a variant pairing.
 
     ``baseline_rows`` counts every age the baseline reports across its headline
@@ -426,8 +493,13 @@ def coverage_report(baseline_dir: str, variant_dir: str, *, required: set[str] |
     accident: 3 of 355 in the 2026-08-16 run, which had been reported as a normal
     "sensitive: gap" verdict. Measuring coverage the same way turns that into the
     partial-coverage status it is.
+
+    A quantity either fit could not read is named here too, so isolating an
+    unusable summary file in :func:`load_headlines` costs the pairing its verdict
+    rather than letting the comparison quietly shrink to what parsed.
     """
-    base, var = _comparable(baseline_dir), _comparable(variant_dir)
+    base_summaries, var_summaries = _pair(baseline_dir, variant_dir, summaries)
+    base, var = base_summaries.quantities, var_summaries.quantities
     baseline_rows = sum(len(frame) for frame in base.values())
     shared_rows = 0
     for qty, frame in base.items():
@@ -436,7 +508,10 @@ def coverage_report(baseline_dir: str, variant_dir: str, *, required: set[str] |
         b_ages = pd.Index(frame["age_months"])
         v_ages = pd.Index(var[qty]["age_months"])
         shared_rows += len(b_ages.intersection(v_ages))
-    missing = sorted((set(base) | (required or set())) - (set(base) & set(var)))
+    unreadable = set(base_summaries.unreadable) | set(var_summaries.unreadable)
+    missing = sorted(
+        (set(base) | unreadable | (required or set())) - (set(base) & set(var))
+    )
     return baseline_rows, shared_rows, missing
 
 
@@ -486,15 +561,25 @@ def summarise_absent(label: str, status: str, reason: str, variant_dir: str | No
     return row
 
 
-def compare_dirs(baseline_dir: str, variant_dir: str) -> pd.DataFrame:
+def compare_dirs(
+    baseline_dir: str,
+    variant_dir: str,
+    *,
+    summaries: tuple[FitSummaries, FitSummaries] | None = None,
+) -> pd.DataFrame:
     """Compare shared ages and parameters, with the point statistic labelled.
 
     ``age_months=-1`` marks a scalar. Parameter estimates from diagnostics are
     means; trajectory and psi summaries are medians. Fractional ages are retained.
     This calculates differences only; :func:`summarise` requires validation
     evidence before making a robustness claim.
+
+    ``summaries`` reuses records already read by :func:`coverage_report`, which a
+    caller always computes for the same pairing; without it each directory is
+    read twice.
     """
-    base, var = _comparable(baseline_dir), _comparable(variant_dir)
+    base_summaries, var_summaries = _pair(baseline_dir, variant_dir, summaries)
+    base, var = base_summaries.quantities, var_summaries.quantities
     rows = []
     for qty in sorted(set(base) & set(var)):
         b, v = base[qty].set_index("age_months"), var[qty].set_index("age_months")
@@ -524,7 +609,6 @@ def summarise(
     *,
     baseline_dir: str | None = None,
     validation_errors: list[str] | None = None,
-    mismatch: list[str] | None = None,
     coverage: tuple[int, int, list[str]] | None = None,
 ) -> dict:
     """One-row robustness verdict for a variant (feeds the §7 matrix).
@@ -534,6 +618,12 @@ def summarise(
     cannot yield a robustness verdict. ``coverage`` includes required quantities
     even when both fits omit them. Soft convergence caveats from either fit are
     carried into the verdict; hard failures prevent assessment.
+
+    The not-assessed statuses are ordered so the *cause* is reported, not a
+    downstream symptom: a stale or unverifiable pairing is named before a
+    coverage shortfall, because refitting the variant is what fixes both and a
+    reader told only about missing series will fix those and re-run into the
+    same wall.
     """
     gate = diagnostics_gate(variant_dir)
     base_gate = diagnostics_gate(baseline_dir) if baseline_dir else None
@@ -558,17 +648,17 @@ def summarise(
         caveats.extend(f"baseline: {caveat}" for caveat in base_gate.caveats)
     caveated = converged is True and bool(caveats)
     status = "compared"
-    if mismatch:
-        status = "stale-pairing"
-        verdict = (
-            "STALE PAIRING (not assessed): baseline and variant differ in "
-            + ", ".join(mismatch)
-            + " — refit the variant against the current model of record"
-        )
-    elif converged is False or (base_gate and base_gate.converged is False):
+    if converged is False or (base_gate and base_gate.converged is False):
         status = "non-converged"
         verdict = "NON-CONVERGED (not assessed): baseline or variant failed the gate"
-    elif coverage is not None and (coverage[2] or (coverage_frac is not None and coverage_frac < MIN_COVERAGE)):
+    elif validation_errors is None or validation_errors or base_gate is None:
+        status = "unverified-pairing"
+        verdict = "UNVERIFIED PAIRING (not assessed): " + "; ".join(
+            validation_errors or ["both fits require provenance and convergence checks"])
+    elif coverage is None:
+        status = "unverified-coverage"
+        verdict = "COVERAGE NOT CHECKED (not assessed): pass a coverage_report result"
+    elif coverage[2] or (coverage_frac is not None and coverage_frac < MIN_COVERAGE):
         status = "partial-coverage"
         missing_note = (
             f"; missing series: {', '.join(coverage[2])}" if coverage[2] else ""
@@ -577,10 +667,6 @@ def summarise(
             f"PARTIAL COVERAGE (not assessed): only {coverage[1]} of "
             f"{coverage[0]} baseline rows are shared{missing_note}"
         )
-    elif validation_errors is None or validation_errors or base_gate is None:
-        status = "unverified-pairing"
-        verdict = "UNVERIFIED PAIRING (not assessed): " + "; ".join(
-            validation_errors or ["both fits require provenance and convergence checks"])
     elif converged is None or base_gate.converged is None:
         status = "unverified-convergence"
         verdict = "CONVERGENCE NOT VERIFIED (not assessed): baseline or variant has no gate"
@@ -594,7 +680,7 @@ def summarise(
             verdict = "sensitive: " + ", ".join(outside)
             if caveated:
                 verdict += " (converged with caveats)"
-        elif gate.clean is True and base_gate.clean is True and coverage is not None:
+        elif gate.clean is True and base_gate.clean is True:
             verdict = "robust (all within baseline 89% interval)"
         elif caveated:
             verdict = (

@@ -296,9 +296,16 @@ def fit_validation_kwargs(
     downstream computations would otherwise mix revisions. Publication instead
     checks that the fit itself came from a clean revision and carries the current
     executable-code signature. Later documentation commits do not invalidate an
-    already complete fit. Provisional local syncs retain lifecycle, definition,
-    implementation and sampling checks while allowing dirty provenance and
-    relaxed data checks.
+    already complete fit. Provisional local syncs retain lifecycle, definition
+    and sampling checks while allowing dirty provenance and relaxed data checks.
+
+    The executable-code signature is asked for by ``resume`` and the publication
+    purposes only. ``render`` and ``provisional-sync`` deliberately omit it: the
+    signature covers every module in the package, so requiring it there would
+    mean a one-line change to a plot helper stopped an existing fit being
+    re-rendered and stopped ``sync_report_figures.py --allow-provisional`` from
+    working in the checkout where code is being edited, which is the one place
+    it exists to work.
 
     Publication also requires clean convergence: a fit carrying soft-tier
     sampling caveats (divergences, low energy BFMI) stays usable for development
@@ -332,12 +339,21 @@ def fit_validation_kwargs(
 
     kwargs: dict[str, Any] = {
         "expected_definition": expected_definition,
-        "expected_implementation": implementation_signature(),
         "expected_sampling_config_name": expected_sampling_config_name,
         "expected_sampling_parameters": expected_sampling_parameters,
     }
     if purpose == "provisional-sync":
         return kwargs
+    if purpose != "render":
+        # The executable-code signature covers every module in the package, so
+        # any code edit anywhere invalidates it. That breadth is right for the
+        # purposes that syndicate a fit into the report or build new numbers on
+        # top of it, and wrong for the two that only read one back: ``render``
+        # re-renders a fit that already exists, and ``provisional-sync`` is the
+        # documented local-dev path for exactly the checkout where code is
+        # being changed. Requiring it there would make an edit to a plot helper
+        # enough to render every fit unusable for its own report.
+        kwargs["expected_implementation"] = implementation_signature()
 
     if current_source_data_hash is None:
         raise ValueError(f"{purpose} validation requires the current source-data hash.")
@@ -548,6 +564,15 @@ def validate_fit_output(
 ) -> list[str]:
     """Return every reason that fitted output is unsuitable for its intended use.
 
+    Every ``expected_*`` argument means the same thing: ``None`` is *not
+    checked*. ``expected_implementation`` in particular is never inferred from
+    the current code — a caller that wants the executable-code signature checked
+    passes it (``fit_validation_kwargs`` supplies it for the purposes that ask
+    for it). Defaulting it on would silently impose the strictest check in this
+    function on every caller that happens to pass a definition, including
+    ``scripts/loso_compare.py`` and :mod:`vocab_growth.recovery.simulate`, which
+    read a model of record back rather than publishing from it.
+
     ``require_clean_convergence`` additionally rejects a fit that cleared the hard
     convergence gate but recorded soft-tier caveats (divergent transitions or a low
     energy BFMI). Those caveats do not invalidate the fit for development or review
@@ -615,17 +640,21 @@ def validate_fit_output(
                 f"definition: {summary}."
             )
 
-    if expected_implementation is None and expected_definition is not None:
-        from vocab_growth.models.implementation_identity import implementation_signature
-
-        expected_implementation = implementation_signature()
     if expected_implementation is not None:
+        from vocab_growth.models import implementation_identity
+
         recorded = manifest.get("model", {}).get("implementation")
-        if recorded != expected_implementation:
+        if not implementation_identity.matches(recorded, expected_implementation):
+            # Name what moved. This message is the whole basis for deciding to
+            # spend a reporting-quality refit, and "a hash differs" cannot tell
+            # a dependency point release from an edited likelihood.
             errors.append(
                 "The fitted implementation signature is missing or differs from "
-                "the current executable code or numerical libraries; refit before "
-                "using this output."
+                "the current executable code or numerical libraries ("
+                + implementation_identity.describe_difference(
+                    recorded, expected_implementation
+                )
+                + "); refit before using this output."
             )
 
     sampling_payload = manifest.get("sampling", {})

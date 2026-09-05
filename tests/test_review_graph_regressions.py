@@ -55,6 +55,7 @@ def test_reporting_grid_does_not_change_the_observed_model(key, tmp_path, monkey
         np.testing.assert_allclose(covariances[0], covariances[1], atol=1e-12, rtol=1e-12)
 
 
+@pytest.mark.slow
 def test_produced_likelihood_is_the_conditional_four_cell_distribution(tmp_path, monkeypatch):
     """Enumerate the conditional distribution and check the engine's actual alpha."""
     pi = np.array([0.6, 0.1, 0.2, 0.1])

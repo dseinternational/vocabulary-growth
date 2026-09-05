@@ -20,11 +20,20 @@ import pytest
 from vocab_growth.sensitivity.compare import (
     MIN_COVERAGE,
     coverage_report,
-    definition_mismatch,
     failed_fit_dir,
     summarise,
     summarise_absent,
 )
+
+
+def _row(quantity, base, var, lo, hi, within):
+    """One ``compare_dirs`` row, in the schema ``compare_dirs`` actually emits."""
+    return {
+        "quantity": quantity, "age_months": 12.0,
+        "base_estimate": base, "var_estimate": var, "estimate_kind": "median",
+        "delta": var - base, "base_ci_lo": lo, "base_ci_hi": hi,
+        "within_baseline_ci": within, "interval_kind": "eti",
+    }
 
 
 def _write_fit(root, name, definition, series):
@@ -59,49 +68,24 @@ BASE_DEF = {
 # ---------------------------------------------------------------- stale pairing
 
 
-def test_a_variant_differing_only_in_its_overrides_is_a_sound_pairing(tmp_path):
-    base = _write_fit(tmp_path, "base", BASE_DEF, ([12, 24], [10.0, 20.0]))
-    variant = _write_fit(
-        tmp_path,
-        "variant",
-        {**BASE_DEF, "config_name": "base-narrow", "banner": "x", "eta_sigma": 0.4},
-        ([12, 24], [10.0, 20.0]),
+def test_a_stale_pairing_is_never_reported_as_robust(tmp_path):
+    """The live case: the baseline was refitted under CLAMP_Q_ONLY mid-run.
+
+    ``pairing_errors`` is what detects this now — it validates each fit against
+    the definition the registry currently builds, values and all, rather than
+    diffing the two manifests for unexpected field names. The guard kept here is
+    the consequence: whatever the containment says, an unsound pairing must not
+    reach a robustness verdict, and the reason must reach the matrix row.
+    """
+    comparison = pd.DataFrame([_row("Ey", 10.0, 10.0, 9.0, 11.0, True)])
+    _write_clean_gate_payload(tmp_path)
+    row = summarise(
+        comparison, str(tmp_path), "v",
+        baseline_dir=str(tmp_path), coverage=(1, 1, []),
+        validation_errors=["variant: the model definition differs from the current "
+                           "registered definition: clamp_mean_above_hi_anchor."],
     )
-    assert definition_mismatch(base, variant, {"eta_sigma"}) == []
-
-
-def test_a_definition_change_outside_the_overrides_is_caught_by_name(tmp_path):
-    """The live case: the baseline was refitted under CLAMP_Q_ONLY mid-run."""
-    base = _write_fit(tmp_path, "base", BASE_DEF, ([12, 24], [10.0, 20.0]))
-    variant = _write_fit(
-        tmp_path,
-        "variant",
-        {**BASE_DEF, "config_name": "base-narrow", "eta_sigma": 0.4,
-         "clamp_mean_above_hi_anchor": True},
-        ([12, 24], [10.0, 20.0]),
-    )
-    assert definition_mismatch(base, variant, {"eta_sigma"}) == [
-        "clamp_mean_above_hi_anchor"
-    ]
-
-
-def test_an_unverifiable_pairing_is_not_reported_as_a_mismatch(tmp_path):
-    """No manifest means "cannot check", which is not the same as "differs"."""
-    base = tmp_path / "base"
-    base.mkdir()
-    variant = tmp_path / "variant"
-    variant.mkdir()
-    assert definition_mismatch(str(base), str(variant), {"eta_sigma"}) == []
-
-
-def test_a_stale_pairing_is_never_reported_as_robust():
-    comparison = pd.DataFrame([{
-        "quantity": "Ey", "age_months": 12, "base_median": 10.0,
-        "var_median": 10.0, "delta": 0.0, "base_ci_lo": 9.0, "base_ci_hi": 11.0,
-        "within_baseline_ci": True, "interval_kind": "eti",
-    }])
-    row = summarise(comparison, "/nonexistent", "v", mismatch=["clamp_mean_above_hi_anchor"])
-    assert row["status"] == "stale-pairing"
+    assert row["status"] == "unverified-pairing"
     assert "robust" not in row["verdict"]
     assert "clamp_mean_above_hi_anchor" in row["verdict"]
 
@@ -127,12 +111,9 @@ def test_coverage_uses_the_comparison_own_matching_rule(tmp_path):
 
 
 def test_collapsed_coverage_is_not_assessed():
-    comparison = pd.DataFrame([{
-        "quantity": "gap", "age_months": 12, "base_median": 10.0,
-        "var_median": 99.0, "delta": 89.0, "base_ci_lo": 9.0, "base_ci_hi": 11.0,
-        "within_baseline_ci": False, "interval_kind": "eti",
-    }])
-    row = summarise(comparison, "/nonexistent", "v", mismatch=[], coverage=(355, 3, []))
+    comparison = pd.DataFrame([_row("gap", 10.0, 99.0, 9.0, 11.0, False)])
+    row = summarise(comparison, "/nonexistent", "v", baseline_dir="/nonexistent",
+                    validation_errors=[], coverage=(355, 3, []))
     assert row["status"] == "partial-coverage"
     assert row["coverage"] < MIN_COVERAGE
     # The delta is large and outside the interval, but on 3 of 355 points that
@@ -165,22 +146,29 @@ def _write_clean_gate_payload(dirpath):
 
 
 def test_full_coverage_reaches_a_real_verdict(tmp_path):
-    comparison = pd.DataFrame([{
-        "quantity": "Ey", "age_months": 12, "base_median": 10.0,
-        "var_median": 10.0, "delta": 0.0, "base_ci_lo": 9.0, "base_ci_hi": 11.0,
-        "within_baseline_ci": True, "interval_kind": "eti",
-    }])
+    comparison = pd.DataFrame([_row("Ey", 10.0, 10.0, 9.0, 11.0, True)])
     _write_clean_gate_payload(tmp_path)
-    row = summarise(comparison, str(tmp_path), "v", mismatch=[], coverage=(1, 1, []),
+    row = summarise(comparison, str(tmp_path), "v", coverage=(1, 1, []),
                     baseline_dir=str(tmp_path), validation_errors=[])
     assert row["status"] == "compared"
     assert row["verdict"].startswith("robust")
 
     # Without any recorded convergence gate the containment is still reported,
     # but "robust" is reserved for a fit with a cleanly passing payload.
-    row = summarise(comparison, "/nonexistent", "v", mismatch=[], coverage=(1, 1, []))
+    row = summarise(comparison, "/nonexistent", "v", coverage=(1, 1, []))
     assert row["status"] == "unverified-pairing"
     assert not row["verdict"].startswith("robust")
+
+
+def test_unchecked_coverage_says_so_rather_than_blaming_the_gate(tmp_path):
+    """Both gates clean, no coverage supplied: name the input that is missing."""
+    comparison = pd.DataFrame([_row("Ey", 10.0, 10.0, 9.0, 11.0, True)])
+    _write_clean_gate_payload(tmp_path)
+    row = summarise(comparison, str(tmp_path), "v",
+                    baseline_dir=str(tmp_path), validation_errors=[])
+    assert row["status"] == "unverified-coverage"
+    assert "COVERAGE NOT CHECKED" in row["verdict"]
+    assert "convergence" not in row["verdict"]
 
 
 # -------------------------------------------------------- variants that vanish
