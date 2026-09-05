@@ -134,6 +134,7 @@ FIELD_ROLES: dict[str, FieldRole] = {
     "exclude_studies": FieldRole.DATA,
     "exclude_us01_spoken_ceiling": FieldRole.DATA,
     "include_implausible_production": FieldRole.DATA,
+    "include_same_day_disagreements": FieldRole.DATA,
     "include_uk01_signed": FieldRole.DATA,
     "include_es01_cells": FieldRole.DATA,
     "include_nz01_cells": FieldRole.DATA,
@@ -168,10 +169,10 @@ FIELD_ROLES: dict[str, FieldRole] = {
 #: justified where it is added -- the value alone does not show that the
 #: pre-field behaviour matched it.
 #:
-#: The two entries here are the mechanism's first use, and they are what it was
-#: built for. Issue #266 finding 8 needed ``spoken_fallback`` on the trivariate
-#: and joint definitions so VG14 and VG15 could run the sensitivity the
-#: bivariate models have had since #240 -- and under raw dictionary equality
+#: The first two entries here are the mechanism's first use, and they are what
+#: it was built for. Issue #266 finding 8 needed ``spoken_fallback`` on the
+#: trivariate and joint definitions so VG14 and VG15 could run the sensitivity
+#: the bivariate models have had since #240 -- and under raw dictionary equality
 #: adding it would have invalidated every VG14 and VG15 fit ever made, for a
 #: field whose default is what those fits already did.
 #:
@@ -182,9 +183,21 @@ FIELD_ROLES: dict[str, FieldRole] = {
 #: ``spoken_fallback_kappa_sigma`` is read **only** under
 #: ``separate_dispersion``, which no fit without the field could have selected,
 #: so its value could not have affected one.
+#:
+#: The third, ``include_same_day_disagreements`` (#289 task 4.3, 2026-09-05),
+#: makes a different kind of claim, checked a different way. The field is a
+#: loader switch, not a graph choice: an engine forwards it to
+#: ``data_utils.load_data`` as a keyword argument, and before the field existed
+#: no engine passed that argument at all, so every one of those fits ran the
+#: loader at its declared default. The entry's value must therefore equal the
+#: loader's own default -- ``tests/test_fit_identity.py`` reads it off
+#: ``load_data``'s signature and compares -- and the engines that forward the
+#: field are the same three that forward ``include_implausible_production``,
+#: which is the only path by which a definition field reaches the loader.
 BACKFILL_DEFAULTS: dict[str, Any] = {
     "spoken_fallback": SPOKEN_FALLBACK_PRODUCT,
     "spoken_fallback_kappa_sigma": 0.5,
+    "include_same_day_disagreements": False,
 }
 
 

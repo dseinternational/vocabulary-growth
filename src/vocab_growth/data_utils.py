@@ -2004,7 +2004,11 @@ def load_combined_data(
     return df.drop(columns=["produced"])
 
 
-def count_reinstated_implausible_production(max_age_months: int | None = None) -> int:
+def count_reinstated_implausible_production(
+    max_age_months: int | None = None,
+    *,
+    include_same_day_disagreements: bool = False,
+) -> int:
     """Spoken observations the implausible-production rule masks by default.
 
     This is what the ``include_implausible_production`` sensitivity puts back, and
@@ -2015,16 +2019,59 @@ def count_reinstated_implausible_production(max_age_months: int | None = None) -
 
     Derived by differencing the two loader paths rather than reimplementing the
     signature, so it cannot drift from the rule it reports on. The figure is
-    the sensitivity's *net* reinstatement, not the implausible rule's own
-    catch: :func:`mask_same_day_production_disagreements` independently
-    re-masks reinstated ceiling-region counts that have an observed same-day
-    partner, so the count is smaller than the rule's documented total (5
-    against 11 in the current pool). Pass ``include_same_day_disagreements``
-    as well to reinstate those too.
+    the flag's *net* reinstatement with the same-day rule held at
+    ``include_same_day_disagreements`` on both sides of the difference. With
+    the same-day rule active (the default) it is smaller than the implausible
+    rule's own catch, because :func:`mask_same_day_production_disagreements`
+    independently re-masks reinstated ceiling-region counts that have an
+    observed same-day partner (5 against 11 in the current pool). With
+    ``include_same_day_disagreements=True`` -- the combined variant
+    ``us01-masked-production-reinstated`` -- it is the rule's own catch, which
+    is the figure a reader of that variant's fit log needs.
     """
-    masked = load_combined_data(max_age_months=max_age_months)
+    masked = load_combined_data(
+        max_age_months=max_age_months,
+        include_same_day_disagreements=include_same_day_disagreements,
+    )
     reinstated = load_combined_data(
-        max_age_months=max_age_months, include_implausible_production=True
+        max_age_months=max_age_months,
+        include_implausible_production=True,
+        include_same_day_disagreements=include_same_day_disagreements,
+    )
+    return int(
+        reinstated["spoken"].notna().sum() - masked["spoken"].notna().sum()
+    )
+
+
+def count_reinstated_same_day_disagreements(
+    max_age_months: int | None = None,
+    *,
+    include_implausible_production: bool = False,
+) -> int:
+    """Spoken observations the same-day disagreement rule masks by default.
+
+    The companion of :func:`count_reinstated_implausible_production` for the
+    ``include_same_day_disagreements`` flag, and for the same reason: a
+    reinstatement variant's fit log has to state what it reinstated, or a flag
+    that stopped biting would look like a pass. Differenced through the loader
+    with the implausible rule held at ``include_implausible_production`` on
+    both sides. At the default, ``False``, the figure is the rule's *own* catch
+    -- the two Words & Sentences counts of 385 and 406 words at 23 months --
+    which is what the engines print, so that beside the implausible figure
+    taken with this flag lifted (11) the two lines partition the combined
+    variant's gain over the default pool (13) rather than overlap. With
+    ``include_implausible_production=True`` the figure also counts the six
+    reinstated ceiling-region records the rule re-masks, 8 in all; that is the
+    same-day rule's reach on the reinstated frame, not what a fit log reports.
+    """
+    masked = load_combined_data(
+        max_age_months=max_age_months,
+        include_implausible_production=include_implausible_production,
+    )
+    reinstated = load_combined_data(
+        max_age_months=max_age_months,
+        include_implausible_production=include_implausible_production,
+        include_same_day_disagreements=True,
     )
     return int(
         reinstated["spoken"].notna().sum() - masked["spoken"].notna().sum()

@@ -193,6 +193,34 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "suffix": "us01-implausible-reinstated",
         "scalar": {"include_implausible_production": True},
     },
+    # The combined-flag successor (#289 task 4.3). The inverse variant above
+    # reinstates only 5 of the implausible rule's 11 counts, because
+    # `mask_same_day_production_disagreements` (#275) runs afterwards and
+    # independently re-masks the six reinstated ceiling-region records that have
+    # an observed same-day partner. So on its own it answers a narrower question
+    # than the one registered for it -- what changes if the implausible judgement
+    # is wrong *and the same-day judgement is right* -- which is not the
+    # counterfactual a reader of the headline trajectories needs. This variant
+    # lifts both rules, putting back all 11 plus the same-day rule's own two
+    # catches (385 and 406 words at 23 months). Both engines print the two
+    # figures separately, each with the other flag held, so a variant that
+    # stopped biting on either rule shows up rather than passing quietly. The
+    # one-factor variant stays registered: read the pair together to separate
+    # the two judgements.
+    ("vg10", "us01-masked-production-reinstated"): {
+        "suffix": "us01-masked-production-reinstated",
+        "scalar": {
+            "include_implausible_production": True,
+            "include_same_day_disagreements": True,
+        },
+    },
+    ("vg15", "us01-masked-production-reinstated"): {
+        "suffix": "us01-masked-production-reinstated",
+        "scalar": {
+            "include_implausible_production": True,
+            "include_same_day_disagreements": True,
+        },
+    },
 
     # The 810-item reference denominator. Every model scores raw counts against
     # n_trials = 810, so counts from the 416-item Oxford CDI, the 396/680-item
@@ -693,9 +721,13 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # reference, so no count is scored against a denominator its form did not
     # use. The lag predictor is a logit of a *proportion*, understood / 810, so
     # a short-form source enters it already deflated -- the harmonisation acts
-    # directly on the regressor here, not only on the outcome. Expect partial
-    # coverage rather than a clean verdict: the same restriction keeps 264 of
-    # VG10's 1,424 fitted rows, and it changes study composition as well as size.
+    # directly on the regressor here, not only on the outcome. Read the verdict
+    # with its support in view: the same restriction keeps 264 of VG10's 1,424
+    # fitted rows, and it changes study composition as well as size. (Until
+    # #289 task 4.2 the plot-grid `gap` series was matched on exact ages, so a
+    # restricted pool's different linspace made every such variant "partial
+    # coverage" with nothing compared; it is now interpolated onto the
+    # baseline's grid inside the variant's support.)
     ("vg16", "dse-native-only"): {
         "suffix": "dse-native-only",
         "scalar": {"dse_native_only": True},

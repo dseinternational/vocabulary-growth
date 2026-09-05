@@ -108,16 +108,19 @@ The failure is at least safe: validation runs for all models first, and the firs
 
 The old `us01-ceiling-excluded` variants **no longer exist** and `fit_sensitivity.py` raises `KeyError` for them: they excluded records that the Edgin audit established as invalid and that are now masked by default, so they could not fail (`notes/202607261245-edgin-duplicated-outcome-records.md` §§9–10, 13).
 
-They are replaced by the inverse. `us01-implausible-reinstated` puts the masked spoken observations back and refits, answering what changes if the default exclusion is itself mistaken. This is not optional in a published refit: the source author no longer holds the original data files, so the exclusion can never be confirmed at source, and this pair is the only evidence a reader has for whether the headline joint trajectories depend on our judgement.
+They are replaced by the inverse. `us01-masked-production-reinstated` puts the masked spoken observations back and refits, answering what changes if the default exclusion is itself mistaken. This is not optional in a published refit: the source author no longer holds the original data files, so the exclusion can never be confirmed at source, and this pair is the only evidence a reader has for whether the headline joint trajectories depend on our judgement.
 
 ```bash
-python scripts/fit_sensitivity.py vg10 us01-implausible-reinstated --config rep
-python scripts/fit_sensitivity.py vg15 us01-implausible-reinstated --config rep
-python scripts/compare_sensitivity.py vg10 --variant us01-implausible-reinstated
-python scripts/compare_sensitivity.py vg15 --variant us01-implausible-reinstated
+python scripts/fit_sensitivity.py vg10 us01-masked-production-reinstated --config rep
+python scripts/fit_sensitivity.py vg15 us01-masked-production-reinstated --config rep
+python scripts/compare_sensitivity.py vg10 --variant us01-masked-production-reinstated
+python scripts/compare_sensitivity.py vg15 --variant us01-masked-production-reinstated
 ```
 
-Check the fit log's observation counts: each variant prints `us_01 implausible production reinstated` and it must read **11** against the current pool. A zero there means the variant has stopped biting and the comparison is worthless — treat it as a failure, not a pass.
+Check the fit log's observation counts: each variant prints `us_01 implausible production reinstated`, which must read **11** against the current pool, and `us_01 same-day production disagreements reinstated`, which must read **2**; the frame gains their sum, 13 spoken observations. A zero on either line means the variant has stopped biting on that rule and the comparison is worthless — treat it as a failure, not a pass.
+
+> [!NOTE]
+> **The mandatory arm changed from `us01-implausible-reinstated` to `us01-masked-production-reinstated` on 2026-09-05** ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.3). The one-factor variant lifts the implausible rule only, and `mask_same_day_production_disagreements` (#275) then independently re-masks six of the eleven reinstated counts because they have an observed same-day partner, so it nets **5** and answers a narrower question than the one registered for it — what changes if the implausible judgement is wrong _and the same-day judgement is right_. The successor lifts both rules through `include_same_day_disagreements`, a definition field added with a checked `BACKFILL_DEFAULTS` entry so no fit made before it was invalidated by its arrival. The one-factor variant stays registered and prints 5; fit it too if the two judgements need separating.
 
 > [!NOTE]
 > **Re-pinned from 22 to 11 on 2026-08-14.** The old figure was correct when `us_01` came from the Wordbank by-child export; rebuilding it from the Edgin item-level contributor files changed which administrations trip the near-ceiling and longitudinal-collapse signatures. Verified three ways rather than assumed: `vg10` and `vg15` independently log 11; `vg10`'s frame goes from 1,428 spoken observations at baseline to 1,439 in the variant, exactly +11; and the loader confirms it directly — `include_implausible_production=True` takes `us_01` from 211 to 222 spoken observations, whole-pool 1,428 to 1,439. Row counts are unchanged at 230 either way, because the rule blanks the `spoken` value rather than dropping the row. The old note about "22 rather than 30, the other 8 under the duplicated-outcome rule" no longer describes the current pool and has been dropped; the duplicated-outcome rule is still independent and still has its own flag.

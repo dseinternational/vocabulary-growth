@@ -348,6 +348,7 @@ def build_joint_analysis_frame(
         population=definition.population,
         columns=merged_columns,
         include_implausible_production=definition.include_implausible_production,
+        include_same_day_disagreements=definition.include_same_day_disagreements,
     )
     # The DSE-native sensitivity drops every source on a shorter form, which
     # includes three of the four cross-tab sources. Their cell blocks are gated
@@ -634,10 +635,24 @@ def prepare_joint_data(
     if definition.include_implausible_production:
         # No age bound: this engine's load_data call above passes none, so the
         # reported count has to be taken over the same frame or it misstates what
-        # the fit actually reinstated.
+        # the fit actually reinstated. The other flag is held at the definition's
+        # value so the figure is this flag's own net reinstatement.
         counts.append((
             "us_01 implausible production reinstated",
-            vocab_data_utils.count_reinstated_implausible_production(),
+            vocab_data_utils.count_reinstated_implausible_production(
+                include_same_day_disagreements=(
+                    definition.include_same_day_disagreements
+                ),
+            ),
+        ))
+    if definition.include_same_day_disagreements:
+        # The rule's own catch. The ceiling-region counts it re-masks when the
+        # implausible rule is lifted are counted under that rule's figure above
+        # (11 with this flag set, 5 without), so the two lines partition the
+        # combined variant's gain over the default pool rather than overlap.
+        counts.append((
+            "us_01 same-day production disagreements reinstated",
+            vocab_data_utils.count_reinstated_same_day_disagreements(),
         ))
     if n_subjects is not None:
         n_singletons = int((analysis_df.groupby("subject_code").size() == 1).sum())

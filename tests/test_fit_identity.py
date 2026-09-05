@@ -126,6 +126,7 @@ def test_the_data_admission_switches_are_data_affecting():
         "population",
         "td_languages",
         "include_implausible_production",
+        "include_same_day_disagreements",
         "exclude_us01_spoken_ceiling",
         "one_observation_per_subject",
         # Seeds the reproducible subsample, so it selects rows.
@@ -195,6 +196,35 @@ def test_a_backfill_entry_excuses_exactly_the_stated_value(monkeypatch):
         difference.field == "dse_native_only"
         for difference in definition_differences(recorded, altered)
     )
+
+
+def test_the_same_day_backfill_entry_is_the_loaders_own_default():
+    """The third entry's claim, checked rather than asserted (#289 task 4.3).
+
+    Every fit made before `include_same_day_disagreements` existed called the
+    loader without that argument, so it ran at the loader's declared default.
+    The entry is only true while it equals that default -- read off the
+    signature, not restated here -- and only for the classes whose engines
+    forward the field. A record without the field must validate against the
+    registered definition, and a variant that sets the field must not.
+    """
+    import inspect
+
+    from vocab_growth.data_utils import load_combined_data, load_data
+    from vocab_growth.models.definitions import VG15
+
+    for loader in (load_data, load_combined_data):
+        parameter = inspect.signature(loader).parameters["include_same_day_disagreements"]
+        assert parameter.default is BACKFILL_DEFAULTS["include_same_day_disagreements"]
+
+    for definition in (VG10, VG15):
+        recorded = normalise_for_json(definition)
+        recorded.pop("include_same_day_disagreements")
+        assert definition_differences(recorded, definition) == []
+        altered = dataclasses.replace(definition, include_same_day_disagreements=True)
+        (difference,) = definition_differences(recorded, altered)
+        assert difference.field == "include_same_day_disagreements"
+        assert difference.role is FieldRole.DATA
 
 
 def test_backfill_entries_name_real_fields():

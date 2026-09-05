@@ -1122,6 +1122,27 @@ class BivariateModelDefinition:
     be confirmed at source, and this flag is the only way to show what the reported
     trajectories would have been had the judgement been wrong. See
     ``notes/202607261245-edgin-duplicated-outcome-records.md``."""
+    include_same_day_disagreements: bool = False
+    """Reinstate the us_01 production counts masked as same-day contradictions.
+
+    ``data_utils.mask_same_day_production_disagreements`` masks a production
+    count contradicted by a same-day administration on another form (#275). Its
+    own catch on the default pool is two Words & Sentences counts -- 385 and 406
+    words at 23 months against same-day counts of 11 and 50 -- but it also
+    re-masks six of the eleven counts ``include_implausible_production`` puts
+    back, because those reinstated ceiling-region records have an observed
+    same-day partner. So ``us01-implausible-reinstated`` alone reinstates five
+    counts, not eleven, and cannot answer its registered question: what the
+    trajectories would have been had the implausible judgement been wrong.
+    ``us01-masked-production-reinstated`` sets both flags and can (#289 task
+    4.3). Read ``data_utils.SAME_DAY_DISAGREEMENT_FACTOR`` before reinstating
+    on its own.
+
+    Added 2026-09-05 with a ``fit_identity.BACKFILL_DEFAULTS`` entry: every fit
+    made before the field existed called the loader without the argument, whose
+    default is ``False``, so a manifest that lacks the field records a fit with
+    it set to ``False``. That claim is pinned in ``tests/test_fit_identity.py``
+    against the loader's own signature."""
 
     @property
     def model_type(self) -> ModelType:
@@ -1875,6 +1896,27 @@ class JointModelDefinition:
     be confirmed at source, and this flag is the only way to show what the reported
     trajectories would have been had the judgement been wrong. See
     ``notes/202607261245-edgin-duplicated-outcome-records.md``."""
+    include_same_day_disagreements: bool = False
+    """Reinstate the us_01 production counts masked as same-day contradictions.
+
+    ``data_utils.mask_same_day_production_disagreements`` masks a production
+    count contradicted by a same-day administration on another form (#275). Its
+    own catch on the default pool is two Words & Sentences counts -- 385 and 406
+    words at 23 months against same-day counts of 11 and 50 -- but it also
+    re-masks six of the eleven counts ``include_implausible_production`` puts
+    back, because those reinstated ceiling-region records have an observed
+    same-day partner. So ``us01-implausible-reinstated`` alone reinstates five
+    counts, not eleven, and cannot answer its registered question: what the
+    trajectories would have been had the implausible judgement been wrong.
+    ``us01-masked-production-reinstated`` sets both flags and can (#289 task
+    4.3). Read ``data_utils.SAME_DAY_DISAGREEMENT_FACTOR`` before reinstating
+    on its own.
+
+    Added 2026-09-05 with a ``fit_identity.BACKFILL_DEFAULTS`` entry: every fit
+    made before the field existed called the loader without the argument, whose
+    default is ``False``, so a manifest that lacks the field records a fit with
+    it set to ``False``. That claim is pinned in ``tests/test_fit_identity.py``
+    against the loader's own signature."""
 
     # -- nz_01 (Foster-Cohen) produced cross-tab inclusion --
     include_nz01_cells: bool = True
