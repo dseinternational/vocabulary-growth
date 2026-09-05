@@ -4,7 +4,7 @@
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 
 > [!IMPORTANT]
-> Proposal record, 2026-09-04. Two issues were opened and nothing was built: [#296](https://github.com/dseinternational/vocabulary-growth/issues/296) proposes **VG24**, VG15 with a correlated 3×3 subject random-effect block, and [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) proposes **VG25**, VG15 with a sign → speech cross-lag, explicitly deferred on [#242](https://github.com/dseinternational/vocabulary-growth/issues/242). Every count below is read from VG15's registered prepared frame at commit `db4b298` through `vocab_growth.analysis_frames`; every estimate is quoted from the two descriptive notes it cites. No fit was run and no VG15 trace was available locally.
+> Proposal record, 2026-09-04. Two issues were opened and nothing was built: [#296](https://github.com/dseinternational/vocabulary-growth/issues/296) proposes **VG24**, VG15 with a correlated 3×3 subject random-effect block, and [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) proposes **VG25**, VG15 with a sign → speech cross-lag, explicitly deferred on [#242](https://github.com/dseinternational/vocabulary-growth/issues/242). Every count below is read from VG15's registered prepared frame at commit `db4b298` through `vocab_growth.analysis_frames`; every estimate is quoted from the two descriptive notes it cites. No fit was run; the realised correlations in §8 are read from the VG15 model-of-record trace of the 2026-09-01 refit, at `D:\output\vocabulary-growth`, and reproduced by `scripts/experiments/vg15_realised_subject_correlations.py`.
 
 ## 1. The question
 
@@ -35,7 +35,7 @@ The ordering is also a matter of interpretability. Under VG16's population basel
 
 | quantity                                                                  | instrument                        | expected sign                                                                                       |
 | ------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------- |
-| persistent between-child correlation of signed share and production ratio | VG24's `rho_sign_q`               | zero to negative, the substitution result of §2                                                     |
+| persistent between-child correlation of signed share and production ratio | VG24's `rho_sign_q`               | positive: the fitted intercepts already correlate at +0.20 among the identifying children (§8)      |
 | prospective within-child effect of prior-wave signed share on current `q` | VG25 with a within-child baseline | unknown; VG16's within variant is positive without excluding zero, and joint estimation inflates it |
 | later speech given earlier signed share, conditional on earlier speech    | the 16 August regression          | positive, +0.19 [0.03, 0.36]                                                                        |
 
@@ -75,10 +75,20 @@ The VG16 fit of 2026-08-14 rested on 250 children and 412 observations at a 6-mo
 
 ## 8. What would change the sequencing
 
-- **A near-zero realised correlation closes #296.** The first check needs no code: the correlation of VG15's fitted subject intercepts, `delta_subj_sign` against `delta_subj_q`, from the model-of-record trace, as [202608151120](202608151120-vg16-cross-lag-quantified.md) did for VG16 (+0.135). No VG15 trace was on either local output root on 2026-09-04, so this waits for the next fit or a fetch from blob storage.
+- **Gate 1 of #296 has run, and passes.** The correlation of VG15's fitted subject intercepts, read from the model-of-record trace of the 2026-09-01 refit (frame hash matching today's loader) by `scripts/experiments/vg15_realised_subject_correlations.py`, the check [202608151120](202608151120-vg16-cross-lag-quantified.md) made for VG16 (+0.135). Per-draw Pearson correlation across children, posterior mean and 89% ETI:
+
+  | pair       | all 763 children        | children with both marginals     |
+  | ---------- | ----------------------- | -------------------------------- |
+  | sign ~ `q` | +0.037 [−0.018, +0.092] | 146: **+0.198 [+0.107, +0.289]** |
+  | `u` ~ `q`  | +0.083 [+0.033, +0.132] | 365: +0.165 [+0.105, +0.224]     |
+  | `u` ~ sign | +0.026 [−0.029, +0.080] | 143: +0.128 [+0.031, +0.224]     |
+
+  Among the children who inform it, the sign–`q` correlation is positive and clear of zero, and larger than the `u`–`q` correlation that motivated VG20 (whose realised +0.165 here sits under a fitted `rho_uq` of 0.39, the attenuation shrinkage produces). The all-children figures are diluted by the 617 children whose signed intercept sits at its prior. **This overturns the expectation recorded in #296 and in §5**: the persistent between-child association is positive, not the zero-to-negative substitution result of [202608141500](202608141500-sign-speech-additivity-and-cross-lag.md) §3. The two are not in conflict, because they are measured on almost disjoint children: the descriptive §3 used the three sources that partition comprehension into cells (`uk_02`, `uk_07`, `es_01`), and those cells are exactly where VG15's subject effects do not enter, so the 146 children here are `ie_02`, `uk_04`, `uk_05`, `uk_06` and `uk_02`'s marginal-only rows. Whether the sign matches once the cell studies are given subject shifts is the separate proposal named in §6, and now a more interesting one.
+
 - **#242 closing unblocks #297**, or its wave definition, LOO replacement and wave-sequential recovery being accepted as the standard a second lag model is held to.
 - **Neither is fitted before the [#281](https://github.com/dseinternational/vocabulary-growth/issues/281) / [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) refit sequence is decided**; the `us_03` ingestion changes VG15's frame anyway.
 - **VG15's recovery bias on `psi`** ([#226](https://github.com/dseinternational/vocabulary-growth/issues/226)) is inherited by both; its mechanism should be understood before either model's recovery is read.
+- **The sign scale is well identified in the fit of record**: `tau_subj_sign` = 1.155 [0.989, 1.336], which HalfNormal(1.5) places at prior CDF 0.56, beside `tau_subj_u` 0.791 and `tau_subj_q` 1.273. The contraction to report on VG24 is the correlation's, not the scale's.
 
 None of this changes the causal position. Signing is taught because a child is not talking, and no model in the family can remove that selection. The one thing in the descriptive result's favour is that the residual selection runs against a positive finding, so +0.19 is more likely attenuated than inflated.
 
