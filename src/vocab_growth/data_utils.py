@@ -664,6 +664,55 @@ def drop_structurally_distinct_subsamples(
     return out.loc[~suspect].reset_index(drop=True), dropped
 
 
+#: Sources whose ``produced`` union contains a non-vocal modality the source does
+#: not separately record.
+#:
+#: VG18's outcome is the produced union and its covariate is sign group, so
+#: ``signed`` is a component of its own outcome -- a tautology its module
+#: docstring already states for the *union studies*, recommending either a
+#: restricted study set or VG17's ``spoken`` outcome instead.
+#:
+#: ``us_03`` is worse than those, and differently. The union studies at least
+#: record ``signed``, so their rows are grouped correctly and the confound is
+#: visible in the contrast. ``us_03``'s expressive cell is "understands and says
+#: **or signs**" (the study authors' wording; see ``data/vocab_data_us_03.md``)
+#: with no separable sign component at all, so its rows are grouped ``unknown``
+#: while their outcome silently contains the exposure. On the current frame that
+#: is 284 rows into a reference group of 698 -- a 41% enlargement of the very
+#: group the contrast is measured against, by rows whose outcome includes the
+#: thing being contrasted.
+#:
+#: Applied to the produced outcome only. A source could record both a spoken
+#: count and a union, and would then be perfectly usable for VG17's spoken
+#: outcome; ``us_03`` contributes nothing there anyway, because it has no spoken
+#: count to pass VG17's own filter.
+PRODUCED_UNION_WITHOUT_SIGN_DETAIL: frozenset[str] = frozenset({"us_03"})
+
+
+def drop_ungroupable_produced_unions(
+    df: pd.DataFrame,
+    *,
+    include_ungroupable_produced_unions: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Drop rows whose produced union hides the sign component being contrasted.
+
+    Applies the rule documented on
+    :data:`PRODUCED_UNION_WITHOUT_SIGN_DETAIL`. For a produced-outcome
+    sign-group model only; the caller decides, because the same rows are
+    unobjectionable for any model that does not condition on sign group.
+    """
+    out = df.copy()
+    dropped: dict[str, int] = {}
+    if include_ungroupable_produced_unions or "study" not in out.columns:
+        return out, dropped
+    hit = out["study"].isin(PRODUCED_UNION_WITHOUT_SIGN_DETAIL)
+    if not hit.any():
+        return out, dropped
+    for study, count in hit[hit].groupby(out.loc[hit, "study"]).size().items():
+        dropped[str(study)] = int(count)
+    return out.loc[~hit].reset_index(drop=True), dropped
+
+
 def mask_comprehension_below_production(
     df: pd.DataFrame,
     *,

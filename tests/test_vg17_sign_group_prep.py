@@ -131,3 +131,64 @@ def test_vg18_sign_group_is_derived_from_a_component_of_its_outcome():
     # the sign group is defined by words that also enter the outcome.
     assert (union["produced"] >= union["spoken"]).all()
     assert np.any(union["produced"] > union["spoken"])
+
+
+# --- a produced union with no separable sign component ---------------------------
+
+
+def test_vg18_excludes_a_produced_union_with_no_separable_sign_component():
+    """us_03 cannot be placed in a sign group, so it must not enter VG18.
+
+    Its expressive cell is "understands and says **or signs**" with no separable
+    sign count, so every row would be grouped `unknown` while its outcome
+    contains the exposure the model contrasts on. That is not the same fault
+    VG18's docstring already warns about: the union studies record `signed`, so
+    they are grouped correctly and their confound is visible in the contrast.
+    """
+    df, _, _ = model_vg17._prepare("produced")
+    assert "us_03" not in set(df["study"])
+
+
+def test_the_spoken_outcome_is_not_touched_by_that_exclusion():
+    """The rule is about the produced union, not about the study.
+
+    VG17's `spoken` outcome does not contain `signed` -- which is why it is the
+    interpretable contrast -- so a source is only excluded where its union hides
+    the sign component. us_03 reaches neither model, but for different reasons:
+    here it simply has no spoken count to pass the outcome filter.
+    """
+    spoken, _, _ = model_vg17._prepare("spoken")
+    assert "us_03" not in set(spoken["study"])
+
+    pool = data_utils.load_combined_data(include_produced=True)
+    us03 = pool[pool["study"] == "us_03"]
+    assert len(us03) > 0, "us_03 is in the pool; this test would be vacuous otherwise"
+    assert us03["spoken"].isna().all(), "excluded by the outcome filter, not the rule"
+
+
+def test_the_ungroupable_union_rule_names_its_sources_and_is_reversible():
+    frame = pd.DataFrame(
+        {
+            "study": ["us_03", "us_03", "uk_02"],
+            "subject_id": ["a", "b", "c"],
+            "age": [20.0, 30.0, 30.0],
+            "produced": [5.0, 40.0, 60.0],
+        }
+    )
+    kept, dropped = data_utils.drop_ungroupable_produced_unions(frame)
+    assert set(kept["study"]) == {"uk_02"}
+    assert dropped == {"us_03": 2}
+
+    reinstated, none_dropped = data_utils.drop_ungroupable_produced_unions(
+        frame, include_ungroupable_produced_unions=True
+    )
+    assert len(reinstated) == 3
+    assert none_dropped == {}
+
+
+def test_the_ungroupable_union_registry_is_not_empty_and_holds_registry_studies():
+    """An empty registry would make the rule silently inert."""
+    registry = data_utils.PRODUCED_UNION_WITHOUT_SIGN_DETAIL
+    assert registry
+    pool = data_utils.load_combined_data(include_produced=True)
+    assert registry <= set(pool["study"]), "names a study the pool does not carry"
