@@ -36,6 +36,7 @@ builder (``sync_report_figures``, ``compare_models``) must not.
 
 from __future__ import annotations
 
+import enum
 import importlib
 from dataclasses import dataclass
 from types import ModuleType
@@ -317,6 +318,62 @@ ENGINES: dict[str, EngineAdapter] = {
 
 
 # ============================================================
+# Roles
+# ============================================================
+
+
+class ModelRole(enum.Enum):
+    """What a model is *for*, and therefore whether it must be refit-current.
+
+    The taxonomy is not new. ``methods-workflow.qmd`` defined it and the roles
+    table in ``docs/models/README.md`` assigns it; what was missing is any way
+    for code to read it, so every registered model was treated identically by
+    the refit driver and by publication validation. One stale development rung
+    could therefore block publishing the models of record, and a correction
+    touching two models that carry a reported number invalidated all twenty
+    (#301, recorded on #281).
+
+    Roles are **declared, not inferred**, for the reason engine identity is:
+    nothing about a definition says whether its estimates are the ones the
+    findings quote. That is a study-owner decision, and
+    ``tests/test_model_catalogue.py`` pins these against the documented table
+    so the prose and the code cannot drift apart the way the engine assignment
+    did (#273).
+    """
+
+    MODEL_OF_RECORD = "model-of-record"
+    """The current source for a stated estimand. Must be refit-current."""
+
+    TD_REFERENCE = "td-reference"
+    """A typically-developing comparison model with a distinct population role.
+    It supplies the other side of a published contrast, so it must be
+    refit-current too."""
+
+    DEVELOPMENT_STEP = "development-step"
+    """Retained to show how structure was added, not preferred for headline
+    estimates. Not refit-current by requirement."""
+
+    SUPERSEDED = "superseded"
+    """Replaced after a documented structural or data problem. The taxonomy's
+    own rule is that it "never supplies a number in the findings"."""
+
+    UNCLASSIFIED = "unclassified"
+    """No role has been decided yet. Deliberately **fails closed**: treated as
+    though it were a model of record, so adding a model or leaving one
+    undecided keeps today's strictness. Relaxing a model is then an explicit,
+    reviewable act rather than an omission."""
+
+    @property
+    def publication_required(self) -> bool:
+        """Whether a fit of this role must pass full publication validation."""
+        return self in {
+            ModelRole.MODEL_OF_RECORD,
+            ModelRole.TD_REFERENCE,
+            ModelRole.UNCLASSIFIED,
+        }
+
+
+# ============================================================
 # Models
 # ============================================================
 
@@ -332,6 +389,11 @@ class RegisteredModel:
     engine: EngineAdapter
     """The engine that fits it. Declared, not inferred: VG05 and VG07 share a
     definition class and run on different engines."""
+
+    role: ModelRole
+    """What the model is for, and therefore whether it must be refit-current.
+    See :class:`ModelRole`; unclassified fails closed."""
+
 
     @property
     def definition(self) -> ModelDefinition:
@@ -380,6 +442,48 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg22": "bivariate_re",
         "vg23": "bivariate_re",
     }
+    # Sourced from the roles table in ``docs/models/README.md`` and the
+    # decision notes it cites -- not inferred. A model whose role that record
+    # does not state is left UNCLASSIFIED, which keeps today's strictness; see
+    # ``ModelRole.UNCLASSIFIED``. Classifying one is a study-owner decision and
+    # belongs in the same commit as the record that justifies it.
+    role_of = {
+        # Roles table: model of record for the DS joint understood+spoken
+        # estimands from 2026-08-19, reaffirmed through the us_03 refit by
+        # ``notes/202609031930-vg20-vg22-decision.md``.
+        "vg20": ModelRole.MODEL_OF_RECORD,
+        # Roles table, VG14 row: "Wholly replaced by VG15 for reporting ...
+        # VG15 supplies everything VG14 does".
+        "vg15": ModelRole.MODEL_OF_RECORD,
+        # The typically-developing side of the published DS-vs-TD contrasts:
+        # ``scripts/compare_ds_td_re.py`` names vg11/vg12 as TD_KEYS and vg21
+        # as JOINT_TD_KEY.
+        "vg11": ModelRole.TD_REFERENCE,
+        "vg12": ModelRole.TD_REFERENCE,
+        "vg21": ModelRole.TD_REFERENCE,
+        # Roles table: development steps, none expected to supply a reported
+        # number. VG16 is a single-purpose development model whose headline is
+        # withdrawn; VG10 was model of record 2026-08-05 to 2026-08-19.
+        "vg05": ModelRole.DEVELOPMENT_STEP,
+        "vg07": ModelRole.DEVELOPMENT_STEP,
+        "vg08": ModelRole.DEVELOPMENT_STEP,
+        "vg09": ModelRole.DEVELOPMENT_STEP,
+        "vg10": ModelRole.DEVELOPMENT_STEP,
+        "vg14": ModelRole.DEVELOPMENT_STEP,
+        "vg16": ModelRole.DEVELOPMENT_STEP,
+    }
+    # Fails closed: anything the record does not classify keeps full
+    # publication strictness rather than silently relaxing.
+    role_of.update(
+        {key: ModelRole.UNCLASSIFIED for key in MODEL_REGISTRY if key not in role_of}
+    )
+    unknown_roles = sorted(set(role_of) - set(MODEL_REGISTRY))
+    if unknown_roles:
+        raise RuntimeError(
+            f"Roles declared for unregistered models: {unknown_roles}. Remove "
+            "them or register the model in MODEL_REGISTRY."
+        )
+
     missing = sorted(set(MODEL_REGISTRY) - set(engine_of))
     if missing:
         raise RuntimeError(
@@ -394,7 +498,9 @@ def _catalogue() -> dict[str, RegisteredModel]:
             "or register the model in MODEL_REGISTRY."
         )
     return {
-        key: RegisteredModel(model_key=key, engine=ENGINES[engine_of[key]])
+        key: RegisteredModel(
+            model_key=key, engine=ENGINES[engine_of[key]], role=role_of[key]
+        )
         for key in MODEL_REGISTRY
     }
 
