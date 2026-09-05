@@ -1,7 +1,7 @@
 # Runbook: full reporting-config refit of all models
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section, and the PowerShell driver and dirty-checkout material, by Claude Code/Opus 5).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section, the PowerShell driver and dirty-checkout material, and the run-archive section, by Claude Code/Opus 5).
 
 How to refit the whole `VG01`–`VG16` family at reporting quality (`rep`) on a
 large VM, render every report, and produce comparisons — with the pitfalls that a
@@ -247,6 +247,49 @@ tens of seconds per fit.
 files, disposable by design — exactly what the mount is for, and with the stripe
 it has both the room and the throughput. Keep expectations low: CI measured the
 compile cache as noise and dropped it in `8b7de41`.
+
+### Bringing the output root home before teardown
+
+The fitting VM is ephemeral and the output root is **not** just `models/`. Four
+sibling directories carry state that nothing else can reproduce cheaply, and
+`models/` is the only one anybody thinks to copy:
+
+| directory           | what is lost with it                                                        |
+| ------------------- | --------------------------------------------------------------------------- |
+| `models/`           | the fits themselves — traces, summaries, manifests                          |
+| `recovery/`         | each replicate's `truth.nc`, `simulation.json` and synthetic frame          |
+| `comparisons/`      | scored recovery matrices, sensitivity matrices, the DS/TD contrasts, `oos/` |
+| `failed/`           | quarantined fits, which are the evidence for why a replicate was excluded   |
+| `replication-logs/` | the driver's per-model logs, including the backlog runs' `.err` files       |
+
+**Copy the whole root, and record where you put it.** On this workstation the
+convention is `F:\projects\vocabulary-growth\<commit>\output` — the commit the
+run was made at, which is also what every `fit_manifest.json` records, so an
+archive can be matched to its fits without opening one. The _working_ root is
+`D:\output\vocabulary-growth` (`DSE_VOCAB_GROWTH_OUTPUT_DIR`, set machine-wide),
+and consolidating an archive into it is what makes `--compare-only`,
+`compare_sensitivity.py` and the comparison book's recovery tables work at all.
+
+This is written down because the split cost an afternoon on 2026-09-05.
+`models/` had been consolidated into `D:` and everything else left on `F:`, with
+nothing recording that. `fit_recovery.py --compare-only` reported `no simulated
+replicates found`, a search of the output root and the checkout found no
+`truth.nc`, and eleven reporting-tier recovery fits were written off as lost —
+until the archive turned out to be one volume away, with the matrices already
+scored. The comparison book meanwhile rendered its honest fallback, telling
+readers "parameter recovery was not run in this cycle" about a run that had been
+completed, written up and committed two days earlier.
+
+**A posterior truth is recoverable even if `recovery/` is genuinely gone.**
+`truth_from_trace` selects the draw deterministically from the replicate number
+(a golden-ratio sequence over the source chain), and each recovery fit's
+`recovery_source.json` records the chain, draw and definition it used — so
+`(model-of-record trace, replicate)` identifies the truth completely. Verified on
+2026-09-05: rebuilding VG20 r01 from the surviving trace reproduced chain 0 draw
+3708 and all 24 deterministics exactly. **This does not extend to `--truth
+prior`** — a prior truth comes from a seeded draw against the model's own prior
+with no trace behind it, so nothing outside `recovery/` identifies it. Keep the
+directory; the rebuild is a backstop, not a reason to skip the copy.
 
 ### Surviving a full disk
 
