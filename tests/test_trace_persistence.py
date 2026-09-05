@@ -370,3 +370,35 @@ def test_a_scattered_effect_is_kept_because_it_is_not_a_scaling():
     dropped = plan_trace_persistence(_joint_modality_trace(), "compact")["posterior"]
     assert "delta_sign" not in dropped
     assert "z_sign" not in dropped
+
+
+def test_nutpie_backend_resolves_override_then_environment_then_numba(monkeypatch):
+    """``configured_nutpie_backend`` follows trace persistence's resolution (#289 4.1).
+
+    The backend is nutpie's compiler, not a sampling parameter: it changes
+    nothing about the posterior and is recorded in the manifest's runtime
+    block. ``numba`` is the default every fit of record used; ``jax`` is the
+    escape hatch for a graph numba cannot compile on a platform.
+    """
+    from vocab_growth.fit_artifacts import (
+        NUTPIE_BACKEND_ENV_VAR,
+        configured_nutpie_backend,
+        set_nutpie_backend,
+    )
+
+    monkeypatch.delenv(NUTPIE_BACKEND_ENV_VAR, raising=False)
+    set_nutpie_backend(None)
+    try:
+        assert configured_nutpie_backend() == "numba"
+        monkeypatch.setenv(NUTPIE_BACKEND_ENV_VAR, "  JAX ")
+        assert configured_nutpie_backend() == "jax"
+        set_nutpie_backend("numba")
+        assert configured_nutpie_backend() == "numba", "the override beats the environment"
+        set_nutpie_backend(None)
+        monkeypatch.setenv(NUTPIE_BACKEND_ENV_VAR, "cuda")
+        with pytest.raises(ValueError, match="expected one of numba, jax"):
+            configured_nutpie_backend()
+        with pytest.raises(ValueError, match="--nutpie-backend"):
+            set_nutpie_backend("torch")
+    finally:
+        set_nutpie_backend(None)

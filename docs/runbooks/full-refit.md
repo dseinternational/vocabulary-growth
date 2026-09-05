@@ -142,6 +142,18 @@ Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, wh
 
 Four further VG15 variants exist for the 2026-08-12 changes and cost a fit each. `tau-psi-narrow` and `tau-psi-wide` bracket the between-study scale, which was set from the measured spread and so is data-informed in exactly the way Target 8 was created for; with four informed studies it is weakly identified and governs how far the per-study values shrink toward the reported centre. `psi-drop-es01` and `psi-drop-uk07` remove one source's cross-tab while keeping its marginals, so U, q and r are untouched and only the association loses evidence — es_01 is the one to run if only one is affordable, being 185 of the 434 `psi`-informing rows and the only source sitting at independence.
 
+### `vg15 fallback-dispersion` and nutpie's numba backend
+
+In the 2026-09-01 cycle this arm was the one fit that could not run: on the linux-aarch64 refit VM the sampler compile died with numba/LLVM's "ran out of registers during register allocation" in `np_concatenate` over 44 arrays, while VG14's same arm compiled ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.1). The 44 arrays are nutpie's gradient assembly: it concatenates one gradient array per free random variable in a single call (still so in nutpie 0.16.11, the latest release, and on `main`), and the arm adds two free scalars (`log_kappa_s_fallback`, `log_kappa_sign_fallback`) to VG15's 42. On win-amd64 with the locked numba and llvmlite the arm compiles and draws under both backends, so the failure is the AArch64 backend's, not the graph's.
+
+The escape hatch is the other compiler:
+
+```bash
+python scripts/fit_sensitivity.py vg15 fallback-dispersion --config rep --nutpie-backend jax
+```
+
+`--nutpie-backend` (or `DSE_VOCAB_GROWTH_NUTPIE_BACKEND`) changes which compiler evaluates the log-density and nothing else: the posterior is the same, the fit validates as any other, and the choice is recorded in the manifest's `runtime.nutpie_backend` so the run record can say which arm was made with which. Try the default first on the VM; reach for `jax` only when numba fails, and note it in the run record.
+
 ### Default (sequential, resumable)
 
 ```powershell

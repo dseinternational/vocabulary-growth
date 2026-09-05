@@ -21,6 +21,11 @@ from multiprocessing import freeze_support
 import dse_research_utils.environment.setup as setup
 
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import (
+    NUTPIE_BACKENDS,
+    configured_nutpie_backend,
+    set_nutpie_backend,
+)
 from vocab_growth.models.catalogue import engine_for
 from vocab_growth.models.common import is_reporting_quality_config
 from vocab_growth.reporting import (
@@ -70,11 +75,29 @@ if __name__ == "__main__":
             "$DSE_VOCAB_GROWTH_OUTPUT_DIR; default: <repo>/output)."
         ),
     )
+    parser.add_argument(
+        "--nutpie-backend",
+        type=str,
+        default=None,
+        choices=list(NUTPIE_BACKENDS),
+        help=(
+            "Which compiler nutpie evaluates the log-density with (overrides "
+            "$DSE_VOCAB_GROWTH_NUTPIE_BACKEND; default: numba). 'jax' is the "
+            "escape hatch for a graph numba cannot compile on a platform -- "
+            "VG15 fallback-dispersion's 44 free variables on the linux-aarch64 "
+            "refit VM (#289 task 4.1). Does not affect the posterior; recorded "
+            "in the fit manifest's runtime block."
+        ),
+    )
 
     freeze_support()
     args = parser.parse_args()
     # Set the output root before init_script(), in case script setup reads a path.
     env.set_output_root(args.output_dir)
+    # Resolve nutpie's compiler now so a bad value fails at startup rather than
+    # hours into a reporting fit (#289 task 4.1).
+    set_nutpie_backend(args.nutpie_backend)
+    configured_nutpie_backend()
     setup.init_script()
 
     if args.model not in _MODELS_WITH_VARIANTS:
