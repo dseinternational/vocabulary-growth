@@ -262,9 +262,9 @@ model:
   variants were fitted on 2026-08-20 and the study owner **adopted the
   8–22-month specification** for the matched-comprehension comparison,
   rejecting 8–25 as ceiling-contaminated
-  (`notes/202608211100-window-22-adopted.md`); its promotion as a registered
-  successor model (VG21) is tracked in issue #240, and until it lands VG13
-  remains the 8–18-month model of record.
+  (`notes/202608211100-window-22-adopted.md`); that promotion landed as **VG21**, registered and
+  fitted at `rep` on 2026-09-02 (issue #240), and VG13 is retained as the
+  historical 8–18-month model.
 
 ### Typically developing single-outcome, with hierarchy (VG11, VG12)
 
