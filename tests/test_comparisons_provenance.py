@@ -163,6 +163,59 @@ def test_a_missing_manifest_is_an_error_naming_the_remedy(dirs):
     assert "regenerate" in errors[0]
 
 
+def test_a_source_file_is_recorded_and_a_change_to_it_is_an_error(dirs, tmp_path):
+    """A script with no contributing fit records its raw input instead (#289 4.9).
+
+    `compare_matched_designs.py` reads one CSV and no posterior, so its four
+    tables had no provenance at all and the sync warned on every one. The
+    source file is fingerprinted like a fit manifest: a change stales the
+    comparison, and a missing file is an error rather than a pass.
+    """
+    models_dir, comparisons_dir = dirs
+    models_dir.mkdir()
+    source = tmp_path / "data" / "vocab_data_es_01.csv"
+    source.parent.mkdir()
+    source.write_text("a,b\n1,2\n", encoding="utf-8")
+    (comparisons_dir / "matched_design_bands.csv").touch()
+
+    write_comparison_manifest(
+        str(comparisons_dir),
+        script="compare_matched_designs.py",
+        contributing={},
+        outputs=["matched_design_bands.csv"],
+        source_files={"es_01": str(source)},
+        source_root=str(tmp_path),
+    )
+    recorded = json.loads(
+        (comparisons_dir / COMPARISON_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    entry = recorded["scripts"]["compare_matched_designs.py"]
+    assert entry["contributing_fits"] == {}
+    assert entry["source_files"]["es_01"]["path"] == "data/vocab_data_es_01.csv"
+    assert entry["source_files"]["es_01"]["sha256"].startswith("sha256:")
+
+    errors, warnings = validate_comparison_manifest(
+        str(comparisons_dir), str(models_dir), source_root=str(tmp_path)
+    )
+    assert errors == []
+    assert warnings == []
+
+    source.write_text("a,b\n1,3\n", encoding="utf-8")
+    errors, _ = validate_comparison_manifest(
+        str(comparisons_dir), str(models_dir), source_root=str(tmp_path)
+    )
+    assert len(errors) == 1
+    assert "source file es_01" in errors[0]
+    assert "changed after this comparison was generated" in errors[0]
+
+    source.unlink()
+    errors, _ = validate_comparison_manifest(
+        str(comparisons_dir), str(models_dir), source_root=str(tmp_path)
+    )
+    assert len(errors) == 1
+    assert "is missing" in errors[0]
+
+
 def test_several_scripts_merge_into_one_manifest(dirs):
     """Each comparison script records its own entry without clobbering others."""
     models_dir, comparisons_dir = dirs
