@@ -876,6 +876,7 @@ _SOURCE_TABLE_SCHEMAS = {
     "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex INTEGER, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
     "vocab_uk_07": 'subject_id VARCHAR, "group" VARCHAR, sex INTEGER, timepoint VARCHAR, age BIGINT, understood INTEGER, spoken INTEGER, signed INTEGER, spoken_signed INTEGER, produced INTEGER, survey_vocab_max INTEGER',
     "vocab_us_01": "subject_id VARCHAR, form VARCHAR, age DOUBLE, sex VARCHAR, dev_status VARCHAR, comprehension INTEGER, production INTEGER, survey_vocab_max INTEGER, in_norming_window BOOLEAN",
+    "vocab_us_03": "subject_id VARCHAR, timepoint VARCHAR, age BIGINT, age_months DOUBLE, understood BIGINT, understood_only BIGINT, produced BIGINT, survey_vocab_max BIGINT",
 }
 
 _US01_COLUMNS = (
@@ -1944,3 +1945,113 @@ def test_the_prepared_frame_has_a_deterministic_row_order():
     pd.testing.assert_frame_equal(
         data_utils._deterministic_row_order(shuffled), first
     )
+
+
+# --- us_03 (Fidler): ingest, and the structurally distinct sub-sample -----------
+
+_US03_COLUMNS = (
+    "subject_id, timepoint, age, age_months, understood, understood_only, "
+    "produced, survey_vocab_max"
+)
+
+
+def _insert_us03(con, rows):
+    for row in rows:
+        con.execute(
+            f"INSERT INTO vocab_us_03 ({_US03_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            row,
+        )
+
+
+def test_us03_expressive_cell_is_a_produced_union_not_a_spoken_count(
+    tmp_path, monkeypatch
+):
+    """`under_say_tot` counts words the child understands and says **or signs**.
+
+    Confirmed by the data providers, against a source document that described it
+    as speech-only and an upstream column still named `spoken`. The two
+    modalities are not separable -- one number, unlike the exclusive cells nz_01
+    and uk_07 carry -- so no spoken marginal exists to recover.
+
+    This is the test that stops the union being read as speech. Doing so would
+    put a produced count into `q = S/U`, the headline estimand of VG10, VG16,
+    VG19, VG20 and VG22, for 254 of about 1,400 Down syndrome spoken
+    observations -- and it would read as an ordinary number, because a produced
+    union is exactly the shape a spoken count is.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        _insert_us03(con, [("f01", "t1", 19, 18.96, 111, 111, 0, 396),
+                           ("f02", "t1", 23, 22.80, 106, 104, 2, 396)])
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    us03 = data_utils.load_combined_data(include_produced=True)
+    us03 = us03[us03["study"] == "us_03"]
+
+    assert len(us03) == 2
+    # Comprehension is the inclusive total and is unaffected by the modality
+    # question: it is what us_03 contributes to the models.
+    assert us03["understood"].tolist() == [111.0, 106.0]
+    # The union lands in `produced`, nested inside comprehension by construction.
+    assert us03["produced"].tolist() == [0.0, 2.0]
+    assert (us03["produced"] <= us03["understood"]).all()
+    # Neither marginal is recoverable, so neither is asserted. A zero `signed`
+    # would claim an absence the source does not support -- signing is inside
+    # the union, not missing from it.
+    assert us03["spoken"].isna().all()
+    assert us03["signed"].isna().all()
+
+
+def test_us03_older_subsample_is_dropped_by_default_and_reinstatable(
+    tmp_path, monkeypatch
+):
+    """The 62-80 month children come out; the flag puts them back.
+
+    They are excluded because `survey_vocab_max` is not established for them, not
+    because they are old -- see `STRUCTURALLY_DISTINCT_SUBSAMPLES`.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        _insert_us03(con, [("f01", "t1", 20, 19.92, 120, 118, 2, 396),
+                           ("f_old", "t1", 70, 70.08, 306, 20, 286, 396)])
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    default = data_utils.load_combined_data()
+    default = default[default["study"] == "us_03"]
+    assert default["age"].tolist() == [20.0]
+    assert default["understood"].tolist() == [120.0]
+
+    reinstated = data_utils.load_combined_data(
+        include_structurally_distinct_subsamples=True
+    )
+    reinstated = reinstated[reinstated["study"] == "us_03"]
+    assert sorted(reinstated["age"].tolist()) == [20.0, 70.0]
+
+
+def test_the_subsample_rule_does_not_drop_older_children_from_other_studies(
+    tmp_path, monkeypatch
+):
+    """The criterion is provenance, not age, and this is what keeps it honest.
+
+    The Down syndrome pool deliberately admits an early-vocabulary form given to
+    an older child. A rule keyed on age alone would take `us_01`'s only
+    comprehension observations between 19 and 27 months with it, and would keep
+    taking more as older cohorts arrive.
+    """
+    db_path = _create_vocab_db(tmp_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(
+            f"INSERT INTO vocab_us_01 ({_US01_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("d_old", "WG", 70.0, None, "down_syndrome", 200, 40, 396, False),
+        )
+        _insert_us03(con, [("f_old", "t1", 70, 70.08, 306, 20, 286, 396)])
+    monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
+
+    pool = data_utils.load_combined_data()
+    assert 70.0 in pool[pool["study"] == "us_01"]["age"].tolist()
+    assert pool[pool["study"] == "us_03"].empty
+
+
+def test_the_subsample_bound_sits_in_the_gap_the_source_documents():
+    """35 months separates us_03's two groups; nothing legitimate is near it."""
+    assert data_utils.STRUCTURALLY_DISTINCT_SUBSAMPLES["us_03"] == 35.0

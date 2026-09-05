@@ -52,6 +52,7 @@ Kalashnikova
 Karousou
 Kruschke
 Kucharski
+Lanfranchi
 LLM
 LOSO
 Laudanska
@@ -122,6 +123,7 @@ autouse
 azcopy
 bandings
 baselining
+Baumer
 bimodality
 blobfuse
 callout
@@ -138,6 +140,7 @@ dataclass
 dataclasses
 datatree
 deterministics
+Deusen
 dexp
 disattenuated
 disattenuates

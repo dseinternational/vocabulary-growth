@@ -99,7 +99,10 @@ def _prepare(outcome="spoken", studies=None):
 
     :func:`~vocab_growth.data_utils.mask_incomparable_signed_outcomes` is applied
     on top, and deliberately here rather than in the loader: it is specific to the
-    signing models, and the canonical loader leaves ``signed`` alone.
+    signing models, and the canonical loader leaves ``signed`` alone. For the
+    ``produced`` outcome,
+    :func:`~vocab_growth.data_utils.drop_ungroupable_produced_unions` is applied
+    as well, for the same reason and on the same principle.
 
     ``studies`` (optional) restricts to a subset, e.g. ("uk_02", "nz_01", "es_01")
     for the de-duplicated-union total-expressive analysis (see model_vg18 docstring).
@@ -112,6 +115,13 @@ def _prepare(outcome="spoken", studies=None):
     # use.  uk_01 is signed-only and uk_06 is not source-verified; both remain in
     # the outcome model as the explicit "unknown" reference group.
     df, _ = vocab_data_utils.mask_incomparable_signed_outcomes(df)
+    if outcome == "produced":
+        # A source whose produced union hides its own sign component cannot be
+        # placed in a sign group: it would land in `unknown` while its outcome
+        # contains the exposure. See PRODUCED_UNION_WITHOUT_SIGN_DETAIL. Only
+        # the produced outcome is affected -- `spoken` does not contain `signed`,
+        # which is the whole reason VG17 is the interpretable contrast.
+        df, _ = vocab_data_utils.drop_ungroupable_produced_unions(df)
     # sign group: unknown (no sign data) / non-signer (signed==0) / signer (signed>0)
     sg = np.where(df["signed"].isna(), 0, np.where(df["signed"] > 0, 2, 1))
     df["sign_group"] = sg.astype(int)
