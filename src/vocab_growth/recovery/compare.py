@@ -38,7 +38,11 @@ import pandas as pd
 import xarray as xr
 
 from vocab_growth import intervals
-from vocab_growth.fit_artifacts import require_full_trace
+from vocab_growth.fit_artifacts import (
+    FIT_MANIFEST_FILENAME,
+    read_json,
+    require_full_trace,
+)
 from vocab_growth.sensitivity.compare import CAVEATS_SEPARATOR, diagnostics_gate
 
 # Dimensions whose elements are reported individually. Observation-level
@@ -284,6 +288,24 @@ def aggregate_table(truth: xr.Dataset, posterior: xr.Dataset) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def sampling_tier(fit_dir: str) -> str | None:
+    """The sampling configuration a fit was made at, from its manifest.
+
+    ``None`` when the directory carries no manifest, which no fit made by the
+    pipeline lacks -- the manifest is written before sampling starts -- so a
+    missing tier is a fit from outside the pipeline rather than an old one.
+    """
+    path = os.path.join(fit_dir, FIT_MANIFEST_FILENAME)
+    if not os.path.isfile(path):
+        return None
+    try:
+        manifest = read_json(path)
+    except Exception:  # noqa: BLE001 - an unreadable manifest is an unknown tier
+        return None
+    name = (manifest.get("sampling") or {}).get("configuration_name")
+    return None if name is None else str(name)
+
+
 def summarise(
     table: pd.DataFrame,
     fit_dir: str,
@@ -301,6 +323,10 @@ def summarise(
     caveats (divergences, low BFMI, unassessable parameters) — or a pre-payload
     fit assessed only from ``diagnostics.csv`` — is scored, but its verdict says
     "converged with caveats" and the caveats travel in their own column.
+
+    The row also records the fit's sampling tier, read from its manifest, so
+    the matrix can say what each replicate was sampled at and
+    :func:`pooled_row` can refuse to pool across tiers (#289 task 4.7).
     """
     gate = diagnostics_gate(fit_dir)
     converged, max_rhat, min_ess = gate
@@ -348,6 +374,7 @@ def summarise(
     return {
         "replicate": label,
         "truth_source": truth_source,
+        "sampling_configuration": sampling_tier(fit_dir),
         "converged": converged,
         "max_rhat": max_rhat,
         "min_ess": min_ess,
@@ -367,12 +394,66 @@ def summarise(
     }
 
 
+def _tier_groups(summaries: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Replicate labels grouped by recorded sampling tier, unrecorded ones apart."""
+    groups: dict[str, list[str]] = {}
+    for summary in summaries:
+        tier = summary.get("sampling_configuration")
+        groups.setdefault("unrecorded" if tier is None else str(tier), []).append(
+            str(summary.get("replicate"))
+        )
+    return groups
+
+
 def pooled_row(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     """Pooled indicative row across replicates.
 
     Marked indicative deliberately: with a handful of replicates over correlated
     quantities this is a descriptive summary, not a coverage estimate.
+
+    Replicates sampled at different tiers are **not pooled** (#289 task 4.7).
+    The matrix is assembled from whatever replicate directories exist, and on
+    2026-09-03 a ``rep`` run stopped after two replicates pooled with a
+    ``test``-tier fit still sitting in the third directory, publishing a
+    mixed-tier ``POOLED (2 of 3 replicates assessed)`` row that the comparison
+    book rendered as three replicates of three. The refusal row keeps the
+    ``POOLED`` prefix so readers that drop the pooled row still drop it, and
+    its verdict says ``not assessed`` so readers that count assessed
+    replicates do not count it. A replicate with no recorded tier is grouped
+    on its own; it does not stop the recorded ones pooling with each other.
     """
+    recorded_tiers = sorted(
+        tier for tier in _tier_groups(summaries) if tier != "unrecorded"
+    )
+    if len(recorded_tiers) > 1:
+        by_tier = "; ".join(
+            f"{tier}: {', '.join(labels)}"
+            for tier, labels in sorted(_tier_groups(summaries).items())
+        )
+        return {
+            "replicate": (
+                f"POOLED (refused: {len(summaries)} replicates at mixed sampling tiers)"
+            ),
+            "truth_source": ", ".join(sorted({s["truth_source"] for s in summaries})),
+            "sampling_configuration": by_tier,
+            "converged": None,
+            "max_rhat": None,
+            "min_ess": None,
+            "caveats": "",
+            "n_targets": 0,
+            "n_within_ci89": 0,
+            "coverage_ci89": float("nan"),
+            "coverage_ci50": float("nan"),
+            "max_abs_z": float("nan"),
+            "worst_quantity": "",
+            "quantities_outside_ci89": "",
+            "verdict": (
+                "NOT POOLED (not assessed): replicates were sampled at different "
+                f"tiers ({by_tier}); score each tier on its own, or refit the odd "
+                "one out at the tier the run claims"
+            ),
+        }
+
     assessed = [s for s in summaries if s.get("converged") is True]
     n_targets = sum(s["n_targets"] for s in assessed)
     n_within = sum(s["n_within_ci89"] for s in assessed)
@@ -387,6 +468,9 @@ def pooled_row(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "replicate": f"POOLED ({len(assessed)} of {len(summaries)} replicates assessed)",
         "truth_source": ", ".join(sorted({s["truth_source"] for s in summaries})),
+        "sampling_configuration": ", ".join(
+            tier for tier in sorted(_tier_groups(summaries)) if tier != "unrecorded"
+        ) or None,
         "converged": all(s.get("converged") for s in assessed) if assessed else None,
         "max_rhat": max((s["max_rhat"] for s in assessed if s["max_rhat"]), default=None),
         "min_ess": min((s["min_ess"] for s in assessed if s["min_ess"]), default=None),

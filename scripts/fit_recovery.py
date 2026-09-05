@@ -36,7 +36,7 @@ import pandas as pd
 from vocab_growth import environment as env
 from vocab_growth.models.common import is_reporting_quality_config
 from vocab_growth.models.definitions import MODEL_REGISTRY
-from vocab_growth.recovery.compare import compare_replicate, pooled_row
+from vocab_growth.recovery.compare import compare_replicate, pooled_row, sampling_tier
 from vocab_growth.recovery.refit import fit_recovery_replicate, recovery_fit_dir
 from vocab_growth.recovery.simulate import (
     available_replicates,
@@ -106,12 +106,21 @@ def _resolve_pair(model_key: str, variant: str | None, fit_variant: str | None):
     return truth, fitted, f"{fitted_label}-under-{tag}"
 
 
-def _score(model_key: str, definition, label: str, fit_definition=None) -> None:
+def _score(
+    model_key: str, definition, label: str, fit_definition=None, *, config: str
+) -> None:
     """Score every simulated replicate of one model and write its recovery matrix.
 
     Deliberately scores every replicate that exists rather than only the ones the
     current invocation ran: the matrix is the model's whole recovery record, and
     re-scoring a single replicate of a staged run must not drop the others.
+
+    Every replicate that exists **at this run's sampling tier**, that is. A
+    replicate directory holding a fit made at another tier is reported and
+    skipped rather than scored into the same matrix (#289 task 4.7): the tier
+    is a property of the run, not of the replicate, and a matrix mixing them
+    reads as a single record when it is two. Pass ``--config`` for the tier
+    those fits were made at to score them.
     """
     fit_definition = definition if fit_definition is None else fit_definition
     # The trace's own grid, which is the fitted definition's.
@@ -137,6 +146,13 @@ def _score(model_key: str, definition, label: str, fit_definition=None) -> None:
         trace_path = os.path.join(fit_dir, "trace.nc")
         if not os.path.isfile(trace_path):
             console.print(f"[yellow]skip r{replicate:02d}: no recovery trace at {trace_path}[/yellow]")
+            continue
+        tier = sampling_tier(fit_dir)
+        if tier is not None and tier != config:
+            console.print(
+                f"[yellow]skip r{replicate:02d}: sampled at {tier!r}; this run scores "
+                f"{config!r} (pass --config {tier} to score it)[/yellow]"
+            )
             continue
         _frame, truth, record = load_simulation(sim_dir, expected_definition=definition)
         table, aggregates, summary = compare_replicate(
@@ -182,6 +198,7 @@ def _score(model_key: str, definition, label: str, fit_definition=None) -> None:
             [
                 "replicate",
                 "truth_source",
+                "sampling_configuration",
                 "converged",
                 "n_targets",
                 "coverage_ci89",
@@ -388,7 +405,9 @@ if __name__ == "__main__":
 
         if do_compare:
             try:
-                _score(model_key, definition, model_label, fit_definition)
+                _score(
+                    model_key, definition, model_label, fit_definition, config=args.config
+                )
             except Exception as exc:
                 failures[f"{model_label} compare"] = f"{type(exc).__name__}: {exc}"
                 console.print(f"[bold red]{model_label} scoring failed:[/bold red] {exc}")
