@@ -23,6 +23,8 @@ format:
 ---
 
 ::: {.callout-note}
+
+Conditional composition correction by OpenAI Codex/GPT-6 (2026-09-05).
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
 
@@ -151,7 +153,7 @@ The association $\psi$ is deliberately **decoupled** from the subject random eff
 - **Understood** (all Down syndrome studies): Beta-Binomial on the reference inventory.
 - **Spoken / signed conditional counts:** where understood is observed and the child's count does not exceed it, spoken and signed are Beta-Binomial **conditional on that child's own understood total**, with means $q$ and $r$. Rows without a usable understood count fall back to a marginal likelihood over the full inventory.
 - **Four-cell cross-tabulation rows** (`uk_02`, `uk_07`, `es_01`): a Dirichlet-Multinomial over the four states above — a multinomial that permits extra variation. Rows with complete four-cell data use this composition term _instead of_ separate spoken and signed contributions, so nothing is counted twice, and the four-cell sum is treated as the authoritative understood total for that occasion. **This is what identifies $\psi$.**
-- **Three-cell produced rows** (`nz_01`): this source records no comprehension total at all, so the unobservable "neither" cell is dropped and the composition is renormalised over the remaining three. It identifies $\psi$ through the sign/speak overlap alone, with no comprehension denominator involved.
+- **Three-cell produced rows** (`nz_01`): this source records no comprehension total at all, so the model conditions on the produced total and drops the unobservable "neither" cell. The remaining Dirichlet parameters are retained. The mean composition is renormalised over the three produced cells, while their total concentration is $\mathrm{conc}\,P(\mathrm{produced}\mid\mathrm{understood})$. This is the conditional distribution implied by the four-cell model. It identifies $\psi$ through the sign/speak overlap alone, with no comprehension denominator involved.
 
 The Dirichlet-Multinomial terms are not per-observation Beta-Binomials like the three word-count components, so they are excluded from every **per-outcome** leave-one-out row, and the spoken and signed rows exclude the administrations already represented by a composition term. They **are** included in the **administration-level** row, which sums every likelihood factor belonging to one administration into a single held-out case — so that row is the first predictive score this model's association $\psi$ has ever had, and the one to read for it. What the quantitative machinery still does not cover should be stated rather than inferred: PIT calibration and the parameter-recovery harness run on the marginal count likelihoods only, so the cell composition is checked there only by the posterior predictive panels below. Pointwise cell-likelihood calibration, per-source age-banded checks and child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 

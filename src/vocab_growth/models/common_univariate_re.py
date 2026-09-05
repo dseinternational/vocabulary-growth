@@ -474,7 +474,8 @@ def build_univariate_re_model(
             cfg_eta=config.eta_dist,
             suffix="",
             X_all_z_data=X_all_z_data,
-            grid=GPGrid(
+            grid=GPGrid.from_age_grids(
+                grids,
                 sa_z=slope_age_a_z,
                 sb_z=slope_age_b_z,
                 ell_low_z=ell_low_z,

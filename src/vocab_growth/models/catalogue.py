@@ -19,8 +19,9 @@ check (issue #273).
 The record is deliberately **not** part of the serialised statistical
 definition. A fit is validated by comparing the manifest's recorded definition
 field for field, so adding a field to a definition dataclass invalidates every
-existing fit of that class; engine identity, plot hooks and report templates
-are implementation facts that must be free to change without a refit.
+existing fit of that class. Reporting hooks remain outside that definition.
+A separate executable-code signature now checks implementation changes, including
+engine changes, before a fit is reused.
 
 **Engine identity is not inferred from the definition class.** VG05 and VG07
 share ``BivariateModelDefinition`` and run on different engines, so the class

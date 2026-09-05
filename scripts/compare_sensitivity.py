@@ -32,18 +32,22 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.implementation_identity import implementation_signature
 from vocab_growth.reporting import console, dataframe_table, heading
 from vocab_growth.sensitivity.compare import (
     compare_dirs,
     coverage_report,
-    definition_mismatch,
     failed_fit_dir,
     fit_created_at,
+    load_comparable,
+    pairing_errors,
+    required_quantities,
     summarise,
     summarise_absent,
 )
-from vocab_growth.sensitivity.registry import VARIANTS, variants_for
+from vocab_growth.sensitivity.registry import VARIANTS, build_variant, variants_for
 
 MATRIX_COLUMNS = [
     "variant",
@@ -56,6 +60,9 @@ MATRIX_COLUMNS = [
     "caveats",
     "max_rhat",
     "min_ess",
+    "baseline_converged",
+    "baseline_max_rhat",
+    "baseline_min_ess",
     "n_within_ci",
     "n_checked",
     "coverage",
@@ -72,18 +79,6 @@ def _model_dir(model_key: str, suffix: str | None = None) -> str:
     d = MODEL_REGISTRY[model_key]
     name = f"{d.model_id}-{d.config_name}" + (f"-{suffix}" if suffix else "")
     return os.path.join(env.models_output_dir(), name)
-
-
-def _override_keys(spec: dict) -> set[str]:
-    """Definition fields this variant is allowed to change.
-
-    ``scalar`` overrides name definition fields directly. ``kappa`` overrides
-    rebuild a nested prior block, so the field that changes is the block itself
-    (``kappa``, ``kappa_u``, ``kappa_q``, …) rather than the inner names.
-    """
-    keys = set(spec.get("scalar") or {})
-    keys |= set(spec.get("kappa") or {})
-    return keys
 
 
 if __name__ == "__main__":
@@ -121,6 +116,31 @@ if __name__ == "__main__":
     os.makedirs(detail_dir, exist_ok=True)
     failed_root = os.path.join(env.output_root(), "failed")
 
+    # Every variant is checked against the same baseline and the same checkout,
+    # so the expensive inputs are computed once rather than once per row: the
+    # executable-code signature hashes the whole package, the baseline's
+    # prepared-frame hash rebuilds the frame, and the baseline's own summaries
+    # are read by both the coverage report and the comparison. VG15 registers
+    # thirty variants. Deferred to the first fitted variant so a run that has
+    # only "not fitted" rows to report still needs neither the prepared data nor
+    # the baseline's output.
+    baseline_inputs: dict = {}
+
+    def _baseline_inputs() -> dict:
+        if not baseline_inputs:
+            try:
+                baseline_inputs.update(
+                    signature=implementation_signature(),
+                    frame_hash=expected_analysis_frame_hash(args.model, definition),
+                    summaries=load_comparable(baseline),
+                )
+            except (OSError, ValueError, KeyError) as exc:
+                console.print(
+                    f"[bold red]Baseline fit cannot be read:[/bold red] {baseline}\n{exc}"
+                )
+                raise SystemExit(1) from exc
+        return baseline_inputs
+
     rows: list[dict] = []
     for name in names:
         spec = VARIANTS.get((args.model, name))
@@ -154,11 +174,34 @@ if __name__ == "__main__":
             rows.append(row)
             continue
 
-        mismatch = definition_mismatch(baseline, vdir, _override_keys(spec))
-        coverage = coverage_report(baseline, vdir)
-        comparison = compare_dirs(baseline, vdir)
-        comparison.to_csv(os.path.join(detail_dir, f"{args.model}-{name}.csv"), index=False)
-        row = summarise(comparison, vdir, label=name, mismatch=mismatch, coverage=coverage)
+        shared = _baseline_inputs()
+        errors = pairing_errors(
+            baseline, vdir, args.model, name,
+            signature=shared["signature"], baseline_frame_hash=shared["frame_hash"],
+        )
+        variant_definition, = build_variant(args.model, name)
+        required = (required_quantities(args.model, definition)
+                    | required_quantities(args.model, variant_definition))
+        try:
+            summaries = (shared["summaries"], load_comparable(vdir))
+            coverage = coverage_report(baseline, vdir, required=required, summaries=summaries)
+            comparison = compare_dirs(baseline, vdir, summaries=summaries)
+            row = summarise(
+                comparison, vdir, label=name, baseline_dir=baseline,
+                validation_errors=errors, coverage=coverage,
+            )
+            # Only a real comparison replaces the detail file. Writing an empty
+            # frame on the failure path below would destroy the last good detail
+            # for this variant, which is the only per-age record there is.
+            comparison.to_csv(
+                os.path.join(detail_dir, f"{args.model}-{name}.csv"), index=False
+            )
+        except (OSError, ValueError, KeyError) as exc:
+            # The pairing errors are the more actionable finding when a fit is
+            # both stale and unreadable, so they travel with the reason; and the
+            # fit directory exists, so its convergence gate is still reported.
+            reason = "; ".join([f"NOT ASSESSED: {exc}", *errors])
+            row = summarise_absent(name, "invalid-summary", reason, variant_dir=vdir)
         row["baseline_fit_utc"] = baseline_fit_utc
         row["variant_fit_utc"] = fit_created_at(vdir)
         row["computed_at_utc"] = now

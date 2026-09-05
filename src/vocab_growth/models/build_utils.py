@@ -80,7 +80,7 @@ class AgeGrids:
     X_query: np.ndarray
     X_query_z: np.ndarray
     X_gp_domain_z: np.ndarray
-    """Two endpoints used only to size the HSGP approximation domain."""
+    """Two fixed endpoints that size and centre the HSGP approximation domain."""
     X_all_z: np.ndarray
     n_plot: int
     n_query: int

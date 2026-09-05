@@ -25,6 +25,7 @@ from vocab_growth.fit_artifacts import (
 )
 from vocab_growth.models.common import PREPARE_STAGE_NAME, run_fit_pipeline
 from vocab_growth.models.definitions import VG01
+from vocab_growth.models.implementation_identity import implementation_signature
 
 
 def _write_manifest(
@@ -39,6 +40,7 @@ def _write_manifest(
             "model_id": VG01.model_id,
             "config_name": VG01.config_name,
             "definition": normalise_for_json(VG01),
+            "implementation": implementation_signature(),
         },
         "sampling": {
             "configuration_name": sampling_name,

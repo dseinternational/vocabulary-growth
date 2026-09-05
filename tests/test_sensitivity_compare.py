@@ -16,7 +16,12 @@ import json
 
 import pandas as pd
 
-from vocab_growth.sensitivity.compare import compare_dirs, diagnostics_gate, summarise
+from vocab_growth.sensitivity.compare import (
+    compare_dirs,
+    coverage_report,
+    diagnostics_gate,
+    summarise,
+)
 
 
 def _write_gate_payload(dirpath, **overrides):
@@ -60,7 +65,7 @@ def test_summarise_tolerates_mixed_bool_none_ci_column(tmp_path):
     assert row["n_checked"] == 2
     assert row["n_within_ci"] == 1
     assert row["quantities_outside_ci"] == "psi"
-    assert row["verdict"] == "sensitive: psi"
+    assert row["status"] == "unverified-pairing"
     # Unchecked (None) rows still count towards the magnitude summary.
     assert row["max_abs_delta"] == 20.0
 
@@ -85,6 +90,7 @@ def _write_vg15_outputs(dirpath, q_median, p_any_median, ey_any_median, psi_medi
 def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
     base_dir, var_dir = tmp_path / "base", tmp_path / "var"
     base_dir.mkdir(), var_dir.mkdir()
+    _write_gate_payload(base_dir)
     _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
                         ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
     # q shifts outside the baseline 89% interval; p_any, Ey_any and psi stay within
@@ -103,7 +109,9 @@ def test_compare_dirs_then_summarise_vg15_shape(tmp_path):
     assert by_qty["p_any"] is True
     assert by_qty["psi"] is True
 
-    row = summarise(comparison, str(var_dir), label="vg15-variant")
+    row = summarise(comparison, str(var_dir), label="vg15-variant",
+                    baseline_dir=str(base_dir), validation_errors=[],
+                    coverage=coverage_report(str(base_dir), str(var_dir)))
     assert row["converged"] is True
     assert row["status"] == "compared"
     assert row["caveats"] == ""
@@ -138,24 +146,24 @@ def _write_diagnostics(dirpath, *, beta_lag=None, r_hat=1.005):
     ).to_csv(dirpath / "diagnostics.csv")
 
 
-def test_load_beta_lag_reads_the_scalar_from_diagnostics(tmp_path):
-    from vocab_growth.sensitivity.compare import load_beta_lag
+def test_load_parameters_reads_the_cross_lag_mean_from_diagnostics(tmp_path):
+    from vocab_growth.sensitivity.compare import load_parameters
 
     _write_diagnostics(tmp_path, beta_lag=(0.199, 0.089, 0.311))
-    assert load_beta_lag(str(tmp_path)) == {
-        "beta_lag_median": 0.199,
-        "beta_lag_ci_lo": 0.089,
-        "beta_lag_ci_hi": 0.311,
-    }
+    row = load_parameters(str(tmp_path))["beta_lag"].iloc[0]
+    assert row["estimate"] == 0.199
+    assert row["estimate_kind"] == "mean"
+    assert row["ci_lo"] == 0.089
+    assert row["ci_hi"] == 0.311
 
 
-def test_load_beta_lag_is_none_without_a_cross_lag(tmp_path):
+def test_load_parameters_omits_absent_cross_lag(tmp_path):
     """Every bivariate fit writes diagnostics.csv; only VG16 carries beta_lag."""
-    from vocab_growth.sensitivity.compare import load_beta_lag
+    from vocab_growth.sensitivity.compare import load_parameters
 
     _write_diagnostics(tmp_path, beta_lag=None)
-    assert load_beta_lag(str(tmp_path)) is None
-    assert load_beta_lag(str(tmp_path / "does-not-exist")) is None
+    assert "beta_lag" not in load_parameters(str(tmp_path))
+    assert load_parameters(str(tmp_path / "does-not-exist")) == {}
 
 
 def test_a_moved_cross_lag_is_scored_rather_than_ignored(tmp_path):
@@ -164,6 +172,7 @@ def test_a_moved_cross_lag_is_scored_rather_than_ignored(tmp_path):
     no compared series. VG16 supplies no other reported number."""
     base_dir, var_dir = tmp_path / "base", tmp_path / "var"
     base_dir.mkdir(), var_dir.mkdir()
+    _write_gate_payload(base_dir)
     _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
                         ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
     _write_vg15_outputs(var_dir, q_median=0.5, p_any_median=0.3,
@@ -176,7 +185,9 @@ def test_a_moved_cross_lag_is_scored_rather_than_ignored(tmp_path):
     assert by_qty["beta_lag"] is False
     assert by_qty["q"] is True          # every trajectory is unmoved
 
-    row = summarise(comparison, str(var_dir), label="vg16-conditional-only")
+    row = summarise(comparison, str(var_dir), label="vg16-conditional-only",
+                    baseline_dir=str(base_dir), validation_errors=[],
+                    coverage=coverage_report(str(base_dir), str(var_dir)))
     assert "beta_lag" in row["quantities_outside_ci"]
     assert row["verdict"].startswith("sensitive")
 
@@ -184,6 +195,7 @@ def test_a_moved_cross_lag_is_scored_rather_than_ignored(tmp_path):
 def test_beta_lag_within_the_baseline_interval_scores_robust(tmp_path):
     base_dir, var_dir = tmp_path / "base", tmp_path / "var"
     base_dir.mkdir(), var_dir.mkdir()
+    _write_gate_payload(base_dir)
     _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
                         ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
     _write_vg15_outputs(var_dir, q_median=0.5, p_any_median=0.3,
@@ -270,6 +282,7 @@ def test_diagnostics_gate_falls_back_to_the_csv_and_says_so(tmp_path):
 def test_summarise_reports_converged_with_caveats_rather_than_robust(tmp_path):
     base_dir, var_dir = tmp_path / "base", tmp_path / "var"
     base_dir.mkdir(), var_dir.mkdir()
+    _write_gate_payload(base_dir)
     _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
                         ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
     _write_vg15_outputs(var_dir, q_median=0.5, p_any_median=0.3,
@@ -285,7 +298,9 @@ def test_summarise_reports_converged_with_caveats_rather_than_robust(tmp_path):
     )
 
     comparison = compare_dirs(str(base_dir), str(var_dir))
-    row = summarise(comparison, str(var_dir), label="vg15-variant")
+    row = summarise(comparison, str(var_dir), label="vg15-variant",
+                    baseline_dir=str(base_dir), validation_errors=[],
+                    coverage=coverage_report(str(base_dir), str(var_dir)))
     assert row["converged"] is True
     assert row["status"] == "converged-with-caveats"
     assert "not scored robust" in row["verdict"]
@@ -295,6 +310,7 @@ def test_summarise_reports_converged_with_caveats_rather_than_robust(tmp_path):
 def test_summarise_keeps_robust_for_a_clean_payload(tmp_path):
     base_dir, var_dir = tmp_path / "base", tmp_path / "var"
     base_dir.mkdir(), var_dir.mkdir()
+    _write_gate_payload(base_dir)
     _write_vg15_outputs(base_dir, q_median=0.5, p_any_median=0.3,
                         ey_any_median=100.0, psi_median=1.5, p_psi_gt_1=0.99)
     _write_vg15_outputs(var_dir, q_median=0.5, p_any_median=0.3,
@@ -302,7 +318,9 @@ def test_summarise_keeps_robust_for_a_clean_payload(tmp_path):
     _write_gate_payload(var_dir)
 
     comparison = compare_dirs(str(base_dir), str(var_dir))
-    row = summarise(comparison, str(var_dir), label="vg15-variant")
+    row = summarise(comparison, str(var_dir), label="vg15-variant",
+                    baseline_dir=str(base_dir), validation_errors=[],
+                    coverage=coverage_report(str(base_dir), str(var_dir)))
     assert row["status"] == "compared"
     assert row["caveats"] == ""
     assert row["verdict"] == "robust (all within baseline 89% interval)"

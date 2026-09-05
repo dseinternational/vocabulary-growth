@@ -19,6 +19,7 @@ from vocab_growth.fit_artifacts import (
     write_fit_state,
 )
 from vocab_growth.models.definitions import VG01, VG02
+from vocab_growth.models.implementation_identity import implementation_signature
 
 _SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "sync_report_figures.py"
 _SPEC = importlib.util.spec_from_file_location("sync_report_figures_script", _SCRIPT_PATH)
@@ -36,7 +37,7 @@ def _write_output(output_root, definition, *, state):
     )
     output_dir.mkdir(parents=True)
     manifest = {
-        "model": {"definition": normalise_for_json(definition)},
+        "model": {"definition": normalise_for_json(definition), "implementation": implementation_signature()},
         "sampling": {
             "configuration_name": "dev",
             "parameters": asdict(sampling.get_sampling_configuration("dev")),

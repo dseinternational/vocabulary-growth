@@ -100,6 +100,7 @@ from vocab_growth.models.gp_utils import (
     build_kappa_of_z_anchored,
     trend_and_gp,
 )
+from vocab_growth.models.implementation_identity import implementation_signature
 from vocab_growth.posterior_analysis import (
     extract_posterior,
     extract_posterior_predictive,
@@ -815,19 +816,14 @@ def build_model(
             cfg_eta=context.model_config.eta_dist,
             suffix="",
             X_all_z_data=X_all_z_data,
-            grid=GPGrid(
+            grid=GPGrid.from_age_grids(
+                grids,
                 sa_z=slope_age_a_z,
                 sb_z=slope_age_b_z,
                 ell_low_z=ell_low_z,
                 ell_high_z=ell_high_z,
                 M=M,
                 L=L,
-                # Pin the HSGP basis centre to the declared domain's midpoint so
-                # a reporting-query change cannot move the approximation's
-                # accuracy region (#234). For every current model of record the
-                # pinned value equals the lazily computed one, so this changes
-                # no fitted graph.
-                x_center_z=float(np.mean(grids.X_gp_domain_z)),
             ),
             store_deterministic=True,
             latent_name="f_all",
@@ -2175,6 +2171,7 @@ def write_fit_manifest(context: AnyModelFitContext, definition) -> None:
             # reader that wants to know what kind of thing a field controls now
             # has it recorded rather than having to guess from the name.
             "definition_payload": fit_identity.semantic_payload(definition),
+            "implementation": implementation_signature(),
         },
         "sampling": {
             "configuration_name": context.sampling_config_name,

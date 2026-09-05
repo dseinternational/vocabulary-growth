@@ -1,13 +1,15 @@
 # Model inventory
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and Codex/GPT-5; dispersion prior note by Claude Code/Opus 5; reporting-age update, VG15 peak-age disclosure correction and VG22 designed-prior update by Claude Code/Fable 5; VG15 psi-source disclosure correction by Claude Code/Opus 5).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and Codex/GPT-5; dispersion prior note by Claude Code/Opus 5; reporting-age update, VG15 peak-age disclosure correction and VG22 designed-prior update by Claude Code/Fable 5; VG15 psi-source disclosure correction by Claude Code/Opus 5; statistical review fixes by OpenAI Codex/GPT-6).
 
 > [!WARNING]
 > This is work in progress. All models and their output are preliminary and likely
 > to change as the models evolve and further data are received.
 >
 > **All fifteen models were refitted at reporting quality in the 13–16 August 2026 run** ([`notes/202608142000`](../../notes/202608142000-refit-run-record-and-disk-failure.md)), so the numerical prose is current as of that run. Fourteen clear the hard convergence gate; VG11 is published under a narrow recorded exception, and VG10, VG12 and VG13 carry soft-tier caveats — all four disclosures reach the report through `convergence_caveats.csv` and Appendix B. That run also settled the changes that had made the previous fits stale: the nested outcome likelihood, the TD repeated-measures correction, signing-source harmonisation and the Edgin inclusion revision from #163; `us_01` rebuilt from the Edgin item-level contributor files rather than the age-truncated Wordbank by-child export (195 → 230 rows, 78 → 126 comprehension observations — see [`notes/202608031500-edgin-out-of-window-administrations.md`](../../notes/202608031500-edgin-out-of-window-administrations.md), whose §7 records a reversal in how the out-of-window administrations are handled); the `uk_07` (PACT-DS) integration; and the widening of the VG11/VG12/VG13 reference pool to English, Italian and Spanish (European) so the Down-syndrome-versus-typically-developing comparison covers several languages on both sides ([`notes/202608031500-td-romance-extension.md`](../../notes/202608031500-td-romance-extension.md)).
+>
+> The 2026-09-05 review corrected VG15's produced-cell concentration and fixed GP centring across the shared engines. Historical numerical results have not been re-estimated for these changes. Fit reuse now requires a matching executable-code signature; older manifests without one require a refit. See [the correction note](../../notes/202609051042-statistical-model-review-fixes.md).
 >
 > Two definition changes were taken **during** that run and are described below: the DS joint family adopted `CLAMP_Q_ONLY`, and comprehension reporting moved from 72 to 84 months under a project-wide age policy. (Comprehension reporting has since been lowered back to 72 months on 2026-08-22, and VG04/VG12 report comprehension only to 25 months — see the reporting-ages section below.)
 
@@ -285,3 +287,5 @@ qualifying observations can contribute.
   months with the tightened `q`-GP amplitude `eta_q`), yielding a
   **data-identified** total expressive vocabulary rather than VG14's
   independence-based bound.
+
+VG15's three-cell produced composition conditions the four-cell Dirichlet-Multinomial on the produced total. It retains the three original Dirichlet parameters. Their sum is `conc * P(produced | understood)`, rather than `conc`.
