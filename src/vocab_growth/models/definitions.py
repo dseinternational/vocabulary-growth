@@ -1218,6 +1218,16 @@ class BivariateSexShiftModelDefinition(BivariateCorrelatedSubjectREModelDefiniti
     descriptive estimates are 0.2 to 0.35 logits, and the typically developing
     CDI norms put the whole effect well inside one such SD."""
 
+    def __post_init__(self) -> None:
+        # The coupling is a property of the definition, so it is checked here
+        # at construction, before a fit's prepare and priors stages can write a
+        # manifest and a prior figure for a coefficient that never existed.
+        if self.sex_effect_sigma is not None and not self.sex_known_only:
+            raise ValueError(
+                "sex_effect_sigma needs sex_known_only: a coefficient on a covariate "
+                "a quarter of the rows lack has nothing to multiply."
+            )
+
 
 @dataclass(frozen=True)
 class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
@@ -3693,6 +3703,10 @@ def _validate_positive_scale_fields(value, *, path: str) -> None:
         if is_dataclass(field_value):
             _validate_positive_scale_fields(field_value, path=field_path)
         elif item.name.endswith(("_alpha", "_beta", "_sigma")):
+            # An optional scale (`float | None`, None meaning "no such term")
+            # is not a scale that must be positive: `None` is its off state.
+            if field_value is None and "None" in str(item.type):
+                continue
             if (
                 not isinstance(field_value, (int, float))
                 or not math.isfinite(field_value)

@@ -200,10 +200,20 @@ def build_bivariate_re_analysis_frame(
     sex_unknown_rows_excluded = 0
     if sex_known_only:
         # Row-wise rather than child-wise: sex is recorded per administration in
-        # the source files, and the loader has already dropped the one batch in
-        # which a child's rows disagreed (the ceiling-saturated us_01
-        # preparation batch, see the note). `build_model_re` still refuses a
-        # frame in which any retained child carries two values.
+        # the source files. On the prepared database the restriction is exactly
+        # study-level (a study records sex for every row or for none), which is
+        # what makes the sex-known control arm comparable with VG20's registered
+        # `exclude_studies` field. Refuse partial coverage rather than let the
+        # field turn silently into a row-level filter that moves the frame hash
+        # and the leave-one-study-out reading.
+        coverage = df.groupby("study", sort=False)["sex"].apply(lambda s: float(s.notna().mean()))
+        partial = coverage[(coverage > 0) & (coverage < 1)]
+        if len(partial):
+            raise ValueError(
+                "sex_known_only is a study-level restriction, but sex is recorded for "
+                f"only part of {sorted(partial.index)}; decide the row scope (or express "
+                "the restriction through exclude_studies) before fitting."
+            )
         keep = df["sex"].notna()
         sex_unknown_rows_excluded = int((~keep).sum())
         if sex_unknown_rows_excluded == 0:
@@ -213,6 +223,20 @@ def build_bivariate_re_analysis_frame(
                 "is reading the wrong column or the wrong database."
             )
         df = df[keep]
+        # Sex is a child-level covariate. Refuse a frame in which a retained
+        # child carries two values here, so the control arm (no coefficient) is
+        # held to the same rule as the effect arm, whose `sex_contrast_codes`
+        # repeats the check at graph build. The one such child in the source
+        # data (a us_01 preparation-batch row) is removed today by the
+        # ceiling-only provenance rule, not by any sex rule.
+        if "subject_id" in df.columns:
+            per_child = df.groupby(["study", "subject_id"], sort=False)["sex"].nunique()
+            inconsistent = int((per_child > 1).sum())
+            if inconsistent:
+                raise ValueError(
+                    f"{inconsistent} children carry more than one sex value across "
+                    "their administrations; sex is a child-level covariate."
+                )
     analysis_df = df[columns].copy()
 
     # Keep rows where at least one outcome is observed (and age is present)
@@ -343,7 +367,11 @@ def prepare_bivariate_re_data(
         ))
     if getattr(definition, "sex_known_only", False):
         counts.append(
-            ("Rows without recorded sex excluded", info["sex_unknown_rows_excluded"])
+            (
+                "Rows without recorded sex excluded (of loaded rows, before the "
+                "age and outcome filters)",
+                info["sex_unknown_rows_excluded"],
+            )
         )
         by_sex = analysis_df.drop_duplicates(["study", "subject_id"])["sex"].value_counts()
         counts.append(

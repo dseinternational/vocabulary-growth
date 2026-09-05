@@ -49,16 +49,21 @@ into a **separate output root**, so nothing here can become a model of record:
 * ``vg20_sex_arm_loo.csv`` -- paired leave-one-out comparison of the two arms
   per outcome, valid because they see identical rows.
 
-The descriptive estimates the note reports are carried as constants
-(``REFERENCE``) so the fitted values print beside them; they are not fitted
-quantities and the comparison is what this harness exists to make.
+The descriptive estimates the note reports are read from
+``sex_effect_by_study.csv``, which ``sex_effect_by_study.py`` writes into the
+same ``comparisons/sex-effect/`` directory, so the fitted values print beside
+them without a hand-copied table that can go stale; when that file is absent
+the reference table is skipped.
 
 Usage::
 
-    python scripts/experiments/vg20_sex_arm.py fit control --output-dir /scratch/vg20-sex
-    python scripts/experiments/vg20_sex_arm.py fit sex --output-dir /scratch/vg20-sex
-    python scripts/experiments/vg20_sex_arm.py fit full --output-dir /scratch/vg20-sex
-    python scripts/experiments/vg20_sex_arm.py compare --output-dir /scratch/vg20-sex
+    python scripts/experiments/vg20_sex_arm.py --output-dir /scratch/vg20-sex fit control
+    python scripts/experiments/vg20_sex_arm.py --output-dir /scratch/vg20-sex fit sex
+    python scripts/experiments/vg20_sex_arm.py --output-dir /scratch/vg20-sex fit full
+    python scripts/experiments/vg20_sex_arm.py --output-dir /scratch/vg20-sex compare
+
+``--output-dir`` and ``--sigma`` belong to the top-level parser, so they go
+before the subcommand.
 
 ``--config`` defaults to ``test`` (4 chains x 2000 draws), the tier the note
 recommended: ``dev`` under-converges the hierarchical models and a coefficient
@@ -91,19 +96,32 @@ ARMS: dict[str, dict] = {
     "full": {},
 }
 
-#: The note's descriptive estimates (logits, girl minus boy, 89% intervals),
-#: for printing beside the fitted coefficients. Not fitted quantities.
-REFERENCE = pd.DataFrame(
-    [
-        ("DS pooled, study-adjusted", "understood", 0.33, 0.15, 0.51),
-        ("DS pooled, study-adjusted", "spoken", 0.35, 0.12, 0.58),
-        ("DS pooled, study-adjusted", "production ratio", 0.23, 0.01, 0.45),
-        ("TD Wordbank, English (American)", "understood", 0.20, 0.13, 0.28),
-        ("TD Wordbank, English (American)", "spoken", 0.33, 0.29, 0.37),
-        ("TD Wordbank, English (American)", "production ratio", 0.14, 0.08, 0.20),
-    ],
-    columns=["source", "outcome", "estimate", "lo89", "hi89"],
-)
+def reference_table(output_root: str) -> pd.DataFrame:
+    """The descriptive estimates of ``notes/202609041206``, as ``sex_effect_by_study.py`` wrote them.
+
+    Read rather than transcribed: those numbers moved once already, when ie_02,
+    uk_05 and uk_06 gained sex codes, and a hand-copied table would not have
+    noticed. Empty when the sibling script has not been run on this output root.
+    """
+    path = os.path.join(output_root, "comparisons", "sex-effect", "sex_effect_by_study.csv")
+    if not os.path.isfile(path):
+        print(
+            f"[vg20_sex_arm] no descriptive reference at {path}; run "
+            "sex_effect_by_study.py to print it beside the fitted values."
+        )
+        return pd.DataFrame()
+    return pd.read_csv(path)
+
+
+def _predict_new_study():
+    """``scripts/predict_new_study.py``, loaded by path as ``predict_new_study_checks.py`` does."""
+    import importlib.util
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "predict_new_study.py")
+    spec = importlib.util.spec_from_file_location("predict_new_study", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def logit(p):
@@ -125,13 +143,41 @@ def arm_definition(arm: str, sigma: float):
     overrides = dict(ARMS[arm])
     if "sex_effect_sigma" in overrides:
         overrides["sex_effect_sigma"] = sigma
-    return D._as_definition_subclass(
+    definition = D._as_definition_subclass(
         D.VG20,
         D.BivariateSexShiftModelDefinition,
         config_name=f"{D.VG20.config_name}-sex-{arm}",
         banner=f"Fitting VG20 sex arm '{arm}' (exploratory, issue #295)",
         **overrides,
     )
+    # Validate at definition time, as `marginal_arm.py` and the sensitivity
+    # overrides do, so a mis-specified arm fails here rather than after the
+    # prepare and priors stages have written a manifest and a prior figure.
+    D.validate_model_definition(definition)
+    return definition
+
+
+def _recorded_definition_differences(fit_dir: str, definition) -> list:
+    """How the manifest in ``fit_dir`` differs from ``definition``; empty without a manifest."""
+    from vocab_growth.models.fit_identity import definition_differences
+
+    path = os.path.join(fit_dir, "fit_manifest.json")
+    if not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    return definition_differences(manifest["model"]["definition"], definition)
+
+
+def _refuse_to_replace_a_different_fit(fit_dir: str, definition) -> None:
+    """``--sigma`` is not in the directory name, so a second prior would replace the first."""
+    diffs = _recorded_definition_differences(fit_dir, definition)
+    if diffs:
+        fields = ", ".join(f"{d.field} ({d.recorded!r} fitted, {d.expected!r} asked)" for d in diffs)
+        raise SystemExit(
+            f"{fit_dir} already holds a fit of a different definition: {fields}. "
+            "Promotion would delete it; use another --output-dir for a different prior."
+        )
 
 
 def arm_dir(output_root: str, arm: str, sigma: float) -> str:
@@ -147,6 +193,7 @@ def fit(args) -> int:
     from vocab_growth import environment as env
     from vocab_growth.models.common import run_fit_pipeline
     from vocab_growth.models.common_bivariate_re import bivariate_re_stages
+    from vocab_growth.models.exploratory import write_exploratory_marker
 
     definition = arm_definition(args.arm, args.sigma)
     env.set_output_root(args.output_dir)
@@ -156,23 +203,26 @@ def fit(args) -> int:
         f"sex_known_only={definition.sex_known_only} "
         f"sex_effect_sigma={definition.sex_effect_sigma} -> {arm_dir(args.output_dir, args.arm, args.sigma)}"
     )
+    target = arm_dir(args.output_dir, args.arm, args.sigma)
+    _refuse_to_replace_a_different_fit(target, definition)
     run_fit_pipeline(args.config, definition, stages=bivariate_re_stages(definition))
+    # The pipeline promotes into a directory shaped exactly like a publishable
+    # fit; say what this one is not (see `vocab_growth.models.exploratory`).
+    write_exploratory_marker(
+        target,
+        model_label=f"VG20 sex arm '{args.arm}'",
+        note=(
+            "Exploratory VG20 variant (issue #295): an unregistered definition "
+            "subclass fitted through the engine pipeline into a separate output "
+            "root. Not a model of record and not validatable for publication."
+        ),
+    )
     return 0
 
 
 # ---------------------------------------------------------------------------
 # Compare
 # ---------------------------------------------------------------------------
-
-
-def _interval_columns(df: pd.DataFrame) -> tuple[str, str]:
-    """The lower/upper interval columns of an ArviZ-style summary table."""
-    if {"eti89_lb", "eti89_ub"}.issubset(df.columns):
-        return "eti89_lb", "eti89_ub"
-    pct = [c for c in df.columns if "%" in c]
-    if len(pct) >= 2:
-        return pct[0], pct[-1]
-    raise KeyError(f"No interval columns among {list(df.columns)}")
 
 
 #: The population-curve columns of each outcome's stored summary. For the two
@@ -213,6 +263,13 @@ class Arm:
         self.diag = pd.read_csv(os.path.join(self.dir, "diagnostics.csv"), index_col=0)
         with open(os.path.join(self.dir, "fit_manifest.json"), encoding="utf-8") as fh:
             self.manifest = json.load(fh)
+        # The directory name does not encode `--sigma`, so check the fitted
+        # definition against the one asked for, field by field, the way the
+        # pipeline's own validation does.
+        diffs = _recorded_definition_differences(self.dir, self.definition)
+        if diffs:
+            fields = ", ".join(f"{d.field} ({d.recorded!r} fitted, {d.expected!r} asked)" for d in diffs)
+            raise RuntimeError(f"Arm {arm!r} at {self.dir} was fitted under a different definition: {fields}.")
         self._frame = None
 
     @property
@@ -238,7 +295,7 @@ class Arm:
     def param_row(self, name: str) -> dict | None:
         if name not in self.diag.index:
             return None
-        lo, hi = _interval_columns(self.diag)
+        lo, hi = "eti89_lb", "eti89_ub"  # what `az.summary(..., ci_kind="eti")` writes
         r = self.diag.loc[name]
         row = {"mean": float(r["mean"]), "sd": float(r["sd"]), "lo89": float(r[lo]), "hi89": float(r[hi])}
         for k in ("r_hat", "ess_bulk", "ess_tail"):
@@ -250,13 +307,22 @@ class Arm:
         return self.idata.posterior[name].values
 
     def convergence(self) -> dict:
-        div = int(self.idata.sample_stats["diverging"].values.sum())
-        out = {"divergences": div}
-        if "r_hat" in self.diag.columns:
-            out["max_r_hat"] = float(self.diag["r_hat"].max())
-        if "ess_bulk" in self.diag.columns:
-            out["min_ess_bulk"] = float(self.diag["ess_bulk"].min())
-        return out
+        """The gate's verdict, not the maximum of the scalar-only `diagnostics.csv`.
+
+        That CSV covers variables of size two or less, so its maximum R-hat
+        cannot see the HSGP coefficient vectors the gate screens.
+        """
+        from vocab_growth.sensitivity.compare import diagnostics_gate
+
+        gate = diagnostics_gate(self.dir)
+        return {
+            "divergences": int(self.idata.sample_stats["diverging"].values.sum()),
+            "max_r_hat": gate.max_rhat,
+            "min_ess_bulk": gate.min_ess,
+            "converged": gate.converged,
+            "convergence_source": gate.source,
+            "caveats": "; ".join(gate.caveats),
+        }
 
 
 def parameters_table(arms: dict[str, Arm]) -> pd.DataFrame:
@@ -435,12 +501,6 @@ def ppc_by_sex_table(arms: dict[str, Arm]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _beta_binomial(rng, n, mean, kappa):
-    mean = np.clip(mean, 1e-6, 1 - 1e-6)
-    p = rng.beta(mean * kappa, (1 - mean) * kappa)
-    return rng.binomial(np.broadcast_to(n, p.shape).astype(int), p)
-
-
 def marginal_ppc_by_sex_table(arms: dict[str, Arm], n_draws: int = 400, seed: int = 20260904) -> pd.DataFrame:
     """The new-child posterior predictive by sex within age band.
 
@@ -461,8 +521,17 @@ def marginal_ppc_by_sex_table(arms: dict[str, Arm], n_draws: int = 400, seed: in
             continue
         arm = arms[name]
         rng = np.random.default_rng(seed)
-        post = arm.idata.posterior.to_dataset().stack(sample=("chain", "draw"))
-        pick = np.sort(rng.choice(post.sizes["sample"], size=n_draws, replace=False))
+        pns = _predict_new_study()
+        posterior = arm.idata.posterior.to_dataset()
+        n_samples = posterior.sizes["chain"] * posterior.sizes["draw"]
+        pick = np.sort(rng.choice(n_samples, size=n_draws, replace=False))
+        # Subset before stacking: stacking the whole group materialises and
+        # copies every posterior variable (about 0.5 GB at `test`, several
+        # times that at `rep`) to pick a handful of them.
+        needed = ["f_u_plot", "h_plot", "kappa_u_plot", "kappa_s_plot", "delta_u", "delta_q"]
+        if "beta_sex_u" in posterior:
+            needed += ["beta_sex_u", "beta_sex_q"]
+        post = posterior[needed].stack(sample=("chain", "draw"))
 
         def take(var, post=post, pick=pick):
             return np.asarray(post[var].isel(sample=pick).transpose("sample", ...).values, dtype=float)
@@ -472,8 +541,8 @@ def marginal_ppc_by_sex_table(arms: dict[str, Arm], n_draws: int = 400, seed: in
         age = frame["age"].to_numpy(dtype=float)
         x_plot = np.asarray(cd["X_plot"].values, dtype=float)
 
-        def on_obs(grid, age=age, x_plot=x_plot):  # (S, n_plot) -> (S, n_obs)
-            return np.stack([np.interp(age, x_plot, g) for g in grid])
+        def on_obs(grid, age=age, x_plot=x_plot, pns=pns):  # (S, n_plot) -> (S, n_obs)
+            return pns._interp_draws(x_plot, grid, age)
 
         f_u, h = on_obs(take("f_u_plot")), on_obs(take("h_plot"))
         kappa_u, kappa_s = on_obs(take("kappa_u_plot")), on_obs(take("kappa_s_plot"))
@@ -481,11 +550,14 @@ def marginal_ppc_by_sex_table(arms: dict[str, Arm], n_draws: int = 400, seed: in
         subject = np.asarray(cd["subject_obs"].values).astype(int)
         eta_u = f_u + take("delta_u")[:, study]
         eta_q = h + take("delta_q")[:, study]
-        tau_u, tau_q, rho = (take(v)[:, None] for v in ("tau_subj_u", "tau_subj_q", "rho_uq"))
-        z1 = rng.standard_normal((n_draws, subject.max() + 1))
-        z2 = rng.standard_normal((n_draws, subject.max() + 1))
-        eta_u = eta_u + (tau_u * z1)[:, subject]
-        eta_q = eta_q + (tau_q * (rho * z1 + np.sqrt(1 - rho**2) * z2))[:, subject]
+        # A fresh correlated child-effect pair per child, drawn by the helper
+        # `predict_new_study.py` uses, which mirrors the engine's own
+        # unseen-child construction; indices 0 and 2 are the two intercepts.
+        child = pns.draw_child_params(
+            posterior, arm.definition, "constant", pick, rng, (n_draws, subject.max() + 1)
+        )
+        eta_u = eta_u + child[..., 0][:, subject]
+        eta_q = eta_q + child[..., 2][:, subject]
         if "beta_sex_u" in arm.idata.posterior:
             x_sex = np.asarray(cd["x_sex"].values, dtype=float)
             eta_u = eta_u + take("beta_sex_u")[:, None] * x_sex
@@ -496,25 +568,19 @@ def marginal_ppc_by_sex_table(arms: dict[str, Arm], n_draws: int = 400, seed: in
         is_cond = np.asarray(cd["s_is_conditional"].values).astype(bool)
         for outcome, _var, idx, rows_df, y in _outcome_rows(arm):
             if outcome == "understood":
-                rep = _beta_binomial(rng, N_TRIALS, p_u[:, idx], kappa_u[:, idx])
+                rep = pns._betabinom_draw(rng, N_TRIALS, p_u[:, idx], kappa_u[:, idx])
             else:
                 mean = np.where(is_cond, q[:, idx], (p_u * q)[:, idx])
-                rep = _beta_binomial(rng, trials_s, mean, kappa_s[:, idx])
+                rep = pns._betabinom_draw(rng, trials_s, mean, kappa_s[:, idx])
             rows.extend(_cell_rows(name, outcome, rows_df, y, rep.astype(float)))
     return pd.DataFrame(rows)
-
-
-def _pointwise_elpd(loo) -> np.ndarray:
-    """The pointwise LOO log score, under whichever name this ArviZ spells it."""
-    for name in ("elpd_i", "loo_i"):
-        if hasattr(loo, name):
-            return np.asarray(getattr(loo, name).values, dtype=float)
-    raise AttributeError(f"ELPDData has no pointwise field among elpd_i/loo_i: {dir(loo)}")
 
 
 def loo_table(arms: dict[str, Arm]) -> pd.DataFrame:
     """Paired LOO difference, sex minus control, per outcome."""
     import arviz as az
+
+    from vocab_growth.loo_reff import sampled_parameter_reff
 
     if not {"control", "sex"} <= set(arms):
         return pd.DataFrame()
@@ -533,12 +599,19 @@ def loo_table(arms: dict[str, Arm]) -> pd.DataFrame:
             keep &= (da.var(dim=sample_dims) > 1e-12).values
         n_dropped = int(keep.size - keep.sum())
         loos = {}
+        reffs = {}
         for name in ("control", "sex"):
-            source = arms[name].idata.copy(deep=False)
+            arm = arms[name]
+            # The project pins PSIS-LOO's relative efficiency to the sampled
+            # parameters (`vocab_growth.loo_reff`, decision of 2026-08-23), so
+            # this table is comparable with each arm's own `loo_summary.csv`.
+            sampled = ((arm.manifest.get("artefacts") or {}).get("trace") or {}).get("sampled_parameters")
+            reffs[name] = sampled_parameter_reff(arm.idata, names=sampled)
+            source = arm.idata.copy(deep=False)
             source["log_likelihood"] = source["log_likelihood"].isel({obs_dim: keep})
-            loos[name] = az.loo(source, var_name=var, pointwise=True)
-        li_c = _pointwise_elpd(loos["control"])
-        li_s = _pointwise_elpd(loos["sex"])
+            loos[name] = az.loo(source, var_name=var, pointwise=True, reff=reffs[name])
+        li_c = np.asarray(loos["control"].elpd_i.values, dtype=float)
+        li_s = np.asarray(loos["sex"].elpd_i.values, dtype=float)
         if li_c.shape != li_s.shape:
             raise RuntimeError(f"{var}: the two arms have different numbers of observations.")
         diff = li_s - li_c
@@ -549,6 +622,8 @@ def loo_table(arms: dict[str, Arm]) -> pd.DataFrame:
                 "outcome": outcome,
                 "n_obs": n,
                 "n_dropped_degenerate": n_dropped,
+                "reff_control": float(reffs["control"]),
+                "reff_sex": float(reffs["sex"]),
                 "elpd_control": float(li_c.sum()),
                 "elpd_sex": float(li_s.sum()),
                 "elpd_diff_sex_minus_control": float(diff.sum()),
@@ -585,9 +660,11 @@ def compare(args) -> int:
         "vg20_sex_arm_ppc_by_sex.csv": ppc_by_sex_table(arms),
         "vg20_sex_arm_ppc_marginal_by_sex.csv": marginal_ppc_by_sex_table(arms),
         "vg20_sex_arm_loo.csv": loo_table(arms),
-        "vg20_sex_arm_reference_descriptive.csv": REFERENCE,
+        "vg20_sex_arm_reference_descriptive.csv": reference_table(args.output_dir),
     }
     for filename, table in tables.items():
+        if table.empty:
+            continue
         table.to_csv(os.path.join(out_dir, filename), index=False)
         print(f"\n=== {filename}")
         print(table.round(3).to_string(index=False))

@@ -54,6 +54,17 @@ def test_the_inert_variant_is_vg20_plus_two_defaults():
     assert variant.sex_known_only is False
     assert variant.sex_effect_sigma is None
     assert {f.name for f in dataclasses.fields(variant)} - {f.name for f in dataclasses.fields(VG20)} == SEX_FIELDS
+    # An optional scale at `None` is its off state, not a scale that must be
+    # positive: the inert and control arms must validate.
+    D.validate_model_definition(variant)
+    D.validate_model_definition(
+        _as_definition_subclass(VG20, BivariateSexShiftModelDefinition, sex_known_only=True)
+    )
+
+
+def test_a_coefficient_without_the_restriction_is_refused_at_definition_time():
+    with pytest.raises(ValueError, match="needs sex_known_only"):
+        _as_definition_subclass(VG20, BivariateSexShiftModelDefinition, sex_effect_sigma=0.5)
 
 
 def _frame(sex):
