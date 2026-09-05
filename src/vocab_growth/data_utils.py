@@ -601,6 +601,69 @@ comprehension counts for sensitivity analysis.
 """
 
 
+#: Studies whose older administrations are a structurally distinct sub-sample
+#: rather than legitimately older children.
+#:
+#: The Down syndrome pool deliberately **admits** administrations above a form's
+#: registered age window -- for this population an early-vocabulary form given to
+#: an older child is developmentally appropriate, and those rows are us_01's only
+#: comprehension observations between 19 and 27 months. So age alone must never
+#: be the criterion, and this rule is stated on *provenance* instead, exactly as
+#: :data:`CEILING_ONLY_CHILD_STUDIES` is.
+#:
+#: ``us_03``: four children (workbook ``id`` 1-5, one of which carries no CDI
+#: data) sit at 62-80 months against 17-35 for all 286 other administrations --
+#: a 27-month gap with nothing in it. They have no second visit, sit near the
+#: form's ceiling at 286-376 produced of 396, and their ages are the only ones in
+#: the file not recorded as a whole hundredth of a year. The source's own
+#: documentation concludes they came from a different file, plausibly the second
+#: of the two projects its citation names, and records that the workbook carries
+#: no project identifier to confirm it with (``data/vocab_data_us_03.md``).
+#:
+#: What makes this an exclusion rather than a caveat is the measurement, not the
+#: age: whether those four were given the same 396-word Words and Gestures form
+#: is unknown, and ``survey_vocab_max`` -- the denominator every likelihood in
+#: this project divides by -- is the least certain value in the source for
+#: exactly those rows. One of them records 432 understood against a 396-item
+#: ceiling, which is in range on a larger form and impossible on this one.
+#: Admitting them means asserting a denominator the source will not support.
+#:
+#: The age bound is the empirical gap, not a developmental claim: it separates
+#: the sub-sample and nothing else. Reinstate with
+#: ``include_structurally_distinct_subsamples=True``; #289 task 0.3 records the
+#: question to the data providers that would settle it properly.
+STRUCTURALLY_DISTINCT_SUBSAMPLES: dict[str, float] = {"us_03": 35.0}
+
+
+def drop_structurally_distinct_subsamples(
+    df: pd.DataFrame,
+    *,
+    include_structurally_distinct_subsamples: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Drop administrations from a documented structurally distinct sub-sample.
+
+    Applies the rule documented on
+    :data:`STRUCTURALLY_DISTINCT_SUBSAMPLES`. The whole administration goes,
+    unlike the comprehension rules, because what is in doubt is the form -- and
+    therefore ``survey_vocab_max`` -- rather than any one recorded count.
+    """
+    out = df.copy()
+    dropped: dict[str, int] = {}
+    if include_structurally_distinct_subsamples or "study" not in out.columns:
+        return out, dropped
+
+    age = pd.to_numeric(out.get("age"), errors="coerce")
+    suspect = pd.Series(False, index=out.index)
+    for study, above in STRUCTURALLY_DISTINCT_SUBSAMPLES.items():
+        hit = (out["study"] == study) & age.notna() & (age > above)
+        if hit.any():
+            dropped[str(study)] = int(hit.sum())
+        suspect |= hit
+    if not suspect.any():
+        return out, dropped
+    return out.loc[~suspect].reset_index(drop=True), dropped
+
+
 def mask_comprehension_below_production(
     df: pd.DataFrame,
     *,
@@ -1496,6 +1559,41 @@ def vocab_combined_view_sql() -> str:
     FROM vocab_us_01 as vus01
     WHERE vus01.dev_status = 'down_syndrome'
     UNION ALL
+    -- us_03 (Fidler): Project CAPEabilities / Project EXPO, 396-word English
+    -- Words and Gestures. `understood` is the inclusive comprehension total
+    -- (the source's two mutually exclusive cells, already summed upstream), and
+    -- `age` is the whole-month rounding of `age_months`, matching every other
+    -- source. No sex was shared.
+    --
+    -- **The expressive cell is a produced union, not spoken.** The study
+    -- authors state: "Understands and Says is inclusive of expressive language through spoken word and sign."
+    -- The source document asserted a speech-only reading twice, both inferred
+    -- from the column's original name, `spoken`; the column has since been
+    -- renamed to `produced` here and upstream, and
+    -- data/vocab_data_us_03.md carries the correction. Modalities cannot
+    -- be separated -- there
+    -- is one number, not the exclusive cells nz_01 and uk_07 carry -- so no
+    -- spoken marginal can be recovered, and claiming one would put a produced
+    -- union into `q = S/U`, the headline estimand of VG10, VG16, VG19, VG20 and
+    -- VG22, for 254 of about 1,400 Down syndrome spoken observations.
+    --
+    -- So `spoken` is NULL and the count lands in `produced`. `signed` is NULL
+    -- too: signing is inside the union rather than absent, and a zero would
+    -- assert something the source does not say. us_03 therefore informs
+    -- comprehension, and its production waits for a produced-outcome model --
+    -- the rows are ordinary understood-without-spoken observations, which every
+    -- engine already handles.
+    SELECT 'us_03'                          as study,
+           vus03.subject_id,
+           NULL                                as sex,
+           vus03.age,
+           vus03.understood,
+           NULL                                as spoken,
+           NULL                                as signed,
+           vus03.produced,
+           vus03.survey_vocab_max
+    FROM vocab_us_03 as vus03
+    UNION ALL
     SELECT 'uk_03'                           as study,
            vuk2025.subject_id,
            NULL                                as sex,
@@ -1713,6 +1811,7 @@ def load_combined_data(
     include_ceiling_only_children=False,
     include_comprehension_below_production=False,
     include_same_day_disagreements=False,
+    include_structurally_distinct_subsamples=False,
     include_produced=False,
 ):
     """
@@ -1823,6 +1922,23 @@ def load_combined_data(
     df, _ = mask_same_day_production_disagreements(
         df, include_disagreements=include_same_day_disagreements
     )
+    # Before the row-local rule below: this removes whole administrations, so
+    # running it first keeps the later rules' counts honest -- a row that is not
+    # in the pool should not also be reported as masked.
+    #
+    # There is deliberately no companion rule for counts above their own form's
+    # ceiling. The form-ceiling guard in `_CEILING_GUARD_KEEP` (issues #128/#131)
+    # already drops those in the view, before any loader rule sees them, which is
+    # why us_03's three over-ceiling observations never reach here. That guard
+    # has no reinstatement flag, unlike every rule in this module; whether it
+    # should is a live question (#289 task 0.1) and a larger change than an
+    # ingest, because it applies to every source and all four count columns.
+    df, _ = drop_structurally_distinct_subsamples(
+        df,
+        include_structurally_distinct_subsamples=(
+            include_structurally_distinct_subsamples
+        ),
+    )
     # Last, and deliberately so: this rule compares two columns of a single row,
     # so it needs no cross-row context, and running it after the others means it
     # only fires on comprehension counts that survived every earlier rule. A row
@@ -1927,6 +2043,7 @@ def load_data(
     include_ceiling_only_children: bool = False,
     include_comprehension_below_production: bool = False,
     include_same_day_disagreements: bool = False,
+    include_structurally_distinct_subsamples: bool = False,
 ) -> pd.DataFrame:
     """
     Load vocabulary data for the specified population.

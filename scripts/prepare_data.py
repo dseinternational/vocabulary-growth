@@ -40,6 +40,7 @@ _sources = {
     "vocab_es_01": "./data/vocab_data_es_01.csv",
     "vocab_uk_07": "./data/vocab_data_uk_07.csv",
     "vocab_us_01": "./data/vocab_data_us_01.csv",
+    "vocab_us_03": "./data/vocab_data_us_03.csv",
 }
 # nz_01 (Foster-Cohen) is added with the real anonymisation key in a separate
 # data commit; tolerate its absence so the pipeline still builds without it.
@@ -414,6 +415,25 @@ con.execute(
     """
     CREATE TABLE vocab_us_01 AS
     SELECT * FROM vocab_us_01_df
+    """
+)
+
+# us_03 (Fidler) is the Project CAPEabilities / Project EXPO data share: 290
+# rows for 184 children on the 396-word English Words and Gestures form, up to
+# two visits about a year apart. Its two expressive cells are mutually exclusive
+# in the source (`understand_tot` + `under_say_tot` = `cdi_total`), so the
+# prepared CSV already carries `understood` as the inclusive total and
+# `understood_only` as the exclusive cell; `spoken` is nested inside
+# `understood` by construction, as in mx_01. There is no sign or gesture
+# modality. See data/vocab_data_us_03.md for the full provenance, including the
+# three over-ceiling observations and the older sub-sample, both of which the
+# loader excludes by default under their own reinstatement flags.
+vocab_us_03_df = _loaded["vocab_us_03"]
+
+con.execute(
+    """
+    CREATE TABLE vocab_us_03 AS
+    SELECT * FROM vocab_us_03_df
     """
 )
 
