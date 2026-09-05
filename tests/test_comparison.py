@@ -776,3 +776,95 @@ def test_product_marginal_kappa_matches_monte_carlo_moments():
 def test_load_marginal_spoken_trajectory_rejects_a_univariate_model():
     with pytest.raises(ValueError, match="not a bivariate model"):
         comparison.load_marginal_spoken_trajectory("vg11")
+
+
+# ----------------------------------------------------------------------------
+# The administration-weighted child (#289 task 4.5)
+# ----------------------------------------------------------------------------
+def _grid_and_scalar(n_draw, ages):
+    import xarray as xr
+
+    def grid(v):
+        return xr.DataArray(
+            np.asarray(v, dtype=float).reshape(1, n_draw, len(ages)).copy(),
+            dims=("chain", "draw", "plot_id"),
+        )
+
+    def by_study(v):
+        v = np.asarray(v, dtype=float)
+        return xr.DataArray(v.reshape(1, n_draw, v.shape[-1]).copy(), dims=("chain", "draw", "study_id"))
+
+    const = xr.Dataset({"X_plot": xr.DataArray(np.asarray(ages, dtype=float), dims=("plot_id",))})
+    return grid, by_study, const
+
+
+def _weighted_fixture():
+    """Two studies at opposite offsets, each seen at one end of the age range."""
+    import pandas as pd
+
+    ages = np.array([12.0, 24.0, 36.0, 48.0, 60.0])
+    n_draw = 3
+    offsets = np.tile(np.array([[1.0, -1.0]]), (n_draw, 1))  # (draw, study)
+    frame = pd.DataFrame({
+        "study_code": [0] * 10 + [1] * 10,
+        "age": [12.0] * 10 + [60.0] * 10,
+    })
+    return ages, n_draw, offsets, frame
+
+
+def test_univariate_weighted_child_follows_the_studies_present_at_each_age(tmp_path):
+    """VG11/VG12 had no weighted loader, so the weighted attainment delay was
+    read against the joint comparator and stopped at its window (#289 4.5).
+    The single-outcome loader must weight the study offsets by who is sampled
+    at each age, exactly as the joint loader does."""
+    import xarray as xr
+    from scipy.special import expit
+
+    ages, n_draw, offsets, frame = _weighted_fixture()
+    grid, by_study, const = _grid_and_scalar(n_draw, ages)
+    post = xr.Dataset({"f_plot": grid(np.zeros((n_draw, len(ages)))), "delta": by_study(offsets)})
+    path = tmp_path / "univariate_re.nc"
+    xr.DataTree.from_dict({"posterior": post, "constant_data": const}).to_netcdf(str(path))
+
+    got_ages, W = comparison.load_univariate_trajectory_weighted(str(path), 810, frame, bandwidth=3.0)
+    np.testing.assert_array_equal(got_ages, ages)
+    assert W.shape == (n_draw, len(ages))
+    # Only study 0 is sampled at 12 months, only study 1 at 60: the weighted
+    # child is that study's child there, not the reference child at f = 0.
+    np.testing.assert_allclose(W[:, 0], expit(1.0) * 810, rtol=1e-9)
+    np.testing.assert_allclose(W[:, -1], expit(-1.0) * 810, rtol=1e-9)
+    # Midway, both studies are equally (and negligibly) near, so the weights
+    # normalise to a half each.
+    np.testing.assert_allclose(W[:, 2], 0.5 * (expit(1.0) + expit(-1.0)) * 810, rtol=1e-6)
+
+    # A frame that is not the fit's own -- more studies than the posterior
+    # carries offsets for -- is refused rather than indexed out of range.
+    import pandas as pd
+
+    wrong = pd.DataFrame({"study_code": [0, 1, 2], "age": [12.0, 36.0, 60.0]})
+    with pytest.raises(ValueError, match="not the fit's own frame"):
+        comparison.load_univariate_trajectory_weighted(str(path), 810, wrong)
+
+
+def test_joint_weighted_child_matches_the_univariate_construction(tmp_path):
+    """The joint loader shares the study weights with the single-outcome one,
+    so the two sides of a weighted contrast mean the same child."""
+    import xarray as xr
+    from scipy.special import expit
+
+    ages, n_draw, offsets, frame = _weighted_fixture()
+    grid, by_study, const = _grid_and_scalar(n_draw, ages)
+    zeros = np.zeros((n_draw, len(ages)))
+    post = xr.Dataset({
+        "f_u_plot": grid(zeros), "h_plot": grid(zeros),
+        "delta_u": by_study(offsets), "delta_q": by_study(-offsets),
+    })
+    path = tmp_path / "joint_re.nc"
+    xr.DataTree.from_dict({"posterior": post, "constant_data": const}).to_netcdf(str(path))
+
+    got_ages, U, S = comparison.load_population_trajectory_weighted(str(path), 810, frame, bandwidth=3.0)
+    np.testing.assert_array_equal(got_ages, ages)
+    np.testing.assert_allclose(U[:, 0], expit(1.0) * 810, rtol=1e-9)
+    np.testing.assert_allclose(S[:, 0], expit(1.0) * expit(-1.0) * 810, rtol=1e-9)
+    np.testing.assert_allclose(U[:, -1], expit(-1.0) * 810, rtol=1e-9)
+    np.testing.assert_allclose(S[:, -1], expit(-1.0) * expit(1.0) * 810, rtol=1e-9)
