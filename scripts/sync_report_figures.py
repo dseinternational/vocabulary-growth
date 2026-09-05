@@ -57,6 +57,7 @@ from vocab_growth.fit_artifacts import (
     source_data_hash,
     validate_fit_output,
 )
+from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 COPY_EXTS = (".svg", ".png", ".csv")
@@ -253,6 +254,7 @@ def main() -> None:
                 None if args.allow_provisional else source_data_hash(env.DATA_DIR)
             )
             validation_failures: list[tuple[str, list[str]]] = []
+            skipped_by_role: list[tuple[str, str, list[str]]] = []
             for name in sorted(os.listdir(models_dir)):
                 src = os.path.join(models_dir, name)
                 definition = definitions_by_label.get(name)
@@ -286,9 +288,26 @@ def main() -> None:
                     ),
                 )
                 if errors:
-                    validation_failures.append((name, errors))
+                    # A model that supplies no reported number must not be able
+                    # to block publishing the ones that do. Before roles were
+                    # declared this loop was all-or-nothing, so a stale
+                    # development rung took the whole sync down with it -- and
+                    # #301, which moved two models carrying a reported number,
+                    # invalidated all twenty. The failure is still shown; what
+                    # changes is that it is not fatal and the model's figures
+                    # are left out rather than syndicated unvalidated.
+                    role = CATALOGUE[definition.model_id.lower()].role
+                    if role.publication_required:
+                        validation_failures.append((name, errors))
+                    else:
+                        skipped_by_role.append((name, role.value, errors))
                 else:
                     model_sources.append((name, src))
+
+            for name, role_value, errors in skipped_by_role:
+                print(f"[skip] {name}: {role_value}, not required for publication")
+                for error in errors:
+                    print(f"  - {error}")
 
             if validation_failures:
                 for name, errors in validation_failures:
@@ -299,6 +318,7 @@ def main() -> None:
                     "No report figures were changed because one or more model "
                     "outputs failed validation."
                 )
+
 
             for name, src in model_sources:
                 n = _sync_dir(src, os.path.join(env.REPORT_FIGS_DIR, name))

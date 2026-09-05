@@ -33,8 +33,11 @@ from vocab_growth.models.catalogue import (
     CATALOGUE,
     ENGINES,
     EngineAdapter,
+    ModelRole,
     engine_for,
     get,
+    models_with_role,
+    publication_models,
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
@@ -445,3 +448,113 @@ def test_the_package_docstring_points_at_the_source_rather_than_restating_it():
         "the package docstring should point at the catalogue and the registry "
         "rather than restate what they hold"
     )
+
+
+# --- roles: declared here, pinned against the documented table ------------------
+#
+# The roles table in ``docs/models/README.md`` is the study owner's record of
+# what each model is for. Until the catalogue carried it, nothing could read it
+# and every model was treated identically by publication validation. These pin
+# the declaration against that record so the two cannot drift the way the engine
+# assignment did (#273) -- and so relaxing a model is a visible, reviewable edit
+# rather than something that happens by omission.
+
+
+def _documented_development_steps() -> set[str]:
+    """Model keys the roles table calls a development step or model."""
+    text = (_REPO_ROOT / "docs" / "models" / "README.md").read_text(encoding="utf-8")
+    start = text.index("### Model roles")
+    section = text[start:]
+    end = section.find(chr(10) + "### ", 1)
+    if end != -1:
+        section = section[:end]
+    found: set[str] = set()
+    for line in section.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 2 or "Development" not in cells[1]:
+            continue
+        # The first cell may name several models ("VG05, VG07, VG08").
+        for token in cells[0].replace(",", " ").split():
+            token = token.strip("*` ")
+            if token.lower() in MODEL_REGISTRY:
+                found.add(token.lower())
+    return found
+
+
+@pytest.mark.parametrize("model_key", _MODEL_KEYS)
+def test_every_registered_model_declares_a_role(model_key):
+    """A model with no role would silently pick up whatever the default is."""
+    assert isinstance(get(model_key).role, ModelRole)
+
+
+def test_the_documented_development_steps_are_declared_as_such():
+    """The roles table is the record; the catalogue must agree with it.
+
+    Only checked in the direction the table can support. The table names the
+    development steps explicitly, so every one of them must be declared. It does
+    not name a role for every model, and the ones it omits are deliberately
+    ``UNCLASSIFIED`` rather than guessed.
+    """
+    documented = _documented_development_steps()
+    assert documented, "the roles table named no development steps; has it moved?"
+    declared = {
+        key for key, model in CATALOGUE.items() if model.role is ModelRole.DEVELOPMENT_STEP
+    }
+    assert documented <= declared, (
+        "documented as a development step but not declared one: "
+        f"{sorted(documented - declared)}"
+    )
+
+
+def test_an_unclassified_model_still_requires_publication_validation():
+    """Fail closed. Omitting a role must never relax a model by accident."""
+    assert ModelRole.UNCLASSIFIED.publication_required
+
+
+@pytest.mark.parametrize(
+    "role", [ModelRole.MODEL_OF_RECORD, ModelRole.TD_REFERENCE, ModelRole.UNCLASSIFIED]
+)
+def test_the_roles_that_supply_numbers_are_publication_required(role):
+    assert role.publication_required
+
+
+@pytest.mark.parametrize("role", [ModelRole.DEVELOPMENT_STEP, ModelRole.SUPERSEDED])
+def test_the_roles_that_supply_no_number_are_not_publication_required(role):
+    """The taxonomy's own rule: a superseded model never supplies a number."""
+    assert not role.publication_required
+
+
+def test_at_least_one_model_of_record_is_declared():
+    """A catalogue with no model of record would publish nothing, silently."""
+    assert any(m.role is ModelRole.MODEL_OF_RECORD for m in CATALOGUE.values())
+
+
+def test_the_publication_scope_is_exactly_the_publication_required_models():
+    """What the refit driver defaults to, and what the sync refuses without."""
+    assert set(publication_models()) == {
+        key for key, model in CATALOGUE.items() if model.role.publication_required
+    }
+
+
+def test_the_publication_scope_is_a_strict_subset_of_the_registry():
+    """If it were the whole registry the role wiring would be doing nothing."""
+    scope = set(publication_models())
+    assert scope < set(MODEL_REGISTRY)
+
+
+def test_an_unclassified_model_is_still_in_the_publication_scope():
+    """Fail closed end to end: undecided must mean refitted, not dropped."""
+    unclassified = models_with_role(ModelRole.UNCLASSIFIED)
+    assert set(unclassified) <= set(publication_models())
+
+
+def test_no_development_step_is_in_the_publication_scope():
+    steps = set(models_with_role(ModelRole.DEVELOPMENT_STEP))
+    assert steps and not (steps & set(publication_models()))
+
+
+def test_the_scope_helpers_return_registry_keys():
+    for key in publication_models() + models_with_role(ModelRole.DEVELOPMENT_STEP):
+        assert key in MODEL_REGISTRY

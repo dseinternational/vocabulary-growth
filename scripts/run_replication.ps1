@@ -49,8 +49,18 @@
 param(
     # Sampling config: dev | test | rep | rep-lite.
     [string]   $Config = 'rep',
-    # Model keys to run. Defaults to every registered model.
+    # Model keys to run. Defaults to the models -Scope selects.
     [string[]] $Models,
+    # Which models the default list covers when -Models is not given.
+    #   publication - models whose catalogue role requires a publication-valid
+    #                 fit (models of record, TD references, and anything not yet
+    #                 classified, which fails closed). The default: a
+    #                 development step supplies no reported number, so refitting
+    #                 it buys nothing publishable.
+    #   all         - every registered model, including development steps.
+    #                 Use for a true full replication run.
+    [ValidateSet('publication', 'all')]
+    [string]   $Scope = 'publication',
     # Output root; overrides $env:DSE_VOCAB_GROWTH_OUTPUT_DIR.
     [string]   $OutputDir,
     # Where to write run logs. Default: <output>/replication-logs.
@@ -188,6 +198,7 @@ if ($Detach -and -not $env:_REPL_DETACHED) {
     $childArgs = @('-NoProfile', '-File', $PSCommandPath, '-Config', $Config, '-LogDir', $LogDir,
                    '-MaxParallel', $MaxParallel, '-MinFreeGB', $MinFreeGB)
     if ($Models)           { $childArgs += @('-Models', ($Models -join ',')) }
+    if ($Scope)            { $childArgs += @('-Scope', $Scope) }
     if ($OutputDir)        { $childArgs += @('-OutputDir', $OutputDir) }
     if ($TracePersistence) { $childArgs += @('-TracePersistence', $TracePersistence) }
     foreach ($s in 'RenderOnFit', 'NoSync', 'Fresh', 'IncludeKfold', 'NoDescriptives',
@@ -308,12 +319,30 @@ function Test-CompatibleFit([string] $Model) {
 }
 
 # ---------------------------------------------------------------------------
-# Resolve model list from the registry (single source of truth) unless given.
+# Resolve the model list from the catalogue (single source of truth) unless
+# given. -Scope publication drops the roles that supply no reported number, so
+# the default run is the one that makes something publishable rather than the
+# one that refits everything; -Scope all restores the whole registry.
 # ---------------------------------------------------------------------------
+$excludedModels = @()
 if (-not $Models -or $Models.Count -eq 0) {
-    $registry = & uv run python -c 'from vocab_growth.models.definitions import MODEL_REGISTRY; print(" ".join(MODEL_REGISTRY))'
-    if ($LASTEXITCODE -ne 0 -or -not $registry) { Write-Error 'Could not enumerate MODEL_REGISTRY'; exit 1 }
-    $Models = $registry.Trim() -split '\s+'
+    if ($Scope -eq 'all') {
+        $expr = 'from vocab_growth.models.definitions import MODEL_REGISTRY; print(" ".join(MODEL_REGISTRY))'
+    } else {
+        $expr = 'from vocab_growth.models.catalogue import publication_models; print(" ".join(publication_models()))'
+    }
+    $selected = & uv run python -c $expr
+    if ($LASTEXITCODE -ne 0 -or -not $selected) { Write-Error "Could not enumerate models for -Scope $Scope"; exit 1 }
+    $Models = $selected.Trim() -split '\s+'
+
+    if ($Scope -ne 'all') {
+        # Name what was left out, with its role. A run that silently fitted a
+        # subset is the defect `tests/test_runbook_model_lists.py` exists for;
+        # narrowing the default deliberately must not reintroduce it quietly.
+        $skipExpr = 'from vocab_growth.models.catalogue import CATALOGUE; print(" ".join(f"{k}:{m.role.value}" for k, m in CATALOGUE.items() if not m.role.publication_required))'
+        $excluded = & uv run python -c $skipExpr
+        if ($LASTEXITCODE -eq 0 -and $excluded) { $excludedModels = $excluded.Trim() -split '\s+' }
+    }
 }
 # Accept a single comma-joined string as well as a real array: the -Detach
 # re-launch passes one argument, and so do most shells.
@@ -321,7 +350,10 @@ $Models = @($Models | ForEach-Object { $_ -split ',' } | Where-Object { $_ } | F
 
 Write-Log '===== REPLICATION RUN START ====='
 Write-Log "config=$Config pwsh=$($PSVersionTable.PSVersion) fresh=$($Fresh.IsPresent) output=$OutRoot"
-Write-Log "models: $($Models -join ' ')"
+Write-Log "scope=$Scope models: $($Models -join ' ')"
+if ($excludedModels.Count -gt 0) {
+    Write-Log "excluded by role: $($excludedModels -join ' ')"
+}
 Write-Log "parallel=$MaxParallel min-free=${MinFreeGB}GB render-on-fit=$($RenderOnFit.IsPresent)"
 Write-Log ("phases: descriptives={0} fit={1} compare={2} render={3} upload={4} kfold={5}" -f (-not $NoDescriptives), (-not $NoFit), (-not $NoCompare), (-not $NoRender), (-not $NoUpload), $IncludeKfold.IsPresent)
 
