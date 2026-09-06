@@ -1,4 +1,5 @@
 Abbeduto
+Armon
 ArviZ
 BFGS
 BFMI
@@ -59,6 +60,7 @@ Laudanska
 Laudańska
 Lewandowsky
 Lexi
+Lotem
 Lézine
 MCMC
 MCSE
@@ -79,6 +81,7 @@ Pagnamenta
 Palacios
 Pandoc
 Plunkett
+Poulin
 Poustka
 Preis
 Psychometrika
@@ -94,6 +97,7 @@ Spiegelhalter
 Stojanovik
 Sánchez
 TEDS
+Toole
 TOST
 Thal
 Tovar
