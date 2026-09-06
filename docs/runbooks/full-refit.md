@@ -150,11 +150,11 @@ Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, wh
 > [!NOTE]
 > **Re-pinned from 1,243 / "278 of 1,521" on 2026-09-06**, after ingesting `us_03`. Recomputed through `analysis_frames.build_analysis_frame` on VG10 and VG15 — the fits' own builder, not a proxy for the rule — both reporting `non_native_rows_excluded = 1523`.
 >
-> Note which denominator this is. 264 + 1,523 = **1,787**, not the 1,708 rows of VG10's *baseline* frame: the restriction runs before some later exclusions, so the printed count is not "baseline minus kept". The old pair was on the same basis (278 + 1,243 = 1,521), so the two are directly comparable.
+> Note which denominator this is. 264 + 1,523 = **1,787**, not the 1,708 rows of VG10's _baseline_ frame: the restriction runs before some later exclusions, so the printed count is not "baseline minus kept". The old pair was on the same basis (278 + 1,243 = 1,521), so the two are directly comparable.
 >
 > Most of the movement is the denominator rather than the variant — `us_03` is a 396-item form, so all 284 of its administrations are non-native. The kept set also fell slightly, 278 → 264; that cannot be `us_03`, which adds no native rows, and it is not attributed here. This is exactly the stale pin the paragraph warns about: the check says "must be 1,243", a current fit prints 1,523, and a reader following the runbook would record a failure that is not one.
 
- On VG15 it also leaves uk_02 as the only cross-tab source, so `psi` falls back to its single-study branch: that fit answers the denominator question, not the association one.
+On VG15 it also leaves uk_02 as the only cross-tab source, so `psi` falls back to its single-study branch: that fit answers the denominator question, not the association one.
 
 ### VG15's `psi` after the study-level term
 
