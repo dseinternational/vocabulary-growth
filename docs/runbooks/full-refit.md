@@ -695,7 +695,10 @@ Back up the non-converged output first; the refit becomes the model of record.
 > gate first time and **`vg09` missed it at max R-hat 1.0111 on `p_slope_low_u` and
 > `intercept_u`** — which is this block, named in the list above — with **zero divergences**
 > and ESS fine (618 against 400). So the rung is the raised tuning prescribed here
-> (tune 12000 / draws 8000 / `target_accept` 0.97), not a divergence remedy. Two models
+> (tune 12000 / draws 8000 / `target_accept` 0.97), not a divergence remedy — and
+> **it worked, first try**: max R-hat 1.0111 → **1.0037**, min ESS 618 → 1,479, still
+> zero divergences, in 1 h 03 m of which 89.5% was sampling. The prescription in this
+> section is therefore confirmed rather than merely inherited. Two models
 > cleared the hard gate but carry soft-tier caveats: `vg02` gained **1** divergent
 > transition where it had none before, and `vg22` went from **1 to 3**. `vg08` passed at
 > max R-hat 1.0092 against the 1.01 threshold and min ESS 666 — worth watching rather than
