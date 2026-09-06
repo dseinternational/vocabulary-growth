@@ -309,7 +309,7 @@ def test_diagnostics_gate_hard_failure_in_the_payload_is_non_converged(tmp_path)
     assert gate.clean is False
 
 
-def test_diagnostics_gate_flags_unassessable_parameters_as_a_caveat(tmp_path):
+def test_diagnostics_gate_flags_unassessable_parameters_as_a_hard_failure(tmp_path):
     _write_gate_payload(
         tmp_path,
         passed=False,
@@ -320,7 +320,7 @@ def test_diagnostics_gate_flags_unassessable_parameters_as_a_caveat(tmp_path):
         unassessable_parameters=["tau_subj_q"],
     )
     gate = diagnostics_gate(str(tmp_path))
-    assert gate.converged is True
+    assert gate.converged is False
     assert gate.clean is False
     assert any("could not be assessed" in caveat for caveat in gate.caveats)
 

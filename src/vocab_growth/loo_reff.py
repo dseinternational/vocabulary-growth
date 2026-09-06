@@ -26,7 +26,7 @@ pinned when the caller can name the parameters (a rebuilt model); otherwise
 
 The computation lives in :mod:`dse_research_utils.statistics.loo` (v0.12.0);
 this module binds it to this repository's trace-attribute reader and keeps the
-project-specific ``LookupError`` message, which names the date the attribute
+project-specific ``SampledParametersUnavailableError`` message, which names the date the attribute
 was introduced.
 
 See ``notes/202608231530-observation-deterministics-not-sampled.md`` §3 and §7.
@@ -45,14 +45,14 @@ from vocab_growth.fit_artifacts import read_sampled_parameters_attr
 def sampled_parameter_names(trace: Any, *, names: Sequence[str] | None = None) -> list[str]:
     """The sampled parameters of ``trace``: ``names`` if given, else its attribute.
 
-    Raises ``LookupError`` when neither is available — a trace from before the
+    Raises ``SampledParametersUnavailableError`` when neither is available — a trace from before the
     attribute existed, read without a model to name the parameters.
     """
     if names is not None:
         return list(names)
     recorded = read_sampled_parameters_attr(trace)
     if recorded is None:
-        raise LookupError(
+        raise shared_loo.SampledParametersUnavailableError(
             "The trace does not record its sampled parameters (written before "
             "2026-08-23) and none were supplied; pass names=[rv.name for rv in "
             "model.free_RVs] from a rebuilt model, or accept ArviZ's default."
@@ -84,12 +84,10 @@ def reff_or_default(
     comes with a model to name them. The notice is printed rather than swallowed
     because a comparison that mixes the two conventions should say so.
     """
-    try:
-        return sampled_parameter_reff(trace, names=names)
-    except LookupError:
-        warn(
-            f"  {label + ': ' if label else ''}reff left at ArviZ's posterior-wide "
-            "default — the trace predates the sampled-parameters record and no "
-            "model was supplied to pin it."
-        )
-        return None
+    return shared_loo.reff_or_default(
+        trace,
+        names=names,
+        attr_reader=read_sampled_parameters_attr,
+        label=label,
+        warn=warn,
+    )

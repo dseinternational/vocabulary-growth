@@ -27,6 +27,7 @@ import dse_research_utils.plot.predictive as plot_predictive
 import dse_research_utils.plot.styles as plot_styles
 import dse_research_utils.statistics.descriptive as descriptive_stats
 import dse_research_utils.statistics.diagnostics as shared_diagnostics
+import dse_research_utils.statistics.loo as shared_loo
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
 import dse_research_utils.statistics.models.reporting as reporting
@@ -69,6 +70,8 @@ from vocab_growth.fit_artifacts import (
     configured_nutpie_backend,
     convergence_caveats,
     create_staging_root,
+    diagnostics_assessable,
+    diagnostics_scan_completed,
     git_metadata,
     is_reporting_quality_config,
     normalise_for_json,
@@ -1100,30 +1103,28 @@ def emit_loo_summary(
     """
     rows = []
     for label, loo in loo_by_label.items():
-        pareto_k = getattr(loo, "pareto_k", None)
-        good_k = getattr(loo, "good_k", None)
-        counts = {"good": None, "bad": None, "very_bad": None}
-        if pareto_k is not None and good_k is not None:
-            values = np.asarray(pareto_k).ravel()
-            values = values[np.isfinite(values)]
-            counts = {
-                "good": int((values <= float(good_k)).sum()),
-                "bad": int(((values > float(good_k)) & (values <= 1.0)).sum()),
-                "very_bad": int((values > 1.0).sum()),
-            }
+        shared = shared_loo.loo_summary_row(loo, label=label, reff=reff)
+        values = shared_loo.pareto_k_values(loo).ravel()
+        # Bands describe finite diagnostics only; the separate unusable count
+        # includes every non-finite value without double-counting +infinity.
+        counts = shared_loo.pareto_k_bands(
+            values[np.isfinite(values)], shared["k_threshold"]
+        )
         rows.append(
             {
                 "outcome": label,
-                "elpd_loo": float(getattr(loo, "elpd", np.nan)),
+                "elpd_loo": shared["elpd_loo"],
                 "se": float(getattr(loo, "se", np.nan)),
-                "p_loo": float(getattr(loo, "p", np.nan)),
-                "n_data_points": int(getattr(loo, "n_data_points", 0)),
+                "p_loo": shared["p_loo"],
+                "n_data_points": shared["n_observations"],
                 "n_samples": int(getattr(loo, "n_samples", 0)),
                 "n_dropped_degenerate": int(dropped_by_label.get(label, 0)),
                 "pareto_k_good": counts["good"],
                 "pareto_k_bad": counts["bad"],
                 "pareto_k_very_bad": counts["very_bad"],
-                "good_k_threshold": None if good_k is None else float(good_k),
+                "pareto_k_nonfinite": shared["pareto_k_nonfinite"],
+                "pareto_k_unusable": shared["pareto_k_unusable"],
+                "good_k_threshold": shared["k_threshold"],
                 "scale": str(getattr(loo, "scale", "log")),
                 "reff": None if reff is None else float(reff),
             }
@@ -1790,10 +1791,9 @@ def enforce_convergence_gate(
     if not is_reporting_quality_config(sampling_config_name):
         return []
 
-    scan_failed = (
-        gate_summary.get("max_rhat") is None
-        or gate_summary.get("min_ess") is None
-    )
+    scan_failed = not diagnostics_scan_completed(gate_summary)
+    assessable = diagnostics_assessable(gate_summary)
+    checks = gate_summary.get("checks") or {}
     rhat_failing = gate_summary.get("rhat_failing") or []
     ess_failing = gate_summary.get("ess_failing") or []
     unassessable = gate_summary.get("unassessable_parameters") or []
@@ -1821,19 +1821,27 @@ def enforce_convergence_gate(
         rhat_failing = []
         scan_failed = False
 
-    if scan_failed or rhat_failing or ess_failing or unassessable:
+    check_failed = (
+        checks.get("rhat") is False and accepted is None
+    ) or checks.get("ess") is False
+    if scan_failed or not assessable or rhat_failing or ess_failing or check_failed:
         if scan_failed:
             reason = "The R-hat/ESS convergence scan did not complete."
-        elif unassessable and not (rhat_failing or ess_failing):
+        elif not assessable and not (rhat_failing or ess_failing):
             reason = (
-                f"The convergence gate could not assess R-hat/ESS for "
-                f"{len(unassessable)} parameter(s): {', '.join(unassessable[:6])}."
+                "The convergence gate could not assess R-hat/ESS"
+                + (f" for {len(unassessable)} parameter(s): {', '.join(unassessable[:6])}."
+                   if unassessable else ": diagnostic values are unavailable.")
             )
-        else:
+        elif rhat_failing or ess_failing:
             reason = (
                 f"The convergence gate found {len(rhat_failing)} R-hat failure(s) "
                 f"and {len(ess_failing)} ESS failure(s)."
             )
+            if unassessable:
+                reason += f" It also could not assess: {', '.join(unassessable[:6])}."
+        else:
+            reason = "The recorded R-hat/ESS checks failed without naming the failing parameters."
         failure_path = os.path.join(output_dir, CONVERGENCE_FAILURE_FILENAME)
         with open(failure_path, "w", encoding="utf-8") as failure_file:
             failure_file.write(
@@ -1893,6 +1901,12 @@ def report_diagnostic_warnings(gate_summary: dict) -> None:
     min_ess = gate_summary.get("min_ess")
 
     problems: list[str] = []
+    if diagnostics_scan_completed(gate_summary) and not diagnostics_assessable(gate_summary):
+        names = gate_summary.get("unassessable_parameters") or []
+        problems.append(
+            "R-hat/ESS could not be assessed"
+            + (f" for: {', '.join(names[:6])}" if names else ".")
+        )
     rhat_failing = gate_summary.get("rhat_failing") or []
     if rhat_failing:
         detail = f" (max {max_rhat:.3f})" if max_rhat is not None else ""
@@ -1911,7 +1925,7 @@ def report_diagnostic_warnings(gate_summary: dict) -> None:
         console.print()
         for line in problems:
             console.print(f"[bold yellow]⚠ {line}[/bold yellow]")
-    elif max_rhat is not None and min_ess is not None:
+    elif diagnostics_scan_completed(gate_summary) and diagnostics_assessable(gate_summary):
         console.print(
             f"[green]✓ r_hat ≤ {rhat_max} and ESS ≥ {ess_threshold} across all "
             "free parameters (including vector-valued).[/green]"

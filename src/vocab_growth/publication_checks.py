@@ -25,6 +25,7 @@ import os
 import re
 import urllib.request
 from collections.abc import Iterable
+from urllib.parse import quote
 
 #: ``src``/``href`` targets in rendered HTML that point at a local file.
 _ASSET = re.compile(r'(?:src|href)="([^"#?][^"]*?)"')
@@ -80,12 +81,13 @@ def verify_published(
 
     Each failure is ``"<status or exception> <path>"``, so the caller can print
     them as a list. ``base_url`` is the directory URL the files were published
-    under, with or without a trailing slash.
+    under, with or without a trailing slash. ``relative_paths`` contains raw
+    filenames, not URL-encoded paths; each is encoded exactly once.
     """
     failures: list[str] = []
     root = base_url.rstrip("/")
     for relative in relative_paths:
-        url = f"{root}/{relative}"
+        url = f"{root}/{quote(relative, safe='/')}"
         try:
             with urllib.request.urlopen(url, timeout=timeout) as response:
                 if response.status != 200:

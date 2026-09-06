@@ -33,6 +33,10 @@ from collections.abc import Mapping
 from scipy import stats
 
 from vocab_growth.administration_loo import ADMINISTRATION_LABEL
+from vocab_growth.fit_artifacts import (
+    diagnostics_assessable,
+    diagnostics_scan_completed,
+)
 from vocab_growth.glossary import render_glossary  # noqa: F401  (re-exported)
 from vocab_growth.models.diagnostics_utils import (  # noqa: F401  (re-exported)
     render_convergence_caveats,
@@ -1619,9 +1623,16 @@ def render_loo_section(directory: str = ".") -> None:
 
     # The estimate is not usable without its reliability diagnostic, so the
     # verdict is printed rather than left for the reader to derive.
-    bad = int(table.get("pareto_k_bad", pd.Series(dtype=int)).fillna(0).sum())
-    very_bad = int(table.get("pareto_k_very_bad", pd.Series(dtype=int)).fillna(0).sum())
-    total = int(table.get("n_data_points", pd.Series(dtype=int)).fillna(0).sum())
+    total = int(table["n_data_points"].sum())
+    very_bad = int(table["pareto_k_very_bad"].fillna(0).sum())
+    if "pareto_k_unusable" in table and table["pareto_k_unusable"].notna().all():
+        unusable = int(table["pareto_k_unusable"].sum())
+    elif table["pareto_k_good"].notna().all():
+        # Older writers counted only finite values in the good band. Its
+        # complement includes missing values, unlike bad + very_bad.
+        unusable = total - int(table["pareto_k_good"].sum())
+    else:
+        unusable = None
     print(
         "The Pareto $k$ counts say whether that estimate can be trusted. "
         "Leave-one-out here is approximated by importance sampling rather than "
@@ -1630,16 +1641,19 @@ def render_loo_section(directory: str = ".") -> None:
         "Counts are against the threshold in the table, which ArviZ sets from "
         "the sample size.\n"
     )
-    if bad == 0 and very_bad == 0:
+    if unusable is None or total == 0:
+        print("The Pareto $k$ counts are unavailable or empty; reliability cannot be assessed.")
+    elif unusable == 0:
         print(
             f"For this fit **every one of the {total:,} observations is within "
             "the threshold**, so the estimate above is reliable."
         )
     else:
-        share = (bad + very_bad) / total if total else 0.0
+        share = unusable / total
         print(
-            f"For this fit **{bad + very_bad} of {total:,} observations "
-            f"({share:.0%}) exceed the threshold** ({very_bad} of them above 1), "
+            f"For this fit **{unusable} of {total:,} observations "
+            f"({share:.0%}) have non-finite Pareto $k$ or exceed the threshold** "
+            f"({very_bad} finite values above 1), "
             "so the estimate above should be treated as indicative rather than "
             "as a precise quantity."
         )
@@ -2079,7 +2093,8 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
 
     divergences = summary.get("divergences")
     bfmi = summary.get("bfmi_per_chain") or []
-    min_bfmi = min(bfmi) if bfmi else None
+    finite_bfmi = [value for value in bfmi if value is not None and math.isfinite(value)]
+    min_bfmi = min(finite_bfmi) if len(finite_bfmi) == len(bfmi) and bfmi else None
 
     def mark(ok):
         return "pass" if ok else "**fail**"
@@ -2095,6 +2110,8 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             f"| Largest R-hat | {max_rhat:.6f}{where} | ≤ {rhat_max:g} | hard | "
             f"{mark(checks.get('rhat', max_rhat <= rhat_max))} |"
         )
+    else:
+        print(f"| Largest R-hat | unavailable | ≤ {rhat_max:g} | hard | **fail** |")
     if min_ess is not None:
         where = (
             f" ({best_ess_name})" if best_ess_name == unlisted
@@ -2104,6 +2121,8 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             f"| Smallest effective sample size | {min_ess:,.0f}{where} | ≥ {ess_min:,} | hard | "
             f"{mark(checks.get('ess', min_ess >= ess_min))} |"
         )
+    else:
+        print(f"| Smallest effective sample size | unavailable | ≥ {ess_min:,} | hard | **fail** |")
     if divergences is not None:
         print(
             f"| Divergent transitions | {divergences:,} | 0 | soft | "
@@ -2114,9 +2133,14 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             f"| Smallest energy BFMI across chains | {min_bfmi:.3f} | ≥ {bfmi_min:g} | soft | "
             f"{mark(checks.get('bfmi', min_bfmi >= bfmi_min))} |"
         )
+    else:
+        print(f"| Smallest energy BFMI across chains | unavailable | ≥ {bfmi_min:g} | soft | **fail** |")
     unassessable = summary.get("unassessable_parameters") or []
-    if unassessable:
-        print(f"| Parameters the gate could not assess | {len(unassessable):,} | 0 | — | noted |")
+    if not diagnostics_scan_completed(summary):
+        print("| R-hat/ESS scan | did not complete | completed | hard | **fail** |")
+    if not diagnostics_assessable(summary):
+        detail = ", ".join(unassessable) if unassessable else "unavailable diagnostics"
+        print(f"| Parameters the gate could not assess | {detail} | none | hard | **fail** |")
     print()
 
     manifest = read_manifest(directory)
@@ -2128,8 +2152,17 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
         effort.append(f"after {params['tune']:,} tuning draws")
     if params.get("target_accept"):
         effort.append(f"at target acceptance {params['target_accept']:g}")
-    hard = bool(checks.get("rhat", True)) and bool(checks.get("ess", True))
-    soft = bool(checks.get("divergences", True)) and bool(checks.get("bfmi", True))
+    hard = (
+        diagnostics_scan_completed(summary)
+        and diagnostics_assessable(summary)
+        and bool(checks.get("rhat", max_rhat is not None and max_rhat <= rhat_max))
+        and bool(checks.get("ess", min_ess is not None and min_ess >= ess_min))
+    )
+    soft = (
+        divergences is not None and divergences == 0
+        and min_bfmi is not None and min_bfmi >= bfmi_min
+        and bool(checks.get("divergences", True)) and bool(checks.get("bfmi", True))
+    )
     if hard and soft:
         verdict = "This fit clears both tiers of the convergence gate."
     elif hard:
@@ -2139,10 +2172,11 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             "intervals should be read with that in mind."
         )
     else:
-        verdict = (
-            "This fit **does not clear the hard tier** and reaches this page only under a "
-            "recorded exception, which the caveat block above states."
-        )
+        verdict = "This fit **does not clear the hard tier**."
+        if summary.get("accepted_rhat_exception"):
+            verdict += " The caveat block above states the recorded exception."
+        else:
+            verdict += " These results are provisional and must not be published as a completed fit."
     sentence = verdict
     if effort:
         sentence += " Sampled with " + ", ".join(effort) + "."

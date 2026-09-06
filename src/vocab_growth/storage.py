@@ -122,8 +122,7 @@ def _verify_report_upload(output_dir: str, model_label: str, result) -> str:
     a broken publication is never reported as complete.
     """
     index_html = os.path.join(output_dir, "index.html")
-    sent = [url[len(result.prefix_url):] for url in result.urls]
-    missing = unpublished_assets(index_html, sent)
+    missing = unpublished_assets(index_html, result.relative_paths)
     if missing:
         shown = ", ".join(missing[:8]) + (", ..." if len(missing) > 8 else "")
         raise RuntimeError(
