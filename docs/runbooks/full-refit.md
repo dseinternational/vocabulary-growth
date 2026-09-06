@@ -52,10 +52,19 @@ naive run hits. Distilled from the 2026-07-12 run
   references `gp_model_graph.svg`, so without it all twenty render with a broken
   figure and nothing fails loudly enough to notice.
 - Disk: **choose the trace tier against the volume you actually have, and set it
-  before you start.** Under about 1 TB use
-  `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact`; at 1 TB or more leave the default
+  before you start.** Under about 300 GB use
+  `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact`; above that leave the default
   `full`, and make sure that variable is _unset_ so it cannot silently override
-  you. `compact` is byte-identical for reporting but blocks recovery scoring,
+  you. (**This threshold was 1 TB until 2026-09-06**, and was inherited from
+  traces written before the 2026-08-23 change that stopped sampling the
+  observation-sized deterministics. Measured on the 2026-09-04 round — 40 fits,
+  **218 GB** at `full` — a `rep` model fit now averages **6.6 GB**, a sensitivity
+  variant 3.8 GB and a recovery replicate 5.0 GB, with one outlier that dominates
+  any budget: VG11 at 24.6 GB. Sizing is in
+  [Surviving a full disk](#surviving-a-full-disk). The old figure would have sent
+  any workstation-sized volume to `compact` for no reason, and `compact` is the
+  tier that blocks exactly the tools the phase 3 validation work needs.)
+  `compact` is byte-identical for reporting but blocks recovery scoring,
   `regenerate_plots.py` and `loso_compare.py` on those fits without a refit, so
   it is a saving worth making only when the space is genuinely tight. Either way,
   redirect output off the checkout with `--output-dir <scratch>` or
@@ -136,7 +145,16 @@ python scripts/compare_sensitivity.py vg10 --variant dse-native-only
 python scripts/compare_sensitivity.py vg15 --variant dse-native-only
 ```
 
-Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, which must read 1,243 against the current pool. It is the widest-scoped variant registered — 278 of 1,521 rows survive, from ie_01's 810 wave, ie_02, uk_02's DSE arm and uk_06 — so expect wide intervals and read it for whether the trajectory _shapes_ hold, not for agreement to three significant figures. On VG15 it also leaves uk_02 as the only cross-tab source, so `psi` falls back to its single-study branch: that fit answers the denominator question, not the association one.
+Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, which must read **1,523** against the current pool. It is the widest-scoped variant registered — **264 of 1,787** rows survive, from ie_01's 810 wave (46), ie_02 (111), uk_02's DSE arm (96) and uk_06 (11), leaving 181 children — so expect wide intervals and read it for whether the trajectory _shapes_ hold, not for agreement to three significant figures.
+
+> [!NOTE]
+> **Re-pinned from 1,243 / "278 of 1,521" on 2026-09-06**, after ingesting `us_03`. Recomputed through `analysis_frames.build_analysis_frame` on VG10 and VG15 — the fits' own builder, not a proxy for the rule — both reporting `non_native_rows_excluded = 1523`.
+>
+> Note which denominator this is. 264 + 1,523 = **1,787**, not the 1,708 rows of VG10's _baseline_ frame: the restriction runs before some later exclusions, so the printed count is not "baseline minus kept". The old pair was on the same basis (278 + 1,243 = 1,521), so the two are directly comparable.
+>
+> Most of the movement is the denominator rather than the variant — `us_03` is a 396-item form, so all 284 of its administrations are non-native. The kept set also fell slightly, 278 → 264; that cannot be `us_03`, which adds no native rows, and it is not attributed here. This is exactly the stale pin the paragraph warns about: the check says "must be 1,243", a current fit prints 1,523, and a reader following the runbook would record a failure that is not one.
+
+On VG15 it also leaves uk_02 as the only cross-tab source, so `psi` falls back to its single-study branch: that fit answers the denominator question, not the association one.
 
 ### VG15's `psi` after the study-level term
 
@@ -171,12 +189,12 @@ comes from the **catalogue's roles** rather than from `MODEL_REGISTRY`:
 
 | `-Scope`      | covers                                                                                    |
 | ------------- | ----------------------------------------------------------------------------------------- |
-| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 13 today |
-| `all`         | every registered model, including development steps — 20 today                            |
+| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 14 today |
+| `all`         | every registered model, including development steps — 21 today                            |
 
 A development step supplies no reported number, and a superseded model never
 supplies one at all, so refitting them buys nothing publishable. Dropping the
-seven takes a sequential `rep` run from twenty models to thirteen.
+seven takes a sequential `rep` run from twenty-one models to fourteen.
 
 **Unclassified fails closed**, so a model whose role has not been decided is
 still refitted. Narrowing happens only when someone declares a role, in
@@ -355,7 +373,18 @@ $env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
 
 **Three models should stay at `full`: VG10, VG12 and VG15.** They are `fit_recovery.py`'s headline set, and recovery scoring refuses a compacted trace up front — as do `regenerate_plots.py` and `loso_compare.py`. Pass `--trace-persistence full` for those three specifically. Everything else can be compacted, at the cost of needing a refit if its plots ever have to be regenerated.
 
-**Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates. At `full` that exceeds 400 GB; at `compact` it is roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB is comfortable at `compact`; 1 TB at `full`.**
+**Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates.
+
+> [!NOTE]
+> **Re-measured 2026-09-06.** The paragraph below described traces written before the 2026-08-23 change that stopped sampling the observation-sized deterministics, and overstates a current round by roughly a factor of two. **Budget per fit rather than per round**, because what a round costs depends entirely on how many variants it schedules.
+>
+> The 2026-09-04 round, measured directly: **40 fits, 217.8 GB** at `full` — 20 model fits at `rep` (131.4 GB, mean **6.6**), 9 sensitivity variants at `rep` (34.4 GB, mean **3.8**), 8 recovery replicates at `rep` (39.8 GB, mean **5.0**) and 3 VG11 recovery replicates at `test` (12.3 GB, mean 4.1).
+>
+> **That is not a full round**, and the total should not be read as one: it carries 9 of the ~82 registered sensitivity variants, and its three `test` replicates would each be VG11-sized at `rep`. Scale from the means instead. Two things dominate any estimate. **The typically developing side is half the bill on 30% of the fits** — 108 GB across 12 fits — and within it five carry a third of the whole round on their own: VG11 24.6 GB, VG21 15.2, VG13 and VG23 14.5 each, VG12 7.6, so 76 GB of the 218. Against that, every one of the thirteen Down syndrome models is 1.2–5.9 GB (as are VG03 and VG04, the small TD pair, at 2.9 and 1.5). And the promotion headroom to add is **one VG11**, 24.6 GB, not a share of the total.
+>
+> Practical figures: the 21 registered models come to about **140 GB**; add ~4 GB per sensitivity arm and ~5 GB per recovery replicate. So a model round plus the ten mandatory data-handling arms is roughly **180 GB**, and **300 GB is comfortable** for it. A round that also runs recovery across the registry passes 400 GB and wants **500 GB**. Reach for `compact` below ~300 GB, remembering it costs the recovery, plot-regeneration and LOSO paths.
+
+The figures that follow are retained as the record of what the pre-2026-08-23 fits cost, not as guidance: at `full` that exceeded 400 GB; at `compact` it was roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB was comfortable at `compact`; 1 TB at `full`.**
 
 The 2026-08 refit is provisioned on a **2 TB attached disk**, so `full` is the tier to use and this section's `compact` advice does not apply to it. Measured against the current traces, its 28 planned fits come to about 320 GB at `full` — lower than the 400 GB above because that figure includes recovery replicates, which this run does not schedule. Either way it is comfortably inside the volume, and a fresh VM starts with an empty `output/`, so the peak equals the total rather than transiently holding both an old and a new trace.
 
@@ -420,17 +449,24 @@ systemd-run --user --scope --collect --unit=vg-sens -p MemoryMax=64G -p OOMPolic
 sensitivity fit dies alone instead of killing a seven-hour one.
 
 > [!IMPORTANT]
-> **A systemd scope does not inherit conda activation.** The first relaunch after the
-> crash failed all three TD jobs in 0m with `ModuleNotFoundError: No module named
-'dse_research_utils'`. Source and activate inside the driver script, and assert it
-> before any fit starts, so the failure is one line rather than a silent batch of
-> zero-minute FAILs:
+> **A systemd scope does not inherit environment activation.** The first relaunch
+> after the crash failed all three TD jobs in 0m with `ModuleNotFoundError: No
+module named 'dse_research_utils'`. Activate inside the driver script, and assert
+> it before any fit starts, so the failure is one line rather than a silent batch
+> of zero-minute FAILs:
 >
 > ```bash
-> source /opt/conda/etc/profile.d/conda.sh
-> conda activate dse-vocab-growth
-> python -c "import dse_research_utils" || { echo "env not activated" >&2; exit 1; }
+> cd /path/to/vocabulary-growth
+> uv run python -c "import dse_research_utils" || { echo "env not resolved" >&2; exit 1; }
 > ```
+>
+> **Updated 2026-09-06.** This block used to source `/opt/conda/etc/profile.d/conda.sh`
+> and activate `dse-vocab-growth`. That environment is retired — the project is a
+> single-layer `uv` environment now — so following the old text on a current image
+> fails with the very error it exists to prevent. The finding is unchanged and is
+> the reason to keep the assertion: a scope inherits neither form of activation.
+> Prefer `uv run`, which needs no activation at all; if you activate `.venv`
+> instead, assert the same import.
 
 **4. Sample per-process RSS, not machine-wide `used_GB`.** A machine-level sampler
 records that the box hit 244 GB but not which process did it — after the 2026-08-13
@@ -653,6 +689,24 @@ Back up the non-converged output first; the refit becomes the model of record.
 > assuming hightune. The ridge now surfaces instead on the **hierarchical TD models**
 > (`vg11`/`vg12`/`vg13`) — see the TD config warning above. (`vg13` additionally needs
 > `target_accept 0.99` for divergences, as in July.)
+
+> **Update (2026-09-06, the `us_03` refit):** the ridge **did** recur, on exactly one model.
+> All fourteen Down syndrome models were fitted at plain `rep`; thirteen cleared the hard
+> gate first time and **`vg09` missed it at max R-hat 1.0111 on `p_slope_low_u` and
+> `intercept_u`** — which is this block, named in the list above — with **zero divergences**
+> and ESS fine (618 against 400). So the rung is the raised tuning prescribed here
+> (tune 12000 / draws 8000 / `target_accept` 0.97), not a divergence remedy — and
+> **it worked, first try**: max R-hat 1.0111 → **1.0037**, min ESS 618 → 1,479, still
+> zero divergences, in 1 h 03 m of which 89.5% was sampling. The prescription in this
+> section is therefore confirmed rather than merely inherited. Two models
+> cleared the hard gate but carry soft-tier caveats: `vg02` gained **1** divergent
+> transition where it had none before, and `vg22` went from **1 to 3**. `vg08` passed at
+> max R-hat 1.0092 against the 1.01 threshold and min ESS 666 — worth watching rather than
+> escalating. `vg24`, fitted for the first time, passed on the first attempt
+> (0 divergences, R-hat 1.0044, BFMI 0.578), so a correlated child block did not cost the
+> stability it costs the TD family. Wall times on 32 cores at four-way concurrency:
+> `vg02` 1,013 s at the fast end to `vg19` 5,897 s and `vg22` 5,138 s at the slow end,
+> about 9 hours for the fourteen.
 
 ## 3. Render + comparisons
 

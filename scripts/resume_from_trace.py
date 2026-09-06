@@ -30,7 +30,11 @@ Guards, all fail-closed, because a trace and a model that disagree would produce
 silently wrong summaries rather than an error:
 
 * the retained manifest's model definition must equal the current registered one;
-* its raw-data fingerprint must equal the current one;
+* its exact prepared-frame hash must equal the one the current loader produces;
+* its raw-data fingerprint must equal the current one, unless the frame hash
+  vouches for it -- the same excuse ``validate_fit_output`` applies, for the same
+  reason: the fingerprint covers every CSV in ``data/`` while a model reads the
+  raw data only through its own prepared frame;
 * its sampling configuration name must equal the one being resumed under;
 * the trace's free variables and their dimensions must match the rebuilt model's.
 """
@@ -47,6 +51,7 @@ import dse_research_utils.environment.setup as setup
 import xarray as xr
 
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     FIT_MANIFEST_FILENAME,
     normalise_for_json,
@@ -87,7 +92,7 @@ def _stages_for(model_key: str, definition):
         raise
 
 
-def _verify(retained_dir: str, definition, config: str) -> dict:
+def _verify(retained_dir: str, model_key: str, definition, config: str) -> dict:
     """Fail closed unless the retained fit is the one we are about to resume."""
     manifest_path = os.path.join(retained_dir, FIT_MANIFEST_FILENAME)
     if not os.path.isfile(manifest_path):
@@ -108,12 +113,36 @@ def _verify(retained_dir: str, definition, config: str) -> dict:
             f"The retained fit used sampling configuration {recorded_config!r}, "
             f"not {config!r}."
         )
+    # The raw fingerprint cannot see a loader-rule change -- masking and
+    # exclusion rules run in Python after the CSVs are read -- so on its own it
+    # would let this script summarise an old posterior under new rules, which is
+    # the defect #266 finding 1 named for this script. The exact frame hash is
+    # the check that sees it, and the two are combined exactly as
+    # ``validate_fit_output`` combines them, deliberately: a frame that still
+    # rebuilds identically vouches for the fit against churn in CSVs the model
+    # never reads, and a manifest that records no frame hash cannot vouch for
+    # anything, so the fingerprint stays a hard gate there.
+    recorded_frame = manifest.get("data", {}).get("analysis_frame_hash")
+    current_frame = expected_analysis_frame_hash(model_key, definition)
+    frame_vouches = recorded_frame == current_frame
+
     recorded_hash = manifest.get("data", {}).get("source_data_hash")
     current_hash = source_data_hash(env.DATA_DIR)
-    if recorded_hash != current_hash:
+    if recorded_hash != current_hash and not frame_vouches:
         raise ValueError(
             "The raw data has changed since the retained fit; its trace no "
             "longer corresponds to the data the summaries would describe."
+        )
+    if not frame_vouches:
+        raise ValueError(
+            "The prepared analysis frame differs from the one used for the "
+            "retained fit: the loader's rules or ordering changed since it was "
+            "fitted, so its trace no longer corresponds to the data the "
+            "summaries would describe."
+            if recorded_frame is not None
+            else "The retained fit records no prepared-frame hash, so it cannot "
+            "be shown to correspond to the current loader's output; refit "
+            "rather than resuming from it."
         )
     return manifest
 
@@ -170,7 +199,7 @@ def main() -> int:
         return 1
 
     try:
-        manifest = _verify(args.retained_dir, definition, args.config)
+        manifest = _verify(args.retained_dir, args.model, definition, args.config)
     except (OSError, ValueError) as exc:
         console.print(f"[bold red]{exc}[/bold red]")
         return 1

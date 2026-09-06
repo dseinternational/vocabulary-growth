@@ -592,3 +592,53 @@ def test_every_stage_factory_names_its_first_stage_the_way_the_pipeline_requires
         assert first == PREPARE_STAGE_NAME, f"{key} ({engine.name}): {first!r}"
         checked += 1
     assert checked >= 2, f"only {checked} models exercised this contract"
+
+
+def test_the_staging_root_does_not_repeat_the_model_label(tmp_path):
+    """A short tag, because `dot` obeys MAX_PATH whatever Windows is set to.
+
+    The staging root contains a ``models/<label>/`` directory, so carrying the
+    label in the root's own name too spent 60-79 characters saying it twice.
+    On 2026-09-06 that pushed the VG10 ``us01-masked-production-reinstated``
+    arm's ``gp_model_graph.svg`` to 262 characters and graphviz silently
+    dropped it, while Python wrote a 273-character sibling beside it.
+    """
+    from vocab_growth.fit_artifacts import create_staging_root
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    definition = MODEL_REGISTRY["vg10"]
+    staged = create_staging_root(str(tmp_path), definition.model_id)
+    name = Path(staged).name
+
+    assert name.startswith(f"{definition.model_id}-")
+    assert definition.config_name not in name, (
+        "the staging root must not carry the full model label: the label "
+        "already names the models/<label>/ directory inside this root"
+    )
+    # The run id alone is what makes it unique, so two roots for one model
+    # must still not collide.
+    assert create_staging_root(str(tmp_path), definition.model_id) != staged
+
+
+def test_a_failed_fit_keeps_the_model_label_in_its_quarantine_name(tmp_path):
+    """`retain_failed_fit` reads the inner directory, not the staging root.
+
+    This is why shortening the staging root above costs nothing: the
+    quarantine name comes from ``models/<label>``, which is unchanged.
+    """
+    from vocab_growth.fit_artifacts import create_staging_root, retain_failed_fit
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    definition = MODEL_REGISTRY["vg10"]
+    label = f"{definition.model_id}-{definition.config_name}"
+    staging_root = create_staging_root(str(tmp_path), definition.model_id)
+    staged_output = Path(staging_root) / "models" / label
+    staged_output.mkdir(parents=True)
+    (staged_output / "fit_state.json").write_text("{}", encoding="utf-8")
+
+    retained = retain_failed_fit(str(staged_output), str(tmp_path))
+
+    assert retained is not None
+    assert Path(retained).name.startswith(label), (
+        f"quarantined fits must stay identifiable by model label: {retained}"
+    )

@@ -166,6 +166,14 @@ $env:PATH        = $VenvBin + [IO.Path]::PathSeparator + $env:PATH
 # renders them rather than degrading them to '?'.
 $env:PYTHONUTF8 = '1'
 
+# Every per-model log here is a redirected file, and Python block-buffers stdout
+# when it is not a terminal. Without this a fit's log stays empty for its first
+# 8 KB -- so a run cannot be watched, a hung fit is indistinguishable from one
+# that has just started, and, worst, a fit killed by the OOM killer loses the
+# buffered output that would say why. That last case has happened on this
+# project. Unbuffered costs nothing at these volumes.
+$env:PYTHONUNBUFFERED = '1'
+
 # Pin each chain to one thread when fitting a pool. Every fit already runs its
 # own chains in parallel, so a pool of them oversubscribes the box through the
 # BLAS/OpenMP thread pools unless these are held at 1 -- the pitfall recorded
