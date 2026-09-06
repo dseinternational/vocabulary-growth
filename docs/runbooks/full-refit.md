@@ -690,6 +690,21 @@ Back up the non-converged output first; the refit becomes the model of record.
 > (`vg11`/`vg12`/`vg13`) — see the TD config warning above. (`vg13` additionally needs
 > `target_accept 0.99` for divergences, as in July.)
 
+> **Update (2026-09-06, the `us_03` refit):** the ridge **did** recur, on exactly one model.
+> All fourteen Down syndrome models were fitted at plain `rep`; thirteen cleared the hard
+> gate first time and **`vg09` missed it at max R-hat 1.0111 on `p_slope_low_u` and
+> `intercept_u`** — which is this block, named in the list above — with **zero divergences**
+> and ESS fine (618 against 400). So the rung is the raised tuning prescribed here
+> (tune 12000 / draws 8000 / `target_accept` 0.97), not a divergence remedy. Two models
+> cleared the hard gate but carry soft-tier caveats: `vg02` gained **1** divergent
+> transition where it had none before, and `vg22` went from **1 to 3**. `vg08` passed at
+> max R-hat 1.0092 against the 1.01 threshold and min ESS 666 — worth watching rather than
+> escalating. `vg24`, fitted for the first time, passed on the first attempt
+> (0 divergences, R-hat 1.0044, BFMI 0.578), so a correlated child block did not cost the
+> stability it costs the TD family. Wall times on 32 cores at four-way concurrency:
+> `vg02` 1,013 s at the fast end to `vg19` 5,897 s and `vg22` 5,138 s at the slow end,
+> about 9 hours for the fourteen.
+
 ## 3. Render + comparisons
 
 Two report blocks read artefacts the fit itself does not write, and print a "run this" note until they exist. Produce them per fit **before** rendering (each opens the trace, so run them one model at a time rather than as a sweep while a heavy fit is on the box):
