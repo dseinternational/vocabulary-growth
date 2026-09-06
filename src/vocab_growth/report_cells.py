@@ -194,6 +194,25 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
         "subject_re_correlation_eta",
         "lkj",
     ),
+    # VG24 (#296) correlates three child effects rather than two, so the same
+    # LKJ prior induces three marginals. Each gets its own row: they are not one
+    # quantity, and `rho_sign_q` is the one the model exists to estimate. The
+    # rows appear only where the parameter is present, so VG20 and VG23 still
+    # render exactly one.
+    (
+        "rho_u_sign",
+        "Correlation between a child's understood and signed-ratio offsets "
+        "$\\rho_{u\\,sign}$",
+        "subject_re_correlation_eta",
+        "lkj",
+    ),
+    (
+        "rho_sign_q",
+        "Correlation between a child's signed-ratio and $q$ offsets "
+        "$\\rho_{sign\\,q}$",
+        "subject_re_correlation_eta",
+        "lkj",
+    ),
     ("log_psi", "Sign–speech association $\\psi$ (log scale)", "log_psi", "log_psi"),
     ("beta_lag", "Cross-lag coefficient $\\beta$", "beta_lag", "lag"),
     # VG15 samples this and its own page names it a prior-sensitivity target,
@@ -236,6 +255,25 @@ def fitted_parameters(directory: str = ".") -> set[str]:
         return {str(name) for name in pd.read_csv(path, index_col=0).index}
     except (OSError, ValueError):
         return set()
+
+
+def _correlated_block_size(definition: dict) -> int:
+    """How many child effects the correlated block spans: 2 (VG20/VG23) or 3 (VG24).
+
+    Read off the ``use_subject_re_*`` flags rather than stored, because that is
+    what the engines build the block from: both refuse a definition that sets
+    ``subject_re_correlation_eta`` without every block the correlation spans, so
+    counting the set flags counts the block's dimension exactly.
+
+    Defaults to 2 for a definition that predates the joint variant, which is
+    every fit made before VG24 and the right answer for all of them.
+    """
+    size = sum(
+        1
+        for flag in ("use_subject_re_u", "use_subject_re_q", "use_subject_re_sign")
+        if definition.get(flag)
+    )
+    return size if size >= 2 else 2
 
 
 def _prior_row(
@@ -374,24 +412,35 @@ def _prior_row(
         return description, f"HalfNormal({sigma:g})", reading
 
     if kind == "lkj":
-        # `(rho + 1) / 2 ~ Beta(eta, eta)` is exactly LKJ(eta) for a 2x2, which
-        # is how the build writes it so the correlation stays a named variable.
-        # Named as LKJ here for the same reason `_subject_scale_row` does.
+        # The MARGINAL of one correlation under LKJ(eta) on an n x n matrix is
+        # `(rho + 1) / 2 ~ Beta(eta + (n - 2)/2, eta + (n - 2)/2)`. At n = 2 that
+        # is Beta(eta, eta), which is how VG20 and VG23 write the block so the
+        # correlation stays a named variable; at VG24's n = 3 it is
+        # Beta(eta + 1/2, eta + 1/2), a per-correlation SD of 0.41 rather than
+        # 0.45. Small, but the table quotes 5-95% bounds, and quoting the 2x2
+        # ones against a 3x3 block would be wrong by more than the rounding.
         eta = definition.get(stem)
         if eta is None:
             return None
         eta = float(eta)
-        lo = float(stats.beta.ppf(0.05, eta, eta)) * 2.0 - 1.0
-        hi = float(stats.beta.ppf(0.95, eta, eta)) * 2.0 - 1.0
+        shape = eta + (_correlated_block_size(definition) - 2) / 2.0
+        lo = float(stats.beta.ppf(0.05, shape, shape)) * 2.0 - 1.0
+        hi = float(stats.beta.ppf(0.95, shape, shape)) * 2.0 - 1.0
         if eta == 1.0:
             emphasis = "flat over (-1, 1), so no size of correlation is favoured"
         elif eta > 1.0:
             emphasis = "pulled toward zero, so a correlation has to be evidenced"
         else:
             emphasis = "pushed toward ±1, which favours a strong correlation"
+        # `rho_u_sign` -> `u\,sign`, not `u_sign`: a bare underscore inside the
+        # subscript braces is a second subscript operator, which is a LaTeX
+        # error rather than a cosmetic problem. Matches how the descriptions
+        # above write the same symbols.
+        symbol = parameter.removeprefix("rho_").replace("_", "\\,")
         return (
             description,
-            f"LKJ({eta:g}), i.e. $(\\rho_{{uq}}+1)/2 \\sim$ Beta({eta:g}, {eta:g})",
+            f"LKJ({eta:g}), i.e. $(\\rho_{{{symbol}}}+1)/2 \\sim$ "
+            f"Beta({shape:g}, {shape:g})",
             f"centred on zero and {emphasis}; 5–95% {lo:+.2f} to {hi:+.2f}",
         )
 
@@ -785,6 +834,17 @@ def _prior_rows(
                     if name.startswith(f"{parameter}_")
                     or name == f"log_{parameter}_ratio"
                 )
+
+    # VG24's `subject_re_corr` is the LKJ matrix the `rho_*` rows above describe:
+    # one sampled object, three reported marginals. It is covered by them rather
+    # than exempt, because a prior is genuinely stated for it -- an exemption
+    # would record the opposite. Conditioned on a row having rendered, so a
+    # future definition that samples the matrix without reporting any marginal
+    # still fails the coverage check instead of passing on this line.
+    if "subject_re_corr" in present and any(
+        name.startswith("rho_") for name in covered
+    ):
+        covered.append("subject_re_corr")
 
     rows.extend(factor_rows)
     covered.extend(factor_covered)

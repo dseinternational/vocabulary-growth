@@ -257,6 +257,25 @@ _TARGETS: dict[str, EngineRecoverySpec] = {
     "vg21": BIVARIATE_RE_SPEC,
     "vg22": BIVARIATE_RE_SPEC,
     "vg23": BIVARIATE_RE_SPEC,
+    # VG24 is to VG15 what VG20 is to VG10, and the argument carries across
+    # unchanged: the correlation changes the PRIOR on a child's three deviates,
+    # not how any count is drawn, and the simulator samples the observation nodes
+    # from the real graph at a fixed truth draw. So JOINT_SPEC is correct here
+    # with no change -- the marginals, both compositions and both nested links
+    # are VG15's.
+    #
+    # The three correlations need no scoring entries: `rho_uq`, `rho_u_sign` and
+    # `rho_sign_q` are scalar Deterministics, so `recovery/compare.py` picks them
+    # up by dimension, exactly as VG20's `rho_uq` is. `subject_re_corr` carries
+    # two dims and falls through both branches of `target_variables` rather than
+    # erroring, as VG22's `subject_factor_loadings` does.
+    #
+    # Registered rather than deferred because `rho_sign_q` is the whole point of
+    # the model and is identified by the children carrying both a signed and a
+    # spoken marginal -- a subset of the frame, not all of it. Whether that
+    # subset identifies it is a recovery question, and recovery is how it gets
+    # measured instead of assumed.
+    "vg24": JOINT_SPEC,
 }
 
 UNSUPPORTED_REASONS: dict[str, str] = {

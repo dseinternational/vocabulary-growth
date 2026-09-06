@@ -171,9 +171,9 @@ def clamp_targets(value: bool | str) -> tuple[bool, bool]:
     field, so a *new* field would add a key to every definition of every class that
     declares it and invalidate every one of their fits at once — which for this
     field is every class that declares it: the whole ``BivariateModelDefinition``
-    tree, ``TrivariateModelDefinition`` and ``JointModelDefinition``, fourteen of
-    the twenty registered models (the six univariate ones do not declare it, which
-    is why ``common_univariate_re`` reads it through ``getattr``). Widening this
+    tree, ``TrivariateModelDefinition`` and ``JointModelDefinition``, fifteen of
+    the twenty-one registered models (the six univariate ones do not declare it,
+    which is why ``common_univariate_re`` reads it through ``getattr``). Widening this
     field's domain leaves ``True``/``False`` serialising exactly as before, so only
     a definition that actually opts in changes. Stated as the rule rather than a
     count: the count was written as "fifteen" and stayed there through five
@@ -2043,6 +2043,51 @@ class JointModelDefinition:
         return ModelType.JOINT
 
 
+@dataclass(frozen=True)
+class JointCorrelatedSubjectREModelDefinition(JointModelDefinition):
+    """Joint definition that also correlates the three subject random effects.
+
+    VG24 (issue #296). The field lives on a **subclass** for the reason
+    :class:`BivariateCorrelatedSubjectREModelDefinition` records: a fit is
+    validated by comparing the serialised definition field for field, so adding
+    a field to ``JointModelDefinition`` invalidates every fit of it. VG15 is
+    today the only direct instance, so a ``BACKFILL_DEFAULTS`` entry would also
+    have been valid; the subclass is the established precedent for this seam and
+    keeps the excuse registry to the three entries that need it.
+
+    ``None`` means "behave exactly as the parent class", so the subclass is inert
+    until a definition sets the field; the engine reads it through ``getattr``.
+    """
+
+    subject_re_correlation_eta: float | None = None
+    """LKJ concentration for the correlation among the three subject intercepts.
+
+    ``None`` disables the correlation, leaving the three blocks independent as in
+    VG15. When set, the 3x3 correlation matrix over a child's (understood, ``q``,
+    signed) deviations is ``LKJCorr(eta)`` and the three off-diagonals are
+    exposed as the named deterministics ``rho_uq``, ``rho_u_sign`` and
+    ``rho_sign_q``, which is what the summaries and the recovery scorer read.
+
+    **The scales stay the three ``tau_subj_*`` HalfNormals.** Only the
+    correlation is estimated here, so ``tau_subj_u``, ``tau_subj_q`` and
+    ``tau_subj_sign`` keep their names, their priors and their per-child meaning,
+    and VG15's are directly comparable with VG24's.
+
+    ``eta = 2`` matches VG20 and VG23 so that the three models' ``rho_uq`` are
+    prior-comparable. Note the marginal is **not** identical: for an ``n x n``
+    LKJ(eta) matrix each correlation has ``(rho + 1) / 2 ~ Beta(eta + (n - 2)/2,
+    eta + (n - 2)/2)``, so at ``n = 3`` the per-correlation prior SD is 0.41
+    against VG20's 0.45 at ``n = 2``. Close enough that the comparison is fair,
+    different enough that the model page should say so rather than imply the
+    priors are the same object.
+
+    The nesting is exact: at the identity correlation the block emits
+    ``tau * z``, which is what VG15's independent blocks emit, op for op.
+    ``tests/test_joint_correlated_subject_re.py`` asserts that numerically
+    rather than by inspection.
+    """
+
+
 # ============================================================
 # Model instances
 # ============================================================
@@ -3711,6 +3756,64 @@ VG23 = _as_definition_subclass(
     subject_re_correlation_eta=2.0,
 )
 
+# VG24 (issue #296) is to VG15 what VG20 is to VG10: the same graph with the
+# child effects allowed to correlate, derived from VG15 so its priors cannot
+# drift away and so VG15's own fingerprint is untouched.
+#
+# What it exists to estimate is `rho_sign_q` -- do children who persistently sign
+# a larger share of what they understand also persistently say a larger share of
+# it? Nothing in the registry answers that. VG15's three subject blocks are
+# independent scales with no correlation structure, and VG16's cross-lag runs
+# understood -> q, not sign -> speech.
+#
+# Gate 1 ran before any of this was written and is positive: VG15's own fitted
+# subject intercepts correlate at +0.198 (89% ETI [0.107, 0.289]) across the 146
+# children carrying both a signed and a spoken marginal -- larger than the
+# realised u-q correlation on the same fit (+0.165 over 365 children) that sits
+# under VG20's fitted rho_uq of 0.39. See
+# notes/202609041722-sign-speech-modelling-proposals.md.
+#
+# That is not the zero-to-negative concurrent substitution result of
+# notes/202608141500-sign-speech-additivity-and-cross-lag.md §3, and the two do
+# not conflict: that analysis used the three cell-partition sources (uk_02,
+# uk_07, es_01), which are exactly where VG15's subject effects do not enter, so
+# the children are almost disjoint. It is also a different quantity from the
+# prospective +0.19 of notes/202608160930-early-signing-and-later-speech.md,
+# which conditions on earlier speech. Having all three on the record is what lets
+# the report say which is which.
+#
+# WHICH CHILDREN INFORM IT. The subject shifts enter the marginal likelihoods
+# only; the four-cell and produced-cell Dirichlet-Multinomials are fed
+# population + study marginals with no subject shift, deliberately, so the
+# subject block cannot pull `psi` (see the engine comment at the cell DMs).
+# Under that design `rho_sign_q` is identified by the children carrying both a
+# signed and a spoken marginal, not by every child in the frame. Extending the
+# subject shifts into the cell likelihoods would bring the es_01, uk_07 and
+# nz_01 children in, but it changes what `psi` means and is a separate proposal.
+# The model page states the support rather than leaving a reader to assume the
+# whole frame informs the correlation.
+#
+# A sign -> speech CROSS-LAG is the other obvious model and is deliberately not
+# this one (#297, deferred on #242). The argument is
+# notes/202608151140-cross-lag-not-for-models-of-record.md §4, unchanged: within-
+# child deviations have no memory beyond the occasion, so a population-baseline
+# lag mostly absorbs the covariance between *persistent* standings through a
+# noisy proxy. This is the between-child estimate, and it comes first.
+VG24 = _as_definition_subclass(
+    VG15,
+    JointCorrelatedSubjectREModelDefinition,
+    model_id="VG24",
+    config_name="age-joint-signspeech-ds-corr",
+    banner=(
+        "Fitting Model VG24: VG15 + correlated subject random effects on U, q"
+        " and the signed ratio (rho_uq, rho_u_sign, rho_sign_q) - Down syndrome"
+    ),
+    # eta = 2, matching VG20 and VG23 so the three models' rho_uq are
+    # prior-comparable. At n = 3 this is a per-correlation prior SD of 0.41
+    # rather than VG20's 0.45; see the field docstring.
+    subject_re_correlation_eta=2.0,
+)
+
 MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -3732,6 +3835,7 @@ MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "vg21": VG21,
     "vg22": VG22,
     "vg23": VG23,
+    "vg24": VG24,
 }
 
 
@@ -3931,6 +4035,56 @@ def validate_model_definition(definition) -> None:
         definition, "use_subject_re_u", False
     ):
         raise ValueError(f"{prefix} cross-lag requires use_subject_re_u=True.")
+
+    # VG24 (#296). The joint correlated block draws a child's three deviations
+    # from one joint Normal, so it is defined only when all three blocks exist.
+    # Rejected here rather than built partially: a two-of-three combination has
+    # a defensible reading (correlate the pair, leave the third independent) and
+    # a silent one (emit a 3x3 whose third row multiplies nothing), and the
+    # engine would pick the silent one. If the pairwise model is ever wanted it
+    # should be a registered variant that says so, not an unvalidated flag
+    # combination.
+    #
+    # Why the joint family is checked here and the bivariate one is not. The
+    # bivariate models get both of these guarantees from
+    # `subject_effects.resolve`, which `common_bivariate_re` calls before it
+    # builds anything. That resolver is built around the (u, q) PAIR and its
+    # per-outcome specs; the joint family is three outcomes with no specs, so it
+    # has no plan to resolve and no such gate. Rather than widen the resolver to
+    # a shape only one model needs, the rule the joint engine relies on is stated
+    # where every definition passes: here.
+    #
+    # The positivity check deliberately covers BOTH families -- it duplicates the
+    # resolver's rather than contradicting it, and it fires at definition time,
+    # which is earlier. `_validate_positive_scale_fields` cannot do it: that keys
+    # on the `_alpha`/`_beta`/`_sigma` suffixes and has never seen this field.
+    # Same defect class as `sign_peak_prior`: the engines hand it straight to an
+    # LKJ/Beta, which accepts a non-positive concentration and then samples
+    # garbage from it. `is not None` rather than truthiness throughout, so
+    # `eta = 0` reaches the check that rejects it instead of reading as "off".
+    correlation_eta = getattr(definition, "subject_re_correlation_eta", None)
+    if correlation_eta is not None and (
+        not isinstance(correlation_eta, (int, float))
+        or isinstance(correlation_eta, bool)
+        or not math.isfinite(correlation_eta)
+        or correlation_eta <= 0
+    ):
+        raise ValueError(
+            f"{prefix}.subject_re_correlation_eta must be a positive finite LKJ "
+            f"concentration; got {correlation_eta!r}."
+        )
+    if correlation_eta is not None and definition.model_type is ModelType.JOINT:
+        missing_blocks = [
+            name
+            for name in ("use_subject_re_u", "use_subject_re_q", "use_subject_re_sign")
+            if not getattr(definition, name, False)
+        ]
+        if missing_blocks:
+            raise ValueError(
+                f"{prefix}.subject_re_correlation_eta correlates all three subject "
+                "random effects, so it requires "
+                f"{', '.join(f'{name}=True' for name in missing_blocks)}."
+            )
 
     marginalisation = getattr(definition, "singleton_marginalisation", None)
     if marginalisation is not None and not getattr(definition, "use_subject_re", False):

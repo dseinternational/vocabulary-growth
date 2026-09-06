@@ -98,7 +98,7 @@ def _build_uncached(model_id, tmp_path, monkeypatch):
         ct.prepare_trivariate_data(ctx, d)
         ct.configure_trivariate_priors(ctx, d)
         ct.build_model(ctx, d)
-    elif model_id == "VG15":
+    elif model_id in {"VG15", "VG24"}:
         cj.prepare_joint_data(ctx, d)
         cj.configure_joint_priors(ctx, d)
         cj.build_model(ctx, d)

@@ -1,0 +1,510 @@
+---
+title: "Model VG24: Correlated child effects on comprehension, speech and sign - children with Down syndrome"
+
+date: now
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      # Explicit href rather than `- repo`; see the note in vg20/index.qmd. The
+      # per-model reports render in the OUTPUT directory, which has no
+      # repository above it, so Quarto's `repo` shorthand is a hard error there.
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/dseinternational/vocabulary-growth/
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+:::
+
+::: {.callout-note}
+This narrative was written from the model's specification before its first reporting-quality fit, deliberately from scratch rather than derived from VG15's report — copying the parent's report is how VG21 inherited three claims that had already been withdrawn from VG13 ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)). Every number on this page is rendered from the fit named in the banner below. The sections on what the correlations mean were written before that fit existed and should be read as the questions the fit answers, not as its answers.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sampling_banner
+
+render_sampling_banner()
+```
+
+VG24 is VG15 with three added parameters. VG15 gives each child three deviations — one on the comprehension trajectory, one on the production ratio $q$, one on the signed ratio $r$ — and draws them independently, which fixes at zero every relationship between them. VG24 replaces that assumption with a free $3 \times 3$ correlation and lets the data answer. VG15 is nested exactly at the identity.
+
+The parameter the model exists to produce is $\rho_{sign\,q}$: **do children who persistently sign a larger share of what they understand also persistently say a larger share of it?** Nothing in the registry answers that question. $\rho_{uq}$ — the quantity VG20 estimates for VG10, here on the trivariate frame — and $\rho_{u\,sign}$ come with it.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('candidate', instead='VG15', signing=True)
+```
+
+![The model's structure. VG24 differs from VG15 in the child-effect block alone.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Why this model, and why not a cross-lag {#sec-why}
+
+The sign-to-speech question has been examined descriptively three times and has never had a fitted model behind it. The three descriptive answers are different quantities, and reading them as one is the mistake this page is written to prevent:
+
+| Where | Quantity | Result |
+| --- | --- | --- |
+| `notes/202608160930-early-signing-and-later-speech.md` | Prospective: signed share predicts *later* spoken vocabulary, holding earlier speech and comprehension fixed | $+0.19$ SD per SD, 89% ETI $[0.03, 0.36]$ |
+| `notes/202608141500-sign-speech-additivity-and-cross-lag.md` §3 | Concurrent between-child association at matched comprehension and age | zero to negative, bracketed $[-0.44, -0.05]$ |
+| Gate 1 for this model | Correlation of VG15's own fitted child intercepts | $+0.198$, 89% ETI $[0.107, 0.289]$ |
+
+The second and third do not conflict, because they are measured on almost disjoint children: the concurrent analysis used the three cell-partition sources (`uk_02`, `uk_07`, `es_01`), which are exactly where VG15's child effects do not enter. VG24 estimates the third quantity properly — adjusted for age, study and the Beta-Binomial measurement model, with the uncertainty propagated rather than read off point estimates.
+
+**A sign → speech cross-lag is the other obvious model, and is deliberately not this one** ([#297](https://github.com/dseinternational/vocabulary-growth/issues/297), deferred on [#242](https://github.com/dseinternational/vocabulary-growth/issues/242)). The argument is the one `notes/202608151140-cross-lag-not-for-models-of-record.md` made for VG16 and it is unchanged here: within-child deviations were measured to have no memory beyond the occasion, so a population-baseline lag mostly absorbs the covariance between *persistent* standings through a noisy proxy. The persistent covariance is what VG24 estimates directly. It comes first for the same reason VG20 came before any lag model on the bivariate side.
+
+## What identifies each correlation {#sec-support}
+
+::: {.callout-important}
+## Not every child in the frame informs every correlation
+
+VG15's child shifts enter the **marginal** likelihoods only. The four-cell and produced-cell Dirichlet-Multinomials are fed population and study marginals with no child shift — deliberately, so that the child block cannot pull the association $\psi$ onto a thinly identified random effect. A consequence is that $\rho_{sign\,q}$ is identified by the children who contribute **both** a signed and a spoken marginal, not by all of the children in the frame, and $\rho_{u\,sign}$ likewise.
+
+Extending the child shifts into the cell likelihoods would bring the `es_01`, `uk_07` and `nz_01` children in, but it changes what $\psi$ means and is a separate proposal, not a variant of this one.
+:::
+
+```{python}
+#| label: correlation-support
+#| echo: false
+#| output: asis
+# How many children actually inform each correlation, read from THIS fit's own
+# stored data rather than from a rebuilt frame -- a rebuilt frame can silently
+# differ from the one the fit used. Guarded so a report rendered without the
+# trace degrades to a note instead of failing the render.
+import itertools
+
+try:
+    import arviz as az
+    import numpy as np
+
+    _idata = az.from_netcdf("trace.nc")
+    _constant = _idata.constant_data
+    _subject = np.asarray(_constant["subject_obs"]).astype(int)
+    _masks = {
+        "u": np.asarray(_constant["obs_u_mask"]).astype(bool),
+        "q": np.asarray(_constant["obs_s_mask"]).astype(bool),
+        "sign": np.asarray(_constant["obs_sign_mask"]).astype(bool),
+    }
+    _children = {
+        outcome: set(_subject[mask].tolist()) for outcome, mask in _masks.items()
+    }
+    _labels = {
+        ("u", "q"): r"$\rho_{uq}$",
+        ("u", "sign"): r"$\rho_{u\,sign}$",
+        ("q", "sign"): r"$\rho_{sign\,q}$",
+    }
+
+    print("| Correlation | Children contributing both marginals | Of the frame's children |")
+    print("| --- | ---: | ---: |")
+    _total = len(set(_subject.tolist()))
+    for _left, _right in itertools.combinations(("u", "q", "sign"), 2):
+        _both = _children[_left] & _children[_right]
+        print(
+            f"| {_labels[(_left, _right)]} | {len(_both):,} | "
+            f"{len(_both) / _total:.1%} of {_total:,} |"
+        )
+    print()
+    print(
+        ": Read at render time from this fit's own stored data. A correlation "
+        "estimated on a minority of the frame is not thereby wrong, but its "
+        "interval is the interval that subset supports, and it should not be "
+        "described as a property of the whole pool."
+    )
+except Exception as _exc:  # noqa: BLE001 - a report must not fail on a missing trace
+    print(f"_Support table unavailable: {type(_exc).__name__}._")
+```
+
+::: {.callout-warning}
+## The reporter confound, stated up front
+
+All three counts come from **one questionnaire completed by one parent**. A parent who over-reports tends to over-report every modality, so shared reporting tendency is not merely hard to separate from shared child ability — the model contains no term for it at all, and it loads onto the correlations by default. That biases all three **upward** in magnitude.
+
+This is the same caveat VG20 and VG23 carry for $\rho_{uq}$, and it applies with more force here: signing and speech are reported on the same form, item by item, by the same informant. Any number this page produces should be read as a model-conditional association in observed child standing, not as a pure persistent-ability correlation.
+:::
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Credible interval",
+    "Estimand",
+    "Reference inventory",
+    "Production ratio ($q$)",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Random intercept",
+    "Between-child heterogeneity ($\\tau$)",
+    "Partial pooling",
+    "Population-level and subject-marginal",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "Posterior predictive check",
+    "BFMI (Bayesian fraction of missing information)",
+])
+```
+
+## Priors {#sec-priors}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
+
+render_priors_table()
+```
+
+Every prior is VG15's, unchanged, including the three child-effect scales: $\tau_{subj,u}$, $\tau_{subj,q}$ and $\tau_{subj,sign}$ keep their $\mathrm{HalfNormal}(1.5)$ priors and their per-child meaning, so VG15's and VG24's are directly comparable. The one addition is the LKJ concentration on the correlation, $\eta = 2$ — a gentle pull toward independence, so that a correlation has to be evidenced rather than assumed. A prior that made a large correlation cheap would be assuming the answer to the question the model was built to ask.
+
+::: {.callout-note}
+## $\eta = 2$ here is not quite $\eta = 2$ in VG20
+
+$\eta = 2$ is chosen to match VG20 and VG23 so that the three models' $\rho_{uq}$ are estimated under the same concentration and a comparison between them is not an artefact of regularisation. The induced **marginal** on any one correlation is not identical, because it depends on the size of the block: under $\mathrm{LKJ}(\eta)$ on an $n \times n$ matrix, $(\rho + 1)/2 \sim \mathrm{Beta}(\eta + (n-2)/2,\ \eta + (n-2)/2)$. At VG24's $n = 3$ that is a prior SD of $0.41$, against $0.45$ at VG20's $n = 2$ — close enough that the comparison is fair, different enough to state rather than imply that the priors are the same object. The priors table above computes the bounds it quotes from the block's actual size.
+:::
+
+### Understood trajectory
+
+![How far apart in age two points must be before the understood trend may move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
+
+![Prior on the proportion of words understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+
+![Prior on the proportion of words understood at the high age anchor.](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+
+### Production ratio
+
+![How far apart in age two points must be before the production ratio may move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
+
+![Prior on the fraction of understood words that are spoken at the low age anchor.](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+
+![Prior on the fraction of understood words that are spoken at the high age anchor.](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
+
+### Signed ratio
+
+![How far apart in age two points must be before the signed trend may move independently.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the tent mean, on the logit scale.](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
+
+![Prior on the signed ratio at the young anchor age.](p_slope_low_sign_dist.png){#fig-sign-low .lightbox fig-align="left"}
+
+![Prior on the signed ratio at the peak anchor — the height of the hump.](p_slope_mid_sign_dist.png){#fig-sign-mid .lightbox fig-align="left"}
+
+![Prior on the signed ratio at the old anchor age.](p_slope_hi_sign_dist.png){#fig-sign-hi .lightbox fig-align="left"}
+
+### Dispersion
+
+![Prior on the floor of the understood dispersion parameter.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the younger reference age.](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the older reference age.](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
+
+![Prior on the floor of the spoken dispersion parameter.](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the younger reference age.](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the older reference age.](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
+
+![Prior on the floor of the signed dispersion parameter.](kappa_min_sign_dist.png){#fig-kappa-min-sign .lightbox fig-align="left"}
+
+![Prior on the intercept of the signed dispersion's age term.](a_kappa_sign_dist.png){#fig-a-kappa-sign .lightbox fig-align="left"}
+
+![Prior on the magnitude of the signed dispersion's age slope.](b_kappa_mag_sign_dist.png){#fig-b-kappa-mag-sign .lightbox fig-align="left"}
+
+### Association and concentration
+
+![Prior on the sign–speech association on the log-odds-ratio scale. Mass to the right of zero is prior belief in positive association.](log_psi_dist.png){#fig-log-psi .lightbox fig-align="left"}
+
+![Prior on the Dirichlet-Multinomial concentration.](log_conc_dist.png){#fig-log-conc .lightbox fig-align="left"}
+
+## Prior predictive checks {#sec-prior-predictive}
+
+![Understood trajectories drawn from the priors.](prior_samples_u.png){#fig-prior-u .lightbox fig-align="left"}
+
+![Spoken trajectories drawn from the priors.](prior_samples_s.png){#fig-prior-s .lightbox fig-align="left"}
+
+![Signed trajectories drawn from the priors.](prior_samples_sign.png){#fig-prior-sign .lightbox fig-align="left"}
+
+![Signed ratio $r(a)$ drawn from the priors — the fraction of understood words that are signed.](prior_samples_r.png){#fig-prior-r .lightbox fig-align="left"}
+
+![Production ratio $q(a)$ drawn from the priors — the fraction of understood words that are spoken.](prior_samples_q.png){#fig-prior-q .lightbox fig-align="left"}
+
+![Total expressive probability drawn from the priors, before any association has been estimated.](prior_samples_p_any.png){#fig-prior-p-any .lightbox fig-align="left"}
+
+::: {.callout-note}
+These figures plot **population-level** trajectories, which exclude study and child effects by construction. They therefore cannot exercise the correlated child block, and no reading of them can validate it — the same limitation [#233](https://github.com/dseinternational/vocabulary-growth/issues/233) recorded for VG19's and VG20's prior figures. The correlation's prior is checked in the priors table above and in `tests/test_joint_correlated_subject_re.py`, which samples it from the density and pins its marginals.
+:::
+
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
+import pandas as pd
+
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+::: {.callout-note}
+
+The normality tests in this table are reported for completeness. They are not a check on the model: the outcomes are bounded counts, which are not expected to be normally distributed, and the model does not assume that they are.
+
+:::
+
+## Diagnostics {#sec-diagnostics}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_convergence_caveats
+
+render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
+```
+
+::: {.callout-note}
+The child block is sampled as one joint object rather than as three independent scales, so its geometry is not VG15's. A correlation near $\pm 1$ makes the covariance near-singular and is the failure mode to watch for in the energy and pair plots; a correlation the data cannot determine shows instead as a flat posterior close to the prior, which is an informative result rather than a defect.
+:::
+
+![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox fig-align="left"}
+
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![Pairwise joint posteriors for the prioritised parameters. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+![Marginal posterior distributions for the sampled and derived parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above. For the three correlations this is the number that separates "estimated" from "returned unchanged".
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
+## Findings {#sec-findings}
+
+### The three child-effect correlations
+
+```{python}
+#| label: correlations
+#| echo: false
+#| output: asis
+# Read from this fit's own diagnostics so the text cannot drift from the model
+# it describes.
+import pandas as _pd
+
+_names = [
+    ("rho_uq", r"Understood and $q$ $\rho_{uq}$"),
+    ("rho_u_sign", r"Understood and signed ratio $\rho_{u\,sign}$"),
+    ("rho_sign_q", r"Signed ratio and $q$ $\rho_{sign\,q}$"),
+]
+_diagnostics = _pd.read_csv("diagnostics.csv", index_col=0)
+_present = [(k, label) for k, label in _names if k in _diagnostics.index]
+
+if _present:
+    print("| Correlation | Posterior mean | SD | 89% ETI | ESS (bulk) | R-hat |")
+    print("| --- | ---: | ---: | --- | ---: | ---: |")
+    for _key, _label in _present:
+        _row = _diagnostics.loc[_key]
+        print(
+            f"| {_label} (`{_key}`) | {_row['mean']:.3f} | {_row['sd']:.3f} | "
+            f"{_row['eti89_lb']:.3f} to {_row['eti89_ub']:.3f} | "
+            f"{_row['ess_bulk']:,.0f} | {_row['r_hat']:.3f} |"
+        )
+    print()
+    print(": Under VG15 all three are exactly zero by construction.")
+    print()
+
+    _headline = _diagnostics.loc["rho_sign_q"] if "rho_sign_q" in _diagnostics.index else None
+    if _headline is not None:
+        if _headline["eti89_lb"] > 0:
+            _verdict = (
+                "lies entirely **above** zero: the children who sign a larger "
+                "share of what they understand also tend to say a larger share "
+                "of it, so sign and speech standing go together rather than "
+                "trading off"
+            )
+        elif _headline["eti89_ub"] < 0:
+            _verdict = (
+                "lies entirely **below** zero: children who sign more of what "
+                "they understand tend to say less of it. That is the "
+                "substitution reading, and it would need to be reconciled with "
+                "the prospective result before being reported"
+            )
+        else:
+            _verdict = (
+                "**spans** zero, so this fit does not distinguish the "
+                "correlation from the independence VG15 assumes"
+            )
+        print(
+            f"**This is the number the model exists to produce.** Its 89% "
+            f"equal-tailed interval {_verdict}. Read it with the reporter "
+            f"confound and the support table above: the model has no informant "
+            f"term, and this correlation is identified by the children who "
+            f"contribute both a signed and a spoken marginal."
+        )
+else:
+    print("_This fit's `diagnostics.csv` carries no correlation rows._")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
+
+render_headline_quantities()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_variation_table
+
+render_variation_table()
+```
+
+Three comparisons are worth making once there are numbers, and none is automatic:
+
+- **Against VG15**, which is nested at the identity. The population trajectories and the association $\psi$ should sit close, but agreement is an empirical stability check rather than a correctness invariant — correlation changes nonlinear subject-marginal expectations, and refitting can legitimately reallocate fixed effects and marginal scales.
+- **Against VG20**, which estimates $\rho_{uq}$ on the same population under the same $\eta$ but on the bivariate frame, without any signing information. A difference between VG20's $\rho_{uq}$ and VG24's is a statement about the frames and the third outcome, not about the populations.
+- **Against the three descriptive results** in @sec-why. VG24 estimates the third of them; it neither confirms nor contradicts the first two, and the report should say which is which rather than presenting one number as the answer to all three questions.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
+
+render_family_notes()
+```
+
+## Posterior vocabulary summaries {#sec-predictions}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table()
+```
+
+## Association psi {#sec-psi}
+
+![Posterior distribution of the sign–speech association. Mass to the right of 1 is evidence of positive association.](psi_posterior.png){#fig-psi .lightbox fig-align="left"}
+
+$\psi$ is a **within-child, within-understood** association between saying a word and signing it. $\rho_{sign\,q}$ is a **between-child** association between persistent standings. They are different quantities and can legitimately have different signs: children who sign more may say less at a given moment while the children who sign more overall are also the children who say more overall. VG24 is the first model to carry both, which is what makes stating the distinction possible rather than theoretical.
+
+::: {.callout-note}
+The child shifts do not enter the cell likelihoods that identify $\psi$, so $\psi$ is estimated from the same information here as in VG15. A material move in $\psi$ between the two fits is therefore something to explain, not something to expect.
+:::
+
+![The four sign/speech states as fractions of comprehension, against age. The four curves sum to one at every age.](four_cell_composition.png){#fig-four-cell .lightbox fig-align="left"}
+
+## Total expressive vocabulary {#sec-total-expressive}
+
+![The data-identified total expressive vocabulary against the independence upper bound.](p_any_identified_vs_bound.png){#fig-p-any .lightbox fig-align="left"}
+
+## What signing is worth to the child {#sec-signing-value}
+
+![Expressive vocabulary split into sign-only, sign-and-speech and speech-only word counts.](signing_composition_words.png){#fig-signing-composition .lightbox fig-align="left"}
+
+![What counting sign adds to a child's own expressive vocabulary, as a multiple of the speech-only count.](signing_uplift.png){#fig-signing-uplift .lightbox fig-align="left"}
+
+![The signed ratio against the production ratio, with uncertainty intervals.](signed_vs_spoken_rate.png){#fig-rates .lightbox fig-align="left"}
+
+## Posterior predictive checks {#sec-ppc}
+
+![Observed against predicted totals for the four within-understood cells, one panel per source, with predictive intervals.](four_cell_ppc_by_source.png){#fig-four-cell-ppc .lightbox fig-align="left"}
+
+![Observed against predicted totals for `nz_01`'s three within-produced cells, with predictive intervals.](nz01_produced_cell_ppc.png){#fig-nz01-ppc .lightbox fig-align="left"}
+
+## Expected vocabulary by month {#sec-monthly}
+
+![Expected words understood by month.](expected_counts_by_month_u.png){#fig-monthly-u .lightbox fig-align="left"}
+
+![Expected words spoken by month.](expected_counts_by_month_s.png){#fig-monthly-s .lightbox fig-align="left"}
+
+![Expected words signed by month.](expected_counts_by_month_sign.png){#fig-monthly-sign .lightbox fig-align="left"}
+
+## Predictive calibration {#sec-calibration}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```
+
+## Out-of-sample prediction {#sec-loo}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+## Limits {#sec-limits}
+
+- **The correlations are model-conditional associations in observed child standing, not persistent-ability correlations.** The graph contains no informant, same-administration or measurement-error term, so shared parent-reporting tendency loads onto all three. The confound is stated at the top of this page because it is not removable by anything in this model.
+- **$\rho_{sign\,q}$ and $\rho_{u\,sign}$ rest on a subset of the frame**, quantified in @sec-support. The interval each carries is the interval that subset supports.
+- **Signing is very nearly a study-level property.** A binary signer/non-signer contrast is not identifiable in this pool, which is why the model estimates a correlation among continuous child standings rather than a group difference. Study random intercepts absorb between-study level, so the correlation is estimated within studies; where a study contributes few children with both marginals, it contributes little.
+- **This is a between-child estimate and carries no temporal direction.** It cannot say whether signing earlier leads to more speech later. That is the cross-lag question, deliberately deferred to [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) behind [#242](https://github.com/dseinternational/vocabulary-growth/issues/242), and no reading of $\rho_{sign\,q}$ substitutes for it.
+- **A correlation is not a mechanism.** Children who sign more of what they understand and say more of it may share a cause — earlier intervention, a more responsive language environment, a milder phenotype — that this model does not observe and does not adjust for.

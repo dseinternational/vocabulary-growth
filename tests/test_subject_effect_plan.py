@@ -73,6 +73,16 @@ EXPECTED = {
     "vg21": ({"u": "constant", "q": "constant"}, None, None, False),
     "vg22": ({"u": "factor", "q": "factor"}, None, 3, False),
     "vg23": ({"u": "constant", "q": "constant"}, 2.0, None, False),
+    # VG24 is VG15 plus the correlation, so all three blocks stay constant and
+    # the eta appears. The joint engine does not consume this plan -- `resolve`
+    # is called only from `common_bivariate_re`, and the joint seam reads the
+    # field directly -- so this row records what the resolver says about a joint
+    # definition rather than what fits it. It is checked because a resolver that
+    # silently dropped the third block, or reported no correlation, would be
+    # wrong about VG24 the day something starts consuming it.
+    "vg24": (
+        {"u": "constant", "q": "constant", "sign": "constant"}, 2.0, None, False,
+    ),
 }
 
 

@@ -31,7 +31,12 @@ from vocab_growth.models.definitions import MODEL_REGISTRY
 #: through `_as_definition_subclass`; VG15 shares the q and reporting groups and
 #: takes the understood anchors from its class defaults, which match.
 _DS_JOINT_MODELS = frozenset(
-    {"vg05", "vg07", "vg08", "vg09", "vg10", "vg14", "vg15", "vg16", "vg19", "vg20", "vg22"}
+    {
+        "vg05", "vg07", "vg08", "vg09", "vg10", "vg14", "vg15", "vg16", "vg19",
+        "vg20", "vg22",
+        # VG24 derives from VG15 and inherits every shared block (#296).
+        "vg24",
+    }
 )
 
 #: The typically-developing bivariate models, which deliberately carry *different*
@@ -135,7 +140,7 @@ def test_the_bivariate_class_tree_size():
     ], direct
 
 
-def test_the_mean_clamp_field_is_declared_by_fourteen_of_the_twenty():
+def test_the_mean_clamp_field_is_declared_by_fifteen_of_the_twenty_one():
     """`clamp_targets`' docstring gives this as the refit bill for widening it.
 
     It was written as "fifteen", then briefly as "all twenty" -- which is the reach
@@ -149,9 +154,9 @@ def test_the_mean_clamp_field_is_declared_by_fourteen_of_the_twenty():
     )
     assert declaring == [
         "vg05", "vg07", "vg08", "vg09", "vg10", "vg13", "vg14",
-        "vg15", "vg16", "vg19", "vg20", "vg21", "vg22", "vg23",
+        "vg15", "vg16", "vg19", "vg20", "vg21", "vg22", "vg23", "vg24",
     ], declaring
-    assert len(declaring) == 14, len(declaring)
+    assert len(declaring) == 15, len(declaring)
     # Stated in the docstring as a rule over classes, so check that shape too.
     assert {type(MODEL_REGISTRY[k]).__name__ for k in declaring} == {
         "BivariateModelDefinition",
@@ -160,6 +165,7 @@ def test_the_mean_clamp_field_is_declared_by_fourteen_of_the_twenty():
         "BivariateFactorSubjectREModelDefinition",
         "TrivariateModelDefinition",
         "JointModelDefinition",
+        "JointCorrelatedSubjectREModelDefinition",
     }
 
 
@@ -175,7 +181,7 @@ def test_every_registered_class_declares_the_comprehension_cap_field():
         if "report_max_age_understood" not in {f.name for f in dataclasses.fields(d)}
     )
     assert without == [], without
-    assert len(MODEL_REGISTRY) == 20, len(MODEL_REGISTRY)
+    assert len(MODEL_REGISTRY) == 21, len(MODEL_REGISTRY)
 
 
 def test_the_shared_kappa_block_covers_eight_definitions():
@@ -184,4 +190,6 @@ def test_the_shared_kappa_block_covers_eight_definitions():
         k for k, d in MODEL_REGISTRY.items()
         if getattr(d, "kappa_u", None) is D._DS_JOINT_UNDERSTOOD_KAPPA_RE
     )
-    assert sharers == ["vg09", "vg10", "vg14", "vg15", "vg16", "vg19", "vg20", "vg22"]
+    assert sharers == [
+        "vg09", "vg10", "vg14", "vg15", "vg16", "vg19", "vg20", "vg22", "vg24",
+    ]
