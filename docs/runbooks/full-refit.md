@@ -449,17 +449,24 @@ systemd-run --user --scope --collect --unit=vg-sens -p MemoryMax=64G -p OOMPolic
 sensitivity fit dies alone instead of killing a seven-hour one.
 
 > [!IMPORTANT]
-> **A systemd scope does not inherit conda activation.** The first relaunch after the
-> crash failed all three TD jobs in 0m with `ModuleNotFoundError: No module named
-'dse_research_utils'`. Source and activate inside the driver script, and assert it
-> before any fit starts, so the failure is one line rather than a silent batch of
-> zero-minute FAILs:
+> **A systemd scope does not inherit environment activation.** The first relaunch
+> after the crash failed all three TD jobs in 0m with `ModuleNotFoundError: No
+module named 'dse_research_utils'`. Activate inside the driver script, and assert
+> it before any fit starts, so the failure is one line rather than a silent batch
+> of zero-minute FAILs:
 >
 > ```bash
-> source /opt/conda/etc/profile.d/conda.sh
-> conda activate dse-vocab-growth
-> python -c "import dse_research_utils" || { echo "env not activated" >&2; exit 1; }
+> cd /path/to/vocabulary-growth
+> uv run python -c "import dse_research_utils" || { echo "env not resolved" >&2; exit 1; }
 > ```
+>
+> **Updated 2026-09-06.** This block used to source `/opt/conda/etc/profile.d/conda.sh`
+> and activate `dse-vocab-growth`. That environment is retired — the project is a
+> single-layer `uv` environment now — so following the old text on a current image
+> fails with the very error it exists to prevent. The finding is unchanged and is
+> the reason to keep the assertion: a scope inherits neither form of activation.
+> Prefer `uv run`, which needs no activation at all; if you activate `.venv`
+> instead, assert the same import.
 
 **4. Sample per-process RSS, not machine-wide `used_GB`.** A machine-level sampler
 records that the box hit 244 GB but not which process did it — after the 2026-08-13
