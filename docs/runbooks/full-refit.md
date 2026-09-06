@@ -52,10 +52,18 @@ naive run hits. Distilled from the 2026-07-12 run
   references `gp_model_graph.svg`, so without it all twenty render with a broken
   figure and nothing fails loudly enough to notice.
 - Disk: **choose the trace tier against the volume you actually have, and set it
-  before you start.** Under about 1 TB use
-  `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact`; at 1 TB or more leave the default
+  before you start.** Under about 300 GB use
+  `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact`; above that leave the default
   `full`, and make sure that variable is _unset_ so it cannot silently override
-  you. `compact` is byte-identical for reporting but blocks recovery scoring,
+  you. (**This threshold was 1 TB until 2026-09-06**, and was inherited from
+  traces written before the 2026-08-23 change that stopped sampling the
+  observation-sized deterministics. Measured on the 40 `rep` fits of the
+  2026-09-04 round, a whole round at `full` is **218 GB** — 110 GB of Down
+  syndrome fits and their variants, 108 GB of typically developing ones — with
+  the largest single trace 24.6 GB, VG11. The old figure would have sent any
+  workstation-sized volume to `compact` for no reason, and `compact` is the tier
+  that blocks exactly the tools the phase 3 validation work needs.)
+  `compact` is byte-identical for reporting but blocks recovery scoring,
   `regenerate_plots.py` and `loso_compare.py` on those fits without a refit, so
   it is a saving worth making only when the space is genuinely tight. Either way,
   redirect output off the checkout with `--output-dir <scratch>` or
@@ -355,7 +363,12 @@ $env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
 
 **Three models should stay at `full`: VG10, VG12 and VG15.** They are `fit_recovery.py`'s headline set, and recovery scoring refuses a compacted trace up front — as do `regenerate_plots.py` and `loso_compare.py`. Pass `--trace-persistence full` for those three specifically. Everything else can be compacted, at the cost of needing a refit if its plots ever have to be regenerated.
 
-**Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates. At `full` that exceeds 400 GB; at `compact` it is roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB is comfortable at `compact`; 1 TB at `full`.**
+**Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates.
+
+> [!NOTE]
+> **Re-measured 2026-09-06.** The paragraph below described traces written before the 2026-08-23 change that stopped sampling the observation-sized deterministics, and overstated a current round by about a factor of two. The 2026-09-04 round is 40 `rep` fits totalling **218 GB** at `full`: 28 Down syndrome fits and variants at 110 GB (largest 5.9 GB, VG08) and 12 typically developing ones at 108 GB (largest 24.6 GB, VG11). So the TD side is now most of the bill on half the fits, and the promotion headroom to add is VG11's 24.6 GB rather than a share of a 400 GB total. **300 GB is comfortable at `full`** for a round of this shape; reach for `compact` below that, and remember it costs the recovery, plot-regeneration and LOSO paths.
+
+The figures that follow are retained as the record of what the pre-2026-08-23 fits cost, not as guidance: at `full` that exceeded 400 GB; at `compact` it was roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB was comfortable at `compact`; 1 TB at `full`.**
 
 The 2026-08 refit is provisioned on a **2 TB attached disk**, so `full` is the tier to use and this section's `compact` advice does not apply to it. Measured against the current traces, its 28 planned fits come to about 320 GB at `full` — lower than the 400 GB above because that figure includes recovery replicates, which this run does not schedule. Either way it is comfortably inside the volume, and a fresh VM starts with an empty `output/`, so the peak equals the total rather than transiently holding both an old and a new trace.
 
