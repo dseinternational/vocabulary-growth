@@ -11,10 +11,11 @@ original rationale for the cap — a single bivariate dataset above 18 months �
 is obsolete: the Romance-language extension admits paired Italian WG rows to
 24 months, and 694 admissible administrations from two studies now sit above
 it. What remains of the cap is density (thin above 18 months) and the Oxford
-CDI's 418-item ceiling binding at 23–25 months. The study owner has adopted
-the 8–22-month `window-22` specification as this model's successor
-(notes/202608211100-window-22-adopted.md); its promotion as VG21 is tracked in
-#240, and until it lands VG13 remains the 8–18-month model of record.
+CDI's 418-item ceiling binding at 23–25 months. The study owner adopted the
+8–22-month `window-22` specification as this model's successor
+(notes/202608211100-window-22-adopted.md), and it landed as **VG21**, registered
+and fitted at `rep` on 2026-09-02 (#240). VG13 is retained as the historical
+8–18-month model.
 """
 
 from vocab_growth.models.common_bivariate_re import (
