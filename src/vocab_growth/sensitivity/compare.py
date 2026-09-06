@@ -26,6 +26,8 @@ from vocab_growth.fit_artifacts import (
     ACCEPTED_EXCEPTION_KEY,
     DIAGNOSTICS_SUMMARY_FILENAME,
     convergence_caveats,
+    diagnostics_assessable,
+    diagnostics_scan_completed,
     validate_fit_output,
 )
 
@@ -405,7 +407,7 @@ def diagnostics_gate(dirpath: str) -> DiagnosticsGate:
     failed, matching the fit pipeline's own gate), ``passed`` supplies
     :attr:`DiagnosticsGate.clean`, and
     :func:`vocab_growth.fit_artifacts.convergence_caveats` plus the
-    unassessable-parameter list supply the soft tier. Only when the payload is
+    unassessable-parameter list retain the reasons for failure. Only when the payload is
     absent — a fit made before it existed — does this fall back to scanning
     ``diagnostics.csv``, whose values are rounded and scalars-only and which
     records nothing about divergences, BFMI or unassessable parameters; the
@@ -420,8 +422,16 @@ def diagnostics_gate(dirpath: str) -> DiagnosticsGate:
             # A registered exception accepts a narrowly-scoped R-hat failure;
             # convergence_caveats reports it, so it belongs to the soft tier.
             rhat_ok = True
-        converged = rhat_ok and bool(checks.get("ess"))
+        converged = (
+            diagnostics_scan_completed(payload)
+            and diagnostics_assessable(payload)
+            and rhat_ok and bool(checks.get("ess"))
+        )
         caveats = list(convergence_caveats(payload))
+        if not diagnostics_scan_completed(payload):
+            caveats.append("The R-hat/ESS convergence scan did not complete.")
+        elif not diagnostics_assessable(payload) and not payload.get("unassessable_parameters"):
+            caveats.append("The convergence gate could not assess R-hat/ESS.")
         unassessable = payload.get("unassessable_parameters") or []
         if unassessable:
             shown = ", ".join(unassessable[:6])
@@ -439,7 +449,7 @@ def diagnostics_gate(dirpath: str) -> DiagnosticsGate:
             min_ess=None if min_ess is None else float(min_ess),
             caveats=tuple(caveats),
             source=DIAGNOSTICS_SUMMARY_FILENAME,
-            clean=bool(payload.get("passed")),
+            clean=converged and bool(payload.get("passed")),
         )
 
     df = _read(dirpath, "diagnostics.csv")

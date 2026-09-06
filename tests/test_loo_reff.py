@@ -18,6 +18,7 @@ import arviz_stats  # noqa: F401  (registers the ``azstats`` accessor)
 import numpy as np
 import pytest
 import xarray as xr
+from dse_research_utils.statistics.loo import SampledParametersUnavailableError
 
 from vocab_growth.fit_artifacts import SAMPLED_PARAMETERS_ATTR
 from vocab_growth.loo_reff import (
@@ -79,7 +80,7 @@ def test_single_chain_is_one_as_in_arviz():
 
 def test_unpinnable_trace_raises_and_the_default_path_says_so():
     trace = _trace()  # no record, no names
-    with pytest.raises(LookupError, match="sampled parameters"):
+    with pytest.raises(SampledParametersUnavailableError, match="sampled parameters"):
         sampled_parameter_reff(trace)
     notices = []
     assert reff_or_default(trace, label="VG99", warn=notices.append) is None
@@ -93,3 +94,37 @@ def test_unpinnable_trace_raises_and_the_default_path_says_so():
 def test_names_missing_from_the_posterior_are_an_error():
     with pytest.raises(KeyError, match="absent"):
         sampled_parameter_reff(_trace(), names=["mu", "not_there"])
+
+
+@pytest.mark.parametrize("names", [["absent"], []])
+@pytest.mark.parametrize("recorded", [False, True])
+def test_fallback_does_not_hide_invalid_selections(names, recorded):
+    trace = _trace(attr=names if recorded else None)
+    notices = []
+    with pytest.raises(KeyError if names else ValueError):
+        reff_or_default(trace, names=None if recorded else names, warn=notices.append)
+    assert notices == []
+
+
+@pytest.mark.parametrize("error", [LookupError("reader"), KeyError("reader"), RuntimeError("reader")])
+def test_fallback_propagates_reader_errors(monkeypatch, error):
+    def fail(trace):
+        raise error
+
+    monkeypatch.setattr("vocab_growth.loo_reff.read_sampled_parameters_attr", fail)
+    with pytest.raises(type(error), match="reader"):
+        reff_or_default(_trace())
+
+
+def test_fallback_propagates_calculation_errors(monkeypatch):
+    def fail(*args, **kwargs):
+        raise LookupError("calculation")
+
+    monkeypatch.setattr("dse_research_utils.statistics.loo.sampled_parameter_reff", fail)
+    with pytest.raises(LookupError, match="calculation"):
+        reff_or_default(_trace(), names=["mu"])
+
+
+def test_default_notice_preserves_literal_brackets(capsys):
+    assert reff_or_default(_trace(), label="VG99[bold]") is None
+    assert "VG99[bold]:" in capsys.readouterr().out

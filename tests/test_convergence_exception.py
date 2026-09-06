@@ -50,6 +50,11 @@ def test_the_exception_applies_to_the_failure_it_was_written_for():
         ("a worse r_hat", {"max_rhat": 1.02}),
         ("an ESS failure alongside", {"ess_failing": ["tau_subject"]}),
         ("a scan that did not complete", {"max_rhat": None}),
+        ("an explicitly failed scan", {"scan_completed": False}),
+        ("unavailable ESS", {"min_ess": None}),
+        ("non-finite R-hat", {"max_rhat": float("nan")}),
+        ("an unassessable parameter", {"unassessable_parameters": ["theta"]}),
+        ("an unassessable check", {"checks": {"diagnostics_assessable": False}}),
     ],
 )
 def test_the_exception_refuses_to_widen(label, override):

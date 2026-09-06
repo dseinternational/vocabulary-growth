@@ -393,6 +393,8 @@ def _summary_row(label: str, loo, reff: float) -> dict:
         "se": shared["se"],
         "p_loo": shared["p_loo"],
         "pareto_k_gt_0.7": shared["pareto_k_above"],
+        "pareto_k_nonfinite": shared["pareto_k_nonfinite"],
+        "pareto_k_unusable": shared["pareto_k_unusable"],
         "n_subjects": shared["n_subjects"],
         "reff": shared["reff"],
     }

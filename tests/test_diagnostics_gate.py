@@ -10,7 +10,11 @@ study/subject random intercepts — element-wise. These tests pin that split,
 and the gate-payload-driven console banner.
 """
 
+import json
+
+import dse_research_utils.statistics.diagnostics as shared_diagnostics
 import numpy as np
+import pandas as pd
 import preliz as pz
 import pymc as pm
 import pytest
@@ -171,6 +175,79 @@ def test_unassessable_parameter_fails_the_hard_tier(tmp_path):
     assert marker.exists()
     assert "could not assess" in marker.read_text()
     assert "frozen_term" in marker.read_text()
+
+
+@pytest.mark.parametrize("case", ["unassessable", "missing_tail", "failed", "empty"])
+def test_shared_scan_status_reaches_the_gate_and_report(tmp_path, monkeypatch, capsys, case):
+    from vocab_growth.report_cells import render_diagnostic_verdict
+    from vocab_growth.sensitivity.compare import diagnostics_gate
+
+    def summary(*args, **kwargs):
+        if case == "failed":
+            raise RuntimeError("scan failed")
+        if case == "empty":
+            return pd.DataFrame(columns=["r_hat", "ess_bulk", "ess_tail"])
+        if case == "missing_tail":
+            return pd.DataFrame({"r_hat": [1.0], "ess_bulk": [1000]}, index=["theta"])
+        return pd.DataFrame({"r_hat": [np.nan], "ess_bulk": [np.nan], "ess_tail": [np.nan]}, index=["theta"])
+
+    monkeypatch.setattr(shared_diagnostics.az, "summary", summary)
+    payload = shared_diagnostics.write_diagnostics_summary(object(), str(tmp_path))
+    completed = case in {"unassessable", "missing_tail"}
+    assert payload["scan_completed"] is completed
+    reason = "could not assess" if completed else "did not complete"
+    with pytest.raises(ConvergenceGateError, match=reason):
+        enforce_convergence_gate(payload, sampling_config_name="rep", output_dir=str(tmp_path))
+    sensitivity = diagnostics_gate(str(tmp_path))
+    assert sensitivity.converged is False
+    assert sensitivity.clean is False
+    assert any(("could not be assessed" if completed else "did not complete") in item for item in sensitivity.caveats)
+    marker = (tmp_path / "CONVERGENCE_FAILED.txt").read_text()
+    assert reason in marker
+    if completed:
+        assert "theta" in marker
+    capsys.readouterr()
+    render_diagnostic_verdict(str(tmp_path))
+    rendered = capsys.readouterr().out
+    assert "does not clear the hard tier" in rendered
+    assert "recorded exception" not in rendered
+    assert "theta" in rendered if completed else "did not complete" in rendered
+
+
+@pytest.mark.parametrize("value", [None, np.nan, np.inf, -np.inf])
+def test_legacy_unavailable_extrema_fail_conservatively(tmp_path, value):
+    with pytest.raises(ConvergenceGateError, match="did not complete"):
+        enforce_convergence_gate(_payload(max_rhat=value), sampling_config_name="rep", output_dir=str(tmp_path))
+
+
+def test_explicit_failed_scan_cannot_pass_with_finite_extrema(tmp_path):
+    with pytest.raises(ConvergenceGateError, match="did not complete"):
+        enforce_convergence_gate({**_payload(), "scan_completed": False}, sampling_config_name="rep", output_dir=str(tmp_path))
+
+
+def test_completed_scan_with_unavailable_extrema_does_not_claim_scan_failure(tmp_path):
+    with pytest.raises(ConvergenceGateError, match="diagnostic values are unavailable"):
+        enforce_convergence_gate({**_payload(max_rhat=None), "scan_completed": True}, sampling_config_name="rep", output_dir=str(tmp_path))
+
+
+def test_nested_amendment_nulls_are_readable_by_reports(tmp_path, capsys):
+    from vocab_growth.fit_artifacts import convergence_caveats
+    from vocab_growth.report_cells import render_diagnostic_verdict
+
+    (tmp_path / "diagnostics_summary.json").write_text(json.dumps({**_payload(), "scan_completed": True}))
+    tables = {}
+    amended = shared_diagnostics.amend_diagnostics_summary(
+        str(tmp_path),
+        {"checks": {"bfmi": False}, "bfmi_per_chain": [0.4, np.nan],
+         "accepted_rhat_exception": {"observed_max_rhat": np.inf, "parameters": ["theta"]},
+         "nested": {"values": np.array([np.nan, -np.inf, 1.0])}},
+        tables=tables,
+    )
+    assert amended == tables["diagnostics_summary"] == json.loads((tmp_path / "diagnostics_summary.json").read_text())
+    assert amended["nested"]["values"] == [None, None, 1.0]
+    assert len(convergence_caveats(amended)) == 2
+    render_diagnostic_verdict(str(tmp_path))
+    assert "soft" in capsys.readouterr().out
 
 
 def test_measured_failures_take_precedence_in_the_reason(tmp_path):
