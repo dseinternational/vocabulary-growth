@@ -858,6 +858,23 @@ def _prior_rows(
     # from demanding a prior that does not exist.
     covered.extend(name for name in inert if name in present)
 
+    # The same conditioning the headline dispersion row applies (#234, #240):
+    # kappa is count dispersion at an age, so it is a between-child quantity
+    # only where the outcome's mean carries no child effect. Where it does,
+    # kappa is the residual spread between one child's own same-age
+    # administrations and `tau_subject` is what separates children -- calling it
+    # between-child spread there hands kappa the child scale's job, which is the
+    # error the headline row was corrected for and this cell kept repeating.
+    # Keyed by definition field because the conditioning is per outcome: the
+    # nested spoken mean is p_u * q, so its kappa is within-child only when both
+    # sides carry a child effect. An empty `present` means the fitted parameters
+    # could not be read, and the marginal wording is the conservative reading.
+    child_scales_for_field = {
+        "kappa": {"tau_subject"},
+        "kappa_u": {"tau_subj_u"},
+        "kappa_s": {"tau_subj_u", "tau_subj_q"},
+        "kappa_sign": {"tau_subj_sign"},
+    }
     for field in ("kappa", "kappa_u", "kappa_s", "kappa_sign"):
         kappa = definition.get(field)
         if not isinstance(kappa, dict):
@@ -873,13 +890,14 @@ def _prior_rows(
             if ages
             else "intercept-and-slope form"
         )
-        rows.append(
-            (
-                f"Dispersion $\\kappa${outcome}",
-                form,
-                "larger $\\kappa$ means *less* between-child spread",
-            )
+        conditional = bool(present) and child_scales_for_field[field] <= present
+        reading = (
+            "larger $\\kappa$ means *less* within-child spread between same-age "
+            "administrations"
+            if conditional
+            else "larger $\\kappa$ means *less* spread across same-age administrations"
         )
+        rows.append((f"Dispersion $\\kappa${outcome}", form, reading))
         covered.extend(_dispersion_parameters(present, field))
 
     return covered, rows

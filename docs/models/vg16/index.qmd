@@ -595,7 +595,7 @@ posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
 posterior_summary_u
 ```
 
-![Median predicted words understood with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+![Median predicted words understood against the observed data. The band is **subject-marginal and predictive**: every draw samples a new child's effect and then one administration's count for them, so it approximates where one more child's counts would fall. It is not an uncertainty interval on the population trajectory, which is much narrower.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
 ![The probability of a given understood-word count **or fewer** for a new, unseen child. Read this for questions of the form "what fraction of children understand 100 words or fewer at this age?"](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
 
@@ -630,7 +630,7 @@ posterior_summary_s
 
 Same column convention as the understood table. This one runs to a later age, for the reasons in @sec-clamp.
 
-![Median predicted words spoken with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+![Median predicted words spoken against the observed data. The band is **subject-marginal and predictive** in the same sense as the understood figure, and each draw's spoken count is drawn from that same draw's understood count, so it carries the understood spread as well as the production ratio's.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
 ![The probability of a given spoken-word count **or fewer** for a new, unseen child.](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
 
