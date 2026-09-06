@@ -107,7 +107,7 @@ def test_trace_divergences_is_none_for_a_missing_trace(tmp_path):
 # loo_compare._warn_if_unusable
 # ---------------------------------------------------------------------------
 def _row(n_high: int, n_obs: int, p_loo: float = 1.0) -> dict:
-    return {"n_observations": n_obs, "pareto_k_gt_0.7": n_high, "p_loo": p_loo}
+    return {"n_observations": n_obs, "pareto_k_gt_0.7": n_high, "pareto_k_unusable": n_high, "p_loo": p_loo}
 
 
 @pytest.mark.parametrize(

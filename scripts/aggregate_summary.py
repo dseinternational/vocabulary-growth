@@ -166,6 +166,9 @@ def per_model_summary(short: str, label: str,
             summary["elpd_loo"] = float(row["elpd_loo"])
             summary["elpd_loo_se"] = float(row["se"])
             summary["pareto_k_gt_0.7"] = int(row["pareto_k_gt_0.7"])
+            for column in ("pareto_k_nonfinite", "pareto_k_unusable"):
+                # Legacy tables cannot establish how many diagnostics were missing.
+                summary[column] = int(row[column]) if pd.notna(row.get(column)) else None
             summary["n_loo_obs"] = int(row["n_observations"])
 
     return summary

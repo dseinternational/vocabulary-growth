@@ -1,7 +1,7 @@
 # Agent Instructions
 
 > [!NOTE]
-> Maintained with assistance from LLM-based AI tools, including OpenAI Codex/GPT-5.
+> Maintained with assistance from LLM-based AI tools, including OpenAI Codex/GPT-6.
 
 > **Keep in sync:** This file, `CLAUDE.md`, and `.github/copilot-instructions.md` share the same content. When updating one, update all three.
 
@@ -11,7 +11,7 @@ This project is an exploratory study of vocabulary development in children with 
 
 The Python package `vocab_growth` (in `src/vocab_growth/`) defines a series of PyMC models that are fitted to vocabulary assessment data aggregated from multiple international studies. Reports are authored in Quarto (`.qmd`).
 
-This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.12.5` (see [Environment setup](#environment-setup)); a commented local-dev override in `pyproject.toml` lets you point at a sibling `../research/src/python` checkout instead.
+This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.13.0` (see [Environment setup](#environment-setup)); a commented local-dev override in `pyproject.toml` lets you point at a sibling `../research/src/python` checkout instead.
 
 ## Environment setup
 

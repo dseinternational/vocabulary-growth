@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -442,6 +443,28 @@ CONVERGENCE_EXCEPTIONS: dict[str, ConvergenceException] = {
 }
 
 
+def diagnostics_scan_completed(summary: dict) -> bool:
+    """Read explicit scan status, requiring finite extrema for legacy files."""
+    if "scan_completed" in summary:
+        return summary["scan_completed"] is True
+    return all(
+        summary.get(key) is not None and math.isfinite(float(summary[key]))
+        for key in ("max_rhat", "min_ess")
+    )
+
+
+def diagnostics_assessable(summary: dict) -> bool:
+    """Require usable extrema and no missing parameter diagnostics."""
+    return (
+        not summary.get("unassessable_parameters")
+        and (summary.get("checks") or {}).get("diagnostics_assessable") is not False
+        and all(
+            summary.get(key) is not None and math.isfinite(float(summary[key]))
+            for key in ("max_rhat", "min_ess")
+        )
+    )
+
+
 def accepted_rhat_exception(
     model_id: str | None, gate_summary: dict | None
 ) -> ConvergenceException | None:
@@ -457,7 +480,9 @@ def accepted_rhat_exception(
     exception = CONVERGENCE_EXCEPTIONS.get(model_id)
     if exception is None:
         return None
-    if gate_summary.get("ess_failing"):
+    if not diagnostics_scan_completed(gate_summary) or not diagnostics_assessable(gate_summary):
+        return None
+    if gate_summary.get("ess_failing") or (gate_summary.get("checks") or {}).get("ess") is False:
         return None
     max_rhat = gate_summary.get("max_rhat")
     if max_rhat is None or float(max_rhat) > exception.max_rhat:

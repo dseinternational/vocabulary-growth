@@ -602,11 +602,11 @@ def test_loo_section_reports_a_clean_fit_as_reliable(tmp_path, capsys):
 
 
 def test_loo_section_flags_unreliable_importance_sampling(tmp_path, capsys):
-    row = {**_CLEAN_ROW, "pareto_k_good": 1128, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
+    row = {**_CLEAN_ROW, "pareto_k_good": 1233, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
     report_cells.render_loo_section(str(_loo_fit(tmp_path, [row])))
     out = capsys.readouterr().out
-    assert "288 of 1,521 observations (19%) exceed the threshold" in out
-    assert "30 of them above 1" in out
+    assert "288 of 1,521 observations (19%) have non-finite Pareto $k$ or exceed the threshold" in out
+    assert "30 finite values above 1" in out
 
 
 def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
@@ -616,7 +616,7 @@ def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
     threshold. Reporting that as unreliability without saying why would send a
     reader looking for a modelling fault that is not there.
     """
-    row = {**_CLEAN_ROW, "pareto_k_good": 1128, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
+    row = {**_CLEAN_ROW, "pareto_k_good": 1233, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
     fit = _loo_fit(tmp_path, [row], parameters=("eta_u", "tau_subj_u"))
     report_cells.render_loo_section(str(fit))
     out = capsys.readouterr().out
@@ -625,7 +625,7 @@ def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
 
 
 def test_non_hierarchical_fits_do_not_get_that_explanation(tmp_path, capsys):
-    row = {**_CLEAN_ROW, "pareto_k_good": 1128, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
+    row = {**_CLEAN_ROW, "pareto_k_good": 1233, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
     fit = _loo_fit(tmp_path, [row], parameters=("eta",))
     report_cells.render_loo_section(str(fit))
     assert "wrong unit of prediction" not in capsys.readouterr().out

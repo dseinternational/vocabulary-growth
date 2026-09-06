@@ -93,7 +93,7 @@ class LooEntry:
     n_high_pareto: int
 
 
-#: Share of observations above Pareto-k 0.7 beyond which the PSIS estimate is
+#: Share of unusable observations beyond which the PSIS estimate is
 #: reported as unusable rather than merely caveated. PSIS-LOO degenerates for the
 #: subject-random-effect models -- leaving one observation out swings the child
 #: intercept it is nearly the only evidence for -- and past this fraction the
@@ -113,11 +113,11 @@ def _warn_if_unusable(label: str, row: dict) -> None:
     n = row["n_observations"]
     if not n:
         return
-    share = row["pareto_k_gt_0.7"] / n
+    share = row["pareto_k_unusable"] / n
     if share < HIGH_PARETO_K_UNUSABLE_SHARE:
         return
     print(
-        f"      [unusable] {label}: {share:.0%} of observations above Pareto-k 0.7 "
+        f"      [unusable] {label}: {share:.0%} of observations have non-finite Pareto-k or exceed 0.7 "
         f"(p_loo = {row['p_loo']:.0f} on {n} observations).\n"
         "      PSIS-LOO has degenerated here; do not compare this elpd with another "
         "model's.\n"
@@ -157,6 +157,8 @@ def _loo_summary_row(label: str, loo, reff=None) -> dict:
         "looic": shared["looic"],
         "looic_se": shared["looic_se"],
         "pareto_k_gt_0.7": shared["pareto_k_above"],
+        "pareto_k_nonfinite": shared["pareto_k_nonfinite"],
+        "pareto_k_unusable": shared["pareto_k_unusable"],
         "n_observations": shared["n_observations"],
     }
 

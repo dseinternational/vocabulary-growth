@@ -15,6 +15,9 @@ from __future__ import annotations
 import functools
 import http.server
 import threading
+from contextlib import nullcontext
+from types import SimpleNamespace
+from urllib.parse import quote
 
 import pytest
 
@@ -97,3 +100,68 @@ def test_verify_published_reports_an_unreachable_host():
     failures = verify_published("http://127.0.0.1:9/", ["index.html"], timeout=1.0)
     assert len(failures) == 1
     assert failures[0].endswith(" index.html")
+
+
+@pytest.fixture
+def upload_report(tmp_path, monkeypatch):
+    from vocab_growth.storage import ValidatedFitOutput
+
+    names = ["figures/psi (dev).png", "tables/a+b.csv", "figures/café.png", "tables/50%20.csv", "assets/index.html"]
+    for name in names:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("asset", encoding="utf-8")
+    (tmp_path / "index.html").write_text(
+        "".join(f'<a href="{name}">asset</a>' for name in names), encoding="utf-8"
+    )
+    (tmp_path / "trace.nc").write_bytes(b"excluded")
+    sent, requested = [], []
+
+    def upload_blob(name, data, **kwargs):
+        sent.append(name)
+        assert data.read()
+
+    client = SimpleNamespace(get_container_client=lambda name: SimpleNamespace(upload_blob=upload_blob))
+    monkeypatch.setattr("azure.storage.blob.BlobServiceClient", lambda *a, **k: client)
+    monkeypatch.setattr("azure.identity.DefaultAzureCredential", lambda: object())
+    monkeypatch.setenv("DSERESEARCH_BLOB_CONTAINER_URL", "https://acct.blob.core.windows.net/reports")
+
+    def request(url, **kwargs):
+        requested.append(url)
+        return nullcontext(SimpleNamespace(status=200))
+
+    monkeypatch.setattr("urllib.request.urlopen", request)
+    return ValidatedFitOutput(str(tmp_path)), names, sent, requested
+
+
+def test_upload_matches_raw_names_and_requests_encoded_urls(upload_report):
+    from vocab_growth.storage import upload_to_blob_storage
+
+    output, names, sent, requested = upload_report
+    report = upload_to_blob_storage(output, "model (dev)")
+    prefix = report.removesuffix("index.html")
+    assert "model%20%28dev%29/" in prefix
+    assert requested == [report, *(prefix + quote(name, safe="/") for name in sorted(names))]
+    assert len(sent) == len(names) + 1
+    assert not any(name.endswith("trace.nc") for name in sent)
+    assert report.endswith("/index.html") and not report.endswith("/assets/index.html")
+
+
+@pytest.mark.parametrize("skipped", ["figures/psi (dev).png", "tables/a+b.csv", "figures/café.png"])
+def test_upload_still_rejects_skipped_referenced_files(upload_report, skipped):
+    from vocab_growth.storage import upload_to_blob_storage
+
+    output, _, _, requested = upload_report
+    with pytest.raises(RuntimeError, match="were not uploaded") as error:
+        upload_to_blob_storage(output, "model", skip=lambda name: name == skipped)
+    assert skipped in str(error.value)
+    assert requested == []
+
+
+def test_nested_index_does_not_replace_skipped_root(upload_report):
+    from vocab_growth.storage import upload_to_blob_storage
+
+    output, _, _, requested = upload_report
+    with pytest.raises(RuntimeError, match="No index.html report"):
+        upload_to_blob_storage(output, "model", skip=lambda name: name == "index.html")
+    assert requested == []
