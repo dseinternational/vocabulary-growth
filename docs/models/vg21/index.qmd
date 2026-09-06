@@ -363,7 +363,7 @@ Read them with three things in mind. **The plotted population curves are the ave
 
 ::: {.callout-note title="Sensitivity variants"}
 
-No sensitivity variant is registered against VG21 itself. The evidence that would ordinarily come from one already exists against its predecessor: `window-22`, `window-25` and `window-22-vague-anchors` are registered on VG13 and the first two were fitted on 2026-08-20 at VG13's own reporting settings, which is what the promotion rests on — `window-22-vague-anchors` widened both high slope anchors in the direction that would have reopened the DS/TD gap and moved P(TD>DS) by at most 0.0085 anywhere on the grid. What has **not** been carried across is `single-admin`, which retains one administration per child with the child effects removed. Given that repeated administrations are the mechanism behind both the child scales and the energy caveat, it is the variant most worth registering here next. **Nothing in this report is a result from any variant.**
+One sensitivity variant is registered against VG21 itself — `vague-anchors`, added on 2026-08-25 (`ec10ee8`), which widens both high age anchors exactly as VG13's `window-22-vague-anchors` does but directly on this model. **It has never been fitted**, so it contributes no evidence here. The evidence the promotion rests on therefore still comes from its predecessor: `window-22`, `window-25` and `window-22-vague-anchors` are registered on VG13 and the first two were fitted on 2026-08-20 at VG13's own reporting settings, which is what the promotion rests on — `window-22-vague-anchors` widened both high slope anchors in the direction that would have reopened the DS/TD gap and moved P(TD>DS) by at most 0.0085 anywhere on the grid. What has **not** been carried across is `single-admin`, which retains one administration per child with the child effects removed. Given that repeated administrations are the mechanism behind both the child scales and the energy caveat, it is the variant most worth registering here next. **Nothing in this report is a result from any variant.**
 
 :::
 
@@ -588,7 +588,7 @@ monthly_s
 
 A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
 
-No sensitivity variant is registered against VG21 itself; the evidence the window-22 promotion rests on is VG13's registered `window-*` variants, so the matrix shown is **VG13's**.
+VG21's one registered variant, `vague-anchors`, has never been fitted, so it appears in no matrix. The evidence the window-22 promotion rests on is VG13's registered `window-*` variants, so the matrix shown is **VG13's**.
 
 ```{python}
 from pathlib import Path
