@@ -577,7 +577,7 @@ These compare the predicted spread of counts with the observed counts at each ag
 
 ### Median trend
 
-![Median predicted understood vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+![Median predicted understood vocabulary against the observed data. The band is **predictive, not an uncertainty interval on the population trajectory**: it adds the Beta-Binomial dispersion around the fitted curve, and because this model carries no child effect that dispersion already contains the differences between children.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
 ![The same trend, smoothed for presentation. The underlying numbers are unchanged.](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
@@ -640,7 +640,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ### Median trend
 
-![Median predicted spoken vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+![Median predicted spoken vocabulary against the observed data. The band is **predictive** in the same sense as the understood figure, and each draw's count is taken from that same draw's understood count, so it carries the understood spread as well.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
 ![The same trend, smoothed for presentation. The underlying numbers are unchanged.](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 
@@ -695,7 +695,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_sign")
 
 ### Median trend
 
-![Median predicted signed vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_sign.png){#fig-trend-sign .lightbox fig-align="left"}
+![Median predicted signed vocabulary against the observed data. The band is **predictive** in the same sense as the understood figure, and each draw's count is taken from that same draw's understood count, so it carries the understood spread as well.](posterior_predictive_median_trend_sign.png){#fig-trend-sign .lightbox fig-align="left"}
 
 ![The same trend, smoothed for presentation. The underlying numbers are unchanged.](posterior_predictive_median_trend_sign_smoothed.png){#fig-trend-sign-smooth .lightbox fig-align="left"}
 

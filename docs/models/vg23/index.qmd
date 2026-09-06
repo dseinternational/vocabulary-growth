@@ -288,7 +288,7 @@ render_family_notes()
 
 ## Posterior predictions -- words understood
 
-![Median predicted understood vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+![Median predicted understood vocabulary against the observed data. The band is **subject-marginal and predictive**: every draw samples a new child's effect and then one administration's count for them, so it approximates where one more child's counts would fall. It is not an uncertainty interval on the population trajectory, which is much narrower.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
 ```{python}
 #| echo: false
@@ -302,7 +302,7 @@ render_dispersion_scope()
 
 ## Posterior predictions -- words spoken
 
-![Median predicted spoken vocabulary with uncertainty intervals, against the observed data.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+![Median predicted spoken vocabulary against the observed data. The band is **subject-marginal and predictive** in the same sense as the understood figure, and each draw's spoken count is drawn from that same draw's understood count, so it carries the understood spread as well as the production ratio's.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
 ![How the spoken dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
 
