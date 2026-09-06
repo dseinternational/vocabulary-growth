@@ -72,6 +72,9 @@ CLAMP_Q_ONLY_MODELS = {
     "vg20",
     # VG22 derives from VG10 and inherits its clamp scope unchanged.
     "vg22",
+    # VG24 derives from VG15 and inherits its clamp scope unchanged
+    # (2026-09-06, issue #296).
+    "vg24",
 }
 
 

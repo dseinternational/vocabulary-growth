@@ -441,6 +441,7 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg21": "bivariate_re",
         "vg22": "bivariate_re",
         "vg23": "bivariate_re",
+        "vg24": "joint",
     }
     # Sourced from the roles table in ``docs/models/README.md`` and the
     # decision notes it cites -- not inferred. A model whose role that record

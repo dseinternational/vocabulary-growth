@@ -63,6 +63,7 @@ Lézine
 MCMC
 MCSE
 Marchman
+Multinomials
 Marschik
 McElreath
 Mervis
@@ -116,6 +117,7 @@ apraxia
 argmax
 argmin
 arrowsize
+asarray
 asis
 asstxt
 autodiff
@@ -177,6 +179,7 @@ idxmin
 iloc
 incl
 indep
+itertools
 isfile
 isin
 isna
@@ -212,7 +215,9 @@ nonregular
 nonverbal
 nonwords
 nonzero
+noqa
 numba
+numpy
 nunique
 nutpie
 orcid
@@ -271,6 +276,7 @@ swapfile
 swapon
 tanh
 timepoint
+tolist
 toddlerhood
 trigamma
 Udhnani

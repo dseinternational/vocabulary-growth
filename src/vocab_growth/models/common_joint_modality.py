@@ -150,6 +150,24 @@ CELL_NAMES = ["neither", "sign_only", "speak_only", "both"]
 PROD_CELL_NAMES = ["sign_only", "speak_only", "both"]
 PROD_CELL_COLUMNS = ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]
 
+#: The three latent trajectories carrying a subject random intercept, in the
+#: order the correlated block (VG24, #296) stacks them. The suffixes are the ones
+#: already baked into `tau_subj_*`, `z_subj_*` and `delta_subj_*`, so this names
+#: the existing convention rather than introducing a second one.
+SUBJECT_RE_OUTCOMES = ("u", "q", "sign")
+
+#: Off-diagonals of the subject correlation matrix, exposed as named scalars.
+#:
+#: `rho_uq` deliberately matches VG20's and VG23's name for the same quantity, so
+#: the three are read side by side without a translation table. `rho_sign_q` is
+#: the one VG24 exists to estimate. Order is (name, row, column) into the matrix
+#: `SUBJECT_RE_OUTCOMES` indexes.
+SUBJECT_RE_CORRELATIONS = (
+    ("rho_uq", 0, 1),
+    ("rho_u_sign", 0, 2),
+    ("rho_sign_q", 1, 2),
+)
+
 
 # ============================================================
 # Dataclasses
@@ -1277,9 +1295,115 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             delta = pm.Deterministic(f"delta_subj_{suffix}", tau * z, dims="subject_id")
             return delta[subject_obs]
 
-        subject_shift_u = subject_shift(use_subject_re_u, definition.tau_subj_u_sigma, "u")
-        subject_shift_q = subject_shift(use_subject_re_q, definition.tau_subj_q_sigma, "q")
-        subject_shift_sign = subject_shift(use_subject_re_sign, definition.tau_subj_sign_sigma, "sign")
+        subject_re_correlation_eta = getattr(
+            definition, "subject_re_correlation_eta", None
+        )
+        if subject_re_correlation_eta is None:
+            subject_shift_u = subject_shift(use_subject_re_u, definition.tau_subj_u_sigma, "u")
+            subject_shift_q = subject_shift(use_subject_re_q, definition.tau_subj_q_sigma, "q")
+            subject_shift_sign = subject_shift(use_subject_re_sign, definition.tau_subj_sign_sigma, "sign")
+        else:
+            # VG24 (#296). A child's three deviations are drawn from one joint
+            # Normal rather than independently. Only the CORRELATION is added:
+            # the scales stay the three `tau_subj_*` HalfNormals above, with
+            # their names, their priors and their per-child meaning, so VG15's
+            # and VG24's are directly comparable.
+            #
+            # The nesting is exact, and deliberately so. `z_subj_u/q/sign` keep
+            # their names, their standard-Normal priors and their dims, and
+            # become the whitened coordinates; at the identity correlation the
+            # covariance factor below is diag(tau), so `z @ chol.T` is `tau * z`
+            # op for op, which is what the independent branch above emits.
+            # `delta_subj_*` therefore still means what it always meant, and
+            # every downstream reader -- the summaries, the comparison suite,
+            # the recovery scorer -- sees what it always saw.
+            # `tests/test_joint_correlated_subject_re.py` asserts the equality
+            # numerically rather than trusting this paragraph.
+            #
+            # `definitions.validate_model_definition` has already refused a
+            # partial flag combination, so all three blocks exist here.
+            #
+            # `LKJCholeskyCov` and NOT `LKJCorr`, which is the obvious primitive
+            # and is wrong here. Measured on the locked PyMC 6.3.1: `LKJCorr`
+            # returns the lower-triangular Cholesky FACTOR rather than the
+            # correlation matrix its own docstring example indexes, so reading
+            # `corr[i, j]` off it yields the structural zeros of the upper
+            # triangle -- every correlation exactly 0.000 in every draw. Worse,
+            # once that is corrected its marginals are not exchangeable and its
+            # forward sampler and its density disagree with each other: drawing
+            # gives per-correlation SDs of (0.408, 0.378, 0.378) and NUTS on the
+            # same graph gives (0.450, 0.409, 0.407), against the LKJ(2), n = 3
+            # value of 0.408. Under it `rho_sign_q` -- the quantity this model
+            # exists to estimate -- would carry a different prior from `rho_uq`
+            # purely because of its position in the matrix.
+            #
+            # `LKJCholeskyCov` is exchangeable and correct on the same check
+            # (0.405, 0.410, 0.409), and its `sd_dist` reproduces VG15's three
+            # independent HalfNormal scales exactly (marginal mean 1.18-1.26,
+            # SD 0.90, against HalfNormal(1.5)'s 1.197 and 0.904).
+            #
+            # `tests/test_joint_correlated_subject_re.py` pins the properties
+            # this block RELIES ON -- exchangeable LKJ marginals and the
+            # unchanged scale priors, both sampled from the density -- and
+            # separately pins `LKJCorr`'s shape as the recorded reason for the
+            # choice. An upstream fix to `LKJCorr` therefore fails that second
+            # test rather than passing silently, which is the point: the
+            # decision gets re-read instead of inherited.
+            sd_dist = pm.HalfNormal.dist(
+                sigma=[
+                    definition.tau_subj_u_sigma,
+                    definition.tau_subj_q_sigma,
+                    definition.tau_subj_sign_sigma,
+                ],
+                shape=len(SUBJECT_RE_OUTCOMES),
+            )
+            subject_re_chol, subject_re_corr, subject_re_stds = pm.LKJCholeskyCov(
+                "subject_re",
+                eta=subject_re_correlation_eta,
+                n=len(SUBJECT_RE_OUTCOMES),
+                sd_dist=sd_dist,
+                compute_corr=True,
+                # The scales and correlations are re-exposed below under the
+                # names every reader already uses, so storing PyMC's own
+                # `subject_re_corr` / `subject_re_stds` would put each quantity
+                # in the trace twice under two names.
+                store_in_trace=False,
+            )
+
+            # `tau_subj_*` are Deterministics here and free variables in VG15.
+            # The names, the priors and the per-child meaning are identical --
+            # `_DERIVED_NAMES` in `report_cells` already records that these
+            # three are sampled in some models and derived in others -- and
+            # keeping them lets the summaries, the variation table and the
+            # recovery scorer read VG24 with no special case.
+            for position, suffix in enumerate(SUBJECT_RE_OUTCOMES):
+                _ = pm.Deterministic(f"tau_subj_{suffix}", subject_re_stds[position])
+
+            z_subj = [
+                pm.Normal(f"z_subj_{suffix}", 0.0, 1.0, dims="subject_id")
+                for suffix in SUBJECT_RE_OUTCOMES
+            ]
+            # `subject_re_chol` is the Cholesky factor of the COVARIANCE, so it
+            # carries the scales already: at the identity correlation it is
+            # diag(tau) and this is `z * tau`, which is what the independent
+            # branch above emits, op for op.
+            subject_deviations = pt.stack(z_subj, axis=1) @ subject_re_chol.T
+
+            subject_shifts = []
+            for position, suffix in enumerate(SUBJECT_RE_OUTCOMES):
+                delta = pm.Deterministic(
+                    f"delta_subj_{suffix}",
+                    subject_deviations[:, position],
+                    dims="subject_id",
+                )
+                subject_shifts.append(delta[subject_obs])
+            subject_shift_u, subject_shift_q, subject_shift_sign = subject_shifts
+
+            # Named scalars rather than elements of a packed matrix, so the
+            # summary tables, the priors table and the recovery scorer read them
+            # directly. `rho_sign_q` is the quantity this model exists for.
+            for name, row, column in SUBJECT_RE_CORRELATIONS:
+                _ = pm.Deterministic(name, subject_re_corr[row, column])
 
         # Standardised observed ages (used by the age-varying kappa functions).
         z_obs = pm.Deterministic("z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims="obs_id")

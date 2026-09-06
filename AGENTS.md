@@ -95,7 +95,7 @@ This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01
 uv run python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>] [--trace-persistence <tier>]
 ```
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, `vg19`, `vg20`, `vg21`, `vg22`, `vg23`, or `all`. `all` is derived from `MODEL_REGISTRY` rather than from this list, so it always covers every registered model.
+- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, `vg19`, `vg20`, `vg21`, `vg22`, `vg23`, `vg24`, or `all`. `all` is derived from `MODEL_REGISTRY` rather than from this list, so it always covers every registered model.
 - `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
 - `--render`: render the Quarto model output after the completed fit is atomically promoted. A rendering failure leaves the fit complete and available for a later `--render-only` retry.
 - `--render-only`: validate and render an existing compatible fit without sampling again.
@@ -161,7 +161,7 @@ Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`
 
 The full, canonical list of models -- each model's population, outcome, structure, and purpose -- is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
 
-There are currently twenty registered models (`VG01`-`VG16` and `VG19`-`VG23`, with retired `VG06` omitted and `VG17`/`VG18` taken by the exploratory sign-group modules, which live in `src/vocab_growth/models/exploratory/` and whose output is explicitly not validatable), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag, correlated-random-effect, child-slope and low-rank-factor structures.
+There are currently twenty-one registered models (`VG01`-`VG16` and `VG19`-`VG24`, with retired `VG06` omitted and `VG17`/`VG18` taken by the exploratory sign-group modules, which live in `src/vocab_growth/models/exploratory/` and whose output is explicitly not validatable), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag, correlated-random-effect, child-slope and low-rank-factor structures.
 
 ### Registering a model
 

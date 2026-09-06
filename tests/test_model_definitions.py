@@ -168,6 +168,9 @@ _ANCHORED_OUTCOMES = {
     # (_as_definition_subclass is shallow), so its anchor ages are VG13's
     # (12, 17) rather than VG21's.
     "vg23": {"kappa_u", "kappa_s"},
+    # VG24 derives from VG15 and shares its nested prior blocks outright, so it
+    # carries the same two-anchor form on both outcomes (#296).
+    "vg24": {"kappa_u", "kappa_s"},
 }
 
 

@@ -201,11 +201,11 @@ memory-heavy. So:
 > [!WARNING]
 > **The two lists below must together cover every key in `MODEL_REGISTRY`.** They are an explicit `-Models` split, so the driver's registry-derived default does not apply and a model missing from both is never queued, never validated, and never reported as absent — the run ends `SUCCESS` having fitted a subset. `tests/test_runbook_model_lists.py` checks the split against the registry; if it fails, correct the lists here rather than the test.
 
-- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22`): run
+- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22 vg24`): run
   a pool, `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores):
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24
   ```
 
   `-MaxParallel` above 1 pins `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
