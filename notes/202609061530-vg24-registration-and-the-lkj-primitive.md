@@ -58,7 +58,7 @@ Beyond the definition and the engine: catalogue entry on the `joint` engine (rol
 
 ## Fitted, 2026-09-06
 
-It went through the `us_03` refit as one of [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) phase 1's fourteen, which is what registering it early was for, and **passed its gate on the first attempt at `rep`**: 0 divergences, max R-hat 1.0044, min ESS 1,863, min energy BFMI 0.578. No escalation rung, which VG15's lineage did not lead me to expect.
+It went through the `us_03` refit as one of [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) phase 1's fourteen, which is what registering it early was for, and **passed its gate on the first attempt at `rep`**: 0 divergences, max R-hat 1.0044, min ESS 1,863, min energy BFMI 0.578. No escalation rung — worth recording because adding a correlated block is exactly the change that has cost sampling stability elsewhere in this project (it is what the four typically developing models' sub-0.3 BFMI is about), and here it cost none. VG15 itself sampled cleanly in the same run (0 divergences, BFMI 0.560), so this is the block being well-behaved rather than a fragile parent being rescued.
 
 | parameter    |      mean |   89% interval | posterior sd |
 | ------------ | --------: | -------------: | -----------: |
