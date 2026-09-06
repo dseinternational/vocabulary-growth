@@ -440,7 +440,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_u")
 
 ### Median trend
 
-![Median predicted words understood with uncertainty intervals, against the observed data. **Subject-marginal**.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+![Median predicted words understood against the observed data. The band is **subject-marginal and predictive**: every draw samples a new child's effect and then one administration's count for them, so it approximates where one more child's counts would fall. It is not an uncertainty interval on the population trajectory, which is much narrower.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
 
 ![The same trend, smoothed for presentation only. The underlying numbers are unchanged, so read the unsmoothed figure where the two appear to differ.](posterior_predictive_median_trend_u_smoothed.png){#fig-trend-u-smooth .lightbox fig-align="left"}
 
@@ -509,7 +509,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ### Median trend
 
-![Median predicted words spoken with uncertainty intervals, against the observed data. **Subject-marginal**.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+![Median predicted words spoken against the observed data. The band is **subject-marginal and predictive**: each draw samples a new child's understood effect, an understood count from it, and then a spoken count from that. This model puts no child effect on the production ratio, so persistent between-child differences in it stay in the spoken dispersion rather than in a sampled child effect.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
 
 ![The same trend, smoothed for presentation only.](posterior_predictive_median_trend_s_smoothed.png){#fig-trend-s-smooth .lightbox fig-align="left"}
 

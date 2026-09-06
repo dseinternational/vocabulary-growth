@@ -373,6 +373,62 @@ def test_signed_peak_is_reported_as_estimated(tmp_path, capsys):
     assert "prior median 40 months" in out
 
 
+def test_the_dispersion_reading_is_within_child_where_a_child_effect_exists(
+    tmp_path, capsys
+):
+    """The priors table kept the label the headline row was corrected for (#240).
+
+    With a child effect on the outcome's mean, `kappa` is the residual spread
+    between one child's own same-age administrations; `tau_subj_u` is what
+    separates children. Calling `kappa` between-child spread there describes the
+    wrong parameter, and did so in every joint model's priors table.
+    """
+    fit = _fit(
+        tmp_path,
+        definition={"kappa_u": {"anchor_ages": [18.0, 48.0]}},
+        parameters=("kappa_min_u", "tau_subj_u"),
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "within-child spread between same-age administrations" in out
+    assert "between-child spread" not in out
+
+
+def test_the_dispersion_reading_stays_marginal_without_a_child_effect(
+    tmp_path, capsys
+):
+    """Without one, `kappa` mixes between-child, between-study and occasion spread.
+
+    That is not a within-child quantity either, so the wording says what the row
+    covers -- administrations at an age -- rather than naming a component.
+    """
+    fit = _fit(
+        tmp_path,
+        definition={"kappa": {"anchor_ages": [18.0, 48.0]}},
+        parameters=("kappa_min",),  # no tau_subject
+    )
+    report_cells.render_priors_table(str(fit))
+    out = capsys.readouterr().out
+    assert "spread across same-age administrations" in out
+    assert "within-child" not in out
+    assert "between-child spread" not in out
+
+
+def test_the_nested_spoken_dispersion_needs_a_child_effect_on_both_sides(tmp_path):
+    """The spoken mean is `p_u * q`; one child effect leaves the other marginal.
+
+    VG08 carries one on understood alone, so its `kappa_s` keeps the marginal
+    reading -- the same per-outcome rule the headline dispersion row applies.
+    """
+    definition = {"kappa_s": {"anchor_ages": [18.0, 48.0]}}
+    one_side = report_cells._prior_rows(definition, {"kappa_min_s", "tau_subj_u"})[1]
+    both = report_cells._prior_rows(
+        definition, {"kappa_min_s", "tau_subj_u", "tau_subj_q"}
+    )[1]
+    assert any("across same-age" in row[2] for row in one_side)
+    assert any("within-child" in row[2] for row in both)
+
+
 def test_priors_table_says_so_when_there_is_no_manifest(tmp_path, capsys):
     report_cells.render_priors_table(str(tmp_path))
     assert "No fit manifest" in capsys.readouterr().out
