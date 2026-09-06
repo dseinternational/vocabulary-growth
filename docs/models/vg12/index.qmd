@@ -355,7 +355,7 @@ The between-child row is a different estimand again: it is how much children of 
 
 ::: {.callout-note title="Sensitivity variants"}
 
-Several deliberate one-change variants of this model are registered and can be refitted with `scripts/fit_sensitivity.py`: broader low and high anchor priors, a narrower GP amplitude, and a variant retaining a single administration per child with the child effects removed. **None of them is reported here.** The high-anchor variant is the important one, because that anchor has no independent norm behind it, as the Priors section explains — it is the model's key un-normed sensitivity test, and this fit does not settle it.
+Several deliberate one-change variants of this model are registered and can be refitted with `scripts/fit_sensitivity.py`: broader low and high anchor priors, a narrower GP amplitude, a variant retaining a single administration per child with the child effects removed, and `free-scales`, which reverts to the two free scales this model carried before the variance partition. **None of them is reported here.** The high-anchor variant is the important one, because that anchor has no independent norm behind it, as the Priors section explains — it is the model's key un-normed sensitivity test, and this fit does not settle it.
 
 :::
 
