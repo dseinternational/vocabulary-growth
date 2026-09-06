@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The `us01-implausible-reinstated` sensitivity must run and must bite.
+"""The `us01-*-reinstated` sensitivities must run and must bite.
 
 ``mask_implausible_production_administrations`` excludes 30 us_01 administrations
 by default. The source author no longer holds the original data files, so that
@@ -32,6 +32,7 @@ from vocab_growth.models.common import ModelFitContext
 from vocab_growth.sensitivity.registry import build_variant
 
 _VARIANT = "us01-implausible-reinstated"
+_COMBINED = "us01-masked-production-reinstated"
 
 
 def _context(definition, tmp_path):
@@ -54,6 +55,7 @@ def _requires_db():
         pytest.skip("prepared vocabulary DuckDB not available")
 
 
+@pytest.mark.parametrize("variant_name", [_VARIANT, _COMBINED])
 @pytest.mark.parametrize(
     ("model_key", "prepare"),
     [
@@ -62,14 +64,19 @@ def _requires_db():
     ],
 )
 def test_variant_preparation_runs_and_reinstates_production(
-    model_key, prepare, tmp_path
+    model_key, prepare, variant_name, tmp_path
 ):
-    """Each engine must prepare the variant frame and gain the masked records."""
+    """Each engine must prepare the variant frame and gain the masked records.
+
+    The combined variant's two fit-log figures -- the implausible rule's catch
+    with the same-day rule lifted, and the same-day rule's own catch -- must
+    partition the frame's gain over the baseline (#289 task 4.3).
+    """
     _requires_db()
     from vocab_growth.models.definitions import MODEL_REGISTRY
 
     baseline = MODEL_REGISTRY[model_key]
-    (variant,) = build_variant(model_key, _VARIANT)
+    (variant,) = build_variant(model_key, variant_name)
 
     # Preparation must not raise for either — the AttributeError above was only
     # reachable by actually running the engine.
@@ -81,7 +88,14 @@ def test_variant_preparation_runs_and_reinstates_production(
     # And the prepared frames must differ by exactly what the fit log reports.
     base_spoken = int(base_ctx.analysis_df["spoken"].notna().sum())
     variant_spoken = int(variant_ctx.analysis_df["spoken"].notna().sum())
-    reported = vocab_data_utils.count_reinstated_implausible_production()
+    reported = vocab_data_utils.count_reinstated_implausible_production(
+        include_same_day_disagreements=variant.include_same_day_disagreements
+    )
+    if variant.include_same_day_disagreements:
+        same_day = vocab_data_utils.count_reinstated_same_day_disagreements()
+        assert same_day > 0
+        assert reported == 11, "with the same-day rule lifted the rule's whole catch returns"
+        reported += same_day
 
     assert reported > 0, "a reinstatement variant that restores nothing cannot fail"
     assert variant_spoken == base_spoken + reported

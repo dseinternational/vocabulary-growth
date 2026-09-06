@@ -227,18 +227,22 @@ def test_registry_counts_and_models():
     # the variance, on rows that are older and clustered by study -- could not
     # be measured on either signing model at all. VG14 had no variants before
     # this and so no entry below.
-    assert len(VARIANTS) == 80
+    #
+    # +2 on 2026-09-05 (#289 task 4.3): the combined-flag successor to
+    # `us01-implausible-reinstated` on VG10 and VG15, which lifts the same-day
+    # disagreement rule as well so the implausible rule's full catch comes back.
+    assert len(VARIANTS) == 82
     assert len(variants_for("vg14")) == 3
     assert len(variants_for("vg16")) == 5
     assert len(variants_for("vg21")) == 1
     assert len(variants_for("vg23")) == 1
     assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
-    assert len(variants_for("vg10")) == 17
+    assert len(variants_for("vg10")) == 18
     assert len(variants_for("vg11")) == 5
     assert len(variants_for("vg12")) == 5
     assert len(variants_for("vg13")) == 4
-    assert len(variants_for("vg15")) == 30
+    assert len(variants_for("vg15")) == 31
     assert len(variants_for("vg20")) == 6
 
 
@@ -256,9 +260,9 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 30
+    assert len(all_vg15) == 31
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 30
+    assert len({d.config_name for d in all_vg15}) == 31
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
@@ -296,6 +300,29 @@ def test_implausible_production_reinstatement_is_registered_and_bites():
     # The baselines must not carry the flag, or the variant would be a no-op.
     assert VG10.include_implausible_production is False
     assert VG15.include_implausible_production is False
+
+
+def test_masked_production_reinstatement_lifts_both_rules():
+    """The successor sets both flags; the one-factor variant leaves the second.
+
+    `us01-implausible-reinstated` reinstates 5 of the implausible rule's 11
+    counts, because the same-day disagreement rule re-masks the six that have an
+    observed same-day partner. The successor exists to lift both (#289 task 4.3),
+    and the one-factor variant has to keep its second flag off or the pair stops
+    separating the two judgements.
+    """
+    for model, model_id in (("vg10", "VG10"), ("vg15", "VG15")):
+        (variant,) = build_variant(model, "us01-masked-production-reinstated")
+        assert variant.include_implausible_production is True
+        assert variant.include_same_day_disagreements is True
+        assert variant.model_id == model_id
+        assert "us01-masked-production-reinstated" in variant.config_name
+
+        (one_factor,) = build_variant(model, "us01-implausible-reinstated")
+        assert one_factor.include_same_day_disagreements is False
+
+    assert VG10.include_same_day_disagreements is False
+    assert VG15.include_same_day_disagreements is False
 
 
 def test_dse_native_variant_is_registered_and_bites():

@@ -22,6 +22,11 @@ that no manifest entry claims are reported as warnings, so comparison scripts
 that do not yet record provenance are visible without blocking the ones that
 do. The nested ``recovery/`` and ``sensitivity/`` sub-directories are produced
 by their own validated pipelines and are outside this manifest's scope.
+
+A script that reads no fitted output -- ``compare_matched_designs.py`` reads
+one source CSV -- records its inputs as ``source_files`` instead (#289 task
+4.9), hashed the same way, so a comparison that outlives a change to its
+source is caught the way one that outlives a refit is.
 """
 
 from __future__ import annotations
@@ -65,25 +70,38 @@ def fit_manifest_fingerprint(model_output_dir: str) -> dict:
     }
 
 
+def _source_relative_path(path: str, source_root: str) -> str:
+    """``path`` relative to ``source_root``, POSIX separators, for the record."""
+    relative = os.path.relpath(os.path.abspath(path), os.path.abspath(source_root))
+    return relative.replace(os.sep, "/")
+
+
 def write_comparison_manifest(
     comparisons_dir: str,
     *,
     script: str,
     contributing: dict[str, str],
     outputs: list[str],
+    source_files: dict[str, str] | None = None,
+    source_root: str | None = None,
 ) -> None:
     """Record one comparison script's provenance, merging with other scripts'.
 
     ``contributing`` maps a model label (``VG10-<config_name>``) to its fitted
     output directory; ``outputs`` names the files the script wrote into
-    ``comparisons_dir`` (basenames).
+    ``comparisons_dir`` (basenames). ``source_files`` maps a label to a raw
+    input file the script read directly rather than through a fit; each is
+    recorded by its path relative to ``source_root`` (the working directory
+    when not given, which is the repository root for every script here) and
+    its hash, and :func:`validate_comparison_manifest` checks both.
     """
     manifest_path = os.path.join(comparisons_dir, COMPARISON_MANIFEST_FILENAME)
     payload: dict = {"schema_version": 1, "scripts": {}}
     if os.path.isfile(manifest_path):
         payload = read_json(manifest_path)
         payload.setdefault("scripts", {})
-    payload["scripts"][script] = {
+    root = os.getcwd() if source_root is None else source_root
+    entry: dict = {
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "outputs": sorted(outputs),
         "contributing_fits": {
@@ -91,18 +109,29 @@ def write_comparison_manifest(
             for label, model_dir in sorted(contributing.items())
         },
     }
+    if source_files:
+        entry["source_files"] = {
+            label: {
+                "path": _source_relative_path(path, root),
+                "sha256": _file_sha256(path),
+            }
+            for label, path in sorted(source_files.items())
+        }
+    payload["scripts"][script] = entry
     write_json_atomic(manifest_path, payload)
 
 
 def validate_comparison_manifest(
-    comparisons_dir: str, models_dir: str
+    comparisons_dir: str, models_dir: str, *, source_root: str | None = None
 ) -> tuple[list[str], list[str]]:
     """Validate every recorded comparison against the current fitted output.
 
     Returns ``(errors, warnings)``. Errors: the manifest is missing or
     unreadable, a contributing fit's directory or manifest is gone, or a
     contributing fit's manifest no longer matches its recorded fingerprint
-    (the model was refitted after the comparison was generated). Warnings:
+    (the model was refitted after the comparison was generated); likewise a
+    recorded source file that is gone or whose hash has moved, resolved
+    against ``source_root`` (the working directory when not given). Warnings:
     files in the comparisons directory that no manifest entry claims.
     """
     errors: list[str] = []
@@ -140,6 +169,21 @@ def validate_comparison_manifest(
                 errors.append(
                     f"{script}: contributing fit {label} was refitted after "
                     "this comparison was generated; regenerate the comparison."
+                )
+        root = os.getcwd() if source_root is None else source_root
+        for label, recorded in sorted((entry.get("source_files") or {}).items()):
+            path = os.path.join(root, recorded.get("path") or "")
+            if not os.path.isfile(path):
+                errors.append(
+                    f"{script}: source file {label} ({recorded.get('path')}) is "
+                    f"missing under {root}."
+                )
+                continue
+            if _file_sha256(path) != recorded.get("sha256"):
+                errors.append(
+                    f"{script}: source file {label} ({recorded.get('path')}) "
+                    "changed after this comparison was generated; regenerate "
+                    "the comparison."
                 )
 
     for name in sorted(os.listdir(comparisons_dir)):

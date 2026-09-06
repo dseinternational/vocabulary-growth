@@ -61,9 +61,12 @@ from vocab_growth.fit_artifacts import (
     DIAGNOSTICS_SUMMARY_FILENAME,
     FIT_MANIFEST_FILENAME,
     NOT_SAMPLED_ATTR,
+    NUTPIE_BACKEND_ENV_VAR,
+    NUTPIE_BACKENDS,
     SAMPLED_PARAMETERS_ATTR,
     TracePersistence,
     accepted_rhat_exception,
+    configured_nutpie_backend,
     convergence_caveats,
     create_staging_root,
     git_metadata,
@@ -1006,6 +1009,15 @@ def sample(context: AnyModelFitContext, *, store_observation_deterministics: boo
                 + ", ".join(not_sampled)
             )
 
+    # Which compiler nutpie evaluates the density with. `numba` is the default
+    # and what every fit of record used; `jax` is the documented escape hatch
+    # for a graph numba cannot compile on a given platform (#289 task 4.1). It
+    # does not change the posterior, so it is recorded in the manifest's
+    # runtime block rather than compared as a sampling parameter.
+    backend = configured_nutpie_backend()
+    if backend != NUTPIE_BACKENDS[0]:
+        console.print(f"nutpie backend: {backend} (${NUTPIE_BACKEND_ENV_VAR} or --nutpie-backend)")
+
     with context.model:
         trace = pm.sample(
             context.sampling.draws,
@@ -1014,6 +1026,7 @@ def sample(context: AnyModelFitContext, *, store_observation_deterministics: boo
             cores=context.sampling.cores,
             target_accept=context.sampling.target_accept,
             nuts_sampler="nutpie",
+            compile_kwargs={"backend": backend},
             # rich progress bar segfaults under nutpie's worker threads when
             # stdout is not a TTY (redirected/backgrounded); keep it for
             # interactive terminals only.
@@ -2195,6 +2208,10 @@ def write_fit_manifest(context: AnyModelFitContext, definition) -> None:
         "runtime": {
             "python": sys.version,
             "platform": platform.platform(),
+            # The compiler nutpie will evaluate the density with (#289 4.1).
+            # Recorded here, not under `sampling`, because it changes nothing
+            # about the posterior and publication compares `sampling` exactly.
+            "nutpie_backend": configured_nutpie_backend(),
             "packages": dict(sorted(packages.items(), key=lambda item: item[0].lower())),
             "direct_package_origins": dict(
                 sorted(direct_origins.items(), key=lambda item: item[0].lower())

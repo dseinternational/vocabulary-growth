@@ -171,13 +171,9 @@ def load_population_trajectory_weighted(
 
     f_u, h = flat("f_u_plot")[:, order], flat("h_plot")[:, order]  # (S, n_age)
     d_u, d_q = flat("delta_u"), flat("delta_q")  # (S, K)
-    codes = np.asarray(frame["study_code"], dtype=int)
-    obs_ages = np.asarray(frame["age"], dtype=float)
     ages_sorted = ages[order]
-    kernel = np.exp(-0.5 * ((ages_sorted[:, None] - obs_ages[None, :]) / bandwidth) ** 2)
-    K = int(codes.max()) + 1
-    weights = np.stack([kernel[:, codes == k].sum(axis=1) for k in range(K)], axis=1)
-    weights /= np.where(weights.sum(axis=1, keepdims=True) > 0, weights.sum(axis=1, keepdims=True), 1.0)
+    weights = _study_weights(ages_sorted, frame, bandwidth)
+    K = weights.shape[1]
 
     sig = lambda x: 1.0 / (1.0 + np.exp(-x))  # noqa: E731
     U = np.zeros_like(f_u)
@@ -190,6 +186,25 @@ def load_population_trajectory_weighted(
         U += w * pu_k
         S += w * pu_k * sig(h + d_q[:, k][:, None])
     return ages_sorted, U * n_trials_, S * n_trials_
+
+
+def _study_weights(ages_sorted: np.ndarray, frame, bandwidth: float) -> np.ndarray:
+    """``(n_age, K)`` study weights at each plot age: a Gaussian kernel over
+    ``frame``'s administrations, normalised across studies at each age.
+
+    Shared by the joint and single-outcome weighted loaders so the
+    administration-weighted child means the same thing on both sides of a
+    contrast. A study with no administration near an age gets zero weight
+    there; an age with no administration anywhere keeps zero weights rather
+    than dividing by zero.
+    """
+    codes = np.asarray(frame["study_code"], dtype=int)
+    obs_ages = np.asarray(frame["age"], dtype=float)
+    kernel = np.exp(-0.5 * ((ages_sorted[:, None] - obs_ages[None, :]) / bandwidth) ** 2)
+    K = int(codes.max()) + 1
+    weights = np.stack([kernel[:, codes == k].sum(axis=1) for k in range(K)], axis=1)
+    weights /= np.where(weights.sum(axis=1, keepdims=True) > 0, weights.sum(axis=1, keepdims=True), 1.0)
+    return weights
 
 
 #: Series the joint sign/speech engine (VG15) reports on the plot grid, as
@@ -262,6 +277,52 @@ def load_univariate_trajectory(
     """
     ages, (p,), _ = _load_reshaped_draws(path, ("p_plot",))
     return ages, p * n_trials_
+
+
+def load_univariate_trajectory_weighted(
+    path: str, n_trials_: int, frame, *, bandwidth: float = 3.0
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(ages, W)`` for the administration-weighted child of a single-outcome RE model.
+
+    The single-outcome analogue of :func:`load_population_trajectory_weighted`,
+    for the typically developing comparators VG11 and VG12 (``f_plot`` plus the
+    dataset-level study offsets ``delta``). Until #289 task 4.5 those had no
+    weighted loader, so the weighted attainment delay was read against the
+    joint comparator VG21 and stopped at its window's edge, about 100 spoken
+    words, where the reference-child delay against VG11 runs on. Both delays
+    now share a comparator. Same kernel, same normalisation, same frame guard
+    as the joint loader; ``frame`` must carry ``study_code`` and ``age`` and
+    should be the fit's own verified frame.
+    """
+    d = az.from_netcdf(path)
+    post = _dataset(d, "posterior")
+    cdata = _dataset(d, "constant_data")
+    ages = np.asarray(cdata["X_plot"].values, dtype=float)
+    order = np.argsort(ages)
+
+    def flat(name):
+        arr = post[name].values
+        return arr.reshape(arr.shape[0] * arr.shape[1], arr.shape[2])
+
+    f = flat("f_plot")[:, order]  # (S, n_age)
+    d_s = flat("delta")  # (S, K)
+    ages_sorted = ages[order]
+    weights = _study_weights(ages_sorted, frame, bandwidth)
+    if weights.shape[1] > d_s.shape[1]:
+        raise ValueError(
+            f"{os.path.basename(os.path.dirname(path))}: the frame codes "
+            f"{weights.shape[1]} studies but the posterior carries offsets for "
+            f"{d_s.shape[1]}; this is not the fit's own frame."
+        )
+
+    sig = lambda x: 1.0 / (1.0 + np.exp(-x))  # noqa: E731
+    W = np.zeros_like(f)
+    for k in range(weights.shape[1]):
+        w = weights[:, k][None, :]
+        if not np.any(w):
+            continue
+        W += w * sig(f + d_s[:, k][:, None])
+    return ages_sorted, W * n_trials_
 
 
 def population_trajectory(key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

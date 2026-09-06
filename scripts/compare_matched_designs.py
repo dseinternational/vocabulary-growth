@@ -69,6 +69,7 @@ import statsmodels.api as sm
 from scipy import stats
 
 from vocab_growth import environment as env
+from vocab_growth.comparisons_provenance import write_comparison_manifest
 
 DEFAULT_SOURCE = os.path.join("data", "vocab_data_es_01.csv")
 N_ITEMS = 651
@@ -312,6 +313,17 @@ def main() -> None:
         table.to_csv(os.path.join(out_dir, name), index=False)
         print(f"\n=== {name}")
         print(table.to_string(index=False))
+    # No fit contributes -- this is a descriptive analysis of one source's own
+    # counts -- so the provenance recorded is the source file itself (#289 task
+    # 4.9): a change to es_01 stales these tables the way a refit stales the
+    # fit-derived comparisons.
+    write_comparison_manifest(
+        out_dir,
+        script="compare_matched_designs.py",
+        contributing={},
+        outputs=list(tables),
+        source_files={"es_01": args.source},
+    )
     print(f"\n[written] {out_dir}")
 
 

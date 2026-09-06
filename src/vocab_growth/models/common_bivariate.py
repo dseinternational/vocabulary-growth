@@ -238,6 +238,7 @@ def build_bivariate_analysis_frame(
             definition, "td_languages", vocab_data_utils.ENGLISH_LANGUAGES
         ),
         include_implausible_production=definition.include_implausible_production,
+        include_same_day_disagreements=definition.include_same_day_disagreements,
     )
     ceiling_rows_excluded = 0
     if definition.exclude_us01_spoken_ceiling:
@@ -286,10 +287,24 @@ def prepare_bivariate_data(
     if definition.include_implausible_production:
         # No age bound: this engine's load_data call above passes none, so the
         # reported count has to be taken over the same frame or it misstates what
-        # the fit actually reinstated.
+        # the fit actually reinstated. The other flag is held at the definition's
+        # value so the figure is this flag's own net reinstatement.
         counts.append((
             "us_01 implausible production reinstated",
-            vocab_data_utils.count_reinstated_implausible_production(),
+            vocab_data_utils.count_reinstated_implausible_production(
+                include_same_day_disagreements=(
+                    definition.include_same_day_disagreements
+                ),
+            ),
+        ))
+    if definition.include_same_day_disagreements:
+        # The rule's own catch. The ceiling-region counts it re-masks when the
+        # implausible rule is lifted are counted under that rule's figure above
+        # (11 with this flag set, 5 without), so the two lines partition the
+        # combined variant's gain over the default pool rather than overlap.
+        counts.append((
+            "us_01 same-day production disagreements reinstated",
+            vocab_data_utils.count_reinstated_same_day_disagreements(),
         ))
     key_value_table("Observation counts", counts)
     dataframe_table(desc, title="Descriptive statistics")
@@ -2529,7 +2544,7 @@ def plot_study_fans(context, n_trials, *, output_dir=None, filename=None,
     spans = frame.groupby("study_code")["age"].agg(["min", "max"])
 
     # The default cycle carries ten colours and the Down syndrome pool has
-    # fourteen studies, so the house palette is extended with its dark variants
+    # fifteen studies, so the house palette is extended with its dark variants
     # and, beyond twelve, a dotted line -- rather than letting two studies share
     # a colour.
     palette = [

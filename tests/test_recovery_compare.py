@@ -298,6 +298,69 @@ def test_csv_fallback_is_flagged_and_never_scored_recovered(tmp_path):
     assert "diagnostics.csv" in row["caveats"]
 
 
+def _write_manifest(dirpath, tier):
+    (dirpath / "fit_manifest.json").write_text(
+        json.dumps({"sampling": {"configuration_name": tier}}), encoding="utf-8"
+    )
+
+
+def test_summarise_records_the_sampling_tier_from_the_manifest(tmp_path):
+    """The matrix has to say what each replicate was sampled at (#289 task 4.7)."""
+    _write_gate_payload(tmp_path)
+    table = pd.DataFrame(
+        [{"quantity": "slope", "index": "", "z": 0.1, "within_ci50": True, "within_ci89": True}]
+    )
+    row = summarise(table, str(tmp_path), label="r01", truth_source="posterior")
+    assert row["sampling_configuration"] is None
+
+    _write_manifest(tmp_path, "rep")
+    row = summarise(table, str(tmp_path), label="r01", truth_source="posterior")
+    assert row["sampling_configuration"] == "rep"
+
+
+def _summary(label, tier, *, converged=True):
+    return {
+        "replicate": label, "truth_source": "posterior", "sampling_configuration": tier,
+        "converged": converged, "max_rhat": 1.004, "min_ess": 1500.0, "n_targets": 100,
+        "n_within_ci89": 90, "coverage_ci89": 0.9, "coverage_ci50": 0.5,
+        "max_abs_z": 2.0, "quantities_outside_ci89": "q_query",
+    }
+
+
+def test_pooled_row_refuses_to_pool_across_sampling_tiers():
+    """The 2026-09-03 defect: a `rep` run's two replicates pooled with a stale
+    `test`-tier fit in the third directory, and the comparison book rendered
+    three replicates of three. The refusal keeps the POOLED prefix (so the
+    book's filter still drops it) and says "not assessed" (so its counter does
+    not count it)."""
+    row = pooled_row([_summary("r01", "rep"), _summary("r02", "rep"), _summary("r03", "test")])
+    assert row["replicate"].startswith("POOLED")
+    assert "refused" in row["replicate"]
+    assert row["verdict"].startswith("NOT POOLED (not assessed)")
+    assert "rep: r01, r02" in row["verdict"]
+    assert "test: r03" in row["verdict"]
+    assert row["n_targets"] == 0
+    assert row["converged"] is None
+    assert np.isnan(row["coverage_ci89"])
+
+    # A non-converged replicate at the other tier still stops the pooling: the
+    # label "n of m assessed" would otherwise count it as a replicate of this run.
+    row = pooled_row([_summary("r01", "rep"), _summary("r02", "test", converged=False)])
+    assert "refused" in row["replicate"]
+
+
+def test_pooled_row_pools_one_tier_and_records_it():
+    row = pooled_row([_summary("r01", "rep"), _summary("r02", "rep")])
+    assert row["replicate"] == "POOLED (2 of 2 replicates assessed)"
+    assert row["sampling_configuration"] == "rep"
+    assert row["n_targets"] == 200
+
+    # Summaries that never recorded a tier still pool, as before the column existed.
+    row = pooled_row([_summary("r01", None), _summary("r02", None)])
+    assert row["replicate"] == "POOLED (2 of 2 replicates assessed)"
+    assert row["sampling_configuration"] is None
+
+
 def test_pooled_row_counts_only_confirmed_converged_replicates():
     summaries = [
         {

@@ -20,11 +20,14 @@ import dse_research_utils.statistics.models.sampling as sampling
 from vocab_growth import environment as env
 from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
+    NUTPIE_BACKENDS,
     FitValidationError,
     TracePersistence,
+    configured_nutpie_backend,
     configured_trace_persistence,
     fit_validation_kwargs,
     require_valid_fit,
+    set_nutpie_backend,
     set_trace_persistence,
     source_data_hash,
 )
@@ -239,6 +242,20 @@ if __name__ == "__main__":
             "check without refitting. Does not affect the posterior."
         ),
     )
+    parser.add_argument(
+        "--nutpie-backend",
+        type=str,
+        default=None,
+        choices=list(NUTPIE_BACKENDS),
+        help=(
+            "Which compiler nutpie evaluates the log-density with (overrides "
+            "$DSE_VOCAB_GROWTH_NUTPIE_BACKEND; default: numba). 'jax' is the "
+            "escape hatch for a graph numba cannot compile on a platform -- "
+            "VG15 fallback-dispersion's 44 free variables on the linux-aarch64 "
+            "refit VM (#289 task 4.1). Does not affect the posterior; recorded "
+            "in the fit manifest's runtime block."
+        ),
+    )
 
     freeze_support()
 
@@ -263,6 +280,10 @@ if __name__ == "__main__":
     # fails at startup.
     set_trace_persistence(args.trace_persistence)
     configured_trace_persistence()
+    # Same again for nutpie's compiler, and for the same reason: a bad value in
+    # the environment should fail here, not at the sampling stage.
+    set_nutpie_backend(args.nutpie_backend)
+    configured_nutpie_backend()
 
     setup.init_script()
 

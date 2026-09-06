@@ -854,6 +854,62 @@ class TracePersistence(StrEnum):
 # fitted model for a storage decision.
 TRACE_PERSISTENCE_ENV_VAR = "DSE_VOCAB_GROWTH_TRACE_PERSISTENCE"
 
+NUTPIE_BACKEND_ENV_VAR = "DSE_VOCAB_GROWTH_NUTPIE_BACKEND"
+
+#: The backends nutpie compiles a PyMC model with. ``numba`` is nutpie's own
+#: default and the one every fit of record was made with; ``jax`` compiles the
+#: same log-density through JAX instead. The choice changes nothing about the
+#: posterior -- it is which compiler evaluates the density and its gradient --
+#: and is recorded in the fit manifest's ``runtime`` block rather than its
+#: ``sampling`` block for exactly that reason: the sampling parameters are
+#: compared field for field at publication, and a fit made with the other
+#: compiler is the same fit.
+NUTPIE_BACKENDS = ("numba", "jax")
+
+_nutpie_backend_override: str | None = None
+
+
+def set_nutpie_backend(value: str | None) -> None:
+    """Set a process-wide nutpie backend override (from ``--nutpie-backend``).
+
+    Takes precedence over ``$DSE_VOCAB_GROWTH_NUTPIE_BACKEND``. Pass ``None`` to
+    clear it. Call once, early in a script's entry point, as with
+    :func:`set_trace_persistence`.
+    """
+    global _nutpie_backend_override
+    _nutpie_backend_override = None if value is None else _parse_nutpie_backend(value, "--nutpie-backend")
+
+
+def _parse_nutpie_backend(raw: str, source: str) -> str:
+    value = raw.strip().lower()
+    if value not in NUTPIE_BACKENDS:
+        raise ValueError(
+            f"{source} is {raw!r}; expected one of {', '.join(NUTPIE_BACKENDS)}."
+        )
+    return value
+
+
+def configured_nutpie_backend() -> str:
+    """The nutpie backend to compile with: the override, the environment, else ``numba``.
+
+    This exists for one documented case (#289 task 4.1). nutpie assembles the
+    gradient of the log-density by concatenating one array per free random
+    variable in a single call, and on the linux-aarch64 refit VM numba's
+    ``np_concatenate`` over VG15 ``fallback-dispersion``'s 44 free variables
+    failed in LLVM register allocation ("ran out of registers during register
+    allocation"); the model of record's 42 compiled, and the same 44 compile
+    and draw on win-amd64 with the locked numba and llvmlite. Upstream nutpie
+    (0.16.11, the latest release, and ``main``) still concatenates in one call,
+    so the escape hatch is the other compiler, selected for that one fit and
+    recorded in its manifest.
+    """
+    if _nutpie_backend_override is not None:
+        return _nutpie_backend_override
+    raw = os.environ.get(NUTPIE_BACKEND_ENV_VAR)
+    if not raw:
+        return NUTPIE_BACKENDS[0]
+    return _parse_nutpie_backend(raw, f"${NUTPIE_BACKEND_ENV_VAR}")
+
 _trace_persistence_override: TracePersistence | None = None
 
 

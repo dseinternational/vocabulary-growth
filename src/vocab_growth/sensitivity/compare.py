@@ -48,6 +48,14 @@ _SERIES: tuple[tuple[str, str, str, str, str], ...] = (
     ("gap", "comprehension_production_gap.csv", "gap_median", "ci_lo", "ci_hi"),
 )
 
+#: Headline series emitted on the plot grid, ``np.linspace(min_age, max_age,
+#: n_plot)``, rather than on the integer query grid. Two fits share those ages
+#: only if they share an age range, so these are compared by interpolating the
+#: variant's curve onto the baseline's ages inside the variant's own support
+#: (see :func:`_comparable_ages`). Every other series is compared at exactly
+#: matching ages.
+PLOT_GRID_QUANTITIES: frozenset[str] = frozenset({"gap"})
+
 
 def _read(dirpath: str, name: str) -> pd.DataFrame | None:
     path = os.path.join(dirpath, name)
@@ -468,6 +476,44 @@ def fit_created_at(dirpath: str) -> str | None:
     return None if manifest is None else manifest.get("created_at_utc")
 
 
+def _comparable_ages(
+    qty: str, base: pd.DataFrame, var: pd.DataFrame
+) -> tuple[np.ndarray, np.ndarray]:
+    """The baseline ages ``qty`` can be compared at, and the variant's estimate there.
+
+    This is the one matching rule, shared by :func:`coverage_report` and
+    :func:`compare_dirs` so the coverage reported is the coverage compared.
+
+    Query-grid series and scalars match exactly: their ages are integer months
+    from ``ages_query`` (or ``-1``), shared by construction. Plot-grid series
+    (:data:`PLOT_GRID_QUANTITIES`) are emitted on ``np.linspace(min_age,
+    max_age, n_plot)``, so two fits share those ages only if they share an age
+    range; a variant that restricts the pool gets a different linspace and an
+    exact intersection collapses to arithmetic accidents -- 3 of 355 rows on
+    2026-08-16, reported as a normal "sensitive: gap" verdict, then 39 of 335
+    for VG10 ``dse-native-only`` on 2026-09-01, reported as partial coverage
+    with nothing to compare. So for those the variant's curve is interpolated
+    onto the baseline's ages inside the variant's own support: the two
+    population curves compared where both exist, on the baseline's grid, which
+    is the population-curve basis #289 task 4.2 asks for. Ages the variant does
+    not reach are not compared and count against coverage, so a variant whose
+    support is genuinely narrower is still reported as partial.
+    """
+    b = base.set_index("age_months")
+    v = var.set_index("age_months")
+    if qty not in PLOT_GRID_QUANTITIES:
+        ages = b.index.intersection(v.index)
+        return ages.to_numpy(dtype=float), v.loc[ages, "estimate"].to_numpy(dtype=float)
+    v = v.sort_index()
+    v_ages = v.index.to_numpy(dtype=float)
+    if not len(v_ages):
+        return np.empty(0), np.empty(0)
+    ages = b.index.to_numpy(dtype=float)
+    inside = (ages >= v_ages.min()) & (ages <= v_ages.max())
+    ages = ages[inside]
+    return ages, np.interp(ages, v_ages, v["estimate"].to_numpy(dtype=float))
+
+
 def coverage_report(
     baseline_dir: str,
     variant_dir: str,
@@ -483,16 +529,15 @@ def coverage_report(
     the variant does not at all.
 
     **This must use exactly the matching rule** :func:`compare_dirs` **uses**, or
-    it reports coverage the comparison does not have. The rule is an exact match
-    on ``age_months``, which is safe for the query-grid series (integer months
-    from ``ages_query``) and consequential for the plot-grid ones: ``gap`` is
-    emitted on ``np.linspace(min_age, max_age, n_plot)``, so two fits share its
-    ages only if they share an age range. A variant that restricts the pool —
-    ``dse-native-only`` is the live example — gets a different linspace, and the
-    intersection collapses to the handful of points that coincide by arithmetic
-    accident: 3 of 355 in the 2026-08-16 run, which had been reported as a normal
-    "sensitive: gap" verdict. Measuring coverage the same way turns that into the
-    partial-coverage status it is.
+    it reports coverage the comparison does not have; both read it from
+    :func:`_comparable_ages`. Query-grid series match on ``age_months``
+    exactly. The plot-grid ``gap`` series is interpolated onto the baseline's
+    ages inside the variant's support, because a variant that restricts the
+    pool -- ``dse-native-only`` is the live example -- gets a different
+    linspace and an exact intersection keeps only the points that coincide by
+    accident, which had been reported first as a normal "sensitive: gap"
+    verdict (3 of 355 shared, 2026-08-16) and then as partial coverage with
+    nothing to compare (39 of 335, 2026-09-01).
 
     A quantity either fit could not read is named here too, so isolating an
     unusable summary file in :func:`load_headlines` costs the pairing its verdict
@@ -505,9 +550,7 @@ def coverage_report(
     for qty, frame in base.items():
         if qty not in var:
             continue
-        b_ages = pd.Index(frame["age_months"])
-        v_ages = pd.Index(var[qty]["age_months"])
-        shared_rows += len(b_ages.intersection(v_ages))
+        shared_rows += len(_comparable_ages(qty, frame, var[qty])[0])
     unreadable = set(base_summaries.unreadable) | set(var_summaries.unreadable)
     missing = sorted(
         (set(base) | unreadable | (required or set())) - (set(base) & set(var))
@@ -574,6 +617,11 @@ def compare_dirs(
     This calculates differences only; :func:`summarise` requires validation
     evidence before making a robustness claim.
 
+    Ages are matched by :func:`_comparable_ages`: exactly for query-grid series
+    and scalars, and by interpolating the variant's curve onto the baseline's
+    ages for the plot-grid series, so a variant on a different linspace is
+    compared as a population curve rather than at arithmetic coincidences.
+
     ``summaries`` reuses records already read by :func:`coverage_report`, which a
     caller always computes for the same pairing; without it each directory is
     read twice.
@@ -583,12 +631,15 @@ def compare_dirs(
     rows = []
     for qty in sorted(set(base) & set(var)):
         b, v = base[qty].set_index("age_months"), var[qty].set_index("age_months")
-        for age in b.index.intersection(v.index):
-            bm, vm = float(b.loc[age, "estimate"]), float(v.loc[age, "estimate"])
+        kinds = set(v["estimate_kind"])
+        if len(kinds) != 1 or set(b["estimate_kind"]) != kinds:
+            raise ValueError(f"{qty} uses different point statistics")
+        (kind,) = kinds
+        ages, estimates = _comparable_ages(qty, base[qty], var[qty])
+        for age, vm in zip(ages, estimates, strict=True):
+            bm = float(b.loc[age, "estimate"])
+            vm = float(vm)
             lo, hi = b.loc[age, "ci_lo"], b.loc[age, "ci_hi"]
-            kind = b.loc[age, "estimate_kind"]
-            if kind != v.loc[age, "estimate_kind"]:
-                raise ValueError(f"{qty} uses different point statistics")
             within = bool(lo <= vm <= hi) if pd.notna(lo) and pd.notna(hi) else None
             rows.append({
                 "quantity": qty, "age_months": float(age),

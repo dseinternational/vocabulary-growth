@@ -628,14 +628,30 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
               f"P(TD>DS)={r['dq_p_gt0']:.2f}")
 
 
-def _weighted_trajectory(key: str, trace_path: str, n: int):
-    """The administration-weighted child for ``key``, or ``None`` with a reason."""
+def _verified_frame_for(key: str):
+    """The fit's own frame, verified against its recorded hash, or a reason."""
     from vocab_growth.report_cells import _verified_frame, read_manifest
 
     frame, reason = _verified_frame(read_manifest(C.model_dir(key)))
     if frame is None or "study_code" not in frame.columns:
         return None, reason or "frame carries no study_code"
+    return frame, None
+
+
+def _weighted_trajectory(key: str, trace_path: str, n: int):
+    """The administration-weighted child for joint model ``key``, or ``None`` with a reason."""
+    frame, reason = _verified_frame_for(key)
+    if frame is None:
+        return None, reason
     return C.load_population_trajectory_weighted(trace_path, n, frame), None
+
+
+def _weighted_univariate_trajectory(key: str, trace_path: str, n: int):
+    """The administration-weighted child for single-outcome model ``key``."""
+    frame, reason = _verified_frame_for(key)
+    if frame is None:
+        return None, reason
+    return C.load_univariate_trajectory_weighted(trace_path, n, frame), None
 
 
 def _write_weighted_comprehension(ds_key, td_key, ds_trace, td_trace, ds_n, td_n) -> None:
@@ -680,22 +696,26 @@ def _write_weighted_attainment(outcome: str, td_key: str) -> None:
     """``ds_td_<outcome>_re_attainment_delay_weighted.csv``: D(v) for the weighted child.
 
     The reference-child delay to reach v words is the headline; this is the same
-    contrast on the administration-weighted trajectories. Both models here are
-    joint RE models (VG20 and VG21), so the weighted child is available on both
-    sides; the univariate TD comparators VG11/VG12 carry a single outcome and
-    are left to the reference child.
+    contrast on the administration-weighted trajectories, against the **same**
+    typically developing comparator the reference-child delay uses (VG11 for
+    spoken, VG12 for understood). Until #289 task 4.5 the univariate
+    comparators had no weighted loader, so this table was read against the
+    joint comparator VG21 instead and stopped at its window's edge -- about
+    100 spoken words -- where the reference-child delay runs on; the two
+    columns of the book's milestone table therefore compared different models
+    as well as different children.
     """
-    if td_key in TD_KEYS.values():
-        td_key = JOINT_TD_KEY
-    sides = {}
-    for pop, key in (("DS", DS_KEY), ("TD", td_key)):
-        traj, why = _weighted_trajectory(key, C.trace_path(key), C.n_trials(key))
-        if traj is None:
-            print(f"  weighted attainment ({outcome}) not written: {pop} {why}", flush=True)
-            return
-        a, U, S = traj
-        sides[pop] = (a, U if outcome == "understood" else S)
-    (a_ds, w_ds), (a_td, w_td) = sides["DS"], sides["TD"]
+    ds, why = _weighted_trajectory(DS_KEY, C.trace_path(DS_KEY), C.n_trials(DS_KEY))
+    if ds is None:
+        print(f"  weighted attainment ({outcome}) not written: DS {why}", flush=True)
+        return
+    a_ds, U_ds, S_ds = ds
+    w_ds = U_ds if outcome == "understood" else S_ds
+    td, why = _weighted_univariate_trajectory(td_key, C.trace_path(td_key), C.n_trials(td_key))
+    if td is None:
+        print(f"  weighted attainment ({outcome}) not written: TD {why}", flush=True)
+        return
+    a_td, w_td = td
     ia, ib = C.align_draws(w_ds.shape[0], w_td.shape[0], seed=SEED)
     A_ds = np.column_stack([C.first_crossing_age(w_ds[ia], a_ds, v) for v in N_GRID])
     A_td = np.column_stack([C.first_crossing_age(w_td[ib], a_td, v) for v in N_GRID])

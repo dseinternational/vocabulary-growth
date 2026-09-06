@@ -1446,6 +1446,39 @@ def test_us01_same_day_disagreement_rule_masks_exactly_two_counts():
     assert set(rows["age"]) == {23}
 
 
+def test_reinstatement_counters_hold_the_other_rule_fixed():
+    """The two fit-log figures are each flag's net reinstatement given the other.
+
+    On the default pool the implausible rule's catch is 11 and the same-day
+    rule's own catch is 2, but the same-day rule also re-masks 6 of the 11 when
+    they are reinstated. So the one-factor variant nets 5, and the combined
+    variant (`us01-masked-production-reinstated`, #289 task 4.3) reports 11 for
+    the implausible rule with the same-day rule lifted and 8 for the same-day
+    rule with the implausible rule lifted: 13 in total, which is what the
+    combined frame gains over the default one.
+    """
+    assert data_utils.count_reinstated_implausible_production() == 5
+    assert data_utils.count_reinstated_same_day_disagreements() == 2
+    assert (
+        data_utils.count_reinstated_implausible_production(
+            include_same_day_disagreements=True
+        )
+        == 11
+    )
+    assert (
+        data_utils.count_reinstated_same_day_disagreements(
+            include_implausible_production=True
+        )
+        == 8
+    )
+
+    default = data_utils.load_combined_data()
+    both = data_utils.load_combined_data(
+        include_implausible_production=True, include_same_day_disagreements=True
+    )
+    assert both["spoken"].notna().sum() - default["spoken"].notna().sum() == 13
+
+
 def test_mask_incomplete_administrations_reports_counts_and_needs_columns():
     frame = pd.DataFrame({
         "study": ["ie_01", "ie_01", "uk_03"],
