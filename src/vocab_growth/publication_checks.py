@@ -62,8 +62,14 @@ def referenced_assets(html_path: str) -> list[str]:
 
 
 def unpublished_assets(html_path: str, published: Iterable[str]) -> list[str]:
-    """Referenced assets absent from ``published`` (POSIX paths relative to the page)."""
-    sent = {path.replace(os.sep, "/") for path in published}
+    """Referenced assets absent from ``published`` (paths relative to the page).
+
+    ``published`` may carry either separator: an uploader walking a Windows
+    directory yields backslashes whatever platform later checks the record, so
+    both are normalised to ``/`` unconditionally rather than through ``os.sep``,
+    which is already ``/`` on POSIX and would leave a backslash path unmatched.
+    """
+    sent = {path.replace("\\", "/") for path in published}
     return [asset for asset in referenced_assets(html_path) if asset not in sent]
 
 
