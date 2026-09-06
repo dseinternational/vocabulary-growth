@@ -1,7 +1,10 @@
-# The typically developing models' low BFMI is the child-scale / dispersion ridge, and the partition is not what causes it
+# The typically developing models' low BFMI is the child effect, and the partition is not what causes it
 
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+
+> [!IMPORTANT]
+> **Revised the same day, after the Down syndrome refit supplied a control.** The first version of this note called the pathology "the child-scale / dispersion ridge" throughout. The Down syndrome family shows that is two claims, only one of which generalises: adding a child effect costs energy exploration in **both** populations, but the τ–κ _correlation_ is specific to the typically developing models. See [The Down syndrome family is the control](#the-down-syndrome-family-is-the-control) — it is the section that makes the argument, and it was not available when the rest was written.
 
 Date: 2026-09-06. Measured on the existing `rep` fits of VG11, VG12, VG13, VG21 and VG23 — read-only, nothing refitted. Scopes [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.6, and bears on [#225](https://github.com/dseinternational/vocabulary-growth/issues/225) and [#229](https://github.com/dseinternational/vocabulary-growth/issues/229) because it is the same parameter in all three.
 
@@ -31,9 +34,41 @@ The last column is the marginal energy SD against the ≈√(d/2) a well-behaved
 
 **Tightness is not the problem.** VG11's `tau_subject` has by far the smallest coefficient of variation (0.0086 against 0.018–0.022) and the best BFMI. So the "strikingly tight for a parameter identified by 17% of children" observation in `202608050900-td-hierarchical-geometry.md` §8 describes something real but is not itself the pathology.
 
+## The Down syndrome family is the control
+
+The refit running on 2026-09-06 supplied something the typically developing models cannot: a lineage in which the child effect is added **and nothing else is**, on a pool with real within-child replication. VG08 is VG07 plus a constant understood child effect.
+
+| model                         | child effect |  min BFMI | corr(τ_subj_u, κ_young_u) | corr(τ_subj_u, energy) |
+| ----------------------------- | ------------ | --------: | ------------------------: | ---------------------: |
+| VG07 (study RE only)          | no           | **0.784** |                         — |                      — |
+| VG14 (no child effect)        | no           | **0.816** |                         — |                      — |
+| VG08 (+ constant child on U)  | yes          | **0.421** |                **−0.001** |                 −0.632 |
+| VG10 (+ child on q, anchored) | yes          |     0.470 |                    +0.271 |                 −0.469 |
+| VG16 (VG10 + cross-lag)       | yes          |     0.486 |                    +0.278 |                 −0.465 |
+
+Two things follow, and they pull apart the single claim the first version of this note made.
+
+**The energy cost of a child effect is general.** BFMI roughly halves at exactly the step that introduces one — 0.78 to 0.42, with nothing else changing — and the child scale is the strongest energy correlate in every model that has one, Down syndrome included (−0.63 in VG08). That is not a typically developing quirk.
+
+**The τ–κ ridge is not general.** In VG08 the correlation between the child scale and the concentration is **−0.001**: no trade-off at all, while the typically developing models sit at +0.57 to +0.76. So "child scale versus dispersion" describes the TD pathology specifically, not the cost of having a child effect.
+
+The obvious candidate for the difference is replication, and it is large. Measured on each model's own prepared frame:
+
+| frame          |  rows | children | mean obs/child | children with ≥2 visits |
+| -------------- | ----: | -------: | -------------: | ----------------------: |
+| VG08/VG10 (DS) | 1,708 |      943 |           1.81 |               **46.6%** |
+| VG12 (TD)      | 7,049 |    5,819 |           1.21 |                   17.2% |
+| VG13 (TD)      | 6,356 |    5,496 |           1.16 |                   15.1% |
+
+Nearly half of Down syndrome children are seen more than once, against a sixth of typically developing ones. Where the data can separate between-child from within-child variance directly, the child scale does not have to be prised apart from the dispersion by the shape of the likelihood — and the correlation that indicates it is being so prised apart is absent. That is [#229](https://github.com/dseinternational/vocabulary-growth/issues/229)'s thesis with a control group.
+
+(The Down syndrome figures are lower than #229's table, which gives 1.95 and 50.7%. That table predates `us_03`, which adds 183 children who are mostly seen once.)
+
+**What this does not license.** Two populations, one contrast, and the populations differ in far more than replication — different instruments, ages, pool sizes and study composition. Replication is the candidate explanation, not the established one; the test that would settle it is thinning the Down syndrome pool to TD-like replication and asking whether the ridge appears.
+
 ## Why this ties three issues together
 
-The parameter with the strongest energy correlation is `tau_subject`, and that is exactly the parameter [#225](https://github.com/dseinternational/vocabulary-growth/issues/225) finds biased in recovery. So the recovery bias, the low BFMI and #229's design question are **one mechanism seen three ways**: a child effect and an observation-level dispersion competing for the same variance on the same probability scale, identified by functional form rather than by replication.
+The parameter with the strongest energy correlation is `tau_subject`, and that is exactly the parameter [#225](https://github.com/dseinternational/vocabulary-growth/issues/225) finds biased in recovery. So the recovery bias, the low BFMI and #229's design question are **one mechanism seen three ways**: a child effect and an observation-level dispersion competing for the same variance on the same probability scale, identified by functional form rather than by replication. The Down syndrome control above is what makes that last clause more than a phrase — where replication is available, the competition does not show up as a correlation.
 
 That has a sequencing consequence which is the practical point of this note. #225's evidence is interval coverage, measured on VG12 recovery fits whose own BFMI caveat reads _"the interval bounds are less reliable than the point estimates"_. An interval-coverage failure cannot be diagnosed with an instrument that reports unreliable intervals. **4.6 comes first**, and it is unblocked: all seven typically developing fits were verified on 2026-09-06 as untouched by the `us_03` ingestion — every one reproduces its recorded prepared-frame hash exactly — so none of this waits on the Down syndrome refit.
 
