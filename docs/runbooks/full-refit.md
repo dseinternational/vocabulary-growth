@@ -57,12 +57,13 @@ naive run hits. Distilled from the 2026-07-12 run
   `full`, and make sure that variable is _unset_ so it cannot silently override
   you. (**This threshold was 1 TB until 2026-09-06**, and was inherited from
   traces written before the 2026-08-23 change that stopped sampling the
-  observation-sized deterministics. Measured on the 40 `rep` fits of the
-  2026-09-04 round, a whole round at `full` is **218 GB** — 110 GB of Down
-  syndrome fits and their variants, 108 GB of typically developing ones — with
-  the largest single trace 24.6 GB, VG11. The old figure would have sent any
-  workstation-sized volume to `compact` for no reason, and `compact` is the tier
-  that blocks exactly the tools the phase 3 validation work needs.)
+  observation-sized deterministics. Measured on the 2026-09-04 round — 40 fits,
+  **218 GB** at `full` — a `rep` model fit now averages **6.6 GB**, a sensitivity
+  variant 3.8 GB and a recovery replicate 5.0 GB, with one outlier that dominates
+  any budget: VG11 at 24.6 GB. Sizing is in
+  [Surviving a full disk](#surviving-a-full-disk). The old figure would have sent
+  any workstation-sized volume to `compact` for no reason, and `compact` is the
+  tier that blocks exactly the tools the phase 3 validation work needs.)
   `compact` is byte-identical for reporting but blocks recovery scoring,
   `regenerate_plots.py` and `loso_compare.py` on those fits without a refit, so
   it is a saving worth making only when the space is genuinely tight. Either way,
@@ -366,7 +367,13 @@ $env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
 **Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates.
 
 > [!NOTE]
-> **Re-measured 2026-09-06.** The paragraph below described traces written before the 2026-08-23 change that stopped sampling the observation-sized deterministics, and overstated a current round by about a factor of two. The 2026-09-04 round is 40 `rep` fits totalling **218 GB** at `full`: 28 Down syndrome fits and variants at 110 GB (largest 5.9 GB, VG08) and 12 typically developing ones at 108 GB (largest 24.6 GB, VG11). So the TD side is now most of the bill on half the fits, and the promotion headroom to add is VG11's 24.6 GB rather than a share of a 400 GB total. **300 GB is comfortable at `full`** for a round of this shape; reach for `compact` below that, and remember it costs the recovery, plot-regeneration and LOSO paths.
+> **Re-measured 2026-09-06.** The paragraph below described traces written before the 2026-08-23 change that stopped sampling the observation-sized deterministics, and overstates a current round by roughly a factor of two. **Budget per fit rather than per round**, because what a round costs depends entirely on how many variants it schedules.
+>
+> The 2026-09-04 round, measured directly: **40 fits, 217.8 GB** at `full` — 20 model fits at `rep` (131.4 GB, mean **6.6**), 9 sensitivity variants at `rep` (34.4 GB, mean **3.8**), 8 recovery replicates at `rep` (39.8 GB, mean **5.0**) and 3 VG11 recovery replicates at `test` (12.3 GB, mean 4.1).
+>
+> **That is not a full round**, and the total should not be read as one: it carries 9 of the ~82 registered sensitivity variants, and its three `test` replicates would each be VG11-sized at `rep`. Scale from the means instead. Two things dominate any estimate. **The typically developing side is half the bill on 30% of the fits** — 108 GB across 12 fits — and within it five carry a third of the whole round on their own: VG11 24.6 GB, VG21 15.2, VG13 and VG23 14.5 each, VG12 7.6, so 76 GB of the 218. Against that, every one of the thirteen Down syndrome models is 1.2–5.9 GB (as are VG03 and VG04, the small TD pair, at 2.9 and 1.5). And the promotion headroom to add is **one VG11**, 24.6 GB, not a share of the total.
+>
+> Practical figures: the 21 registered models come to about **140 GB**; add ~4 GB per sensitivity arm and ~5 GB per recovery replicate. So a model round plus the ten mandatory data-handling arms is roughly **180 GB**, and **300 GB is comfortable** for it. A round that also runs recovery across the registry passes 400 GB and wants **500 GB**. Reach for `compact` below ~300 GB, remembering it costs the recovery, plot-regeneration and LOSO paths.
 
 The figures that follow are retained as the record of what the pre-2026-08-23 fits cost, not as guidance: at `full` that exceeded 400 GB; at `compact` it was roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB was comfortable at `compact`; 1 TB at `full`.**
 
