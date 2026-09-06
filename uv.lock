@@ -3,12 +3,12 @@ revision = 3
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-    "python_full_version < '3.15' and platform_machine == 'x86_64' and sys_platform == 'linux'",
     "python_full_version >= '3.15' and platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "python_full_version < '3.15' and platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python_full_version >= '3.15' and platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "python_full_version < '3.15' and platform_machine == 'arm64' and sys_platform == 'darwin'",
     "python_full_version >= '3.15' and platform_machine == 'AMD64' and sys_platform == 'win32'",
+    "python_full_version < '3.15' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+    "python_full_version < '3.15' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version < '3.15' and platform_machine == 'arm64' and sys_platform == 'darwin'",
     "python_full_version < '3.15' and platform_machine == 'AMD64' and sys_platform == 'win32'",
 ]
 supported-markers = [
@@ -550,8 +550,8 @@ wheels = [
 
 [[package]]
 name = "dse-research-utils"
-version = "0.12.0"
-source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.12.4#8ee0c8c4e1b8cd68a00d0d163a1c2b79a32d7c52" }
+version = "0.12.5"
+source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.12.5#7b27e8e3ed1b16a5d5ea4eee8ea8789bab30358e" }
 dependencies = [
     { name = "arviz" },
     { name = "arviz-base" },
@@ -629,7 +629,7 @@ typecheck = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.12.4" }]
+requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.12.5" }]
 
 [package.metadata.requires-dev]
 dev = [
