@@ -645,21 +645,41 @@ def get_hsgp_hyperparams(
 def render_model_graph(model: pm.Model, output_dir: str) -> None:
     """Render the model DAG to ``gp_model_graph.svg`` in ``output_dir``.
 
-    Best-effort: if the graphviz ``dot`` executable is not installed the render
-    is skipped with a warning rather than aborting the fit, so the pipeline runs
-    on machines without graphviz. The model-diagram figure is a non-essential
-    reporting artefact (a missing SVG only shows as a broken figure in the
-    optional Quarto report).
+    Best-effort about graphviz being *installed*, and only about that: with no
+    ``dot`` executable the render is skipped with a warning rather than
+    aborting the fit, so the pipeline runs on machines without graphviz. The
+    model-diagram figure is a non-essential reporting artefact (a missing SVG
+    only shows as a broken figure in the optional Quarto report).
+
+    A ``dot`` that runs and *fails* is a different thing and is reported as
+    one. Until 2026-09-06 both went through the same silent skip, which is how
+    a missing SVG went unnoticed for a sensitivity variant: on Windows the
+    usual cause is the target exceeding the 260-character ``MAX_PATH``, since
+    ``dot`` is not long-path-aware even where ``LongPathsEnabled`` is set, and
+    the message it gives ("No such file or directory") points at the directory
+    rather than at the length. The path and its length are printed for that
+    reason. Still non-fatal -- the figure is not worth losing a fit over.
     """
     try:
-        digraph = pymc_utils.model_to_graphviz(model)
-        digraph.render(
-            filename=os.path.join(output_dir, "gp_model_graph"),
-            format="svg",
-            cleanup=True,
-        )
-    except Exception as exc:  # e.g. graphviz 'dot' not on PATH — non-fatal
+        import graphviz
+    except ImportError as exc:  # the Python package itself is absent
         console.print(f"[yellow]Skipped model graph: {exc}[/yellow]")
+        return
+
+    target = os.path.join(output_dir, "gp_model_graph")
+    try:
+        pymc_utils.model_to_graphviz(model).render(
+            filename=target, format="svg", cleanup=True
+        )
+    except graphviz.ExecutableNotFound as exc:  # dot not on PATH — expected
+        console.print(f"[yellow]Skipped model graph: {exc}[/yellow]")
+    except Exception as exc:  # dot ran and failed — a defect, not a skip
+        console.print(f"[red]Model graph failed: {exc}[/red]")
+        console.print(
+            f"[red]  target {target}.svg is {len(target) + 4} characters; "
+            f"over 260 means MAX_PATH, which dot obeys regardless of "
+            f"LongPathsEnabled[/red]"
+        )
 
 
 def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
@@ -2287,7 +2307,10 @@ def run_fit_pipeline(
         ci_prob=0.89,
         interval_kind="eti",
     )
-    staging_root = create_staging_root(output_root, canonical_reporting.model_label)
+    # The model *id*, not the label: the label already names the directory
+    # inside this root, and repeating it can push a long variant's paths past
+    # Windows' MAX_PATH. See create_staging_root.
+    staging_root = create_staging_root(output_root, definition.model_id)
     context = ModelFitContext(
         reporting=reporting.ReportingConfiguration(
             model_name=definition.model_id,

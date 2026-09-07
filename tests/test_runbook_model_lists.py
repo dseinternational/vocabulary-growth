@@ -113,3 +113,51 @@ def test_the_prose_headline_lists_match_their_commands():
             f"The prose list {sorted(prose)} and its `-Models` command "
             f"{sorted(command)} disagree in {RUNBOOK.name}."
         )
+
+
+def _scope_table_counts() -> dict[str, int]:
+    """The `N today` figures from the runbook's `-Scope` table, by scope name."""
+    text = RUNBOOK.read_text(encoding="utf-8")
+    return {
+        match.group(1): int(match.group(2))
+        for match in re.finditer(
+            r"^\|\s*`(publication|all)`\s*\|.*?(\d+)\s+today", text, re.MULTILINE
+        )
+    }
+
+
+def test_the_scope_table_counts_match_the_catalogue():
+    """The `-Scope` table's "N today" figures are derived, so they go stale silently.
+
+    They are prose, not a list, so the checks above cannot see them: registering
+    VG24 on 2026-09-06 moved `publication` from 13 to 14 and `all` from 20 to 21
+    and left the table reading the old pair, which is the same drift this file
+    was written for -- a hand-copied figure that no longer describes the
+    registry. A reader sizing a run from the table would under-count by one
+    model in each column.
+
+    `publication` is *models of record + TD references + unclassified* because
+    unclassified fails closed; `all` is the whole registry.
+    """
+    from vocab_growth.models.catalogue import CATALOGUE
+
+    roles = {
+        key: str(getattr(entry.role, "value", entry.role))
+        for key, entry in CATALOGUE.items()
+    }
+    expected = {
+        "publication": sum(
+            1
+            for role in roles.values()
+            if role in {"model-of-record", "td-reference", "unclassified"}
+        ),
+        "all": len(MODEL_REGISTRY),
+    }
+    found = _scope_table_counts()
+    assert set(found) == {"publication", "all"}, (
+        f"Could not parse both scope rows out of {RUNBOOK.name}; got {found}."
+    )
+    assert found == expected, (
+        f"The `-Scope` table in {RUNBOOK.name} says {found} but the catalogue "
+        f"gives {expected}. Update the table, not this test."
+    )

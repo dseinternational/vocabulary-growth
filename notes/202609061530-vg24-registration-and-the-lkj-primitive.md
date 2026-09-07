@@ -55,3 +55,23 @@ Beyond the definition and the engine: catalogue entry on the `joint` engine (rol
 - **Which children inform `rho_sign_q`.** The child shifts enter the marginal likelihoods only — not the four-cell or produced-cell Dirichlet-Multinomials, so the child block cannot pull `psi`. So `rho_sign_q` and `rho_u_sign` are identified by the children contributing both marginals, not by the whole frame. The model page computes and states the support from the fit's own stored data. Extending the shifts into the cell likelihoods would bring the `es_01`, `uk_07` and `nz_01` children in but changes what `psi` means; that is a separate proposal.
 - **The reporter confound.** All three counts come from one questionnaire completed by one parent, and the graph has no informant term, so shared reporting tendency loads onto every correlation and biases all three upward in magnitude. Same caveat VG20 and VG23 carry, with more force here because signing and speech are reported item by item on the same form.
 - **The cross-lag.** Still [#297](https://github.com/dseinternational/vocabulary-growth/issues/297), still deferred on [#242](https://github.com/dseinternational/vocabulary-growth/issues/242). VG24 is the between-child estimate and carries no temporal direction.
+
+## Fitted, 2026-09-06
+
+It went through the `us_03` refit as one of [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) phase 1's fourteen, which is what registering it early was for, and **passed its gate on the first attempt at `rep`**: 0 divergences, max R-hat 1.0044, min ESS 1,863, min energy BFMI 0.578. No escalation rung — worth recording because adding a correlated block is exactly the change that has cost sampling stability elsewhere in this project (it is what the four typically developing models' sub-0.3 BFMI is about), and here it cost none. VG15 itself sampled cleanly in the same run (0 divergences, BFMI 0.560), so this is the block being well-behaved rather than a fragile parent being rescued.
+
+| parameter    |      mean |   89% interval | posterior sd |
+| ------------ | --------: | -------------: | -----------: |
+| `rho_sign_q` | **0.391** | [0.231, 0.539] |        0.097 |
+| `rho_uq`     |     0.341 | [0.230, 0.445] |        0.067 |
+| `rho_u_sign` |     0.278 | [0.098, 0.442] |        0.107 |
+
+Child scales: `tau_subj_u` 0.829, `tau_subj_q` 1.274, `tau_subj_sign` 1.191.
+
+All three correlations are data-driven rather than prior artefacts — the `LKJCholeskyCov(eta = 2)` marginal on a 3×3 matrix is symmetric about zero with an 89% interval of [−0.655, +0.655], so the posteriors sit well inside it and contract about 0.78 (`rho_sign_q`) and 0.76 (`rho_u_sign`). All three exclude zero, `rho_u_sign` only narrowly.
+
+**Against gate 1.** The plug-in correlation of VG15's fitted sign and `q` intercepts was +0.20 [0.11, 0.29]; the direct estimate is roughly twice it. That is the expected direction rather than a discrepancy: a plug-in correlates _shrunken_ point estimates and is attenuated toward zero. Consistent with attenuation, not proof of it.
+
+**The support is as predicted and the ingestion did not touch it.** 146 children carry both a signed and a spoken marginal, over 251 rows, from `ie_02` (65), `uk_02` (36), `uk_04` (18), `uk_05` (16) and `uk_06` (11). `us_03` contributes no sign data at all — its expressive cell is a produced union with no separable sign component — so the correlation this model exists to read is identified by exactly the same children as before the refit.
+
+Still unvalidated: no parameter recovery, no sensitivity arms, no rendered report. VG24 is `unclassified` in the catalogue and therefore publication-required, so any of those failing would block the whole figure sync. The numbers above are a fit result, not yet a finding, and the reporter confound above applies to all three unchanged.

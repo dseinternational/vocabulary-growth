@@ -520,7 +520,7 @@ render_loo_section()
 
 - **A reference, not a target.** This curve describes typically-developing children in these datasets. It is the baseline the Down syndrome models are compared against, and it must not be read as a standard an individual child is failing to meet.
 - **The population curve is the average study.** It is not the curve of any contributing dataset, and the between-study row in the Findings section says how far individual datasets sit from it.
-- **The oldest query ages are extrapolation.** Comprehension observations stop before the reported grid does, and the query-age table does not mark the rows beyond them.
+- **The reported ages stop where the observations do.** This pool carries no comprehension above 25 months, and `report_max_age_understood = 25` caps every reported quantity there, so the query grid's 27- and 30-month rows are filtered out rather than extrapolated into. Nothing reported here is beyond the observed support; the limit is that there is no evidence past 25 months at all.
 - **Language and dataset cannot be separated.** The pool spans English, Italian and Spanish (European), and each non-English language enters through a single dataset, so any language effect is reported as between-dataset heterogeneity and cannot be isolated.
 - **The high anchor is un-normed.** No independent comprehension norm exists at that age; the prior there is regularisation, and its registered sensitivity variant has not been reported.
 - **The GP amplitude is close to its prior.** This is a recorded, unresolved calibration defect. It does not affect the reported developmental quantities directly, but the amplitude itself should not be read as data-driven.

@@ -769,11 +769,29 @@ def require_valid_fit(output_dir: str, **kwargs: Any) -> None:
         raise FitValidationError(f"Fit output is not valid for this operation:\n - {detail}")
 
 
-def create_staging_root(output_root: str, model_label: str) -> str:
-    """Create an isolated root for a fit before atomic publication."""
-    safe_label = model_label.replace(os.sep, "-")
+def create_staging_root(output_root: str, tag: str) -> str:
+    """Create an isolated root for a fit before atomic publication.
+
+    ``tag`` must be **short** -- the model id, not the model label. The label
+    already names the ``models/<label>/`` directory this root contains, and
+    repeating it here cost enough characters to push a long variant's paths
+    past Windows' 260-character ``MAX_PATH``: on 2026-09-06 graphviz silently
+    failed to write ``gp_model_graph.svg`` for the VG10
+    ``us01-masked-production-reinstated`` arm at 262 characters, while Python
+    wrote a 273-character sibling in the same directory without complaint.
+    ``LongPathsEnabled`` only lifts the limit for processes whose manifest
+    declares it -- Python's does, ``dot``'s does not -- so a staging path has
+    to stay short for any external tool that writes into it.
+
+    The run id already guarantees uniqueness; the tag exists only so that a
+    ``.staging`` directory left behind by a killed fit says which model it
+    belongs to. Quarantine naming is unaffected: :func:`retain_failed_fit` is
+    passed the inner ``models/<label>`` directory, so its basename is the
+    label whatever this root is called.
+    """
+    safe_tag = tag.replace(os.sep, "-")
     run_id = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-    staging_root = os.path.join(output_root, ".staging", f"{safe_label}-{run_id}")
+    staging_root = os.path.join(output_root, ".staging", f"{safe_tag}-{run_id}")
     os.makedirs(staging_root, exist_ok=False)
     return staging_root
 
