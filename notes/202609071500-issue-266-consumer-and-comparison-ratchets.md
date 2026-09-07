@@ -67,4 +67,4 @@ Only fits. VG22's recovery and whole-child predictive comparison are [#289](http
 
 ## Checks
 
-`ruff` and `mypy` clean; 2,042 fast tests passed (53 skipped, up from 2,012 — thirty new) and 315 slow tests passed. `pool_descriptives.py`, `subject_effect_correlation.py`, `compare_ds_td_trajectories.py`, `aggregate_summary.py`, `prior_vs_posterior.py --table --model vg16` and `emit_factor_correlation.py` were each run end to end against the real output root, and the resulting `comparison_manifest.json` was validated.
+`ruff` and `mypy` clean; 2,069 fast tests passed (53 skipped) and 315 slow tests passed, after rebasing onto the `dse-research-utils` 0.14.0 adoption in [#315](https://github.com/dseinternational/vocabulary-growth/pull/315). Twenty-eight of the fast tests are new here (thirty collected, one being a three-way parametrisation). `pool_descriptives.py`, `subject_effect_correlation.py`, `compare_ds_td_trajectories.py`, `aggregate_summary.py`, `prior_vs_posterior.py --table --model vg16` and `emit_factor_correlation.py` were each run end to end against the real output root, and the resulting `comparison_manifest.json` was validated.

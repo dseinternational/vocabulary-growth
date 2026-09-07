@@ -361,9 +361,10 @@ def main() -> None:
             # Comparison outputs are derived from fitted output but carried no
             # provenance of their own, so a comparison generated from a
             # since-replaced fit synced as though it were current (issue #266
-            # finding 1). Unclaimed files are reported rather than rejected:
-            # the manifest is being adopted script by script, and a warning
-            # names what is still unrecorded without blocking the rest.
+            # finding 1). Unclaimed files are still reported rather than
+            # rejected, but since 2026-09-07 every comparison writer records an
+            # entry, so a warning here names a comparison that has not been
+            # regenerated rather than a script that never recorded anything.
             comparison_errors, comparison_warnings = validate_comparison_manifest(
                 comparisons_dir,
                 models_dir,

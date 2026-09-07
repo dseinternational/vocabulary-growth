@@ -17,11 +17,17 @@ contributing fit's ``fit_manifest.json``. The sync validates the manifest with
 contributing model was refitted after the comparison was generated, and the
 comparison must be regenerated before it can be published.
 
-Coverage is ratcheted rather than assumed: files in the comparisons directory
+Coverage was ratcheted rather than assumed: files in the comparisons directory
 that no manifest entry claims are reported as warnings, so comparison scripts
-that do not yet record provenance are visible without blocking the ones that
-do. The nested ``recovery/`` and ``sensitivity/`` sub-directories are produced
-by their own validated pipelines and are outside this manifest's scope.
+that did not yet record provenance stayed visible without blocking the ones
+that did. Every script that writes into the comparisons root records an entry
+as of 2026-09-07, and the three that touch the directory without generating
+anything carry their reason in :data:`MANIFEST_EXEMPT_SCRIPTS`, which
+``tests/test_comparison_manifest_coverage.py`` pins -- so an unclaimed file now
+means a comparison that has not been regenerated rather than a script nobody
+has wired up. The nested ``recovery/`` and ``sensitivity/`` sub-directories are
+produced by their own validated pipelines and are outside this manifest's
+scope.
 
 A script that reads no fitted output -- ``compare_matched_designs.py`` reads
 one source CSV -- records its inputs as ``source_files`` instead (#289 task
