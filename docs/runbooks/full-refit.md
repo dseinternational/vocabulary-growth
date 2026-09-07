@@ -253,6 +253,18 @@ memory-heavy. So:
   TD pool than the model the serial rule was written for. Neither has a `rep` fit
   yet, so neither has a measured peak — treat them as VG13-class until one exists.
 
+  > [!NOTE]
+  > **2026-09-07.** The memory figures behind this rule — VG13 at 178–243 GB, the
+  > OOM record below — describe fits made before 2026-08-23, when the
+  > observation-sized deterministics stopped being sampled. No TD `rep` peak has
+  > been measured on the current code. The per-draw arithmetic and a measured
+  > VG12 `test` profile in
+  > [`notes/202609071440`](../../notes/202609071440-td-fits-on-96gb-hardware.md)
+  > put VG11 at `rep` near 48 GB and the other TD models at 16–30 GB, with the
+  > VG11 measurement still to be made; its §8 is the procedure. Keep the
+  > _procedure_ here — sole tenant, separate scopes, per-process RSS — and treat
+  > the _numbers_ as stale until that fit records one.
+
 ### Fit straight to the attached disk, not to local scratch
 
 Asked when the 2026-08 run was provisioned with a 2 TB premium disk: fit to the
