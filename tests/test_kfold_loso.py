@@ -91,27 +91,36 @@ def _record(model_short, fold, passed):
 
 
 def test_fit_fold_runs_the_canonical_diagnostics_scan(monkeypatch, tmp_path):
+    """The scan the fold fit must run, patched where the fit now lives.
+
+    The mechanics moved to :mod:`vocab_growth.fold_fits` when a second script
+    needed the same fold fit under a different holdout rule, so the stand-ins go
+    on that module; ``KFOLD_TMP_DIR`` stays here, because where the fold writes
+    is still this script's choice and is passed in.
+    """
+    from vocab_growth import fold_fits
+
     canned = _fold_gate_payload()
     calls = {}
 
     monkeypatch.setattr(_MODULE, "KFOLD_TMP_DIR", str(tmp_path))
     monkeypatch.setattr(
-        _MODULE, "configure_bivariate_priors", lambda context, definition: None
+        fold_fits, "configure_bivariate_priors", lambda context, definition: None
     )
 
     def fake_build(context, definition):
         context.set_model(object(), {})
 
-    monkeypatch.setattr(_MODULE, "build_model_re", fake_build)
+    monkeypatch.setattr(fold_fits, "build_model_re", fake_build)
 
     sentinel_trace = object()
 
     def fake_sample(context, **kwargs):
         context.set_trace(sentinel_trace)
 
-    monkeypatch.setattr(_MODULE, "sample", fake_sample)
+    monkeypatch.setattr(fold_fits, "sample", fake_sample)
     monkeypatch.setattr(
-        _MODULE, "diagnostics_var_names", lambda model: (["eta"], ["eta", "delta"])
+        fold_fits, "diagnostics_var_names", lambda model: (["eta"], ["eta", "delta"])
     )
 
     def fake_write(trace, output_dir, var_names=None):
@@ -121,7 +130,7 @@ def test_fit_fold_runs_the_canonical_diagnostics_scan(monkeypatch, tmp_path):
         return canned
 
     monkeypatch.setattr(
-        _MODULE.shared_diagnostics, "write_diagnostics_summary", fake_write
+        fold_fits.shared_diagnostics, "write_diagnostics_summary", fake_write
     )
 
     analysis_df = pd.DataFrame(

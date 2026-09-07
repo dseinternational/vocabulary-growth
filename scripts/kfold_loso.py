@@ -52,13 +52,9 @@ from __future__ import annotations
 
 import math
 import os
-import shutil
 import time
 from dataclasses import dataclass
 
-import dse_research_utils.statistics.diagnostics as shared_diagnostics
-import dse_research_utils.statistics.models.data as model_data
-import dse_research_utils.statistics.models.reporting as reporting
 import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pandas as pd
@@ -73,13 +69,7 @@ from vocab_growth.comparisons_provenance import (
     write_comparison_manifest,
 )
 from vocab_growth.fit_artifacts import source_data_hash
-from vocab_growth.models.build_utils import require_valid_counts
-from vocab_growth.models.common import ModelFitContext, diagnostics_var_names
-from vocab_growth.models.common_bivariate import (
-    configure_bivariate_priors,
-    sample,
-)
-from vocab_growth.models.common_bivariate_re import build_model_re
+from vocab_growth.fold_fits import fit_holdout_fold, fold_gate_fields
 from vocab_growth.models.definitions import (
     VG07,
     VG08,
@@ -150,22 +140,6 @@ class FoldFitRecord:
     min_ess: float | None
     divergences: int | None
     bfmi_ok: bool | None
-
-
-def fold_gate_fields(gate: dict) -> dict:
-    """``FoldFitRecord`` convergence fields from a diagnostics-gate payload.
-
-    ``gate`` is the dict returned by
-    ``shared_diagnostics.write_diagnostics_summary``.
-    """
-    checks = gate.get("checks") or {}
-    return {
-        "passed": bool(gate.get("passed")),
-        "max_rhat": gate.get("max_rhat"),
-        "min_ess": gate.get("min_ess"),
-        "divergences": gate.get("divergences"),
-        "bfmi_ok": checks.get("bfmi"),
-    }
 
 
 def model_convergence_flags(fit_records: list[FoldFitRecord]) -> dict[str, bool]:
@@ -257,70 +231,22 @@ def fit_fold(
     sampling_cfg: sampling.SamplingConfiguration,
     label: str,
 ) -> tuple[xr.DataTree, int, dict]:
-    """Run prepare → priors → build → sample → diagnostics scan on a
-    holdout-marked analysis frame.
+    """:func:`vocab_growth.fold_fits.fit_holdout_fold`, plus this script's row count.
 
-    Returns ``(trace, n_obs, gate)``, where ``gate`` is the payload of the
-    canonical convergence scan (``write_diagnostics_summary``).
+    The mechanics moved to :mod:`vocab_growth.fold_fits` when
+    ``wave_forward_score.py`` needed the same fold fit for a different holdout
+    rule; the hand copy made for it read the energy verdict from the wrong key
+    and reported every fold's BFMI as passing.
     """
-    n = len(analysis_df_with_holdout)
-    has_u = analysis_df_with_holdout["understood"].notna().values
-    # Same contract as the engines' own prepare stage: validate before the cast,
-    # because NumPy truncates toward zero silently and the k-fold path builds
-    # its BinomialModelData here rather than going through the engine (#233).
-    require_valid_counts(
-        np.asarray(analysis_df_with_holdout.loc[has_u, "understood"], dtype=float),
-        "understood",
-        definition.n_trials,
+    trace, gate = fit_holdout_fold(
+        definition,
+        analysis_df_with_holdout,
+        sampling_cfg,
+        label=label,
+        tmp_root=KFOLD_TMP_DIR,
+        name_prefix="KFOLD",
     )
-    bmd = model_data.BinomialModelData(
-        X_obs=np.asarray(analysis_df_with_holdout["age"], dtype=float).reshape(-1, 1),
-        y_obs=np.where(
-            has_u,
-            analysis_df_with_holdout["understood"].fillna(0).astype(int),
-            0,
-        ).astype(int),
-        n_trials=definition.n_trials,
-    )
-
-    reporting_cfg = reporting.ReportingConfiguration(
-        model_name=f"KFOLD-{label}",
-        config_name=definition.config_name,
-        output_root_dir=KFOLD_TMP_DIR,
-        ci_prob=0.89,
-        interval_kind="eti",
-    )
-    if os.path.exists(reporting_cfg.output_dir):
-        shutil.rmtree(reporting_cfg.output_dir)
-    os.makedirs(reporting_cfg.output_dir, exist_ok=True)
-
-    context: ModelFitContext = ModelFitContext(
-        reporting=reporting_cfg,
-        sampling=sampling_cfg,
-    )
-    context.set_model_data(bmd, analysis_df_with_holdout)
-    configure_bivariate_priors(context, definition)
-    build_model_re(context, definition)
-    # The held-out predictive below reads p_u_obs / p_s_obs / q_obs /
-    # kappa_*_obs at every draw, which the sampler otherwise no longer stores
-    # (fit_artifacts.sampled_variable_names). Storing them here costs the same
-    # memory as recomputing them afterwards and saves the second pass.
-    sample(context, store_observation_deterministics=True)
-
-    # The canonical convergence scan, with var_names built exactly as the fit
-    # pipeline's diagnostics stage builds them: the scalar summary set plus
-    # every free RV element-wise, so the study/subject random intercepts and
-    # HSGP basis coefficients are screened too. The returned payload must be
-    # captured here because the fold's output directory is deleted when the
-    # next fold reuses it, so the JSON written into it is transient.
-    # enforce_convergence_gate is deliberately not called: it is a no-op below
-    # the reporting tier, and a failed fold should be recorded, not aborted.
-    _summary_names, gate_var_names = diagnostics_var_names(context.model)
-    gate = shared_diagnostics.write_diagnostics_summary(
-        context.trace, reporting_cfg.output_dir, var_names=gate_var_names
-    )
-
-    return context.trace, n, gate
+    return trace, len(analysis_df_with_holdout), gate
 
 
 # ============================================================
