@@ -46,6 +46,7 @@ Haldane
 Hermite
 Holzinger
 Hutchins
+ignorability
 Jupytext
 Juárez
 Kaat
@@ -95,6 +96,7 @@ Schaaf
 Soto
 Spiegelhalter
 Stojanovik
+subsetting
 Sánchez
 TEDS
 Toole

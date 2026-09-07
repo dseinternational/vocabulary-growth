@@ -10,9 +10,9 @@ which fits eleven other models that carry no lag at all.
 
 Read :func:`prev_wave_lag_for_frame` first: it is the supported entry point, and
 :func:`prev_wave_lag` is the array primitive underneath it. The distinction matters
-because the two settings that change the result -- the gap ceiling and the
-zero-source treatment -- live on the definition, and a caller reaching past the
-frame-level function has to pass them itself.
+because the three settings that change the result -- the gap ceiling, the
+zero-source treatment and the same-form restriction -- live on the definition,
+and a caller reaching past the frame-level function has to pass them itself.
 
 The one thing here that is *not* a definition-level concern is
 :func:`validate_cross_lag`, which is checked against the resolved child-effect plan;
@@ -95,6 +95,8 @@ def prev_wave_lag(
     *,
     max_gap_months: float | None = None,
     zero_handling: str = LAG_ZERO_CLIP,
+    form_ceiling=None,
+    same_form_only: bool = False,
 ):
     """Per-observation prior-wave understood lag source for the VG16 cross-lag.
 
@@ -121,6 +123,13 @@ def prev_wave_lag(
       of one wave share child, study and recorded age, so which *row* the
       source index points at cannot move the likelihood — only the selected
       count can.
+
+    ``same_form_only`` (with ``form_ceiling``) keeps only lags whose source and
+    target waves were scored against the same checklist, which is the review's
+    own measurement check: the predictor is a logit of ``understood /
+    n_trials``, so a source scored on a shorter form enters it already
+    deflated, and a study intercept cannot absorb a *within*-study form
+    transition. Like the gap ceiling it drops the lag, not the row.
 
     Returns ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation
     arrays: ``has_lag_f`` is 1.0 where a source wave exists and 0.0 otherwise
@@ -154,6 +163,32 @@ def prev_wave_lag(
         too_far = (has_lag_f > 0) & ((age - age[prev_idx]) > max_gap_months)
         has_lag_f = np.where(too_far, 0.0, has_lag_f)
         prev_idx = np.where(too_far, 0, prev_idx)
+    # The same-form restriction drops the lag on the same terms and for the same
+    # reason: applied after the source is chosen, so a row whose source used a
+    # different form loses its lag rather than falling back to an earlier
+    # same-form wave, which would silently lengthen the gap and confound the
+    # measurement question with the interval one. Both ceilings must be known --
+    # an unknown one cannot certify that the two waves used the same checklist.
+    if same_form_only:
+        if form_ceiling is None:
+            raise ValueError(
+                "same_form_only needs form_ceiling: the restriction is defined on "
+                "the checklist each wave was scored against, and none was given."
+            )
+        ceiling = np.asarray(form_ceiling, dtype=float)
+        if len(ceiling) != n:
+            raise ValueError(
+                f"form_ceiling has {len(ceiling)} entries for {n} observations."
+            )
+        source_ceiling = ceiling[prev_idx]
+        same = (
+            (ceiling == source_ceiling)
+            & ~np.isnan(ceiling)
+            & ~np.isnan(source_ceiling)
+        )
+        crossed = (has_lag_f > 0) & ~same
+        has_lag_f = np.where(crossed, 0.0, has_lag_f)
+        prev_idx = np.where(crossed, 0, prev_idx)
 
     und_prev = np.where(has_lag_f > 0, understood[prev_idx], n_trials * 0.5)
     if zero_handling == LAG_ZERO_CONTINUITY:
@@ -173,15 +208,29 @@ def prev_wave_lag_for_frame(analysis_df, n_trials: int, definition):
     """The supported entry point: :func:`prev_wave_lag` over an analysis frame.
 
     Call this, not :func:`prev_wave_lag`, wherever an analysis frame is in hand.
-    It reads the two settings that change the result off ``definition``, so a
+    It reads the three settings that change the result off ``definition``, so a
     caller cannot silently get the registered defaults for a variant that moved
     them -- which is what ``definition=None`` used to allow, and what two of the
     three out-of-module callers were doing.
 
     ``definition`` is required for that reason: every caller has one. An array-only
     caller (a trace-reconstruction script) calls :func:`prev_wave_lag` directly and
-    passes the same two settings itself.
+    passes the same three settings itself -- and, for the same-form restriction,
+    the form identity this function reads off the frame.
     """
+    same_form_only = bool(getattr(definition, "lag_same_form_only", False))
+    form_ceiling = None
+    if same_form_only:
+        if "survey_vocab_max" not in analysis_df.columns:
+            raise ValueError(
+                "lag_same_form_only=True needs the frame's `survey_vocab_max` "
+                "column, and this prepared frame does not carry it. The engine "
+                "requests it for every Down syndrome frame and for `use_cross_lag` "
+                "specifically, so the only way here is a typically-developing "
+                "cross-lag model: the Wordbank query never produces the column, "
+                "and form identity would have to come from `form` instead."
+            )
+        form_ceiling = analysis_df["survey_vocab_max"].to_numpy(dtype=float)
     return prev_wave_lag(
         np.asarray(analysis_df["subject_code"], dtype=int),
         np.asarray(analysis_df["age"], dtype=float),
@@ -189,6 +238,8 @@ def prev_wave_lag_for_frame(analysis_df, n_trials: int, definition):
         n_trials,
         max_gap_months=getattr(definition, "lag_max_gap_months", None),
         zero_handling=getattr(definition, "lag_zero_handling", LAG_ZERO_CLIP),
+        form_ceiling=form_ceiling,
+        same_form_only=same_form_only,
     )
 
 

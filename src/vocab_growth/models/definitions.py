@@ -1024,6 +1024,25 @@ class BivariateModelDefinition:
     ``LAG_ZERO_CLIP`` (the default) reproduces the historical clip exactly.
     See the constants in ``likelihood_utils`` for what the alternative changes
     and why seven rows on the current frame make it a live question."""
+    lag_same_form_only: bool = False
+    """Drop a lag whose source wave was scored against a different checklist form.
+
+    ``False`` (the default) is the historical behaviour: the lag predictor is
+    ``logit(understood / n_trials)`` whatever form produced the count, which is
+    the project's difficulty-ordering harmonisation acting directly on a
+    *regressor* rather than on an outcome. A source scored on a 396-item form
+    enters already deflated relative to one scored on 810, and a study intercept
+    cannot absorb a form transition that happens *within* a study.
+
+    On the 2026-09-06 frame 131 of VG16's 473 supporting rows (28%) cross a form
+    ceiling between source and target. Setting this keeps 342 rows from 226
+    children in all eight contributing studies -- against 80 rows from 74
+    children in two studies under ``dse_native_only``, which is the other
+    form-restricted check and cannot separate a scale effect from a change of
+    study composition. Like ``lag_max_gap_months`` it drops the lag, not the
+    row: the observation still enters both likelihoods. Counted in
+    ``notes/202609071000-vg16-available-case-audit.md``
+    ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242))."""
 
     # -- GP anchor constraint (per-draw zero at reference age) --
     anchor_g_u_at_ref: bool = False

@@ -29,6 +29,7 @@ from vocab_growth.fit_artifacts import normalise_for_json
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     VG10,
+    VG16,
     VG19,
     VG20,
     VG22,
@@ -225,6 +226,34 @@ def test_the_same_day_backfill_entry_is_the_loaders_own_default():
         (difference,) = definition_differences(recorded, altered)
         assert difference.field == "include_same_day_disagreements"
         assert difference.role is FieldRole.DATA
+
+
+def test_the_same_form_backfill_entry_is_the_call_sites_own_default():
+    """The fourth entry's claim, checked rather than asserted (#242).
+
+    ``lag_same_form_only`` reaches the lag construction through one ``getattr``
+    with a default, so a definition that predates the field resolves to exactly
+    that value -- which is the whole of the claim the entry makes about every
+    VG16 fit before 2026-09-07. Read the default off the source rather than
+    restating it here, so moving it fails this test instead of quietly widening
+    what the entry excuses.
+    """
+    import inspect
+
+    from vocab_growth.models import cross_lag
+
+    source = inspect.getsource(cross_lag.prev_wave_lag_for_frame)
+    assert 'getattr(definition, "lag_same_form_only", False)' in source
+    assert BACKFILL_DEFAULTS["lag_same_form_only"] is False
+
+    recorded = normalise_for_json(VG16)
+    recorded.pop("lag_same_form_only")
+    assert definition_differences(recorded, VG16) == []
+
+    altered = dataclasses.replace(VG16, lag_same_form_only=True)
+    (difference,) = definition_differences(recorded, altered)
+    assert difference.field == "lag_same_form_only"
+    assert difference.role is FieldRole.GRAPH
 
 
 def test_backfill_entries_name_real_fields():
