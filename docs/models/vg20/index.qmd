@@ -183,6 +183,8 @@ The only prior that is new here is the one on the correlation. It is placed as $
 
 $\eta = 1$ would be uniform across every correlation from $-1$ to $+1$. The value used here is larger, which places more mass near zero — a deliberate choice, because the two independent measurements motivating the model both put the correlation small and positive, and a prior that made a large correlation cheap would be assuming the answer the model exists to test. The prior is symmetric about zero, so it favours no direction.
 
+**The trajectory anchors are VG10's, and they are frame calibration, not independent norms.** The understood anchors and the high production-ratio anchor were set so the prior trend line sits where this project's own directly observed comprehension and spoken/understood ratios sit, because no independent Down syndrome norm exists for either quantity; only the low production-ratio anchor is centred on an independent typically-developing estimate. Posterior agreement with those anchors is therefore partly by construction and is not independent corroboration. Every Down syndrome joint model from VG05 onwards carries the same anchor values, so the caution applies across the lineage; the registered broad-anchor sensitivity on VG10 (`u-anchor-broad`, [#147](https://github.com/dseinternational/vocabulary-growth/issues/147)) is what tests it, and on the pre-`us_03` pool it left every reported quantity inside the model of record's interval.
+
 ### Understood trajectory
 
 ![Prior on the proportion of words understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}

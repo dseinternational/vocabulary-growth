@@ -2967,7 +2967,10 @@ VG04 = UnivariateModelDefinition(
     p_slope_low_beta=8.0,
     # 26 mo understood high anchor — NO independent CDI comprehension norm (WS is
     # production-only), so Beta(1.3, 1.3) is broad regularisation and a named
-    # sensitivity target in PRIORS.md, not an externally anchored value.
+    # sensitivity target in PRIORS.md, not an externally anchored value. Tested
+    # (#147, 2026-08-18, `vg12 hi-anchor-broad` at `rep`): reverting it to the vague
+    # Beta(1.1, 1.1) moved 30 mo comprehension by 0.63 words against an 89%
+    # interval 152.8 words wide. The posterior does not lean on this anchor.
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
     eta_sigma=0.5,
@@ -3174,7 +3177,10 @@ VG12 = UnivariateREModelDefinition(
     # Understood trajectory priors shared with VG04 (see the note there): the
     # 12 mo low anchor is anchored to the independent Wordbank comprehension norm
     # (~83 words), while the 26 mo high anchor has no independent CDI norm (WS is
-    # production-only) and remains broad regularisation / a sensitivity target.
+    # production-only) and remains broad regularisation / a sensitivity target —
+    # tested robust under #147 (`hi-anchor-broad`, `lo-anchor-broad` and
+    # `eta-narrow` all inside the baseline 89% interval at every query age; see
+    # docs/models/PRIORS.md, "Sensitivity results").
     p_slope_low_alpha=1.2,
     p_slope_low_beta=8.0,
     p_slope_hi_alpha=1.3,
