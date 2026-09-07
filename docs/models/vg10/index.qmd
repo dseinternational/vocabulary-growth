@@ -404,11 +404,12 @@ else:
         "max_abs_delta",
         "quantities_outside_ci",
         "verdict",
+        "baseline_fit_utc",
         "variant_fit_utc",
     ]])
 ```
 
-The table lists every registered VG10 sensitivity variant, read from the comparison harness's own output. `n_within_ci` of `n_checked` is how many reported quantities fell inside the model of record's 89% interval; `max_abs_delta` is the largest movement, in the units of the quantity concerned. Rows whose `status` records no fit have not been run.
+The table lists every registered VG10 sensitivity variant, read from the comparison harness's own output. `n_within_ci` of `n_checked` is how many reported quantities fell inside the model of record's 89% interval; `max_abs_delta` is the largest movement, in the units of the quantity concerned. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 Read the `verdict` column rather than the deltas. Variants marked robust moved nothing outside the baseline's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did move quantities outside, and is a live caveat on everything above it in this report: where the harness names a quantity in `quantities_outside_ci`, statements about that quantity at the ages where the two fits disagree should be read as conditional on the modelling choice the variant changes. Two comparisons carry no verdict at all — one because it was fitted against a baseline that has since changed and needs refitting, the other because too few of its reported ages are shared with the baseline for a comparison to mean anything. Both are disclosed rather than quietly dropped, and neither should be read as evidence either way.
 

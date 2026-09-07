@@ -68,6 +68,11 @@ from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_artifacts import source_data_hash
 from vocab_growth.models.build_utils import require_valid_counts
 from vocab_growth.models.common import ModelFitContext, diagnostics_var_names
 from vocab_growth.models.common_bivariate import (
@@ -448,6 +453,7 @@ def main(
 ) -> None:
     SPECS = [(m, AVAILABLE[m]) for m in models]
     os.makedirs(OUT_DIR, exist_ok=True)
+    written = ComparisonOutputs(OUT_DIR)
     print(f"models: {', '.join(models)}   K={K}   config={sampling_config_name}")
 
     print("Reloading DS analysis frame …", flush=True)
@@ -563,6 +569,19 @@ def main(
     fit_df.to_csv(os.path.join(OUT_DIR, f"kfold_loso_fits{suffix}.csv"), index=False)
     print("\n=== Fit timings and convergence ===")
     print(fit_df.to_string(index=False))
+
+    # This script fits its own folds rather than reading a model of record, so
+    # there is no contributing fit to fingerprint. What its tables can outlive
+    # is a data change, and that is what the manifest records for them
+    # (issue #266 finding 1).
+    write_comparison_manifest(
+        OUT_DIR,
+        script="kfold_loso.py",
+        contributing={},
+        outputs=written.written(),
+        source_data_hash=source_data_hash(env.DATA_DIR),
+        arguments=[*models, f"K={K}", f"config={sampling_config_name}"],
+    )
 
     total_wall = fit_df["wall_seconds"].sum()
     print(f"\nTotal fit wall time: {total_wall:.1f}s ({total_wall/60:.1f} min)")

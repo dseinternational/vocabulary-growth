@@ -60,6 +60,11 @@ import pandas as pd
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
 from vocab_growth import posterior_analysis, reporting_ages
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_consumers import contributing_fits
 from vocab_growth.models.common_joint_modality import MIN_WORDS_FOR_MILESTONE
 from vocab_growth.models.definitions import VG15
 
@@ -109,6 +114,16 @@ DS_SIGN_KEY = "vg15"
 DS_SIGNING_MAX_AGE = float(reporting_ages.max_age_for_sign_ratio(VG15))
 
 OUT_DIR = env.comparisons_output_dir()
+
+#: Every model of record this script reads, for validation and the manifest.
+CONTRIBUTING_MODELS = (
+    DS_JOINT_KEY,
+    TD_JOINT_KEY,
+    DS_DISP_KEY,
+    TD_SPOKEN_KEY,
+    TD_UNDERSTOOD_KEY,
+    DS_SIGN_KEY,
+)
 SEED = 20260626
 PCT = 10.0
 # Vocabulary levels (words) for the level-indexed delay curves.
@@ -514,11 +529,29 @@ def main() -> None:
     argv = sys.argv[1:]
     if "--verify" in argv:
         _verify()
+    allow_stale = "--allow-stale-fit" in argv
+    os.makedirs(OUT_DIR, exist_ok=True)
+    # Every fit this comparison reads is checked against the registered
+    # definition and the current prepared frame, and recorded in the
+    # comparisons manifest so the outputs cannot outlive a refit unnoticed
+    # (issue #266 findings 1 and 7).
+    contributing = contributing_fits(
+        CONTRIBUTING_MODELS,
+        consumer="compare_ds_td_expressive.py",
+        allow_stale=allow_stale,
+    )
+    written = ComparisonOutputs(OUT_DIR)
     run_expressive_delay()
     run_sign_inclusive()
     run_ds_signing_profile()
     run_below_percentile()
     run_peak_growth()
+    write_comparison_manifest(
+        OUT_DIR,
+        script="compare_ds_td_expressive.py",
+        contributing=contributing,
+        outputs=written.written(),
+    )
     print(f"\nWrote CSVs + figures to {OUT_DIR}/", flush=True)
 
 

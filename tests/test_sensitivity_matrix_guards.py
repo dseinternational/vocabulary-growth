@@ -8,6 +8,13 @@ produced an error, a blank, or a missing file. A harness that reads two
 directories of CSVs will compare whatever it finds, so the guards have to be
 positive checks rather than the absence of a crash. See
 ``notes/202608142000-refit-run-record-and-disk-failure.md`` §7.
+
+A fourth was found on 2026-09-06 and is guarded at the end of this file: a
+targeted rerun retains the rows it did not recompute, and a retained row was
+scored against whatever baseline existed at the time. After a refit the matrix
+therefore presents verdicts against two different baselines side by side. That
+one is not a bad row either -- it is a true record, mislabelled by its
+neighbours.
 """
 
 from __future__ import annotations
@@ -19,8 +26,10 @@ import pytest
 
 from vocab_growth.sensitivity.compare import (
     MIN_COVERAGE,
+    STALE_BASELINE_STATUS,
     coverage_report,
     failed_fit_dir,
+    merge_retained_rows,
     summarise,
     summarise_absent,
 )
@@ -202,3 +211,110 @@ def test_an_absent_variant_is_a_row_not_an_omission(status):
     assert row["status"] == status
     assert row["n_checked"] == 0
     assert row["verdict"] == "reason"
+
+
+# --- A carried-over row scored against a superseded baseline (issue #266) ---
+
+
+def _matrix_row(variant, *, status="compared", baseline="2026-09-01T00:00:00+00:00",
+                verdict="robust"):
+    return {
+        "variant": variant,
+        "status": status,
+        "verdict": verdict,
+        "max_abs_delta": 1.0,
+        "baseline_fit_utc": baseline,
+        "variant_fit_utc": "2026-09-01T00:00:00+00:00",
+    }
+
+
+def test_a_retained_row_against_a_superseded_baseline_is_marked():
+    """The concrete defect: two verdicts side by side, scored against two baselines.
+
+    ``robustness_matrix_vg10.csv`` held exactly this on 2026-09-06 — one row
+    against the pre-``us_03`` fit and two against the refitted one, with nothing
+    in the presented columns to tell them apart.
+    """
+    previous = pd.DataFrame([_matrix_row("us01-implausible-reinstated")])
+    recomputed = pd.DataFrame(
+        [_matrix_row("dse-native-only", baseline="2026-09-06T11:57:26+00:00")]
+    )
+    merged = merge_retained_rows(
+        previous, recomputed, baseline_fit_utc="2026-09-06T11:57:26+00:00"
+    )
+    retained = merged[merged["variant"] == "us01-implausible-reinstated"].iloc[0]
+    assert retained["status"] == STALE_BASELINE_STATUS
+    assert "STALE BASELINE" in retained["verdict"]
+    # The baseline it actually used is named, not merely flagged.
+    assert "2026-09-01T00:00:00+00:00" in retained["verdict"]
+    # ... and the recomputed row is untouched.
+    current = merged[merged["variant"] == "dse-native-only"].iloc[0]
+    assert current["status"] == "compared"
+    assert current["verdict"] == "robust"
+
+
+def test_a_retained_row_against_the_same_baseline_is_left_alone():
+    baseline = "2026-09-06T11:57:26+00:00"
+    previous = pd.DataFrame([_matrix_row("no-us01", baseline=baseline)])
+    recomputed = pd.DataFrame([_matrix_row("dse-native-only", baseline=baseline)])
+    merged = merge_retained_rows(previous, recomputed, baseline_fit_utc=baseline)
+    retained = merged[merged["variant"] == "no-us01"].iloc[0]
+    assert retained["status"] == "compared"
+    assert retained["verdict"] == "robust"
+
+
+@pytest.mark.parametrize("status", ["not-fitted", "failed", "invalid-summary"])
+def test_only_a_comparison_can_be_stale_not_an_absence(status):
+    """A new baseline does not change "nobody ran it".
+
+    ``summarise_absent`` rows carry ``baseline_fit_utc`` like any other, but
+    their verdict is a statement about the variant rather than about a
+    comparison, so re-marking them would be a false report of staleness.
+    """
+    previous = pd.DataFrame([_matrix_row("no-us01", status=status,
+                                         verdict="NOT ASSESSED: no fit")])
+    recomputed = pd.DataFrame(
+        [_matrix_row("dse-native-only", baseline="2026-09-06T11:57:26+00:00")]
+    )
+    merged = merge_retained_rows(
+        previous, recomputed, baseline_fit_utc="2026-09-06T11:57:26+00:00"
+    )
+    retained = merged[merged["variant"] == "no-us01"].iloc[0]
+    assert retained["status"] == status
+    assert retained["verdict"] == "NOT ASSESSED: no fit"
+
+
+def test_the_retained_rows_numbers_survive_the_mark():
+    """Marking, not dropping: the row is a true record of a comparison made."""
+    previous = pd.DataFrame([_matrix_row("us01-implausible-reinstated")])
+    merged = merge_retained_rows(
+        previous,
+        pd.DataFrame([_matrix_row("dse-native-only", baseline="2026-09-06T00:00:00+00:00")]),
+        baseline_fit_utc="2026-09-06T00:00:00+00:00",
+    )
+    retained = merged[merged["variant"] == "us01-implausible-reinstated"].iloc[0]
+    assert retained["max_abs_delta"] == 1.0
+    assert retained["variant_fit_utc"] == "2026-09-01T00:00:00+00:00"
+
+
+def test_the_registered_order_is_restored_after_a_merge():
+    previous = pd.DataFrame([_matrix_row("no-us01"), _matrix_row("lag-gap-12")])
+    recomputed = pd.DataFrame([_matrix_row("dse-native-only")])
+    merged = merge_retained_rows(
+        previous,
+        recomputed,
+        baseline_fit_utc="2026-09-01T00:00:00+00:00",
+        order=["lag-gap-12", "dse-native-only", "no-us01"],
+    )
+    assert list(merged["variant"]) == ["lag-gap-12", "dse-native-only", "no-us01"]
+
+
+def test_a_matrix_with_no_variant_column_is_replaced_not_merged():
+    """An unreadable standing matrix must not be silently half-merged."""
+    recomputed = pd.DataFrame([_matrix_row("dse-native-only")])
+    merged = merge_retained_rows(
+        pd.DataFrame({"something_else": [1]}),
+        recomputed,
+        baseline_fit_utc="2026-09-01T00:00:00+00:00",
+    )
+    assert list(merged["variant"]) == ["dse-native-only"]

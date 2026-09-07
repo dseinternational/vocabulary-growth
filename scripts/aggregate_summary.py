@@ -33,13 +33,20 @@ import arviz as az
 import pandas as pd
 
 from vocab_growth import environment as env
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_artifacts import FIT_MANIFEST_FILENAME
+from vocab_growth.fit_consumers import fit_errors
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
-# (short model id, output-folder label), derived from the registry so a newly
-# added model is picked up automatically rather than requiring a second,
-# hand-maintained list here.
+# (registry key, short model id, output-folder label), derived from the registry
+# so a newly added model is picked up automatically rather than requiring a
+# second, hand-maintained list here.
 MODELS = [
-    (d.model_id, f"{d.model_id}-{d.config_name}") for d in MODEL_REGISTRY.values()
+    (key, d.model_id, f"{d.model_id}-{d.config_name}")
+    for key, d in MODEL_REGISTRY.items()
 ]
 
 LOG_DIR = os.path.join(env.output_root(), "logs")
@@ -122,7 +129,7 @@ def trace_divergences(trace_path: str) -> int | None:
     return int(diverging.values.sum())
 
 
-def per_model_summary(short: str, label: str,
+def per_model_summary(key: str, short: str, label: str,
                       log_timings: dict[str, Any]) -> dict[str, Any]:
     model_dir = os.path.join(MODELS_DIR, label)
     diag_path = os.path.join(model_dir, "diagnostics.csv")
@@ -139,9 +146,17 @@ def per_model_summary(short: str, label: str,
 
     timing = log_timings.get("per_model", {}).get(short, {})
 
+    # This table is a summary *of a set of fits*, so a fit that no longer
+    # matches the registered definition or the current frame is reported in the
+    # row rather than excluded: a row saying so is the finding (issue #266
+    # finding 1). Every other consumer refuses; here refusing would drop the
+    # only place the staleness would have been visible side by side.
+    stale = fit_errors(key, model_dir)
     summary = {
         "model": short,
         "label": label,
+        "fit_current": not stale,
+        "fit_stale_reason": "; ".join(stale),
         "n_parameters_reported": int(len(diag)),
         "ess_bulk_min": ess_min,
         "ess_bulk_max": ess_max,
@@ -177,6 +192,7 @@ def per_model_summary(short: str, label: str,
 def main() -> None:
     os.makedirs(COMPARE_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
+    written = ComparisonOutputs(COMPARE_DIR)
 
     logs = sorted(glob.glob(os.path.join(LOG_DIR, "fit_all_rep_*.log")))
     log_path = logs[-1] if logs else ""
@@ -193,9 +209,27 @@ def main() -> None:
     with open(os.path.join(LOG_DIR, "run_summary.json"), "w", encoding="utf-8") as f:
         json.dump(run_summary, f, indent=2)
 
-    rows = [per_model_summary(short, label, timings) for short, label in MODELS]
+    rows = [
+        per_model_summary(key, short, label, timings)
+        for key, short, label in MODELS
+    ]
     df = pd.DataFrame(rows)
     df.to_csv(os.path.join(COMPARE_DIR, "model_summary.csv"), index=False)
+    # Unlike the other comparison writers this one deliberately summarises stale
+    # fits too (the ``fit_current`` column above is the point), so the manifest
+    # records every fit that has one rather than only the current ones.
+    write_comparison_manifest(
+        COMPARE_DIR,
+        script="aggregate_summary.py",
+        contributing={
+            label: os.path.join(MODELS_DIR, label)
+            for _, _, label in MODELS
+            if os.path.isfile(
+                os.path.join(MODELS_DIR, label, FIT_MANIFEST_FILENAME)
+            )
+        },
+        outputs=written.written(),
+    )
     print(df.to_string(index=False))
     print(f"\nWrote: {os.path.join(COMPARE_DIR, 'model_summary.csv')}")
     print(f"       {os.path.join(LOG_DIR, 'run_summary.json')}")

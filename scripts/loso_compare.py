@@ -44,6 +44,10 @@ from scipy.stats import betabinom
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
 from vocab_growth.analysis_frames import expected_analysis_frame_hash
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
 from vocab_growth.fit_artifacts import (
     read_sampled_parameters_attr,
     require_full_trace,
@@ -402,6 +406,13 @@ def _summary_row(label: str, loo, reff: float) -> dict:
 
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
+    # ``rebuilt_model_for`` already refuses a fit that does not match the
+    # registered definition on the current frame; what was missing was the
+    # record of which fits these tables came from (issue #266 finding 1).
+    contributing = {
+        spec.folder: os.path.join(MODELS_DIR, spec.folder) for spec in SPECS
+    }
+    written = ComparisonOutputs(OUT_DIR)
     print("Reloading DS analysis frame …", flush=True)
     analysis_df = load_analysis_frame()
     n_subjects = analysis_df["subject_code"].nunique()
@@ -507,6 +518,12 @@ def main() -> None:
         )
     summary_df.to_csv(
         os.path.join(OUT_DIR, "loso_compare_summary.csv"), index=False
+    )
+    write_comparison_manifest(
+        OUT_DIR,
+        script="loso_compare.py",
+        contributing=contributing,
+        outputs=written.written(),
     )
     print("\nSummary:")
     print(summary_df.to_string(index=False))

@@ -24,9 +24,9 @@ are overwritten in the VG09 output directory.
 
 from __future__ import annotations
 
+import argparse
 import os
 
-import arviz as az
 import dse_research_utils.environment.setup as setup
 import numpy as np
 import pandas as pd
@@ -35,6 +35,7 @@ from scipy.stats import betabinom
 import vocab_growth.data_utils as data_utils
 import vocab_growth.plotting as plotting
 from vocab_growth import environment as env
+from vocab_growth.fit_consumers import add_allow_stale_argument, load_validated_trace
 from vocab_growth.models.definitions import VG09
 
 VG09_DIR = os.path.join(env.models_output_dir(), "VG09-age-understood-spoken-ds-re-subj-uq")
@@ -53,10 +54,22 @@ def _load_vg09_observed_counts() -> pd.DataFrame:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_allow_stale_argument(parser)
+    args = parser.parse_args()
+
     setup.init_script()
 
     print(f"Loading VG09 trace from {VG09_DIR}/trace.nc …", flush=True)
-    idata = az.from_netcdf(os.path.join(VG09_DIR, "trace.nc"))
+    # This script overwrites VG09's own posterior-predictive figures, so a
+    # stale trace would put current-data labels on superseded draws in the
+    # model of record's directory (issue #266 finding 1).
+    idata = load_validated_trace(
+        "vg09",
+        VG09_DIR,
+        consumer="regenerate_vg09_marginal_predictive.py",
+        allow_stale=args.allow_stale_fit,
+    )
 
     post = idata.posterior
     n_chain = post.sizes["chain"]

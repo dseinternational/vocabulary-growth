@@ -24,6 +24,11 @@ import sys
 
 import numpy as np
 
+from vocab_growth.fit_consumers import (
+    add_allow_stale_argument,
+    require_current_fit_dir,
+)
+
 OUTPUT_FILENAME = "subject_factor_corr.csv"
 VARIABLE = "subject_factor_corr"
 
@@ -68,9 +73,19 @@ def summarise(fit_dir: str) -> str | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fit_dir", nargs="+", help="Fitted output directory holding trace.nc")
+    add_allow_stale_argument(parser)
     args = parser.parse_args(argv)
     status = 0
     for fit_dir in args.fit_dir:
+        # The correlation table lands *inside* the fit directory and is read
+        # back by VG22's report, so a model of record is checked against the
+        # current definition and frame first (issue #266 finding 1). A variant
+        # directory is not: its definition differs by design, and it says so.
+        require_current_fit_dir(
+            fit_dir,
+            consumer="emit_factor_correlation.py",
+            allow_stale=args.allow_stale_fit,
+        )
         path = summarise(fit_dir)
         if path is None:
             print(f"{fit_dir}: no {VARIABLE} in the trace (not a factor model, or no trace)")

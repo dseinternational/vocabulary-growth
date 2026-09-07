@@ -61,6 +61,10 @@ from scipy.stats import betabinom
 
 from vocab_growth.comparisons_provenance import fit_manifest_fingerprint
 from vocab_growth.environment import output_root, set_output_root
+from vocab_growth.fit_consumers import (
+    add_allow_stale_argument,
+    require_current_fit,
+)
 from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
@@ -619,9 +623,15 @@ def load_frame(path: str) -> tuple[pd.DataFrame, dict]:
     return kept.reset_index(drop=True), counts
 
 
-def load_posterior(model_key: str, root: str):
+def load_posterior(model_key: str, root: str, *, allow_stale: bool = False):
     """The model of record's posterior, its plot grid and its total draw count."""
     mdir = _model_dir(model_key, root)
+    # Out-of-sample coverage is a claim about a fit predicting an unseen study.
+    # If the fit's own frame has moved, the claim is about a model that no
+    # longer exists (issue #266 finding 1).
+    require_current_fit(
+        model_key, mdir, consumer="predict_new_study.py", allow_stale=allow_stale
+    )
     tree = az.from_netcdf(os.path.join(mdir, "trace.nc"))
     post = tree["posterior"]
     x_plot = np.asarray(tree["constant_data"]["X_plot"]).ravel()
@@ -639,6 +649,7 @@ def main() -> None:
     ap.add_argument("--draws", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=20260903)
     ap.add_argument("--out", default=None)
+    add_allow_stale_argument(ap)
     args = ap.parse_args()
 
     if args.model not in CATALOGUE:
@@ -658,7 +669,9 @@ def main() -> None:
         f"[frame] scoring {counts['rows_scored']} rows, {counts['children']} children"
     )
 
-    mdir, post, x_plot, total = load_posterior(args.model, root)
+    mdir, post, x_plot, total = load_posterior(
+        args.model, root, allow_stale=args.allow_stale_fit
+    )
     rng = np.random.default_rng(args.seed)
     draws = rng.choice(total, size=min(args.draws, total), replace=False)
     print(f"[trace] {mdir}: {total} draws, using {draws.size}")

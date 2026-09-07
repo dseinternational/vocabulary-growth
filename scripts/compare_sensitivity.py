@@ -23,6 +23,14 @@ as coverage it has not got — the requirement recorded in
 rewrite the whole matrix from that one row, silently dropping every other
 variant's verdict. Carried-over rows keep the ``computed_at_utc`` of the run that
 produced them, so a stale row is visible as one.
+
+**A carried-over row scored against a superseded baseline is marked.** Retaining
+a row is right; presenting it as though it were scored against the current model
+of record is not. A refit moves ``baseline_fit_utc``, and every retained
+``compared`` row that names an earlier one has its status set to
+``stale-baseline``, with
+its verdict prefixed by the baseline it actually used, so the merged matrix is
+internally consistent rather than merely auditable (issue #266 finding 2).
 """
 
 import argparse
@@ -42,6 +50,7 @@ from vocab_growth.sensitivity.compare import (
     failed_fit_dir,
     fit_created_at,
     load_comparable,
+    merge_retained_rows,
     pairing_errors,
     required_quantities,
     summarise,
@@ -215,16 +224,17 @@ if __name__ == "__main__":
     out = args.out or os.path.join(detail_dir, f"robustness_matrix_{args.model}.csv")
 
     # A targeted rerun updates its own rows and leaves the rest standing, rather
-    # than rewriting the matrix down to the single variant just recomputed.
+    # than rewriting the matrix down to the single variant just recomputed. A
+    # retained row scored against a superseded baseline is marked as such
+    # (issue #266 finding 2), so the merged matrix is internally consistent
+    # rather than merely auditable.
     if args.variant != "all" and os.path.exists(out):
-        previous = pd.read_csv(out)
-        if "variant" in previous.columns:
-            kept = previous[~previous["variant"].isin(matrix["variant"])]
-            matrix = pd.concat([kept, matrix], ignore_index=True)
-        order = {name: i for i, name in enumerate(variants_for(args.model))}
-        matrix = matrix.sort_values(
-            "variant", key=lambda s: s.map(lambda v: order.get(v, len(order)))
-        ).reset_index(drop=True)
+        matrix = merge_retained_rows(
+            pd.read_csv(out),
+            matrix,
+            baseline_fit_utc=baseline_fit_utc,
+            order=variants_for(args.model),
+        )
 
     for column in MATRIX_COLUMNS:
         if column not in matrix.columns:

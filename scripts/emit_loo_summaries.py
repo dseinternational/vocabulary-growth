@@ -35,6 +35,10 @@ import arviz as az
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from vocab_growth import environment as env  # noqa: E402
+from vocab_growth.fit_consumers import (  # noqa: E402
+    add_allow_stale_argument,
+    require_current_fit,
+)
 from vocab_growth.models.common import (  # noqa: E402
     LOO_SUMMARY_FILENAME,
     emit_loo_summary,
@@ -85,12 +89,21 @@ def model_directories(output_root: str) -> dict[str, str]:
     return {k: os.path.join(models_dir, v) for k, v in found.items()}
 
 
-def emit_for(model_id: str, directory: str) -> bool:
+def emit_for(model_id: str, directory: str, *, allow_stale: bool = False) -> bool:
     trace_path = os.path.join(directory, "trace.nc")
     if not os.path.isfile(trace_path):
         print(f"  {model_id}: no trace.nc — skipped")
         return False
 
+    # ``loo_<MODEL>.csv`` is a published comparison table, so the fit behind it
+    # is checked against the registered definition and the frame today's loader
+    # rules produce (issue #266 finding 1).
+    require_current_fit(
+        model_id,
+        directory,
+        consumer="emit_loo_summaries.py",
+        allow_stale=allow_stale,
+    )
     idata = az.from_netcdf(trace_path)
     # ArviZ 1.x returns an xarray DataTree whose ``groups`` is a tuple of paths
     # ("/log_likelihood"), not a method returning bare names as in 0.x.
@@ -137,6 +150,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("models", nargs="+", help="model ids, or 'all'")
     parser.add_argument("--output-dir", default=None)
+    add_allow_stale_argument(parser)
     args = parser.parse_args()
 
     output_root = args.output_dir or env.output_root()
@@ -151,7 +165,9 @@ def main() -> None:
         if model_id not in directories:
             print(f"  {model_id}: no model-of-record output found — skipped")
             continue
-        if emit_for(model_id, directories[model_id]):
+        if emit_for(
+            model_id, directories[model_id], allow_stale=args.allow_stale_fit
+        ):
             written += 1
     print(f"\n{written}/{len(requested)} model(s) updated.")
 

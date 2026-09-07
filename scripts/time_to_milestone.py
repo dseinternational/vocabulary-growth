@@ -32,6 +32,7 @@ contrasts.
 
 from __future__ import annotations
 
+import argparse
 import os
 
 import dse_research_utils.plot.styles as plot_styles
@@ -44,6 +45,15 @@ from vocab_growth.comparison import (
     load_population_trajectory,
     load_univariate_trajectory,
     milestone_table,
+)
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_consumers import (
+    add_allow_stale_argument,
+    contributing_fits,
+    require_current_fit,
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
@@ -106,12 +116,20 @@ def _emit(table: pd.DataFrame, model_id: str, pop: str, outcome: str,
     merged.extend(table.to_dict("records"))
 
 
-def process_univariate(key: str, merged: list[dict]) -> None:
+def process_univariate(key: str, merged: list[dict], *,
+                       allow_stale: bool = False) -> None:
     d = MODEL_REGISTRY[key]
     trace = C.trace_path(key)
     if not os.path.exists(trace):
         print(f"  skip {d.model_id}: not fitted yet ({trace} absent)")
         return
+    # A milestone age is read straight off the fitted trajectory, so it means
+    # nothing about the current pool unless the fit was made on it (issue #266
+    # finding 1).
+    require_current_fit(
+        key, C.model_dir(key), consumer="time_to_milestone.py",
+        allow_stale=allow_stale,
+    )
     ages, W = load_univariate_trajectory(trace, d.n_trials)
     pop, outcome = d.population.value.upper(), d.outcome.value
     model_dir = C.model_dir(key)
@@ -123,12 +141,17 @@ def process_univariate(key: str, merged: list[dict]) -> None:
     )
 
 
-def process_bivariate(key: str, merged: list[dict]) -> None:
+def process_bivariate(key: str, merged: list[dict], *,
+                      allow_stale: bool = False) -> None:
     d = MODEL_REGISTRY[key]
     trace = C.trace_path(key)
     if not os.path.exists(trace):
         print(f"  skip {d.model_id}: not fitted yet ({trace} absent)")
         return
+    require_current_fit(
+        key, C.model_dir(key), consumer="time_to_milestone.py",
+        allow_stale=allow_stale,
+    )
     ages, U, S = load_population_trajectory(trace, d.n_trials)
     pop = d.population.value.upper()
     model_dir = C.model_dir(key)
@@ -142,19 +165,45 @@ def process_bivariate(key: str, merged: list[dict]) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_allow_stale_argument(parser)
+    args = parser.parse_args()
+
     env.preflight_disk(2.0, env.output_root(), label="milestone outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(COMPARE_DIR, exist_ok=True)
 
+    fitted = [
+        key
+        for key in list(UNIVARIATE) + list(BIVARIATE)
+        if os.path.exists(C.trace_path(key))
+    ]
+    # Every fit this comparison reads is checked against the registered
+    # definition and the current prepared frame, and recorded in the
+    # comparisons manifest so the outputs cannot outlive a refit unnoticed
+    # (issue #266 findings 1 and 7).
+    contributing = contributing_fits(
+        fitted,
+        consumer="time_to_milestone.py",
+        allow_stale=args.allow_stale_fit,
+    )
+    written = ComparisonOutputs(COMPARE_DIR)
+
     merged: list[dict] = []
     for key in UNIVARIATE:
-        process_univariate(key, merged)
+        process_univariate(key, merged, allow_stale=args.allow_stale_fit)
     for key in BIVARIATE:
-        process_bivariate(key, merged)
+        process_bivariate(key, merged, allow_stale=args.allow_stale_fit)
 
     merged_df = pd.DataFrame(merged)
     merged_df.to_csv(os.path.join(COMPARE_DIR, "time_to_milestone_all.csv"),
                      index=False)
+    write_comparison_manifest(
+        COMPARE_DIR,
+        script="time_to_milestone.py",
+        contributing=contributing,
+        outputs=written.written(),
+    )
     n_models = len(UNIVARIATE) + len(BIVARIATE)
     print(f"Wrote per-model CSV+plot for up to {n_models} models.")
     print(f"Combined: {os.path.join(COMPARE_DIR, 'time_to_milestone_all.csv')}")
