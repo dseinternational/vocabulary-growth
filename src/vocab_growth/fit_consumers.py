@@ -31,10 +31,14 @@ locally with output that will not pass publication. An override prints what it
 overrode, every time: reading a superseded posterior should be a choice someone
 made rather than something that happened quietly.
 
-:data:`EXEMPT_CONSUMERS` records the two scripts that read a trace and are *not*
-expected to validate, with the reason. An exemption that is written down can be
-argued with; an absence looks like an oversight, which is what the other eleven
-turned out to be.
+:data:`EXEMPT_CONSUMERS` records the two scripts that read a trace and do not go
+through this module, with the reason -- which is not the same as not validating:
+``fit_recovery.py`` makes these same three checks inside its own harness, and
+``compact_traces.py`` never reads a posterior value. A reason that is written
+down can be argued with; an absence looks like an oversight, which is what the
+other eleven turned out to be. It has to be argued with the code in view, too:
+the first version of the recovery entry claimed the opposite of what that code
+does, so ``tests/test_fit_consumers.py`` now checks both claims against it.
 """
 
 from __future__ import annotations
@@ -52,17 +56,25 @@ from vocab_growth.fit_artifacts import (
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelDefinition
 
-#: Trace-reading scripts that deliberately do not validate, and why. Both were
-#: argued for on issue #266 on 2026-09-06 and are recorded here rather than left
-#: as an absence, the way ``fit_validation_kwargs`` records which purposes omit
-#: the executable-code signature.
+#: Trace-reading scripts that do not use this module, and why. Recorded here
+#: rather than left as an absence, the way ``fit_validation_kwargs`` records
+#: which purposes omit the executable-code signature. Neither entry is an
+#: exemption from provenance: ``fit_recovery.py`` makes the same three checks
+#: through its own harness, and ``compact_traces.py`` never reads a posterior
+#: value. ``tests/test_fit_consumers.py`` checks both claims against the code
+#: they describe, because the first version of the recovery entry asserted the
+#: opposite of what that code does and nothing caught it.
 EXEMPT_CONSUMERS: dict[str, str] = {
     "fit_recovery.py": (
-        "reads a posterior only as a truth generator: a draw from a fit whose "
-        "frame has since moved is still a valid parameter vector to simulate "
-        "from, and the refit it is scored against is made by the current "
-        "pipeline under the current rules. Staleness does not make the truth "
-        "worse."
+        "validates, but not here and not against the registry. The trace it "
+        "opens itself is a recovery replicate's own fit, in a variant directory "
+        "whose definition is meant to differ. The model of record it takes a "
+        "truth from is opened inside `recovery.simulate.truth_from_trace`, "
+        "which makes these same three checks and refuses before slicing a "
+        "multi-gigabyte trace, with the remedy this module cannot offer: refit "
+        "the model of record, or use `--truth prior`. `load_simulation` "
+        "separately compares the definition a simulation recorded against the "
+        "one about to fit it, which is what the staged `--fit-only` path needs."
     ),
     "compact_traces.py": (
         "manipulates trace files as files -- it drops recomputable variables and "

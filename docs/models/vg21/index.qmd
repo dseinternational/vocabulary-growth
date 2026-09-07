@@ -420,7 +420,7 @@ summary_q = pd.read_csv("posterior_summary_q.csv")
 summary_q
 ```
 
-The `interval_kind` column of this table records the interval convention; it is equal-tailed throughout, an 89% outer and a 50% inner. Columns beginning `ci_` are the outer interval and those beginning `ci50_` the inner one.
+The `interval_kind` column of this table records the interval convention; it is equal-tailed throughout, an 89% outer and a 50% inner. Columns beginning `ci_` are the outer interval and those beginning `ci50_` the inner one. The table carries two estimands: `q_population_*` — and the historical `q_*` columns, which are the same numbers — is the zero-effect reference child in the average study, and `q_subject_marginal_*` is the same rate for a freshly drawn child, which is the wider pair and the one to quote about an individual. Neither has an expected-count column, because $q$ is the share of a child's *own* comprehension that they speak, so multiplying it by the reference inventory would describe a child who understands every word in it.
 
 ## Comprehension-production gap
 
