@@ -17,11 +17,17 @@ contributing fit's ``fit_manifest.json``. The sync validates the manifest with
 contributing model was refitted after the comparison was generated, and the
 comparison must be regenerated before it can be published.
 
-Coverage is ratcheted rather than assumed: files in the comparisons directory
+Coverage was ratcheted rather than assumed: files in the comparisons directory
 that no manifest entry claims are reported as warnings, so comparison scripts
-that do not yet record provenance are visible without blocking the ones that
-do. The nested ``recovery/`` and ``sensitivity/`` sub-directories are produced
-by their own validated pipelines and are outside this manifest's scope.
+that did not yet record provenance stayed visible without blocking the ones
+that did. Every script that writes into the comparisons root records an entry
+as of 2026-09-07, and the three that touch the directory without generating
+anything carry their reason in :data:`MANIFEST_EXEMPT_SCRIPTS`, which
+``tests/test_comparison_manifest_coverage.py`` pins -- so an unclaimed file now
+means a comparison that has not been regenerated rather than a script nobody
+has wired up. The nested ``recovery/`` and ``sensitivity/`` sub-directories are
+produced by their own validated pipelines and are outside this manifest's
+scope.
 
 A script that reads no fitted output -- ``compare_matched_designs.py`` reads
 one source CSV -- records its inputs as ``source_files`` instead (#289 task
@@ -43,6 +49,27 @@ from vocab_growth.fit_artifacts import (
 )
 
 COMPARISON_MANIFEST_FILENAME = "comparison_manifest.json"
+
+#: Scripts that touch the comparisons directory and deliberately record no
+#: manifest entry, with the reason. Recorded rather than left as an absence, so
+#: the coverage test can tell "exempt" from "not wired up yet" -- which is the
+#: distinction that let eleven scripts sit unrecorded for a month.
+MANIFEST_EXEMPT_SCRIPTS: dict[str, str] = {
+    "compare_sensitivity.py": (
+        "writes only into the nested ``sensitivity/`` sub-directory, which is "
+        "outside this manifest's scope: each row already carries its own "
+        "baseline and variant fit timestamps, and the pairing is validated "
+        "against the baseline it was actually scored against."
+    ),
+    "publish_comparison.py": (
+        "publishes comparison outputs that already exist; it generates none, so "
+        "it has no provenance of its own to record."
+    ),
+    "sync_report_figures.py": (
+        "is the consumer of this manifest rather than a producer -- it is the "
+        "script that validates every entry before copying the outputs."
+    ),
+}
 
 
 def _file_sha256(path: str) -> str:
@@ -81,6 +108,52 @@ def _source_relative_path(path: str, source_root: str) -> str:
     return relative.replace(os.sep, "/")
 
 
+class ComparisonOutputs:
+    """The files a comparison run actually wrote into the comparisons root.
+
+    Hand-maintained output lists are the obvious way to fill ``outputs``, and
+    ``compare_models.py`` has one -- but they go stale silently in the direction
+    that matters: a script that gains a figure keeps claiming the old set, and
+    the new file shows up as unclaimed provenance in the sync. Snapshotting the
+    directory instead means the claim is derived from the run.
+
+    Detection is by ``(size, mtime_ns)``, so a rewrite producing a
+    byte-identical file at an unchanged nanosecond timestamp would be missed.
+    Nothing in this repository writes that way -- every producer here goes
+    through ``to_csv`` or a Matplotlib save -- and the failure mode is a file
+    reported as unclaimed rather than one wrongly vouched for.
+
+    Only the top level is watched: the nested ``recovery/`` and ``sensitivity/``
+    directories are produced by their own validated pipelines and are outside
+    this manifest's scope.
+    """
+
+    def __init__(self, comparisons_dir: str) -> None:
+        self.dir = comparisons_dir
+        self._before = self._snapshot()
+
+    def _snapshot(self) -> dict[str, tuple[int, int]]:
+        if not os.path.isdir(self.dir):
+            return {}
+        state: dict[str, tuple[int, int]] = {}
+        for name in os.listdir(self.dir):
+            path = os.path.join(self.dir, name)
+            if not os.path.isfile(path) or name == COMPARISON_MANIFEST_FILENAME:
+                continue
+            info = os.stat(path)
+            state[name] = (info.st_size, info.st_mtime_ns)
+        return state
+
+    def written(self) -> list[str]:
+        """Basenames created or changed since this object was constructed."""
+        after = self._snapshot()
+        return sorted(
+            name
+            for name, state in after.items()
+            if self._before.get(name) != state
+        )
+
+
 def write_comparison_manifest(
     comparisons_dir: str,
     *,
@@ -89,6 +162,8 @@ def write_comparison_manifest(
     outputs: list[str],
     source_files: dict[str, str] | None = None,
     source_root: str | None = None,
+    source_data_hash: str | None = None,
+    arguments: list[str] | None = None,
 ) -> None:
     """Record one comparison script's provenance, merging with other scripts'.
 
@@ -99,6 +174,18 @@ def write_comparison_manifest(
     recorded by its path relative to ``source_root`` (the working directory
     when not given, which is the repository root for every script here) and
     its hash, and :func:`validate_comparison_manifest` checks both.
+
+    ``source_data_hash`` is for a comparison derived from the pool rather than
+    from any fit -- ``pool_descriptives.py`` describes the data itself, and
+    ``kfold_loso.py`` fits its own folds rather than reading a model of record.
+    Neither has a contributing fit to fingerprint, and recording nothing would
+    make them indistinguishable from a script that simply has not been wired up.
+
+    ``arguments`` records the invocation. A script whose outputs depend on its
+    arguments -- ``compare_ds_td_re.py`` takes outcome tokens -- writes only what
+    that run produced, so an entry claiming three files where the directory holds
+    nine is a *correct* record of a partial run rather than a defect, and the
+    argument list is what makes that legible.
     """
     manifest_path = os.path.join(comparisons_dir, COMPARISON_MANIFEST_FILENAME)
     payload: dict = {"schema_version": 1, "scripts": {}}
@@ -114,6 +201,10 @@ def write_comparison_manifest(
             for label, model_dir in sorted(contributing.items())
         },
     }
+    if arguments is not None:
+        entry["arguments"] = list(arguments)
+    if source_data_hash is not None:
+        entry["source_data_hash"] = source_data_hash
     if source_files:
         entry["source_files"] = {
             label: {
@@ -127,7 +218,11 @@ def write_comparison_manifest(
 
 
 def validate_comparison_manifest(
-    comparisons_dir: str, models_dir: str, *, source_root: str | None = None
+    comparisons_dir: str,
+    models_dir: str,
+    *,
+    source_root: str | None = None,
+    current_source_data_hash: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """Validate every recorded comparison against the current fitted output.
 
@@ -136,8 +231,10 @@ def validate_comparison_manifest(
     contributing fit's manifest no longer matches its recorded fingerprint
     (the model was refitted after the comparison was generated); likewise a
     recorded source file that is gone or whose hash has moved, resolved
-    against ``source_root`` (the working directory when not given). Warnings:
-    files in the comparisons directory that no manifest entry claims.
+    against ``source_root`` (the working directory when not given), and a
+    recorded pool-wide ``source_data_hash`` that no longer matches
+    ``current_source_data_hash`` (not checked when the caller passes none).
+    Warnings: files in the comparisons directory that no manifest entry claims.
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -175,6 +272,20 @@ def validate_comparison_manifest(
                     f"{script}: contributing fit {label} was refitted after "
                     "this comparison was generated; regenerate the comparison."
                 )
+        recorded_pool = entry.get("source_data_hash")
+        # ``None`` means *not checked*, as it does for every ``expected_*``
+        # argument in ``validate_fit_output``. It is what
+        # ``sync_report_figures.py --allow-provisional`` passes, and that path
+        # deliberately relaxes the data checks.
+        if (
+            recorded_pool is not None
+            and current_source_data_hash is not None
+            and recorded_pool != current_source_data_hash
+        ):
+            errors.append(
+                f"{script}: the raw data changed after this comparison was "
+                "generated; regenerate the comparison."
+            )
         root = os.getcwd() if source_root is None else source_root
         for label, recorded in sorted((entry.get("source_files") or {}).items()):
             path = os.path.join(root, recorded.get("path") or "")

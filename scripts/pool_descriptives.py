@@ -36,6 +36,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from vocab_growth import data_utils as du  # noqa: E402
 from vocab_growth import environment as env  # noqa: E402
+from vocab_growth.comparisons_provenance import (  # noqa: E402
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_artifacts import source_data_hash  # noqa: E402
 from vocab_growth.reporting import heading  # noqa: E402
 
 SUMMARY_FILENAME = "pool_descriptives.csv"
@@ -99,11 +104,22 @@ def main() -> None:
     os.makedirs(out_dir, exist_ok=True)
 
     heading("Pool descriptives", style="bold cyan")
+    written = ComparisonOutputs(out_dir)
     df = du.load_combined_data()
     summary = summarise(df)
     bands = coverage_bands(df)
     summary.to_csv(os.path.join(out_dir, SUMMARY_FILENAME), index=False)
     bands.to_csv(os.path.join(out_dir, BANDS_FILENAME), index=False)
+    # These tables describe the pool itself rather than any fit, so what they
+    # can outlive is a data change, not a refit: the raw-data fingerprint is
+    # what the manifest records for them (issue #266 finding 1).
+    write_comparison_manifest(
+        out_dir,
+        script="pool_descriptives.py",
+        contributing={},
+        outputs=written.written(),
+        source_data_hash=source_data_hash(env.DATA_DIR),
+    )
 
     row = summary.iloc[0]
     print(f"  {row['administrations']} administrations from {row['children']} children "

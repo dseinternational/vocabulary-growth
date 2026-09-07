@@ -21,6 +21,7 @@ Outputs (in the configured comparisons dir — default `output/comparisons/`, se
 
 from __future__ import annotations
 
+import argparse
 import os
 
 import dse_research_utils.plot.styles as plot_styles
@@ -29,9 +30,16 @@ import pandas as pd
 
 from vocab_growth import comparison
 from vocab_growth import environment as env
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_consumers import add_allow_stale_argument, contributing_fits
 
-DS_DIR = comparison.model_dir("vg20")
-TD_DIR = comparison.model_dir("vg21")  # VG13 (8-18 mo) until 2026-09-02
+DS_KEY = "vg20"
+TD_KEY = "vg21"  # VG13 (8-18 mo) until 2026-09-02
+DS_DIR = comparison.model_dir(DS_KEY)
+TD_DIR = comparison.model_dir(TD_KEY)
 OUT_DIR = env.comparisons_output_dir()
 
 UNDERSTOOD_COLOUR = "C0"
@@ -97,9 +105,24 @@ def plot_gap_panel(ax, df: pd.DataFrame, title: str, ci_pct: int = 89) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_allow_stale_argument(parser)
+    args = parser.parse_args()
+
     env.preflight_disk(2.0, OUT_DIR, label="DS/TD trajectory outputs")
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
+
+    # Every fit this comparison reads is checked against the registered
+    # definition and the current prepared frame, and recorded in the
+    # comparisons manifest so the outputs cannot outlive a refit unnoticed
+    # (issue #266 findings 1 and 7).
+    contributing = contributing_fits(
+        (DS_KEY, TD_KEY),
+        consumer="compare_ds_td_trajectories.py",
+        allow_stale=args.allow_stale_fit,
+    )
+    written = ComparisonOutputs(OUT_DIR)
 
     ds_joint = pd.read_csv(os.path.join(DS_DIR, "joint_trajectory.csv"))
     td_joint = pd.read_csv(os.path.join(TD_DIR, "joint_trajectory.csv"))
@@ -131,6 +154,13 @@ def main() -> None:
     fig.savefig(os.path.join(OUT_DIR, "ds_td_comprehension_production_gap.png"), dpi=300)
     fig.savefig(os.path.join(OUT_DIR, "ds_td_comprehension_production_gap.svg"))
     plt.close(fig)
+
+    write_comparison_manifest(
+        OUT_DIR,
+        script="compare_ds_td_trajectories.py",
+        contributing=contributing,
+        outputs=written.written(),
+    )
 
     print(
         "Saved:\n"

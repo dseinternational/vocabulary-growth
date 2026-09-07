@@ -18,6 +18,7 @@ sorting used in `common_bivariate_re.prepare_bivariate_re_data`.
 
 from __future__ import annotations
 
+import argparse
 import os
 
 import arviz as az
@@ -28,6 +29,7 @@ import pandas as pd
 
 from vocab_growth import environment as env
 from vocab_growth.data_utils import load_data
+from vocab_growth.fit_consumers import add_allow_stale_argument, load_validated_trace
 from vocab_growth.models.definitions import Population
 
 MODEL_DIR = os.path.join(env.models_output_dir(), "VG07-age-understood-spoken-ds-re")
@@ -55,10 +57,22 @@ def _summary_row(label: str, samples: np.ndarray) -> dict:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_allow_stale_argument(parser)
+    args = parser.parse_args()
+
     plot_styles.set_matplotlib_default_style()
 
     print("Loading VG07 trace …", flush=True)
-    idata = az.from_netcdf(os.path.join(MODEL_DIR, "trace.nc"))
+    # The study offsets below are a reported number, so the fit they come from
+    # is checked against the registered definition and the frame today's loader
+    # rules produce before it is read (issue #266 finding 1).
+    idata = load_validated_trace(
+        "vg07",
+        MODEL_DIR,
+        consumer="vg07_study_effects.py",
+        allow_stale=args.allow_stale_fit,
+    )
     post = idata.posterior
 
     labels = study_labels()

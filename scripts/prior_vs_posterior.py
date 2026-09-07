@@ -27,11 +27,14 @@ import preliz as pz
 from scipy import stats
 
 from vocab_growth import environment as env
-from vocab_growth.fit_artifacts import (
-    FIT_MANIFEST_FILENAME,
-    FitValidationError,
-    normalise_for_json,
-    read_json,
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_consumers import (
+    add_allow_stale_argument,
+    fit_errors,
+    require_current_fit,
 )
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
@@ -255,11 +258,19 @@ def _plot_panel(ax, name, prior, post_samples):
 
 
 def overlay_model(short: str, label: str,
-                  definition) -> None:
+                  definition, *, allow_stale: bool = False) -> None:
     trace_path = os.path.join(MODELS_DIR, label, "trace.nc")
     if not os.path.exists(trace_path):
         print(f"  {short}: trace not found — skipped")
         return
+    # Overlaying a posterior on the *current* priors is only meaningful if the
+    # posterior came from them, on the frame those priors were chosen for
+    # (issue #266 finding 1). The conflict table below has checked the
+    # definition since the sweep's first run; this path had not.
+    require_current_fit(
+        short.lower(), os.path.join(MODELS_DIR, label),
+        consumer="prior_vs_posterior.py", allow_stale=allow_stale,
+    )
     print(f"  {short}: loading trace …", flush=True)
     idata = az.from_netcdf(trace_path)
     post = idata.posterior
@@ -341,15 +352,18 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
     # mismatch. This bit the sweep's own first run — VG12's eta showed prior CDF
     # 0.991 with contraction -0.670, which was an eta=1.0 posterior being read
     # against the eta=0.5 prior it had just been reverted to.
-    manifest_path = os.path.join(MODELS_DIR, label, FIT_MANIFEST_FILENAME)
-    if os.path.isfile(manifest_path):
-        try:
-            stored = read_json(manifest_path).get("model", {}).get("definition")
-        except FitValidationError:
-            stored = None
-        if stored is not None and stored != normalise_for_json(definition):
-            print(f"  {short}: SKIPPED — trace predates the current definition (refit needed)")
-            return []
+    #
+    # The guard used to compare the stored definition payload to the current one
+    # as raw dictionaries. That is the pre-#273 comparison: it cannot tell a
+    # graph change from a reporting one, and it has no ``BACKFILL_DEFAULTS``, so
+    # a fit predating a field whose default reproduces what it did was skipped
+    # as stale when it was not. ``fit_errors`` makes the same check through the
+    # classified payload, and adds the exact prepared-frame hash the raw
+    # comparison could not see at all (issue #266 finding 1).
+    stale = fit_errors(short.lower(), os.path.join(MODELS_DIR, label))
+    if stale:
+        print(f"  {short}: SKIPPED — {'; '.join(stale)}")
+        return []
     try:
         priors = model_priors(definition)
     except Exception as exc:  # a prior form this builder does not know yet
@@ -416,11 +430,27 @@ def write_conflict_table(models: dict | None = None) -> None:
         return
     out_dir = env.comparisons_output_dir()
     os.makedirs(out_dir, exist_ok=True)
+    written = ComparisonOutputs(out_dir)
     path = os.path.join(out_dir, "prior_posterior_conflict.csv")
     with open(path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+    # Only the models whose conflict rows are actually in the table: a fit
+    # skipped above as stale contributed nothing and must not be recorded as
+    # though it had (issue #266 finding 1).
+    scored = {r["model"] for r in rows}
+    write_comparison_manifest(
+        out_dir,
+        script="prior_vs_posterior.py --table",
+        contributing={
+            label: os.path.join(MODELS_DIR, label)
+            for short, (label, _) in (models or MODEL_LABELS).items()
+            if short in scored
+        },
+        outputs=written.written(),
+        arguments=sorted(scored),
+    )
     flagged = [r for r in rows if r["flags"]]
     print(f"{len(rows)} parameters checked across {len(models or MODEL_LABELS)} models -> {path}")
     print(f"\n{len(flagged)} FLAGGED:\n")
@@ -452,6 +482,7 @@ def main() -> None:
             "is a large transient memory cost; use this to backfill a single fit."
         ),
     )
+    add_allow_stale_argument(parser)
     args = parser.parse_args()
     selected = MODEL_LABELS
     if args.model:
@@ -465,7 +496,7 @@ def main() -> None:
         return
     plot_styles.set_matplotlib_default_style()
     for short, (label, definition) in selected.items():
-        overlay_model(short, label, definition)
+        overlay_model(short, label, definition, allow_stale=args.allow_stale_fit)
 
 
 if __name__ == "__main__":

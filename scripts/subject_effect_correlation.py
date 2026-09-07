@@ -47,6 +47,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from vocab_growth import comparison as C  # noqa: E402
 from vocab_growth import environment as env  # noqa: E402
 from vocab_growth import intervals  # noqa: E402
+from vocab_growth.comparisons_provenance import (  # noqa: E402
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_consumers import (  # noqa: E402
+    add_allow_stale_argument,
+    contributing_fits,
+)
 from vocab_growth.reporting import heading  # noqa: E402
 
 FILENAME = "ds_subject_effect_correlation.csv"
@@ -77,6 +85,7 @@ def main() -> None:
     parser.add_argument("models", nargs="*", default=["vg20"], help="model keys")
     parser.add_argument("--thin", type=int, default=20)
     parser.add_argument("--output-dir", default=None)
+    add_allow_stale_argument(parser)
     args = parser.parse_args()
 
     env.set_output_root(args.output_dir)
@@ -84,10 +93,28 @@ def main() -> None:
     os.makedirs(out_dir, exist_ok=True)
 
     heading("Subject-effect correlation", style="bold cyan")
-    rows = [summarise(key, args.thin) for key in (args.models or ["vg20"])]
+    keys = args.models or ["vg20"]
+    # Every fit this comparison reads is checked against the registered
+    # definition and the current prepared frame, and recorded in the
+    # comparisons manifest so the outputs cannot outlive a refit unnoticed
+    # (issue #266 findings 1 and 7).
+    contributing = contributing_fits(
+        keys,
+        consumer="subject_effect_correlation.py",
+        allow_stale=args.allow_stale_fit,
+    )
+    written = ComparisonOutputs(out_dir)
+    rows = [summarise(key, args.thin) for key in keys]
     frame = pd.DataFrame(rows)
     path = os.path.join(out_dir, FILENAME)
     frame.to_csv(path, index=False)
+    write_comparison_manifest(
+        out_dir,
+        script="subject_effect_correlation.py",
+        contributing=contributing,
+        outputs=written.written(),
+        arguments=keys,
+    )
     for row in rows:
         print(
             f"  {row['model']}: corr {row['corr_median']:+.3f} "

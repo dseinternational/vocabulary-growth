@@ -14,6 +14,20 @@ API. In particular several carry hard-coded paths — `/scratch/vg-geom-output` 
 throwaway output roots, and the output root of the machine the run happened on —
 and none is covered by the test suite.
 
+For the same reason these sit **outside** the fit-consumer ratchet that issue
+[#266](https://github.com/dseinternational/vocabulary-growth/issues/266) finding
+1 asked for. Every script in `scripts/` that opens a stored trace now checks it
+against the registered definition and the exact prepared frame, or carries a
+written exemption, and `tests/test_fit_consumer_coverage.py` enforces that. The
+harnesses here are dated records rather than entry points that produce a current
+number, so the same rule would be the wrong one: several were written against a
+fit that has since been superseded, and that is what makes them a record. The two
+that _are_ cited as live evidence — `vg16_crosslag_quantification.py` and
+`vg16_within_lag_bias.py` — do validate their traces, because #266 finding 7
+found them combining a corrected computation with an obsolete trace. A harness
+added here whose number is meant to stand should do the same, through
+`vocab_growth.fit_consumers`.
+
 ## Why they are separate from `scripts/`
 
 Everything in `scripts/` is a supported entry point that operates on registered

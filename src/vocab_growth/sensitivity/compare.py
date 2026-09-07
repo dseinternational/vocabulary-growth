@@ -486,6 +486,64 @@ def fit_created_at(dirpath: str) -> str | None:
     return None if manifest is None else manifest.get("created_at_utc")
 
 
+STALE_BASELINE_STATUS = "stale-baseline"
+
+
+def merge_retained_rows(
+    previous: pd.DataFrame,
+    recomputed: pd.DataFrame,
+    *,
+    baseline_fit_utc: str | None,
+    order: list[str] | None = None,
+) -> pd.DataFrame:
+    """Merge a targeted rerun into the standing matrix, marking stale rows.
+
+    A targeted ``--variant`` rerun recomputes one row and leaves the rest
+    standing, which is right: rewriting the matrix down to the single variant
+    just recomputed would silently drop every other verdict. But a row left
+    standing was scored against *whatever baseline existed when it was
+    computed*, and until this function existed nothing said so. Refitting the
+    model of record therefore left a matrix whose rows compared against two
+    different baselines, presented side by side with no way to tell them apart
+    -- the concrete instance recorded on issue #266 was ``vg10``'s matrix, where
+    ``us01-implausible-reinstated`` was scored against the pre-``us_03``
+    baseline and the two rows beside it against the refitted one.
+
+    A retained row whose ``baseline_fit_utc`` differs from the current baseline
+    therefore has its status set to :data:`STALE_BASELINE_STATUS`, and its verdict is
+    prefixed with the baseline it actually used. Its numbers are kept: they are
+    a true record of a comparison that was made, and dropping them would lose
+    the fact that the variant has been fitted at all. Only ``compared`` rows are
+    marked -- a ``not-fitted`` or ``failed`` row says something about the
+    variant rather than about the comparison, and a new baseline does not change
+    it.
+    """
+    if "variant" not in previous.columns:
+        return recomputed
+    kept = previous[~previous["variant"].isin(recomputed["variant"])].copy()
+    if not kept.empty and "baseline_fit_utc" in kept.columns:
+        stale = (kept["baseline_fit_utc"] != baseline_fit_utc) & (
+            kept.get("status") == "compared"
+        )
+        if stale.any():
+            kept.loc[stale, "verdict"] = [
+                f"STALE BASELINE (scored against {was}): {verdict}"
+                for was, verdict in zip(
+                    kept.loc[stale, "baseline_fit_utc"],
+                    kept.loc[stale, "verdict"].fillna(""),
+                    strict=True,
+                )
+            ]
+            kept.loc[stale, "status"] = STALE_BASELINE_STATUS
+    merged = pd.concat([kept, recomputed], ignore_index=True)
+    if order:
+        rank = {name: i for i, name in enumerate(order)}
+        merged = merged.sort_values(
+            "variant", key=lambda s: s.map(lambda v: rank.get(v, len(rank)))
+        ).reset_index(drop=True)
+    return merged
+
+
 def _comparable_ages(
     qty: str, base: pd.DataFrame, var: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray]:

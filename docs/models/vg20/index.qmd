@@ -446,11 +446,12 @@ if robustness_path is None:
 else:
     robustness = pd.read_csv(robustness_path)
     wanted = ["variant", "status", "n_within_ci", "n_checked", "max_abs_delta",
-              "quantities_outside_ci", "verdict", "variant_fit_utc"]
+              "quantities_outside_ci", "verdict", "baseline_fit_utc",
+              "variant_fit_utc"]
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run.
+Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ### Parameter recovery
 

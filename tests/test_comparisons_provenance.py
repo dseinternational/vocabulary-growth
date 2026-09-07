@@ -247,3 +247,98 @@ def test_several_scripts_merge_into_one_manifest(dirs):
     )
     assert errors == []
     assert warnings == []
+
+
+# --- Pool-wide provenance, the snapshot, and the invocation record ------------
+
+
+def test_a_pool_derived_comparison_records_the_raw_data_hash(dirs):
+    """Some comparisons have no contributing fit, and that must not read as none.
+
+    ``pool_descriptives.py`` describes the data itself and ``kfold_loso.py``
+    fits its own folds; neither reads a model of record. Recording nothing would
+    make them indistinguishable from a script that was never wired up, which is
+    the state finding 1 was about.
+    """
+    models_dir, comparisons_dir = dirs
+    models_dir.mkdir(parents=True)
+    (comparisons_dir / "pool_descriptives.csv").write_text("a,b\n1,2\n")
+    write_comparison_manifest(
+        str(comparisons_dir),
+        script="pool_descriptives.py",
+        contributing={},
+        outputs=["pool_descriptives.csv"],
+        source_data_hash="sha256:pool",
+    )
+
+    errors, warnings = validate_comparison_manifest(
+        str(comparisons_dir), str(models_dir), current_source_data_hash="sha256:pool"
+    )
+    assert errors == [] and warnings == []
+
+    errors, _ = validate_comparison_manifest(
+        str(comparisons_dir), str(models_dir), current_source_data_hash="sha256:moved"
+    )
+    assert len(errors) == 1
+    assert "raw data changed" in errors[0]
+    assert "regenerate" in errors[0]
+
+
+def test_a_pool_hash_is_not_checked_when_the_caller_supplies_none(dirs):
+    """``None`` is *not checked*, as everywhere else in this codebase."""
+    models_dir, comparisons_dir = dirs
+    models_dir.mkdir(parents=True)
+    (comparisons_dir / "pool_descriptives.csv").write_text("a\n1\n")
+    write_comparison_manifest(
+        str(comparisons_dir),
+        script="pool_descriptives.py",
+        contributing={},
+        outputs=["pool_descriptives.csv"],
+        source_data_hash="sha256:pool",
+    )
+    errors, _ = validate_comparison_manifest(str(comparisons_dir), str(models_dir))
+    assert errors == []
+
+
+def test_the_invocation_is_recorded_so_a_partial_run_is_legible(dirs):
+    models_dir, comparisons_dir = dirs
+    models_dir.mkdir(parents=True)
+    (comparisons_dir / "ds_td_spoken_re_dispersion.csv").write_text("a\n1\n")
+    write_comparison_manifest(
+        str(comparisons_dir),
+        script="compare_ds_td_re.py (spoken)",
+        contributing={},
+        outputs=["ds_td_spoken_re_dispersion.csv"],
+        arguments=["spoken"],
+    )
+    payload = json.loads(
+        (comparisons_dir / COMPARISON_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert payload["scripts"]["compare_ds_td_re.py (spoken)"]["arguments"] == [
+        "spoken"
+    ]
+
+
+def test_the_output_snapshot_names_what_the_run_actually_wrote(dirs):
+    """The claim is derived from the run, not from a hand-maintained list."""
+    from vocab_growth.comparisons_provenance import ComparisonOutputs
+
+    _, comparisons_dir = dirs
+    (comparisons_dir / "already_there.csv").write_text("a\n1\n")
+
+    written = ComparisonOutputs(str(comparisons_dir))
+    (comparisons_dir / "new_output.csv").write_text("b\n2\n")
+    (comparisons_dir / "already_there.csv").write_text("a\n1\n2\n")  # rewritten
+
+    assert written.written() == ["already_there.csv", "new_output.csv"]
+
+
+def test_the_snapshot_ignores_the_manifest_and_the_nested_pipelines(dirs):
+    from vocab_growth.comparisons_provenance import ComparisonOutputs
+
+    _, comparisons_dir = dirs
+    (comparisons_dir / "sensitivity").mkdir()
+    written = ComparisonOutputs(str(comparisons_dir))
+    (comparisons_dir / COMPARISON_MANIFEST_FILENAME).write_text("{}")
+    (comparisons_dir / "sensitivity" / "robustness_matrix_vg10.csv").write_text("a\n")
+    assert written.written() == []

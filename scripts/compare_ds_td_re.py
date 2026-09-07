@@ -71,6 +71,11 @@ import pandas as pd
 
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_consumers import contributing_fits
 
 # DS comparator: the model of record's spoken/understood sub-curve (study+subject
 # REs). One-line swap to vg07/vg08/vg09/vg10 for a sensitivity check (all carry
@@ -232,10 +237,22 @@ def _at_age(frame: pd.DataFrame, age: float, col: str) -> float:
 # ----------------------------------------------------------------------------
 # Per-outcome analysis
 # ----------------------------------------------------------------------------
-def run_outcome(outcome: str) -> None:
+def run_outcome(outcome: str, *, allow_stale: bool = False) -> None:
     td_key = TD_KEYS[outcome]
     print(f"\n=== {outcome.upper()}: DS={C.model_label(DS_KEY)} vs "
           f"TD={C.model_label(td_key)} ===", flush=True)
+    # Both sides are checked against the registered definition and the frame
+    # today's loader rules produce, and recorded for the sync (issue #266
+    # finding 1). The record is per sub-comparison rather than per script:
+    # ``main()`` takes outcome tokens, so one entry for the whole script would
+    # unclaim the other outcome's files on every partial run.
+    os.makedirs(OUT_DIR, exist_ok=True)
+    contributing = contributing_fits(
+        (DS_KEY, td_key, DISP_DS_KEY),
+        consumer="compare_ds_td_re.py",
+        allow_stale=allow_stale,
+    )
+    written = ComparisonOutputs(OUT_DIR)
 
     ages_ds, p_ds, k_ds, n_ds = C.load_outcome_trajectory(DS_KEY, outcome)
     ages_td, p_td, k_td, n_td = C.load_outcome_trajectory(td_key, outcome)
@@ -355,6 +372,14 @@ def run_outcome(outcome: str) -> None:
                   C.model_label(DISP_DS_KEY))
 
     _print_summary(outcome, ew, lr, ad, disp, het, C.model_label(DISP_DS_KEY))
+
+    write_comparison_manifest(
+        OUT_DIR,
+        script=f"compare_ds_td_re.py ({outcome})",
+        contributing=contributing,
+        outputs=written.written(),
+        arguments=[outcome],
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -568,7 +593,8 @@ def _print_summary(outcome, ew, lr, ad, disp, het, disp_ds_lab) -> None:
 # Comprehension-matched analysis (joint models only)
 # ----------------------------------------------------------------------------
 def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
-                              td_key: str = JOINT_TD_KEY) -> None:
+                              td_key: str = JOINT_TD_KEY,
+                              *, allow_stale: bool = False) -> None:
     """Contrast the population production ratio q = S/U at matched comprehension.
 
     Matching on comprehension N (rather than age) strips out the TD/DS timescale
@@ -578,6 +604,13 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
     subject effects and no rho_uq, so it is not E[q_i | U_i = N]. Requires JOINT
     models so U and S are coupled per draw (VG20 DS vs VG21 TD).
     """
+    os.makedirs(OUT_DIR, exist_ok=True)
+    contributing = contributing_fits(
+        (ds_key, td_key),
+        consumer="compare_ds_td_re.py",
+        allow_stale=allow_stale,
+    )
+    written = ComparisonOutputs(OUT_DIR)
     ds_trace, ds_n, ds_lab = resolve_joint(ds_key)
     td_trace, td_n, td_lab = resolve_joint(td_key)
     print(f"\n=== COMPREHENSION-MATCHED: DS={ds_lab} vs TD={td_lab} "
@@ -626,6 +659,14 @@ def run_comprehension_matched(ds_key: str = JOINT_DS_KEY,
               f"Δq(TD-DS)={r['dq_median']:+.2f} "
               f"[{r['dq_ci_lo']:+.2f}, {r['dq_ci_hi']:+.2f}]  "
               f"P(TD>DS)={r['dq_p_gt0']:.2f}")
+
+    write_comparison_manifest(
+        OUT_DIR,
+        script="compare_ds_td_re.py (comprehension)",
+        contributing=contributing,
+        outputs=written.written(),
+        arguments=["comprehension"],
+    )
 
 
 def _verified_frame_for(key: str):
@@ -817,12 +858,15 @@ def main() -> None:
         (a.split("=", 1)[1] for a in argv if a.startswith("--td-joint=")),
         JOINT_TD_KEY,
     )
+    allow_stale = "--allow-stale-fit" in argv
     tokens = [a for a in argv if not a.startswith("-")] or ["spoken", "understood"]
     for tok in tokens:
         if tok == "comprehension":
-            run_comprehension_matched(JOINT_DS_KEY, td_joint)
+            run_comprehension_matched(
+                JOINT_DS_KEY, td_joint, allow_stale=allow_stale
+            )
         elif tok in TD_KEYS:
-            run_outcome(tok)
+            run_outcome(tok, allow_stale=allow_stale)
         else:
             raise SystemExit(
                 f"unknown token {tok!r}; choose from "

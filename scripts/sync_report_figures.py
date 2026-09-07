@@ -270,13 +270,16 @@ def main() -> None:
         for definition in MODEL_REGISTRY.values()
     }
     model_sources: list[tuple[str, str]] = []
+    # Hoisted out of the models block: the comparison manifest's pool-wide
+    # ``source_data_hash`` is checked against it too, and --comparisons-only
+    # skips that block entirely.
+    current_source_hash = (
+        None if args.allow_provisional else source_data_hash(env.DATA_DIR)
+    )
 
     if not args.comparisons_only:
         if os.path.isdir(models_dir):
             expected_sampling = sampling.get_sampling_configuration(args.config)
-            current_source_hash = (
-                None if args.allow_provisional else source_data_hash(env.DATA_DIR)
-            )
             validation_failures: list[tuple[str, list[str]]] = []
             skipped_by_role: list[tuple[str, str, list[str]]] = []
             for name in sorted(os.listdir(models_dir)):
@@ -358,11 +361,14 @@ def main() -> None:
             # Comparison outputs are derived from fitted output but carried no
             # provenance of their own, so a comparison generated from a
             # since-replaced fit synced as though it were current (issue #266
-            # finding 1). Unclaimed files are reported rather than rejected:
-            # the manifest is being adopted script by script, and a warning
-            # names what is still unrecorded without blocking the rest.
+            # finding 1). Unclaimed files are still reported rather than
+            # rejected, but since 2026-09-07 every comparison writer records an
+            # entry, so a warning here names a comparison that has not been
+            # regenerated rather than a script that never recorded anything.
             comparison_errors, comparison_warnings = validate_comparison_manifest(
-                comparisons_dir, models_dir
+                comparisons_dir,
+                models_dir,
+                current_source_data_hash=current_source_hash,
             )
             for warning in comparison_warnings:
                 print(f"[warn] {warning}")

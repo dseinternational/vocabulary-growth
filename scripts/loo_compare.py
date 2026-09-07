@@ -47,6 +47,7 @@ For new-child questions use grouped leave-one-subject-out
 
 from __future__ import annotations
 
+import argparse
 import os
 from dataclasses import dataclass
 
@@ -60,6 +61,14 @@ from vocab_growth import environment as env
 from vocab_growth.administration_loo import (
     LikelihoodFactor,
     administration_log_likelihood,
+)
+from vocab_growth.comparisons_provenance import (
+    ComparisonOutputs,
+    write_comparison_manifest,
+)
+from vocab_growth.fit_consumers import (
+    add_allow_stale_argument,
+    require_current_fit,
 )
 from vocab_growth.loo_reff import reff_or_default
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
@@ -230,7 +239,7 @@ def _attach_joint_log_likelihood(idata: xr.DataTree) -> None:
     idata.log_likelihood = ll.assign({"y_joint": joint_da})
 
 
-def per_model_loo() -> dict[str, list[dict]]:
+def per_model_loo(*, allow_stale: bool = False) -> dict[str, list[dict]]:
     """Compute LOO for every fitted model and write per-model CSVs."""
     out: dict[str, list[dict]] = {}
     for short, label in MODEL_LABELS.items():
@@ -238,6 +247,15 @@ def per_model_loo() -> dict[str, list[dict]]:
         if not os.path.exists(trace_path):
             print(f"  {short}: trace not found at {trace_path} — skipped")
             continue
+        # An elpd is a statement about how well a model predicts *this data*, so
+        # a fit whose frame has moved cannot be compared with one whose has not
+        # (issue #266 finding 1).
+        require_current_fit(
+            short.lower(),
+            os.path.join(MODELS_DIR, label),
+            consumer="loo_compare.py",
+            allow_stale=allow_stale,
+        )
         print(f"  {short}: loading trace …", flush=True)
         idata = az.from_netcdf(trace_path)
         if "log_likelihood" not in [g.rsplit("/", 1)[-1] for g in idata.groups]:
@@ -328,13 +346,25 @@ def compare_pair(
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_allow_stale_argument(parser)
+    args = parser.parse_args()
+
     os.makedirs(OUT_DIR, exist_ok=True)
+    written = ComparisonOutputs(OUT_DIR)
 
     print("Computing per-model LOO …\n")
-    per_model_loo()
+    per_model_loo(allow_stale=args.allow_stale_fit)
 
     # Compare VG05 vs VG07 — same DS data, same outcomes, RE on vs off.
     print("\nLoading VG05 + VG07 for joint comparison …", flush=True)
+    for short in ("VG05", "VG07"):
+        require_current_fit(
+            short.lower(),
+            os.path.join(MODELS_DIR, MODEL_LABELS[short]),
+            consumer="loo_compare.py",
+            allow_stale=args.allow_stale_fit,
+        )
     vg05 = az.from_netcdf(os.path.join(MODELS_DIR, MODEL_LABELS["VG05"], "trace.nc"))
     vg07 = az.from_netcdf(os.path.join(MODELS_DIR, MODEL_LABELS["VG07"], "trace.nc"))
     _attach_joint_log_likelihood(vg05)
@@ -345,6 +375,19 @@ def main() -> None:
                  [("VG05", vg05), ("VG07", vg07)], var_name="y_u_obs")
     compare_pair("ds_bivariate_re_vs_no_re_spoken",
                  [("VG05", vg05), ("VG07", vg07)], var_name="y_s_obs")
+
+    # Only the models a trace was actually found and read for are recorded: an
+    # elpd table names the fits it scored, not the ones it hoped to.
+    write_comparison_manifest(
+        OUT_DIR,
+        script="loo_compare.py",
+        contributing={
+            label: os.path.join(MODELS_DIR, label)
+            for short, label in MODEL_LABELS.items()
+            if os.path.isfile(os.path.join(MODELS_DIR, label, "trace.nc"))
+        },
+        outputs=written.written(),
+    )
 
 
 if __name__ == "__main__":
