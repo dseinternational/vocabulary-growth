@@ -16,13 +16,18 @@ import json
 import math
 import os
 import shutil
-import subprocess
+import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any, Literal
+
+from dse_research_utils.metadata.provenance import git_snapshot
+from dse_research_utils.storage.directories import promote_directory
+from dse_research_utils.storage.files import atomic_write
 
 # `fit_identity` defers its own import of this module to call time, so this is
 # a one-way edge rather than a cycle.
@@ -88,14 +93,64 @@ def read_json(path: str | os.PathLike[str]) -> dict[str, Any]:
     return payload
 
 
+def _umask_file_mode() -> int:
+    """The mode an ordinary ``open(path, "w")`` would give a new file.
+
+    :func:`dse_research_utils.storage.files.atomic_write` creates its temporary
+    file with :func:`tempfile.mkstemp`, which is owner-only (0600) by design.
+    Every manifest, state file and comparison manifest this repository has
+    written was created by a plain ``open`` instead, so it carries
+    ``0o666 & ~umask`` -- readable by the group and by others under the usual
+    022. Those artefacts are read back by other accounts on the shared fitting
+    VM and by the uploader, so narrowing them to 0600 is a behaviour change,
+    not a hardening: this restores the historical mode explicitly rather than
+    inheriting whichever one the helper happens to use.
+
+    ``os.umask`` is the only way to read the process umask before 3.15, and it
+    is a read-modify-write. The window is between two consecutive syscalls in
+    the writing thread; fits create these files from one thread, outside
+    sampling.
+    """
+    current = os.umask(0o022)
+    os.umask(current)
+    return 0o666 & ~current
+
+
+def write_atomic(
+    path: str | os.PathLike[str], write_temporary: Callable[[Path], object]
+) -> None:
+    """:func:`dse_research_utils.storage.files.atomic_write`, with this repo's mode.
+
+    The one place the file-mode decision is made. Every other writer in this
+    repository goes through here so a manifest, a fit-state file and a cached
+    report table cannot end up with three different modes.
+    """
+
+    def write_and_share(temporary: Path) -> None:
+        write_temporary(temporary)
+        os.chmod(temporary, _umask_file_mode())
+
+    atomic_write(path, write_and_share)
+
+
 def write_json_atomic(path: str, payload: dict[str, Any]) -> None:
-    """Write metadata atomically so interruption cannot leave partial JSON."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    temporary = f"{path}.{uuid.uuid4().hex}.tmp"
-    with open(temporary, "w", encoding="utf-8") as destination:
-        json.dump(payload, destination, indent=2, sort_keys=True, default=_json_default)
-        destination.write("\n")
-    os.replace(temporary, path)
+    """Write metadata atomically so interruption cannot leave partial JSON.
+
+    The replacement is :func:`write_atomic`; the *serialisation* stays here
+    deliberately. The two-space indent, sorted keys, :func:`_json_default`
+    encoder and trailing newline are the stored format that every manifest on
+    disk and every manifest-hash in a comparison manifest was written with, and
+    the shared helper is explicit that JSON encoding belongs to the caller.
+    """
+
+    def write_temporary(temporary: Path) -> None:
+        with temporary.open("w", encoding="utf-8") as destination:
+            json.dump(
+                payload, destination, indent=2, sort_keys=True, default=_json_default
+            )
+            destination.write("\n")
+
+    write_atomic(path, write_temporary)
 
 
 def write_fit_state(
@@ -148,37 +203,42 @@ def write_fit_state(
     write_json_atomic(path, payload)
 
 
+#: Seconds allowed for the one Git query behind :func:`git_metadata`.
+#:
+#: The shared helper defaults to 5.0; this repository has always allowed 10,
+#: and a status scan on the fitting VM's scratch volume is slower than on a
+#: laptop. Preserved rather than inherited so a timeout does not start
+#: recording ``dirty: None`` -- which fails ``require_clean_fit`` -- on a
+#: checkout that is in fact clean.
+GIT_QUERY_TIMEOUT_SECONDS = 10.0
+
+
 def git_metadata(repo_dir: str) -> dict[str, object]:
-    """Return the repository revision and dirty state without requiring Git."""
+    """Return the repository revision and dirty state without requiring Git.
 
-    def run_git(*args: str) -> str | None:
-        try:
-            result = subprocess.run(
-                ["git", *args],
-                cwd=repo_dir,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return result.stdout.strip()
+    The four keys are the manifest's stored schema and are unchanged: every
+    fit on disk carries them, and :func:`validate_fit_output` compares
+    ``commit`` and ``dirty``. What moved into
+    :func:`dse_research_utils.metadata.provenance.git_snapshot` (shared library
+    0.14.0) is *how* they are obtained -- one bounded ``status --porcelain=v2
+    --branch`` call instead of three separate commands, with inherited
+    ``GIT_*`` repository overrides stripped, optional index locks and the
+    filesystem-monitor hook disabled.
 
-    commit = run_git("rev-parse", "HEAD")
-    branch_result = run_git("branch", "--show-current")
-    if branch_result is None:
-        branch = None
-        detached = None
-    else:
-        branch = branch_result or None
-        detached = not bool(branch_result)
-    status = run_git("status", "--porcelain", "--untracked-files=normal")
+    The recorded values keep their meaning. ``dirty`` still counts staged,
+    unstaged, unmerged and untracked changes and still excludes ignored files;
+    it is ``None`` whenever the query could not establish it, rather than
+    ``False``, so an unavailable Git never reads as a clean checkout.
+    ``detached`` is now reported by Git itself instead of inferred from an
+    empty ``branch --show-current``. ``commit`` is ``None`` on an unborn
+    branch, as it was when ``rev-parse HEAD`` failed there.
+    """
+    snapshot = git_snapshot(repo_dir, timeout=GIT_QUERY_TIMEOUT_SECONDS)
     return {
-        "commit": commit,
-        "branch": branch,
-        "detached": detached,
-        "dirty": None if status is None else bool(status),
+        "commit": snapshot.commit,
+        "branch": snapshot.branch,
+        "detached": snapshot.detached,
+        "dirty": snapshot.dirty,
     }
 
 
@@ -796,8 +856,58 @@ def create_staging_root(output_root: str, tag: str) -> str:
     return staging_root
 
 
+#: Serialises the two renames a directory promotion performs.
+#:
+#: The shared helper takes the lock rather than choosing one, so the scope is
+#: this repository's to state: it covers *threads of one process*. That is the
+#: whole of the exposure this repository actually has -- a fit promotes the one
+#: ``models/<label>/`` directory it staged, and two concurrent fits of the same
+#: model into the same output root would already be racing for that directory
+#: before either reached promotion. Fitting several models at once (``fit_model.py
+#: all``, the sensitivity runners) targets a different destination per run and is
+#: unaffected. A deployment that did run two processes over one model would need a
+#: process lock here instead. Public, and shared with
+#: ``scripts/sync_report_figures.py``, so the two promoting call sites in this
+#: repository serialise against each other rather than against nothing.
+PROMOTION_LOCK = threading.Lock()
+
+
+def promotion_path(path: str) -> Path:
+    """``path`` with its parents resolved and its own name left alone.
+
+    :func:`dse_research_utils.storage.directories.promote_directory` refuses a
+    symlinked ancestor, and on the fitting VM ``<repo>/output`` *is* a symlink
+    to a scratch volume (see :mod:`vocab_growth.environment`), as is ``/tmp``
+    on macOS. Resolving the parent chain deliberately -- these are directories
+    this repository created itself -- is what the shared helper documents for
+    that case. The final component is **not** resolved: a destination that is
+    itself a symlink must still be rejected rather than silently followed.
+
+    Public so ``scripts/sync_report_figures.py`` promotes its figure cache
+    through the same rule rather than a second copy of it.
+    """
+    absolute = Path(path).absolute()
+    return absolute.parent.resolve() / absolute.name
+
+
 def promote_staged_fit(staged_output_dir: str, canonical_output_dir: str) -> None:
-    """Replace canonical output only after a staged fit has fully completed."""
+    """Replace canonical output only after a staged fit has fully completed.
+
+    Delegates the renames to
+    :func:`dse_research_utils.storage.directories.promote_directory` (shared
+    library 0.14.0), which validates the three paths against each other -- no
+    nesting, no aliasing through a mounted tree, no symlink in any component,
+    one filesystem -- before it touches the destination, and restores the
+    previous directory itself if the second rename fails.
+
+    Two decisions stay here because the helper leaves them to the caller. The
+    lock is :data:`PROMOTION_LOCK`; and the retained backup is deleted on
+    success, as it always has been -- ``.previous`` is a rollback slot for the
+    promotion itself, not an archive, and a fit's output can be tens of
+    gigabytes. A cleanup failure is reported and *not* raised: the promotion
+    has already succeeded at that point, and turning a leftover directory into
+    a failed fit would be a false report.
+    """
     parent = os.path.dirname(canonical_output_dir)
     output_root = os.path.dirname(parent)
     os.makedirs(parent, exist_ok=True)
@@ -808,17 +918,20 @@ def promote_staged_fit(staged_output_dir: str, canonical_output_dir: str) -> Non
         f"{os.path.basename(canonical_output_dir)}-{uuid.uuid4().hex[:8]}",
     )
 
-    had_canonical = os.path.exists(canonical_output_dir)
-    if had_canonical:
-        os.replace(canonical_output_dir, backup)
-    try:
-        os.replace(staged_output_dir, canonical_output_dir)
-    except BaseException:
-        if had_canonical and os.path.exists(backup):
-            os.replace(backup, canonical_output_dir)
-        raise
-    if had_canonical and os.path.exists(backup):
-        shutil.rmtree(backup)
+    result = promote_directory(
+        promotion_path(staged_output_dir),
+        promotion_path(canonical_output_dir),
+        backup=promotion_path(backup),
+        lock=PROMOTION_LOCK,
+    )
+    if result.backup is not None:
+        try:
+            shutil.rmtree(result.backup)
+        except OSError as exc:
+            print(
+                f"Warning: promoted {canonical_output_dir} but could not remove "
+                f"the retained previous copy at {result.backup}: {exc}"
+            )
 
 
 def retain_failed_fit(staged_output_dir: str, output_root: str) -> str | None:

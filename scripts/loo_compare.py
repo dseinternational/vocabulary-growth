@@ -57,6 +57,10 @@ import pandas as pd
 import xarray as xr
 
 from vocab_growth import environment as env
+from vocab_growth.administration_loo import (
+    LikelihoodFactor,
+    administration_log_likelihood,
+)
 from vocab_growth.loo_reff import reff_or_default
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
@@ -176,7 +180,19 @@ def _attach_joint_log_likelihood(idata: xr.DataTree) -> None:
     pre-#236 behaviour) made every paired administration two held-out cases
     with two PSIS weights, and when its understood factor was held out the
     spoken factor still conditioned on the observed understood count —
-    leaking information relative to leave-one-administration-out."""
+    leaking information relative to leave-one-administration-out.
+
+    The summation itself is :func:`vocab_growth.administration_loo.administration_log_likelihood`,
+    which since #266 finding 4 is where the fit pipeline computes the same
+    thing, and which since the shared library's 0.14.0 release delegates to
+    :func:`dse_research_utils.statistics.log_likelihood.aggregate_log_likelihood`.
+    This function was the original of that arithmetic and kept its own copy;
+    two copies of a sum whose rows must line up is one copy too many. What
+    stays here are the two refusals this script owes its callers -- it is
+    pointed at an arbitrary trace on disk, so it must say *why* one cannot be
+    scored rather than quietly returning nothing -- and the ``y_joint`` name,
+    which the comparison tables and every regenerated CSV already use.
+    """
     ll = idata.log_likelihood
     if "y_joint" in ll.data_vars:
         return
@@ -199,23 +215,18 @@ def _attach_joint_log_likelihood(idata: xr.DataTree) -> None:
             f"({u.sizes[u_dim]}, {s.sizes[s_dim]}); factors cannot be mapped "
             "to administrations."
         )
-    any_mask = u_mask | s_mask
-    # Position of each administration row among the rows kept in y_joint.
-    joint_pos = np.cumsum(any_mask) - 1
-    u_vals = u.transpose("chain", "draw", u_dim).values
-    s_vals = s.transpose("chain", "draw", s_dim).values
-    joint = np.zeros(u_vals.shape[:2] + (int(any_mask.sum()),), dtype=float)
-    joint[..., joint_pos[u_mask]] += u_vals
-    joint[..., joint_pos[s_mask]] += s_vals
-    joint_da = xr.DataArray(
-        joint,
-        dims=("chain", "draw", "obs_joint"),
-        coords={
-            "chain": u["chain"].values,
-            "draw": u["draw"].values,
-            "obs_joint": np.flatnonzero(any_mask),
-        },
+    joint_da = administration_log_likelihood(
+        idata,
+        (
+            LikelihoodFactor("y_u_obs", "obs_u_mask"),
+            LikelihoodFactor("y_s_obs", "obs_s_mask"),
+        ),
     )
+    if joint_da is None:
+        raise ValueError(
+            "no administration in this trace carries an understood or spoken "
+            "likelihood row, so there is nothing to score."
+        )
     idata.log_likelihood = ll.assign({"y_joint": joint_da})
 
 

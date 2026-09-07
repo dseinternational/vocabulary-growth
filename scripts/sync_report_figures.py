@@ -38,9 +38,11 @@ import shutil
 import tempfile
 import uuid
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 import dse_research_utils.statistics.models.sampling as sampling
+from dse_research_utils.storage.directories import promote_directory
 
 from vocab_growth import environment as env
 from vocab_growth.analysis_frames import expected_analysis_frame_hash
@@ -50,12 +52,15 @@ from vocab_growth.comparisons_provenance import (
 )
 from vocab_growth.fit_artifacts import (
     DIAGNOSTICS_SUMMARY_FILENAME,
+    PROMOTION_LOCK,
     FitValidationError,
     fit_validation_kwargs,
+    promotion_path,
     read_convergence_caveats,
     read_json,
     source_data_hash,
     validate_fit_output,
+    write_atomic,
 )
 from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import MODEL_REGISTRY
@@ -67,15 +72,22 @@ CONVERGENCE_DIAGNOSTICS_TABLE = "convergence_diagnostics.csv"
 
 
 def _write_csv(filename: str, header: list[str], rows: list[list[Any]]) -> str:
-    """Atomically (re)write one generated table into the report figure cache."""
-    os.makedirs(env.REPORT_FIGS_DIR, exist_ok=True)
+    """Atomically (re)write one generated table into the report figure cache.
+
+    The replacement is the shared ``atomic_write``; the ``newline=""`` and the
+    ``csv`` writer stay here, because they are what makes these tables the same
+    bytes on every platform (without it, ``csv`` and the text layer each add a
+    carriage return on Windows).
+    """
     path = os.path.join(env.REPORT_FIGS_DIR, filename)
-    tmp = f"{path}.{uuid.uuid4().hex}.tmp"
-    with open(tmp, "w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(header)
-        writer.writerows(rows)
-    os.replace(tmp, path)
+
+    def write_temporary(temporary: Path) -> None:
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(header)
+            writer.writerows(rows)
+
+    write_atomic(path, write_temporary)
     return path
 
 
@@ -159,7 +171,19 @@ def _write_convergence_records(model_sources: list[tuple[str, str]]) -> None:
 
 
 def _sync_dir(src: str, dst: str) -> int:
-    """Replace ``dst`` with an allowlisted snapshot of ``src``."""
+    """Replace ``dst`` with an allowlisted snapshot of ``src``.
+
+    The staging tree is built here -- the allowlist is the point of this
+    function -- and the two renames are the shared ``promote_directory``. The
+    lock is this process's own promotion lock: one sync run replaces each
+    cached directory once, and a second concurrent run over the same checkout
+    would already be racing for these paths before it reached promotion.
+
+    The retained backup is removed on success, as it was before: this cache is
+    rebuilt from ``output/`` by rerunning the script, so a retained copy is
+    only clutter inside the checkout. A cleanup failure after a successful
+    promotion is reported, not raised.
+    """
     parent = os.path.dirname(dst)
     os.makedirs(parent, exist_ok=True)
     staged = tempfile.mkdtemp(prefix=f".{os.path.basename(dst)}-", dir=parent)
@@ -172,17 +196,17 @@ def _sync_dir(src: str, dst: str) -> int:
                 shutil.copy2(source, os.path.join(staged, name))
                 copied += 1
 
-        had_destination = os.path.exists(dst)
-        if had_destination:
-            os.replace(dst, backup)
-        try:
-            os.replace(staged, dst)
-        except BaseException:
-            if had_destination and os.path.exists(backup):
-                os.replace(backup, dst)
-            raise
-        if had_destination:
-            shutil.rmtree(backup)
+        result = promote_directory(
+            promotion_path(staged),
+            promotion_path(dst),
+            backup=promotion_path(backup),
+            lock=PROMOTION_LOCK,
+        )
+        if result.backup is not None:
+            try:
+                shutil.rmtree(result.backup)
+            except OSError as exc:
+                print(f"  warning: could not remove {result.backup}: {exc}")
     finally:
         if os.path.isdir(staged):
             shutil.rmtree(staged)

@@ -307,8 +307,16 @@ def test_render_calibration_section_explains_a_legacy_table(tmp_path, capsys):
 # --------------------------------------------------------------------------
 
 
-def _stratifiable_trace(n_rows: int, n_conditional: int):
-    """A minimal trace carrying one outcome and a branch indicator."""
+def _stratifiable_trace(n_rows: int, n_conditional: int, *, observed_ids=None):
+    """A minimal trace carrying one outcome and a branch indicator.
+
+    The chain, draw and observation coordinates are the ones a real trace
+    carries: every engine builds its model with ``pm.Model(coords=...)``, and
+    the calibration writer now checks the observed array's labels against the
+    replications' rather than assuming equal lengths mean equal rows.
+    ``observed_ids`` overrides the observed group's labels so that check can be
+    exercised.
+    """
     import xarray as xr
 
     rng = np.random.default_rng(20260824)
@@ -316,17 +324,29 @@ def _stratifiable_trace(n_rows: int, n_conditional: int):
     observed = rng.integers(0, 20, size=n_rows)
     is_conditional = np.zeros(n_rows, dtype=int)
     is_conditional[:n_conditional] = 1
+    row_ids = np.arange(n_rows)
     return xr.DataTree.from_dict(
         {
             "posterior_predictive": xr.Dataset(
-                {"y_s_obs": (("chain", "draw", "obs_s_id"), predictive)}
+                {"y_s_obs": (("chain", "draw", "obs_s_id"), predictive)},
+                coords={
+                    "chain": np.arange(2),
+                    "draw": np.arange(50),
+                    "obs_s_id": row_ids,
+                },
             ),
-            "observed_data": xr.Dataset({"y_s_obs": (("obs_s_id",), observed)}),
+            "observed_data": xr.Dataset(
+                {"y_s_obs": (("obs_s_id",), observed)},
+                coords={
+                    "obs_s_id": row_ids if observed_ids is None else observed_ids
+                },
+            ),
             "constant_data": xr.Dataset(
                 {
                     "obs_s_mask": (("obs_id",), np.ones(n_rows, dtype=int)),
                     "s_is_conditional": (("obs_s_id",), is_conditional),
-                }
+                },
+                coords={"obs_s_id": row_ids},
             ),
         }
     )
@@ -421,3 +441,42 @@ def test_calibration_rejects_a_stratum_that_is_not_row_aligned(tmp_path):
             (("spoken", "y_s_obs", "obs_s_mask"),),
             strata={"spoken": ("short", "a", "b")},
         )
+
+
+def test_calibration_rejects_observations_labelled_differently_from_the_draws(tmp_path):
+    """Equal lengths never established that the rows are the same rows.
+
+    The observed group and the posterior-predictive group are separate arrays
+    on the trace. Before the labelled extraction they were flattened and paired
+    by position, so a reordered or re-labelled observed group would have been
+    scored against the wrong replications and produced a plausible table.
+    """
+    from vocab_growth.models.calibration import write_trace_calibration
+
+    n_rows = 12
+    trace = _stratifiable_trace(
+        n_rows, n_conditional=6, observed_ids=np.arange(n_rows)[::-1]
+    )
+    analysis_df = pd.DataFrame({"age": np.linspace(10, 60, n_rows)})
+
+    with pytest.raises(ValueError, match="Cannot align 'y_s_obs'"):
+        write_trace_calibration(
+            trace,
+            analysis_df,
+            str(tmp_path),
+            (("spoken", "y_s_obs", "obs_s_mask"),),
+        )
+
+
+def test_calibration_rejects_a_non_finite_observation(tmp_path):
+    """A NaN outcome means the engine masked the wrong rows.
+
+    Reported here rather than left to the shared checks, so the message names
+    the table being written and how many rows are unusable.
+    """
+    observed = np.array([1.0, np.nan, 3.0])
+    predictive = np.array([[0, 1, 2, 3], [0, 1, 2, 3], [1, 2, 3, 4]])
+    ages = np.array([12.0, 13.0, 14.0])
+
+    with pytest.raises(ValueError, match="finite observations; 1 of 3"):
+        predictive_calibration_table(observed, predictive, ages)

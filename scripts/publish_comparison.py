@@ -49,7 +49,13 @@ import subprocess
 import sys
 
 from vocab_growth import environment as env
-from vocab_growth.publication_checks import referenced_assets, verify_published
+from vocab_growth.publication_checks import (
+    describe_failures,
+    inspect_report,
+    local_failures,
+    present_assets,
+    verify_published,
+)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOK_DIR = os.path.join(REPO_ROOT, "docs", "comparison")
@@ -106,12 +112,29 @@ def render() -> None:
 
 
 def collect(destination: str) -> list[str]:
-    """Assemble exactly the page and the assets it references."""
+    """Assemble exactly the page and the assets it references.
+
+    A reference the page makes that no upload could satisfy -- a figure that was
+    never written, a link out of the published directory, a construct whose
+    target cannot be determined -- stops the collection here. Before the shared
+    inspection those were silently dropped, so the page published referring to
+    a file nobody had noticed was absent, which is the 2026-09-03 failure in a
+    different disguise.
+    """
+    inspection = inspect_report(BOOK_HTML)
+    failures = local_failures(inspection)
+    if failures:
+        listed = "\n  ".join(describe_failures(failures))
+        raise SystemExit(
+            f"[collect] {BOOK_HTML} requires {len(failures)} file(s) that cannot "
+            f"be published:\n  {listed}\nRe-render the book, or correct the "
+            "reference, before publishing."
+        )
     if os.path.isdir(destination):
         shutil.rmtree(destination)
     os.makedirs(destination)
     shutil.copy2(BOOK_HTML, os.path.join(destination, "index.html"))
-    assets = referenced_assets(BOOK_HTML)
+    assets = present_assets(inspection)
     for relative in assets:
         target = os.path.join(destination, relative)
         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -127,8 +150,10 @@ def verify(base_url: str, assets: list[str], timeout: float = 30.0) -> list[str]
     Shared with the model-report upload through ``publication_checks`` since
     #289 task 4.10, so the two paths cannot drift.
     """
-    return verify_published(
-        base_url.rsplit("/", 1)[0], ["index.html", *assets], timeout=timeout
+    return describe_failures(
+        verify_published(
+            base_url.rsplit("/", 1)[0], ["index.html", *assets], timeout=timeout
+        )
     )
 
 

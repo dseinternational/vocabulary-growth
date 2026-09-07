@@ -322,3 +322,57 @@ def test_the_total_log_likelihood_is_conserved():
     per_term = u.sum(dim="obs_u_id") + s.sum(dim="obs_s_id")
     per_case = combined.sum(dim=ADMINISTRATION_DIM)
     np.testing.assert_allclose(per_case.values, per_term.values, rtol=0, atol=1e-12)
+
+
+def test_an_impossible_observation_survives_but_a_missing_one_does_not():
+    """``-inf`` is a value; ``NaN`` is an absence wearing one.
+
+    An administration the model gives zero probability has log likelihood
+    ``-inf``, and its case score must stay ``-inf`` rather than being dropped
+    or clipped -- PSIS-LOO reads that as the pointwise term it is. A ``NaN``
+    among the draws means something upstream failed, and summing it produces a
+    score that is quietly missing for that case while still being tabulated.
+    Both come from the shared aggregator; both are checked here because both
+    reach `loo_summary.csv`.
+    """
+    masks = {"obs_u_mask": np.array([True, True]), "obs_s_mask": np.array([True, True])}
+
+    combined = administration_log_likelihood(
+        _trace(
+            masks,
+            {
+                "y_u_obs": _factor([[[-np.inf, -2.0]]], "obs_u_id"),
+                "y_s_obs": _factor([[[-0.5, -4.0]]], "obs_s_id"),
+            },
+        ),
+        _BIVARIATE,
+    )
+    np.testing.assert_array_equal(combined.values[0, 0], [-np.inf, -6.0])
+
+    with pytest.raises(ValueError, match="NaN"):
+        administration_log_likelihood(
+            _trace(
+                masks,
+                {
+                    "y_u_obs": _factor([[[np.nan, -2.0]]], "obs_u_id"),
+                    "y_s_obs": _factor([[[-0.5, -4.0]]], "obs_s_id"),
+                },
+            ),
+            _BIVARIATE,
+        )
+
+
+def test_one_array_declared_as_two_factors_is_refused():
+    """Double counting looks exactly like a well-behaved score.
+
+    Two `LikelihoodFactor` entries naming the same trace variable would sum it
+    onto the same administrations twice and produce a total that is simply
+    wrong, with nothing in the result to show it.
+    """
+    masks = {"obs_u_mask": np.array([True, True]), "obs_s_mask": np.array([True, True])}
+    factors = {"y_u_obs": _factor([[[-1.0, -2.0]]], "obs_u_id")}
+    with pytest.raises(ValueError, match="more than once"):
+        administration_log_likelihood(
+            _trace(masks, factors),
+            (LikelihoodFactor("y_u_obs", "obs_u_mask"), LikelihoodFactor("y_u_obs", "obs_s_mask")),
+        )

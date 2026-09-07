@@ -642,3 +642,129 @@ def test_a_failed_fit_keeps_the_model_label_in_its_quarantine_name(tmp_path):
     assert Path(retained).name.startswith(label), (
         f"quarantined fits must stay identifiable by model label: {retained}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Shared-library file and directory operations (dse-research-utils 0.14.0)
+# ---------------------------------------------------------------------------
+# `write_json_atomic` and `promote_staged_fit` delegate their replacement
+# mechanics to `dse_research_utils.storage`. What is pinned here is the part
+# the shared helpers leave to this repository: the stored JSON format and file
+# mode, the lock and backup retention, and the paths promotion must still
+# accept or refuse.
+
+
+def test_write_json_atomic_keeps_the_stored_format_and_creates_parents(tmp_path):
+    """Two-space indent, sorted keys, trailing newline — the format on disk.
+
+    Every manifest hash recorded in a ``comparison_manifest.json`` is a hash of
+    these exact bytes, so the serialisation is a compatibility surface even
+    though the writer beneath it changed.
+    """
+    from vocab_growth.fit_artifacts import write_json_atomic
+
+    target = tmp_path / "nested" / "deeper" / "fit_manifest.json"
+    write_json_atomic(str(target), {"b": 2, "a": {"n": 1}})
+
+    assert target.read_text(encoding="utf-8") == '{\n  "a": {\n    "n": 1\n  },\n  "b": 2\n}\n'
+
+
+def test_write_json_atomic_keeps_the_historical_file_mode(tmp_path):
+    """The shared temporary file is 0600; these artefacts are not.
+
+    Fit output is read back by other accounts on the shared fitting VM and by
+    the uploader, and every file this repository has written carried
+    ``0o666 & ~umask``. Restoring that explicitly is the migration's decision,
+    so it is checked rather than left to whichever mode the helper uses.
+    """
+    import os
+    import stat
+
+    from vocab_growth.fit_artifacts import write_json_atomic
+
+    current = os.umask(0o022)
+    os.umask(current)
+    target = tmp_path / "fit_state.json"
+    write_json_atomic(str(target), {"state": "complete"})
+
+    assert stat.S_IMODE(target.stat().st_mode) == 0o666 & ~current
+
+
+def test_write_json_atomic_leaves_the_destination_intact_on_failure(tmp_path):
+    """An unserialisable payload must not truncate the file already there."""
+    from vocab_growth.fit_artifacts import write_json_atomic
+
+    target = tmp_path / "fit_manifest.json"
+    write_json_atomic(str(target), {"schema_version": 1})
+    cycle: dict = {}
+    cycle["self"] = cycle
+
+    with pytest.raises(ValueError):
+        write_json_atomic(str(target), cycle)
+
+    assert json.loads(target.read_text(encoding="utf-8")) == {"schema_version": 1}
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["fit_manifest.json"]
+
+
+def test_promote_staged_fit_retains_no_backup_after_success(tmp_path):
+    """``.previous`` is a rollback slot, not an archive.
+
+    The shared helper deliberately performs no cleanup; a fit's output can be
+    tens of gigabytes, so the retained copy is removed here as it always was.
+    """
+    canonical = tmp_path / "models" / "VG01-test"
+    staged = tmp_path / ".staging" / "run" / "models" / "VG01-test"
+    canonical.mkdir(parents=True)
+    staged.mkdir(parents=True)
+    (canonical / "marker.txt").write_text("old", encoding="utf-8")
+    (staged / "marker.txt").write_text("new", encoding="utf-8")
+
+    promote_staged_fit(str(staged), str(canonical))
+
+    previous = tmp_path / ".previous"
+    assert previous.is_dir() and list(previous.iterdir()) == []
+
+
+def test_promote_staged_fit_works_through_a_symlinked_output_root(tmp_path):
+    """``<repo>/output`` is a symlink to a scratch volume on the fitting VM.
+
+    The shared helper refuses a symlinked ancestor, so this repository resolves
+    the parent chain deliberately before calling it. Without that, promotion
+    would fail on every VM fit while passing in every local checkout.
+    """
+    scratch = tmp_path / "scratch"
+    (scratch / "models").mkdir(parents=True)
+    root = tmp_path / "output"
+    root.symlink_to(scratch, target_is_directory=True)
+    canonical = root / "models" / "VG01-test"
+    staged = root / ".staging" / "run" / "models" / "VG01-test"
+    staged.mkdir(parents=True)
+    (staged / "marker.txt").write_text("new", encoding="utf-8")
+
+    promote_staged_fit(str(staged), str(canonical))
+
+    assert (scratch / "models" / "VG01-test" / "marker.txt").read_text(
+        encoding="utf-8"
+    ) == "new"
+
+
+def test_promote_staged_fit_refuses_a_symlinked_destination(tmp_path):
+    """Resolving the parents must not extend to following the destination.
+
+    A ``models/<label>`` that is itself a link would otherwise have its target
+    replaced somewhere else entirely, which no caller asked for.
+    """
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    canonical = tmp_path / "models" / "VG01-test"
+    canonical.parent.mkdir(parents=True)
+    canonical.symlink_to(elsewhere, target_is_directory=True)
+    staged = tmp_path / ".staging" / "run" / "models" / "VG01-test"
+    staged.mkdir(parents=True)
+    (staged / "marker.txt").write_text("new", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="symlink"):
+        promote_staged_fit(str(staged), str(canonical))
+
+    assert staged.is_dir()
+    assert list(elsewhere.iterdir()) == []
