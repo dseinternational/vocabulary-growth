@@ -299,7 +299,7 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions")
 
 ### Median trend
 
-![Median predicted understood vocabulary with uncertainty intervals, against the observed data.](plot_posterior_predictive_median_trend.png){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
+![Median predicted understood vocabulary against the observed data. The band is **predictive, not an uncertainty interval on the population trajectory**: it adds the Beta-Binomial dispersion around the fitted curve, and because this model carries no child effect that dispersion already contains the differences between children.](plot_posterior_predictive_median_trend.png){#fig-posterior-predictive-median-trend .lightbox fig-align="left"}
 
 ![The same trend, smoothed for presentation. The underlying numbers are unchanged.](plot_posterior_predictive_median_trend_smoothed.png){#fig-posterior-predictive-median-trend-smoothed .lightbox fig-align="left"}
 
