@@ -881,6 +881,26 @@ parameters:
 - four-cell sign/speech composition;
 - uncertainty intervals for the above.
 
+### Sensitivity results
+
+**Target 8 (young-age trajectory anchors) — complete, all seven variants robust.** Fitted and compared on 2026-08-18 at the reporting (`rep`) tier — the issue that tracked it ([#147](https://github.com/dseinternational/vocabulary-growth/issues/147)) specified `test`, and `rep` is strictly stronger — against the models of record as they stood on that date, which is the frame before the `us_03` ingestion (#289) and before the `es_01` gesture-construct correction. The gate is the one in `src/vocab_growth/sensitivity/compare.py`: a variant is robust when every reported quantity at every query age stays inside the baseline 89% interval and the fit clears the convergence thresholds. Detail CSVs and `robustness_matrix_<model>.csv` were written under `output/comparisons/sensitivity/` on the fitting machine; the matrix is reproduced here because those files are not committed.
+
+| Model | Variant           | Converged | Coverage | Max abs delta (words) |
+| ----- | ----------------- | --------- | -------- | --------------------- |
+| vg10  | `u-anchor-broad`  | yes       | 1.0      | 0.549                 |
+| vg10  | `eta-u-narrow`    | yes       | 1.0      | 0.592                 |
+| vg11  | `anchor-broad`    | yes       | 1.0      | 0.055                 |
+| vg11  | `eta-narrow`      | yes       | 1.0      | 0.437                 |
+| vg12  | `lo-anchor-broad` | yes       | 1.0      | 0.360                 |
+| vg12  | `hi-anchor-broad` | yes       | 1.0      | 0.634                 |
+| vg12  | `eta-narrow`      | yes       | 1.0      | 7.038                 |
+
+The check that mattered most passes with room to spare. `vg12 hi-anchor-broad` reverts the 26-month understood high anchor — the one with **no** independent CDI comprehension norm, WS being production-only — to a vague Beta(1.1, 1.1), and moves the 30-month comprehension estimate by 0.634 words against a baseline 89% interval 152.8 words wide. The largest movement anywhere in the table is `vg12 eta-narrow` at 7.04 words, 4.6% of that interval. `vg10 u-anchor-broad` is scored across 395 quantities spanning four estimands (`Ey_understood`, `Ey_spoken`, `gap`, `q`), all inside. `vg11 anchor-broad` needed a high-tuned run (tune 12000, draws 8000, target-accept 0.99, six chains) and came back with zero divergences, max R-hat 1.0043 and min ESS 1,658.
+
+**What this settles.** Reverting each recalibrated young-age anchor to its pre-recalibration vague prior changes nothing the study reports, so the double-dipping concern the recalibration raised (#135/#138/#140/#142, #146) is answered empirically for every Target 8 anchor: the un-normed DS understood anchors (VG10) and the un-normed 26-month TD understood high anchor (VG04/VG12) are regularisation the posterior does not lean on. The anchor comments in `definitions.py` say so where each anchor is set.
+
+**What it does not settle.** Two caveats travel with the table. First, the VG10 baseline it was scored against predates `us_03`, so the VG10 rows describe the pre-ingestion pool; the anchors themselves are unchanged and nothing in the `us_03` refit (`notes/202609062030-us03-refit-curve-shift.md`) suggests the verdict would move, but they will be re-scored in the VM refit window as part of [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 3.5, which also carries the rest of the registered matrix — VG10's other prior arms and VG15's Targets 1–7 — none of which has been fitted. Second, a robust verdict is a statement about the reported quantities at the query ages under this gate, not about every parameter: `eta-narrow` on VG12 moved the flexible term's amplitude posterior visibly while leaving the trajectories inside the interval, which is what the gate is designed to distinguish.
+
 ## Provisional conclusions
 
 The current prior set is coherent with the model architecture, but several priors
@@ -909,7 +929,7 @@ are not neutral defaults and need explicit labelling.
 - Checked against independent Wordbank normative deciles, the TD anchor priors
   are broad enough to cover the norms and, after the young-age recalibration (#135/#138/#140/#142), their centres now track the normative medians; the independent TD `q(a)` curve corroborates both VG13's recalibrated `q` anchors and the VG10/VG15 `q`-anchor tightening. Each anchor's code comment in `definitions.py` now cites the external norm as its basis where one exists and demotes the in-sample statistic to corroboration.
   See "Evidence base: literature and normative data" above.
-- Where an anchor has _no_ independent norm — the DS understood anchors (VG02/VG10) and the 26-month TD understood high anchor (VG04/VG12, WS is production-only) — the re-centring is data-informed regularisation rather than external anchoring, and is now a registered sensitivity target (Target 8: `u-anchor-broad`/`hi-anchor-broad` etc.) so the young-age conclusions can be shown not to hinge on it.
+- Where an anchor has _no_ independent norm — the DS understood anchors (VG02/VG10) and the 26-month TD understood high anchor (VG04/VG12, WS is production-only) — the re-centring is data-informed regularisation rather than external anchoring, and is a registered sensitivity target (Target 8: `u-anchor-broad`/`hi-anchor-broad` etc.). **Tested 2026-08-18: all seven Target 8 variants are robust**, so the young-age conclusions do not hinge on it — see "Sensitivity results" above.
 - The independent DS cohorts anchor only DS _spoken_ vocabulary and only to ~60
   months (Berglund et al., 2001): the DS spoken-low prior is ~2x high at 24 months, the DS understood-low anchor has no independent chronological-age
   source, and the 84-month high anchor is beyond all independent CDI data.
@@ -917,5 +937,9 @@ are not neutral defaults and need explicit labelling.
   the `kappa` age-trend (dispersion rises with age for production) but shows the
   prior is slightly tight at the high-dispersion (older-age) end.
 
-No final robustness conclusion should be made until the prior predictive audit
-and sensitivity checks above are complete.
+The robustness conclusion for the young-age trajectory anchors (Target 8) is made
+and recorded under "Sensitivity results". No robustness conclusion should be drawn
+for the other targets — the DS-joint `q` anchors, the signed hump, the kappa and
+random-effect scales, VG15 `psi` and concentration, VG16 `beta_lag` — until their
+registered arms have been fitted and compared, which is [#289](https://github.com/dseinternational/vocabulary-growth/issues/289)
+tasks 3.5–3.7.

@@ -175,6 +175,8 @@ render_priors_table()
 
 $\tau_0$ keeps VG10's own prior on both outcomes, so the offset is unchanged and the model is one-factor against its parent. $\tau_1 \sim \text{HalfNormal}(0.5)$ has median 0.34 per year, covering both maximum-likelihood values comfortably while keeping mass near zero, so a rate the data do not support shrinks away rather than being asserted. The correlation uses $(\rho_{01}+1)/2 \sim \text{Beta}(2,2)$, which for a $2 \times 2$ matrix is exactly LKJ(2) — a gentle pull toward zero, against a maximum-likelihood value of $+0.43$ to compare with.
 
+**The trajectory anchors are VG10's, and they are frame calibration, not independent norms.** The understood anchors and the high production-ratio anchor were set so the prior trend line sits where this project's own directly observed comprehension and spoken/understood ratios sit, because no independent Down syndrome norm exists for either quantity; only the low production-ratio anchor is centred on an independent typically-developing estimate. Posterior agreement with those anchors is therefore partly by construction and is not independent corroboration. Every Down syndrome joint model from VG05 onwards carries the same anchor values, so the caution applies across the lineage; the registered broad-anchor sensitivity on VG10 (`u-anchor-broad`, [#147](https://github.com/dseinternational/vocabulary-growth/issues/147)) is what tests it, and on the pre-`us_03` pool it left every reported quantity inside the model of record's interval.
+
 ### Understood trajectory
 
 ![Prior on the proportion of words understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
