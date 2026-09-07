@@ -12,6 +12,8 @@ this replaced: the ``[12, 24, 24]`` parallel-form pattern, row-order
 dependence, and multiple source-form rows (issue #242).
 """
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -53,18 +55,20 @@ def _synthetic_df():
 
 
 def test_vg16_is_the_definition_these_tests_assume():
-    """VG16 leaves both lag settings at the primitive's defaults.
+    """VG16 leaves all three lag settings at the primitive's defaults.
 
     Every frame-level call below passes VG16, because
     :func:`prev_wave_lag_for_frame` requires a definition -- the point of which is
     that a caller cannot silently get the defaults for a variant that moved them.
     The counts and logits asserted throughout this module were written against
     those defaults, so this pins the one fact that makes them still apply. If a
-    future VG16 sets a gap ceiling or the continuity correction, this fails here
-    rather than as a wrong number in fifteen other tests.
+    future VG16 sets a gap ceiling, the continuity correction or the same-form
+    restriction, this fails here rather than as a wrong number in twenty other
+    tests.
     """
     assert VG16.lag_max_gap_months is None
     assert VG16.lag_zero_handling == LAG_ZERO_CLIP
+    assert VG16.lag_same_form_only is False
 
 
 def test_compute_prev_wave_lag_identifies_prior_understood_wave():
@@ -365,9 +369,120 @@ def test_no_ceiling_reproduces_the_historical_lag_exactly():
         N_TRIALS,
         max_gap_months=None,
         zero_handling=LAG_ZERO_CLIP,
+        same_form_only=False,
     )
     for a, b in zip(base, same, strict=True):
         np.testing.assert_array_equal(a, b)
+
+
+# --- Same-form restriction (issue #242) ----------------------------------------
+
+
+def _form_aware_args(df, ceilings):
+    return (
+        df["subject_code"].to_numpy(int),
+        df["age"].to_numpy(float),
+        df["understood"].to_numpy(float),
+        N_TRIALS,
+    ), np.asarray(ceilings, dtype=float)
+
+
+def test_same_form_restriction_drops_the_lag_but_keeps_the_row():
+    """Like the gap ceiling, it removes the lag and leaves the observation.
+
+    Subject 0's second wave keeps its lag (396 -> 396) and its third loses it
+    (396 -> 680); subject 3's pattern is the same across the wave whose
+    understood count is missing.
+    """
+    df = _synthetic_df()
+    ceilings = [396, 396, 680, 396, 396, 396, 396, 396, 680]
+    args, form = _form_aware_args(df, ceilings)
+
+    _, base_lag, _ = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
+    _, lag, logits = prev_wave_lag(*args, form_ceiling=form, same_form_only=True)
+
+    np.testing.assert_array_equal(base_lag, [0, 1, 1, 0, 0, 0, 0, 1, 1])
+    np.testing.assert_array_equal(lag, [0, 1, 0, 0, 0, 0, 0, 1, 0])
+    assert len(lag) == len(base_lag)      # no row removed
+    assert logits[2] == 0.0               # and their predictors are neutralised
+    assert logits[8] == 0.0
+
+
+def test_same_form_restriction_never_changes_which_wave_is_the_source():
+    """It gates whether a source is used, not which one is chosen.
+
+    The child's waves are 680, 396, 680. The third wave's source is the second,
+    on a different form, so the restriction drops the lag. Applied while walking
+    the waves it would instead fall back to the *first* wave — same form, but 24
+    months earlier — which would answer the measurement question by silently
+    changing the interval one.
+    """
+    df = pd.DataFrame({
+        "subject_code": [0, 0, 0],
+        "age": [12.0, 24.0, 36.0],
+        "understood": [100.0, 200.0, 300.0],
+    })
+    args, form = _form_aware_args(df, [680, 396, 680])
+
+    base_idx, base_lag, _ = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
+    idx, lag, _ = prev_wave_lag(*args, form_ceiling=form, same_form_only=True)
+
+    np.testing.assert_array_equal(base_lag, [0, 1, 1])
+    np.testing.assert_array_equal(base_idx[1:], [0, 1])
+    np.testing.assert_array_equal(lag, [0, 0, 0])
+    kept = lag > 0
+    np.testing.assert_array_equal(idx[kept], base_idx[kept])
+
+
+def test_same_form_restriction_needs_form_ceilings():
+    df = _synthetic_df()
+    with pytest.raises(ValueError, match="same_form_only needs form_ceiling"):
+        prev_wave_lag(
+            df["subject_code"].to_numpy(int),
+            df["age"].to_numpy(float),
+            df["understood"].to_numpy(float),
+            N_TRIALS,
+            same_form_only=True,
+        )
+
+
+def test_an_unknown_form_ceiling_cannot_certify_a_same_form_lag():
+    """A missing ceiling is not evidence that the two waves matched."""
+    df = pd.DataFrame({
+        "subject_code": [0, 0],
+        "age": [12.0, 24.0],
+        "understood": [100.0, 200.0],
+    })
+    args, _ = _form_aware_args(df, [396, 396])
+
+    _, known, _ = prev_wave_lag(
+        *args, form_ceiling=[396.0, 396.0], same_form_only=True
+    )
+    _, unknown, _ = prev_wave_lag(
+        *args, form_ceiling=[np.nan, 396.0], same_form_only=True
+    )
+    np.testing.assert_array_equal(known, [0, 1])
+    np.testing.assert_array_equal(unknown, [0, 0])
+
+
+def test_same_form_restriction_reads_the_field_off_the_definition():
+    """The frame-level entry point is what a variant actually goes through."""
+    df = _synthetic_df().assign(
+        survey_vocab_max=[396, 396, 680, 396, 396, 396, 396, 396, 680]
+    )
+    variant = dataclasses.replace(VG16, lag_same_form_only=True)
+
+    _, base_lag, _ = prev_wave_lag_for_frame(df, N_TRIALS, VG16)
+    _, lag, _ = prev_wave_lag_for_frame(df, N_TRIALS, variant)
+
+    np.testing.assert_array_equal(base_lag, [0, 1, 1, 0, 0, 0, 0, 1, 1])
+    np.testing.assert_array_equal(lag, [0, 1, 0, 0, 0, 0, 0, 1, 0])
+
+
+def test_same_form_restriction_says_so_when_the_frame_has_no_form_column():
+    variant = dataclasses.replace(VG16, lag_same_form_only=True)
+    with pytest.raises(ValueError, match="survey_vocab_max"):
+        prev_wave_lag_for_frame(_synthetic_df(), N_TRIALS, variant)
 
 
 def test_continuity_correction_moves_a_zero_source_off_the_clip():

@@ -231,9 +231,18 @@ def test_registry_counts_and_models():
     # +2 on 2026-09-05 (#289 task 4.3): the combined-flag successor to
     # `us01-implausible-reinstated` on VG10 and VG15, which lifts the same-day
     # disagreement rule as well so the implausible rule's full catch comes back.
-    assert len(VARIANTS) == 82
+    #
+    # +3 on 2026-09-07 (#242): VG16's `lag-same-form`, with the field it needs,
+    # and the `beta-tight`/`beta-wide` prior-scale pair, which needs none.
+    # `dse-native-only` was its only form-restricted arm and the available-case
+    # audit measured what that arm has to work with -- 80 supporting rows from
+    # 74 children in two studies, against 342 rows from 226 children in all
+    # eight contributing studies under the same-form restriction. The prior-scale
+    # pair is the last of this item's list to be registered; nothing had varied
+    # `beta_lag_sigma`, so the symmetric prior had never been checked.
+    assert len(VARIANTS) == 85
     assert len(variants_for("vg14")) == 3
-    assert len(variants_for("vg16")) == 5
+    assert len(variants_for("vg16")) == 8
     assert len(variants_for("vg21")) == 1
     assert len(variants_for("vg23")) == 1
     assert len(variants_for("vg22")) == 2

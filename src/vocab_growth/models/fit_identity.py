@@ -194,10 +194,20 @@ FIELD_ROLES: dict[str, FieldRole] = {
 #: ``load_data``'s signature and compares -- and the engines that forward the
 #: field are the same three that forward ``include_implausible_production``,
 #: which is the only path by which a definition field reaches the loader.
+#:
+#: The fourth, ``lag_same_form_only`` (#242, 2026-09-07), makes the first
+#: entries' kind of claim and is checked their way: ``cross_lag`` reads it
+#: through ``getattr(definition, "lag_same_form_only", False)``, so a definition
+#: that predates the field resolves to exactly this value and the pre-field lag
+#: is the one the primitive computes with ``same_form_only=False``.
+#: ``tests/test_fit_identity.py`` reads that default off the call site rather
+#: than restating it, and ``tests/test_cross_lag.py`` pins that the unrestricted
+#: path reproduces the historical arrays exactly.
 BACKFILL_DEFAULTS: dict[str, Any] = {
     "spoken_fallback": SPOKEN_FALLBACK_PRODUCT,
     "spoken_fallback_kappa_sigma": 0.5,
     "include_same_day_disagreements": False,
+    "lag_same_form_only": False,
 }
 
 

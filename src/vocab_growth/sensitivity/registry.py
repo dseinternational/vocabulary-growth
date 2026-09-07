@@ -767,6 +767,40 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # leverage; non-boundary sources move by under 0.002 logits.
     ("vg16", "lag-continuity"): {"suffix": "lag-continuity", "scalar": {
         "lag_zero_handling": LAG_ZERO_CONTINUITY}},
+    #
+    # `lag-same-form` is the review's own measurement check, and the
+    # available-case audit (#242, 2026-09-07) is what made it worth a field.
+    # `dse-native-only` above was the only form-restricted arm, and on the
+    # current frame it leaves **80 supporting rows from 74 children in two
+    # studies** -- so whatever it shows is as much a statement about `uk_02` and
+    # `ie_02` as about the measurement scale. Restricting instead to lags whose
+    # source and target waves used the *same* form keeps 342 rows from 226
+    # children in all eight contributing studies, and drops exactly the 131 rows
+    # (28%) that cross a ceiling. That is the comparison the review asked for:
+    # the harmonisation acts on the regressor here, not only on the outcome, and
+    # a study intercept cannot absorb a within-study form transition. Neither
+    # arm identifies a scale effect on its own; together they bracket it.
+    ("vg16", "lag-same-form"): {"suffix": "lag-same-form", "scalar": {
+        "lag_same_form_only": True}},
+    #
+    # The coefficient-prior-scale pair #242 asks for, and the one VG16 variant
+    # that needs no field: `beta_lag_sigma` has been on the definition since the
+    # cross-lag was added. `Normal(0, 0.5)` is symmetric, which the review grants,
+    # but symmetry is not calibration -- "posterior exclusion of zero is not
+    # purely a data result merely because the prior did not prefer a sign".
+    #
+    # The prediction being tested is that these move nothing: the current fit's
+    # posterior SD is 0.066 against a prior SD of 0.5, a contraction of 0.98, so
+    # the prior is doing almost no work on the interval. That is an argument from
+    # one number, which is exactly what this item exists to replace with a fit.
+    # `beta-tight` is the arm that carries the question -- a prior pulled toward
+    # zero is what would expose a prior-driven exclusion of it -- and `beta-wide`
+    # is its companion, checking that the interval does not simply inflate with
+    # whatever it is given.
+    ("vg16", "beta-tight"): {"suffix": "beta-tight", "scalar": {
+        "beta_lag_sigma": 0.25}},
+    ("vg16", "beta-wide"): {"suffix": "beta-wide", "scalar": {
+        "beta_lag_sigma": 1.0}},
 
     # -- VG21: the anchors it was promoted with (#228, #240) --
     #
