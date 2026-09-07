@@ -20,6 +20,9 @@ import os
 import numpy as np
 import pandas as pd
 import xarray as xr
+from dse_research_utils.report.readers import read_csv
+from dse_research_utils.statistics.predictive import predictive_observation_checks
+from dse_research_utils.statistics.samples import sample_matrix
 
 from vocab_growth import intervals
 
@@ -71,6 +74,15 @@ def predictive_calibration_table(
     mean over observations of the predictive mass inside the tabulated
     interval). Compare the empirical columns against these, not against 1/12 or
     the nominal level (#234).
+
+    The per-observation quantities come from
+    :func:`dse_research_utils.statistics.predictive.predictive_observation_checks`
+    (shared library 0.14.0), which computes exactly this set: linear quantiles
+    at ``(1 - p) / 2`` and its complement, closed-interval inclusion, the
+    predictive mass inside those bounds, and the midpoint PIT with the same
+    ``(1 - sum p_k^3) / 12`` reference. What stays here is this project's
+    reporting: the age banding, the zero rates, the group means, and the column
+    names and order of the written table.
     """
     observed = np.asarray(observed, dtype=float)
     predictive = np.asarray(predictive)
@@ -87,50 +99,55 @@ def predictive_calibration_table(
         raise ValueError("observation_chunk_size must be positive.")
     if observed.size == 0 or predictive.shape[1] == 0:
         raise ValueError("calibration requires observations and predictive samples.")
+    # The shared helper refuses non-finite observations rather than choosing a
+    # population for the caller, which is the right division: an outcome column
+    # carrying NaN here means the engine masked the wrong rows, and every row
+    # reaching this point is one the likelihood scored. Checked here so the
+    # failure names the table being written.
+    if not np.isfinite(observed).all():
+        raise ValueError(
+            "calibration requires finite observations; "
+            f"{int((~np.isfinite(observed)).sum())} of {observed.size} are not. "
+            "Mask unobserved rows before summarising them."
+        )
 
     n_observations = observed.size
-    predictive_mean = np.empty(n_observations, dtype=float)
-    predictive_zero_rate = np.empty(n_observations, dtype=float)
-    pit = np.empty(n_observations, dtype=float)
-    expected_pit_variance = np.empty(n_observations, dtype=float)
+    checks = predictive_observation_checks(
+        observed,
+        predictive,
+        interval_probs=interval_probs,
+        sample_axis=1,
+        pit_method="midpoint",
+        observation_chunk_size=observation_chunk_size,
+    )
+    predictive_mean = checks.predictive_mean
+    pit = checks.midpoint_pit
+    expected_pit_variance = checks.expected_midpoint_pit_variance
     coverage_by_prob = {
-        prob: np.empty(n_observations, dtype=bool) for prob in interval_probs
+        prob: checks.inside[:, column] for column, prob in enumerate(interval_probs)
     }
+    # Predictive mass inside the tabulated interval: what coverage a perfectly
+    # calibrated model would show, discreteness included.
     expected_coverage_by_prob = {
-        prob: np.empty(n_observations, dtype=float) for prob in interval_probs
+        prob: checks.predictive_mass[:, column]
+        for column, prob in enumerate(interval_probs)
     }
+    # Widths are differenced in the bounds' own dtype and then stored as
+    # float64 before the group means below, which is the arithmetic the written
+    # table has always carried.
     width_by_prob = {
-        prob: np.empty(n_observations, dtype=float) for prob in interval_probs
+        prob: (checks.upper[:, column] - checks.lower[:, column]).astype(float)
+        for column, prob in enumerate(interval_probs)
     }
 
+    # The one per-observation quantity the shared checks do not compute: the
+    # zero rate is this project's own column, and a count outcome's floor is
+    # what it reports on. Chunked on the same schedule, so the temporary arrays
+    # stay the size they were.
+    predictive_zero_rate = np.empty(n_observations, dtype=float)
     for start in range(0, n_observations, observation_chunk_size):
         stop = min(start + observation_chunk_size, n_observations)
-        y = observed[start:stop]
-        y_rep = predictive[start:stop]
-        predictive_mean[start:stop] = y_rep.mean(axis=1)
-        predictive_zero_rate[start:stop] = np.mean(y_rep == 0, axis=1)
-        pit[start:stop] = np.mean(y_rep < y[:, None], axis=1) + 0.5 * np.mean(
-            y_rep == y[:, None], axis=1
-        )
-        for offset, row in enumerate(y_rep):
-            _, counts = np.unique(row, return_counts=True)
-            mass = counts / row.size
-            # Var(mid-PIT | calibrated) = (1 - sum p_k^3) / 12 for this
-            # observation's predictive distribution.
-            expected_pit_variance[start + offset] = (
-                1.0 - float(np.sum(mass**3))
-            ) / 12.0
-        for prob in interval_probs:
-            tail = (1 - prob) / 2
-            lower = np.quantile(y_rep, tail, axis=1)
-            upper = np.quantile(y_rep, 1 - tail, axis=1)
-            coverage_by_prob[prob][start:stop] = (y >= lower) & (y <= upper)
-            # Predictive mass inside the tabulated interval: what coverage a
-            # perfectly calibrated model would show, discreteness included.
-            expected_coverage_by_prob[prob][start:stop] = np.mean(
-                (y_rep >= lower[:, None]) & (y_rep <= upper[:, None]), axis=1
-            )
-            width_by_prob[prob][start:stop] = upper - lower
+        predictive_zero_rate[start:stop] = np.mean(predictive[start:stop] == 0, axis=1)
 
     age_starts = np.floor(ages / age_band_months).astype(int) * age_band_months
     groups: list[tuple[str, np.ndarray]] = [("all", np.ones(observed.size, dtype=bool))]
@@ -224,12 +241,26 @@ def write_trace_calibration(
                 f"found {observation_dims}."
             )
         observation_dim = observation_dims[0]
-        predictive = (
-            replicated.stack(sample=("chain", "draw"))
-            .transpose(observation_dim, "sample")
-            .values
-        )
-        observed = np.asarray(trace.observed_data[variable].values)
+        # `sample_matrix` reshapes to (observation, sample) with every
+        # dimension declared, and `observed_values` then checks the observed
+        # array's coordinate index against the replications' own before
+        # flattening it. Every engine declares this dimension in the model's
+        # `coords`, so the labels are there; what changes is that a
+        # disagreement between the two groups is now a failure rather than a
+        # silently mismatched row. Equal lengths never established alignment.
+        try:
+            matrix = sample_matrix(
+                replicated,
+                sample_dims=("chain", "draw"),
+                observation_dims=(observation_dim,),
+            )
+            observed = matrix.observed_values(trace.observed_data[variable])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot align {variable!r} with its observed values: {exc}"
+            ) from exc
+        predictive = matrix.values
+        observed = np.asarray(observed)
         ages = np.asarray(analysis_df.loc[mask, "age"], dtype=float)
         table = predictive_calibration_table(observed, predictive, ages)
         table.insert(0, "outcome", label)
@@ -384,14 +415,28 @@ def render_calibration_section(directory: str = ".") -> None:
     than failing when the fit predates the calibration table, so the section is
     never silently empty.
     """
-    path = os.path.join(directory, "posterior_predictive_calibration.csv")
-    if not os.path.exists(path):
+    read = read_csv(os.path.join(directory, "posterior_predictive_calibration.csv"))
+    if read.status == "missing":
         print(
             "_No calibration table for this fit "
             "(`posterior_predictive_calibration.csv` absent — refit to generate it)._"
         )
         return
-    table = pd.read_csv(path)
+    if read.status == "invalid":
+        if read.reason == "empty_document":
+            # `write_trace_calibration` writes an empty frame -- which has no
+            # columns, so `to_csv` writes a bare newline -- when a trace carries
+            # no posterior-predictive variable it recognises. That is an empty
+            # table, and until this read distinguished the two it reached
+            # `pd.read_csv` and aborted the report cell.
+            print("_The calibration table for this fit is empty._")
+        else:
+            print(
+                "_The calibration table for this fit could not be read "
+                f"(`{read.reason}`)._"
+            )
+        return
+    table = read.value
     if table.empty:
         print("_The calibration table for this fit is empty._")
         return

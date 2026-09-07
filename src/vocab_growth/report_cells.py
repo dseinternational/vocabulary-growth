@@ -30,6 +30,7 @@ import math
 import os
 from collections.abc import Mapping
 
+from dse_research_utils.report.readers import FileRead, nearest_row, read_csv, read_json
 from scipy import stats
 
 from vocab_growth.administration_loo import ADMINISTRATION_LABEL
@@ -43,6 +44,7 @@ from vocab_growth.models.diagnostics_utils import (  # noqa: F401  (re-exported)
 )
 
 MANIFEST_FILENAME = "fit_manifest.json"
+
 
 # Sampling configurations that are reporting-grade. Read from the manifest's
 # recorded name rather than inferred from chains x draws: the old templates
@@ -62,8 +64,50 @@ CONFIG_LABELS = {
 }
 
 
+class ReportArtefactError(RuntimeError):
+    """A file in a fit's output directory exists and cannot be parsed.
+
+    Distinct from a file this engine never writes, which every helper below
+    treats as "not applicable" and renders as a pending-fit placeholder. A
+    damaged file must not become that placeholder: the placeholder reads as
+    "this fit has not produced this yet", which is reassuring and wrong.
+    """
+
+
+def _table(directory: str, name: str) -> FileRead:
+    """Read one summary CSV, keeping missing and damaged apart.
+
+    :func:`dse_research_utils.report.readers.read_csv` (shared library 0.14.0)
+    returns the state; the policy is this repository's. A file that is absent
+    or that parsed to nothing is "not written by this engine". A parse, decode
+    or read failure is a defect and raises.
+
+    ``empty_document`` -- a file with no columns at all -- is deliberately on
+    the first side. Several writers here build their table with
+    ``pd.DataFrame(rows)`` and write it whatever ``rows`` contains; with no rows
+    that produces a column-less frame, and ``to_csv`` then writes a single
+    newline. That file records "there was nothing to tabulate", not damage.
+    """
+    read = read_csv(os.path.join(directory, f"{name}.csv"))
+    if read.status == "invalid" and read.reason != "empty_document":
+        raise ReportArtefactError(
+            f"{read.path} could not be read ({read.reason}: {read.error_type}). "
+            "A damaged artefact is not a fit that has yet to produce one."
+        )
+    return read
+
+
 def read_manifest(directory: str = ".") -> dict:
-    """The fit manifest for a rendered report, or an empty dict when absent."""
+    """The fit manifest for a rendered report, or an empty dict when absent.
+
+    Deliberately **not** routed through the shared strict JSON reader, unlike
+    the diagnostics payload. ``write_json_atomic`` serialises with Python's
+    default ``allow_nan``, so a definition field holding a non-finite float is
+    written as a bare ``NaN`` token; the strict reader rejects those, and every
+    manifest already on disk has to stay readable. The report's own tolerance
+    for a manifest it cannot parse is what it always was: render the fit's
+    pages without the fields the manifest would have supplied.
+    """
     path = os.path.join(directory, MANIFEST_FILENAME)
     if not os.path.isfile(path):
         return {}
@@ -250,15 +294,15 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
 
 def fitted_parameters(directory: str = ".") -> set[str]:
     """Names of the parameters this fit actually sampled, from its diagnostics."""
-    path = os.path.join(directory, "diagnostics.csv")
-    if not os.path.isfile(path):
+    read = read_csv(os.path.join(directory, "diagnostics.csv"), index_col=0)
+    if read.status == "missing" or read.reason == "empty_document":
         return set()
-    import pandas as pd
-
-    try:
-        return {str(name) for name in pd.read_csv(path, index_col=0).index}
-    except (OSError, ValueError):
-        return set()
+    if read.status == "invalid":
+        raise ReportArtefactError(
+            f"{read.path} could not be read ({read.reason}: {read.error_type}); "
+            "the parameters this fit sampled cannot be established."
+        )
+    return {str(name) for name in read.value.index}
 
 
 def _correlated_block_size(definition: dict) -> int:
@@ -1084,17 +1128,16 @@ _OUTCOME_LABELS = {
 
 
 def _read(directory: str, name: str):
-    """A summary CSV, or None when this engine does not write it."""
-    import pandas as pd
+    """A summary CSV, or None when this engine does not write it.
 
-    path = os.path.join(directory, f"{name}.csv")
-    if not os.path.isfile(path):
+    An empty table reads as absent, as it always has: a section with no rows to
+    show and a section this engine never writes both render as pending. A
+    *damaged* file raises through :func:`_table` instead.
+    """
+    read = _table(directory, name)
+    if read.status != "present":
         return None
-    try:
-        frame = pd.read_csv(path)
-    except (OSError, ValueError):
-        return None
-    return frame if not frame.empty else None
+    return read.value if not read.value.empty else None
 
 
 def _peak_row(frame, column: str):
@@ -1367,15 +1410,16 @@ def render_variation_table(directory: str = ".") -> None:
     number, so the alias row is labelled with the age it refers to and a second
     table gives the scale across the reported ages (#233).
     """
-    import pandas as pd
-
-    path = os.path.join(directory, "diagnostics.csv")
-    if not os.path.isfile(path):
+    read = read_csv(os.path.join(directory, "diagnostics.csv"), index_col=0)
+    if read.status == "missing" or read.reason == "empty_document":
         return
-    try:
-        frame = pd.read_csv(path, index_col=0)
-    except (OSError, ValueError):
+    if read.status == "invalid":
+        print(
+            "_The diagnostics table for this fit could not be read "
+            f"(`{read.reason}`), so the between-group scales are not shown._"
+        )
         return
+    frame = read.value
 
     labels = {
         "tau": "Between studies",
@@ -1494,19 +1538,21 @@ def render_loo_section(directory: str = ".") -> None:
     """
     import pandas as pd
 
-    path = os.path.join(directory, "loo_summary.csv")
-    if not os.path.isfile(path):
+    read = read_csv(os.path.join(directory, "loo_summary.csv"))
+    if read.status == "missing":
         print(
             "_No leave-one-out summary for this fit (`loo_summary.csv` absent — "
             "it was added on 2026-08-16, so fits made before then need a refit "
             "to produce it)._"
         )
         return
-    try:
-        table = pd.read_csv(path)
-    except (OSError, ValueError):
-        print("_The leave-one-out summary for this fit could not be read._")
+    if read.status == "invalid":
+        print(
+            "_The leave-one-out summary for this fit could not be read "
+            f"(`{read.reason}`)._"
+        )
         return
+    table = read.value
     if table.empty:
         print("_The leave-one-out summary for this fit is empty._")
         return
@@ -2040,16 +2086,22 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     ``diagnostics_summary.json``, the manifest's sampling parameters and
     ``diagnostics.csv`` (for which parameter set each extreme) and says it.
     """
-    path = os.path.join(directory, "diagnostics_summary.json")
-    if not os.path.isfile(path):
+    # The strict shared JSON reader is safe for this file specifically: the
+    # shared diagnostics writer sanitises non-finite values before writing it,
+    # so a bare NaN or Infinity token here would itself be the defect. The fit
+    # manifest is deliberately *not* read this way -- see `read_manifest`.
+    read = read_json(os.path.join(directory, "diagnostics_summary.json"))
+    if read.status == "missing":
         print("_No `diagnostics_summary.json` for this fit, so the gate verdict cannot be shown._")
         return
-    try:
-        with open(path, encoding="utf-8") as handle:
-            summary = json.load(handle)
-    except (OSError, ValueError):
-        print("_The diagnostics summary for this fit could not be read._")
+    if read.status == "invalid" or not isinstance(read.value, dict):
+        print(
+            "_The diagnostics summary for this fit could not be read "
+            f"(`{read.reason or 'not a JSON object'}`), so the gate verdict "
+            "cannot be shown._"
+        )
         return
+    summary = read.value
 
     thresholds = summary.get("thresholds") or {}
     rhat_max = thresholds.get("rhat_max", 1.01)
@@ -2873,7 +2925,9 @@ def render_conditional_production_check(directory: str = ".") -> None:
     for level in _CONDITIONAL_PRODUCTION_LEVELS:
         if level > x_max or float(level) not in observed_rows.index:
             continue
-        row = curve.iloc[int((curve["words_understood"] - level).abs().idxmin())]
+        row = nearest_row(curve, key="words_understood", at=float(level))
+        if row is None:
+            continue
         seen = observed_rows.loc[float(level)]
         curve_cell = f"{float(row['q_median']):.2f}"
         if has_ci:
@@ -2953,8 +3007,11 @@ def render_reference_child_calibration(directory: str = ".") -> None:
         col = next((c for c in table.columns if c.startswith("Ey_median")), None)
         if col is None or table.empty:
             return None
-        i = int((table["age_months"] - age).abs().idxmin())
-        return None if abs(float(table["age_months"].iloc[i]) - age) > 0.6 else float(table[col].iloc[i])
+        # The 0.6-month bound is the point: this reads the monthly summary at
+        # the age asked for, and a grid that does not carry that age must give
+        # nothing rather than the nearest one it happens to have.
+        row = nearest_row(table, key="age_months", at=float(age), max_distance=0.6)
+        return None if row is None else float(row[col])
 
     has_weighted = any(w is not None for _, _, _, w in outcomes)
     header = ["Age", "Outcome", "Reference child"]

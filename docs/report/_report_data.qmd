@@ -15,6 +15,7 @@ import pandas as pd
 from dse_research_utils.report.data import ReportData
 from dse_research_utils.report.data import num as _num
 from dse_research_utils.report.data import show_or_pending as _show_or_pending
+from dse_research_utils.report.readers import nearest_row
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 FIG_ROOT = Path("figures")
@@ -109,8 +110,8 @@ def comp_at(name, match_col, match_val, col):
     df = comp_load(name)
     if df is None or match_col not in df or col not in df:
         return None
-    row = df.iloc[(df[match_col] - match_val).abs().argmin()]
-    return row[col]
+    row = nearest_row(df, key=match_col, at=match_val)
+    return None if row is None else row[col]
 
 
 def words(model_id, summary, age_months, column="Ey_median"):
@@ -177,7 +178,7 @@ def comp_row(name, grid_col, grid_val, *, prefix="d", bare=False):
     if bare:
         df = df.rename(
             columns={c: f"{prefix}_{c}" for c in _BARE_COLS if c in df.columns})
-    return df.iloc[int((df[grid_col] - grid_val).abs().argmin())]
+    return nearest_row(df, key=grid_col, at=grid_val)
 
 
 def band(row, prefix="d", fmt="{:.1f}", unit=""):

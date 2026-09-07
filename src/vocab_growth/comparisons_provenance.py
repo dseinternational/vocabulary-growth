@@ -31,9 +31,10 @@ source is caught the way one that outlives a refit is.
 
 from __future__ import annotations
 
-import hashlib
 import os
 from datetime import UTC, datetime
+
+from dse_research_utils.metadata.provenance import sha256_file
 
 from vocab_growth.fit_artifacts import (
     FIT_MANIFEST_FILENAME,
@@ -45,11 +46,15 @@ COMPARISON_MANIFEST_FILENAME = "comparison_manifest.json"
 
 
 def _file_sha256(path: str) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return f"sha256:{digest.hexdigest()}"
+    """The recorded digest of one file: the shared hash, this project's prefix.
+
+    :func:`dse_research_utils.metadata.provenance.sha256_file` returns the bare
+    lowercase hexadecimal digest of the file's bytes, read in the same bounded
+    chunks; the ``sha256:`` prefix is this repository's stored form and stays
+    here, so every digest already written into a ``comparison_manifest.json``
+    still compares equal.
+    """
+    return f"sha256:{sha256_file(path)}"
 
 
 def fit_manifest_fingerprint(model_output_dir: str) -> dict:

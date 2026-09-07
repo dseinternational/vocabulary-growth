@@ -67,44 +67,103 @@ def test_write_fit_manifest_records_data_code_and_sampling(tmp_path):
     assert isinstance(manifest["runtime"]["direct_package_origins"], dict)
 
 
-def test_git_metadata_records_detached_head_as_null(monkeypatch):
-    outputs = {
-        ("rev-parse", "HEAD"): "abc123\n",
-        ("branch", "--show-current"): "\n",
-        ("status", "--porcelain", "--untracked-files=normal"): "",
+def _git(repository: Path, *arguments: str) -> str:
+    """Run one Git command in ``repository`` with no ambient identity."""
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            *arguments,
+        ],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _repository(tmp_path: Path) -> Path:
+    """A one-commit repository, so a commit and a branch both exist."""
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    _git(repository, "init", "--initial-branch=main", "--quiet")
+    (repository / "tracked.txt").write_text("one", encoding="utf-8")
+    _git(repository, "add", "tracked.txt")
+    _git(repository, "commit", "--quiet", "-m", "initial")
+    return repository
+
+
+def test_git_metadata_records_a_clean_checkout(tmp_path):
+    """The four recorded keys, against a real repository rather than a stub.
+
+    ``validate_fit_output`` turns ``dirty is not False`` into a refusal to
+    resume or publish, so "clean" has to be recorded as exactly ``False`` --
+    not ``None``, which is what an unavailable query records.
+    """
+    repository = _repository(tmp_path)
+
+    assert git_metadata(str(repository)) == {
+        "commit": _git(repository, "rev-parse", "HEAD"),
+        "branch": "main",
+        "detached": False,
+        "dirty": False,
     }
 
-    def fake_run(command, **kwargs):
-        del kwargs
-        return subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=outputs[tuple(command[1:])],
-            stderr="",
-        )
 
-    monkeypatch.setattr("vocab_growth.fit_artifacts.subprocess.run", fake_run)
+def test_git_metadata_records_detached_head_as_null(tmp_path):
+    repository = _repository(tmp_path)
+    commit = _git(repository, "rev-parse", "HEAD")
+    _git(repository, "checkout", "--quiet", "--detach", commit)
 
-    metadata = git_metadata("/repo")
-
-    assert metadata == {
-        "commit": "abc123",
+    assert git_metadata(str(repository)) == {
+        "commit": commit,
         "branch": None,
         "detached": True,
         "dirty": False,
     }
 
 
-def test_git_metadata_distinguishes_unavailable_git(monkeypatch):
-    def fail_run(command, **kwargs):
-        del command, kwargs
-        raise OSError("git unavailable")
+def test_git_metadata_counts_an_untracked_file_as_dirty(tmp_path):
+    """Untracked entries are dirt, and ignored ones are not.
 
-    monkeypatch.setattr("vocab_growth.fit_artifacts.subprocess.run", fail_run)
+    Both halves matter to ``require_clean_fit``: a fit whose output directory
+    happens to sit inside the checkout must not be recorded as dirty for that
+    reason, while a genuinely uncommitted source file must be.
+    """
+    repository = _repository(tmp_path)
+    (repository / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+    _git(repository, "add", ".gitignore")
+    _git(repository, "commit", "--quiet", "-m", "ignore")
+    (repository / "ignored").mkdir()
+    (repository / "ignored" / "trace.nc").write_bytes(b"artefact")
+    assert git_metadata(str(repository))["dirty"] is False
 
-    metadata = git_metadata("/repo")
+    (repository / "untracked.py").write_text("x = 1\n", encoding="utf-8")
+    assert git_metadata(str(repository))["dirty"] is True
 
-    assert metadata == {
+
+def test_git_metadata_distinguishes_unavailable_git(tmp_path):
+    """A directory that is not a working tree records nothing, not a clean one.
+
+    ``dirty`` must stay ``None`` here. ``False`` would let an unverifiable
+    checkout satisfy the publication provenance check.
+    """
+    outside = tmp_path / "not-a-repo"
+    outside.mkdir()
+
+    assert git_metadata(str(outside)) == {
+        "commit": None,
+        "branch": None,
+        "detached": None,
+        "dirty": None,
+    }
+    assert git_metadata(str(tmp_path / "absent")) == {
         "commit": None,
         "branch": None,
         "detached": None,

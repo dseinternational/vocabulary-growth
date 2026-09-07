@@ -1728,3 +1728,71 @@ def test_reference_child_calibration_sets_the_curve_beside_the_sample(tmp_path, 
 def test_reference_child_calibration_says_so_without_a_monthly_summary(tmp_path, capsys):
     report_cells.render_reference_child_calibration(str(_fit(tmp_path)))
     assert "no monthly summary" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Read states (dse-research-utils 0.14.0)
+# ---------------------------------------------------------------------------
+# The report's artefact reads distinguish three states rather than two. A file
+# this engine never writes and a file that cannot be parsed used to be the same
+# thing here -- both rendered the pending-fit placeholder, which tells a reader
+# "this fit has yet to produce it" about a fit that produced something damaged.
+
+
+def test_a_damaged_summary_is_not_a_fit_that_has_yet_to_produce_one(tmp_path):
+    """A parse failure raises; the placeholder is reserved for absence."""
+    (tmp_path / "posterior_summary.csv").write_text(
+        'age_months,Ey_median\n1,2\n"unterminated\n', encoding="utf-8"
+    )
+
+    assert report_cells._read(str(tmp_path), "absent_table") is None
+    with pytest.raises(report_cells.ReportArtefactError, match="parse_error"):
+        report_cells._read(str(tmp_path), "posterior_summary")
+
+
+def test_a_table_written_with_no_rows_still_reads_as_absent(tmp_path):
+    """`pd.DataFrame([]).to_csv()` writes a bare newline, not a damaged file.
+
+    Several writers here build their table from a list of row dicts and write
+    it whatever that list contains. With no rows the frame has no columns at
+    all, and the file records "there was nothing to tabulate" — which the
+    report has always rendered as pending, and must keep rendering that way.
+    """
+    pd.DataFrame([]).to_csv(tmp_path / "posterior_summary.csv", index=False)
+    (tmp_path / "diagnostics.csv").write_text("\n", encoding="utf-8")
+
+    assert report_cells._read(str(tmp_path), "posterior_summary") is None
+    assert report_cells.fitted_parameters(str(tmp_path)) == set()
+
+
+def test_a_damaged_diagnostics_table_does_not_silently_empty_the_prior_check(tmp_path):
+    """`fitted_parameters` decides which priors a report claims were sampled.
+
+    Returning an empty set for an unreadable file would silently withdraw every
+    parameter from the priors table instead of saying the file is damaged.
+    """
+    (tmp_path / "diagnostics.csv").write_text(
+        'name,r_hat\neta_u,1.0\n"unterminated\n', encoding="utf-8"
+    )
+
+    with pytest.raises(report_cells.ReportArtefactError, match="diagnostics.csv"):
+        report_cells.fitted_parameters(str(tmp_path))
+
+
+def test_an_unreadable_gate_payload_says_so_rather_than_reporting_no_gate(tmp_path, capsys):
+    """Absent and unreadable are different sentences on the rendered page."""
+    report_cells.render_diagnostic_verdict(str(tmp_path))
+    assert "No `diagnostics_summary.json`" in capsys.readouterr().out
+
+    (tmp_path / "diagnostics_summary.json").write_text("{not json", encoding="utf-8")
+    report_cells.render_diagnostic_verdict(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "could not be read" in out and "parse_error" in out
+
+
+def test_an_unreadable_loo_summary_says_so_rather_than_reporting_none(tmp_path, capsys):
+    (tmp_path / "loo_summary.csv").write_text('a,b\n1,2\n"unterminated\n', encoding="utf-8")
+
+    report_cells.render_loo_section(str(tmp_path))
+    out = capsys.readouterr().out
+    assert "could not be read" in out and "parse_error" in out

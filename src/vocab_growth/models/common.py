@@ -39,6 +39,10 @@ import preliz as pz
 import pymc as pm
 import xarray as xr
 from arviz import ELPDData
+from dse_research_utils.statistics.models.hsgp_design import (
+    HSGPDesign,
+    calibrate_hsgp_1d,
+)
 from matplotlib.figure import Figure
 from preliz.distributions.distributions import Continuous
 
@@ -596,6 +600,40 @@ PACKAGE_LIST = [
 ]
 
 
+def hsgp_design_for(X_gp_domain_z, ell_range_z) -> HSGPDesign:
+    """The realised HSGP geometry for the age kernel: ``m``, ``L`` and centre.
+
+    :func:`dse_research_utils.statistics.models.hsgp_design.calibrate_hsgp_1d`
+    (shared library 0.14.0) applies PyMC's own ExpQuad recommendation to the
+    declared domain and length-scale range, then returns the geometry it
+    realised rather than the recipe. ``c_floor=None`` is this repository's
+    calibration unchanged: no boundary floor is imposed, so the basis count and
+    boundary factor are exactly what ``approx_hsgp_hyperparams`` recommends.
+
+    The boundary is the recommendation's factor times the domain's *half-range*
+    ``(x_max - x_min) / 2``, and the centre is its midpoint. That is the same S
+    the recommendation sizes ``(m, c)`` for, and the same midpoint
+    ``HSGP.prior_linearized`` centres X at. Deriving ``L`` from ``max|z|``
+    instead would inflate it past what ``m`` supports -- z-scores are skewed
+    about zero, not about the midpoint -- raising the smallest well-approximated
+    length-scale above ``ell_range_z[0]``.
+
+    Parameters
+    ----------
+    X_gp_domain_z : np.ndarray
+        Standardised lower and upper endpoints of the declared HSGP age domain,
+        shape (2, 1). Reporting query ages are deliberately excluded, so a
+        changed query cannot move the approximation.
+    ell_range_z : tuple of float
+        Length-scale range in z-score scale.
+    """
+    return calibrate_hsgp_1d(
+        X_gp_domain_z,
+        ls_range=(float(ell_range_z[0]), float(ell_range_z[1])),
+        c_floor=None,
+    )
+
+
 def get_hsgp_hyperparams(
     X_gp_domain_z,
     ell_range_z,
@@ -615,31 +653,12 @@ def get_hsgp_hyperparams(
     -------
     tuple[list[float], list[int]]
         ``(L, M)`` where ``L`` is the HSGP boundary and ``M`` is the basis
-        size, each wrapped in a single-element list (one per input dim).
+        size, each wrapped in a single-element list (one per input dim) as
+        ``pm.gp.HSGP`` takes them. :func:`hsgp_design_for` returns the same
+        geometry as one saveable record.
     """
-    x_min = float(np.min(X_gp_domain_z))
-    x_max = float(np.max(X_gp_domain_z))
-
-    ell_low_z = ell_range_z[0]
-    ell_high_z = ell_range_z[1]
-
-    m, c = pm.gp.hsgp_approx.approx_hsgp_hyperparams(
-        x_range=[x_min, x_max],
-        lengthscale_range=[ell_low_z, ell_high_z],
-        cov_func="expquad",
-    )
-
-    # HSGP.prior_linearized centres X at the grid midpoint, so the domain the
-    # basis must cover is the half-range S = (x_max - x_min) / 2 — the same S
-    # that approx_hsgp_hyperparams sizes (m, c) for. Deriving L from max|z|
-    # instead would inflate L past what m supports (z-scores are skewed about
-    # zero, not about the midpoint), raising the smallest well-approximated
-    # length-scale above ell_range_z[0].
-    S = (x_max - x_min) / 2.0
-    L = [S * c]
-    M = [m]
-
-    return L, M
+    design = hsgp_design_for(X_gp_domain_z, ell_range_z)
+    return [design.L], [design.m]
 
 
 def render_model_graph(model: pm.Model, output_dir: str) -> None:

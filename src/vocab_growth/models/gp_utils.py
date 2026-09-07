@@ -48,6 +48,7 @@ from dataclasses import dataclass
 import numpy as np
 import pymc as pm
 import pytensor.tensor as pt
+from dse_research_utils.statistics.models.hsgp_design import HSGPDesign, create_hsgp
 from dse_research_utils.statistics.models.pymc_utils import logit
 from pytensor.tensor.linalg import solve as pt_solve
 
@@ -960,15 +961,29 @@ def _gp_from_mean(
     )
     eta = cfg_eta.to_pymc(f"eta{suffix}")
     cov = pm.gp.cov.ExpQuad(1, ls=ell)
-    hsgp = pm.gp.HSGP(cov_func=cov, m=grid.M, L=grid.L)
     if grid.x_center_z is not None:
-        # PyMC (6.3.1) exposes no constructor argument for the basis centre; it
-        # sets `_X_center` lazily from min/max of the X passed to `prior`, guarded
-        # by a None check (pymc/gp/hsgp_approx.py). Pre-setting it here pins the
-        # centre to the declared GP domain's midpoint so the reporting grid
-        # cannot move the approximation. Covered by a regression test against the
-        # locked PyMC version.
-        hsgp._X_center = np.array([float(grid.x_center_z)])
+        # The realised geometry, as three saved scalars: basis count, domain
+        # half-width, and the centre the basis is built about. Handing them to
+        # `create_hsgp` (shared library 0.14.0) pins the centre through a public
+        # PyMC call on the centre alone, before any query row enters the object.
+        #
+        # It replaces an assignment to the private `_X_center`. PyMC (6.3.1)
+        # exposes no constructor argument for the centre and sets it lazily from
+        # the min/max of the X passed to `prior`, guarded by a None check
+        # (pymc/gp/hsgp_approx.py), so the reporting grid would otherwise move
+        # the approximation. The pinned value is identical either way -- for a
+        # single row, `(max + min) / 2` is that row -- and a regression test
+        # against the locked PyMC version checks the resulting basis.
+        hsgp = create_hsgp(
+            HSGPDesign(m=grid.M[0], L=grid.L[0], center=float(grid.x_center_z)),
+            cov_func=cov,
+        )
+    else:
+        # No declared centre: PyMC's own, taken from the query rows. Only the
+        # exploratory modules and the experiment arms that deliberately test
+        # that default reach this branch; every registered engine builds its
+        # grid through `GPGrid.from_age_grids`, which sets one.
+        hsgp = pm.gp.HSGP(cov_func=cov, m=grid.M, L=grid.L)
     g_unit = hsgp.prior(f"g_unit{suffix}", X=X_all_z_data, dims="all_id")
     if anchor_idx is not None:
         if n_obs is None or nuisance_basis is None:

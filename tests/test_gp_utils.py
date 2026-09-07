@@ -22,7 +22,7 @@ import pytensor.tensor as pt
 import pytest
 
 from vocab_growth.models.build_utils import CLAMP_SOFTNESS
-from vocab_growth.models.common import get_hsgp_hyperparams
+from vocab_growth.models.common import get_hsgp_hyperparams, hsgp_design_for
 from vocab_growth.models.definitions import SubjectFactorPriorParams
 from vocab_growth.models.gp_utils import (
     CHILD_FACTOR_ANCHOR_ORDER,
@@ -639,3 +639,56 @@ def test_pinned_centre_decouples_the_basis_from_appended_query_rows():
     )
     assert not np.allclose(lazy_base, lazy_extended[:9])
 
+
+
+# --- saved HSGP geometry (dse-research-utils 0.14.0) ---------------------------
+#
+# `get_hsgp_hyperparams` now returns the two lists `pm.gp.HSGP` takes, taken
+# from a realised `HSGPDesign`; `_gp_from_mean` builds the object from that
+# record through the shared factory rather than by assigning PyMC's private
+# `_X_center`. The geometry is the fit's, so these check that it is the same
+# geometry and that it replays unchanged on grids other than the one it came
+# from.
+
+
+def test_the_saved_design_is_the_geometry_the_engines_build_from():
+    """One record, three scalars, agreeing with the pair the engines pass on."""
+    domain = np.array([[-1.5], [3.5]])
+    ell_range_z = (0.3, 1.2)
+
+    design = hsgp_design_for(domain, ell_range_z)
+    L, M = get_hsgp_hyperparams(domain, ell_range_z)
+
+    assert [design.L] == L and [design.m] == M
+    # The centre is the declared domain's midpoint, which is what
+    # `GPGrid.from_age_grids` pins, and not the midpoint of any query grid.
+    assert design.center == 1.0
+    assert design.calibration_version == "pymc-expquad-v1"
+
+
+def test_saved_geometry_replays_on_subset_and_extended_grids():
+    """The #234 property, now a property of the record rather than of a pin.
+
+    A basis built from saved geometry evaluates each row the same way whatever
+    else is in the array with it: a subset gives the same rows as the full
+    grid, and appending reporting ages beyond the observed range leaves the
+    shared rows untouched. Without a fixed centre, PyMC takes it from the
+    min/max of whatever it is handed, so both of these would move.
+    """
+    from dse_research_utils.statistics.models.hsgp_design import (
+        HSGPDesign,
+        create_hsgp,
+    )
+
+    low, high = -2.5, 1.9
+    design = HSGPDesign(m=24, L=(high - low) / 2 * 1.7, center=(low + high) / 2)
+    rows = np.linspace(low, high, 40).reshape(-1, 1)
+
+    with pm.Model():
+        gp = create_hsgp(design, cov_func=pm.gp.cov.ExpQuad(1, ls=0.4))
+        full = gp.prior_linearized(rows)[0].eval()
+        subset = gp.prior_linearized(rows[7:19])[0].eval()
+        extended = gp.prior_linearized(np.vstack([rows, [[high]], [[low]]]))[0].eval()
+
+    np.testing.assert_array_equal(full[7:19], subset)
+    np.testing.assert_array_equal(full, extended[: len(rows)])

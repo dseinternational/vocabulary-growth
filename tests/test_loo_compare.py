@@ -37,11 +37,19 @@ def _make_trace(u_mask, s_mask, u_ll, s_ll, *, constant_data=True):
     ``u_ll`` / ``s_ll`` are (chain, draw, factor) arrays whose factor lengths
     must match the mask counts (unless a test deliberately breaks that).
     """
+    u_values = np.asarray(u_ll, dtype=float)
     log_likelihood = xr.Dataset(
         {
-            "y_u_obs": (("chain", "draw", "obs_u_id"), np.asarray(u_ll, dtype=float)),
+            "y_u_obs": (("chain", "draw", "obs_u_id"), u_values),
             "y_s_obs": (("chain", "draw", "obs_s_id"), np.asarray(s_ll, dtype=float)),
-        }
+        },
+        # The chain and draw labels a trace read back from `trace.nc` carries.
+        # The combination is by explicit unit now, and it checks that the
+        # factors it sums were drawn from the same samples.
+        coords={
+            "chain": np.arange(u_values.shape[0]),
+            "draw": np.arange(u_values.shape[1]),
+        },
     )
     groups = {"log_likelihood": log_likelihood}
     if constant_data:

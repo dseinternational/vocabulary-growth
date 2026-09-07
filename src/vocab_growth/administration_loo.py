@@ -33,7 +33,13 @@ administrations, silently.
 The mechanics are ``scripts/loo_compare.py``'s ``_attach_joint_log_likelihood``,
 which has computed this correctly for the bivariate case since #236 -- generalised
 to any number of factors, including matrix-valued ones, and moved where the fit
-pipeline itself can use it.
+pipeline itself can use it. Since the shared library's 0.14.0 release the
+summation itself is
+:func:`dse_research_utils.statistics.log_likelihood.aggregate_log_likelihood`,
+which takes the output units *explicitly* rather than inferring them from a
+mask. What stays here is everything that decides which unit a row belongs to:
+the factor/mask pairs each engine declares, the refusal to score a partial set
+of factors, and the finding-3 check below.
 
 **Repeated administrations of the same child remain separate cases.** This
 scores prediction of another administration like those in the frame, not
@@ -47,6 +53,12 @@ from dataclasses import dataclass
 
 import numpy as np
 import xarray as xr
+from dse_research_utils.statistics.log_likelihood import (
+    LogLikelihoodFactor as SharedLikelihoodFactor,
+)
+from dse_research_utils.statistics.log_likelihood import (
+    aggregate_log_likelihood,
+)
 
 #: Name of the combined pointwise likelihood attached to the trace, and the
 #: dimension it is indexed by. ``obs_joint`` is the name
@@ -100,11 +112,35 @@ def administration_log_likelihood(
     present with a mask that does not match its rows **does** raise: that is the
     finding-3 defect, and silently summing the wrong rows onto the wrong
     administrations is exactly what must not happen.
+
+    The shared aggregator adds two refusals this had none of. A likelihood
+    containing ``NaN`` or ``+inf`` raises instead of propagating into a
+    plausible-looking score, while ``-inf`` is retained because an impossible
+    observation genuinely has that log likelihood. Values are summed in
+    float64, which every engine here already stores. Declaring one trace
+    variable as two factors is refused here rather than by the shared helper --
+    see the comment on the check.
     """
     log_likelihood = getattr(trace, "log_likelihood", None)
     constant_data = getattr(trace, "constant_data", None)
     if log_likelihood is None or constant_data is None:
         return None
+
+    # Selecting non-overlapping factors is the caller's responsibility, and the
+    # shared aggregator cannot check it for us: indexing a Dataset twice yields
+    # two distinct objects, so its own duplicate-array guard does not see a
+    # variable named twice. One repeated name is the whole of the overlap this
+    # repository can have -- the factor tuples are engine-declared constants
+    # over disjoint trace variables -- and it would double the term rather than
+    # fail, producing a total that is simply wrong with nothing in the result
+    # to show it.
+    names = [factor.variable for factor in factors]
+    if len(set(names)) != len(names):
+        raise ValueError(
+            "A log-likelihood factor was declared more than once "
+            f"({sorted(name for name in set(names) if names.count(name) > 1)}); "
+            "its contribution would be summed onto the same administrations twice."
+        )
 
     usable: list[tuple[xr.DataArray, np.ndarray]] = []
     for factor in factors:
@@ -134,30 +170,38 @@ def administration_log_likelihood(
     if not any_mask.any():
         return None
 
-    # Position of each administration among the rows the combined score keeps.
-    position = np.cumsum(any_mask) - 1
-    template = usable[0][0]
-    n_chain = template.sizes["chain"]
-    n_draw = template.sizes["draw"]
-    combined = np.zeros((n_chain, n_draw, int(any_mask.sum())), dtype=float)
-
-    for array, mask in usable:
-        dim = _factor_dim(array)
-        values = array.transpose("chain", "draw", dim, ...).values
-        if values.ndim > 3:
-            # A composition factor: sum its cells into the row's contribution.
-            values = values.reshape(n_chain, n_draw, values.shape[2], -1).sum(axis=-1)
-        np.add.at(combined, (slice(None), slice(None), position[mask]), values)
-
-    return xr.DataArray(
-        combined,
-        dims=("chain", "draw", ADMINISTRATION_DIM),
-        coords={
-            "chain": template["chain"].values,
-            "draw": template["draw"].values,
-            ADMINISTRATION_DIM: np.flatnonzero(any_mask),
-        },
+    # The unit is the administration row of the analysis frame, named by its
+    # own position in that frame. Handing the shared helper the frame positions
+    # -- rather than a mask, or a rank among the kept rows -- is what makes the
+    # mapping legible: `obs_joint` then *is* `np.flatnonzero(any_mask)`, the
+    # same coordinate the combined score has carried since #266, and a factor
+    # whose mask disagrees with its rows can no longer land on a neighbour.
+    combined = aggregate_log_likelihood(
+        [
+            SharedLikelihoodFactor(
+                values=array,
+                row_dim=_factor_dim(array),
+                # Rows of this factor, in the order it stores them, named by
+                # the administration each covers.
+                row_unit_ids=np.flatnonzero(mask),
+                # A composition factor is stored per row *and* per cell; the
+                # cells are summed within the row, exactly as ArviZ folds a
+                # pointwise likelihood's trailing dimensions.
+                event_dims=tuple(
+                    dim
+                    for dim in array.dims
+                    if dim not in ("chain", "draw", _factor_dim(array))
+                ),
+            )
+            for array, mask in usable
+        ],
+        unit_ids=np.flatnonzero(any_mask),
+        unit_dim=ADMINISTRATION_DIM,
     )
+    # The shared helper names its result `log_likelihood`; this one is stored
+    # under `ADMINISTRATION_VAR`, and a name that says otherwise would be read
+    # back from the trace.
+    return combined.rename(ADMINISTRATION_VAR)
 
 
 def attach_administration_log_likelihood(
