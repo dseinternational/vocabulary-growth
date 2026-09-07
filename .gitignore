@@ -191,3 +191,6 @@ Desktop.ini
 *.pdf
 # Staged beside the comparison artefacts by the publication tail; provenance for the sync, not book input.
 docs/comparison/comparison_manifest.json
+
+# numba compilation cache pytensor writes into the working directory on Windows
+packagespytensor/
