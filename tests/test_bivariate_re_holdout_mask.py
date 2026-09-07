@@ -266,3 +266,128 @@ def test_extract_model_samples_guards_against_misaligned_mask(tmp_path, monkeypa
 
     with pytest.raises(ValueError, match="#67"):
         extract_model_samples(bad_trace)
+
+
+# --- The subject-marginal conversion rate (issue #233) ------------------------
+
+
+def _q_re_definition():
+    """VG07 with a child effect on both outcomes -- VG10's structure, cheaply."""
+    return replace(VG07, use_subject_re_u=True, use_subject_re_q=True)
+
+
+def test_the_subject_marginal_conversion_rate_is_the_same_child_as_the_spoken_one(
+    tmp_path, monkeypatch
+):
+    """``q_*_subject_marginal`` must be the rate inside the stored ``p_s``.
+
+    The engine already stored a subject-marginal ``p_u`` and ``p_s`` and threw
+    the rate between them away, so the reports had a population ``q`` and no way
+    to say what share of their own comprehension a freshly drawn child converts
+    (issue #233). Storing a *recomputed* rate would be worse than storing none:
+    the unseen child differs by model -- correlated under ``rho_uq``, a (b0, b1)
+    pair for VG19, a factor block for VG22 -- and rebuilding it outside this
+    function is how the correlation came to be silently dropped once before
+    (#224).
+
+    So the claim to pin is identity, not similarity: ``p_s = p_u * q`` must hold
+    draw by draw on both grids, which it can only do if all three come from one
+    child.
+    """
+    definition = _q_re_definition()
+    context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
+
+    context.set_trace(_prior_as_posterior_trace(context))
+    sample_posterior_predictive(context, definition)
+    predictive = _as_dataset(context.trace["posterior_predictive"])
+
+    for grid in ("plot", "query"):
+        np.testing.assert_allclose(
+            predictive[f"p_s_{grid}_subject_marginal"].values,
+            predictive[f"p_u_{grid}_subject_marginal"].values
+            * predictive[f"q_{grid}_subject_marginal"].values,
+            rtol=0,
+            atol=0,
+        )
+
+
+def test_the_stored_rate_is_not_the_population_rate(tmp_path, monkeypatch):
+    """A child effect on ``q`` must make the two estimands actually differ.
+
+    Otherwise the new columns would be a relabelling of the old ones, and the
+    identity above would hold trivially.
+    """
+    definition = _q_re_definition()
+    context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
+
+    context.set_trace(_prior_as_posterior_trace(context))
+    sample_posterior_predictive(context, definition)
+
+    population = _as_dataset(context.trace["posterior"])["q_query"].values
+    marginal = _as_dataset(context.trace["posterior_predictive"])[
+        "q_query_subject_marginal"
+    ].values
+    assert not np.allclose(population, marginal)
+
+
+def test_the_rate_columns_appear_only_for_a_model_with_a_child_effect_on_q(
+    tmp_path, monkeypatch
+):
+    """VG07 has no ``tau_subj_q``, so its population and new-child rates coincide.
+
+    Emitting both blocks there would tell a reader the model distinguishes two
+    estimands it does not.
+    """
+    from vocab_growth.models.common_bivariate import posterior_summary
+
+    for definition, expect_columns in ((_q_re_definition(), True), (VG07, False)):
+        context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
+        context.set_trace(_prior_as_posterior_trace(context))
+        sample_posterior_predictive(context, definition)
+        posterior_summary(context)
+
+        summary_q = context.dataframes["posterior_summary_q"]
+        # The historical population column is unconditional and keeps its name:
+        # `sensitivity/compare.py` and every report cell read it.
+        assert "q_median" in summary_q.columns
+        for column in (
+            "q_population_median",
+            "q_subject_marginal_median",
+            "q_subject_marginal_ci_lo",
+            "q_subject_marginal_ci_hi",
+        ):
+            assert (column in summary_q.columns) is expect_columns, column
+        # A rate is not a count of anything: `q * n_trials` would be the spoken
+        # total only for a child who understood the whole inventory.
+        assert not [c for c in summary_q.columns if c.startswith("Ey_")]
+
+
+def test_a_trace_written_before_the_rate_existed_still_loads(tmp_path, monkeypatch):
+    """Every fit of record predates these nodes (issue #233).
+
+    Requiring them would make the whole extractor fail on those traces rather
+    than leave one estimand unavailable, which would stop `regenerate_plots.py`,
+    the sensitivity comparisons and `loso_compare.py` reading any of them.
+    """
+    definition = _q_re_definition()
+    context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
+    context.set_trace(_prior_as_posterior_trace(context))
+    sample_posterior_predictive(context, definition)
+
+    predictive = _as_dataset(context.trace["posterior_predictive"]).drop_vars(
+        ["q_query_subject_marginal", "q_plot_subject_marginal"]
+    )
+    older = xr.DataTree.from_dict(
+        {
+            "posterior": _as_dataset(context.trace["posterior"]),
+            "posterior_predictive": predictive,
+            "constant_data": _as_dataset(context.trace["constant_data"]),
+            "observed_data": _as_dataset(context.trace["observed_data"]),
+        }
+    )
+
+    samples = extract_model_samples(older)
+    assert samples.q_query_subject_marginal is None
+    assert samples.q_plot_subject_marginal is None
+    # The rest of the extraction is unaffected.
+    assert samples.q_query.shape[0] == samples.X_query.shape[0]

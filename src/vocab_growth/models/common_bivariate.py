@@ -188,6 +188,8 @@ class BivariateModelSamples:
     # Production rate (q) samples
     q_plot: np.ndarray
     q_query: np.ndarray
+    q_query_subject_marginal: np.ndarray | None
+    q_plot_subject_marginal: np.ndarray | None
 
     # Spoken (S) samples (derived)
     f_s_plot: np.ndarray
@@ -877,6 +879,16 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     p_s_plot_subject_marginal = _optional_posterior_predictive(
         trace, "p_s_plot_subject_marginal", "plot_id"
     )
+    # Optional for the same reason and one more: no fit made before 2026-09-07
+    # stores them at all (issue #233), so requiring them would make every
+    # existing fit unreadable by this extractor rather than merely unable to
+    # report one estimand.
+    q_query_subject_marginal = _optional_posterior_predictive(
+        trace, "q_query_subject_marginal", "query_id"
+    )
+    q_plot_subject_marginal = _optional_posterior_predictive(
+        trace, "q_plot_subject_marginal", "plot_id"
+    )
 
     # Constant data
     X_obs = np.array(trace.constant_data["X_obs"].values)
@@ -901,6 +913,8 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
         kappa_u_query=kappa_u_query,
         q_plot=q_plot,
         q_query=q_query,
+        q_query_subject_marginal=q_query_subject_marginal,
+        q_plot_subject_marginal=q_plot_subject_marginal,
         f_s_plot=f_s_plot,
         p_s_plot=p_s_plot,
         p_s_query=p_s_query,
@@ -1458,6 +1472,25 @@ def sample_posterior_predictive(
         pm.Deterministic(
             "p_s_plot_subject_marginal", p_u_plot * q_plot, dims=("plot_id",)
         )
+        # The conversion rate for the same unseen child (issue #233). It was
+        # computed here and discarded, so the reports had a population `q` and a
+        # subject-marginal `p_s` built out of it, and no way to say what share of
+        # their own comprehension a freshly drawn child converts. It is not
+        # recoverable from the stored summaries: the ratio of the `p_s` and `p_u`
+        # medians is not the median of the ratio, and the two are correlated
+        # within a draw by construction.
+        #
+        # Written for every model, as the `p_*` pair above is. Where a model puts
+        # no child effect on `q` -- VG08 -- these equal the population rate, and
+        # that is a true statement about the graph rather than a mislabelling:
+        # its subject-marginal `p_s` is already the marginal `p_u` times this
+        # same population `q`.
+        pm.Deterministic(
+            "q_query_subject_marginal", q_query, dims=("query_id",)
+        )
+        pm.Deterministic(
+            "q_plot_subject_marginal", q_plot, dims=("plot_id",)
+        )
 
         # Understood — plot
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
@@ -1508,6 +1541,8 @@ def sample_posterior_predictive(
                 "y_s_query",
                 "p_s_query_subject_marginal",
                 "p_s_plot_subject_marginal",
+                "q_query_subject_marginal",
+                "q_plot_subject_marginal",
                 "y_s_obs",
             ],
             extend_inferencedata=True,
@@ -1616,6 +1651,22 @@ def posterior_summary(context: BivariateContext):
             "ci_hi": "q_ci_hi",
         }
     )
+    # The population rate above and the rate for a freshly drawn child, named as
+    # the two estimands they are (issue #233). Gated on the model actually
+    # carrying a child effect on `q`: without one the two coincide, and emitting
+    # duplicate columns would suggest the model distinguishes them. Gated too on
+    # the draws being present, because no fit made before 2026-09-07 stores them
+    # and `regenerate_plots.py` rebuilds these tables from fits that do not.
+    if (
+        "tau_subj_q" in context.model_variables
+        and samples.q_query_subject_marginal is not None
+    ):
+        summary_q = posterior_analysis.add_rate_estimand_columns(
+            summary_q,
+            samples.q_query,
+            samples.q_query_subject_marginal,
+            ci_prob=ci_prob,
+        )
     summary_q = posterior_analysis.trim_reported_ages(summary_q, report_max_u)
     dataframe_table(
         summary_q, title="Posterior summary — production rate q(a)", show_index=False

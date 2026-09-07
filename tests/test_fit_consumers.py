@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 
 import pytest
 
@@ -160,6 +161,59 @@ def test_both_exemptions_carry_a_reason():
     }
     for script, reason in fit_consumers.EXEMPT_CONSUMERS.items():
         assert len(reason) > 80, f"{script}'s exemption is asserted, not argued"
+
+
+def test_the_recovery_exemption_describes_what_the_harness_actually_does():
+    """The reason has to be checked, not asserted.
+
+    The first version of this entry said a stale truth draw is still a valid
+    parameter vector and that "staleness does not make the truth worse" -- which
+    argues *against* the check `truth_from_trace` makes, and would read as a
+    licence to remove it. It survived a review because nothing compared the
+    reason with the code.
+
+    So compare them. The claim is that the model-of-record trace is validated
+    inside the recovery harness, and against the same three things this module
+    checks: the registered definition, the raw-data fingerprint and the exact
+    prepared-frame hash.
+    """
+    import inspect
+
+    from vocab_growth.recovery import simulate
+
+    source = inspect.getsource(simulate.truth_from_trace)
+    assert "validate_fit_output(" in source
+    for argument in (
+        "expected_definition=",
+        "expected_source_data_hash=",
+        "expected_analysis_frame_hash=",
+    ):
+        assert argument in source, argument
+    # And it must refuse rather than warn.
+    assert "raise ValueError(" in source
+
+    # `simulate_replicate` is the only caller inside a run, and the checks are
+    # optional arguments -- so a caller that omitted them would silently skip
+    # every one of them.
+    caller = inspect.getsource(simulate.simulate_replicate)
+    assert "definition=definition," in caller
+    assert "source_data_hash=_current_source_data_hash()," in caller
+
+    # The staged half of the claim: a simulation carries its definition forward
+    # to whatever later fits it.
+    assert "expected_definition" in inspect.signature(simulate.load_simulation).parameters
+
+
+def test_the_compaction_exemption_describes_what_that_script_actually_does():
+    """The other entry's claim: it moves trace files and reads no posterior value."""
+    source = (
+        pathlib.Path(__file__).parents[1] / "scripts" / "compact_traces.py"
+    ).read_text(encoding="utf-8")
+    # Its own guard, which is the risk actually present when rewriting in place.
+    assert "promotion" in source.lower() or "in-flight" in source.lower()
+    # No summary or estimand is computed from the draws it moves.
+    for forbidden in ("posterior_summary", "add_probability_estimand_columns"):
+        assert forbidden not in source, forbidden
 
 
 def test_the_shared_override_flag_is_spelled_one_way():

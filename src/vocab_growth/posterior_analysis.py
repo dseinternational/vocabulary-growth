@@ -116,24 +116,86 @@ def add_probability_estimand_columns(
     out = summary.copy()
 
     def add_block(prefix: str, draws: np.ndarray) -> None:
-        ey = draws * n_trials
-        p_outer = intervals.bands(draws, ci_prob, interval_kind, sample_axis=1)
-        p_inner = intervals.bands(draws, inner_ci_prob, interval_kind, sample_axis=1)
-        ey_outer = intervals.bands(ey, ci_prob, interval_kind, sample_axis=1)
-        ey_inner = intervals.bands(ey, inner_ci_prob, interval_kind, sample_axis=1)
-        out[f"p_{prefix}_median"] = np.median(draws, axis=1)
-        out[f"p_{prefix}_ci50_lo"] = p_inner[:, 0]
-        out[f"p_{prefix}_ci50_hi"] = p_inner[:, 1]
-        out[f"p_{prefix}_ci_lo"] = p_outer[:, 0]
-        out[f"p_{prefix}_ci_hi"] = p_outer[:, 1]
-        out[f"Ey_{prefix}_median"] = np.median(ey, axis=1)
-        out[f"Ey_{prefix}_ci50_lo"] = ey_inner[:, 0]
-        out[f"Ey_{prefix}_ci50_hi"] = ey_inner[:, 1]
-        out[f"Ey_{prefix}_ci_lo"] = ey_outer[:, 0]
-        out[f"Ey_{prefix}_ci_hi"] = ey_outer[:, 1]
+        _interval_columns(
+            out,
+            f"p_{prefix}",
+            draws,
+            ci_prob=ci_prob,
+            inner_ci_prob=inner_ci_prob,
+            interval_kind=interval_kind,
+        )
+        _interval_columns(
+            out,
+            f"Ey_{prefix}",
+            draws * n_trials,
+            ci_prob=ci_prob,
+            inner_ci_prob=inner_ci_prob,
+            interval_kind=interval_kind,
+        )
 
     add_block("population", p_population)
     add_block("subject_marginal", p_subject_marginal)
+    return out
+
+
+def _interval_columns(
+    out: pd.DataFrame,
+    prefix: str,
+    draws: np.ndarray,
+    *,
+    ci_prob: float,
+    inner_ci_prob: float,
+    interval_kind: intervals.IntervalKind,
+) -> None:
+    """One estimand's median with its inner and outer interval, in place."""
+    outer = intervals.bands(draws, ci_prob, interval_kind, sample_axis=1)
+    inner = intervals.bands(draws, inner_ci_prob, interval_kind, sample_axis=1)
+    out[f"{prefix}_median"] = np.median(draws, axis=1)
+    out[f"{prefix}_ci50_lo"] = inner[:, 0]
+    out[f"{prefix}_ci50_hi"] = inner[:, 1]
+    out[f"{prefix}_ci_lo"] = outer[:, 0]
+    out[f"{prefix}_ci_hi"] = outer[:, 1]
+
+
+def add_rate_estimand_columns(
+    summary: pd.DataFrame,
+    population: np.ndarray,
+    subject_marginal: np.ndarray,
+    *,
+    name: str = "q",
+    ci_prob: float = intervals.DEFAULT_CI_PROB,
+    inner_ci_prob: float = intervals.INNER_CI_PROB,
+    interval_kind: intervals.IntervalKind = "eti",
+) -> pd.DataFrame:
+    """Add explicit population and new-child columns for a bounded rate.
+
+    The counterpart of :func:`add_probability_estimand_columns` for a quantity
+    that is a rate rather than a probability of a count. It deliberately emits
+    no ``Ey_*`` block: ``q`` is the probability that a word a child understands
+    is one they also say, so ``q * n_trials`` would be a word count only for a
+    child who understood the whole inventory. Reporting one would invite exactly
+    the reading the production-ratio figures already warn against.
+
+    The historical ``{name}_*`` columns are the population trajectory -- every
+    random effect at zero -- while the reports read ``q`` as what a child
+    converts. Until 2026-09-07 the subject-marginal rate was built inside the
+    posterior-predictive pass and then discarded (issue #233), and it cannot be
+    recovered from the stored tables afterwards: the ratio of the ``p_s`` and
+    ``p_u`` medians is not the median of the ratio.
+    """
+    out = summary.copy()
+    for prefix, draws in (
+        ("population", population),
+        ("subject_marginal", subject_marginal),
+    ):
+        _interval_columns(
+            out,
+            f"{name}_{prefix}",
+            draws,
+            ci_prob=ci_prob,
+            inner_ci_prob=inner_ci_prob,
+            interval_kind=interval_kind,
+        )
     return out
 
 

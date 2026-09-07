@@ -4,13 +4,16 @@
 import types
 
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 
+from vocab_growth import intervals
 from vocab_growth.posterior_analysis import (
     COUNT_BUCKET_THRESHOLDS,
     MAX_MONTH_SNAP_OFFSET,
     add_probability_estimand_columns,
+    add_rate_estimand_columns,
     expand_observed_to_obs_id,
     extract_posterior,
     extract_posterior_predictive,
@@ -342,3 +345,71 @@ def test_a_mask_that_disagrees_with_the_likelihood_rows_is_refused(mask, observe
 
     with pytest.raises(ValueError, match=r"issue #67"):
         expand_observed_to_obs_id(trace, "y_u_obs", "obs_u_mask")
+
+
+def test_the_rate_estimand_columns_name_both_estimands_and_emit_no_count():
+    """``add_rate_estimand_columns`` is the ``Ey``-free counterpart (issue #233).
+
+    ``q`` is the probability that a word a child understands is one they also
+    say, so ``q * n_trials`` is a word count only for a child who understood the
+    whole inventory -- exactly the reading the production-ratio figures warn
+    against.
+    """
+    rng = np.random.default_rng(0)
+    population = rng.uniform(0.1, 0.4, size=(5, 400))
+    marginal = rng.uniform(0.1, 0.4, size=(5, 400))
+    summary = pd.DataFrame({"age_months": np.arange(5.0)})
+
+    out = add_rate_estimand_columns(summary, population, marginal, ci_prob=0.89)
+
+    assert not [c for c in out.columns if c.startswith("Ey_")]
+    np.testing.assert_allclose(
+        out["q_population_median"].to_numpy(), np.median(population, axis=1)
+    )
+    np.testing.assert_allclose(
+        out["q_subject_marginal_median"].to_numpy(), np.median(marginal, axis=1)
+    )
+    outer = intervals.bands(marginal, 0.89, "eti", sample_axis=1)
+    np.testing.assert_allclose(out["q_subject_marginal_ci_lo"].to_numpy(), outer[:, 0])
+    np.testing.assert_allclose(out["q_subject_marginal_ci_hi"].to_numpy(), outer[:, 1])
+    # The caller's own columns survive.
+    assert "age_months" in out.columns
+
+
+def test_the_historical_rate_columns_and_the_population_block_are_the_same_numbers():
+    """The reports say so, so it has to be true (issue #233).
+
+    ``posterior_summary`` builds ``q_median`` / ``q_ci*`` through
+    ``intervals.summarise`` and the ``q_population_*`` block through
+    ``add_rate_estimand_columns``. Two paths to one estimand: the report tells a
+    reader they can use either, and a divergence -- a different interval kind
+    resolved from the name, say -- would make that sentence false without
+    breaking anything else.
+    """
+    rng = np.random.default_rng(3)
+    draws = rng.beta(2.0, 5.0, size=(7, 500))
+    ages = np.arange(7.0)
+
+    summary = intervals.summarise(
+        draws, ages, name="q_query", outer=0.89, sample_axis=1
+    ).rename(
+        columns={
+            "median": "q_median",
+            "ci50_lo": "q_ci50_lo",
+            "ci50_hi": "q_ci50_hi",
+            "ci_lo": "q_ci_lo",
+            "ci_hi": "q_ci_hi",
+        }
+    )
+    out = add_rate_estimand_columns(summary, draws, draws, ci_prob=0.89)
+
+    for historical, block in (
+        ("q_median", "q_population_median"),
+        ("q_ci50_lo", "q_population_ci50_lo"),
+        ("q_ci50_hi", "q_population_ci50_hi"),
+        ("q_ci_lo", "q_population_ci_lo"),
+        ("q_ci_hi", "q_population_ci_hi"),
+    ):
+        np.testing.assert_array_equal(
+            out[historical].to_numpy(), out[block].to_numpy(), err_msg=historical
+        )

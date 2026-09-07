@@ -48,7 +48,7 @@ summary_q = pd.read_csv("posterior_summary_q.csv")
 summary_q
 ```
 
-That table is the population-level production ratio at the query ages, with an inner 50% and an outer 89% equal-tailed interval; the `interval_kind` column records the convention.
+That table is the production ratio at the query ages, with an inner 50% and an outer 89% equal-tailed interval; the `interval_kind` column records the convention. It carries two estimands where this model puts a child effect on $q$. The `q_population_*` columns — and the historical `q_*` columns, which are the same numbers — are the zero-effect reference child in the average study. The `q_subject_marginal_*` columns are the same rate for a freshly drawn child, and are the wider pair: they are what to quote about an individual. There is no expected-count column for either, because $q$ is the share of a child's *own* comprehension that they speak, so multiplying it by the reference inventory would describe a child who understands every word in it.
 
 ### Comprehension-production gap
 
