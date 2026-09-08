@@ -1151,15 +1151,21 @@ def restrict_to_dse_native_administrations(
 
     A sensitivity-analysis transformation, not a primary inclusion rule. It
     answers what the trajectories look like when no count has been carried onto
-    a denominator its form did not use: 277 of the Down syndrome pool's 1,516
+    a denominator its form did not use: 277 of the Down syndrome pool's 1,920
     rows survive, from 194 children across ie_01 (its 810 wave only), ie_02,
-    uk_02 (DSE form only) and uk_06 -- 251 understood, 263 spoken and 217 signed
-    observations spanning 9-115 months. (Understood was 259 before
-    :func:`mask_comprehension_below_production`, whose ten masked counts fall
-    seven inside this subset, all in ie_01, and 252 before the withheld ie_02
-    administration -- :data:`IE02_WITHHELD_ADMINISTRATIONS` -- left the
-    pool.) Every other source is on a shorter form
-    and drops out entirely, es_01, nz_01, uk_07 and us_01 among them.
+    uk_02 (DSE form only) and uk_06 -- 258 understood, 263 spoken and 217 signed
+    observations spanning 9-115 months. Every other source is on a shorter form
+    and drops out entirely, es_01, nz_01, uk_07, us_01 and us_03 among them.
+
+    Re-measured 2026-09-08, after the ``us_03`` ingestion. The surviving subset
+    is **unchanged** -- same 277 rows, same 194 children, same four studies --
+    because ``us_03`` is a 396-item form and contributes no native row at all.
+    What moved is the pool it is a subset of (1,516 -> 1,920 rows), so the
+    native *share* fell without the native evidence shrinking. Understood went
+    251 -> 258; the arithmetic previously recorded here for that figure (259
+    before :func:`mask_comprehension_below_production`, 252 before the withheld
+    ie_02 administration, :data:`IE02_WITHHELD_ADMINISTRATIONS`) describes the
+    pre-ingestion pool and has not been re-derived.
 
     Rows whose ceiling is unrecorded are dropped rather than kept: an unknown
     form cannot be shown to be the native one, and the point of the variant is
