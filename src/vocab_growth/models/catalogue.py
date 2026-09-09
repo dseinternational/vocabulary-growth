@@ -472,6 +472,39 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg10": ModelRole.DEVELOPMENT_STEP,
         "vg14": ModelRole.DEVELOPMENT_STEP,
         "vg16": ModelRole.DEVELOPMENT_STEP,
+        # Study-owner decisions of 2026-09-09, recorded in
+        # ``notes/202609091600-model-roles-settled.md`` and in the roles
+        # table, which ``tests/test_model_catalogue.py`` now pins in both
+        # directions for every role.
+        #
+        # VG24 is the only model that estimates ``rho_sign_q``, the
+        # sign-speech child correlation it was registered to deliver (#296);
+        # VG15 keeps the signing trajectories. Whether VG24 takes the rest of
+        # VG15's role is an open promotion question, not decided here.
+        "vg24": ModelRole.MODEL_OF_RECORD,
+        # The typically-developing side of the between-child correlation
+        # contrast (``rho_uq`` 0.127 against VG20's 0.433); nothing else
+        # estimates it.
+        "vg23": ModelRole.TD_REFERENCE,
+        # Replaced as the TD joint comparator by VG21 on 2026-09-02, when both
+        # ``compare_ds_td_*`` scripts moved ``TD_KEY``: its support ends at
+        # about 221 understood words. Still VG23's exact nested null, which a
+        # ``-Scope all`` run refits with it.
+        "vg13": ModelRole.SUPERSEDED,
+        # The single-outcome, single-level baselines each lineage was built
+        # on: VG20 carries VG01 and VG02's estimands, VG11 and VG12 are VG03
+        # and VG04 rebuilt with a hierarchy.
+        "vg01": ModelRole.DEVELOPMENT_STEP,
+        "vg02": ModelRole.DEVELOPMENT_STEP,
+        "vg03": ModelRole.DEVELOPMENT_STEP,
+        "vg04": ModelRole.DEVELOPMENT_STEP,
+        # Each contributes a finding and no number: VG19 the level/rate
+        # dissociation (reporting decision of 2026-08-22), VG22 the sign of the
+        # level-to-rate coupling, whose magnitude the pool's follow-up cannot
+        # identify (``notes/202609091400-is-vg22-the-better-description.md``).
+        # Neither is a promotion candidate; VG20 keeps the DS joint role.
+        "vg19": ModelRole.DEVELOPMENT_STEP,
+        "vg22": ModelRole.DEVELOPMENT_STEP,
     }
     # Fails closed: anything the record does not classify keeps full
     # publication strictness rather than silently relaxing.

@@ -53,7 +53,7 @@ render_model_at_a_glance()
 #| output: asis
 from vocab_growth.report_cells import render_reading_routes
 
-render_reading_routes('candidate', instead='VG15', signing=True)
+render_reading_routes('record', signing=True)
 ```
 
 ![The model's structure. VG24 differs from VG15 in the child-effect block alone.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import re
 from pathlib import Path
 
 import pytest
@@ -460,14 +461,18 @@ def test_the_package_docstring_points_at_the_source_rather_than_restating_it():
 # rather than something that happens by omission.
 
 
-def _documented_development_steps() -> set[str]:
-    """Model keys the roles table calls a development step or model."""
+def _roles_table_section() -> str:
+    """The ``### Model roles`` section of the inventory, which is the record."""
     text = (_REPO_ROOT / "docs" / "models" / "README.md").read_text(encoding="utf-8")
     start = text.index("### Model roles")
     section = text[start:]
     end = section.find(chr(10) + "### ", 1)
-    if end != -1:
-        section = section[:end]
+    return section if end == -1 else section[:end]
+
+
+def _documented_development_steps() -> set[str]:
+    """Model keys the roles table calls a development step or model."""
+    section = _roles_table_section()
     found: set[str] = set()
     for line in section.splitlines():
         if not line.startswith("|"):
@@ -506,6 +511,72 @@ def test_the_documented_development_steps_are_declared_as_such():
         "documented as a development step but not declared one: "
         f"{sorted(documented - declared)}"
     )
+
+
+#: The roles table's own labels, matched by prefix on the first bold span of
+#: the Role cell, so ``**Development step**``, ``**Development steps.**`` and
+#: ``**Development model, single-purpose; …**`` all read as one role.
+_ROLE_LABELS = (
+    ("Model of record", ModelRole.MODEL_OF_RECORD),
+    ("Development", ModelRole.DEVELOPMENT_STEP),
+    ("TD reference", ModelRole.TD_REFERENCE),
+    ("Superseded", ModelRole.SUPERSEDED),
+)
+
+
+def _documented_roles() -> dict[str, ModelRole]:
+    """``{model key: role}`` for every model the roles table names.
+
+    A row whose label matches no known role fails here rather than being
+    skipped, because a new wording is exactly how a model would slip out of
+    the pin. Before 2026-09-09 only development steps were pinned, and only in
+    one direction; a superseded model could be declared with no row at all.
+    """
+    found: dict[str, ModelRole] = {}
+    for line in _roles_table_section().splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        keys = [
+            token.strip("*` ").lower()
+            for token in cells[0].replace(",", " ").split()
+        ]
+        keys = [key for key in keys if key in MODEL_REGISTRY]
+        if not keys:
+            continue
+        match = re.match(r"\*\*(.+?)\*\*", cells[1])
+        assert match, f"roles-table row for {keys} has no bold role label: {cells[1][:60]!r}"
+        label = match.group(1)
+        role = next((r for prefix, r in _ROLE_LABELS if label.startswith(prefix)), None)
+        assert role is not None, f"unrecognised role label {label!r} for {keys}"
+        for key in keys:
+            assert key not in found, f"{key} appears in two roles-table rows"
+            found[key] = role
+    return found
+
+
+def test_every_role_the_table_states_is_declared_exactly():
+    """The table is the record; the catalogue must say the same, model for model."""
+    documented = _documented_roles()
+    assert documented, "the roles table names no models; has it moved?"
+    for key, role in documented.items():
+        assert CATALOGUE[key].role is role, (
+            f"{key}: the roles table says {role.value!r}, the catalogue declares "
+            f"{CATALOGUE[key].role.value!r}"
+        )
+
+
+def test_every_declared_role_has_a_roles_table_row():
+    """A classified model with no row would leave the code free of the record."""
+    documented = _documented_roles()
+    undocumented = sorted(
+        key
+        for key, model in CATALOGUE.items()
+        if model.role is not ModelRole.UNCLASSIFIED and key not in documented
+    )
+    assert not undocumented, f"declared a role but absent from the roles table: {undocumented}"
 
 
 def test_an_unclassified_model_still_requires_publication_validation():

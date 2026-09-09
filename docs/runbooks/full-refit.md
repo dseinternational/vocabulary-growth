@@ -195,14 +195,17 @@ The dirty-checkout refusal is not fussiness, and `-AllowDirty` is a development-
 `-Models` is unchanged and still wins. When it is omitted the default list now
 comes from the **catalogue's roles** rather than from `MODEL_REGISTRY`:
 
-| `-Scope`      | covers                                                                                    |
-| ------------- | ----------------------------------------------------------------------------------------- |
-| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 14 today |
-| `all`         | every registered model, including development steps — 21 today                            |
+| `-Scope`      | covers                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 7 today |
+| `all`         | every registered model, including development steps — 21 today                           |
 
 A development step supplies no reported number, and a superseded model never
-supplies one at all, so refitting them buys nothing publishable. Dropping the
-seven takes a sequential `rep` run from twenty-one models to fourteen.
+supplies one at all, so refitting them buys nothing publishable. Since the
+roles were settled on 2026-09-09 the default covers seven of the twenty-one —
+three models of record and four TD references, with nothing left unclassified —
+about 12 h of the 30 h 27 m a serial `rep` cycle of the whole registry took on
+2026-09-07/08 (`notes/202609091600-model-roles-settled.md`).
 
 **Unclassified fails closed**, so a model whose role has not been decided is
 still refitted. Narrowing happens only when someone declares a role, in

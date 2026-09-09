@@ -53,7 +53,7 @@ render_model_at_a_glance()
 #| output: asis
 from vocab_growth.report_cells import render_reading_routes
 
-render_reading_routes('candidate', instead='VG13')
+render_reading_routes('reference', joint=True)
 ```
 
 ![The model's structure. VG23 differs from VG13 by one node.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
