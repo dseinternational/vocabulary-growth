@@ -322,3 +322,5 @@ worktrees
 xarray
 zarr
 zygosity
+Gompertz
+RMSE
