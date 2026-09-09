@@ -256,7 +256,8 @@ def test_the_restricted_frame_carries_sex_for_every_row(require_prepared_data):
     assert set(frame["sex"].unique()) <= set(SEX_CONTRAST)
     assert info["sex_unknown_rows_excluded"] > 0
     assert len(frame) < len(reference)
-    # Sex is recorded in eight of the fourteen Down syndrome studies.
-    assert not set(frame["study"]) & {"ie_01", "it_01", "nz_01", "uk_03", "uk_04", "us_02"}
+    # Sex is recorded in eight of the fifteen Down syndrome studies; us_03 joined
+    # the seven without it on 2026-09-06.
+    assert not set(frame["study"]) & {"ie_01", "it_01", "nz_01", "uk_03", "uk_04", "us_02", "us_03"}
     # And it is a child-level covariate.
     assert (frame.groupby(["study", "subject_id"])["sex"].nunique() == 1).all()

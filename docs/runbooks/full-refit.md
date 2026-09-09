@@ -111,6 +111,14 @@ The failure is at least safe: validation runs for all models first, and the firs
 
 ### Batch failure semantics
 
+> [!NOTE]
+> **2026-09-08.** The claim below that a failed model makes the run exit non-zero
+> was not observed. `vg09` missed the convergence gate, the driver correctly
+> logged "Stopping before downstream phases because at least one required step
+> failed" and skipped them — and the process still exited **0**. Decide whether a
+> run succeeded from `status.tsv` or the run log; do not automate on the exit
+> code.
+
 `python scripts/fit_model.py all --config rep --render --upload` treats convergence and rendering as per-model failures and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, atomically promotes every successful fit before rendering it, continues rendering after an individual Quarto failure, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. A render failure leaves the completed fit available for `--render-only`; other fitting exceptions still abort immediately. The canonical `run_replication.ps1` path remains resumable and fits one model at a time unless `-MaxParallel` raises it.
 
 ### us_01 implausible-production sensitivity
@@ -187,14 +195,17 @@ The dirty-checkout refusal is not fussiness, and `-AllowDirty` is a development-
 `-Models` is unchanged and still wins. When it is omitted the default list now
 comes from the **catalogue's roles** rather than from `MODEL_REGISTRY`:
 
-| `-Scope`      | covers                                                                                    |
-| ------------- | ----------------------------------------------------------------------------------------- |
-| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 14 today |
-| `all`         | every registered model, including development steps — 21 today                            |
+| `-Scope`      | covers                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 7 today |
+| `all`         | every registered model, including development steps — 21 today                           |
 
 A development step supplies no reported number, and a superseded model never
-supplies one at all, so refitting them buys nothing publishable. Dropping the
-seven takes a sequential `rep` run from twenty-one models to fourteen.
+supplies one at all, so refitting them buys nothing publishable. Since the
+roles were settled on 2026-09-09 the default covers seven of the twenty-one —
+three models of record and four TD references, with nothing left unclassified —
+about 12 h of the 30 h 27 m a serial `rep` cycle of the whole registry took on
+2026-09-07/08 (`notes/202609091600-model-roles-settled.md`).
 
 **Unclassified fails closed**, so a model whose role has not been decided is
 still refitted. Narrowing happens only when someone declares a role, in
@@ -254,16 +265,45 @@ memory-heavy. So:
   yet, so neither has a measured peak — treat them as VG13-class until one exists.
 
   > [!NOTE]
-  > **2026-09-07.** The memory figures behind this rule — VG13 at 178–243 GB, the
-  > OOM record below — describe fits made before 2026-08-23, when the
-  > observation-sized deterministics stopped being sampled. No TD `rep` peak has
-  > been measured on the current code. The per-draw arithmetic and a measured
-  > VG12 `test` profile in
+  > **2026-09-08: measured, and far below every earlier figure.** The VG11 `rep`
+  > measurement that
   > [`notes/202609071440`](../../notes/202609071440-td-fits-on-96gb-hardware.md)
-  > put VG11 at `rep` near 48 GB and the other TD models at 16–30 GB, with the
-  > VG11 measurement still to be made; its §8 is the procedure. Keep the
-  > _procedure_ here — sole tenant, separate scopes, per-process RSS — and treat
-  > the _numbers_ as stale until that fit records one.
+  > §8 asks for has been made — sole tenant on a 137 GB Windows workstation,
+  > numba backend, `--trace-persistence full`:
+  >
+  > | model | peak per-process RSS |     wall |   trace |
+  > | ----- | -------------------: | -------: | ------: |
+  > | VG11  |            **27 GB** | 3 h 59 m | 19.8 GB |
+  > | VG12  |            **12 GB** |     54 m |  8.2 GB |
+  > | VG13  |            **27 GB** | 1 h 42 m | 15.7 GB |
+  > | VG21  |            **28 GB** | 1 h 45 m | 16.5 GB |
+  > | VG23  |            **27 GB** | 1 h 36 m | 15.7 GB |
+  >
+  > against a predicted ~48 GB for VG11 and the pre-2026-08-23 record's
+  > 178–243 GB for VG13. VG11's peak arrives in the fit's **final seconds** —
+  > 24 → 27 GB during post-sampling assembly — so it is still the
+  > assembly step that sets the peak, at a fraction of the old scale.
+  >
+  > **Peak memory does not scale with `n_obs`, and VG11 is not the model that
+  > sets it.** VG21 peaked highest at 28 GB on 6,783 rows, against VG11's 27 GB
+  > on 18,500. The three bivariate TD models (VG13, VG21, VG23) all sit at
+  > 27–28 GB on roughly a third of VG11's data, because each carries two
+  > outcomes, two GPs and two κ blocks; the univariate VG12 is half of that at
+  > 12 GB on a comparable row count. Size a machine for the bivariate models,
+  > not for the largest frame.
+  >
+  > **Read the per-process figure, not machine "used".** At VG11's peak the
+  > machine showed `used=75G` while 69 GB was _available_ and swap held 0.11 GB
+  > of 83: that gap is reclaimable file cache from writing a 20 GB trace, not
+  > consumption. Quoting "used" would overstate the fit by roughly 45 GB — the
+  > ambiguity §8 warned of when it said Windows working-set accounting is not
+  > Linux RSS.
+  >
+  > The _procedure_ below stands unchanged: sole tenant, separate scopes,
+  > per-process RSS. This run measured VG11 **as a sole tenant**, so it is
+  > evidence about VG11's footprint and **not** evidence that VG11 can share a
+  > box; §4 of that note is explicit that relaxing the rule "is a measurement to
+  > make deliberately, not an inference to act on".
 
 ### Fit straight to the attached disk, not to local scratch
 
@@ -587,13 +627,15 @@ PY
 > guidance below was validated only on the _pre-#164, non-hierarchical_ TD models and is
 > retained for history. (See `notes/202607170935-full-refit-vm-run-147-163.md`.)
 
-The full-data TD fits dominate wall time (`vg11`: 16,235 obs, ~9 h at `rep`; `vg12`:
-~6,000 obs). At those sample sizes the posterior is **likelihood-dominated** and ESS
-accumulates fast — `vg11`'s `rep` fit reached **min ESS ≈ 9,850, ~25× the 400 target**,
-so raw draws are nowhere near the binding constraint. **Fit these large models at
-`--config rep-lite`** (4 chains / 4000 tune / 4000 draws, same `target_accept = 0.95`):
-it keeps reporting-grade rigour (ESS still clears 400 with wide margin), gives materially
-identical estimates, and cuts ~⅓ off the wall time.
+The full-data TD fits dominate wall time (`vg11`: 16,235 obs; `vg12`: ~6,000 obs).
+
+> [!NOTE]
+> **2026-09-08.** The wall times in this section are stale in _both_ directions and should not be used for scheduling. Measured this run at `rep` on a 32-core workstation: `vg11` **3 h 59 m**, `vg12` **54 m**, `vg13` **1 h 42 m**, `vg21` **1 h 45 m**, `vg23` **1 h 36 m** — against the ~9 h quoted below for `vg11` — and, in the other direction, `vg03` **2 h 46 m** against a historical ~30 m, with `vg04` 38 m. The Down syndrome pool ran 31 m (`vg02`) to 2 h 20 m (`vg19`), fourteen models in 3 h 47 m at `-MaxParallel 5`. At those sample sizes the posterior is **likelihood-dominated** and ESS
+> accumulates fast — `vg11`'s `rep` fit reached **min ESS ≈ 9,850, ~25× the 400 target**,
+> so raw draws are nowhere near the binding constraint. **Fit these large models at
+> `--config rep-lite`** (4 chains / 4000 tune / 4000 draws, same `target_accept = 0.95`):
+> it keeps reporting-grade rigour (ESS still clears 400 with wide margin), gives materially
+> identical estimates, and cuts ~⅓ off the wall time.
 
 **Validated (2026-07-13, vg11).** Fitting vg11 both ways confirmed it: expected-word
 trajectories agreed to **max 0.27 words (≤ 0.11%)** across the 9–30 mo grid, HDI widths
@@ -779,12 +821,17 @@ So when a new model is added mid-run, either delete its provisional output befor
 
 Note also that `sync_report_figures._sync_dir` is flat: it copies files, not sub-directories. `comparisons/recovery/` and `comparisons/sensitivity/` are synced by an explicit loop, and anything else nested under `comparisons/` will silently not reach the report unless it is added there too.
 
-Per-model reports render after successful fits during `fit_model.py --render`; if a render fails, retry it without resampling using `python scripts/fit_model.py <model> --config rep --render-only --output-dir <scratch>`. **Gotcha:**
-rendering a model report whose output dir is **outside the git checkout** (e.g. a
-scratch `--output-dir`) makes quarto exit non-zero on the `code-links: [repo]`
-post-processor ("not a GitHub project") — the HTML is still produced and complete;
-it just lacks the repo source-link button. It's clean when output lives under the
-in-repo `output/`.
+Per-model reports render after successful fits during `fit_model.py --render`; if a render fails, retry it without resampling using `python scripts/fit_model.py <model> --config rep --render-only --output-dir <scratch>`.
+
+> [!NOTE]
+> **2026-09-08: the `code-links` gotcha no longer reproduces.** This section used
+> to warn that rendering a model report whose output dir is outside the git
+> checkout makes quarto exit non-zero on the `code-links: [repo]` post-processor
+> ("not a GitHub project"), leaving complete HTML without the repo source-link
+> button. On Quarto 1.10.18, every `--render-only` run of this refit — all of
+> them from an output root on another volume — exited 0. Treat a non-zero exit
+> there as a real failure to investigate, not as the expected cost of an
+> out-of-checkout output root.
 
 ### Rendering without an activated environment
 

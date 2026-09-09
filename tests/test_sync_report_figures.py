@@ -18,7 +18,12 @@ from vocab_growth.fit_artifacts import (
     normalise_for_json,
     write_fit_state,
 )
-from vocab_growth.models.definitions import VG01, VG02
+from vocab_growth.models.catalogue import (
+    ModelRole,
+    models_with_role,
+    publication_models,
+)
+from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.models.implementation_identity import implementation_signature
 
 _SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "sync_report_figures.py"
@@ -93,9 +98,14 @@ def test_sync_copy_failure_preserves_previous_destination(tmp_path, monkeypatch)
 
 
 def test_all_model_outputs_validate_before_any_cache_is_changed(tmp_path, monkeypatch):
+    # Both fits belong to publication-required models, chosen by role rather
+    # than by name: a development step that fails validation is skipped by
+    # role instead of blocking (next test), and when VG02 became one on
+    # 2026-09-09 this test silently turned into that one.
+    valid, invalid = (MODEL_REGISTRY[key] for key in publication_models()[:2])
     output_root = tmp_path / "output"
-    _write_output(output_root, VG01, state="complete")
-    _write_output(output_root, VG02, state="running")
+    _write_output(output_root, valid, state="complete")
+    _write_output(output_root, invalid, state="running")
     sync_calls = []
     monkeypatch.setattr(_MODULE, "_sync_dir", lambda *args: sync_calls.append(args))
     monkeypatch.setattr(
@@ -119,3 +129,47 @@ def test_all_model_outputs_validate_before_any_cache_is_changed(tmp_path, monkey
         env.set_output_root(None)
 
     assert sync_calls == []
+
+
+def test_a_model_that_supplies_no_number_is_skipped_rather_than_fatal(
+    tmp_path, monkeypatch, capsys
+):
+    """The other half of the roles doctrine: a development step whose fit fails
+    validation is reported and left out, and the models that carry a number
+    still sync. Before roles were declared this was the all-or-nothing failure
+    of #301, where one stale rung took every model down with it.
+    """
+    valid = MODEL_REGISTRY[publication_models()[0]]
+    step = MODEL_REGISTRY[models_with_role(ModelRole.DEVELOPMENT_STEP)[0]]
+    output_root = tmp_path / "output"
+    _write_output(output_root, valid, state="complete")
+    _write_output(output_root, step, state="running")
+    sync_calls = []
+    monkeypatch.setattr(_MODULE, "_sync_dir", lambda *args: sync_calls.append(args) or 0)
+    # Past the model loop the script writes the convergence records and names
+    # the figure cache; neither belongs in the checkout during a test.
+    monkeypatch.setattr(_MODULE, "_write_convergence_records", lambda sources: None)
+    monkeypatch.setattr(env, "REPORT_FIGS_DIR", str(tmp_path / "figures"))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "sync_report_figures.py",
+            "--output-dir",
+            str(output_root),
+            "--config",
+            "dev",
+            "--allow-provisional",
+            "--models-only",
+        ],
+    )
+
+    try:
+        _MODULE.main()
+    finally:
+        env.set_output_root(None)
+
+    out = capsys.readouterr().out
+    assert f"[skip] {step.model_id}-{step.config_name}: development-step" in out
+    assert len(sync_calls) == 1
+    assert sync_calls[0][0].endswith(f"{valid.model_id}-{valid.config_name}")

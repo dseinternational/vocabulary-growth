@@ -5,13 +5,18 @@ Cross-model comparison overlays (CSV-based, from per-model output tables).
 
 Produces figures under ``output/comparisons/``:
 
-- ``ds_td_spoken_by_age.{png,svg}`` — VG01 (DS) vs VG03 (TD) — words spoken
-- ``ds_td_understood_by_age.{png,svg}`` — VG02 (DS) vs VG04 (TD) — understood
 - ``vg05_vs_vg07_{understood,spoken}.{png,svg}`` — study-RE effect in VG07
 - ``vg07_vg09_vg10_q_by_age.{png,svg}`` — q(age) three-way overlay
 - ``ds_td_q_by_age_vg20.{png,svg}`` — q(age) DS (VG20) vs TD (VG21)
 - ``ds_td_spoken_vs_understood_vg20.{png,svg}`` (+ ``.csv``) — the same
   matched-comprehension comparison in words spoken rather than the ratio
+
+The single-level DS/TD overlays (``ds_td_spoken_by_age``, VG01 against VG03,
+and ``ds_td_understood_by_age``, VG02 against VG04) were retired on 2026-09-09
+when the four baselines became development steps: the random-effect overlays
+``compare_ds_td_re.py`` draws from VG20 against VG11 and VG12 supersede them,
+and a development step's fit is not kept current, so an overlay read from one
+would go stale without anything saying so.
 
 The DS/TD production-ratio-against-comprehension overlays that used to live here
 (``ds_td_q_vs_understood`` with ``ds_td_q_crossings.csv``, and the VG20 variant)
@@ -56,9 +61,7 @@ OUT_DIR = env.comparisons_output_dir()
 #: recorded in the comparison manifest afterwards. Reading a model's summary
 #: CSV without validating its fit was how a stale posterior reached a published
 #: overlay (issue #266 finding 1).
-CONTRIBUTING_MODELS = (
-    "vg01", "vg02", "vg03", "vg04", "vg05", "vg07", "vg09", "vg10", "vg20", "vg21",
-)
+CONTRIBUTING_MODELS = ("vg05", "vg07", "vg09", "vg10", "vg20", "vg21")
 
 DS_COLOUR = plot_styles.COLOUR_BLUE
 TD_COLOUR = plot_styles.COLOUR_ORANGE
@@ -96,26 +99,6 @@ def _validate_contributing_fits(config: str = "rep") -> dict[str, str]:
         )
         contributing[f"{definition.model_id}-{definition.config_name}"] = output_dir
     return contributing
-
-
-def ds_td_spoken_by_age() -> None:
-    overlay_age_curves(
-        "Expected words spoken by age — DS (VG01) vs TD (VG03)",
-        [("DS (VG01)", _read("vg01", "posterior_summary.csv"), DS_COLOUR),
-         ("TD (VG03)", _read("vg03", "posterior_summary.csv"), TD_COLOUR)],
-        os.path.join(OUT_DIR, "ds_td_spoken_by_age"),
-        ylabel="Expected words spoken",
-    )
-
-
-def ds_td_understood_by_age() -> None:
-    overlay_age_curves(
-        "Expected words understood by age — DS (VG02) vs TD (VG04)",
-        [("DS (VG02)", _read("vg02", "posterior_summary.csv"), DS_COLOUR),
-         ("TD (VG04)", _read("vg04", "posterior_summary.csv"), TD_COLOUR)],
-        os.path.join(OUT_DIR, "ds_td_understood_by_age"),
-        ylabel="Expected words understood",
-    )
 
 
 def vg05_vs_vg07() -> None:
@@ -294,8 +277,6 @@ def ds_td_spoken_vs_understood_vg20() -> None:
 OUTPUTS = tuple(
     f"{stem}{ext}"
     for stem, extensions in (
-        ("ds_td_spoken_by_age", (".png", ".svg")),
-        ("ds_td_understood_by_age", (".png", ".svg")),
         ("vg05_vs_vg07_understood", (".png", ".svg")),
         ("vg05_vs_vg07_spoken", (".png", ".svg")),
         ("vg07_vg09_vg10_q_by_age", (".png", ".svg", ".csv")),
@@ -310,8 +291,6 @@ def main() -> None:
     plot_styles.set_matplotlib_default_style()
     os.makedirs(OUT_DIR, exist_ok=True)
     contributing = _validate_contributing_fits()
-    ds_td_spoken_by_age()
-    ds_td_understood_by_age()
     vg05_vs_vg07()
     vg07_vg09_vg10_q_by_age()
     ds_td_q_by_age_vg20()

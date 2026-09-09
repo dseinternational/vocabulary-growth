@@ -1775,7 +1775,7 @@ def render_loo_section(directory: str = ".") -> None:
 
 #: How a report describes its own role. Owner decisions live in
 #: `docs/models/README.md`; a template passes the role it already states.
-READING_ROLES = frozenset({"record", "reference", "candidate", "development"})
+READING_ROLES = frozenset({"record", "reference", "candidate", "development", "superseded"})
 
 
 def _has_child_effects(present: set[str]) -> bool:
@@ -1800,19 +1800,21 @@ def render_reading_routes(
     The technical report says it is written for families, practitioners and
     researchers, and each model page renders standalone, so a reader who lands
     on one gets no other routing. ``role`` is the page's own stated role;
-    a development step or candidate routes every non-research reader to the
-    model of record named in ``instead`` rather than offering them numbers a
-    superseded page should not supply.
+    a development step, a candidate or a superseded model routes every
+    non-research reader to the model named in ``instead`` rather than offering
+    them numbers such a page should not supply.
     """
     if role not in READING_ROLES:
         raise ValueError(f"unknown reading role {role!r}; expected one of {sorted(READING_ROLES)}")
 
     print('::: {.callout-tip title="Three ways to read this page"}')
     print()
-    if role in {"development", "candidate"}:
-        what = (
-            "a development step" if role == "development" else "a candidate that is not yet a model of record"
-        )
+    if role in {"development", "candidate", "superseded"}:
+        what = {
+            "development": "a development step",
+            "candidate": "a candidate that is not yet a model of record",
+            "superseded": "a superseded model",
+        }[role]
         target = f" **{instead}**" if instead else " the model of record named in the inventory"
         print(
             f"This page describes {what}. It is written for **researchers** following how the "

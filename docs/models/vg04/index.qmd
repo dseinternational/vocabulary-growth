@@ -49,7 +49,7 @@ render_model_at_a_glance()
 #| output: asis
 from vocab_growth.report_cells import render_reading_routes
 
-render_reading_routes('reference')
+render_reading_routes('development', instead='VG12')
 ```
 
 ::: {.callout-note}
@@ -62,7 +62,7 @@ For full details and discussion, please refer to the technical report.
 
 ## What this model is for
 
-This is a **reference baseline**. It exists so that the Down syndrome comprehension model, VG02, has a typically-developing curve on the same scale, fitted with the same engine and the same priors machinery, to be compared against. Every structural choice here mirrors VG02 except the population, the age anchors, the age range and the admissible measurement forms, so that a difference between the two curves is a difference between the populations rather than between two modelling approaches. It is also the comprehension counterpart of VG03, which models words spoken in the same pool.
+This is a **development step** (from 9 September 2026): the single-level baseline that VG12 rebuilt with a hierarchy, so the typically-developing comprehension reference is now VG12 and nothing on this page is a reported number. It was built so that the Down syndrome comprehension model, VG02, would have a typically-developing curve on the same scale, fitted with the same engine and the same priors machinery, to be compared against. Every structural choice here mirrors VG02 except the population, the age anchors, the age range and the admissible measurement forms, so that a difference between the two curves is a difference between the populations rather than between two modelling approaches. It is also the comprehension counterpart of VG03, which models words spoken in the same pool.
 
 ::: {.callout-warning title="A typically-developing curve is a reference, not a target"}
 

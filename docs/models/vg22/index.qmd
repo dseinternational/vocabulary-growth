@@ -49,7 +49,7 @@ render_model_at_a_glance()
 #| output: asis
 from vocab_growth.report_cells import render_reading_routes
 
-render_reading_routes('candidate', instead='VG20')
+render_reading_routes('development', instead='VG20')
 ```
 
 ![The model graph. VG22 replaces VG10's two independent child intercepts with a rank-3 factor over four child effects — a level and a rate on each outcome.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}

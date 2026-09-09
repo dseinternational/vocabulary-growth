@@ -46,7 +46,7 @@ render_model_at_a_glance()
 #| output: asis
 from vocab_growth.report_cells import render_reading_routes
 
-render_reading_routes('candidate', instead='VG20')
+render_reading_routes('development', instead='VG20')
 ```
 
 Every model in this family from VG08 onward gives each child a **constant** offset from the population trajectory: a child who is 30 words ahead at two years is assumed to be the same distance ahead, on the model's scale, at six. VG19 relaxes that. Each child gets a **rate** as well as an offset, so a child can pull away from the population curve, or drift toward it, as they grow.
