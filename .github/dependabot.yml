@@ -13,13 +13,13 @@ updates:
         patterns:
           - "*"
     ignore:
-      # numpy 2.5 is unreachable for anything depending on pymc: pytensor 3.3.0
-      # pins numba <=0.66.0, and numba 0.66.0 still pins numpy <2.5. The ceiling
-      # is inherited from dse-research-utils; raising it here only declares a
-      # range no resolver can use. Remove once a PyTensor release admits numba
-      # 0.67, which has relaxed to numpy <2.6.
+      # numpy 2.6 is unreachable for anything depending on pymc: pytensor 3.3.1
+      # pins numba <=0.67.0, and numba 0.67.0 pins numpy <2.6. The ceiling is
+      # inherited from dse-research-utils; raising it here only declares a range
+      # no resolver can use. Remove once a PyTensor release admits a numba that
+      # has relaxed past numpy <2.6.
       - dependency-name: "numpy"
-        versions: [">=2.5.0"]
+        versions: [">=2.6.0"]
     assignees:
       - frankbuckley
 
