@@ -3,7 +3,7 @@
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
-**Date:** 2026-09-09. **Answers:** the question [`202609091200-vg20-vg22-gate-resolved.md`](202609091200-vg20-vg22-gate-resolved.md) left explicitly open — _"Whether VG22 is the better description of these children is not answered here and is not what the gate asked."_ **Supersedes on the refitted pool:** [`202609031415-vg20-vs-vg22.md`](202609031415-vg20-vs-vg22.md), whose numbers all predate the `us_03` ingestion and which flagged that the comparison "could move materially". **Fits read:** the 2026-09-08 `rep` refits of VG20 and VG22, the `rank-2` sensitivity arm, the criterion-1 recovery replicates, and the two `kfold_loso.py` runs of 2026-09-09.
+**Date:** 2026-09-09. **Answers:** the question [`202609091200-vg20-vg22-gate-resolved.md`](202609091200-vg20-vg22-gate-resolved.md) left explicitly open — _"Whether VG22 is the better description of these children is not answered here and is not what the gate asked."_ **Supersedes on the refitted pool:** [`202609031415-vg20-vs-vg22.md`](202609031415-vg20-vs-vg22.md), whose numbers all predate the `us_03` ingestion and which flagged that the comparison "could move materially". **Fits read:** the `rep` refits of VG20 and VG22 from the refit that completed on 2026-09-08 (created 2026-09-07T23:58Z and 2026-09-08T00:30Z), the `rank-2` sensitivity arm, the criterion-1 recovery replicates, and the two `kfold_loso.py` runs of 2026-09-09.
 
 ## Headline
 
@@ -13,7 +13,7 @@ Those two findings are not in tension, and separating them is the point of this 
 
 ## What reproduced on the refitted pool
 
-The child-level comparison, refreshed on the 2026-09-08 fits. Both models are `rep`, on the byte-identical frame `sha256:b27f64ea0640…`, 1,708 rows and 943 children.
+The child-level comparison, refreshed on the refitted fits. Both models are `rep`, on the byte-identical frame `sha256:b27f64ea0640…`, 1,708 rows and 943 children.
 
 | quantity                         |         VG20 (refit) |         VG22 (refit) | pre-refit 20/22 |
 | -------------------------------- | -------------------: | -------------------: | --------------- |
@@ -27,7 +27,7 @@ The child-level comparison, refreshed on the 2026-09-08 fits. Both models are `r
 
 Three things carry over unchanged. **VG20's correlation is inflated by variance it cannot express** — `rho_uq` falls from 0.433 to 0.340 when the rates are given somewhere to live, a 21% reduction against 20% before the refit. **The level spreads shrink the same way**, most visibly the ratio level, 1.361 to 1.259. And **the ratio rate spread excludes zero decisively**, 0.730 [0.632, 0.830]: children with Down syndrome do differ in how fast their production share moves, and VG20 has no parameter for it.
 
-The implied 4×4 correlation at the 36-month reference age (`subject_factor_corr.csv`) reproduces the headline result and sharpens it:
+The implied 4×4 correlation at the 36-month reference age (`subject_factor_corr.csv`) reproduces the headline result:
 
 | pair                                     | refitted                 | pre-refit              |
 | ---------------------------------------- | ------------------------ | ---------------------- |
@@ -38,9 +38,9 @@ The implied 4×4 correlation at the 36-month reference age (`subject_factor_corr
 | comprehension rate ↔ ratio level         | 0.416 [-0.246, 0.884]    | 0.448 [-0.021, 0.842]  |
 | comprehension level ↔ comprehension rate | -0.228 [-0.683, 0.267]   | -0.249 [-0.560, 0.094] |
 
-**A child's comprehension standing predicts their conversion _rate_ (0.402) more strongly than their conversion _level_ (0.340)**, on the same fit, under the same reference age, with both intervals excluding zero — and VG20 estimates only the weaker of the two. That is the most interesting child-level result in the family and it is unavailable without VG22's structure.
+**A child's comprehension standing predicts their conversion _rate_ (0.402) at least as strongly as their conversion _level_ (0.340)**, on the same fit, under the same reference age, with both intervals excluding zero — and VG20 estimates only the second. Two qualifications the 2026-09-03 note did not make. The ordering is a point-estimate one: the two intervals overlap heavily, and the gap between them narrowed from 0.082 to 0.062 on the refit, so "more strongly" is not a distinguishable claim. And the magnitude is rank-dependent in a way `rho_uq` is not. Read off the rank-2 arm's trace, the same correlation is **0.860 [0.732, 0.956]** against rank 3's 0.402, while `rho_uq` is 0.349 against 0.340. At rank 2 the rate direction is forced into the span of the two level directions, so its correlations with them are a constraint of the parameterisation rather than a measurement — [`202608231420`](202608231420-vg22-factor-anchor-bimodality.md) §5's reading of why the rank-2 scale is the compromised one. What survives both ranks is the sign: the coupling is positive, and VG20 has no parameter for it.
 
-One thing did move, and against VG22. **The comprehension rate is fading**: its spread fell from 0.094 [0.042, 0.147] to 0.068 [0.015, 0.121] on 104 more children, and all three of its correlations widened to span zero where two of them previously did not. More data made that effect smaller and less identified, which is the signature of an effect that is not there. VG22's four-effect structure is behaving like a three-effect one.
+One thing did move, and against VG22. **The comprehension rate is fading**: its spread fell from 0.094 [0.042, 0.147] to 0.068 [0.015, 0.121] on 104 more children, and all three of its correlations widened, the one that previously excluded zero (comprehension rate ↔ ratio rate, 0.625 [0.209, 0.894]) now spanning it. More data made that effect smaller and less identified, which is the signature of an effect that is not there. VG22's four-effect structure is behaving like a three-effect one.
 
 ## The predictive evidence, with its caveat
 
@@ -84,13 +84,30 @@ The per-child effects say the same thing from the other side. Recovered per-chil
 
 `tau_subj_u_1` recovers, but it is the wrong kind of success: the truths are 0.06–0.10 against a posterior sd of 0.03–0.04, so the interval covers by being wide relative to a near-zero quantity. It is consistent with that effect not being there.
 
+Where the missing rate variance goes is an interpretation, but the recovery output points one way consistently. In all three replicates the spoken dispersion is recovered _lower_ than it was simulated — more overdispersion — somewhere on the age range: `kappa_young_s` 121 → 65 (z −4.8) and `kappa_excess_young_s` 89 → 36 (z −4.2) in r01, `kappa_young_s` 45 → 31 (z −3.3) in r02, `kappa_min_s` and `kappa_old_s` at z −1.7 and −2.0 in r03. Between-child variation in the production rate and extra Beta-Binomial spread in production counts are the two places the model can put the same variance, and for a child seen once they are not separable. That is consistent with the design reading below; it is not a demonstration of it.
+
+### The correlations recover; the scale does not
+
+The harness scores no element of `subject_factor_corr`, so the implied correlations were read from the recovery traces directly, with each replicate's truth rebuilt from its sampled loadings by the model's own construction (checked against the record trace's stored deterministic: maximum discrepancy 4e-16, and it reproduces the harness's `rho_uq` rows exactly).
+
+| pair                             | rep |  truth | recovered |    sd |     z | covered? |
+| -------------------------------- | --- | -----: | --------: | ----: | ----: | -------- |
+| comprehension level ↔ ratio rate | r01 | +0.528 |    +0.448 | 0.102 | −0.79 | yes      |
+|                                  | r02 | +0.434 |    +0.552 | 0.112 | +1.06 | yes      |
+|                                  | r03 | +0.425 |    +0.453 | 0.113 | +0.25 | yes      |
+| ratio level ↔ ratio rate         | r01 | +0.376 |    +0.342 | 0.085 | −0.40 | yes      |
+|                                  | r02 | +0.464 |    +0.495 | 0.099 | +0.31 | yes      |
+|                                  | r03 | +0.506 |    +0.504 | 0.088 | −0.03 | yes      |
+
+Every one covered, with posteriors honestly wide (sd about 0.1) where `tau_subj_q_1`'s was narrow and wrong. **The factor's shape is identified and its size along the rate dimension is not.** That is a sharper statement than "the rate block fails": the data can say which way the rate effect points relative to the levels, and cannot say how large it is.
+
 ### It is not the prior
 
 `tau_subj_q_1 ~ HalfNormal(0.5)`, so a truth of 0.76 sits 1.5 prior scales out and prior shrinkage is the obvious innocent explanation. It does not account for the displacement. Comparing log-densities at the truth against at the posterior mean, the prior prefers the posterior mean by 0.49 (r01) and 0.59 (r02) log-density units; the posterior prefers it by 5.64 and 9.36. **The prior accounts for 9% and 6% of the gap.** The rest is the likelihood.
 
 ### It is not a rotation artefact
 
-`L` and `LQ` give the same covariance for any orthogonal `Q`, so individual loadings are not identified — `subject_factor_w_32` shows up outside its interval in r02 for exactly that reason and should be ignored. But `tau_subj_q_1` is not a loading. The factor is built so that `Sigma_ii = tau[i]**2` exactly (`build_child_factor` in `gp_utils.py`), which makes each `tau` a rotation-invariant between-child standard deviation and is precisely why the model emits them. The comparison is like for like.
+The rotational freedom of a factor model — `L` and `LQ` give the same covariance for any orthogonal `Q` — is pinned in this model by the triangular anchor constraint, so it is not in play. What is unidentified is narrower: each normalise-a-Normal row of the loading matrix carries one inert radial magnitude, which `build_child_factor`'s own comment names as the price of avoiding a wrapped coordinate, and `subject_factor_w_32` — the diagonal entry of the production-rate row — is such an entry. Its appearing outside its interval in r02 is expected and says nothing. `tau_subj_q_1` is a different kind of quantity: the factor is built so that `Sigma_ii = tau[i]**2` exactly, which makes each `tau` the marginal between-child standard deviation of its effect however the loadings are parameterised. The comparison is like for like.
 
 ## The two failures are the same failure
 
@@ -110,26 +127,26 @@ The rank comparison says two defensible parameterisations of the same data disag
 
 ## Why: it is a design limit, not a modelling fault
 
-A per-year rate on a child's production ratio is identified only by children seen at two separated ages, with production measurable at both. The pool does not have many.
+A per-year rate on a child's production ratio is identified, in practice, by children seen at two separated ages with production measurable at both. A single-visit child contributes only through the way between-child spread changes with age — a signal the model's age-varying dispersion competes for directly. The pool does not have many of the children who count.
 
-| the pool                                       | children |     share |
-| ---------------------------------------------- | -------: | --------: |
-| total                                          |      943 |           |
-| seen once — contribute nothing to any rate     |      518 |     54.9% |
-| repeat-measured                                |      425 |     45.1% |
-| … with ≥ 6 months between first and last visit |      352 |     37.3% |
-| … producing at two or more separate visits     |      272 |     28.8% |
-| **… both: carrying real rate information**     |  **232** | **24.6%** |
+| the pool                                       | children | share of pool |
+| ---------------------------------------------- | -------: | ------------: |
+| total                                          |      943 |               |
+| seen once — next to nothing for a rate         |      518 |         54.9% |
+| repeat-measured                                |      425 |         45.1% |
+| … with ≥ 6 months between first and last visit |      352 |         37.3% |
+| … producing at two or more separate visits     |      272 |         28.8% |
+| **… both: carrying real rate information**     |  **232** |     **24.6%** |
 
 1,708 rows across 1,610 visits, median span between first and last visit 12 months. So `tau_subj_q_1` is being estimated from about **232 informative children**, most contributing a single rate contrast over a one-year window — and the recovery replicates show that is not enough. (The 425 matches `kfold_loso.py`'s `n_subjects` for the later-visit holdout exactly, which cross-checks the wave definition.)
 
-**This is what would change the answer, and it is not a modelling change.** More children seen once will not help; the `us_03` ingestion added 104 repeat-visit children and moved `tau_subj_q_1` from 0.576 to 0.730 without making it recoverable. What identifies a rate is longer follow-up on children already in the pool.
+**This is what would change the answer, and it is not a modelling change.** More children seen once will not help, and the last ingestion is the measurement of that: `us_03` added 104 children with two visits, and `tau_subj_q_1` moved from 0.718 on the fit of record immediately before it to 0.730 after. (The 0.576 quoted in the gate notes is from the 2026-08-23 fits, before the #281 refit; most of the movement between 0.576 and 0.730 predates the ingestion and is not the pool's doing.) What identifies a rate is longer follow-up on children already in the pool.
 
 ## What this means
 
-**Reportable from VG22, as direction and sign:** that children differ in how fast their production share moves at all; that comprehension standing predicts conversion _rate_ more strongly than conversion _level_; and that VG20's `rho_uq` of 0.433 is about a fifth larger than the level–level correlation actually is, because it is absorbing rate variance. The first two are qualitative claims resting on intervals that exclude zero under both ranks; the third is a caveat on a published number rather than a new number.
+**Reportable from VG22, as direction and sign:** that children differ in how fast their production share moves at all (`tau_subj_q_1` excludes zero at both ranks, 0.407 [0.328, 0.487] at rank 2); that the coupling between comprehension standing and conversion _rate_ is positive (positive at both ranks, and recovered within about one standard error in all three replicates); and that about a fifth of VG20's `rho_uq` is coupling VG22 attributes to the rates rather than the levels — a caveat on how a published number should be read rather than a new number, since VG20's correlation is of time-constant offsets and VG22's is of levels at 36 months, and the two coincide only if the rates are zero.
 
-**Not reportable:** any magnitude from VG22's rate block — `tau_subj_q_1` itself, the per-child rates, and the three correlations involving the comprehension rate.
+**Not reportable:** any magnitude from VG22's rate block — `tau_subj_q_1` itself, the per-child rates, the size of the level-to-rate correlation (0.40 at rank 3, 0.86 at rank 2), and anything involving the comprehension rate.
 
 **Unchanged:** VG20 stays the model of record, decided on criterion 2 and not revisited here. Nothing in this note bears on a published population trajectory; the two models remain interchangeable at every reported age.
 
@@ -149,5 +166,6 @@ In order of what each decides.
 - Recovery coverage over three replicates is **indicative, not simulation-based calibration** — the harness says so in its own verdict column. Three replicates cannot estimate a coverage rate. What they can do, and did, is show the same parameter missing in the same direction three times, at |z| of 3.0 to 4.3, which is not a coverage argument.
 - All three replicates cleared R-hat and ESS and failed the four-check gate on **divergences alone** — 6, 1 and 56 — which the harness counts as `converged: yes` with caveats, so criterion 1's "all three assessed" condition is met and the failure is in the recovery rather than in the assessment. r03's 56 is high enough to be worth naming; its R-hat is 1.006 and its minimum ESS 917, and its `tau_subj_q_1` miss is the mildest of the three, so the divergences are not what produced the result.
 - The k-fold numbers are from fold fits that did not converge and are quoted as direction only.
+- The correlation-recovery table is a direct reading of the traces, not a harness output. The reconstruction of each truth from its sampled loadings was checked against the record trace's stored `subject_factor_corr` on 2,000 draws and reproduces the harness's own `rho_uq` rows; the rank-2 correlations are read from that arm's trace the same way, because the sensitivity arm writes no `subject_factor_corr.csv`.
 - VG20's own recovery evidence, cited in [`202609031415`](202609031415-vg20-vs-vg22.md) as the decisive asymmetry, was run **before** the `us_03` ingestion and its outputs are not on the current output root. The comparison "VG20 recovers and VG22 does not" is therefore not like-for-like on data version. It is not needed: VG22's failure is established against its own generating truth on its own current design, without reference to VG20.
 - The comprehension-rate effect fading with more data is one refit's movement, not a trend. It is recorded because it points the same way as its correlations widening, not because either is decisive alone.
