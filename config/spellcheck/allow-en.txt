@@ -267,11 +267,13 @@ residualised
 respecification
 resumable
 reweighted
+restaled
 reweighting
 reweights
 rhat
 robustification
 rsplit
+scorable
 scratchpad
 sens
 setsid
@@ -304,6 +306,7 @@ univariates
 unmigrated
 unmodelled
 unrepresentable
+unscorable
 unsmoothed
 urlsafe
 validatable

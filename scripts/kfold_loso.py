@@ -4,11 +4,12 @@
 K-fold leave-one-subject-out (LOSO) gold-standard comparison of DS bivariate models.
 
 Defaults to VG07/VG08/VG09, the set it was written for; ``--models`` selects any
-subset of VG07-VG10, VG19 and VG20, and ``--suffix`` keeps a non-default run's
-output from overwriting the default one's.
+subset of VG07-VG10, VG19, VG20 and VG22, and ``--suffix`` keeps a non-default
+run's output from overwriting the default one's.
 
-Splits the 510 unique DS subjects into K folds (stratified by study and
-observation count), then for each (model, fold) pair refits the model with
+Splits the unique DS subjects into K folds (stratified by study and
+observation count -- 943 of them since the ``us_03`` ingestion, 510 before it),
+then for each (model, fold) pair refits the model with
 the fold's subjects' observations excluded from the likelihood (but kept
 in `obs_id` space so f_u_obs, h_obs and so on are computed at their ages).
 Subject REs for the held-out subjects are then drawn from their priors
@@ -77,6 +78,7 @@ from vocab_growth.models.definitions import (
     VG10,
     VG19,
     VG20,
+    VG22,
     BivariateModelDefinition,
 )
 from vocab_growth.models.likelihood_utils import (
@@ -85,12 +87,26 @@ from vocab_growth.models.likelihood_utils import (
 )
 
 # Every model this script can compare. `build_model_re` dispatches on the
-# definition's own fields, so the child-slope (VG19) and correlated-intercept
-# (VG20) structures need no separate builder here — which is the whole reason
-# the comparison is one line of configuration rather than a second script.
+# definition's own fields — through `subject_effects.resolve` — so the
+# child-slope (VG19), correlated-intercept (VG20) and low-rank-factor (VG22)
+# structures need no separate builder here, which is the whole reason the
+# comparison is one line of configuration rather than a second script.
+#
+# VG22 was added on 2026-09-09 for the VG20/VG22 promotion decision
+# (`notes/202609031930-vg20-vg22-decision.md` criterion 3). That criterion asks
+# for a paired `loo_compare` at more than four standard errors, and PSIS-LOO
+# degenerates on every model in this family — 36% of VG22's joint observations
+# and 24% of its comprehension observations exceed Pareto-k 0.7 or are
+# non-finite on the 2026-09-08 `rep` fits, which `loo_compare.py` itself marks
+# `[unusable]`. This script is the registered remedy for exactly that: it refits
+# per fold rather than importance-weighting, so no Pareto diagnostic is
+# involved. A held-out subject's factor scores stay at their `Normal(0, 1)`
+# prior during MCMC exactly as the other structures' subject REs do, because
+# `subject_factor_z` is indexed by `subject_id` and only the likelihood drops
+# the fold's rows.
 AVAILABLE = {
     "VG07": VG07, "VG08": VG08, "VG09": VG09,
-    "VG10": VG10, "VG19": VG19, "VG20": VG20,
+    "VG10": VG10, "VG19": VG19, "VG20": VG20, "VG22": VG22,
 }
 DEFAULT_MODELS = ("VG07", "VG08", "VG09")
 
