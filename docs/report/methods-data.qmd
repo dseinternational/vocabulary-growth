@@ -3,48 +3,215 @@ abstract: "**TODO**"
 ---
 
 ::: {.callout-note}
-Drafted in part by an LLM-based AI tool (Claude Code/Fable 5).
+Drafted in part by an LLM-based AI tool (Claude Code/Fable 5 and Fable 5.1).
+:::
+
+::: {.callout-warning title="Reviewer annotations (remove before publication)"}
+This revision (7 September 2026) applies clarity edits to the 4 September draft and adds review notes for the authors, inline as [**REVIEW**: …] and in blocks like this one. The notes flag facts to verify against the source documentation in `data/`, gaps that later chapters assume this chapter fills, and decisions that are the authors' to make. Counts quoted in the review notes were recomputed from the prepared DuckDB build on 7 September 2026.
 :::
 
 # Data {#sec-data}
 
-Parent-reported vocabulary checklists record a subset of the words a child knows, speaks or signs.
+This chapter describes the data the models are fitted to. It covers the checklists the studies used and how their scores were placed on a common scale (@sec-measures), the fifteen Down syndrome studies that contribute observations (@sec-studies), the typically developing reference pool drawn from Wordbank (@sec-td-pool), the checks applied to the data before modelling (@sec-data-checks), and summary tables and figures of the pooled data (@sec-study-summaries, @sec-vocabulary-by-age and @sec-repeated-measures).
 
-Lexical items - a subset of total words known.
+Parent-report vocabulary checklists record which words on a fixed list a child understands, says or signs. The list samples the words children typically learn earliest, so a checklist count is a count of known words *on that list*, not an estimate of everything the child knows. As a child's vocabulary grows beyond the words the list samples, the count says progressively less about how much larger the vocabulary is, and a count at a form's ceiling says only that the child knows at least those words. A count also says nothing about how clearly a word is said, how it is used, or which words are known.
 
-## Measures
+::: {.callout-warning title="REVIEW: total vocabulary paragraph"}
+The models chapter (@sec-reference-inventory) says that what checklist counts can and cannot say about vocabulary beyond the words checklists sample "is discussed in @sec-data". The paragraph above replaces the two placeholder lines in the draft ("Parent-reported vocabulary checklists record a subset…"; "Lexical items - a subset of total words known.") and needs an author's pass: is there a citation for how checklist counts relate to total vocabulary, and should the point about which words are known (nouns versus verbs and function words) stay here or in the shared caveats block?
+:::
 
-Different measures - MacArthur-Bates Communicative Development Inventories (WG, WS), Oxford CDI, DSE Checklists, etc.
+## Measures {#sec-measures}
 
-\[TODO\]
+All studies assessed vocabulary using word checklists. Where respondent information was available, the checklist was completed by a parent or other caregiver, who recorded whether their child understood, said, signed or otherwise expressed each listed word. Parent-reported Communicative Development Inventory (CDI) scores have shown good validity for children with Down syndrome [@millerValidityParentReport1995].
 
-### Signing measures
+Most instruments were versions or adaptations of the MacArthur-Bates CDI [@fensonMacArthurCommunicativeDevelopment1993; @marchmanMacArthurBatesCommunicativeDevelopment2023]. The three DSE Vocabulary Checklists hold 810 printed words plus blank spaces for a child's own name and other personal words, so a count can exceed 810; some studies used only the first one or two checklists. Several forms were adapted to record signing or symbolic gestures [@galeoteDevelopmentVocabularySpanish2011]. @tbl-instruments lists every form in the pool, the outcomes it recorded and the studies that used it.
 
-Sources record signing in different ways, and the signing fields are harmonised before fitting. `uk_01` records sign-only words and cannot identify total signed vocabulary from its aggregate data, so its understood and spoken values are retained while its signing values are masked in the primary signing analyses (VG14, VG15 and VG17); an explicit sensitivity analysis reintroduces it rather than pooling it silently with the comparable total-sign measures. The `uk_06` signing field was masked on the same principle while its construct was unverified, and was reinstated once the source confirmed the instrument: the standard DSE checklists, whose second column is completed for a word the child *understands and signs*, ticked for imitated as well as spontaneous signs. That is a total sign count, and the data agrees -- signed and spoken are each nested within understood on every uk_06 record, while their sum exceeds it on seven of eleven, which only overlapping per-word ticks can produce.
+| Form | Items | Outcomes recorded | Studies |
+|:-----|------:|:------------------|:--------|
+| MacArthur-Bates CDI Words and Gestures (American English) | 396 | understood, spoken | us_01, us_02, us_03 |
+| CDI Words and Gestures, adapted to record signing | 396 | understood, spoken, signed | uk_01 |
+| MacArthur-Bates CDI Words and Sentences (American English) | 680 | spoken | us_01 |
+| CDI Words and Sentences, adapted to record signing | 680 | spoken, signed | uk_01 |
+| Oxford CDI (British English) [@hamiltonInfantVocabularyDevelopment2000] | 416 | understood, spoken | uk_02, uk_03 |
+| Reading CDI, early form | 416 | understood, spoken, signed | uk_04, uk_05 |
+| Reading CDI | 674 | understood, spoken, signed | uk_07 |
+| Il Primo Vocabolario del Bambino, Gesti e Parole [@caselliPrimoVocabolarioBambino1995] | 408 | understood, spoken | it_01 |
+| Il Primo Vocabolario del Bambino, Parole e Frasi | 670 | spoken | it_01 |
+| Spanish CDI-Down | 651 | understood, spoken, gestured or signed | es_01 |
+| New Zealand CDI Words and Sentences | 675 | spoken, signed | nz_01 |
+| DSE Vocabulary Checklists 1 and 2 | 460 | understood, spoken | ie_01 (initial assessment) |
+| DSE Vocabulary Checklists 1 to 3 | 810 | understood, spoken, signed | uk_02, uk_06, ie_01 (follow-up), ie_02 |
 
-## Studies
+: Checklist forms in the pooled Down syndrome data, the number of items each holds, the outcomes recorded on it and the studies that used it. Item counts are the form maxima recorded in the prepared data. {#tbl-instruments}
 
-We pool data from a variety of sources, including data collected by charities and research groups across multiple countries.
+::: {.callout-warning title="REVIEW: instrument table"}
+This table is new. It is built from the study descriptions below and from the form maximum recorded against each administration in the prepared data, and it surfaces four things to check. (1) us_03's expressive column is "understands and says or signs", a union of speech and sign, so no spoken count is used from it; the table lists it under the 396-item form for comprehension only. (2) The draft says uk_01's adapted Words and Sentences form added an "understands" option, but no uk_01 Words and Sentences administration in the prepared data carries a comprehension count, and only 29 of its 69 Words and Gestures administrations do. (3) ie_02 is described as Checklists 1 and 2 (460 words), but every ie_02 administration is recorded against a maximum of 810, whereas ie_01's initial Checklists 1 and 2 administrations are recorded against 460 and are masked as partial administrations by the loader. One of these is wrong, and the answer changes whether ie_02's 111 administrations are on the reference scale. (4) uk_04 and uk_05 are treated as 416-item forms on inference rather than record, as the study paragraphs say.
+:::
+
+Scoring every form on one scale rests on one assumption: shorter early-vocabulary forms mainly omit words that are learned later, so for a child whose count sits well below a form's maximum, a longer form would have recorded nearly the same count. On that basis, each study's scores were converted to common measures of words understood, spoken and, where available, signed, and every count was then scored against the 810-word DSE inventory as a common reference, rather than converted to a percentage or scaled up in proportion to form length. A word can be both spoken and signed, so the two production counts were never added together. Each form's own maximum was retained alongside the count, to identify impossible values and to flag counts at or near a ceiling. The assumption, its consequences near a form's ceiling and the two checks that support it are set out in @sec-reference-inventory.
+
+### Signing measures {#sec-signing-measures}
+
+Nine of the fifteen studies record whether a child signs each word: es_01, ie_02, nz_01, uk_01, uk_02, uk_04, uk_05, uk_06 and uk_07. They record it in two different ways, and the signing fields are harmonised before fitting.
+
+Most sources record a *total* sign count: every word the child signs, whether or not the child also says it. Two, uk_07 and nz_01, instead record each produced word in exactly one of three cells (spoken only, signed only, or both), so their spoken and signed totals are reconstructed by adding the "both" cell to each. Reading those cells as totals would understate both counts by the overlap, which on one uk_07 record reaches 331 words.
+
+One source cannot be placed on the total-sign scale. uk_01 records words the child signs *but does not say*, and its aggregate counts cannot recover the total signed vocabulary. Its understood and spoken values are retained, but its signing values are masked in the primary signing models (@sec-signed-words), and a sensitivity analysis reintroduces them explicitly rather than pooling them silently with the comparable measures.
+
+The uk_06 signing field was masked on the same principle while its construct was unverified, and was reinstated once the source confirmed the instrument: the standard DSE checklists, whose second column is ticked for a word the child *understands and signs*, imitated or spontaneous. That is a total sign count, and the data agree. Because a word can be both signed and spoken, a total sign count plus a spoken count can exceed the understood count, whereas a sign-only count added to a spoken count cannot. On every uk_06 record the signed and spoken counts each fall within the understood count, and on seven of the eleven their sum exceeds it, which only overlapping per-word ticks can produce.
+
+es_01's signing column is defined to include spontaneous symbolic gestures as well as taught signs; its construct is discussed under that study below and its consequences for the sign–speech association in @sec-speech-sign-association.
+
+::: {.callout-warning title="REVIEW: signing measures"}
+The list of signing sources and the two recording conventions come from the data documentation (`data/vocab_data_uk_07.md` states that uk_01, ie_02, uk_04 and uk_05 hold any-modality totals and that uk_07 and nz_01 hold exclusive cells). This contradicts the uk_04 paragraph below, which says whether its signing column counted words the child also spoke is "unstated". The draft named the models by identifier (VG14, VG15 and VG17) a chapter before they are introduced; this revision refers to the models chapter instead. Decide whether VG17, an exploratory model, should be mentioned in the report at all.
+:::
+
+## Studies {#sec-studies}
+
+The pooled Down syndrome data come from fifteen studies in six countries, collected by charities and research groups between the 1990s and 2022. Five are intervention studies (uk_05, uk_06, ie_01, ie_02 and uk_07): their later assessments may reflect the intervention as well as ordinary development. [**REVIEW**: state how intervention exposure is treated in the models. As far as the code shows, every administration enters alike, with no intervention covariate; if so, say so once here rather than as a differently worded caveat under each of the five studies.]
+
+The studies below are ordered by when their data were collected. For several the period is recorded only approximately, or in a companion report rather than the publication cited, and for three (es_01, it_01 and us_02) it is not recorded at all. [**REVIEW**: the draft said "for one it is not recorded at all", which the section itself contradicts. Consider whether a chronological order with unknown dates serves the reader, or whether ordering by dataset identifier, with the years in @tbl-summary-ds, would be plainer.]
+
+Each description gives the source study and how it recruited, the instrument and the outcomes it recorded, and what the project file holds where that differs from the publication. Where a count in the text differs from @tbl-summary-ds, the difference is a data check described in @sec-data-checks.
+
+::: {.callout-warning title="REVIEW: study headings and voice"}
+Headings mix paper titles ("A study of vocabulary, signing and grammatical complexity in 218 children with Down syndrome") with descriptive labels ("Reading and Language Intervention trial, United Kingdom"). This revision leaves them as drafted; a single style, a short descriptive title followed by the country and dataset identifier, would be easier to scan. "This data was" has been changed to "These data were" throughout.
+:::
 
 ### A study of vocabulary, signing and grammatical complexity in 218 children with Down syndrome (uk_01)
 
-This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Communicative Development Inventory (CDI), using both the Words and Gestures and Words and Sentences forms [@marchmanMacArthurBatesCommunicativeDevelopment2023; @fensonMacArthurCommunicativeDevelopment1993].  The data were collected through several research projects at The Sarah Duffen Centre, a joint initiative of the University of Portsmouth and Down Syndrome Education International (then the Portsmouth Down's Syndrome Trust). Parents were provided with the form appropriate for their child's age. In many instances, adapted versions were used. In addition to the standard "understands" and "understands and says" options, the adapted Words and Gestures forms added an option to indicate if the child "signs" the word. The adapted Words and Sentences forms (which usually only include "says") added "understands" and "signs" as options. Participants were 218 children with Down syndrome between 1 and 9 years of age, including 102 girls and 116 boys. Words and Sentences was completed by 154 participants and Words and Gestures was completed by 64 participants. The families participating lived in the five closest counties to Portsmouth -- Hampshire, West Sussex, Surrey, Dorset and Wiltshire.
+This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Communicative Development Inventory (CDI), using both the Words and Gestures and Words and Sentences forms [@fensonMacArthurCommunicativeDevelopment1993; @marchmanMacArthurBatesCommunicativeDevelopment2023]. The data were collected through several research projects at The Sarah Duffen Centre, a joint initiative of the University of Portsmouth and Down Syndrome Education International (then the Portsmouth Down's Syndrome Trust), from the 1990s to 2000. Parents were provided with the form appropriate for their child's age. In many instances, adapted versions were used. In addition to the standard "understands" and "understands and says" options, the adapted Words and Gestures forms added an option to indicate if the child "signs" the word. The adapted Words and Sentences forms (which usually only include "says") added "understands" and "signs" as options. [**REVIEW**: no Words and Sentences administration in the file carries a comprehension count; see the instrument table note.] The original report described 218 children aged between 1 and 9 years, including 102 girls and 116 boys. It stated that Words and Sentences was completed for 154 participants and Words and Gestures for 64. [**REVIEW**: `data/vocab_data_uk_01.md` describes the 154 as Words and Sentences *administrations*, not participants.] The families lived in the five counties closest to Portsmouth: Hampshire, West Sussex, Surrey, Dorset and Wiltshire. The project data contain 214 usable assessments grouped under 129 name-derived identifiers. Because children's names were the only available way to link repeated assessments, these identifiers are not a definitive count of distinct children: one identifier whose records could only be two children fused under one name is withheld from the analysis (@sec-data-checks). The signing field records sign-only words and is masked in the signing models (@sec-signing-measures).
 
 ### The development of vocabulary in Spanish children with Down syndrome: comprehension, production, and gestures (es_01)
 
-This data was collected as part of a study on the development of vocabulary in Spanish children with Down syndrome [@galeoteDevelopmentVocabularySpanish2011]. The participants included 186 children with Down syndrome aged 11 to 71 months. All children had a monolingual Spanish background. The participating families were contacted through early intervention units and Down syndrome parent associations from different cities in Spain (mainly in the South). The study used an adapted CDI form consisting of 651 words organised into 21 categories, with options to record "understands" and "understands and says". In addition, the form included a third column to assess the comprehension and production of gestures representing specific lexical items. Symbolic gestures were defined as those gestures that, when properly taught or spontaneously learnt, substitute specific lexical items (e.g., closing the hand with tight fingers and moving it towards the mouth to simulate "to eat"). The gesture column is therefore a per-word record of manual expression, taught signs and spontaneously learnt gestures alike, which the source does not separate; the authors use *signed* and *gestured* interchangeably, and parents were asked to mark only words "produced or signed referentially and spontaneously". The study's own typically developing comparison group, with no sign instruction reported, averaged 23.6 gestured words, so spontaneous symbolic gesture is captured. No other signing source in the pool records what its parents were told a sign is, so the column is read as this study's signed count on the same footing as the others, with one measurement caveat: after a validity check the authors eliminated eleven of the form's 21 word categories from the gesture data, and whether the totals supplied to us carry that elimination is being confirmed with the author.
+These data were collected as part of a study on the development of vocabulary in Spanish children with Down syndrome [@galeoteDevelopmentVocabularySpanish2011]. The participants included 186 children with Down syndrome aged 11 to 71 months, each assessed once. All children had a monolingual Spanish background. The participating families were contacted through early intervention units and Down syndrome parent associations from different cities in Spain, mainly in the south. The study also assessed 186 typically developing children matched to the children with Down syndrome on mental age and sex; those records are held with the project data but are not used here, because they were collected on a different instrument from the Wordbank forms that make up the typically developing reference pool (@sec-td-pool).
 
-### See and Learn, Down Syndrome Ireland (ie_01)
-
-This data was collected by Down Syndrome Ireland as part of a project from 2019 to 2020.
+The study used an adapted CDI form consisting of 651 words organised into 21 categories, with options to record "understands" and "understands and says". A third column recorded gestures representing specific lexical items. Symbolic gestures were defined as gestures that, whether properly taught or spontaneously learnt, substitute for specific lexical items (for example, closing the hand with tight fingers and moving it towards the mouth to mean "to eat"). The gesture column is therefore a per-word record of manual expression that covers taught signs and self-invented gestures alike, which the source does not separate; the authors use *signed* and *gestured* interchangeably. Parents were asked to mark only words the child produced or signed referentially and of their own accord, not in imitation. The study's own typically developing comparison group, with no sign instruction reported, averaged 23.6 gestured words, so self-invented symbolic gesture is captured as well as taught signs. No other signing source in the pool records what its parents were told a sign is, so the column is read as this study's signed count on the same footing as the others, with one measurement caveat: after a validity check the authors eliminated eleven of the form's 21 word categories from the gesture data, and whether the totals supplied to us carry that elimination has not been confirmed. [**REVIEW**: the draft said this "is being confirmed with the author"; resolve before publication or state it as an open limitation.] Collection dates are not reported; an earlier report from the same research programme described 66 children with Down syndrome in 2008 [@galeoteAcquisitionProductiveVocabulary2008]. [**REVIEW**: check the 66 against the 2008 paper. The only 66 in `data/vocab_data_es_01.md` is 66 parents in the 2011 gesture validity exercise.]
 
 ### Vocabulary development in Italian children with Down syndrome (it_01)
 
-This data was collected as part of two studies investigating longitudinal trends in vocabulary development and cross-sectional data for Italian children with Down syndrome [@zampiniVocabularyDevelopmentChildren2013].
+These data came from two Italian studies of vocabulary development in children with Down syndrome, one longitudinal and one in which children were assessed once [@zampiniVocabularyDevelopmentChildren2013]. The longitudinal study followed 18 children: ten from about two years of age for two years, and eight from about three years for one year. A further 27 were selected from a language-development monitoring programme, nine at each of three *developmental* age levels of about 18, 24 and 30 months; their chronological ages were higher. Collection dates are not reported. The monitoring programme these children attended was already running by early 2008, when a study of children at 36 months drawn from it was submitted for publication [@zampiniCommunicativeGesturesVocabulary2009].
 
-In the first study, 18 children with Down syndrome were studied longitudinally, including 10 children who were 2 years old and were followed for a 2-year period until they reached the age of 4 years. Moreover, eight other 3-year-old children were followed for a 1-year period until they reached the age of 4 years. For the second study, 27 children were selected from the sample of 60 toddlers attending our monitoring program on language development. The inclusion criteria for these children were a developmental age of approximately 18 (M = 18.22, range: 16–20), 24 (M = 24.11, range: 23–25), and 30 (M = 29.22, range: 28–30) months. Nine children were included in each group.
+Parents completed Il Primo Vocabolario del Bambino, the Italian version of the MacArthur CDI [@caselliPrimoVocabolarioBambino1995]. The 408-item Gesti e Parole form recorded words understood and spoken; the 670-item Parole e Frasi form recorded speech only, so comprehension scores come from the shorter form alone. The project file contains 54 children rather than the 45 described in the paper, including records collected beyond 48 months. [**REVIEW**: the draft says the source of the additional records "should be confirmed". Resolve or state as a limitation.]
 
-\[TODO\]
+### DSE and Wates early-reading projects, United Kingdom (uk_02)
+
+These data came from DSE and Wates Foundation language and early-reading projects conducted from approximately 2008 to 2012. [**REVIEW**: `data/vocab_data_uk_02.md` gives a single collection year, 2010. Confirm the span.] The file combines three groups labelled edg2008, edg2009 and wates2010 [**REVIEW**: say what "edg" stands for], with 136 assessments from 65 children aged 19 to 56 months. They are not separate samples: all 28 children in edg2009 also appear in edg2008, and nine of the 40 in wates2010 appear in the earlier groups. How families were invited, and the inclusion criteria, are not recorded.
+
+Of the 136 records, 96 are DSE Vocabulary Checklists and 40 are Oxford CDIs; both recorded words understood and words expressed through speech only, sign only, or both. The available files do not identify who completed every form. The Oxford form used in wates2010 survives as a word-by-word file: 416 printed words in 19 categories, with 25 blank spaces for additional words, completed between January and May 2010. This is the study whose 34 children were assessed on both the DSE checklists and the Oxford CDI, which provides one of the two checks on the common scoring of forms of different lengths (@sec-reference-inventory), and its per-word record of speech and sign is one of the four sources that inform the sign–speech association (@sec-speech-sign-association).
+
+### Reading and Language Intervention trial, United Kingdom (uk_06)
+
+These data came from the Reading and Language Intervention trial reported by @burgoyneEfficacyReadingLanguage2012. The project was advertised in spring 2009 to parents of children with Down syndrome attending mainstream primary schools in Yorkshire and Hampshire. Children were eligible if they were in school Years 1 to 5. Fifty-seven children entered and were assigned either to begin the intervention immediately or to a waiting-list group, with assessments before intervention and after 20 and 40 weeks.
+
+Parents completed all three DSE Vocabulary Checklists, covering 810 printed words and recording words understood, signed, imitated, used spontaneously and spoken clearly. The vocabulary file holds initial assessments for only 11 of the 25 children recruited in Hampshire, aged 60 to 115 months. No usable checklist data are present for the 32 children in the Yorkshire arm, suggesting that checklist data were collected or retained only in Hampshire. The spoken-clearly scores exist in the trial's original data file but were not included in the project vocabulary file, and the imitated column is not used, because it exceeds the understood count on four of the eleven records. The signing column is a total sign count (@sec-signing-measures).
+
+### Word type and communication method in New Zealand children (nz_01)
+
+These data came from children attending one early-intervention centre in a city on the South Island of New Zealand [@foster-cohenWordTypeModality2023]. The published study included 35 children with trisomy 21 aged 30 to 66 months. Children were invited once they had attended the programme for at least 24 months and had begun to use five or more spoken or signed words. One child was excluded because cerebral palsy prevented communication by speech or sign. English was the main or only home language. The checklists were completed between 2010 and 2017, as part of a larger study at the same centre [@foster-cohenVariationMorpholexical2023].
+
+Mothers completed a 675-item New Zealand Words and Sentences CDI about every six months, recording for each word whether the child used speech only, sign only, both, or neither. The form measured expression but not understanding, so the spoken and signed totals are reconstructed from the three production cells (@sec-signing-measures). The project data hold 111 assessments from 33 children, against 114 from 35 in the paper; the author-supplied workbook already contains the smaller totals, so these records were absent before the data were processed for this project.
+
+### Mason-Apps longitudinal vocabulary data, United Kingdom (uk_04)
+
+The Mason-Apps file holds 44 assessments from 18 children with Down syndrome aged 18 to 45 months, most assessed three times about six months apart. The numbers resemble the 18-child group reported by @mason-appsInfantsSyndromeShow2020, and some records may relate to the 14-child sample reported by @mason-appsLongitudinalPredictorsEarly2018, but the ages and assessment patterns do not match either publication exactly. The file contains only children with Down syndrome. Collection dates are not reported in either paper; the doctoral thesis behind them was submitted in September 2013 [@mason-appsEarlyPredictorsLanguage2013].
+
+In the associated studies, families were recruited through Down syndrome charities and University of Reading or local language-support groups; because the file cannot be matched exactly to either publication, these routes may not describe all 18 children. Parents completed a Reading CDI at home before each visit, recording words understood, spoken and signed. Neither paper states how many words the form holds, and this project treats it as a 416-item British CDI; a later 674-item Reading CDI was used in PACT-DS (uk_07), but this does not establish the length of the earlier form. Whether the signing column counted words the child also spoke is not stated in the papers. [**REVIEW**: `data/vocab_data_uk_07.md` records uk_04's signing column as an any-modality total. Reconcile with the data documentation, which is the basis on which the loader treats it.]
+
+### Edgin/Wordbank vocabulary data, United States (us_01)
+
+These data came from the Edgin files held in Wordbank, an open collection of CDI data [@frankWordbankOpenRepository2017]. The source covers children with Down syndrome and several comparison groups. @edgin2015sleep reported recruitment between 2012 and 2015 in Arizona and elsewhere in the United States, with exclusions for Down syndrome other than trisomy 21, birth before 36 weeks, cyanotic heart defects and a home language other than English. That study covers only part of these files, so it cannot describe the full sample.
+
+Parents or caregivers completed the 396-item American-English Words and Gestures CDI or the 680-item Words and Sentences CDI. Words and Gestures recorded understanding and speech, Words and Sentences speech only; no signing measure was collected. The data were rebuilt from Wordbank's item-level contributor files rather than taken from its download page, which truncates every administration to its form's registered age window and would have removed 151 of the 345 Down syndrome administrations. After four entirely blank forms were removed, two of them from children with Down syndrome, the source files yielded 345 Down syndrome assessments from 122 children aged 5 to 173 months, 76 of whom completed both forms, linked by the study's own participant number. [**REVIEW**: `data/vocab_data_us_01.md` gives 71 children, 46 on both forms, for the age-truncated export. Make clear which set each pair of figures describes.] The data checks in @sec-data-checks remove more from this source than from any other: 16 administrations given below the form's lowest registered age and 64 children recorded only at their form's ceiling, leaving 230 administrations from 58 children aged 11 to 27 months.
+
+### Joint-attention intervention, United Kingdom (uk_05)
+
+These data came from Emily Seager's study of joint attention and language development [@seagerEarlyInterventionInfants2018]. Sixteen children with Down syndrome, aged 17 to 23 months at the start, were recruited through a University of Reading language-support group, local charities and the Down's Syndrome Association website. One child heard both English and German, with English the main language. None was already receiving a weekly joint-attention intervention. The recruitment materials set a closing date of 31 May 2016, and each child was then followed for twelve months.
+
+Parents completed an adapted Reading CDI recording words understood, spoken and signed, at an initial assessment and six and twelve months later; the children received a ten-week joint-attention intervention after the first assessment. The file holds 48 assessment records across the three occasions, 46 with vocabulary scores, covering ages 17 to 36 months. [**REVIEW**: @tbl-summary-ds shows 47 administrations for uk_05. Of the two records without vocabulary scores, one has no age and is dropped, and one at 24 months is kept as an empty administration. Check which figure the text should give.]
+
+### Cross-syndrome vocabulary study, United Kingdom (uk_03)
+
+These data came from a study comparing children with Williams syndrome, Down syndrome, fragile X syndrome and typical development, each assessed once [@dsouzaExplainingComprehensionProduction2026]. The Down syndrome group was 27 children, 15 of them girls, aged approximately 12 to 39 months, all living in the United Kingdom with parents using only or mainly English. The paper does not report how participants were recruited or when the data were collected. A companion study of the same cohort was submitted for publication in January 2019 [@dsouzaAttentionalAbilitiesConstrain2020], which places these assessments well before the paper reporting them.
+
+Parents completed the Oxford CDI, recording which words their child understood and produced. The paper describes this form as containing 418 words, whereas this project treats it as 416; no recorded count exceeds 416.
+
+### See and Learn, Down Syndrome Ireland (ie_01)
+
+These data were collected by Down Syndrome Ireland during the national See and Learn project, planned for the 2019/20 academic year [@downsyndromeirelandSeeLearnProject2019; @downsyndromeirelandAnnualReport2020]. Preschools delivered the See and Learn language programme in at least three ten-minute sessions a week for six months, and parents and educators attended regional training. Parents completed DSE Vocabulary Checklists at the beginning and end of the period.
+
+The dataset holds 59 children aged 21 to 80 months at the first assessment, 46 of whom were assessed again six months later. The checklists recorded words understood, imitated and spoken. Checklists 1 and 2 were used initially, covering 460 printed words; the later assessment could include all three, covering 810. Because the initial administrations are not on the 810-word reference scale, their counts are masked as partial administrations (@sec-data-checks), so this study contributes its follow-up assessments only. Preschool closures from March 2020 disrupted delivery and follow-up. [**REVIEW**: the draft's closing sentence, that six-month changes cannot be attributed to See and Learn alone, is a caveat on the programme evaluation rather than on these data; the intervention caveat is now stated once at the top of this section.]
+
+### Online language-through-music programme, Ireland (ie_02)
+
+These data were collected during a 12-week online language-through-music programme delivered from mid-September to December 2022 [@frizelleFeasibilityOnlineLanguage2024]. Parents were invited through the Down Syndrome Ireland membership database, newsletter and social media. Children were eligible if they had Down syndrome, were exposed to English at home and would be aged 12 to 42 months during the programme; three younger children turned 12 months while it ran. Families were randomly assigned to watch the weekly video twice or five times a week.
+
+Parents completed DSE Vocabulary Checklists 1 and 2 online before and after the programme, covering 460 printed words and recording words understood, signed, imitated, used spontaneously and spoken clearly. [**REVIEW**: every ie_02 administration is recorded against a form maximum of 810 in the prepared data, not 460; see the instrument table note.] The published analysis included 68 children; the project data hold 67, with 116 assessments, 67 before and 49 after. [**REVIEW**: @tbl-summary-ds shows 65 children and 111 administrations. Establish where the other two children and five administrations went, and state it here or in @sec-data-checks.] The group totals suggest that the missing child was in the higher-dose group.
+
+### Parent-delivered language programme trial, United Kingdom (uk_07)
+
+These data were collected during a feasibility trial of PACT-DS, Parents and Children Together for children with Down syndrome, a parent-delivered early language teaching programme adapted from an existing programme [@burgoyneProtocolRandomisedControlled2023]. A feasibility trial tests whether a full trial would be workable, not whether the programme works. Families were recruited by advertising through local parent support groups, speech and language therapy organisations and national Down syndrome organisations. Children were eligible if they had Down syndrome, were aged three to six years, lived within about 40 miles of Manchester or Reading, used at least ten English words or signs, had a minimum cognitive level of 18 months and had an English-speaking parent. Twins were excluded.
+
+Thirty children took part, 15 in the intervention group and 15 on the waiting list; both arms are pooled here. Parents completed a 674-item Reading CDI online before the programme, after the 30-week intervention and at follow-up, recording words understood and whether each was expressed through speech only, sign only, or both. The source holds 83 assessments from children aged 34 to 95 months; 82 are used, because one record reports more words produced than understood. The protocol planned a six-month follow-up, but the recorded ages give a median gap of four months between the second and third assessments. [**REVIEW**: `data/vocab_data_uk_07.md` describes the third assessment as four months after the second by design. Check the protocol.]
+
+### Single-assessment vocabulary data, United States (us_02)
+
+These data hold one assessment from each of 26 children with Down syndrome aged 8 to 75 months. The file contains checklist totals for words understood and spoken, but does not record who completed the checklist. The collection dates, recruitment method, inclusion criteria and any publication describing this sample are all unrecorded.
+
+The scores appear to come from the 396-item American-English Words and Gestures CDI, but this is inferred from their range rather than recorded: one child understood exactly 396 words and three others 390 or 391. We treated one understanding score, 382 words at 16 months, as missing because we judged it unlikely to be correct; the spoken score was retained.
+
+### Project CAPEabilities and Project EXPO, United States (us_03)
+
+::: {.callout-warning title="REVIEW: new study paragraph"}
+The draft described fourteen studies; us_03 entered the pool on 5 September 2026 and is the second-largest study by children. The paragraph below is drafted from `data/vocab_data_us_03.md` and the loader's documentation and needs an author who has read the source. There is no entry for the Fidler et al. dataset in the bibliography yet.
+:::
+
+These data were provided by Fidler and colleagues from two studies of children with Down syndrome in the United States, Project CAPEabilities and Project EXPO (Fidler, Van Deusen, Baumer, Bishop and Lanfranchi, 2026). [**REVIEW**: add recruitment, dates and a bibliography entry.] Parents completed the 396-item American-English Words and Gestures CDI, marking each word as "understands" or "understands and says or signs". The expressive column is therefore a union of speech and sign from which no spoken count can be recovered, so this study contributes comprehension only.
+
+The file holds 287 assessments from 183 children. Four children aged 62 to 80 months stand apart from the other 286 assessments, all at 17 to 35 months, with no second visit, counts near the form's ceiling, and in one case 432 words understood against a 396-item form. The source's own documentation concludes they came from a different file, and which form they completed cannot be confirmed, so their three assessments with checklist data are excluded (@sec-data-checks), leaving 284 assessments from 180 children aged 17 to 35 months.
+
+## The typically developing reference pool {#sec-td-pool}
+
+::: {.callout-warning title="REVIEW: new section"}
+The draft prints a typically developing summary table and four figures but never describes the pool in prose. This section is drafted from `data/wordbank_administration_data.md` and the model definitions. Two things need the authors' decision. First, the introduction (@sec-intro) says the comparison pool is 15 Wordbank datasets in four varieties of English, Italian and Spanish, 14,775 children, whereas @tbl-summary-td as currently generated is the English-only scope: 12 datasets and 12,488 children. Either the caption should say which scope it shows or the table should be regenerated at the wider scope. Second, the intro's "aged 8 to 30 months" needs the explanation below of where that window comes from.
+:::
+
+The typically developing reference pool is drawn from Wordbank, an open repository of CDI administrations [@frankWordbankOpenRepository2017], using its by-child summary export downloaded on 15 June 2026. The pool comprises administrations of the American-English Words and Gestures and Words and Sentences forms and the British Oxford CDI, in American, Australian, British and Irish English; the hierarchical typically developing models add the Italian and Spanish (European) forms, so that the comparison with the Down syndrome pool, a quarter of which is non-English, spans several languages on both sides (@sec-randomeffects). The models that carry no random effects to absorb between-language variation stay English-only.
+
+Comprehension is recorded only on the Words and Gestures forms and the Oxford CDI, so the pool's comprehension observations stop where those forms do, at 25 months; Words and Sentences records speech only. The pool's age range, 8 to 30 months, is not a choice made in this project: Wordbank's export admits each administration only within its form's registered age window (8 to 18 months for Words and Gestures, 16 to 30 for Words and Sentences), and those windows are kept as they are because the forms are used within the ages they were normed for. For the Down syndrome pool, by contrast, administrations above a form's window are deliberately admitted, because an early-vocabulary form given to an older child with Down syndrome is developmentally appropriate.
+
+Two groups are excluded. The Edgin dataset's comparison children are the only Wordbank administrations that record a health condition, and the dataset is excluded from the reference pool as a whole. The 186 typically developing children assessed in es_01 are not added to it either, because they were assessed on a different instrument from the Wordbank forms.
+
+## Data checks {#sec-data-checks}
+
+::: {.callout-warning title="REVIEW: new section"}
+The introduction says 957 of 1,024 children "remain after the data checks described in @sec-data", and the draft described none of them beyond the two signing masks. This section is drafted from the loader's documentation and the counts it removes on the current data build. Every rule below has a reinstatement switch for sensitivity analysis; whether the report presents those sensitivity results is a decision for the authors, and if it does this section should point to them.
+:::
+
+The prepared files hold 1,920 checklist administrations of 1,024 children with Down syndrome. The checks below reduce them to the 1,800 administrations of 957 children summarised in @tbl-summary-ds. Two kinds of check are applied. Some *drop* an administration or a child; others *mask* a single count while keeping the administration and its other counts. Each rule has a documented reason and a switch that reinstates the affected records for sensitivity analysis.
+
+Records withheld when the source files are read:
+
+- **uk_01**: one name-derived identifier whose records can only be two children fused under one name. [**REVIEW**: give the number of administrations withheld.]
+- **uk_07**: one administration recording 191 words understood against 489 produced.
+
+Administrations dropped:
+
+- **Given below the form's lowest registered age** (us_01): 16 administrations at 5 to 7 months, three of which report 236 to 368 words spoken.
+- **Children recorded only at their form's ceiling** (us_01): 64 children and 98 administrations that carry the signature of a data-preparation batch rather than of able older children. They are identified on provenance, because the affected children have no non-ceiling record of their own, since age and count together cannot separate such a batch from a legitimately able older child.
+- **A structurally distinct sub-sample** (us_03): the three assessments with checklist data from the four children aged 62 to 80 months described above, whose form cannot be confirmed.
+- **No recorded age**: two administrations, one each in uk_01 and uk_05, that cannot be placed on a trajectory.
+
+Counts masked, with the administration retained:
+
+- **Partial administrations** (ie_01): the 59 initial assessments on Checklists 1 and 2 only, which are not on the 810-word reference scale. Both their understood and spoken counts are masked.
+- **Duplicated outcome columns** (us_01): eight comprehension counts and one spoken count from infant administrations whose understood and spoken columns appear to have been copied from one another.
+- **Implausible production** (us_01): five spoken counts matching a near-ceiling or longitudinal-collapse signature.
+- **Same-day disagreements** (us_01): two spoken counts, of 385 and 406 words at 23 months, contradicted by same-day administrations on another form recording 11 and 50.
+- **Comprehension below production**: ten comprehension counts (seven in ie_01, two in uk_01, one in it_01) that fall below the child's recorded production. The comparison is against the recorded *union* of spoken and signed words, not their sum, which would double-count words both said and signed and flag 87 administrations rather than ten; equality is allowed, since a child who produces every word they understand is legitimate.
+- **Sign-only counts** (uk_01): all 214 signing counts, in the signing models only (@sec-signing-measures).
+
+Together the checks reduce the pool from 1,920 administrations of 1,024 children to 1,800 of 957, the comprehension observations from 1,380 to 1,260, the spoken observations from 1,617 to 1,421 and the signed observations from 900 to 899. An administration whose every count is masked stays in the administration totals of @tbl-summary-ds but contributes nothing to the fits; 92 of the 1,800 are in that position, 59 of them ie_01's initial assessments. [**REVIEW**: recomputed on 7 September 2026 from the DuckDB build; the introduction's 1,024 and 957 agree with it. The per-rule counts above were measured one rule at a time and the rules interact (a us_01 child becomes ceiling-only once a below-floor administration is removed), so they do not sum exactly to the totals. Consider generating all of these counts at render time, as `pool_descriptives.py` does for the Discussion's counts, so they cannot drift, and decide whether the table should count administrations that carry no usable count.]
 
 ## Study summaries {#sec-study-summaries}
 
@@ -55,7 +222,7 @@ from vocab_growth.report_tables import SUMMARY_TABLE_COLWIDTHS, print_wide_table
 
 print_wide_table(
     summary_table("figures/descriptives/summary_table_ds.csv", "Study"),
-    "Pooled Down syndrome data, by study: children, checklist administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Blank cells mean the study records no such measure (or the loader masks it). The All row pools every observation.",
+    "Pooled Down syndrome data, by study, after the checks in @sec-data-checks: children, checklist administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Blank cells mean the study records no such measure (or the loader masks it). The All row pools every observation.",
     "tbl-summary-ds",
     colwidths=SUMMARY_TABLE_COLWIDTHS,
 )
@@ -66,36 +233,40 @@ print_wide_table(
 #| output: asis
 print_wide_table(
     summary_table("figures/descriptives/summary_table_td.csv", "Dataset"),
-    "Typically-developing Wordbank reference pool, by dataset: children, administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Comprehension is measured only on the bivariate forms, so its columns cover fewer administrations than the spoken ones. The All row pools every observation.",
+    "Typically developing Wordbank reference pool, English-language scope, by dataset: children, administrations, and the range, median and mean (SD) of age (months) and of the observed words-understood and words-spoken counts. Comprehension is measured only on the Words and Gestures and Oxford forms, so its columns cover fewer administrations than the spoken ones. The All row pools every observation.",
     "tbl-summary-td",
     colwidths=SUMMARY_TABLE_COLWIDTHS,
 )
 ```
 
+[**REVIEW**: the caption now says "English-language scope" to match the table as generated. If the table is regenerated at the English-plus-Romance scope the hierarchical models use, change the caption and reconcile with @sec-intro.]
+
 ## Vocabulary by age {#sec-vocabulary-by-age}
 
-Every observation in the pooled Down syndrome data, coloured by study, against the pooled interquartile band (25th–75th percentile) per 6-month age bin, drawn where a bin holds at least five observations. The scatter covers the pool's full age range deliberately: beyond about 72 months coverage rests on a couple of studies, which is why the results are reported to 72 months.
+The two figures below show every observation in the pooled Down syndrome data, coloured by study, against the pooled interquartile band (25th to 75th percentile) for each 6-month age bin holding at least five observations. They cover the pool's full age range deliberately: beyond about 72 months, coverage rests on a couple of studies, which is why the results are reported to 72 months.
 
 ![Words understood by age in the pooled Down syndrome data, coloured by study, against the pooled interquartile band.](figures/descriptives/observations_age_understood_ds){#fig-obs-understood-ds .lightbox}
 
 ![Words spoken by age in the pooled Down syndrome data, coloured by study, against the pooled interquartile band.](figures/descriptives/observations_age_spoken_ds){#fig-obs-spoken-ds .lightbox}
 
-The typically-developing Wordbank reference pool is too dense for a scatter — hundreds of administrations at each integer age — so its by-age view is the monthly distribution: one violin per month (density clipped to that month's observed range), with the pooled monthly median and interquartile band. Comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do:
+The typically developing reference pool is too dense for a scatter, with hundreds of administrations at each integer age, so its by-age view is a monthly distribution: one violin per month, with its density clipped to that month's observed range, and the pooled monthly median and interquartile band. Comprehension is measured only on the Words and Gestures and Oxford forms, so the understood panel ends where those forms do.
 
-![Words understood by age in the typically-developing reference pool — monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_understood_td){#fig-obs-understood-td .lightbox}
+![Words understood by age in the typically developing reference pool: monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_understood_td){#fig-obs-understood-td .lightbox}
 
-![Words spoken by age in the typically-developing reference pool — monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_spoken_td){#fig-obs-spoken-td .lightbox}
+![Words spoken by age in the typically developing reference pool: monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_spoken_td){#fig-obs-spoken-td .lightbox}
 
 ## Repeated measures {#sec-repeated-measures}
 
-Many children are measured more than once, and the within-child trajectories motivate the models' subject-level random effects. In the figures below each line joins one child's visits on one checklist form, drawn against the pooled median, mean and interquartile range for that age window (computed over all observations, single-visit children included). Lines are linked **within form only**: a child measured on two forms at one visit, or moved between forms, records counts on different item inventories, and joining those would draw measurement-scale changes as development. The Down syndrome figures cover the 8–72 month reporting window; individual trajectories fan widely around the pooled centre — same-age children span an order of magnitude in vocabulary, and individual slopes vary far more than the median slope.
+Many children are measured more than once, and their within-child trajectories motivate the models' child-level random effects (@sec-randomeffects). In the figures below each line joins one child's visits on one checklist form, drawn against the pooled median, mean and interquartile range for that age window, computed over all observations, single-visit children included. Lines are linked **within form only**: a child measured on two forms at one visit, or moved between forms, records counts on different item inventories, and joining those would draw a change of measurement scale as development.
 
-![Words understood by age — repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_understood_ds){#fig-rm-understood-ds .lightbox}
+The Down syndrome figures cover the 8 to 72 month reporting window. Individual trajectories fan widely around the pooled centre: same-age children span an order of magnitude in vocabulary, and individual slopes vary far more than the median slope does.
 
-![Words spoken by age — repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_spoken_ds){#fig-rm-spoken-ds .lightbox}
+![Words understood by age: repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_understood_ds){#fig-rm-understood-ds .lightbox}
 
-The same view of the typically-developing Wordbank reference pool, over its 8–30 month admission window (3-month bins; comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do):
+![Words spoken by age: repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_spoken_ds){#fig-rm-spoken-ds .lightbox}
 
-![Words understood by age — repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_understood_td){#fig-rm-understood-td .lightbox}
+The typically developing reference pool is shown in the same way over its 8 to 30 month admission window, in 3-month bins. Comprehension is measured only on the Words and Gestures and Oxford forms, so the understood panel ends where those forms do.
 
-![Words spoken by age — repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_spoken_td){#fig-rm-spoken-td .lightbox}
+![Words understood by age: repeated measures in the typically developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_understood_td){#fig-rm-understood-td .lightbox}
+
+![Words spoken by age: repeated measures in the typically developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_spoken_td){#fig-rm-spoken-td .lightbox}

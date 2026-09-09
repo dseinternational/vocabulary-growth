@@ -1,6 +1,7 @@
 Abbeduto
 Armon
 ArviZ
+Bambino
 BFGS
 BFMI
 BPVS
@@ -36,6 +37,8 @@ Fenson
 Fidler
 Figshare
 Floccia
+Frasi
+Gesti
 GLMM
 Galeote
 Golay
@@ -112,6 +115,8 @@ UKRI
 Uhlenbeck
 Vehtari
 Venne
+Vocabolario
+Wates
 WPPSI
 Wainer
 Walle
