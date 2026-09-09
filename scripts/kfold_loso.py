@@ -99,7 +99,7 @@ from vocab_growth.comparisons_provenance import (
 )
 from vocab_growth.fit_artifacts import source_data_hash
 from vocab_growth.fold_fits import fit_holdout_fold, fold_gate_fields
-from vocab_growth.models.cross_lag import iter_subject_age_waves
+from vocab_growth.models.cross_lag import wave_index as subject_wave_index
 from vocab_growth.models.definitions import (
     VG07,
     VG08,
@@ -175,32 +175,13 @@ VISIT1_CONDITIONINGS = ("all-outcomes", "understood-only")
 def wave_index(analysis_df: pd.DataFrame) -> np.ndarray:
     """0 for each child's first administration wave, 1 for the next, and so on.
 
-    Built from :func:`vocab_growth.models.cross_lag.iter_subject_age_waves`, so
-    every row at one recorded age takes the same index -- a child measured on two
-    forms on one day has one wave, not two, which is the wave definition issue
-    #242 settled. Taking the grouping from that shared function rather than
-    regrouping by age here is the part that matters: it is the definition, and it
-    is the thing that could drift.
-
-    ``wave_forward_score.py`` carries an identical function. The two should be one,
-    beside ``iter_subject_age_waves`` in ``vocab_growth.models.cross_lag`` -- but
-    adding or editing a module under ``src/vocab_growth/`` moves the
-    executable-code signature and restales every fit, so the consolidation belongs
-    in a refit window rather than in a comparison script's change.
+    The definition lives beside ``iter_subject_age_waves`` in
+    ``vocab_growth.models.cross_lag`` since the 2026-09-09 refit window; this is
+    the frame-taking wrapper the fold code calls.
     """
-    subject = np.asarray(analysis_df["subject_code"], dtype=int)
-    age = np.asarray(analysis_df["age"], dtype=float)
-    index = np.zeros(len(analysis_df), dtype=int)
-    current_subject: int | None = None
-    counter = 0
-    for rows in iter_subject_age_waves(subject, age):
-        s = int(subject[rows[0]])
-        if s != current_subject:
-            current_subject = s
-            counter = 0
-        index[rows] = counter
-        counter += 1
-    return index
+    return subject_wave_index(
+        analysis_df["subject_code"].to_numpy(), analysis_df["age"].to_numpy()
+    )
 
 
 def build_fold_frame(

@@ -23,6 +23,7 @@ from vocab_growth.models.cross_lag import (
     prev_wave_lag,
     prev_wave_lag_for_frame,
     validate_cross_lag,
+    wave_index,
 )
 from vocab_growth.models.definitions import VG16
 from vocab_growth.models.likelihood_utils import (
@@ -536,3 +537,13 @@ def test_unknown_zero_handling_is_rejected():
             N_TRIALS,
             zero_handling="halve-it",
         )
+
+
+def test_wave_index_counts_each_childs_waves_from_zero_and_ignores_row_order():
+    """Two rows at one recorded age are one wave; the index moves with its row."""
+    subject = np.array([2, 1, 1, 2, 1])
+    age = np.array([30.0, 12.0, 12.0, 18.0, 24.0])
+    expected = np.array([1, 0, 0, 0, 1])
+    np.testing.assert_array_equal(wave_index(subject, age), expected)
+    order = np.array([4, 2, 0, 3, 1])
+    np.testing.assert_array_equal(wave_index(subject[order], age[order]), expected[order])

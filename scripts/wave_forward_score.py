@@ -102,8 +102,10 @@ from vocab_growth.models.common_bivariate_re import (
     build_bivariate_re_analysis_frame,
 )
 from vocab_growth.models.cross_lag import (
-    iter_subject_age_waves,
     prev_wave_lag_for_frame,
+)
+from vocab_growth.models.cross_lag import (
+    wave_index as subject_wave_index,
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.models.likelihood_utils import (
@@ -131,25 +133,14 @@ CONTROL_SUFFIX = "-nolag"
 def wave_index(analysis_df: pd.DataFrame) -> np.ndarray:
     """0 for each child's first administration wave, 1 for the next, and so on.
 
-    Built from :func:`vocab_growth.models.cross_lag.iter_subject_age_waves`, the
-    same grouping the lag itself uses, so "a later wave" here and "a row with a
-    prior-wave source" there cannot drift apart. Every row at one recorded age
-    takes the same index: a child measured on two forms on one day has one wave,
-    not two, which is the wave definition issue #242 settled.
+    The definition lives beside ``iter_subject_age_waves`` in
+    ``vocab_growth.models.cross_lag`` -- the same grouping the lag itself uses,
+    so "a later wave" here and "a row with a prior-wave source" there cannot
+    drift apart. This is the frame-taking wrapper.
     """
-    subject = np.asarray(analysis_df["subject_code"], dtype=int)
-    age = np.asarray(analysis_df["age"], dtype=float)
-    index = np.zeros(len(analysis_df), dtype=int)
-    current_subject: int | None = None
-    counter = 0
-    for rows in iter_subject_age_waves(subject, age):
-        s = int(subject[rows[0]])
-        if s != current_subject:
-            current_subject = s
-            counter = 0
-        index[rows] = counter
-        counter += 1
-    return index
+    return subject_wave_index(
+        analysis_df["subject_code"].to_numpy(), analysis_df["age"].to_numpy()
+    )
 
 
 def stratified_subject_folds(

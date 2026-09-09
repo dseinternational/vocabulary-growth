@@ -23,12 +23,15 @@ about the reporting range, not about the models.
 Cited by ``notes/202608221200-reporting-source-by-quantity.md``.
 """
 
+import os
+
 import numpy as np
 import pandas as pd
 
 from vocab_growth import data_utils as du
+from vocab_growth import environment as env
 
-BASE = "/scratch2/vg-output/models/"
+BASE = os.path.join(env.output_root(), "models")
 MODELS = {
     "VG10": "VG10-age-understood-spoken-ds-re-subj-uq-anchored",
     "VG19": "VG19-age-understood-spoken-ds-re-subj-uq-anchored-slope",
@@ -44,7 +47,7 @@ def _at(df, age, col):
 
 
 def compare(filename, prefix, scale, title):
-    d = {k: pd.read_csv(BASE + v + "/" + filename) for k, v in MODELS.items()}
+    d = {k: pd.read_csv(os.path.join(BASE, v, filename)) for k, v in MODELS.items()}
     if f"{prefix}_median" not in d[REFERENCE].columns:
         print(f"  [{title}] no column {prefix}_median")
         return

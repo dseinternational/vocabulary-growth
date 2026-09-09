@@ -1220,9 +1220,10 @@ class BivariateSexShiftModelDefinition(BivariateCorrelatedSubjectREModelDefiniti
     neither set is VG20 op for op:
 
     * ``sex_known_only`` restricts the frame to administrations with a recorded
-      sex. That is a **data** change: the six studies with no sex column leave
-      the pool (ie_01, it_01, nz_01, uk_03, uk_04, us_02 — a quarter of VG20's
-      children), and the frame gains a ``sex`` column, so its hash moves. It is
+      sex. That is a **data** change: the seven studies with no sex column
+      leave the pool (ie_01, it_01, nz_01, uk_03, uk_04, us_02, us_03 — 384 of
+      VG20's 943 children, two fifths, and 711 of its 1,708 rows), and the
+      frame gains a ``sex`` column, so its hash moves. It is
       what makes the control arm and the effect arm comparable: both see the
       same rows.
     * ``sex_effect_sigma`` adds ``beta_sex_u`` and ``beta_sex_q``, each
@@ -1231,8 +1232,8 @@ class BivariateSexShiftModelDefinition(BivariateCorrelatedSubjectREModelDefiniti
       the population curves the sex-balanced average rather than the boys'
       curve, so the ``*_query`` outputs stay comparable with the control arm's,
       and each coefficient reads directly as the girl-minus-boy difference in
-      logits. Requires ``sex_known_only``: a coefficient on a covariate a
-      quarter of the rows lack has nothing to multiply.
+      logits. Requires ``sex_known_only``: a coefficient on a covariate two
+      fifths of the rows lack has nothing to multiply.
 
     The effect is **constant in age** by design. The note's age-by-sex
     interaction test found nothing on the logit scale in either population, and a

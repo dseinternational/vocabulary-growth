@@ -219,9 +219,10 @@ def build_bivariate_re_analysis_frame(
         sex_unknown_rows_excluded = int((~keep).sum())
         if sex_unknown_rows_excluded == 0:
             raise ValueError(
-                "sex_known_only removed no rows. A quarter of the Down syndrome "
-                "pool has no recorded sex, so a restriction that removes nothing "
-                "is reading the wrong column or the wrong database."
+                "sex_known_only removed no rows. Two fifths of the Down syndrome "
+                "pool has no recorded sex (seven of its fifteen studies, 711 of "
+                "VG20's 1,708 rows), so a restriction that removes nothing is "
+                "reading the wrong column or the wrong database."
             )
         df = df[keep]
         # Sex is a child-level covariate. Refuse a frame in which a retained
