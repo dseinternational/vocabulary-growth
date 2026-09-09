@@ -87,6 +87,31 @@ def iter_subject_age_waves(subject, age):
         start = stop
 
 
+def wave_index(subject, age):
+    """0 for each child's first administration wave, 1 for the next, and so on.
+
+    The per-row counterpart of :func:`iter_subject_age_waves`, built on it so
+    every row at one recorded age takes the same index: a child measured on two
+    forms on one day has one wave, not two, which is the wave definition issue
+    #242 settled. ``kfold_loso.py`` and ``wave_forward_score.py`` both read it
+    and each carried a verbatim copy until the 2026-09-09 refit window, because
+    adding a function here moves the executable-code signature.
+    """
+    subject = np.asarray(subject)
+    age = np.asarray(age, dtype=float)
+    index = np.zeros(len(subject), dtype=int)
+    current = None
+    counter = 0
+    for rows in iter_subject_age_waves(subject, age):
+        s = subject[rows[0]]
+        if current is None or s != current:
+            current = s
+            counter = 0
+        index[rows] = counter
+        counter += 1
+    return index
+
+
 def prev_wave_lag(
     subject,
     age,

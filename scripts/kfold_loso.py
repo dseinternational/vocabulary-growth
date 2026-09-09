@@ -4,11 +4,40 @@
 K-fold leave-one-subject-out (LOSO) gold-standard comparison of DS bivariate models.
 
 Defaults to VG07/VG08/VG09, the set it was written for; ``--models`` selects any
-subset of VG07-VG10, VG19 and VG20, and ``--suffix`` keeps a non-default run's
-output from overwriting the default one's.
+subset of VG07-VG10, VG19, VG20 and VG22, and ``--suffix`` keeps a non-default
+run's output from overwriting the default one's.
 
-Splits the 510 unique DS subjects into K folds (stratified by study and
-observation count), then for each (model, fold) pair refits the model with
+Two holdout units, because two different questions are asked of the same fits.
+``--holdout-unit subject`` (the default, and everything this script did before
+2026-09-09) removes every row of a fold's children: their effects are drawn from
+the prior, and the score is "predict a child you have never seen". ``--holdout-unit
+later-waves`` removes only a fold child's rows *after their first administration
+wave*, keeping that first wave and every other child's later waves in training,
+so the score is "given what this child was at their first visit, how well is their
+next visit predicted". The second is `wave_forward_score.py`'s unit applied to two
+*different models* rather than to one model with a coefficient removed, and it
+exists for criterion 4 of the VG20/VG22 promotion decision
+(``notes/202609031930-vg20-vg22-decision.md``), whose original ``us_03``
+out-of-sample vehicle was invalidated when ``us_03`` was ingested on 2026-09-06 and
+became 284 rows of both models' own training frames.
+
+``--visit1-conditioning understood-only`` additionally masks the fold children's
+first-wave ``spoken`` count to missing, so the child's effects are informed by
+their first-visit comprehension alone. That is the conditioning criterion 4 names
+-- it is where VG20 leads VG22 by 6.36 nats -- and it is the one the child-effect
+correlation exists to serve, because the correlation's job is to carry a child's
+comprehension standing into a prediction about their production. It is only
+meaningful with ``--holdout-unit later-waves``. The frame already carries
+comprehension-only administrations (``us_03`` is 284 of them), so masking is a
+shape the loader and the likelihood already handle rather than a new code path.
+
+Under ``later-waves`` the per-subject elpds are written twice: the total over both
+held-out outcomes, and **comprehension only**, which is criterion 4's own quantity
+(``*_understood_*`` in the file names).
+
+Splits the unique DS subjects into K folds (stratified by study and
+observation count -- 943 of them since the ``us_03`` ingestion, 510 before it),
+then for each (model, fold) pair refits the model with
 the fold's subjects' observations excluded from the likelihood (but kept
 in `obs_id` space so f_u_obs, h_obs and so on are computed at their ages).
 Subject REs for the held-out subjects are then drawn from their priors
@@ -70,6 +99,7 @@ from vocab_growth.comparisons_provenance import (
 )
 from vocab_growth.fit_artifacts import source_data_hash
 from vocab_growth.fold_fits import fit_holdout_fold, fold_gate_fields
+from vocab_growth.models.cross_lag import wave_index as subject_wave_index
 from vocab_growth.models.definitions import (
     VG07,
     VG08,
@@ -77,6 +107,7 @@ from vocab_growth.models.definitions import (
     VG10,
     VG19,
     VG20,
+    VG22,
     BivariateModelDefinition,
 )
 from vocab_growth.models.likelihood_utils import (
@@ -85,12 +116,26 @@ from vocab_growth.models.likelihood_utils import (
 )
 
 # Every model this script can compare. `build_model_re` dispatches on the
-# definition's own fields, so the child-slope (VG19) and correlated-intercept
-# (VG20) structures need no separate builder here — which is the whole reason
-# the comparison is one line of configuration rather than a second script.
+# definition's own fields — through `subject_effects.resolve` — so the
+# child-slope (VG19), correlated-intercept (VG20) and low-rank-factor (VG22)
+# structures need no separate builder here, which is the whole reason the
+# comparison is one line of configuration rather than a second script.
+#
+# VG22 was added on 2026-09-09 for the VG20/VG22 promotion decision
+# (`notes/202609031930-vg20-vg22-decision.md` criterion 3). That criterion asks
+# for a paired `loo_compare` at more than four standard errors, and PSIS-LOO
+# degenerates on every model in this family — 36% of VG22's joint observations
+# and 24% of its comprehension observations exceed Pareto-k 0.7 or are
+# non-finite on the 2026-09-08 `rep` fits, which `loo_compare.py` itself marks
+# `[unusable]`. This script is the registered remedy for exactly that: it refits
+# per fold rather than importance-weighting, so no Pareto diagnostic is
+# involved. A held-out subject's factor scores stay at their `Normal(0, 1)`
+# prior during MCMC exactly as the other structures' subject REs do, because
+# `subject_factor_z` is indexed by `subject_id` and only the likelihood drops
+# the fold's rows.
 AVAILABLE = {
     "VG07": VG07, "VG08": VG08, "VG09": VG09,
-    "VG10": VG10, "VG19": VG19, "VG20": VG20,
+    "VG10": VG10, "VG19": VG19, "VG20": VG20, "VG22": VG22,
 }
 DEFAULT_MODELS = ("VG07", "VG08", "VG09")
 
@@ -122,6 +167,53 @@ if _unsupported_fallback:
     )
 OUT_DIR = env.comparisons_output_dir()
 KFOLD_TMP_DIR = os.path.join(env.output_root(), "kfold_tmp")
+
+HOLDOUT_UNITS = ("subject", "later-waves")
+VISIT1_CONDITIONINGS = ("all-outcomes", "understood-only")
+
+
+def wave_index(analysis_df: pd.DataFrame) -> np.ndarray:
+    """0 for each child's first administration wave, 1 for the next, and so on.
+
+    The definition lives beside ``iter_subject_age_waves`` in
+    ``vocab_growth.models.cross_lag`` since the 2026-09-09 refit window; this is
+    the frame-taking wrapper the fold code calls.
+    """
+    return subject_wave_index(
+        analysis_df["subject_code"].to_numpy(), analysis_df["age"].to_numpy()
+    )
+
+
+def build_fold_frame(
+    analysis_df: pd.DataFrame,
+    fold_subjects: np.ndarray,
+    waves: np.ndarray,
+    holdout_unit: str,
+    visit1_conditioning: str,
+) -> pd.DataFrame:
+    """The fold's frame, carrying the ``holdout`` column its unit implies.
+
+    ``holdout`` marks rows that leave the likelihood but stay in ``obs_id`` space.
+    Under ``later-waves`` that is a fold child's rows after their first wave;
+    under ``subject`` it is all of their rows, which is what this script did
+    before the unit existed.
+
+    ``understood-only`` conditioning is expressed by masking the fold children's
+    first-wave ``spoken`` to missing rather than by a second holdout flag, because
+    the holdout is per row and this is per outcome -- and because a row with a
+    comprehension count and no production count is a shape the frame already
+    carries in quantity, so nothing downstream meets a new case.
+    """
+    frame = analysis_df.copy()
+    in_fold = frame["subject_code"].isin(fold_subjects).to_numpy()
+    if holdout_unit == "subject":
+        frame["holdout"] = in_fold
+        return frame
+
+    frame["holdout"] = in_fold & (waves > 0)
+    if visit1_conditioning == "understood-only":
+        frame.loc[in_fold & (waves == 0), "spoken"] = np.nan
+    return frame
 
 
 @dataclass(frozen=True)
@@ -258,8 +350,21 @@ def holdout_subject_elpds(
     analysis_df: pd.DataFrame,
     trace: xr.DataTree,
     holdout_subject_codes: np.ndarray,
+    row_mask: np.ndarray | None = None,
+    outcomes: tuple[str, ...] = ("understood", "spoken"),
 ) -> dict[int, float]:
-    """Marginal predictive log-density per held-out subject."""
+    """Marginal predictive log-density per held-out subject.
+
+    ``row_mask`` restricts the sum to particular rows, which is what the
+    ``later-waves`` unit needs: a fold child keeps their first wave in the
+    likelihood, so scoring all of their rows would be scoring training data.
+    ``None`` sums every row of the subject, which is the ``subject`` unit's
+    behaviour and this function's original one.
+
+    ``outcomes`` restricts which of the two counts contribute. Criterion 4 of the
+    VG20/VG22 decision is stated on second-visit **comprehension**, so it reads
+    the ``("understood",)`` call; the default sums both, unchanged.
+    """
     p_u_obs = trace.posterior["p_u_obs"].values
     p_s_obs = trace.posterior["p_s_obs"].values
     q_obs = trace.posterior["q_obs"].values
@@ -285,16 +390,24 @@ def holdout_subject_elpds(
 
     holdout_set = set(int(s) for s in holdout_subject_codes)
     subject_codes = analysis_df["subject_code"].to_numpy(dtype=int)
+    scored = (
+        np.ones(len(analysis_df), dtype=bool) if row_mask is None
+        else np.asarray(row_mask, dtype=bool)
+    )
+    score_u = "understood" in outcomes
+    score_s = "spoken" in outcomes
     for s_code in holdout_set:
         log_lik = np.zeros((n_chain, n_draw), dtype=np.float64)
-        for idx in np.flatnonzero(subject_codes == s_code):
+        rows_scored = 0
+        for idx in np.flatnonzero((subject_codes == s_code) & scored):
             row = analysis_df.iloc[idx]
-            if pd.notna(row["understood"]):
+            rows_scored += 1
+            if score_u and pd.notna(row["understood"]):
                 y = int(row["understood"])
                 p = np.clip(p_u_obs[:, :, idx], 1e-12, 1 - 1e-12)
                 k = kappa_u_obs[:, :, idx]
                 log_lik += betabinom.logpmf(y, N_TRIALS, p * k, (1 - p) * k)
-            if pd.notna(row["spoken"]):
+            if score_s and pd.notna(row["spoken"]):
                 y = spoken_observed[idx]
                 if spoken_is_conditional[idx]:
                     p = np.clip(q_obs[:, :, idx], 1e-12, 1 - 1e-12)
@@ -304,7 +417,12 @@ def holdout_subject_elpds(
                 log_lik += betabinom.logpmf(
                     y, spoken_trials[idx], p * k, (1 - p) * k
                 )
-        elpd[s_code] = float(logsumexp(log_lik.ravel()) - log_NK)
+        # A fold child with no scored row contributes nothing and must not enter
+        # the table as a 0.0, which would read as a perfect prediction. Under the
+        # later-waves unit this is every child seen once -- the majority of the
+        # pool -- so the distinction is not an edge case.
+        if rows_scored:
+            elpd[s_code] = float(logsumexp(log_lik.ravel()) - log_NK)
     return elpd
 
 
@@ -376,11 +494,26 @@ def main(
     sampling_config_name: str = "test",
     models: tuple[str, ...] = DEFAULT_MODELS,
     suffix: str = "",
+    holdout_unit: str = "subject",
+    visit1_conditioning: str = "all-outcomes",
 ) -> None:
+    if holdout_unit not in HOLDOUT_UNITS:
+        raise SystemExit(f"--holdout-unit must be one of {HOLDOUT_UNITS}")
+    if visit1_conditioning not in VISIT1_CONDITIONINGS:
+        raise SystemExit(f"--visit1-conditioning must be one of {VISIT1_CONDITIONINGS}")
+    if holdout_unit == "subject" and visit1_conditioning != "all-outcomes":
+        # Under whole-subject holdout there is no retained first visit to
+        # condition on, so the flag would silently do nothing.
+        raise SystemExit(
+            "--visit1-conditioning applies only to --holdout-unit later-waves: "
+            "the subject unit holds the first wave out too, so there is no "
+            "first-visit outcome left to condition on."
+        )
     SPECS = [(m, AVAILABLE[m]) for m in models]
     os.makedirs(OUT_DIR, exist_ok=True)
     written = ComparisonOutputs(OUT_DIR)
     print(f"models: {', '.join(models)}   K={K}   config={sampling_config_name}")
+    print(f"holdout unit: {holdout_unit}   visit-1 conditioning: {visit1_conditioning}")
 
     print("Reloading DS analysis frame …", flush=True)
     analysis_df = load_analysis_frame()
@@ -388,6 +521,22 @@ def main(
         f"  {len(analysis_df)} observations / "
         f"{analysis_df['subject_code'].nunique()} subjects"
     )
+
+    waves = wave_index(analysis_df)
+    if holdout_unit == "later-waves":
+        n_later = int((waves > 0).sum())
+        n_repeat_children = int(
+            analysis_df.loc[waves > 0, "subject_code"].nunique()
+        )
+        print(
+            f"  {n_later} rows in a later wave, across {n_repeat_children} "
+            f"children with more than one visit"
+        )
+        if n_later == 0:
+            raise SystemExit(
+                "No row is in a later wave, so the later-waves unit would hold "
+                "nothing out and score nothing."
+            )
 
     print(f"\nBuilding {K} stratified folds …", flush=True)
     folds, _subj_table = stratified_subject_folds(analysis_df, K=K)
@@ -401,6 +550,11 @@ def main(
     elpd_per_model: dict[str, dict[int, float]] = {
         short: {} for short, _ in SPECS
     }
+    # Criterion 4 is stated on comprehension alone, so the later-waves unit
+    # accumulates that column beside the two-outcome total.
+    elpd_u_per_model: dict[str, dict[int, float]] = {
+        short: {} for short, _ in SPECS
+    }
     fit_records: list[FoldFitRecord] = []
 
     for k, fold_subjects in enumerate(folds):
@@ -410,15 +564,30 @@ def main(
             print(f"  fitting {short} …", flush=True)
             started = time.perf_counter()
 
-            df_with_holdout = analysis_df.copy()
-            df_with_holdout["holdout"] = (
-                df_with_holdout["subject_code"].isin(fold_subjects)
+            df_with_holdout = build_fold_frame(
+                analysis_df, fold_subjects, waves, holdout_unit, visit1_conditioning
             )
             trace, _, gate = fit_fold(definition, df_with_holdout, sampling_cfg, label)
-            elpds = holdout_subject_elpds(df_with_holdout, trace, fold_subjects)
-            elpd_per_model[short].update(elpds)
-
             holdout_mask = df_with_holdout["holdout"].to_numpy()
+            # Score exactly what left the likelihood. Under the subject unit that
+            # is every row of the fold's children, which is what the unmasked call
+            # summed before; under later-waves the retained first wave is training
+            # data and scoring it would be scoring the fit to itself.
+            scored_rows = None if holdout_unit == "subject" else holdout_mask
+            elpds = holdout_subject_elpds(
+                df_with_holdout, trace, fold_subjects, row_mask=scored_rows
+            )
+            elpd_per_model[short].update(elpds)
+            if holdout_unit == "later-waves":
+                elpd_u_per_model[short].update(
+                    holdout_subject_elpds(
+                        df_with_holdout,
+                        trace,
+                        fold_subjects,
+                        row_mask=scored_rows,
+                        outcomes=("understood",),
+                    )
+                )
             n_u_holdout = int(
                 ((df_with_holdout["understood"].notna()) & holdout_mask).sum()
             )
@@ -491,6 +660,35 @@ def main(
     )
     print(pair_df.to_string(index=False))
 
+    # Criterion 4's own quantity: held-out later-wave comprehension, scored on
+    # its own. Written as a separate set rather than an extra column so the
+    # summary and comparison tables keep one meaning per file.
+    if holdout_unit == "later-waves":
+        u_rows = [
+            {"model": short, "subject_code": s_code, "elpd": e}
+            for short in elpd_u_per_model
+            for s_code, e in elpd_u_per_model[short].items()
+        ]
+        elpd_u_df = pd.DataFrame(u_rows).pivot_table(
+            index="subject_code", columns="model", values="elpd"
+        )
+        elpd_u_df.to_csv(
+            os.path.join(OUT_DIR, f"kfold_loso_understood_elpds{suffix}.csv")
+        )
+        print("\n=== Held-out later-wave COMPREHENSION only (criterion 4) ===")
+        summary_u = summarise_models(elpd_u_df, models, flags)
+        summary_u.to_csv(
+            os.path.join(OUT_DIR, f"kfold_loso_understood_summary{suffix}.csv"),
+            index=False,
+        )
+        print(summary_u.to_string(index=False))
+        pair_u = pairwise_compare(elpd_u_df, models, flags)
+        pair_u.to_csv(
+            os.path.join(OUT_DIR, f"kfold_loso_understood_compare{suffix}.csv"),
+            index=False,
+        )
+        print(pair_u.to_string(index=False))
+
     fit_df = pd.DataFrame([r.__dict__ for r in fit_records])
     fit_df.to_csv(os.path.join(OUT_DIR, f"kfold_loso_fits{suffix}.csv"), index=False)
     print("\n=== Fit timings and convergence ===")
@@ -506,7 +704,13 @@ def main(
         contributing={},
         outputs=written.written(),
         source_data_hash=source_data_hash(env.DATA_DIR),
-        arguments=[*models, f"K={K}", f"config={sampling_config_name}"],
+        arguments=[
+            *models,
+            f"K={K}",
+            f"config={sampling_config_name}",
+            f"holdout-unit={holdout_unit}",
+            f"visit1-conditioning={visit1_conditioning}",
+        ],
     )
 
     total_wall = fit_df["wall_seconds"].sum()
@@ -519,6 +723,26 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--config", default="test")
+    ap.add_argument(
+        "--holdout-unit",
+        default="subject",
+        choices=HOLDOUT_UNITS,
+        help=(
+            "what a fold removes from the likelihood: every row of its children "
+            "(subject, the default), or only their rows after the first "
+            "administration wave (later-waves)"
+        ),
+    )
+    ap.add_argument(
+        "--visit1-conditioning",
+        default="all-outcomes",
+        choices=VISIT1_CONDITIONINGS,
+        help=(
+            "with --holdout-unit later-waves, whether a fold child's retained "
+            "first wave keeps both counts or only its comprehension count "
+            "(understood-only is criterion 4's conditioning)"
+        ),
+    )
     ap.add_argument(
         "--models",
         default=",".join(DEFAULT_MODELS),
@@ -535,4 +759,11 @@ if __name__ == "__main__":
     unknown = [m for m in chosen if m not in AVAILABLE]
     if unknown:
         raise SystemExit(f"unknown model(s): {unknown}; available {sorted(AVAILABLE)}")
-    main(K=a.folds, sampling_config_name=a.config, models=chosen, suffix=a.suffix)
+    main(
+        K=a.folds,
+        sampling_config_name=a.config,
+        models=chosen,
+        suffix=a.suffix,
+        holdout_unit=a.holdout_unit,
+        visit1_conditioning=a.visit1_conditioning,
+    )

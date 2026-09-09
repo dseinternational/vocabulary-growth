@@ -49,7 +49,7 @@ render_model_at_a_glance()
 #| output: asis
 from vocab_growth.report_cells import render_reading_routes
 
-render_reading_routes('reference')
+render_reading_routes('development', instead='VG11')
 ```
 
 ::: {.callout-note}
@@ -62,7 +62,7 @@ For full details and discussion, please refer to the technical report.
 
 ## What this model is for
 
-This is a **reference baseline**. It exists so that the Down syndrome spoken-vocabulary model, VG01, has a typically-developing curve on the same scale, fitted with the same engine and the same priors machinery, to be compared against. Every structural choice here mirrors VG01 except the population, the age anchors and the age range, so that a difference between the two curves is a difference between the populations rather than between two modelling approaches.
+This is a **development step** (from 9 September 2026): the single-level baseline that VG11 rebuilt with a hierarchy, so the typically-developing spoken reference is now VG11 and nothing on this page is a reported number. It was built so that the Down syndrome spoken-vocabulary model, VG01, would have a typically-developing curve on the same scale, fitted with the same engine and the same priors machinery, to be compared against. Every structural choice here mirrors VG01 except the population, the age anchors and the age range, so that a difference between the two curves is a difference between the populations rather than between two modelling approaches.
 
 ::: {.callout-warning title="A typically-developing curve is a reference, not a target"}
 
