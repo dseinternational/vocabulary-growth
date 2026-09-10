@@ -1,18 +1,10 @@
 ---
-abstract: "**TODO**"
+abstract: "*Vocabulary checklists are widely used to gather parents' observations of their children's vocabulary development. We combine data from multiple sources using a variety of checklist forms to create a large pooled dataset for analysis.*"
 ---
-
-::: {.callout-note}
-Drafted in part by an LLM-based AI tool (Claude Code/Fable 5 and Fable 5.1).
-:::
-
-::: {.callout-warning title="Reviewer annotations (remove before publication)"}
-This revision (7 September 2026) applies clarity edits to the 4 September draft and adds review notes for the authors, inline as [**REVIEW**: …] and in blocks like this one. The notes flag facts to verify against the source documentation in `data/`, gaps that later chapters assume this chapter fills, and decisions that are the authors' to make. Counts quoted in the review notes were recomputed from the prepared DuckDB build on 7 September 2026.
-:::
 
 # Data {#sec-data}
 
-This chapter describes the data the models are fitted to. It covers the checklists the studies used and how their scores were placed on a common scale (@sec-measures), the fifteen Down syndrome studies that contribute observations (@sec-studies), the typically developing reference pool drawn from Wordbank (@sec-td-pool), the checks applied to the data before modelling (@sec-data-checks), and summary tables and figures of the pooled data (@sec-study-summaries, @sec-vocabulary-by-age and @sec-repeated-measures).
+Vocabulary checklists present lists of words that children are expected to learn during the early stages of language development.
 
 Parent-report vocabulary checklists record which words on a fixed list a child understands, says or signs. The list samples the words children typically learn earliest, so a checklist count is a count of known words *on that list*, not an estimate of everything the child knows. As a child's vocabulary grows beyond the words the list samples, the count says progressively less about how much larger the vocabulary is, and a count at a form's ceiling says only that the child knows at least those words. A count also says nothing about how clearly a word is said, how it is used, or which words are known.
 
