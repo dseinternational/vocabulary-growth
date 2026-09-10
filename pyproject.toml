@@ -96,7 +96,7 @@ testpaths = ["tests"]
 # where it matters — see the `Test` section of AGENTS.md for both commands.
 addopts = "-q -m 'not slow'"
 markers = [
-    "slow: real sampling, compilation or numerical optimisation — minutes, not seconds. Deselected by default; CI runs them with `-m \"\"`.",
+    "slow: real sampling, compilation or numerical optimisation — minutes, not seconds. Deselected by default; the `tests-slow` CI job runs them with `-m \"slow\"`.",
     "emits_reporting_artefacts: opts out of the conftest fixture that silences the fit pipeline's console and figure output, for the tests that assert those artefacts are still produced.",
 ]
 

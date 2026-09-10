@@ -151,6 +151,7 @@ centile
 centiles
 color
 colwidths
+compiledir
 compr
 conftest
 crosswalk
@@ -252,6 +253,7 @@ productionisation
 productionise
 productionising
 pyplot
+pytensor
 pytest
 rankdir
 recentred
