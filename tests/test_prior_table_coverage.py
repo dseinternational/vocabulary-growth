@@ -13,7 +13,13 @@ into that model's template.
 The check is made against each model's **real graph**: the same variable set
 `common.diagnostics_var_names` writes into `diagnostics.csv`, which is what the
 priors table gates on. Building twenty graphs needs the prepared DuckDB and
-takes minutes, so this is `slow`; nothing here samples.
+takes minutes, so the two tests that build one are `slow`; nothing here samples.
+
+The mark is **per test, not on the module**. This file is the slow set's largest
+single cost -- 106 graph builds, 45% of that set's CPU -- and the exemption check
+below builds nothing, so it belongs in the fast job where it guards every pull
+request. The two graph tests carry no shared fixture and are deliberately left
+ungrouped, so `--dist loadgroup` can spread them across workers.
 
 Writing it found three more omissions of the same class straight away: VG15's
 Dirichlet-Multinomial concentration, which has its own prior figure and is named
@@ -39,8 +45,6 @@ from vocab_growth import report_cells
 from vocab_growth.fit_artifacts import normalise_for_json
 from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.common import ModelFitContext, diagnostics_var_names
-
-pytestmark = pytest.mark.slow
 
 
 def _variant_keys():
@@ -90,6 +94,7 @@ def _fit_directory(tmp_path, definition, parameters):
     return str(tmp_path)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("model_key", sorted(CATALOGUE))
 def test_the_priors_table_covers_every_reported_parameter(
     model_key, tmp_path, monkeypatch, require_prepared_data
@@ -110,13 +115,17 @@ def test_the_priors_table_covers_every_reported_parameter(
     report_cells.render_priors_table(directory)
 
 
-@pytest.mark.parametrize("model_key", sorted(CATALOGUE))
-def test_no_parameter_is_both_rendered_and_exempt(model_key):
+def test_no_parameter_is_both_rendered_and_exempt():
     """An exemption that shadows a rendered row would hide a lost row.
 
     Checked on the exemption predicate alone, so it needs no graph: any
     parameter `_PRIOR_SPECS` names a row for must not also be exempt, or
     dropping that row would leave the coverage check silent.
+
+    Not parametrised over the models: `_PRIOR_SPECS` and the exemption
+    predicate are both global, and the body never read the model key, so the
+    parametrisation this carried until 2026-09-10 ran one assertion twenty-one
+    times over.
     """
     for parameter, _, _, _ in report_cells._PRIOR_SPECS:
         assert report_cells._is_exempt(parameter) is None, (
@@ -130,6 +139,7 @@ def test_no_parameter_is_both_rendered_and_exempt(model_key):
 _VARIANTS = sorted({(model_key, name) for model_key, name in _variant_keys()})
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("model_key,variant_name", _VARIANTS)
 def test_the_priors_table_covers_every_variant_parameter(
     model_key, variant_name, tmp_path, monkeypatch, require_prepared_data

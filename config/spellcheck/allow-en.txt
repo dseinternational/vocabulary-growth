@@ -13,6 +13,7 @@ Bergmann
 Betancourt
 Birnbaum
 Borjon
+Borovsky
 Braginsky
 Brunet
 Buckley
@@ -35,6 +36,7 @@ ENOSPC
 EOWPVT
 ESRC
 Edgin
+Elison
 Eriksson
 Fenson
 Fidler
@@ -45,6 +47,7 @@ Gesti
 GLMM
 Galeote
 Golay
+Gompertz
 Graphviz
 HADS
 HMAC
@@ -95,6 +98,7 @@ Poustka
 Preis
 Psychometrika
 PyMC
+RMSE
 ROWPVT
 Rasch
 Reparameterise
@@ -152,6 +156,7 @@ centile
 centiles
 color
 colwidths
+compiledir
 compr
 conftest
 crosswalk
@@ -253,6 +258,7 @@ productionisation
 productionise
 productionising
 pyplot
+pytensor
 pytest
 rankdir
 recentred
@@ -288,6 +294,7 @@ setsid
 signspeech
 spanos
 spkn
+spurters
 stales
 startswith
 subj
@@ -297,6 +304,7 @@ swapon
 syncable
 tanh
 timepoint
+timepoints
 toddlerhood
 tolist
 trigamma
@@ -310,6 +318,7 @@ underdisperse
 underdispersion
 unidimensionality
 unimodality
+unimodally
 univariates
 unmigrated
 unmodelled

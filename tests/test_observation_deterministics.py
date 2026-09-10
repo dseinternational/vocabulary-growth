@@ -71,6 +71,12 @@ from vocab_growth.posterior_recompute import (
 # pull request even after it was extended.
 _slow = pytest.mark.slow
 
+#: Not a selection mark -- the per-test `_slow` above is still what decides which
+#: job runs what, and the fast tests here must stay in the fast job. This only
+#: keeps the module on one worker under `--dist loadgroup`, because `two_fits`
+#: below is two real nutpie fits shared by four tests.
+pytestmark = pytest.mark.xdist_group("observation-deterministics")
+
 
 class _NoopDigraph:
     def render(self, *args, **kwargs):
