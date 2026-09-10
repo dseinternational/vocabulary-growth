@@ -125,15 +125,18 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
   # The suite in two halves whose union is everything `-m "slow or not slow"`
-  # selects. The split buys feedback latency, not total wall time: the slow
-  # half is bounded by two compile-heavy serial units that no rebalancing can
-  # shrink (notes/202608281312-ci-critical-path.md §2), so most failures now
-  # surface from the fast half in a couple of minutes instead of waiting behind
-  # them. `--dist loadfile` keeps each module's fixtures on one worker, which
-  # matters for the modules whose fixture is itself a fit; `--durations=25`
-  # keeps the slowest tests visible so growth in the floor is noticed rather
-  # than discovered (the suite grew 20% in the four days after the 2026-08-24
-  # timing pass).
+  # selects. The split buys feedback latency: most failures surface from the
+  # fast half in a couple of minutes instead of waiting behind the compile-heavy
+  # half. It was recorded here that the slow half was "bounded by two
+  # compile-heavy serial units that no rebalancing can shrink"
+  # (notes/202608281312-ci-critical-path.md §2); that had gone stale, and
+  # rebalancing it is worth 2.9x on four workers -- see the `tests-slow`
+  # comment below and notes/202609101310-slow-test-distribution.md. The two jobs
+  # therefore distribute differently: `tests-fast` keeps `--dist loadfile`,
+  # which holds each module's fixtures on one worker and matters for the modules
+  # whose fixture is itself a fit. `--durations=25` on both keeps the slowest
+  # tests visible so growth in the floor is noticed rather than discovered (the
+  # suite grew 20% in the four days after the 2026-08-24 timing pass).
   tests-fast:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -178,10 +181,19 @@ jobs:
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
 
-      # The four `slow` modules do real sampling, compilation or numerical
-      # optimisation; on four workers each gets a core to itself.
+      # `loadgroup`, not `loadfile`: the slow set's cost is concentrated in one
+      # module (`test_prior_table_coverage.py`, 106 of the set's 301 tests and
+      # 45% of its CPU), and `loadfile` pinned that whole module to a single
+      # worker, so the job could not finish faster than that one file -- 592 s
+      # of a 592 s run. Its tests share nothing, so they distribute per test;
+      # the three modules that *do* share an expensive module-scoped fixture
+      # carry an `xdist_group` mark and still travel together. Measured 592 s
+      # -> 207 s on four workers, and the run is now balanced rather than
+      # critical-path bound: it scales with the worker count, which it did not
+      # before.
+      # See notes/202609101310-slow-test-distribution.md.
       - name: Run pytest (slow set)
-        run: uv run --no-sync pytest -n auto --dist loadfile -m "slow" --durations=25
+        run: uv run --no-sync pytest -n auto --dist loadgroup -m "slow" --durations=25
 
   # Split from the test jobs: none needs another's result, and the fit is an
   # end-to-end smoke of the whole pipeline that pytest does not replace.

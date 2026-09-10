@@ -47,7 +47,12 @@ from support.synthetic_graphs import (
 
 from vocab_growth.models.catalogue import CATALOGUE
 
-pytestmark = pytest.mark.slow
+#: `xdist_group` keeps this module on one worker under `--dist loadgroup`, which
+#: the slow job uses so that the modules whose tests share nothing can spread
+#: across workers. This one must not: the `built` fixture below builds all
+#: twenty-one registered graphs once and every test here reads them, so a
+#: per-test distribution would rebuild all twenty-one on each worker.
+pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("graph-equivalence")]
 
 BASELINE_PATH = Path(__file__).parent / "support" / "graph_baseline.json"
 

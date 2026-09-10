@@ -20,7 +20,12 @@ import pytest
 
 from vocab_growth.models.subject_marginal import partition_subject_rows
 
-pytestmark = pytest.mark.slow
+#: The `xdist_group` half keeps this module on one worker under `--dist
+#: loadgroup`: its context comes from a module-scoped fixture in `conftest.py`
+#: that builds a real marginalised model, so tests here must not be spread
+#: across workers. It holds one test today, which makes the mark a no-op and a
+#: statement of the invariant for the second one.
+pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("subject-marginal")]
 
 
 def test_the_marginalised_model_samples_and_predicts(subject_marginal_context):
