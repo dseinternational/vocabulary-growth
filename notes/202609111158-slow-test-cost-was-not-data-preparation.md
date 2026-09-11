@@ -75,14 +75,14 @@ The key hashes `.python-version` and `uv.lock` and carries **no `restore-keys`**
 
 **On CI**, which is the figure that matters, reading the `tests-slow` job's pytest step:
 
-| Run                                       |  pytest step |
-| ----------------------------------------- | -----------: |
-| main `789c213`, before `--dist loadgroup` |    10 m 23 s |
-| main `82cd646`, after it                  |     9 m 33 s |
-| this change, cold compiledir              |     7 m 25 s |
-| this change, warm compiledir              | **4 m 16 s** |
+| Run                                       |             pytest step |
+| ----------------------------------------- | ----------------------: |
+| main `789c213`, before `--dist loadgroup` |               10 m 23 s |
+| main `82cd646`, after it                  |                9 m 33 s |
+| this change, cold compiledir              |                7 m 25 s |
+| this change, warm compiledir              | **4 m 16 s / 5 m 16 s** |
 
-**9 m 33 s → 4 m 16 s, 55%**, of which the code change is 9 m 33 s → 7 m 25 s and the compiledir cache the rest. `tests-fast` is unchanged at 1 m 32 s → 1 m 38 s, within the noise of a cold cache on its own first run.
+**9 m 33 s → 4 m 16 s and 5 m 16 s**, the two warm runs observed, so 45-55%; of that, the code change is 9 m 33 s → 7 m 25 s and the compiledir cache the rest. Two observations are two observations — the spread between them is a hosted runner's, not the change's, and the direction is not in doubt at this size. `tests-fast` goes 1 m 32 s → 1 m 07 s once its own cache is warm (1 m 38 s on the run that populated it), and `model-fit` 2 m 31 s → 1 m 56 s as whole jobs, neither of which this change touches except through the cache.
 
 **One correction to the previous note, while these are being recorded.** `notes/202609101310-slow-test-distribution.md` §3 reports "592 s → 207 s on four workers", noting "the 592 s from CI and the rest locally". The two halves are not comparable, and pairing them overstates what CI got: **on CI that change measured 10 m 23 s → 9 m 33 s, not 10 m 23 s → 3 m 27 s.** An `-n 4` run on a 32-core workstation is not an `ubuntu-26.04-arm` run. The rebalancing was real and worth having — it removed the one-file ceiling, without which none of the above would have shown — but its CI value was 8%, not 2.9x. Local figures below are labelled as such for that reason.
 
