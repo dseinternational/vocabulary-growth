@@ -39,6 +39,16 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
+      # Every note has a row in the notes index, and every row a note. This runs
+      # here, in a job with no `changes` gate, because `notes/*` classifies as
+      # documentation below and so skips the test jobs -- which is precisely the
+      # change that adds a note and forgets its row. The check is stdlib-only
+      # and the file is an ordinary pytest module besides, so `uv run pytest`
+      # and `tests-fast` cover it too; this step is the one that runs when they
+      # do not. Ten notes had drifted out of the index before it existed.
+      - name: Check the notes index
+        run: python3 tests/test_notes_index.py
+
   lint:
     runs-on: ubuntu-26.04-arm
     steps:
