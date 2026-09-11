@@ -990,8 +990,12 @@ def simulate_replicate(
             if waves is not None:
                 keep = waves[rows] == wave
                 rows, values = rows[keep], values[keep]
-            if not rows.size:
-                continue
+                if not rows.size:
+                    # A wave this node covers no rows of. Only reachable under
+                    # the wave loop; the single-pass path keeps its original
+                    # behaviour of writing an empty slice, so that path is
+                    # unchanged by construction rather than by observation.
+                    continue
             if round_state is not None and node.rv_name in consumer_rvs:
                 predictor_recorded.append((round_index, rows.copy(), round_state))
             if isinstance(node, CountOutcome):
@@ -1012,6 +1016,16 @@ def simulate_replicate(
                 )
 
     # Final coherence check against a model rebuilt from the finished frame.
+    #
+    # `recorded_data` holds the *last* round's denominators, so under the wave
+    # loop this verifies the last wave's rows directly and the earlier waves'
+    # only through the frame-level checks below it (cells summing to their
+    # total, counts inside their denominator, totals tracking their parent),
+    # which do cover every row. That is sufficient for the engines registered
+    # today, because a wave's rows are final once drawn and their denominators
+    # cannot move afterwards -- but it is weaker than the per-round check the
+    # predictor guard makes, and a future engine whose denominators depend on a
+    # *later* wave would need it strengthening rather than trusting.
     context.set_model_data(context.model_data, frame)
     build_stage(context)
     coherence = _verify_coherence(context.model, spec, frame, recorded_data)

@@ -35,13 +35,13 @@ Three replicates, `test` tier, `--truth posterior`, roughly 7–12 minutes each.
 
 **Only one is assessable.** The harness scores a replicate only if its fit's convergence is confirmed, and two of three missed the R-hat ≤ 1.01 gate:
 
-| replicate | converged | max R-hat | min ESS | coverage (89%) | max abs z |
-| --------- | --------- | --------: | ------: | -------------: | --------: |
-| r01       | **yes**   |    1.0096 |     449 |          0.842 |      2.73 |
-| r02       | no        |    1.0132 |     393 |              — |         — |
-| r03       | no        |    1.0105 |     537 |              — |         — |
+| replicate | converged | max R-hat | min ESS |      coverage (89%) | max abs z |
+| --------- | --------- | --------: | ------: | ------------------: | --------: |
+| r01       | **yes**   |    1.0096 |     449 |   0.842 (112 / 133) |      2.73 |
+| r02       | no        |    1.0132 |     393 | _0.752 (100 / 133)_ |    _2.91_ |
+| r03       | no        |    1.0105 |     537 | _0.820 (109 / 133)_ |    _3.28_ |
 
-So the headline is one replicate, and the runbook's caution about what a handful of replicates can establish applies with force.
+The italicised figures are computed but **not assessed** — the harness scores a replicate only on confirmed convergence, and they are shown to say what was refused rather than to be read. The headline is one replicate, and the runbook's caution about what a handful of replicates can establish applies with force.
 
 **On the assessed replicate, `beta_lag` missed low.** Truth 0.285, posterior median 0.201, sd 0.051, 89% ETI [0.121, 0.284] — the truth at the 94.8th percentile of the posterior, just outside, z = −1.64, a bias of −29%. Coverage over all 133 scored quantities was 0.842 against a nominal 0.89, which is the under-nominal coverage this engine already shows ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)) rather than anything specific to the lag.
 

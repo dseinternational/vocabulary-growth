@@ -27,6 +27,8 @@ Data-free and sampling-free except for the two marked ``slow``.
 from __future__ import annotations
 
 import dataclasses
+import json
+import pathlib
 
 import numpy as np
 import pytest
@@ -234,6 +236,63 @@ def test_vg16_simulates_and_the_finished_frame_reproduces_its_own_predictor(
     real = MODEL_REGISTRY["vg16"]
     _, has_lag, _ = prev_wave_lag_for_frame(frame, real.n_trials, real)
     assert has_lag.sum() > 0, "a cross-lag simulation with no lagged row proves nothing"
+
+
+@pytest.mark.slow
+def test_the_wave_loop_runs_and_produces_the_same_shape_of_simulation(
+    tmp_path, monkeypatch, require_prepared_data
+):
+    """The wave loop itself, which no registered model currently selects.
+
+    VG16 is sound in one pass, so without this the loop VG25 needs would ship
+    with no coverage at all -- the failure mode this module exists to avoid,
+    one level up. Forcing it on VG16 is the only way to exercise it until a
+    model with a same-stage predictor is registered.
+
+    The two passes draw different *values* (each round seeds from its own index)
+    and must not be compared on those. What must match is the shape: the same
+    columns simulated, over the same likelihood rows, with the guard passing --
+    both are valid forward simulations of the same model.
+    """
+    from vocab_growth.models.cross_lag import prev_wave_lag_for_frame
+    from vocab_growth.recovery import simulate as simulate_module
+
+    one_pass = simulate_module.simulate_replicate(
+        "vg16", "dev", replicate=1, truth_source="prior",
+        output_root=str(tmp_path / "one"),
+    )
+
+    monkeypatch.setattr(simulate_module, "single_pass_is_sound", lambda *a, **k: False)
+    waved = simulate_module.simulate_replicate(
+        "vg16", "dev", replicate=1, truth_source="prior",
+        output_root=str(tmp_path / "waved"),
+    )
+
+    assert waved.simulated_columns == one_pass.simulated_columns
+    assert waved.row_counts == one_pass.row_counts, (
+        "the wave loop wrote a different number of likelihood rows than the "
+        "single pass; every row belongs to exactly one wave, so the totals "
+        "must agree"
+    )
+
+    # And it really did go wave by wave, rather than falling through to one pass.
+    record = json.loads(
+        (pathlib.Path(waved.directory) / "simulation.json").read_text(encoding="utf-8")
+    )["simulation"]
+    assert record["waves"] == 7
+    assert record["outcome_dependent_predictor"]["single_pass_sound"] is False
+    assert json.loads(
+        (pathlib.Path(one_pass.directory) / "simulation.json").read_text(
+            encoding="utf-8"
+        )
+    )["simulation"]["waves"] is None
+
+    # The property the guard asserts, restated from outside the simulator.
+    definition = MODEL_REGISTRY["vg16"]
+    _, has_lag, _ = prev_wave_lag_for_frame(
+        waved.frame, definition.n_trials, definition
+    )
+    assert has_lag.sum() > 0
 
 
 @pytest.mark.slow
