@@ -247,8 +247,10 @@ def test_registry_counts_and_models():
     # them could change the reported answer rather than check it.
     # `sign-lag-clip` is the treatment VG16 registers and VG25 does not: 14.7%
     # of this lag's support sits at a signed share of exactly 0 or 1, against
-    # VG16's 1.5%, and under the clip those rows carry 76.1% of the predictor's
-    # sum of squares. `sign-lag-marginal-only` confines the term to the spoken
+    # VG16's 1.5%, and under the clip those rows carry 76.1% of the *source
+    # signed-share logit's* sum of squares -- the predictor's observed input,
+    # not the fitted predictor, which also subtracts a latent baseline
+    # (residualised on the source wave's age and study it is 66.1%). `sign-lag-marginal-only` confines the term to the spoken
     # marginal, where VG15's child shifts are confined, and is what says whether
     # the headline scope decision moved `psi`. The rest are checks:
     # `sign-lag-population` (VG16's baseline, which here doubles as the arm in

@@ -150,6 +150,67 @@ def test_ordering_never_drops_a_variable():
     assert len(ordered) == len(set(ordered))
 
 
+def test_the_sign_lag_coefficient_survives_the_cap_on_the_joint_engine():
+    """VG25's `beta_sign_lag`, the same defect on the other engine (#339 review).
+
+    The joint engine led with `psi` and `conc` and then took model order, which
+    on VG25 puts the coefficient eighteenth -- so the six-slot grid showed the
+    two headline associations and four understood-GP hyperparameters, while the
+    report's diagnostics callout sends the reader there to inspect the
+    coefficient against the signing child block. The build order below is VG25's
+    own, read off the built graph.
+    """
+    from vocab_growth.models.common_joint_modality import joint_pair_plot_priority
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    build_order = [
+        "p_slope_low_u", "p_slope_hi_u", "ell_unit_u", "eta_u",
+        "p_slope_low_q", "p_slope_hi_q", "ell_unit_q", "eta_q",
+        "p_slope_low_sign", "p_slope_mid_sign", "p_slope_hi_sign",
+        "peak_unit_sign", "ell_unit_sign", "eta_sign",
+        "tau_u", "tau_q", "tau_sign",
+        "beta_sign_lag",
+        "tau_subj_u", "tau_subj_q", "tau_subj_sign",
+        "rho_uq", "rho_u_sign", "rho_sign_q", "psi", "conc",
+    ]
+    trace = _trace_with_named_scalars(build_order)
+
+    with az.rc_context({"plot.max_subplots": 36}):  # floor(sqrt(36)) = 6 slots
+        # What the engine did before: psi and conc, then build order.
+        was = capped_plot_var_names(trace, _apply(("psi", "conc"), build_order), squared=True)
+        assert "beta_sign_lag" not in was
+
+        priority = joint_pair_plot_priority(MODEL_REGISTRY["vg25"])
+        kept = capped_plot_var_names(trace, _apply(priority, build_order), squared=True)
+
+    # The geometry the report's callout actually names.
+    assert {"beta_sign_lag", "rho_sign_q", "tau_subj_sign"} <= set(kept)
+    assert kept[:2] == ["psi", "conc"]
+
+
+def test_joint_models_without_the_lag_keep_the_order_they_had():
+    """The registration must not restyle VG14's, VG15's or VG24's pair plots."""
+    from vocab_growth.models.common_joint_modality import joint_pair_plot_priority
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    for key in ("vg14", "vg15", "vg23", "vg24"):
+        assert joint_pair_plot_priority(MODEL_REGISTRY[key]) == ("psi", "conc")
+
+
+def test_the_joint_ordering_never_drops_a_variable():
+    from vocab_growth.models.common_joint_modality import joint_pair_plot_priority
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    build_order = [
+        "eta_u", "tau_u", "beta_sign_lag", "tau_subj_sign", "rho_sign_q",
+        "psi", "conc",
+    ]
+    ordered = _apply(joint_pair_plot_priority(MODEL_REGISTRY["vg25"]), build_order)
+
+    assert sorted(ordered) == sorted(build_order)
+    assert len(ordered) == len(set(ordered))
+
+
 def test_models_without_a_child_structure_keep_model_order_exactly():
     """VG05, VG07-VG10 and every univariate model must render as before."""
     from vocab_growth.models.common_bivariate import pair_plot_priority

@@ -88,7 +88,7 @@ Two consequences follow, and both are registered rather than argued:
 - The baseline is **within-child** (@sec-baseline), not VG16's population-relative one.
 - VG25 derives from VG24's definition, so VG24 is its exact nested null and VG24's own fingerprint is untouched.
 
-## The four design decisions {#sec-design}
+## The five design decisions {#sec-design}
 
 [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) named four choices that had to be made before this model could be registered, and measurement added a fifth. Each is stated with what decided it, because each moves either the estimand or the evidence.
 
@@ -163,11 +163,26 @@ A row informs $\beta_{sign\,lag}$ only if the child has an **earlier** administr
 # rebuilt frame can silently differ from the one the fit used. Guarded so a
 # report rendered without the artefact degrades to a note instead of failing.
 try:
+    import json as _json
+
     import pandas as _pd
 
     _audit = _pd.read_csv("sign_cross_lag_audit.csv")
     _branch = _audit["branch"].fillna("")
-    _supporting = _audit[_branch != ""]
+    # The audit records which likelihood each row lands in; whether the lag
+    # REACHES that likelihood is a definition setting, so it is read from the
+    # manifest rather than assumed. Under `sign_lag_in_cells=False` a cross-tab
+    # row still has a branch and still has a source, and the coefficient still
+    # learns nothing from it -- counting it here would report the registered
+    # model's support on a fit that does not have it.
+    with open("fit_manifest.json", encoding="utf-8") as _fh:
+        _in_cells = bool(
+            _json.load(_fh)["model"]["definition"].get("sign_lag_in_cells", True)
+        )
+    _reached = {"conditional", "marginal"}
+    if _in_cells:
+        _reached |= {"cells", "produced-cells"}
+    _supporting = _audit[_branch.isin(_reached)]
 
     print("| | Observations | Children |")
     print("| --- | ---: | ---: |")
@@ -179,6 +194,11 @@ try:
     print(": Rows with a source but no supporting likelihood carry a lag that "
           "informs nothing.")
     print()
+    if not _in_cells:
+        print("This fit sets `sign_lag_in_cells = False`, so the cross-tab "
+              "compositions are **not** counted above: their rows carry a "
+              "source, and the coefficient does not see it.")
+        print()
 
     if len(_supporting):
         _gaps = _supporting["gap_months"]
@@ -208,7 +228,8 @@ try:
         print(": `conditional` and `marginal` are the spoken marginal's two "
               "branches; `cells` and `produced-cells` are the cross-tab "
               "compositions, which the lag reaches only under "
-              "`sign_lag_in_cells`.")
+              "`sign_lag_in_cells` — and which this table therefore lists only "
+              "when this fit set it.")
 except Exception as _exc:  # noqa: BLE001 - a report must not fail on a missing artefact
     print(f"_Support tables unavailable: {type(_exc).__name__}._")
 ```
@@ -529,12 +550,20 @@ try:
     import pandas as _pd
 
     _audit = _pd.read_csv("sign_cross_lag_audit.csv")
-    _supporting = _audit[_audit["branch"].fillna("") != ""]
     _diagnostics = _pd.read_csv("diagnostics.csv", index_col=0)
     _beta = _diagnostics.loc["beta_sign_lag"]
 
     with open("fit_manifest.json", encoding="utf-8") as _fh:
-        _treatment = _json.load(_fh)["model"]["definition"]["sign_lag_zero_handling"]
+        _definition = _json.load(_fh)["model"]["definition"]
+    _treatment = _definition["sign_lag_zero_handling"]
+    # Same filter as @sec-support, and for the same reason: the SD below is the
+    # spread of the predictor the coefficient was actually fitted against, so a
+    # fit that keeps the lag out of the compositions must not be described on
+    # the wider set of rows it does not use.
+    _reached = {"conditional", "marginal"}
+    if bool(_definition.get("sign_lag_in_cells", True)):
+        _reached |= {"cells", "produced-cells"}
+    _supporting = _audit[_audit["branch"].fillna("").isin(_reached)]
 
     _share = _supporting["source_signed_share"].to_numpy(dtype=float)
     _understood = _supporting["source_understood"].to_numpy(dtype=float)

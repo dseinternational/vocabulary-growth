@@ -141,13 +141,14 @@ def test_the_bivariate_class_tree_size():
     ], direct
 
 
-def test_the_mean_clamp_field_is_declared_by_fifteen_of_the_twenty_one():
+def test_the_mean_clamp_field_is_declared_by_sixteen_of_the_twenty_two():
     """`clamp_targets`' docstring gives this as the refit bill for widening it.
 
     It was written as "fifteen", then briefly as "all twenty" -- which is the reach
-    of `report_max_age_understood` (the test below), not of this field. The six
-    univariate models do not declare it, which is why `common_univariate_re` reads
-    it through `getattr`.
+    of `report_max_age_understood` (the test below), not of this field -- and went
+    stale a third time when VG25 registered, which is why this asserts the list and
+    carries the count only in its name. The six univariate models do not declare it,
+    which is why `common_univariate_re` reads it through `getattr`.
     """
     declaring = sorted(
         k for k, d in MODEL_REGISTRY.items()

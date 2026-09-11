@@ -1797,7 +1797,27 @@ def prior_predictive_checks(context: JointContext):
 sample = _shared_sample
 
 
-def diagnostics(context: JointContext):
+def joint_pair_plot_priority(definition) -> tuple[str, ...]:
+    """The variables this engine's pair plot must show, most important first.
+
+    The joint counterpart of
+    :func:`~vocab_growth.models.common_bivariate.pair_plot_priority`, kept
+    separate rather than shared for the reason :func:`diagnostics` gives: the
+    bivariate function would also reorder VG14's, VG15's and VG24's plots.
+
+    ``psi`` and ``conc`` lead for every joint model, which is what this engine
+    has always done. A sign cross-lag adds its coefficient and the two
+    parameters its report asks the reader to read it against -- the persistent
+    association it is meant to be distinguishable from, and the scale of the
+    signing child effect the within-child baseline is built from.
+    """
+    priority: tuple[str, ...] = ("psi", "conc")
+    if getattr(definition, "use_sign_cross_lag", False):
+        priority += ("beta_sign_lag", "rho_sign_q", "tau_subj_sign")
+    return priority
+
+
+def diagnostics(context: JointContext, definition: JointModelDefinition):
     """Run diagnostics on the posterior samples.
 
     The shared engine prioritises ``psi`` and ``conc`` in parameter plots.
@@ -1808,13 +1828,29 @@ def diagnostics(context: JointContext):
     The separate administration-level score includes every factor, including
     ``cells_obs`` and ``nz_prod_cells_obs``. It assesses the predictive
     contribution of the composition association as well as the count models.
+
+    ``definition`` is taken for the pair plot's ordering, which is issue #233's
+    problem on this engine: ArviZ caps the grid at ``floor(sqrt(max_subplots))``
+    -- six variables -- and consumes the list in model order, which is build
+    order. A cross-lag coefficient is built after the mean functions, so VG25's
+    ``beta_sign_lag`` sits nineteenth and the plot showed ``psi``, ``conc`` and
+    four understood-GP hyperparameters, while @sec-diagnostics in its report
+    tells the reader to inspect the coefficient against the signing child block.
+    That is exactly the contradiction #233 named, and it is fixed here the same
+    way: by ordering, not filtering, so nothing is hidden.
+
+    The bivariate engine solves the general case with
+    :func:`~vocab_growth.models.common_bivariate.pair_plot_priority`. Routing
+    this engine through it would also reorder VG14's, VG15's and VG24's pair
+    plots -- a reporting change for three fitted models, which belongs in its own
+    change rather than inside a registration. So only the lag's own block is
+    prepended, and every joint model that does not declare the lag gets a plot
+    byte-identical to before.
     """
     posterior_vars = set(context.trace.posterior.data_vars)
+    priority = joint_pair_plot_priority(definition)
 
-    def _prioritise_psi_conc(
-        names: list[str],
-        priority: tuple[str, ...] = ("psi", "conc"),
-    ) -> list[str]:
+    def _prioritise_psi_conc(names: list[str]) -> list[str]:
         seen: set[str] = set()
         ordered: list[str] = []
         for name in (*priority, *names):
@@ -2553,7 +2589,7 @@ def joint_stages(
         ),
         ("Prior predictive checks", prior_predictive_checks),
         ("Posterior sampling", sample),
-        ("Diagnostics", diagnostics),
+        ("Diagnostics", lambda ctx: diagnostics(ctx, definition)),
         (
             "Posterior predictions",
             lambda ctx: sample_posterior_predictive(ctx, definition),

@@ -367,6 +367,62 @@ def test_the_largest_denominator_wins_inside_a_source_wave():
     assert logit[2] == pytest.approx(_logit(40 / 400), abs=1e-12)
 
 
+def test_a_denominator_tie_is_broken_by_the_numerator_not_the_row_order():
+    """Two quantities are read off the source row, so both are selection keys.
+
+    Review of #339 found the gap: the walk ranked candidate sources on the
+    comprehension denominator alone, but this lag reads the *signed* count off
+    the chosen row as well. Two same-age forms agreeing on the total and
+    disagreeing on how many of those words the child signs are a genuine
+    conflict, and `np.argmax` resolved it by whichever the frame listed first --
+    so a re-sort of the analysis frame could move the predictor. Preferring the
+    larger signed count is the least-truncated rule applied to the numerator.
+
+    No wave that serves as a source offers such a choice on the current frame,
+    for either lag; this pins the rule rather than a present-day number.
+    """
+    subject = [0, 0, 0]
+    age = [12.0, 12.0, 24.0]
+    signed = [20.0, 60.0, 0.0]  # tied denominators, conflicting numerators
+    understood = [100.0, 100.0, 100.0]
+
+    prev, has_lag, logit = prev_wave_sign_share_lag(
+        subject, age, signed, understood, zero_handling=LAG_ZERO_CLIP
+    )
+    assert has_lag[2] == 1.0
+    assert prev[2] == 1
+    assert logit[2] == pytest.approx(_logit(60 / 100), abs=1e-12)
+
+    # And the answer survives listing the conflicting pair the other way round.
+    swapped = prev_wave_sign_share_lag(
+        [0, 0, 0],
+        [12.0, 12.0, 24.0],
+        [60.0, 20.0, 0.0],
+        [100.0, 100.0, 100.0],
+        zero_handling=LAG_ZERO_CLIP,
+    )
+    assert swapped[2][2] == pytest.approx(logit[2], abs=1e-12)
+
+
+def test_tied_sources_are_order_independent_under_permutation():
+    """The permutation check above, on a frame that actually contains ties."""
+    rng = np.random.default_rng(339)
+    subject = np.array([0, 0, 0, 1, 1, 1])
+    age = np.array([12.0, 12.0, 24.0, 18.0, 18.0, 30.0])
+    signed = np.array([20.0, 60.0, 5.0, 7.0, 2.0, 9.0])
+    understood = np.array([100.0, 100.0, 100.0, 80.0, 80.0, 90.0])
+
+    reference = prev_wave_sign_share_lag(subject, age, signed, understood)
+    for _ in range(16):
+        order = rng.permutation(len(subject))
+        inverse = np.argsort(order)
+        shuffled = prev_wave_sign_share_lag(
+            subject[order], age[order], signed[order], understood[order]
+        )
+        np.testing.assert_array_equal(shuffled[1][inverse], reference[1])
+        np.testing.assert_allclose(shuffled[2][inverse], reference[2])
+
+
 def test_a_wave_with_no_usable_share_is_skipped_rather_than_used():
     subject = [0, 0, 0]
     age = [12.0, 18.0, 24.0]

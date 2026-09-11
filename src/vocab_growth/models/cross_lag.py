@@ -129,25 +129,45 @@ def wave_index(subject, age):
     return index
 
 
-def _assign_prev_wave_sources(subject, age, usable, rank):
+def _assign_prev_wave_sources(subject, age, usable, rank_keys):
     """Point every row at its child's most recent strictly earlier usable wave.
 
     The walk both lags share. ``usable`` marks the rows that can *serve* as a
-    source; ``rank`` is the quantity maximised to choose between several usable
-    measurements inside one source wave, and is the least-truncated-measurement
-    rule in both cases -- the largest understood count for VG16's count lag, and
-    the largest comprehension denominator for VG25's ratio lag, which is the
-    same thing said of a ratio.
+    source; ``rank_keys`` is a tuple of arrays, highest priority first, maximised
+    lexicographically to choose between several usable measurements inside one
+    source wave.
+
+    The **first** key is the least-truncated-measurement rule in both cases --
+    the largest understood count for VG16's count lag, and the largest
+    comprehension denominator for VG25's ratio lag, which is the same thing said
+    of a ratio. The keys **after** it are what make the choice independent of the
+    input row order, and the rule for them is: *every quantity the caller reads
+    off the selected row must appear in this tuple*. Two rows tied on all of them
+    are interchangeable in the result; two rows tied on only the first are not,
+    and a plain ``argmax`` would then hand the answer to whichever the frame
+    happened to list first. VG16 reads the source's understood count (its own
+    first key) and, under ``same_form_only``, its form ceiling; VG25 reads the
+    source's signed count as well as its denominator.
+
+    Nothing on the current frame exercises this: no wave that serves as a source
+    offers more than one usable measurement, for either lag. Ten waves *do* carry
+    two usable comprehension measurements, so one further administration for any
+    of those children would make one a source -- which is why the rule is stated
+    and keyed rather than left to the row order the loader happens to produce.
 
     Returns ``(prev_idx, has_lag_f)``: the selected source row (0 where absent,
     gated by ``has_lag_f``) and 1.0/0.0 for whether one exists at all. The state
     advances only once a whole wave is assigned, so no row can take a same-age
-    source and the result does not depend on the input row order.
+    source.
     """
     subject = np.asarray(subject, dtype=int)
     age = np.asarray(age, dtype=float)
     usable = np.asarray(usable, dtype=bool)
-    rank = np.asarray(rank, dtype=float)
+    keys = tuple(np.asarray(k, dtype=float) for k in rank_keys)
+    if not keys:
+        raise ValueError(
+            "rank_keys needs at least the primary least-truncated ranking array."
+        )
     n = len(subject)
     prev_idx = np.zeros(n, dtype=int)
     has_lag_f = np.zeros(n, dtype=float)
@@ -161,7 +181,10 @@ def _assign_prev_wave_sources(subject, age, usable, rank):
             has_lag_f[wave] = 1.0
         candidates = wave[usable[wave]]
         if candidates.size:
-            source = int(candidates[np.argmax(rank[candidates])])
+            # np.lexsort takes its primary key last, so the tuple is reversed;
+            # the winner is the final entry of the returned order.
+            order = np.lexsort(tuple(k[candidates] for k in reversed(keys)))
+            source = int(candidates[order[-1]])
     return prev_idx, has_lag_f
 
 
@@ -211,11 +234,16 @@ def prev_wave_lag(
       scored against the same ``n_trials`` inventory under the project's
       difficulty-ordering harmonisation, and a shorter form right-truncates
       it, so the largest observed count is the least-truncated measurement
-      available. On the current frame no source wave carries more than one
-      understood measurement, so the rule is registered ahead of need. Rows
-      of one wave share child, study and recorded age, so which *row* the
-      source index points at cannot move the likelihood — only the selected
-      count can.
+      available. On the current frame no wave that serves as a source carries
+      more than one understood measurement, so the rule is registered ahead of
+      need — though ten waves do carry two, and one further administration for
+      any of those children would make one a source. Under ``same_form_only``
+      the source's **form ceiling** is read as well as its count, so it is a
+      selection key too: without it, two same-age forms tied on the count but
+      differing in length would hand the lag to whichever the frame listed
+      first. Everything else about a row is shared across its wave (child,
+      study, recorded age), so only the quantities read off the selected row
+      can move the likelihood.
 
     ``same_form_only`` (with ``form_ceiling``) keeps only lags whose source and
     target waves were scored against the same checklist, which is the review's
@@ -235,16 +263,12 @@ def prev_wave_lag(
     age = np.asarray(age, dtype=float)
     understood = np.asarray(understood, dtype=float)
     n = len(subject)
-    prev_idx, has_lag_f = _assign_prev_wave_sources(
-        subject, age, ~np.isnan(understood), understood
-    )
-    prev_idx, has_lag_f = _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months)
-    # The same-form restriction drops the lag on the same terms and for the same
-    # reason: applied after the source is chosen, so a row whose source used a
-    # different form loses its lag rather than falling back to an earlier
-    # same-form wave, which would silently lengthen the gap and confound the
-    # measurement question with the interval one. Both ceilings must be known --
-    # an unknown one cannot certify that the two waves used the same checklist.
+    # Both ceilings must be known -- an unknown one cannot certify that the two
+    # waves used the same checklist -- and the ceiling is validated *before* the
+    # walk because under ``same_form_only`` it is read off the selected source
+    # row, which makes it a selection key (see ``_assign_prev_wave_sources``).
+    # An unrecorded ceiling ranks last: such a source would lose the lag anyway.
+    ceiling = None
     if same_form_only:
         if form_ceiling is None:
             raise ValueError(
@@ -256,6 +280,21 @@ def prev_wave_lag(
             raise ValueError(
                 f"form_ceiling has {len(ceiling)} entries for {n} observations."
             )
+    rank_keys = (
+        (understood,)
+        if ceiling is None
+        else (understood, np.where(np.isnan(ceiling), -np.inf, ceiling))
+    )
+    prev_idx, has_lag_f = _assign_prev_wave_sources(
+        subject, age, ~np.isnan(understood), rank_keys
+    )
+    prev_idx, has_lag_f = _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months)
+    # The same-form restriction drops the lag on the same terms and for the same
+    # reason: applied after the source is chosen, so a row whose source used a
+    # different form loses its lag rather than falling back to an earlier
+    # same-form wave, which would silently lengthen the gap and confound the
+    # measurement question with the interval one.
+    if ceiling is not None:
         source_ceiling = ceiling[prev_idx]
         same = (
             (ceiling == source_ceiling)
@@ -435,8 +474,23 @@ def prev_wave_sign_share_lag(
     signed = np.asarray(signed, dtype=float)
     understood = np.asarray(understood, dtype=float)
     usable = ~np.isnan(signed) & ~np.isnan(understood) & (understood > 0)
+    # The denominator ranks first, for the least-truncated reason VG16's count
+    # lag gives. The numerator is the tie-break, and is here because this lag
+    # reads *two* quantities off the selected row: two same-age forms agreeing
+    # on the comprehension total but disagreeing on how many of those words the
+    # child signs are a genuine conflict, and resolving it by the frame's row
+    # order would make the predictor depend on a sort. Preferring the larger
+    # signed count is the same least-truncated principle applied to the
+    # numerator -- a form that recorded more signs saw more of the child's
+    # signing.
     prev_idx, has_lag_f = _assign_prev_wave_sources(
-        subject, age, usable, np.where(usable, understood, -np.inf)
+        subject,
+        age,
+        usable,
+        (
+            np.where(usable, understood, -np.inf),
+            np.where(usable, signed, -np.inf),
+        ),
     )
     prev_idx, has_lag_f = _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months)
 

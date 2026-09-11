@@ -172,14 +172,16 @@ def clamp_targets(value: bool | str) -> tuple[bool, bool]:
     field, so a *new* field would add a key to every definition of every class that
     declares it and invalidate every one of their fits at once — which for this
     field is every class that declares it: the whole ``BivariateModelDefinition``
-    tree, ``TrivariateModelDefinition`` and ``JointModelDefinition``, fifteen of
-    the twenty-one registered models (the six univariate ones do not declare it,
+    tree, ``TrivariateModelDefinition`` and ``JointModelDefinition``, sixteen of
+    the twenty-two registered models (the six univariate ones do not declare it,
     which is why ``common_univariate_re`` reads it through ``getattr``). Widening this
     field's domain leaves ``True``/``False`` serialising exactly as before, so only
     a definition that actually opts in changes. Stated as the rule rather than a
     count: the count was written as "fifteen" and stayed there through five
-    registrations, and then briefly as "all twenty", which is the reach of
-    ``report_max_age_understood`` rather than of this field. Both are asserted in
+    registrations, then briefly as "all twenty", which is the reach of
+    ``report_max_age_understood`` rather than of this field, and went stale again
+    at VG25 -- which is why the test asserts the *list* and the count here is only
+    ever a reading aid. Both are asserted in
     ``tests/test_ds_joint_shared_priors.py``.
     See ``notes/202608141200-clamp-q-only.md``.
     """
@@ -2131,7 +2133,7 @@ class JointCrossLagModelDefinition(JointCorrelatedSubjectREModelDefinition):
     argument for the understood lag; it transfers unchanged).
 
     A subclass for the reason :class:`JointCorrelatedSubjectREModelDefinition`
-    records: a fit is validated field for field, so putting these six fields on
+    records: a fit is validated field for field, so putting these seven fields on
     the parent would invalidate every VG24 fit. The engine reads all of them
     through ``getattr``, and no ``BACKFILL_DEFAULTS`` entry is needed or would be
     honest -- no fit predating these fields exists to excuse.
