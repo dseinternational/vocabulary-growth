@@ -42,10 +42,17 @@ def test_supported_models_are_registered_and_keyed_consistently():
 
 
 def test_unsupported_model_explains_itself():
-    # VG16 is excluded on substance (outcome-dependent cross-lag design), so the
-    # error has to say why rather than looking like an oversight.
-    with pytest.raises(KeyError, match="cross-lag"):
-        recovery_target("vg16")
+    # VG05 is excluded on substance (a descriptive baseline superseded by VG10),
+    # so the error has to say why rather than looking like an oversight.
+    #
+    # This named VG16 until 2026-09-11, whose exclusion rested on its cross-lag
+    # needing wave-by-wave simulation. Measurement did not support that -- the
+    # simulator already rebuilds between stages, and VG16's lag reads a column
+    # drawn in an earlier stage than the node it enters -- so VG16 is now a
+    # recovery target and the ordering rule is derived and guarded rather than
+    # asserted. See tests/test_recovery_wave_sequential.py.
+    with pytest.raises(KeyError, match="superseded by VG10"):
+        recovery_target("vg05")
 
 
 def test_unknown_model_is_rejected():

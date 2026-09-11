@@ -10,16 +10,35 @@ parameter draw. Nothing here restates a mean function, a dispersion function, or
 a row denominator, so a change to a model cannot silently invalidate its
 recovery check.
 
-The one thing the simulator must sequence itself is the nesting. Words spoken
-and words signed are modelled conditionally on the child's comprehension total,
-whose denominator is a ``pm.Data`` array fixed at build time. Comprehension is
-therefore drawn first, written into the analysis frame, and the model is
-**rebuilt** so the engine re-derives every denominator from the *simulated*
-parent before the dependent outcomes are drawn. After the final round the
-denominators and nested/marginal flags of a model rebuilt from the finished
-synthetic frame are compared against the ones the simulation actually used; a
-mismatch aborts, because it would mean the data were generated under a different
-decomposition from the one that will be fitted.
+The simulator must sequence two things itself, and both are handled the same
+way -- by rebuilding the model from the frame as simulated so far, so the
+engine's own build code re-derives what it derives.
+
+**The nesting.** Words spoken and words signed are modelled conditionally on the
+child's comprehension total, whose denominator is a ``pm.Data`` array fixed at
+build time. Comprehension is therefore drawn first, written into the analysis
+frame, and the model rebuilt before the dependent outcomes are drawn. After the
+final round the denominators and nested/marginal flags of a model rebuilt from
+the finished synthetic frame are compared against the ones the simulation
+actually used; a mismatch aborts, because it would mean the data were generated
+under a different decomposition from the one that will be fitted.
+
+**The waves**, for a model whose predictor is built from an outcome rather than
+from the design. A cross-lag reads an earlier wave's count, so the order the
+simulator draws in starts to matter -- but *whether* it matters is derived, by
+:func:`vocab_growth.recovery.spec.single_pass_is_sound`, rather than assumed.
+Rebuilding between stages already recomputes such a predictor from the simulated
+value, so a predictor whose source is drawn in a strictly earlier stage than
+every node it enters is correct in one pass. Where it is not -- a predictor
+reading an outcome drawn in the *same* stage as the one it shifts -- the stage
+pass is repeated once per administration wave, writing back only that wave's
+rows, so each wave's predictor is built from the simulated wave before it.
+
+Either way the guard is the same shape as the nesting one and runs either way:
+the predictor each row was drawn under must equal the predictor the fitted model
+computes from the finished frame, checked per row rather than argued. That is
+what makes the ordering rule above evidence rather than a claim -- and it is what
+showed the rule VG16 had been held to was wrong (see `single_pass_is_sound`).
 
 Missingness is preserved exactly. A row contributes a simulated value only where
 the real row contributed an observed one, so the synthetic dataset carries the
@@ -57,6 +76,7 @@ from vocab_growth.models.common import (
     PRIORS_STAGE_NAME,
     ModelFitContext,
 )
+from vocab_growth.models.cross_lag import prev_wave_lag_for_frame, wave_index
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.recovery import compare
 from vocab_growth.recovery.spec import (
@@ -65,7 +85,9 @@ from vocab_growth.recovery.spec import (
     EngineRecoverySpec,
     RecoveryTarget,
     outcome_column,
+    outcome_dependent_predictor,
     recovery_target,
+    single_pass_is_sound,
 )
 from vocab_growth.reporting import console, key_value_table
 
@@ -433,8 +455,25 @@ def _write_column(frame: pd.DataFrame, column: str, rows: np.ndarray, values: np
     frame.iloc[rows, frame.columns.get_loc(column)] = values.astype(float)
 
 
+def _restrict(rows: np.ndarray, mutable: np.ndarray | None) -> np.ndarray:
+    """``rows`` narrowed to the positions this round is still allowed to change.
+
+    ``mutable`` is ``None`` for a single-pass simulation, where every row is in
+    play until it is drawn. Under wave-sequential simulation it is the rows of
+    the current wave and every later one: earlier waves are **final**, and
+    overwriting one would destroy the very value the current wave's predictor was
+    built from.
+    """
+    if mutable is None:
+        return rows
+    return np.intersect1d(rows, mutable, assume_unique=False)
+
+
 def _neutralise_child_columns(
-    frame: pd.DataFrame, spec: EngineRecoverySpec, pending_columns: set[str]
+    frame: pd.DataFrame,
+    spec: EngineRecoverySpec,
+    pending_columns: set[str],
+    mutable: np.ndarray | None = None,
 ) -> None:
     """Make nested/marginal classification depend only on the simulated parent.
 
@@ -455,13 +494,15 @@ def _neutralise_child_columns(
         if link.child_column not in frame.columns:
             continue
         observed = frame[link.child_column].notna().to_numpy()
-        frame.iloc[
-            np.flatnonzero(observed), frame.columns.get_loc(link.child_column)
-        ] = 0.0
+        rows = _restrict(np.flatnonzero(observed), mutable)
+        frame.iloc[rows, frame.columns.get_loc(link.child_column)] = 0.0
 
 
 def _neutralise_composition_cells(
-    frame: pd.DataFrame, spec: EngineRecoverySpec, pending_nodes: set[str]
+    frame: pd.DataFrame,
+    spec: EngineRecoverySpec,
+    pending_nodes: set[str],
+    mutable: np.ndarray | None = None,
 ) -> None:
     """Make pending cross-tab cells consistent with their (possibly new) total.
 
@@ -480,7 +521,9 @@ def _neutralise_composition_cells(
                 continue
             if not all(column in frame.columns for column in node.columns):
                 continue
-            rows = np.flatnonzero(frame[node.total_column].notna().to_numpy())
+            rows = _restrict(
+                np.flatnonzero(frame[node.total_column].notna().to_numpy()), mutable
+            )
             if not rows.size:
                 continue
             totals = frame[node.total_column].to_numpy(dtype=float)[rows]
@@ -490,16 +533,108 @@ def _neutralise_composition_cells(
                 )
 
 
-def _apply_parent_totals(frame: pd.DataFrame, spec: EngineRecoverySpec) -> None:
+def _apply_parent_totals(
+    frame: pd.DataFrame, spec: EngineRecoverySpec, mutable: np.ndarray | None = None
+) -> None:
     """Point cross-tab totals at the simulated parent count they partition."""
     for total_column, parent_column in spec.totals_tracking_parent:
         if total_column not in frame.columns or parent_column not in frame.columns:
             continue
-        rows = np.flatnonzero(frame[total_column].notna().to_numpy())
+        rows = _restrict(
+            np.flatnonzero(frame[total_column].notna().to_numpy()), mutable
+        )
         if rows.size:
             frame.iloc[rows, frame.columns.get_loc(total_column)] = (
                 frame[parent_column].to_numpy(dtype=float)[rows]
             )
+
+
+def _cross_lag_state(frame: pd.DataFrame, definition, n_trials: int) -> np.ndarray:
+    """The cross-lag predictor inputs the engine derives from ``frame``.
+
+    Recomputed rather than read off the built model, because the engine bakes
+    these into the graph as plain constants rather than ``pm.Data`` containers,
+    so there is nothing to read back. It is the same pure function of the same
+    frame object the build stage reads, called with nothing changed in between,
+    so what it returns *is* what the build used -- and recording it is only
+    useful because it is then compared against the same function of the
+    **finished** frame.
+
+    Stacked as one array so the comparison is one array comparison: the prior
+    wave's index, whether a row has a lag at all, and the prior wave's logit.
+    All three matter. A row that gained or lost a lag is as much a change of
+    design matrix as one whose lag moved.
+    """
+    prev_idx, has_lag, y_prev_logit = prev_wave_lag_for_frame(
+        frame, n_trials, definition
+    )
+    return np.vstack(
+        [
+            np.asarray(prev_idx, dtype=float),
+            np.asarray(has_lag, dtype=float),
+            np.asarray(y_prev_logit, dtype=float),
+        ]
+    )
+
+
+#: How to read each declared outcome-dependent predictor's design matrix off a
+#: frame. A predictor added to `spec.outcome_dependent_predictor` adds an entry
+#: here; `_predictor_state` raises rather than skipping the guard if one is
+#: missing, so a half-declared predictor stops the run instead of going unchecked.
+_PREDICTOR_STATE = {"cross_lag": _cross_lag_state}
+
+
+def _predictor_state(predictor, frame: pd.DataFrame, definition, n_trials: int):
+    reader = _PREDICTOR_STATE.get(predictor.name)
+    if reader is None:
+        raise KeyError(
+            f"Outcome-dependent predictor {predictor.name!r} is declared in "
+            "recovery.spec but has no state reader in simulate._PREDICTOR_STATE, "
+            "so its simulation could not be checked. Add one."
+        )
+    return reader(frame, definition, n_trials)
+
+
+def _verify_predictor_coherence(
+    predictor,
+    final: np.ndarray,
+    recorded: list[tuple[int, np.ndarray, np.ndarray]],
+) -> dict[str, Any]:
+    """Assert every consuming draw used the predictor the finished frame implies.
+
+    The outcome-dependent counterpart of :func:`_verify_coherence`, and the guard
+    that makes a cross-lag recovery check mean anything rather than an ordering
+    argument. A row's predictor is a function of its child's earlier waves; by the
+    time those waves are final it is fixed, so the value a row was **drawn** under
+    must equal the value the refit will **compute** for it. Where it does not, the
+    data would be generated under one design matrix and fitted under another --
+    which is a recovery failure the model did not commit.
+
+    ``recorded`` is one entry per round that drew a consuming node: the round
+    index, the rows written in it, and the predictor state at that round's build.
+    It runs whether or not the wave loop was used, so the ordering rule in
+    :func:`vocab_growth.recovery.spec.single_pass_is_sound` is checked on every
+    run instead of trusted.
+    """
+    report: dict[str, Any] = {}
+    for round_index, rows, used in recorded:
+        if not rows.size:
+            continue
+        agrees = np.all(np.isclose(used[:, rows], final[:, rows], rtol=0, atol=1e-12), axis=0)
+        if not agrees.all():
+            raise RuntimeError(
+                f"Round {round_index} drew {int((~agrees).sum())} of {rows.size} "
+                f"row(s) under a {predictor.name!r} predictor the finished "
+                "synthetic frame does not reproduce. The data would be generated "
+                "under one design matrix and fitted under another. If this is a "
+                "new predictor, it reads an outcome drawn no earlier than the node "
+                "it enters, and `spec.single_pass_is_sound` must say so."
+            )
+        report[f"{predictor.name}_round_{round_index}"] = {
+            "rows": int(rows.size),
+            "rows_with_predictor": int(final[1, rows].sum()),
+        }
+    return report
 
 
 def _verify_coherence(
@@ -745,17 +880,74 @@ def simulate_replicate(
     }
 
     pending_nodes = {node.rv_name for stage in spec.stages for node in stage}
+    all_columns, all_nodes = set(pending_columns), set(pending_nodes)
 
-    for stage_index, stage in enumerate(spec.stages):
-        if stage_index > 0:
+    # The rounds to draw in. One pass over the stage list unless a predictor is
+    # built from an outcome that a single pass would leave un-simulated when the
+    # node consuming it is drawn -- see `spec.single_pass_is_sound`, which derives
+    # that from the stage order rather than being told it.
+    predictor = outcome_dependent_predictor(definition)
+    wave_sequential = predictor is not None and not single_pass_is_sound(
+        spec, definition, predictor
+    )
+    if not wave_sequential:
+        waves: np.ndarray | None = None
+        rounds = [(0, stage) for stage in spec.stages]
+    else:
+        waves = wave_index(
+            frame["subject_code"].to_numpy(), frame["age"].to_numpy(dtype=float)
+        )
+        rounds = [
+            (wave, stage)
+            for wave in range(int(waves.max()) + 1)
+            for stage in spec.stages
+        ]
+    if predictor is not None:
+        console.print(
+            f"[dim]Outcome-dependent predictor {predictor.name!r} "
+            f"({predictor.description}): "
+            + (
+                f"simulated wave by wave, {int(waves.max()) + 1} waves."
+                if wave_sequential
+                else "one pass is sound (its source is drawn in an earlier stage)."
+            )
+            + "[/dim]"
+        )
+    # One entry per round that draws a consuming node: (round, rows, state).
+    predictor_recorded: list[tuple[int, np.ndarray, np.ndarray]] = []
+    consumer_rvs = set() if predictor is None else set(predictor.consumer_rv_names)
+    current_wave: int | None = None
+
+    for round_index, (wave, stage) in enumerate(rounds):
+        if wave != current_wave:
+            # A new wave draws every outcome again, for its own rows.
+            pending_columns, pending_nodes = set(all_columns), set(all_nodes)
+            current_wave = wave
+        # Earlier waves are final: neutralisation must not touch them, or it
+        # would destroy the values this wave's predictor was built from.
+        mutable = None if waves is None else np.flatnonzero(waves >= wave)
+
+        if round_index > 0:
             # Rebuild on the frame as simulated so far: the engine re-derives every
-            # row denominator and nested/marginal flag from the *simulated* parent.
-            _apply_parent_totals(frame, spec)
-            _neutralise_child_columns(frame, spec, pending_columns)
-            _neutralise_composition_cells(frame, spec, pending_nodes)
+            # row denominator, nested/marginal flag and lag predictor from the
+            # *simulated* parent.
+            _apply_parent_totals(frame, spec, mutable)
+            _neutralise_child_columns(frame, spec, pending_columns, mutable)
+            _neutralise_composition_cells(frame, spec, pending_nodes, mutable)
             context.set_model_data(context.model_data, frame)
             build_stage(context)
             model = context.model
+
+        round_state = None
+        if predictor is not None and any(
+            node.rv_name in consumer_rvs for node in stage
+        ):
+            # Read from the frame the build just read, before anything in this
+            # round changes it, so it is what the build used. Checked against the
+            # finished frame after the loop.
+            round_state = _predictor_state(
+                predictor, frame, definition, context.model_data.n_trials
+            )
 
         present = [node for node in stage if node.rv_name in model.named_vars]
         skipped_nodes.extend(
@@ -774,7 +966,7 @@ def simulate_replicate(
             model=model,
             var_names=[node.rv_name for node in present],
             progressbar=False,
-            random_seed=random_seed + 1000 * replicate + stage_index,
+            random_seed=random_seed + 1000 * replicate + round_index,
             compile_kwargs={"mode": "FAST_COMPILE"},
         )
         drawn = _as_dataset(simulated["posterior_predictive"])
@@ -784,30 +976,55 @@ def simulate_replicate(
             # One chain, one draw: drop the sample dimensions.
             values = values.reshape(values.shape[2:])
             rows = _mask_rows(model, node, n_rows)
+            if isinstance(node, CompositionOutcome) and values.shape != (
+                rows.size,
+                len(node.columns),
+            ):
+                raise ValueError(
+                    f"{node.rv_name}: expected {(rows.size, len(node.columns))} "
+                    f"cell draws, got {values.shape}."
+                )
+            # Under wave-sequential simulation the node is drawn for every row it
+            # covers and only this wave's are kept; the rest are redrawn in their
+            # own round, against the frame as it will then stand.
+            if waves is not None:
+                keep = waves[rows] == wave
+                rows, values = rows[keep], values[keep]
+            if not rows.size:
+                continue
+            if round_state is not None and node.rv_name in consumer_rvs:
+                predictor_recorded.append((round_index, rows.copy(), round_state))
             if isinstance(node, CountOutcome):
                 column = outcome_column(definition, node.column)
                 _write_column(frame, column, rows, values)
                 simulated_columns.append(column)
                 pending_columns.discard(column)
                 pending_nodes.discard(node.rv_name)
-                row_counts[column] = int(rows.size)
+                row_counts[column] = row_counts.get(column, 0) + int(rows.size)
             else:
-                if values.shape != (rows.size, len(node.columns)):
-                    raise ValueError(
-                        f"{node.rv_name}: expected {(rows.size, len(node.columns))} "
-                        f"cell draws, got {values.shape}."
-                    )
                 for cell_index, column in enumerate(node.columns):
                     _write_column(frame, column, rows, values[:, cell_index])
                     simulated_columns.append(column)
                 _write_column(frame, node.total_column, rows, values.sum(axis=1))
                 pending_nodes.discard(node.rv_name)
-                row_counts[node.rv_name] = int(rows.size)
+                row_counts[node.rv_name] = row_counts.get(node.rv_name, 0) + int(
+                    rows.size
+                )
 
     # Final coherence check against a model rebuilt from the finished frame.
     context.set_model_data(context.model_data, frame)
     build_stage(context)
     coherence = _verify_coherence(context.model, spec, frame, recorded_data)
+    if predictor is not None:
+        coherence.update(
+            _verify_predictor_coherence(
+                predictor,
+                _predictor_state(
+                    predictor, frame, definition, context.model_data.n_trials
+                ),
+                predictor_recorded,
+            )
+        )
 
     frame_path = os.path.join(directory, SYNTHETIC_FRAME_FILENAME)
     frame_schema = _write_frame(frame, frame_path)
@@ -838,6 +1055,17 @@ def simulate_replicate(
                 "stage_order": [
                     [node.rv_name for node in stage] for stage in spec.stages
                 ],
+                "outcome_dependent_predictor": (
+                    None
+                    if predictor is None
+                    else {
+                        "name": predictor.name,
+                        "source_column": predictor.source_column,
+                        "consumer_rv_names": list(predictor.consumer_rv_names),
+                        "single_pass_sound": not wave_sequential,
+                    }
+                ),
+                "waves": None if waves is None else int(waves.max()) + 1,
                 "simulated_columns": sorted(set(simulated_columns)),
                 "skipped_nodes": sorted(set(skipped_nodes)),
                 "likelihood_row_counts": row_counts,
@@ -856,6 +1084,11 @@ def simulate_replicate(
         [
             *[(name, f"{count} likelihood rows") for name, count in row_counts.items()],
             ("Coherence checks", f"{len(coherence)} passed"),
+            *(
+                []
+                if waves is None
+                else [("Waves simulated", f"{int(waves.max()) + 1}, in order")]
+            ),
             *([("Skipped nodes", ", ".join(sorted(set(skipped_nodes))))] if skipped_nodes else []),
         ],
     )
