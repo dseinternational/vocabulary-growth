@@ -99,6 +99,109 @@ class EngineRecoverySpec:
     the provenance record states plainly what was held fixed."""
 
 
+@dataclass(frozen=True)
+class OutcomeDependentPredictor:
+    """A model term whose design matrix is built from an outcome column.
+
+    Almost every predictor here is a function of the *design* -- age, study,
+    child -- so drawing every row of an outcome at once is exactly what the model
+    says happens. A cross-lag is not: it reads an earlier wave's **count**, so
+    the design matrix is a function of the outcome, and the order in which the
+    simulator draws things starts to matter.
+
+    Whether it matters is :func:`single_pass_is_sound`'s question, not a matter
+    of declaration -- see there. What is declared here is only what the predictor
+    reads and what it enters, which the engines compute inside the build and
+    nothing can infer from outside it.
+    """
+
+    name: str
+    source_column: str
+    """The outcome column the predictor is built from."""
+    consumer_rv_names: tuple[str, ...]
+    """Likelihood nodes whose density the predictor shifts."""
+    description: str
+
+
+def outcome_dependent_predictor(definition) -> OutcomeDependentPredictor | None:
+    """``definition``'s outcome-dependent predictor, if it has one.
+
+    **A new predictor that reads an outcome column belongs here.**
+    ``tests/test_recovery_wave_sequential.py`` pins the one that exists against
+    the definition field that creates it, and the simulator's guard refuses any
+    simulation whose predictor is not reproducible from the finished frame -- so
+    an undeclared one that actually mattered would abort the run rather than
+    quietly produce a wrong dataset.
+    """
+    if getattr(definition, "use_cross_lag", False):
+        return OutcomeDependentPredictor(
+            name="cross_lag",
+            source_column="understood",
+            consumer_rv_names=("y_s_obs",),
+            description=(
+                "each child's earlier-wave comprehension count, shifting the "
+                "logit of their current production ratio"
+            ),
+        )
+    return None
+
+
+def _stage_producing_column(spec, definition, column: str) -> int | None:
+    """Index of the stage that draws ``column``, or ``None`` if nothing does."""
+    for index, stage in enumerate(spec.stages):
+        for node in stage:
+            if isinstance(node, CountOutcome):
+                if outcome_column(definition, node.column) == column:
+                    return index
+            elif column in node.columns or column == node.total_column:
+                return index
+    return None
+
+
+def _stage_consuming_rv(spec, rv_name: str) -> int | None:
+    """Index of the stage that draws ``rv_name``, or ``None`` if nothing does."""
+    for index, stage in enumerate(spec.stages):
+        if any(node.rv_name == rv_name for node in stage):
+            return index
+    return None
+
+
+def single_pass_is_sound(spec, definition, predictor) -> bool:
+    """Whether every row's predictor is final before anything using it is drawn.
+
+    The simulator already rebuilds the model between stages, so a predictor built
+    from an outcome drawn in a **strictly earlier** stage is recomputed from the
+    simulated value before any row that uses it is drawn -- which is a correct
+    forward simulation, in one pass, with no wave loop needed.
+
+    **This corrects the record.** VG16 was listed as unsupported on the ground
+    that "single-pass simulation would fit synthetic-lag data against real-lag
+    truth" (#242 item 6, #289 task 3.9, and the deferral of #297). Measured on
+    2026-09-11, that is false for VG16: its lag reads ``understood``, drawn in
+    stage 0, and enters ``y_s_obs``, drawn in stage 1, so at the build whose draw
+    consumes the lag the predictor already matched the finished frame's in **0 of
+    1,708 rows**. The blocker was a misdiagnosis, and the wave loop it asked for
+    is not what VG16 needed.
+
+    It is what a predictor reading a **same-stage** outcome needs, which is the
+    shape #297's proposed VG25 has: a sign-to-speech lag reads ``signed``, drawn
+    alongside ``spoken`` in the joint engine's second stage, so a single pass
+    would draw the consumer against a source that is still real. There the wave
+    loop is required, and this function is what selects it.
+    """
+    source_stage = _stage_producing_column(spec, definition, predictor.source_column)
+    if source_stage is None:
+        # Nothing simulates the source, so it is real data in every pass and the
+        # predictor is the same one the refit will see.
+        return True
+    consumers = [_stage_consuming_rv(spec, rv) for rv in predictor.consumer_rv_names]
+    if any(stage is None for stage in consumers):
+        # A declared consumer this engine does not draw: fail toward the wave
+        # loop, which is correct either way and only costs time.
+        return False
+    return all(source_stage < stage for stage in consumers)
+
+
 # --------------------------------------------------------------------------
 # Engine specifications
 # --------------------------------------------------------------------------
@@ -191,14 +294,6 @@ class RecoveryTarget:
 # the non-RE engines, not estimands #163 gates, and adding their engines would
 # widen the surface without adding evidence.
 #
-# VG16 is absent for a substantive reason, not convenience. Its cross-lag
-# predictor is built from each child's *earlier-wave comprehension count*, so the
-# design matrix is a function of the outcome. Simulating comprehension for every
-# wave at once would generate the data under real-data lags but fit it under
-# synthetic-data lags, and the resulting "recovery failure" would be an artefact
-# of the harness rather than of the model. A correct VG16 check needs
-# wave-sequential simulation; until that exists VG16 stays unsupported.
-#
 # Only the data-generating spec is named here. The engine's stage factory comes
 # from `vocab_growth.models.catalogue`, so a model cannot be paired with another
 # engine's pipeline (issue #273).
@@ -210,6 +305,22 @@ _TARGETS: dict[str, EngineRecoverySpec] = {
     "vg11": UNIVARIATE_RE_SPEC,
     "vg12": UNIVARIATE_RE_SPEC,
     "vg13": BIVARIATE_RE_SPEC,
+    # VG16 runs VG10's engine and draws counts exactly as VG10 does -- the
+    # cross-lag changes the q logit, not the observation nodes -- so the VG10
+    # spec is correct here unchanged, as it is for VG19 to VG23 below.
+    #
+    # It was listed as unsupported until 2026-09-11 on a premise that measurement
+    # did not support: that a single pass "would fit synthetic-lag data against
+    # real-lag truth". The simulator already rebuilds between stages, and VG16's
+    # lag reads `understood` (stage 0) while entering `y_s_obs` (stage 1), so the
+    # lag was already recomputed from the simulated parent before the draw that
+    # uses it -- 0 of 1,708 rows differing from the finished frame's lag. See
+    # `single_pass_is_sound`, which now derives that rather than asserting it,
+    # and refuses the case where it does not hold.
+    #
+    # `beta_lag` needs no scoring entry: it is a scalar free RV, so
+    # `recovery/compare.py` picks it up by dimension.
+    "vg16": BIVARIATE_RE_SPEC,
     "vg15": JOINT_SPEC,
     # VG19 runs VG10's engine and VG10's data-generating process. The child slope
     # changes the PRIOR on each child's effect -- one deviate becomes an
@@ -279,11 +390,6 @@ _TARGETS: dict[str, EngineRecoverySpec] = {
 }
 
 UNSUPPORTED_REASONS: dict[str, str] = {
-    "vg16": (
-        "the cross-lag predictor is a function of earlier-wave comprehension, so "
-        "forward simulation must proceed wave by wave; single-pass simulation "
-        "would fit synthetic-lag data against real-lag truth"
-    ),
     "vg01": "descriptive baseline on the single-outcome engine (not a gated estimand)",
     "vg02": "descriptive baseline on the single-outcome engine (not a gated estimand)",
     "vg03": "descriptive baseline on the single-outcome engine (not a gated estimand)",

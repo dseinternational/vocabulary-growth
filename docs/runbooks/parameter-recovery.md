@@ -141,11 +141,10 @@ What a small number of replicates _does_ support:
 
 ## Coverage and known gaps
 
-Supported: VG07–VG13, VG15 and VG19–VG23 — the study-random-effect bivariate engine and its child-effect derivatives, the univariate random-effect engine, and the joint sign/speech engine. This covers all three headline models. The authoritative list is `recovery.spec.supported_models()`, and the seven unsupported models each carry a reason in `recovery.spec.UNSUPPORTED_REASONS`; a test asserts the two partition `MODEL_REGISTRY`, so a newly registered model cannot be silently absent from both.
+Supported: VG07–VG13, VG15, VG16 and VG19–VG24 — the study-random-effect bivariate engine and its child-effect derivatives, the univariate random-effect engine, and the joint sign/speech engine. This covers all three headline models. The authoritative list is `recovery.spec.supported_models()`, and the six unsupported models each carry a reason in `recovery.spec.UNSUPPORTED_REASONS`; a test asserts the two partition `MODEL_REGISTRY`, so a newly registered model cannot be silently absent from both.
 
 Not supported, deliberately:
 
-- **VG16.** Its cross-lag predictor is built from each child's earlier-wave comprehension count, so the design matrix is a function of the outcome. Simulating every wave at once would generate the data under real-data lags and fit it under synthetic-data lags, and the resulting "recovery failure" would be an artefact of the harness. A correct VG16 check needs wave-sequential simulation.
 - **VG01–VG05 and VG14.** Descriptive baselines on the non-random-effect engines, superseded for the estimands #163 gates by VG10 and VG15.
 
 Requesting an unsupported model gives an error stating the reason.
