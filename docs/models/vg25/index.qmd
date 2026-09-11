@@ -55,7 +55,10 @@ render_model_at_a_glance()
 #| output: asis
 from vocab_growth.report_cells import render_reading_routes
 
-render_reading_routes('record', signing=True)
+# 'candidate', not 'record': VG25 is UNCLASSIFIED and unfitted, so families
+# and practitioners are routed to VG24 rather than offered numbers this page
+# should not supply.
+render_reading_routes('candidate', instead='VG24')
 ```
 
 ![The model's structure. VG25 differs from VG24 in one coefficient on the production-ratio logit.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
@@ -113,7 +116,13 @@ VG16 registered the **population-relative** baseline for its own lag, and the di
 
 **Registered: `nz_01` supplies no lag source.** Its cross-tab partitions *produced* words, so the only share it measures is the signed share of **production** — a different variable, not a differently-denominated version of this one. Putting the two under one coefficient would make $\beta_{sign\,lag}$ mean two things at once. Its rows still enter every likelihood they always did.
 
-On the current frame the decision costs nothing measurable: no `nz_01` child has an earlier wave carrying a comprehension-denominated share, so those children would consume no lag either way. The rule is registered on the argument rather than on the count, so that new `nz_01` follow-up data cannot quietly change what the coefficient means.
+::: {.callout-warning}
+## This one costs real support
+
+28 of `nz_01`'s 33 children have more than one wave. Admitting a produced denominator would take the coefficient from **191 supporting observations over 129 children to 269 over 157** — the 28 children [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) anticipated, at a median gap of 6 months. That is 41% more observations, declined.
+
+It is declined on the argument and not on the count, which is the only way the rule survives the next `nz_01` follow-up: a coefficient whose meaning depends on how much data a denominator happens to bring is not a coefficient anyone can interpret.
+:::
 
 ### The gap {#sec-gap}
 
@@ -125,7 +134,16 @@ The model assumes **one coefficient across every gap it sees**. A prospective as
 
 The predictor is $\mathrm{logit}(\text{signed}/\text{understood})$, and a signed share of exactly $0$ is common here in a way an understood count of exactly $0$ is not. On the 2026-09-11 frame **26 of the 191 supporting rows** have a source wave at which the child signed none of what they understood, and 2 more at which they signed all of it — **14.7% of the support on a logit boundary**, against 7 of VG16's 477 rows (1.5%).
 
-The clip puts all 26 at $\mathrm{logit}(10^{-4}) = -9.21$ whatever the wave measured, so a child who understood 2 words and signed none enters identically to a child who understood 406 and signed none. Those 28 rows then carry **76.1% of the predictor's total sum of squares** — which is to say the coefficient would be estimated mostly off a floor constant. The continuity correction $(k+0.5)/(n+1)$ derives each from its own wave's denominator instead: $-1.61$ for the 2-word wave, $-6.70$ for the 406-word one. It halves the predictor's SD ($3.34 \rightarrow 1.79$) and the boundary's leverage ($76.1\% \rightarrow 45.8\%$).
+The clip puts all 26 at $\mathrm{logit}(10^{-4}) = -9.21$ whatever the wave measured, so a child who understood 2 words and signed none enters identically to a child who understood 406 and signed none. The continuity correction $(k+0.5)/(n+1)$ derives each from its own wave's denominator instead: $-1.61$ for the 2-word wave, $-6.70$ for the 406-word one.
+
+What that is worth, measured on the **source signed-share logit** — the predictor's observed input, before the model's own baseline is subtracted, which is the part that can be measured without a fit:
+
+| treatment | SD | range | boundary rows' share of its sum of squares |
+| --- | ---: | --- | ---: |
+| clip | 3.34 | $[-9.21, +9.21]$ | **76.1%** |
+| continuity | 1.79 | $[-6.70, +4.89]$ | 45.8% |
+
+Under the clip, 14.7% of the rows would carry three quarters of the variation the coefficient is estimated from — which is to say $\beta_{sign\,lag}$ would be fixed mostly by a floor constant. That is not an artefact of the raw scale: residualising the source logit on the source wave's age and study, as a stand-in for the baseline the model actually subtracts, leaves the same picture (SD $2.77$ against $1.56$; boundary leverage $66.1\%$ against $42.3\%$).
 
 `sign-lag-clip` is the arm that measures the difference on a fit rather than on this arithmetic.
 
@@ -656,7 +674,7 @@ Leaving one observation out of the likelihood does not remove it from the **late
 - **The coefficient rests on a minority of the frame** (@sec-support), and which children have an earlier wave carrying a signed share is an artefact of which studies followed children longitudinally and at what intervals. A coefficient reported as a property of children with Down syndrome is estimated from a subset defined by study design.
 - **There is no leave-one-study-out arm yet.** [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) check 5 asks for one, and it cannot be registered on this definition today: `exclude_studies` is a `BivariateModelDefinition` field, and adding it to `JointModelDefinition` would restale every VG15 and VG24 fit — a change to make deliberately, with the refit it costs, not as a side effect of registering a variant. `sign-lag-uk07-marginal` is the nearest thing available and is a different question: it keeps `uk_07`'s children and moves their rows from the cross-tab branch to the marginal one.
 - **One coefficient across every gap** (@sec-gap). A prospective association over a year and one over three months are assumed to be the same quantity, and `sign-lag-gap-12` is the check rather than the fix.
-- **The boundary treatment is a modelling choice, not a measurement** (@sec-boundary). Roughly one supporting row in seven has a source share of exactly 0 or 1, where the value the predictor takes is set by the correction rather than by the data.
+- **The boundary treatment is a modelling choice, not a measurement** (@sec-boundary). Roughly one supporting row in seven has a source share of exactly 0 or 1, where the value the predictor takes is set by the correction rather than by the data. Under the registered correction those rows still carry 46% of the source logit's variation, so `sign-lag-clip` is a sensitivity on a choice that matters, not a formality.
 - **Out-of-sample figures leak across the lag** (@sec-loo).
 - **Parameter recovery is registered but not complete.** [#297](https://github.com/dseinternational/vocabulary-growth/issues/297)'s gate 4 asks for recovery in three designed cells — $(\beta = 0, \rho \neq 0)$, $(\beta \neq 0, \rho = 0)$ and both nonzero — whose purpose is to show the lag can be told apart from the correlation. VG25 is a registered recovery target and the simulator selects the wave-sequential order for it automatically, but two of those cells need a way to *set* a parameter in the truth draw, which the harness does not yet have. VG16's own recovery returned `beta_lag` 29% low on its one assessable replicate at `test` ([`notes/202609111500`](../../notes/202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md)), so this check needs a tier above `test` when it runs.
 - **No role has been assigned.** VG25 is `UNCLASSIFIED` in the catalogue, which fails closed: it keeps full publication strictness and stays in the default refit scope. Whether it becomes a model of record, a development step, or neither is a study-owner decision taken with [#190](https://github.com/dseinternational/vocabulary-growth/issues/190)'s other scope questions.

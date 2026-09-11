@@ -445,6 +445,17 @@ def prev_wave_sign_share_lag(
     # neither branch can divide by a NaN.
     signed_prev = np.where(has_lag_f > 0, signed[prev_idx], 0.5)
     understood_prev = np.where(has_lag_f > 0, understood[prev_idx], 1.0)
+    # A numerator above its own denominator is a share above 1, which the clip
+    # absorbs and the continuity correction does NOT: (k + 0.5) / (n + 1) stays
+    # above 1, and `log(1 - r)` of it is a silent NaN that would propagate into
+    # the log density. It cannot happen on the frames registered today -- the
+    # loader masks a comprehension count that falls below the child's recorded
+    # production union, and a cross-tab's cells sum to its own total by
+    # construction, so `signed <= understood` on all 562 rows carrying a share.
+    # It becomes reachable the moment that mask is reinstated for a sensitivity,
+    # which is one field away. Clipped here rather than guarded at the call site
+    # so both treatments see a well-defined share, and a no-op on valid data.
+    signed_prev = np.clip(signed_prev, 0.0, understood_prev)
     if zero_handling == LAG_ZERO_CONTINUITY:
         r_prev = (signed_prev + 0.5) / (understood_prev + 1.0)
     elif zero_handling == LAG_ZERO_CLIP:

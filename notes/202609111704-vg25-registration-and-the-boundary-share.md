@@ -26,7 +26,19 @@ Four were named on the issue. The fifth was forced by measurement and is the onl
 | Gap                              | unrestricted, with a registered 12-month arm       | §6  |
 | Boundary shares                  | **continuity**, not VG16's clip                    | §7  |
 
-Seven sensitivity arms are registered with the model, in the same change as the fields they need — a field with no variant using it is dead weight in a fingerprint.
+Seven sensitivity arms are registered with the model, in the same change as the fields they need — a field with no variant using it is dead weight in a fingerprint. What each does to the coefficient's support, measured:
+
+| arm                         | supporting observations | children | what moves                                                           |
+| --------------------------- | ----------------------: | -------: | -------------------------------------------------------------------- |
+| _(registered)_              |                     191 |      129 | —                                                                    |
+| `sign-lag-clip`             |                     191 |      129 | the predictor's **values**, not its rows (§7)                        |
+| `sign-lag-marginal-only`    |                     111 |       80 | drops `uk_07` entirely and 28 of `uk_02`'s 41                        |
+| `sign-lag-population`       |                     191 |      129 | the **baseline** subtracted, not the rows                            |
+| `sign-lag-uk07-marginal`    |                     191 |      129 | `uk_07`'s 52 rows move from the `cells` branch to the `marginal` one |
+| `sign-lag-gap-12`           |                     168 |      112 | drops the 23 lags reaching back more than a year                     |
+| `beta-sign-tight` / `-wide` |                     191 |      129 | the prior scale only                                                 |
+
+The four that leave the support at 191 are not inert — they change the predictor, the baseline, the likelihood carrying it, or the prior. Stated because a reader checking an arm against its row count would otherwise conclude three of them did nothing.
 
 ## 3. Which likelihoods the lag enters, and what it costs either way
 
@@ -87,11 +99,13 @@ for label, consumer in (("marginal + cells", marginal | cells), ("marginal only"
 
 The two models differ because one of them has a correlation and the other does not. VG16 carries no `rho_uq`, so its population baseline still had a between-child association to measure. VG25 inherits `rho_sign_q`, so the population baseline would be a second, noisier reading of a quantity already in the model. Registered as `sign-lag-population`, where it does double duty as the check in §3.
 
-## 5. `nz_01` supplies no source, and on this frame it costs nothing
+## 5. `nz_01` supplies no source, and it is not free
 
 Its cross-tab partitions **produced** words, so the only share it measures is the signed share of production — a different variable, not a differently-denominated version of this one. Pooling the two under one coefficient would make `beta_sign_lag` mean two things at once.
 
-The issue offered redefining the predictor for those 28 children as the second design in its support table. On the current frame the question is moot in the direction that matters: no `nz_01` child has an earlier wave carrying a comprehension-denominated share, so `nz_01` rows consume no lag under either rule and the "+28 children" line does not reproduce. The rule is registered on the argument rather than on the count, so a future `nz_01` follow-up cannot quietly change what the coefficient means.
+**It costs real support, and the issue's "+28 children" line reproduces almost exactly.** 28 of `nz_01`'s 33 children have more than one wave, and admitting a produced denominator takes the coefficient from 191 supporting observations over 129 children to **269 over 157** — 78 added observations from 28 children, at a median gap of 6 months, and no existing row's source moved. (The issue projected 279 over 164 on the older frame.)
+
+So this is not the free decision an earlier draft of this note claimed. It is declined on the argument alone, which is the only way the rule survives the next `nz_01` follow-up: a coefficient whose meaning depends on how much data a denominator happens to bring is not one anyone can interpret. What would be defensible is a **second** coefficient on the production-denominated share, which is a different model and not this one.
 
 ## 6. The gap
 
@@ -110,14 +124,16 @@ The predictor is `logit(signed / understood)`. A signed share of exactly 0 is co
 
 26 rows have a source wave where the child signed none of what they understood; 2 have one where they signed all of it. The clip puts all 26 at `logit(1e-4) = -9.21` **whatever the wave measured**, so a child who understood 2 words and signed none enters identically to one who understood 406 and signed none. The source denominators of those 26 rows run 2, 7, 7, 13, 15, … 129, 406 — two orders of magnitude, one predictor value.
 
-What that does to the coefficient:
+Measured on the **source signed-share logit** — the predictor's observed input, before the model's latent baseline is subtracted, which is the part measurable without a fit:
 
-| treatment  | predictor SD | range          | boundary rows' share of the predictor's sum of squares |
-| ---------- | -----------: | -------------- | -----------------------------------------------------: |
-| clip       |         3.34 | [−9.21, +9.21] |                                              **76.1%** |
-| continuity |         1.79 | [−6.70, +4.89] |                                                  45.8% |
+| treatment  |   SD | range          | boundary rows' share of its sum of squares |
+| ---------- | ---: | -------------- | -----------------------------------------: |
+| clip       | 3.34 | [−9.21, +9.21] |                                  **76.1%** |
+| continuity | 1.79 | [−6.70, +4.89] |                                      45.8% |
 
-Under the clip, `beta_sign_lag` would be estimated mostly off a floor constant. The continuity correction `(k + 0.5) / (n + 1)` derives each boundary row from its own wave's denominator — −1.61 for the 2-word wave, −6.70 for the 406-word one — which is the ordering the data actually support: a larger denominator with no signs is stronger evidence of not signing.
+Under the clip, 14.7% of the rows carry three quarters of the variation the coefficient is estimated from — `beta_sign_lag` would be fixed mostly by a floor constant. The continuity correction `(k + 0.5) / (n + 1)` derives each boundary row from its own wave's denominator — −1.61 for the 2-word wave, −6.70 for the 406-word one — which is the ordering the data actually support: a larger denominator with no signs is stronger evidence of not signing.
+
+**And it is not an artefact of the raw scale.** The fitted predictor subtracts a latent baseline, so the table above could in principle overstate the boundary's reach. Residualising the source logit on the source wave's age and study — a stand-in for that baseline, and the closest check available before a fit — leaves the same picture: SD 2.77 against 1.56, boundary leverage **66.1% against 42.3%**.
 
 So **VG25 registers continuity and VG16 keeps the clip**. The _field_ default stays `LAG_ZERO_CLIP`, so the two lags are configured the same way and the off-state remains the historical treatment; what changed is what VG25 registers. `sign-lag-clip` measures the difference on a fit rather than on this arithmetic.
 

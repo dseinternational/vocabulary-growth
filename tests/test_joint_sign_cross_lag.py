@@ -153,7 +153,7 @@ def test_the_registered_choices_are_the_ones_the_record_states():
     A silent flip of any one changes the estimand or the evidence: the baseline
     decides whether the coefficient duplicates `rho_sign_q`, the cells decide
     whether uk_07 contributes at all, and the zero treatment decides whether
-    76% of the predictor's sum of squares comes from a floor constant.
+    76% of the source logit's sum of squares comes from a floor constant.
     """
     assert VG25.sign_lag_baseline == "within"
     assert VG25.sign_lag_in_cells is True
@@ -459,6 +459,48 @@ def test_a_share_of_exactly_one_is_finite_under_both_treatments():
         )
         assert np.isfinite(logit[1])
         assert logit[1] == pytest.approx(expected, abs=1e-9)
+
+
+def test_a_numerator_above_its_denominator_cannot_produce_a_nan():
+    """The continuity correction has no clip of its own, so a share above 1 is
+    a silent NaN in `log(1 - r)` -- and a NaN predictor is a NaN log density.
+
+    It cannot arise on the frames registered today: the loader masks a
+    comprehension count below the child's recorded production union, and a
+    cross-tab's cells sum to its own total. It becomes reachable the moment
+    that mask is reinstated for a sensitivity, which is one field away, so the
+    primitive is required to stay finite rather than the caller required to
+    remember.
+    """
+    subject = [0, 0]
+    age = [12.0, 24.0]
+    signed = [60.0, 5.0]      # the source signed MORE than it understood
+    understood = [50.0, 80.0]
+    for treatment in (LAG_ZERO_CLIP, LAG_ZERO_CONTINUITY):
+        _, has_lag, logit = prev_wave_sign_share_lag(
+            subject, age, signed, understood, zero_handling=treatment
+        )
+        assert has_lag[1] == 1.0
+        assert np.isfinite(logit[1]), treatment
+    # And it is pinned at the "everything understood is signed" boundary rather
+    # than at some arbitrary finite value.
+    _, _, continuity = prev_wave_sign_share_lag(
+        subject, age, signed, understood, zero_handling=LAG_ZERO_CONTINUITY
+    )
+    assert continuity[1] == pytest.approx(_logit(50.5 / 51.0), abs=1e-9)
+
+
+def test_the_guard_is_a_no_op_on_valid_shares():
+    """A clip that moved valid data would change every registered fit."""
+    subject = [0, 0, 0]
+    age = [12.0, 18.0, 24.0]
+    signed = [10.0, 40.0, 0.0]
+    understood = [100.0, 80.0, 50.0]
+    _, _, logit = prev_wave_sign_share_lag(
+        subject, age, signed, understood, zero_handling=LAG_ZERO_CONTINUITY
+    )
+    assert logit[1] == pytest.approx(_logit(10.5 / 101.0), abs=1e-12)
+    assert logit[2] == pytest.approx(_logit(40.5 / 81.0), abs=1e-12)
 
 
 def test_an_unknown_treatment_raises_from_the_primitive_too():

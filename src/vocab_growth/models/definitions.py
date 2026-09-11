@@ -2149,11 +2149,17 @@ class JointCrossLagModelDefinition(JointCorrelatedSubjectREModelDefinition):
     **nz_01 supplies no source.** Its cross-tab partitions *produced* words, so
     the only share it measures is the signed share of production, which is a
     different variable rather than a differently-denominated version of this one.
-    Its rows still enter every likelihood they always did; they simply carry no
-    lag, and on the 2026-09-11 frame no nz_01 row would have consumed one either,
-    because no nz_01 child has an earlier wave carrying a comprehension-denominated
-    share. Redefining the predictor for those 28 children would put two variables
-    under one coefficient, which is the one thing a single scalar cannot report."""
+    Redefining the predictor for those children would put two variables under one
+    coefficient, which is the one thing a single scalar cannot report. Their rows
+    still enter every likelihood they always did; they simply carry no lag.
+
+    **This costs real support and is taken on the argument rather than on the
+    count.** 28 of nz_01's 33 children have more than one wave, and admitting a
+    produced denominator would take the coefficient from 191 supporting
+    observations over 129 children to 269 over 157 -- measured on the 2026-09-11
+    frame, and the 28 children the proposal on #297 anticipated. A rule adopted
+    because it happened to be free would not survive the next nz_01 follow-up;
+    this one is meant to."""
 
     sign_lag_baseline: str = "within"
     """Baseline for the lag residual, one of ``likelihood_utils.LAG_BASELINES``.
@@ -3981,7 +3987,8 @@ VG24 = _as_definition_subclass(
 # different decision from the subject-shift one, and the `sign-lag-marginal-only`
 # arm for what measures the difference. es_01 contributes 185 rows carrying a
 # signed share and none of them a lag, because no es_01 child has two waves;
-# nz_01 contributes neither, by the rule on `use_sign_cross_lag`.
+# nz_01 contributes neither, by the rule on `use_sign_cross_lag` -- which costs
+# 78 observations from 28 children, not nothing.
 #
 # EXPECT A SMALL COEFFICIENT WITH AN INTERVAL NEAR ZERO. The descriptive note's
 # 89% interval only just cleared zero at n = 147, VG16's own recovery run
@@ -4027,12 +4034,21 @@ VG25 = _as_definition_subclass(
     #
     # The clip puts all 26 at logit(1e-4) = -9.21 whatever the wave measured, so a
     # child who understood 2 words and signed none enters identically to one who
-    # understood 406 and signed none. Those 28 rows then carry **76.1% of the
-    # predictor's total sum of squares**, which is to say `beta_sign_lag` would be
-    # estimated mostly off a floor constant. The continuity correction,
-    # (k + 0.5) / (n + 1), derives each from its own wave's denominator instead --
-    # -1.61 for the 2-word wave, -6.70 for the 406-word one -- halving the
-    # predictor's SD (3.34 -> 1.79) and the boundary's leverage (76.1% -> 45.8%).
+    # understood 406 and signed none. The continuity correction, (k + 0.5) /
+    # (n + 1), derives each from its own wave's denominator instead -- -1.61 for
+    # the 2-word wave, -6.70 for the 406-word one.
+    #
+    # What that is worth, measured on the SOURCE LOGIT -- the predictor's observed
+    # input, before the latent baseline the fitted term subtracts, which is the
+    # part measurable without a fit: SD 3.34 -> 1.79, and the 28 boundary rows'
+    # share of its total sum of squares 76.1% -> 45.8%. Under the clip, 14.7% of
+    # the rows would carry three quarters of the variation `beta_sign_lag` is
+    # estimated from, which is to say a floor constant would fix it.
+    #
+    # Not an artefact of the raw scale: residualising the source logit on the
+    # source wave's age and study, the closest stand-in for that baseline
+    # available before a fit, leaves SD 2.77 against 1.56 and leverage 66.1%
+    # against 42.3%.
     #
     # The FIELD keeps `LAG_ZERO_CLIP` as its default so the two lags are
     # configured the same way and the off-state stays the historical treatment;

@@ -856,10 +856,12 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # the 2026-09-11 frame have a source wave where the child signed none of what
     # they understood and 2 more where they signed all of it -- 14.7% of the
     # support on a logit boundary, against 1.5% for VG16. Under the clip those 28
-    # rows carry 76.1% of the predictor's total sum of squares and a child who
-    # understood 2 words enters identically to one who understood 406. This arm
-    # is the clip, so the choice is measured on a fit rather than defended by
-    # that paragraph.
+    # rows carry 76.1% of the SOURCE LOGIT's sum of squares -- 66.1% after
+    # residualising on the source wave's age and study, which is the closest
+    # stand-in for the latent baseline the fitted predictor subtracts -- and a
+    # child who understood 2 words enters identically to one who understood 406.
+    # This arm is the clip, so the choice is measured on a fit rather than
+    # defended by that arithmetic.
     ("vg25", "sign-lag-clip"): {"suffix": "sign-lag-clip", "scalar": {
         "sign_lag_zero_handling": LAG_ZERO_CLIP}},
     #
