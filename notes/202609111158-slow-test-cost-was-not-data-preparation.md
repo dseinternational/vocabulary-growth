@@ -36,7 +36,11 @@ summary_var_names = [var.name for var in model.unobserved_RVs if var.size.eval()
 
 The fix is to stop compiling once per variable. Most of these variables have a fully static type shape — every scalar prior does — so their element count is the product of it, needing no PyTensor at all; the rest are evaluated **together** in one compiled function. Over all twenty-one models and all eighty-five registered variants the two implementations return **byte-identical lists in byte-identical order, 106 of 106**, at 416.9 s against 97.7 s.
 
-This is production code, not test code, so every fit pays it too — trivially, at six seconds each, which is why it was never noticed there.
+This is production code, not test code, so every fit pays it too — and never noticeably, which is why it sat there.
+
+**Corrected 2026-09-11, on review.** This paragraph first said "six seconds each", which was the _synthetic-frame maximum_ (VG24) read as if it were the per-fit cost. Re-measured on the **real** full-size frames a fit actually uses, the old implementation costs **1.2 s (VG11, 18,500 rows) to 3.5 s (VG24)** and the new one 0.9 s to 2.5 s — a saving under two seconds on a fit that runs for an hour. The two figures differ because a real frame leaves more of these variables with a symbolic observation dimension, so more of them go through the batched evaluation instead of the static-shape shortcut; the 4–20x speed-ups in this note are synthetic-frame figures and belong to the test file, which is where the 106 repetitions are. The conclusion is unchanged and the reason for it is now the right one: negligible in a fit, and the whole cost of a file that pays it 106 times.
+
+The same caution applies to the table above and the one in §1: both are synthetic-frame measurements, and the build total moved between runs (3.6 s in §1's stage profile, 6.4 s in §2's) with compilation warm-up. Nothing in the comparison depends on which, because both were measured against the 75.8 s in the same run — but they are not the same number measured twice, and should not be read as one. Identical output was re-verified on the real frames too: VG10, VG11, VG15, VG16, VG22 and VG24 all return byte-identical summary and gate lists under both implementations.
 
 ## 3. The synthetic frame, kept for a different reason than the one proposed
 
