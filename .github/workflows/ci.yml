@@ -155,6 +155,29 @@ jobs:
       - name: Install the locked environment
         run: uv sync --locked
 
+      # PyTensor compiles the model graphs to C (and numba) on first use and
+      # keys the result by the generated code, so a cold compiledir means every
+      # graph in the job is compiled from scratch -- and compilation, not
+      # sampling, is what these jobs cost. Measured on this runner, same commit,
+      # `tests-slow`'s pytest step: **7 m 25 s on the cold run that populated the
+      # cache against 4 m 16 s on the next one**, restoring 24 MB. Two fifths of
+      # the job was work a previous run had already done.
+      #
+      # The key is deliberately strict and carries **no `restore-keys`**. A
+      # stale numba function cache is not hypothetical here: on 2026-09-10 a
+      # pytensor/numba bump left `CPUDispatcher` entries that produced a typing
+      # error surviving reruns until they were deleted by hand. `uv.lock` pins
+      # every package, so hashing it means any version move gives a new key and
+      # a cold, correct compiledir; a loose prefix key would restore exactly the
+      # cache that failure mode needs. The cost of the strictness is an
+      # occasional cold run after an unrelated dependency bump, which is the
+      # right way round.
+      - name: Cache the PyTensor compiledir
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.pytensor
+          key: pytensor-fast-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.python-version', 'uv.lock') }}
+
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
 
@@ -177,6 +200,14 @@ jobs:
 
       - name: Install the locked environment
         run: uv sync --locked
+
+      # As in `tests-fast` above: a cold compiledir recompiles every graph, and
+      # the key hashes `uv.lock` so a version bump is cold rather than stale.
+      - name: Cache the PyTensor compiledir
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.pytensor
+          key: pytensor-slow-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.python-version', 'uv.lock') }}
 
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
@@ -213,6 +244,14 @@ jobs:
 
       - name: Install the locked environment
         run: uv sync --locked
+
+      # As in `tests-fast` above: a cold compiledir recompiles every graph, and
+      # the key hashes `uv.lock` so a version bump is cold rather than stale.
+      - name: Cache the PyTensor compiledir
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.pytensor
+          key: pytensor-fit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.python-version', 'uv.lock') }}
 
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
