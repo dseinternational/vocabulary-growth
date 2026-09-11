@@ -35,6 +35,7 @@ ENOSPC
 EOWPVT
 ESRC
 Edgin
+Elemwise
 Elison
 Eriksson
 Fenson
@@ -329,5 +330,6 @@ workstream
 worktree
 worktrees
 xarray
+xdist
 zarr
 zygosity
