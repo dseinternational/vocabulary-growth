@@ -158,8 +158,9 @@ jobs:
       # PyTensor compiles the model graphs to C (and numba) on first use and
       # keys the result by the generated code, so a cold compiledir means every
       # graph in the job is compiled from scratch -- and compilation, not
-      # sampling, is what these jobs cost. Measured 2026-09-11 on the slow set
-      # at four workers: **6 m 41 s cold against 4 m 07 s warm**, so a third of
+      # sampling, is what these jobs cost. Measured on this runner, same commit,
+      # `tests-slow`'s pytest step: **7 m 25 s on the cold run that populated the
+      # cache against 4 m 16 s on the next one**, restoring 24 MB. Two fifths of
       # the job was work a previous run had already done.
       #
       # The key is deliberately strict and carries **no `restore-keys`**. A

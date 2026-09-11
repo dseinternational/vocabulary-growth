@@ -61,7 +61,7 @@ NotImplementedError: Elemwise.perform (Python mode) does not support more than 3
 
 ## 5. The compiledir cache: adopted, and the largest single saving of the four
 
-Item 3, measured before any machinery: the slow set at CI's four workers, **6 m 41 s on a cold compiledir against 4 m 07 s on a warm one**. CI restores uv's package cache and nothing else, so every run has been the cold number.
+Item 3, measured before any machinery: locally, the slow set at four workers, **6 m 41 s on a cold compiledir against 4 m 07 s on a warm one**. CI restores uv's package cache and nothing else, so every run has been the cold number — and on CI itself the cache is worth more than that, **7 m 25 s cold against 4 m 16 s warm** on the same commit, restoring 24 MB.
 
 The key hashes `.python-version` and `uv.lock` and carries **no `restore-keys`**, which is the whole design. A stale numba function cache is not hypothetical here — on 2026-09-10 a pytensor/numba bump left `CPUDispatcher` entries producing a typing error that survived reruns until they were deleted by hand. `uv.lock` pins every package, so any version move gives a new key and a cold, correct compiledir; a loose prefix key would restore exactly the cache that failure mode needs. The cost is an occasional cold run after an unrelated dependency bump, which is the right way round.
 
@@ -73,17 +73,28 @@ The key hashes `.python-version` and `uv.lock` and carries **no `restore-keys`**
 
 ## 7. What it bought
 
-All on one machine, one day, same conditions.
+**On CI**, which is the figure that matters, reading the `tests-slow` job's pytest step:
+
+| Run                                       |  pytest step |
+| ----------------------------------------- | -----------: |
+| main `789c213`, before `--dist loadgroup` |    10 m 23 s |
+| main `82cd646`, after it                  |     9 m 33 s |
+| this change, cold compiledir              |     7 m 25 s |
+| this change, warm compiledir              | **4 m 16 s** |
+
+**9 m 33 s → 4 m 16 s, 55%**, of which the code change is 9 m 33 s → 7 m 25 s and the compiledir cache the rest. `tests-fast` is unchanged at 1 m 32 s → 1 m 38 s, within the noise of a cold cache on its own first run.
+
+**One correction to the previous note, while these are being recorded.** `notes/202609101310-slow-test-distribution.md` §3 reports "592 s → 207 s on four workers", noting "the 592 s from CI and the rest locally". The two halves are not comparable, and pairing them overstates what CI got: **on CI that change measured 10 m 23 s → 9 m 33 s, not 10 m 23 s → 3 m 27 s.** An `-n 4` run on a 32-core workstation is not an `ubuntu-26.04-arm` run. The rebalancing was real and worth having — it removed the one-file ceiling, without which none of the above would have shown — but its CI value was 8%, not 2.9x. Local figures below are labelled as such for that reason.
+
+Locally, on a 32-core workstation, one day, same conditions:
 
 | Measurement                                |     Before |          After | Ratio |
 | ------------------------------------------ | ---------: | -------------: | ----: |
 | `test_prior_table_coverage.py`, serial     | 6 m 01.8 s | **1 m 29.6 s** |  4.0x |
 | `test_prior_table_coverage.py`, 32 workers |     39.8 s |     **21.9 s** |  1.8x |
-| Slow set, 4 workers (CI's count)           | 5 m 48.9 s | **4 m 07.3 s** |  1.4x |
+| Slow set, 4 workers                        | 5 m 48.9 s | **4 m 07.3 s** |  1.4x |
 | Slow set, 32 workers                       | 2 m 56.5 s |     2 m 36.7 s |  1.1x |
 | Slow set, 4 workers, cold compiledir       |          — |     6 m 41.4 s |     — |
-
-The four-worker figure is the one CI sees, and with the compiledir cache it is 6 m 41 s against a 4 m 07 s warm run rather than 5 m 49 s against nothing.
 
 `test_prior_table_coverage.py` is no longer the slow set's largest cost. Its `--durations` entries have left the top fifteen entirely; the set's top costs are now `test_observation_deterministics`'s module fixture (87.8 s, a real fit) and `test_bivariate_re_holdout_mask`'s chain of sampling tests (~370 s of calls). Those are real sampling, not incidental cost, so the next lever on this job is more workers rather than less work — item 4, untouched here.
 
