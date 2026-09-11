@@ -197,15 +197,18 @@ comes from the **catalogue's roles** rather than from `MODEL_REGISTRY`:
 
 | `-Scope`      | covers                                                                                   |
 | ------------- | ---------------------------------------------------------------------------------------- |
-| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 7 today |
-| `all`         | every registered model, including development steps — 21 today                           |
+| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 8 today |
+| `all`         | every registered model, including development steps — 22 today                           |
 
 A development step supplies no reported number, and a superseded model never
 supplies one at all, so refitting them buys nothing publishable. Since the
-roles were settled on 2026-09-09 the default covers seven of the twenty-one —
-three models of record and four TD references, with nothing left unclassified —
-about 12 h of the 30 h 27 m a serial `rep` cycle of the whole registry took on
-2026-09-07/08 (`notes/202609091600-model-roles-settled.md`).
+roles were settled on 2026-09-09 the default covers eight of the twenty-two —
+three models of record, four TD references, and `vg25`, registered on 2026-09-11
+with no role yet assigned ([#297](https://github.com/dseinternational/vocabulary-growth/issues/297)
+check 7). Seven of those eight were about 12 h of the 30 h 27 m a serial `rep`
+cycle of the whole registry took on 2026-09-07/08
+(`notes/202609091600-model-roles-settled.md`); `vg25` costs roughly what `vg24`
+does on top of that.
 
 **Unclassified fails closed**, so a model whose role has not been decided is
 still refitted. Narrowing happens only when someone declares a role, in
@@ -230,11 +233,11 @@ memory-heavy. So:
 > [!WARNING]
 > **The two lists below must together cover every key in `MODEL_REGISTRY`.** They are an explicit `-Models` split, so the driver's registry-derived default does not apply and a model missing from both is never queued, never validated, and never reported as absent — the run ends `SUCCESS` having fitted a subset. `tests/test_runbook_model_lists.py` checks the split against the registry; if it fails, correct the lists here rather than the test.
 
-- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22 vg24`): run
+- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22 vg24 vg25`): run
   a pool, `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores):
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24,vg25
   ```
 
   `-MaxParallel` above 1 pins `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,

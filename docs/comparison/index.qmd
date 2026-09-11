@@ -1001,6 +1001,22 @@ None of this is causal. Signing is taught *because* a child is not talking, so t
 residual selection pushes the estimate down, which is the one direction that
 helps: a positive association survives that bias. It is not evidence that teaching
 signs raises speech.
+
+**Three different questions sound like this one, and the project now has a home
+for each.** Naming which is which is the point, because they can legitimately
+differ in sign: children who sign more may say less at a given moment while the
+children who sign more overall are also the children who say more overall.
+
+| Question | Quantity | Where | Status |
+| --- | --- | --- | --- |
+| Do the children who sign more of what they understand also *say* more of it, as a persistent standing? | $\rho_{sign\,q}$ | VG24 | **0.391 [0.231, 0.539]**, fitted 2026-09-06 |
+| At one moment, within a child's understood words, do saying and signing a word go together? | $\psi$ | VG15 / VG24 | 2.34 [1.89, 2.81] |
+| Does a child who signed *more than usual for them* earlier go on to say a larger share of what they understand later? | $\beta_{sign\,lag}$ | VG25 | registered 2026-09-11, **not yet fitted** |
+
+The note's +0.19 is closest to the third but is not it: that regression conditions
+on the child's speech at the *earlier* wave, which a $q$ child intercept — the
+child's average across all waves — does not. So it is a companion to VG25 rather
+than a preview of it, and the two should not be expected to agree numerically.
 :::
 
 ## Reading

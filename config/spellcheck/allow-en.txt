@@ -274,6 +274,7 @@ rescore
 rescoring
 residualised
 respecification
+restale
 restaled
 restales
 resumable

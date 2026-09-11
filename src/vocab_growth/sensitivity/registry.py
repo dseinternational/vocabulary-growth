@@ -36,6 +36,7 @@ from vocab_growth.models.definitions import (
     SubjectFactorPriorParams,
 )
 from vocab_growth.models.likelihood_utils import (
+    LAG_ZERO_CLIP,
     LAG_ZERO_CONTINUITY,
     SPOKEN_FALLBACK_MOMENT_MATCHED,
     SPOKEN_FALLBACK_PAIRED_ONLY,
@@ -841,6 +842,88 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # partly a statement about two priors.
     ("vg23", "eta-flat"): {"suffix": "eta-flat", "scalar": {
         "subject_re_correlation_eta": 1.0}},
+
+    # -- VG25: the sign -> speech cross-lag (#297) --
+    #
+    # Registered in the same change as the fields, so that no field on the new
+    # definition class is dead weight in the fingerprint, and in the order the
+    # model page reads them: the two that could change the answer first, then
+    # the two that check assumptions, then the prior pair.
+    #
+    # `sign-lag-clip` is the most important arm on this model, and the one whose
+    # verdict is least predictable from arithmetic. VG25 registers the CONTINUITY
+    # treatment rather than VG16's clip, because 26 of the 191 supporting rows on
+    # the 2026-09-11 frame have a source wave where the child signed none of what
+    # they understood and 2 more where they signed all of it -- 14.7% of the
+    # support on a logit boundary, against 1.5% for VG16. Under the clip those 28
+    # rows carry 76.1% of the predictor's total sum of squares and a child who
+    # understood 2 words enters identically to one who understood 406. This arm
+    # is the clip, so the choice is measured on a fit rather than defended by
+    # that paragraph.
+    ("vg25", "sign-lag-clip"): {"suffix": "sign-lag-clip", "scalar": {
+        "sign_lag_zero_handling": LAG_ZERO_CLIP}},
+    #
+    # `sign-lag-marginal-only` confines the lag to the spoken marginal, which is
+    # where VG15's SUBJECT SHIFTS are confined. The headline lets it into the
+    # cross-tab compositions too, on the argument that one scalar coefficient on
+    # a fixed covariate cannot do to `psi` what a free per-child offset did. This
+    # is what tests that: if `psi` sits where VG24 leaves it under the headline,
+    # the argument held; if it moves, this arm is the one to report from. It also
+    # costs most of the evidence -- 111 supporting observations from 80 children
+    # against 191 from 129, with uk_07 contributing nothing at all -- so it is a
+    # check, not a fallback to be preferred on caution.
+    ("vg25", "sign-lag-marginal-only"): {"suffix": "sign-lag-marginal-only", "scalar": {
+        "sign_lag_in_cells": False}},
+    #
+    # `sign-lag-population` is VG16's registered baseline applied here, and it
+    # does double duty. As an estimand it retains the child's persistent signing
+    # standing in the predictor, which with `rho_sign_q` in the same model makes
+    # it a second, noisier reading of that correlation -- which is the argument
+    # for not registering it as the headline, and worth seeing rather than
+    # asserting. As a check it is the only arm in which NO estimated per-child
+    # quantity reaches the cell likelihoods, because this baseline subtracts the
+    # subject shift back out; read beside the arm above it separates "the lag
+    # moved psi" from "a child effect reached psi through the lag".
+    ("vg25", "sign-lag-population"): {"suffix": "sign-lag-population", "scalar": {
+        "sign_lag_baseline": "population"}},
+    #
+    # `sign-lag-gap-12` tests the constancy assumption the way `lag-gap-12` does
+    # for VG16: one coefficient is fitted across every gap the frame offers, and
+    # a prospective association measured over a year is not self-evidently the
+    # same quantity as one measured over three months. Registered with the model
+    # rather than after a reviewer asks, which is what #242 asked for. Dropping a
+    # lag does not drop the row.
+    ("vg25", "sign-lag-gap-12"): {"suffix": "sign-lag-gap-12", "scalar": {
+        "sign_lag_max_gap_months": 12.0}},
+    #
+    # uk_07 supplies 52 of the 191 supporting observations, 27% of the evidence,
+    # and it is the study the headline scope decision brings in -- so a
+    # coefficient that leans on it leans on that decision. This arm attacks that
+    # from the other side than `sign-lag-marginal-only` does: with
+    # `include_uk07_cells=False` uk_07 falls back to its merged-view marginals,
+    # so the SAME children and the SAME lags stay in the model and move from the
+    # `cells` branch to the `marginal` one. Agreement between the two says the
+    # coefficient does not depend on which likelihood carries uk_07.
+    #
+    # It is NOT a leave-one-study-out check, and is not labelled as one.
+    # #297 check 5 asks for those; the joint definitions carry no
+    # `exclude_studies` field (it is a `BivariateModelDefinition` field), and
+    # adding one would be a data-scope field on `JointModelDefinition` that
+    # restales every VG15 and VG24 fit. That is a change to make deliberately,
+    # with the refit it costs, not as a side effect of registering a variant.
+    ("vg25", "sign-lag-uk07-marginal"): {"suffix": "sign-lag-uk07-marginal", "scalar": {
+        "include_uk07_cells": False}},
+    #
+    # The coefficient-prior pair, matching VG16's `beta-tight` / `beta-wide` and
+    # for the same reason: a symmetric prior is not a calibrated one, and
+    # "posterior exclusion of zero is not purely a data result merely because the
+    # prior did not prefer a sign". `beta-sign-tight` is the arm that carries the
+    # question; `beta-sign-wide` checks that the interval does not simply inflate
+    # with whatever it is given.
+    ("vg25", "beta-sign-tight"): {"suffix": "beta-sign-tight", "scalar": {
+        "beta_sign_lag_sigma": 0.25}},
+    ("vg25", "beta-sign-wide"): {"suffix": "beta-sign-wide", "scalar": {
+        "beta_sign_lag_sigma": 1.0}},
 }
 
 

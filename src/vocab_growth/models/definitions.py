@@ -23,6 +23,7 @@ from typing import Any, TypedDict
 from vocab_growth.models.likelihood_utils import (
     LAG_BASELINES,
     LAG_ZERO_CLIP,
+    LAG_ZERO_CONTINUITY,
     LAG_ZERO_TREATMENTS,
     SPOKEN_FALLBACK_PRODUCT,
 )
@@ -2108,6 +2109,121 @@ class JointCorrelatedSubjectREModelDefinition(JointModelDefinition):
     """
 
 
+@dataclass(frozen=True)
+class JointCrossLagModelDefinition(JointCorrelatedSubjectREModelDefinition):
+    """Joint definition that also carries a sign -> speech within-child cross-lag.
+
+    VG25 (issue #297): the joint-engine analogue of VG16's understood -> ``q``
+    term. A child's prior-wave **signed share of comprehension**, relative to a
+    baseline, shifts the logit of their current production ratio ``q`` through
+    one coefficient, ``beta_sign_lag``. The parent is nested exactly at
+    ``beta_sign_lag = 0``.
+
+    It derives from :class:`JointCorrelatedSubjectREModelDefinition` rather than
+    from :class:`JointModelDefinition`, so VG25 is VG24 plus a lag and not VG15
+    plus a lag. That is deliberate and it is the whole reason the coefficient is
+    interpretable: VG24's ``rho_sign_q`` is the *persistent* sign-speech
+    association between children, so with the correlated block in the model the
+    lag has the persistent part taken away from it and is left measuring the
+    prospective, occasion-level quantity it is named for. Without it,
+    ``beta_sign_lag`` is a noisy proxy for ``rho_sign_q``
+    (``notes/202608151140-cross-lag-not-for-models-of-record.md`` s4 makes the
+    argument for the understood lag; it transfers unchanged).
+
+    A subclass for the reason :class:`JointCorrelatedSubjectREModelDefinition`
+    records: a fit is validated field for field, so putting these six fields on
+    the parent would invalidate every VG24 fit. The engine reads all of them
+    through ``getattr``, and no ``BACKFILL_DEFAULTS`` entry is needed or would be
+    honest -- no fit predating these fields exists to excuse.
+    """
+
+    use_sign_cross_lag: bool = False
+    """If True, add the sign -> speech cross-lag: the child's prior-wave signed
+    share of comprehension predicts their current production ratio ``q``.
+
+    The lag source is assigned per complete ``(subject, age)`` administration
+    wave, as VG16's is (issue #242), and where a source wave offers several
+    signed-share measurements the one with the largest comprehension denominator
+    is taken -- the least-truncated-measurement rule, said of a ratio.
+
+    **nz_01 supplies no source.** Its cross-tab partitions *produced* words, so
+    the only share it measures is the signed share of production, which is a
+    different variable rather than a differently-denominated version of this one.
+    Its rows still enter every likelihood they always did; they simply carry no
+    lag, and on the 2026-09-11 frame no nz_01 row would have consumed one either,
+    because no nz_01 child has an earlier wave carrying a comprehension-denominated
+    share. Redefining the predictor for those 28 children would put two variables
+    under one coefficient, which is the one thing a single scalar cannot report."""
+
+    sign_lag_baseline: str = "within"
+    """Baseline for the lag residual, one of ``likelihood_utils.LAG_BASELINES``.
+
+    ``within`` (the registered choice) subtracts the child's own signed-ratio
+    subject intercept, giving the prospective within-child effect net of
+    persistent standing -- the quantity closest to the +0.19 SD of
+    ``notes/202608160930-early-signing-and-later-speech.md``, and the one that is
+    not already carried by ``rho_sign_q``. ``population`` subtracts only the
+    population + study level and is the registered sensitivity.
+
+    Note this differs from VG16, which registered ``population`` as its headline.
+    The reason the two differ is the correlated block: VG16 has no ``rho_uq``, so
+    its population baseline still had a between-child association to measure,
+    while VG25 inherits VG24's ``rho_sign_q`` and its population baseline does
+    not."""
+
+    sign_lag_in_cells: bool = True
+    """Whether the lag term also enters the cross-tab composition likelihoods.
+
+    ``True`` (the registered choice) adds ``beta_sign_lag * x`` to the ``q``
+    used by the four-cell and produced-cell Dirichlet-Multinomials as well as to
+    the spoken marginal. ``False`` confines it to the marginal, which is where
+    VG15's *subject shifts* are confined.
+
+    The two are not the same decision, and the difference is why this is a field
+    rather than an inherited rule. The subject shifts are kept out of the cells
+    because a **free per-child quantity** is co-identified with ``psi`` on those
+    thin rows and pulled it from 1.78 to about 2.8 when it was let in (see the
+    engine comment at the cell DMs). ``beta_sign_lag`` is one scalar against a
+    fixed covariate: it adds a single dimension to the parameter space and has no
+    per-child freedom to chase a composition with. Set against that, it does
+    compete with ``psi`` for the same rows, and the registered arm is the one
+    that lets it -- measured on the 2026-09-11 frame, 191 observations from 129
+    children against 111 from 80, with uk_07 entering at all only under ``True``.
+    The ``sign-lag-marginal-only`` sensitivity is what shows whether ``psi``
+    moved."""
+
+    beta_sign_lag_mu: float = 0.0
+    """Normal mean for ``beta_sign_lag`` (0 imposes no direction)."""
+
+    beta_sign_lag_sigma: float = 0.5
+    """Normal SD for ``beta_sign_lag`` (logit scale, weakly-informative).
+
+    VG16's ``beta_lag_sigma``, deliberately, so the two coefficients are
+    prior-comparable -- and paired with the same ``beta-tight`` / ``beta-wide``
+    sensitivities, because symmetry is not calibration and an interval that
+    excludes zero under one prior scale should be shown to under others."""
+
+    sign_lag_max_gap_months: float | None = None
+    """Drop a lag whose source wave is more than this many months earlier.
+
+    ``None`` imposes no ceiling. VG25 assumes one coefficient across every gap it
+    sees, and this pool's are at least as wide as VG16's -- which is the
+    constancy assumption issue #242 asked to be checked rather than asserted, so
+    the ``sign-lag-gap-12`` arm is registered with the field rather than after a
+    reviewer asks for it. Like VG16's, it drops the lag, not the row."""
+
+    sign_lag_zero_handling: str = LAG_ZERO_CLIP
+    """How a boundary signed share is kept off the logit boundary.
+
+    ``LAG_ZERO_CLIP`` clips ``signed / understood`` to ``[1e-4, 1 - 1e-4]``;
+    ``LAG_ZERO_CONTINUITY`` uses ``(signed + 0.5) / (understood + 1)``, which is
+    derived from the wave's own denominator rather than from a floor. This
+    predictor reaches **both** boundaries where VG16's reaches only the lower
+    one: a child who signs every word they understand is a real observation, and
+    a clip at ``1 - 1e-4`` puts every such wave at the same +9.21 whatever its
+    denominator was. See the constants in ``likelihood_utils``."""
+
+
 # ============================================================
 # Model instances
 # ============================================================
@@ -3840,6 +3956,91 @@ VG24 = _as_definition_subclass(
     subject_re_correlation_eta=2.0,
 )
 
+# VG25 (issue #297) is to VG24 what VG16 is to VG10: the same graph plus one
+# lead-lag coefficient. Derived from VG24 rather than from VG15 deliberately --
+# the lag is only interpretable with the correlated block present, because
+# `rho_sign_q` is what takes the *persistent* sign-speech association off it and
+# leaves it measuring the prospective one. Derived from VG24 also means VG24's
+# own fingerprint is untouched and VG25 nests it exactly at beta_sign_lag = 0.
+#
+# WHAT IT ESTIMATES, and why three quantities are needed rather than one. Asked
+# on 2026-09-04: does early signing predict later speech?
+# `notes/202608160930-early-signing-and-later-speech.md` found +0.19 SD per SD
+# among 147 children, 89% ETI [0.03, 0.36], holding earlier speech and
+# comprehension standing fixed -- a two-wave residual regression, not a model.
+# VG24's `rho_sign_q` is the between-child term (+0.198 [0.107, 0.289] read off
+# VG15's fitted intercepts at gate 1). `beta_sign_lag` is the third: prospective,
+# within-child, net of persistent standing. Each names a different thing, and the
+# report's job is to say which is which rather than to pick one.
+#
+# WHICH CHILDREN INFORM IT. Measured on the 2026-09-11 frame: 191 observations
+# from 129 children at a median gap of 6 months (IQR 4-11) -- uk_07 52, ie_02 43,
+# uk_02 41, uk_05 30, uk_04 25. Confining the term to the spoken marginal, as
+# VG15's subject shifts are confined, would leave 111 observations from 80
+# children and drop uk_07 entirely; see `sign_lag_in_cells` for why that is a
+# different decision from the subject-shift one, and the `sign-lag-marginal-only`
+# arm for what measures the difference. es_01 contributes 185 rows carrying a
+# signed share and none of them a lag, because no es_01 child has two waves;
+# nz_01 contributes neither, by the rule on `use_sign_cross_lag`.
+#
+# EXPECT A SMALL COEFFICIENT WITH AN INTERVAL NEAR ZERO. The descriptive note's
+# 89% interval only just cleared zero at n = 147, VG16's own recovery run
+# returned `beta_lag` 29% low on its one assessable replicate at `test`, and this
+# lag's support is smaller than VG16's 473. That is a reason to read the interval
+# rather than the sign, and a reason gate 4's recovery cells need a tier above
+# `test`. It is not a reason to expect nothing: the point is the estimate with
+# its uncertainty, in interpretable units.
+#
+# NOT A MODEL OF RECORD, AND NOT YET CLASSIFIED. The role is the study owner's to
+# assign (#297 check 7, with #190's other scope decisions), so VG25 is left
+# UNCLASSIFIED, which fails closed -- full publication strictness and a place in
+# the default refit scope, rather than a relaxation nobody chose.
+VG25 = _as_definition_subclass(
+    VG24,
+    JointCrossLagModelDefinition,
+    model_id="VG25",
+    config_name="age-joint-signspeech-ds-corr-signlag",
+    banner=(
+        "Fitting Model VG25: VG24 + sign -> speech cross-lag (prior-wave signed"
+        " share of comprehension -> current q; within-child baseline)"
+        " - Down syndrome"
+    ),
+    use_sign_cross_lag=True,
+    # Within-child, not VG16's population-relative: `rho_sign_q` is in the model,
+    # so the population baseline has the persistent association already accounted
+    # for and nothing left of its own to measure. Registered sensitivity:
+    # `sign-lag-population`.
+    sign_lag_baseline="within",
+    # The lag reaches the cross-tab compositions as well as the spoken marginal.
+    # Rationale and the measured cost of the alternative are on the field.
+    sign_lag_in_cells=True,
+    beta_sign_lag_mu=0.0,
+    beta_sign_lag_sigma=0.5,
+    # CONTINUITY, not the clip VG16 registers, and this is the one place VG25
+    # departs from its sibling on a measurement rather than an argument.
+    #
+    # A signed share of exactly 0 is common here in a way an understood count of
+    # exactly 0 is not: on the 2026-09-11 frame 26 of the 191 supporting rows
+    # have a source wave where the child signed none of what they understood, and
+    # 2 more where they signed all of it -- 14.7% of the support sitting on a
+    # logit boundary, against 7 of VG16's 477 (1.5%).
+    #
+    # The clip puts all 26 at logit(1e-4) = -9.21 whatever the wave measured, so a
+    # child who understood 2 words and signed none enters identically to one who
+    # understood 406 and signed none. Those 28 rows then carry **76.1% of the
+    # predictor's total sum of squares**, which is to say `beta_sign_lag` would be
+    # estimated mostly off a floor constant. The continuity correction,
+    # (k + 0.5) / (n + 1), derives each from its own wave's denominator instead --
+    # -1.61 for the 2-word wave, -6.70 for the 406-word one -- halving the
+    # predictor's SD (3.34 -> 1.79) and the boundary's leverage (76.1% -> 45.8%).
+    #
+    # The FIELD keeps `LAG_ZERO_CLIP` as its default so the two lags are
+    # configured the same way and the off-state stays the historical treatment;
+    # what changes is what VG25 registers. `sign-lag-clip` is the arm that
+    # measures the difference on a fit rather than on this arithmetic.
+    sign_lag_zero_handling=LAG_ZERO_CONTINUITY,
+)
+
 MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -3862,6 +4063,7 @@ MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "vg22": VG22,
     "vg23": VG23,
     "vg24": VG24,
+    "vg25": VG25,
 }
 
 
@@ -4061,6 +4263,32 @@ def validate_model_definition(definition) -> None:
         definition, "use_subject_re_u", False
     ):
         raise ValueError(f"{prefix} cross-lag requires use_subject_re_u=True.")
+
+    # VG25 (#297). The same two checks for the sign -> speech lag, against the
+    # same tuples, and for the same reason the understood lag has them here as
+    # well as in `cross_lag`: this one fires against a definition, before any
+    # data is loaded, while the engine-side check sees what the graph will
+    # actually contain. The child effect this baseline is defined relative to is
+    # the SIGNED-ratio one, not the understood one -- a model with
+    # `use_subject_re_u` and no `use_subject_re_sign` would otherwise pass here
+    # and then silently give both baselines the same value.
+    if getattr(definition, "sign_lag_baseline", LAG_BASELINES[0]) not in LAG_BASELINES:
+        raise ValueError(
+            f"{prefix}.sign_lag_baseline must be one of {LAG_BASELINES}."
+        )
+    if (
+        getattr(definition, "sign_lag_zero_handling", LAG_ZERO_CLIP)
+        not in LAG_ZERO_TREATMENTS
+    ):
+        raise ValueError(
+            f"{prefix}.sign_lag_zero_handling must be one of {LAG_ZERO_TREATMENTS}."
+        )
+    if getattr(definition, "use_sign_cross_lag", False) and not getattr(
+        definition, "use_subject_re_sign", False
+    ):
+        raise ValueError(
+            f"{prefix} sign cross-lag requires use_subject_re_sign=True."
+        )
 
     # VG24 (#296). The joint correlated block draws a child's three deviations
     # from one joint Normal, so it is defined only when all three blocks exist.

@@ -15,11 +15,14 @@ reads a column drawn in a strictly earlier stage than the node it enters, so the
 lag is recomputed from the simulated parent before anything that uses it is
 drawn. :func:`single_pass_is_sound` derives that from the stage order.
 
-It is *not* false in general, and the case it is false for is the one #297
-proposes: a sign-to-speech lag reads ``signed``, which the joint engine draws in
-the same stage as the ``spoken`` it shifts. So the wave loop exists, is selected
-by the same derivation, and the guard that would have caught the original
-misdiagnosis runs on every simulation either way.
+It is *not* false in general, and the case it is false for is now a registered
+model: VG25's sign-to-speech lag reads ``signed``, which the joint engine draws
+in the same stage as the ``spoken`` it shifts. So the wave loop exists, is
+selected by the same derivation, and the guard that would have caught the
+original misdiagnosis runs on every simulation either way. The synthetic
+same-stage predictor below predates VG25 and is kept beside it: it fixes the
+*rule* independently of any model that happens to satisfy it, so unregistering
+VG25 could not quietly remove the coverage.
 
 Data-free and sampling-free except for the two marked ``slow``.
 """
@@ -48,6 +51,14 @@ from vocab_growth.recovery.spec import (
 
 VG16 = MODEL_REGISTRY["vg16"]
 VG10 = MODEL_REGISTRY["vg10"]
+VG25 = MODEL_REGISTRY["vg25"]
+
+#: Every definition field that switches a lag on. A model carrying one and
+#: declaring no predictor would be simulated with no ordering rule and no guard,
+#: which is what `test_every_registered_model_with_a_lag_declares_one` refuses.
+#: Named here rather than inline so adding a third lag fails one assertion with
+#: a clear reason instead of passing silently.
+LAG_FIELDS = ("use_cross_lag", "use_sign_cross_lag")
 
 
 # --- what is declared, and against what -----------------------------------------
@@ -66,11 +77,41 @@ def test_only_a_cross_lag_definition_declares_a_predictor():
     assert predictor.consumer_rv_names == ("y_s_obs",)
 
 
+def test_only_a_sign_cross_lag_definition_declares_the_sign_predictor():
+    """VG25's, pinned against its own field the way VG16's is (#297)."""
+    predictor = outcome_dependent_predictor(VG25)
+    assert VG25.use_sign_cross_lag
+    assert predictor is not None
+    assert predictor.name == "sign_cross_lag"
+    assert predictor.source_column == "signed"
+    # The registered arm puts the term in the compositions as well, so all three
+    # consumers are declared. Confining it to the marginal drops the two
+    # composition nodes and nothing else.
+    assert predictor.consumer_rv_names == ("y_s_obs", "cells_obs", "nz_prod_cells_obs")
+    marginal_only = dataclasses.replace(VG25, sign_lag_in_cells=False)
+    assert (
+        outcome_dependent_predictor(marginal_only).consumer_rv_names == ("y_s_obs",)
+    )
+
+
 def test_every_registered_model_with_a_lag_declares_one():
     """A lag model that declared nothing would be simulated with no guard at all."""
     for key, definition in MODEL_REGISTRY.items():
-        expected = bool(getattr(definition, "use_cross_lag", False))
+        expected = any(
+            bool(getattr(definition, field, False)) for field in LAG_FIELDS
+        )
         assert (outcome_dependent_predictor(definition) is not None) is expected, key
+
+
+def test_the_lag_fields_are_the_ones_the_definitions_actually_carry():
+    """A third lag field added without a predictor would slip past the check above."""
+    declared = {
+        field.name
+        for definition in MODEL_REGISTRY.values()
+        for field in dataclasses.fields(definition)
+        if field.name.startswith("use_") and "cross_lag" in field.name
+    }
+    assert declared == set(LAG_FIELDS), declared
 
 
 def test_the_declared_source_and_consumer_are_names_the_engine_actually_uses():
@@ -113,6 +154,32 @@ def test_a_same_stage_source_is_not_sound_in_one_pass():
     # Both are in the joint engine's second stage, so one pass would draw the
     # consumer against a source that is still the real study value.
     assert not single_pass_is_sound(JOINT_SPEC, MODEL_REGISTRY["vg15"], sign_lag)
+
+
+def test_vg25_selects_the_wave_loop_from_its_own_declaration():
+    """The registered instance of the shape above, derived rather than declared."""
+    predictor = outcome_dependent_predictor(VG25)
+    assert not single_pass_is_sound(JOINT_SPEC, VG25, predictor)
+    # And it is the SAME-STAGE source that decides it, not the extra consumers:
+    # confining the lag to the spoken marginal leaves it unsound too.
+    marginal_only = dataclasses.replace(VG25, sign_lag_in_cells=False)
+    assert not single_pass_is_sound(
+        JOINT_SPEC, marginal_only, outcome_dependent_predictor(marginal_only)
+    )
+
+
+def test_the_declared_sign_source_and_consumers_are_names_the_engine_uses():
+    """A typo in any of them would silently disable the ordering rule and guard."""
+    predictor = outcome_dependent_predictor(VG25)
+    columns = {
+        node.column
+        for stage in JOINT_SPEC.stages
+        for node in stage
+        if hasattr(node, "column")
+    }
+    rv_names = {node.rv_name for stage in JOINT_SPEC.stages for node in stage}
+    assert predictor.source_column in columns
+    assert set(predictor.consumer_rv_names) <= rv_names
 
 
 def test_a_consumer_the_engine_does_not_draw_fails_toward_the_wave_loop():
@@ -242,12 +309,14 @@ def test_vg16_simulates_and_the_finished_frame_reproduces_its_own_predictor(
 def test_the_wave_loop_runs_and_produces_the_same_shape_of_simulation(
     tmp_path, monkeypatch, require_prepared_data
 ):
-    """The wave loop itself, which no registered model currently selects.
+    """The wave loop on a model that does not need it, forced.
 
-    VG16 is sound in one pass, so without this the loop VG25 needs would ship
-    with no coverage at all -- the failure mode this module exists to avoid,
-    one level up. Forcing it on VG16 is the only way to exercise it until a
-    model with a same-stage predictor is registered.
+    Written when no registered model selected the loop; VG25 now does, and
+    :func:`test_vg25_simulates_wave_by_wave_on_its_own_declaration` is the
+    end-to-end check on the model that needs it. This one stays because it is
+    the only comparison available: VG16 is sound in **one** pass, so the loop
+    and the single pass can be run on the same model and required to agree. No
+    such comparison exists for VG25, where one pass is simply wrong.
 
     The two passes draw different *values* (each round seeds from its own index)
     and must not be compared on those. What must match is the shape: the same
@@ -291,6 +360,55 @@ def test_the_wave_loop_runs_and_produces_the_same_shape_of_simulation(
     definition = MODEL_REGISTRY["vg16"]
     _, has_lag, _ = prev_wave_lag_for_frame(
         waved.frame, definition.n_trials, definition
+    )
+    assert has_lag.sum() > 0
+
+
+@pytest.mark.slow
+def test_vg25_simulates_wave_by_wave_on_its_own_declaration(
+    tmp_path, require_prepared_data
+):
+    """The registered model the loop exists for, end to end (#297).
+
+    Everything here is derived rather than declared, which is the property the
+    2026-09-11 correction turned this module into: nothing tells the simulator
+    to go wave by wave. ``outcome_dependent_predictor`` says the lag reads
+    ``signed``; ``single_pass_is_sound`` finds that column drawn in the same
+    stage as every node the lag enters, and selects the loop. The run then
+    checks, on every round, that each row was drawn under the predictor the
+    finished frame implies.
+
+    Measured at about 70 s at ``dev`` on 2026-09-11 -- seven waves over the
+    joint frame, sixteen coherence checks. It earns that by being the first
+    time the loop has run on a model that actually needs it.
+    """
+    from vocab_growth.models.cross_lag import prev_wave_sign_share_lag_for_frame
+    from vocab_growth.recovery.simulate import simulate_replicate
+
+    result = simulate_replicate(
+        "vg25", "dev", replicate=1, truth_source="prior", output_root=str(tmp_path)
+    )
+
+    record = json.loads(
+        (pathlib.Path(result.directory) / "simulation.json").read_text(encoding="utf-8")
+    )["simulation"]
+    predictor = record["outcome_dependent_predictor"]
+    assert predictor["name"] == "sign_cross_lag"
+    assert predictor["source_column"] == "signed"
+    assert predictor["single_pass_sound"] is False
+    assert record["waves"] and record["waves"] > 1
+
+    # The source column and every consumer's column were simulated, which is
+    # what makes the ordering question live at all: a lag over real signing
+    # counts would need no loop.
+    assert {"signed", "spoken", "signed_only", "signed_spoken"} <= set(
+        result.simulated_columns
+    )
+
+    # And the finished frame carries lags, restated from outside the simulator:
+    # a sign-lag simulation with no lagged row would prove nothing.
+    _, has_lag, _ = prev_wave_sign_share_lag_for_frame(
+        result.frame, MODEL_REGISTRY["vg25"]
     )
     assert has_lag.sum() > 0
 

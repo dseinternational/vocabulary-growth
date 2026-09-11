@@ -34,8 +34,9 @@ _DS_JOINT_MODELS = frozenset(
     {
         "vg05", "vg07", "vg08", "vg09", "vg10", "vg14", "vg15", "vg16", "vg19",
         "vg20", "vg22",
-        # VG24 derives from VG15 and inherits every shared block (#296).
-        "vg24",
+        # VG24 derives from VG15 and inherits every shared block (#296);
+        # VG25 derives from VG24 and so inherits them a second time (#297).
+        "vg24", "vg25",
     }
 )
 
@@ -155,8 +156,9 @@ def test_the_mean_clamp_field_is_declared_by_fifteen_of_the_twenty_one():
     assert declaring == [
         "vg05", "vg07", "vg08", "vg09", "vg10", "vg13", "vg14",
         "vg15", "vg16", "vg19", "vg20", "vg21", "vg22", "vg23", "vg24",
+        "vg25",
     ], declaring
-    assert len(declaring) == 15, len(declaring)
+    assert len(declaring) == 16, len(declaring)
     # Stated in the docstring as a rule over classes, so check that shape too.
     assert {type(MODEL_REGISTRY[k]).__name__ for k in declaring} == {
         "BivariateModelDefinition",
@@ -166,6 +168,7 @@ def test_the_mean_clamp_field_is_declared_by_fifteen_of_the_twenty_one():
         "TrivariateModelDefinition",
         "JointModelDefinition",
         "JointCorrelatedSubjectREModelDefinition",
+        "JointCrossLagModelDefinition",
     }
 
 
@@ -181,7 +184,7 @@ def test_every_registered_class_declares_the_comprehension_cap_field():
         if "report_max_age_understood" not in {f.name for f in dataclasses.fields(d)}
     )
     assert without == [], without
-    assert len(MODEL_REGISTRY) == 21, len(MODEL_REGISTRY)
+    assert len(MODEL_REGISTRY) == 22, len(MODEL_REGISTRY)
 
 
 def test_the_shared_kappa_block_covers_eight_definitions():
@@ -192,4 +195,5 @@ def test_the_shared_kappa_block_covers_eight_definitions():
     )
     assert sharers == [
         "vg09", "vg10", "vg14", "vg15", "vg16", "vg19", "vg20", "vg22", "vg24",
+        "vg25",
     ]
