@@ -161,8 +161,30 @@ Automated review of [#339](https://github.com/dseinternational/vocabulary-growth
 
 **The report's support tables ignored `sign_lag_in_cells`.** They filtered the audit artefact on "has a likelihood branch", but a cross-tab row has a branch whether or not the lag reaches it. Rendering a `sign-lag-marginal-only` fit would therefore have reported the registered model's 191 observations over 129 children in place of its own **111 over 80** — and every gap, boundary, study and branch figure derived from that set with it. The template now reads the field from the fit's own manifest, as it already did for the boundary treatment. The caption had said the compositions count "only under `sign_lag_in_cells`" while the code counted them regardless, which is the tell.
 
-**The pair plot could not show the ridge the report sends the reader to inspect.** This is [#233](https://github.com/dseinternational/vocabulary-growth/issues/233) again, on the other engine. ArviZ caps the grid at `floor(sqrt(max_subplots))` — six variables — and the joint engine led with `psi` and `conc` and then took build order, which puts `beta_sign_lag` eighteenth: the plot would have shown the two headline associations and four understood-GP hyperparameters, while @sec-diagnostics tells the reader to read the coefficient against the signing child block. Ordering, not filtering, so nothing is hidden. Only the lag's own block is prepended: routing the joint engine through the bivariate `pair_plot_priority` would also reorder VG14's, VG15's and VG24's plots, and a reporting change for three fitted models is not something to make inside a registration.
+**The pair plot could not show the ridge the report sends the reader to inspect.** This is [#233](https://github.com/dseinternational/vocabulary-growth/issues/233) again, on the other engine. ArviZ caps the grid at `floor(sqrt(max_subplots))` — six variables — and the joint engine led with `psi` and `conc` and then took build order, which puts `beta_sign_lag` eighteenth: the plot would have shown the two headline associations and four understood-GP hyperparameters, while @sec-diagnostics tells the reader to read the coefficient against the signing child block. Ordering, not filtering, so nothing is hidden.
 
-## 11. A note on scope of change
+## 11. The consolidation, and what it found in VG24
+
+The fix above was first made narrowly — the lag's own block prepended to the joint engine's hard-coded `("psi", "conc")` — on the stated ground that routing the engine through the bivariate `pair_plot_priority` would also reorder VG14's, VG15's and VG24's plots. **Two thirds of that reason was wrong**, and doing the consolidation is what showed it:
+
+- **VG14 is on the trivariate engine, which installs no reordering at all.** It was never affected by the joint engine's ordering and is not affected by this.
+- **VG15 does not move.** Its priority is the bare `("psi", "conc")` before and after, because it has no distinguishing child structure. Keeping the two headline names as a _head_, separate from the definition-driven part, is what preserves that: appending to a list that already holds `psi` makes it non-empty, and VG15 would otherwise have acquired the trailing scale block that is meant to mark a model with a structure worth prioritising.
+- **VG24 does move, and it had the same defect live.** Its report says a near-±1 correlation "is the failure mode to watch for in the energy and pair plots", and the grid showed `psi`, `conc` and four understood-GP hyperparameters — not one of its three child correlations. The consolidation is what surfaced that; the narrow fix would have left it.
+
+So the reporting change is to **one** fitted model, not three, and it is a repair rather than a restyle. Measured across all twenty-two registered models: twenty unchanged (every bivariate model, every univariate one, VG14 and VG15), VG24 and VG25 changed.
+
+|      | rendered before                                                 | rendered after                                     |
+| ---- | --------------------------------------------------------------- | -------------------------------------------------- |
+| VG15 | `psi conc p_slope_low_u p_slope_hi_u ell_unit_u eta_u`          | unchanged                                          |
+| VG24 | `psi conc p_slope_low_u p_slope_hi_u ell_unit_u eta_u`          | `psi conc rho_sign_q rho_u_sign rho_uq tau_subj_u` |
+| VG25 | `psi conc beta_sign_lag rho_sign_q tau_subj_sign p_slope_low_u` | `… rho_u_sign` in the sixth slot                   |
+
+Consolidating was **not** a matter of applying the bivariate rules to joint models. A naive merge gives VG24 the priority `('rho_uq', 'tau_subj_u', 'tau_subj_q', 'tau_u', 'tau_q')` — `rho_uq` is the understood–spoken correlation, and the one VG24 exists to estimate is `rho_sign_q`. That is #233's own mistake repeated: prioritising the parameter the _other_ model was added for. The correlated-child branch is therefore modality-aware, and on the joint engine it names all three correlations with `rho_sign_q` first.
+
+The other half is fail-closed. Three engines install no reordering, which is only safe while their models have nothing to order; a test now asserts that for every registered model on them, so registering a model with a distinguishing structure on an unwired engine fails and names the engine instead of silently dropping the intent.
+
+The plots themselves change when VG24 is next fitted, not now — the cached figures are the previous fit's, and this is a code change.
+
+## 12. A note on scope of change
 
 Registering VG25 moves the **executable-code signature**, as any change inside `src/vocab_growth/` does, so every existing fit needs the refit that [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) already schedules before it can be published or resumed. It does **not** move any other model's serialised definition or prepared-frame hash: the seven new fields live on `JointCrossLagModelDefinition`, a subclass no other model instantiates, and `tests/support/graph_baseline.json` gained 315 lines and changed none — which is the evidence that the registration was graph-inert for the other twenty-one.

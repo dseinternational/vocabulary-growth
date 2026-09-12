@@ -98,8 +98,8 @@ def test_the_parameter_a_model_was_added_for_survives_the_cap():
     scales. So the pair plot omitted the one parameter VG20's own caption sends
     the reader there to inspect.
     """
-    from vocab_growth.models.common_bivariate import pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     build_order = [
         "p_slope_low_u", "p_slope_hi_u", "eta_u", "ell_unit_u",
@@ -118,8 +118,8 @@ def test_the_parameter_a_model_was_added_for_survives_the_cap():
 
 def test_the_child_slope_block_survives_the_cap():
     """VG19's rates and their offset-rate correlations, same defect."""
-    from vocab_growth.models.common_bivariate import pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     build_order = [
         "p_slope_low_u", "p_slope_hi_u", "eta_u", "ell_unit_u",
@@ -140,8 +140,8 @@ def test_the_child_slope_block_survives_the_cap():
 
 def test_ordering_never_drops_a_variable():
     """This reorders; it must not filter, or a reader loses a marginal."""
-    from vocab_growth.models.common_bivariate import pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     build_order = ["eta_u", "tau_u", "tau_subj_u", "tau_subj_q", "rho_uq"]
     ordered = _apply(pair_plot_priority(MODEL_REGISTRY["vg20"]), build_order)
@@ -160,8 +160,8 @@ def test_the_sign_lag_coefficient_survives_the_cap_on_the_joint_engine():
     coefficient against the signing child block. The build order below is VG25's
     own, read off the built graph.
     """
-    from vocab_growth.models.common_joint_modality import joint_pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     build_order = [
         "p_slope_low_u", "p_slope_hi_u", "ell_unit_u", "eta_u",
@@ -180,7 +180,7 @@ def test_the_sign_lag_coefficient_survives_the_cap_on_the_joint_engine():
         was = capped_plot_var_names(trace, _apply(("psi", "conc"), build_order), squared=True)
         assert "beta_sign_lag" not in was
 
-        priority = joint_pair_plot_priority(MODEL_REGISTRY["vg25"])
+        priority = pair_plot_priority(MODEL_REGISTRY["vg25"])
         kept = capped_plot_var_names(trace, _apply(priority, build_order), squared=True)
 
     # The geometry the report's callout actually names.
@@ -188,24 +188,94 @@ def test_the_sign_lag_coefficient_survives_the_cap_on_the_joint_engine():
     assert kept[:2] == ["psi", "conc"]
 
 
-def test_joint_models_without_the_lag_keep_the_order_they_had():
-    """The registration must not restyle VG14's, VG15's or VG24's pair plots."""
-    from vocab_growth.models.common_joint_modality import joint_pair_plot_priority
-    from vocab_growth.models.definitions import MODEL_REGISTRY
+def test_the_plain_joint_model_keeps_the_order_it_had():
+    """VG15 has no distinguishing child structure, so its plot must not move.
 
-    for key in ("vg14", "vg15", "vg23", "vg24"):
-        assert joint_pair_plot_priority(MODEL_REGISTRY[key]) == ("psi", "conc")
+    The consolidation's trap: on the joint engine `psi` and `conc` lead
+    unconditionally, so a priority list built by appending to them is never
+    empty, and VG15 would have picked up the scale block that is supposed to
+    mark a model with a structure worth prioritising. The head is kept separate
+    from the definition-driven part for exactly this case.
+    """
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
+
+    assert pair_plot_priority(MODEL_REGISTRY["vg15"]) == ("psi", "conc")
+
+
+def test_vg24s_correlations_survive_the_cap():
+    """The same #233 defect, live in a fitted model of record.
+
+    VG24's report sends the reader to the pair plot for the child block's
+    correlations — "a correlation near ±1 ... is the failure mode to watch for
+    in the energy and pair plots" — and the grid showed `psi`, `conc` and four
+    understood-GP hyperparameters, because build order puts the mean functions
+    first and the cap keeps six.
+
+    `rho_sign_q` leads the three: the naive consolidation would have applied the
+    bivariate rule and prioritised `rho_uq`, which is the understood–spoken
+    correlation and not what VG24 was registered to estimate.
+    """
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
+
+    build_order = [
+        "p_slope_low_u", "p_slope_hi_u", "ell_unit_u", "eta_u",
+        "p_slope_low_q", "p_slope_hi_q", "ell_unit_q", "eta_q",
+        "tau_u", "tau_q", "tau_sign",
+        "tau_subj_u", "tau_subj_q", "tau_subj_sign",
+        "rho_uq", "rho_u_sign", "rho_sign_q", "psi", "conc",
+    ]
+    trace = _trace_with_named_scalars(build_order)
+
+    with az.rc_context({"plot.max_subplots": 36}):  # floor(sqrt(36)) = 6 slots
+        was = capped_plot_var_names(
+            trace, _apply(("psi", "conc"), build_order), squared=True
+        )
+        kept = capped_plot_var_names(
+            trace,
+            _apply(pair_plot_priority(MODEL_REGISTRY["vg24"]), build_order),
+            squared=True,
+        )
+
+    assert not {"rho_sign_q", "rho_u_sign", "rho_uq"} & set(was)
+    assert {"rho_sign_q", "rho_u_sign", "rho_uq"} <= set(kept)
+    assert kept.index("rho_sign_q") < kept.index("rho_uq")
+
+
+def test_engines_that_do_not_order_have_nothing_to_order():
+    """The consolidation's fail-closed half.
+
+    Three engines install no reordering — univariate, univariate with random
+    effects, and trivariate. That is only safe while their models have an empty
+    priority; otherwise the function would declare an intent the engine silently
+    drops. Registering a model with a distinguishing structure on one of them
+    fails here, naming the engine that needs wiring.
+    """
+    from vocab_growth.models.catalogue import get as catalogue_get
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
+
+    unordered = {"univariate", "univariate_re", "trivariate"}
+    for key, definition in MODEL_REGISTRY.items():
+        engine = catalogue_get(key).engine.name
+        if engine in unordered:
+            assert pair_plot_priority(definition) == (), (
+                f"{key} runs on the {engine} engine, which installs no pair-plot "
+                f"reordering, but declares a priority — wire that engine through "
+                f"pair_plot_var_names_fn or the intent is silently dropped."
+            )
 
 
 def test_the_joint_ordering_never_drops_a_variable():
-    from vocab_growth.models.common_joint_modality import joint_pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     build_order = [
         "eta_u", "tau_u", "beta_sign_lag", "tau_subj_sign", "rho_sign_q",
         "psi", "conc",
     ]
-    ordered = _apply(joint_pair_plot_priority(MODEL_REGISTRY["vg25"]), build_order)
+    ordered = _apply(pair_plot_priority(MODEL_REGISTRY["vg25"]), build_order)
 
     assert sorted(ordered) == sorted(build_order)
     assert len(ordered) == len(set(ordered))
@@ -213,8 +283,8 @@ def test_the_joint_ordering_never_drops_a_variable():
 
 def test_models_without_a_child_structure_keep_model_order_exactly():
     """VG05, VG07-VG10 and every univariate model must render as before."""
-    from vocab_growth.models.common_bivariate import pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     for key in ("vg05", "vg07", "vg08", "vg09", "vg10"):
         assert pair_plot_priority(MODEL_REGISTRY[key]) == ()
@@ -222,8 +292,8 @@ def test_models_without_a_child_structure_keep_model_order_exactly():
 
 def test_the_cross_lag_priority_is_unchanged():
     """VG16 already had this treatment; generalising it must not move VG16."""
-    from vocab_growth.models.common_bivariate import pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     assert pair_plot_priority(MODEL_REGISTRY["vg16"]) == (
         "beta_lag", "tau_subj_u", "tau_subj_q", "tau_u", "tau_q",
@@ -232,8 +302,8 @@ def test_the_cross_lag_priority_is_unchanged():
 
 def test_the_factor_priority_omits_the_correlation_matrix():
     """`subject_factor_corr` is 4x4 — 16 plot items would eat the whole grid."""
-    from vocab_growth.models.common_bivariate import pair_plot_priority
     from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
     priority = pair_plot_priority(MODEL_REGISTRY["vg22"])
     assert "rho_uq" in priority
