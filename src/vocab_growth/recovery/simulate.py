@@ -93,6 +93,11 @@ from vocab_growth.recovery.spec import (
     recovery_target,
     single_pass_is_sound,
 )
+from vocab_growth.recovery.truth_overrides import (
+    apply_truth_overrides,
+    check_all_finite,
+    override_tag,
+)
 from vocab_growth.reporting import console, key_value_table
 
 SYNTHETIC_FRAME_FILENAME = "synthetic_analysis_frame.parquet"
@@ -105,11 +110,13 @@ SIMULATION_FILENAME = "simulation.json"
 # ==========================================================================
 
 
-def recovery_label(definition, replicate: int, *, truth_definition=None) -> str:
+def recovery_label(
+    definition, replicate: int, *, truth_definition=None, truth_overrides=()
+) -> str:
     """Output label for one recovery replicate, e.g. ``VG10-...-recovery-r01``."""
     return (
         f"{definition.model_id}-"
-        f"{recovery_config_name(definition, replicate, truth_definition=truth_definition)}"
+        f"{recovery_config_name(definition, replicate, truth_definition=truth_definition, truth_overrides=truth_overrides)}"
     )
 
 
@@ -131,7 +138,26 @@ def truth_source_tag(truth_definition, fit_definition) -> str:
     return "-".join(remainder) if remainder else "record"
 
 
-def recovery_config_name(definition, replicate: int, *, truth_definition=None) -> str:
+def recovery_config_stem(definition, *, truth_definition=None, truth_overrides=()) -> str:
+    """Everything a recovery config name carries before its replicate number.
+
+    Factored out because :func:`available_replicates` finds a run's replicates by
+    matching this as a directory prefix: a marker that reached the name but not
+    the prefix would make a run's own output invisible to its scoring step.
+    """
+    stem = definition.config_name
+    if (
+        truth_definition is not None
+        and truth_definition.config_name != definition.config_name
+    ):
+        stem = f"{stem}-under-{truth_source_tag(truth_definition, definition)}"
+    tag = override_tag(truth_overrides)
+    return f"{stem}-{tag}" if tag else stem
+
+
+def recovery_config_name(
+    definition, replicate: int, *, truth_definition=None, truth_overrides=()
+) -> str:
     """Config name carried by the recovery variant of a definition.
 
     ``truth_definition`` names the definition the *data* came from, when that is
@@ -142,24 +168,36 @@ def recovery_config_name(definition, replicate: int, *, truth_definition=None) -
     directory. The ``-under-<tag>`` marker in the name is what prevents that;
     passing the same definition twice is not a cross-definition run and adds no
     marker, so existing output keeps its existing names.
+
+    ``truth_overrides`` marks the name for the same reason and is the same kind
+    of thing: two cells of #297 check 4 differ only in what their truth was set
+    to, so without a marker one would land in the other's directory and be
+    scored into the other's matrix. No settings adds no marker.
     """
-    stem = definition.config_name
-    if (
-        truth_definition is not None
-        and truth_definition.config_name != definition.config_name
-    ):
-        stem = f"{stem}-under-{truth_source_tag(truth_definition, definition)}"
+    stem = recovery_config_stem(
+        definition, truth_definition=truth_definition, truth_overrides=truth_overrides
+    )
     return f"{stem}-recovery-r{replicate:02d}"
 
 
-def simulation_dir(definition, replicate: int, output_root: str | None = None) -> str:
+def simulation_dir(
+    definition,
+    replicate: int,
+    output_root: str | None = None,
+    *,
+    truth_overrides=(),
+) -> str:
     """Directory holding one replicate's synthetic data and truth.
 
     Deliberately *not* under ``models/``: a completed fit atomically replaces its
     own output directory, which would delete the inputs that produced it.
     """
     root = output_root if output_root is not None else env.output_root()
-    return os.path.join(root, "recovery", recovery_label(definition, replicate))
+    return os.path.join(
+        root,
+        "recovery",
+        recovery_label(definition, replicate, truth_overrides=truth_overrides),
+    )
 
 
 # ==========================================================================
@@ -789,19 +827,27 @@ def _prepared_context(
     return context, _stage_for(stages, BUILD_STAGE_NAME)
 
 
-def available_replicates(definition, output_root: str | None = None) -> list[int]:
+def available_replicates(
+    definition, output_root: str | None = None, *, truth_overrides=()
+) -> list[int]:
     """Replicate numbers that have a written simulation, ascending.
 
     The recovery matrix summarises every replicate that exists, not only the ones
     a particular invocation asked for. Without that, re-scoring one replicate of a
     staged run would overwrite the matrix with a single row and silently drop the
     others.
+
+    Every replicate of *this* run, that is. ``truth_overrides`` is part of the
+    prefix, so a matrix never mixes two settings of the same truth -- which would
+    read as one record when it is two, the same failure the sampling-tier filter
+    in ``fit_recovery.py`` exists to prevent (#289 task 4.7).
     """
     root = output_root if output_root is not None else env.output_root()
     directory = os.path.join(root, "recovery")
     if not os.path.isdir(directory):
         return []
-    prefix = f"{definition.model_id}-{definition.config_name}-recovery-r"
+    stem = recovery_config_stem(definition, truth_overrides=truth_overrides)
+    prefix = f"{definition.model_id}-{stem}-recovery-r"
     found: list[int] = []
     for name in os.listdir(directory):
         if not name.startswith(prefix):
@@ -820,6 +866,7 @@ def simulate_replicate(
     *,
     replicate: int = 1,
     truth_source: str = "posterior",
+    truth_overrides=(),
     n_prior_draws: int = 64,
     random_seed: int = 20260725,
     output_root: str | None = None,
@@ -836,9 +883,17 @@ def simulate_replicate(
     ``truth_source="posterior"`` the truth is then read from the *variant's* own
     trace, which is the only coherent choice: a variant carrying parameters the
     record does not have has nowhere else to get them.
+
+    ``truth_overrides`` sets named free variables in the selected draw before
+    anything is simulated from it, which is how a *designed* parameter setting is
+    asked for rather than whichever one the draw held
+    (:mod:`vocab_growth.recovery.truth_overrides`). They land between the draw
+    and the deterministics on purpose: every reported quantity downstream of a
+    setting is then recomputed under it.
     """
     if truth_source not in {"posterior", "prior"}:
         raise ValueError("truth_source must be 'posterior' or 'prior'.")
+    truth_overrides = tuple(truth_overrides)
     if replicate < 1:
         raise ValueError("replicate is 1-based.")
 
@@ -846,7 +901,9 @@ def simulate_replicate(
     definition = MODEL_REGISTRY[model_key] if definition is None else definition
     spec = target.spec
     root = output_root if output_root is not None else env.output_root()
-    directory = simulation_dir(definition, replicate, root)
+    directory = simulation_dir(
+        definition, replicate, root, truth_overrides=truth_overrides
+    )
     os.makedirs(directory, exist_ok=True)
 
     key_value_table(
@@ -856,6 +913,11 @@ def simulate_replicate(
             ("Engine", spec.engine),
             ("Replicate", replicate),
             ("Truth source", truth_source),
+            *(
+                [("Truth settings", ", ".join(str(o) for o in truth_overrides))]
+                if truth_overrides
+                else []
+            ),
             ("Sampling config", config),
             ("Simulation directory", directory),
         ],
@@ -891,7 +953,23 @@ def simulate_replicate(
             n_prior_draws=n_prior_draws,
             random_seed=random_seed + replicate,
         )
+    if truth_overrides:
+        overridden, applied = apply_truth_overrides(
+            _as_dataset(truth.tree["posterior"]), model, truth_overrides
+        )
+        truth.tree = _single_draw_tree(overridden)
+        truth.provenance = {**truth.provenance, "truth_overrides": applied}
+        for record in applied:
+            console.print(
+                f"[dim]Truth setting: {record['name']} -> {record['applied']}[/dim]"
+            )
     truth = _with_deterministics(truth, model)
+    if truth_overrides:
+        # After the recomputation, not before: a setting on a boundary reaches
+        # the report through a deterministic long before it reaches the sampler.
+        check_all_finite(
+            _as_dataset(truth.tree["posterior"]), context="The truth settings"
+        )
     console.print(
         f"[dim]Truth draw: {truth.source} chain {truth.chain}, draw {truth.draw} "
         f"({len(_as_dataset(truth.tree['posterior']).data_vars)} recorded quantities)[/dim]"
@@ -1087,7 +1165,9 @@ def simulate_replicate(
                 "model_key": model_key,
                 "model_id": definition.model_id,
                 "config_name": definition.config_name,
-                "recovery_config_name": recovery_config_name(definition, replicate),
+                "recovery_config_name": recovery_config_name(
+                    definition, replicate, truth_overrides=truth_overrides
+                ),
                 "definition": normalise_for_json(definition),
             },
             "simulation": {
@@ -1095,6 +1175,7 @@ def simulate_replicate(
                 "replicate": replicate,
                 "sampling_config_name": config,
                 "truth_source": truth.source,
+                "truth_overrides": [str(o) for o in truth_overrides],
                 "truth_chain": truth.chain,
                 "truth_draw": truth.draw,
                 "truth_provenance": truth.provenance,

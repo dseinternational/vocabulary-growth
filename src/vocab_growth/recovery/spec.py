@@ -434,10 +434,16 @@ _TARGETS: dict[str, EngineRecoverySpec] = {
     # Registered rather than deferred because gate 4 of #297 is recovery of this
     # coefficient in three designed cells -- `(beta = 0, rho != 0)`,
     # `(beta != 0, rho = 0)` and both nonzero -- whose whole purpose is to show
-    # the lag can be told apart from the correlation. Two of those cells still
-    # need a way to SET a parameter in the truth draw rather than take what the
-    # posterior or prior offers, which the harness does not yet have; the third
-    # is runnable today from the prior.
+    # the lag can be told apart from the correlation. All three are runnable:
+    # the third is a draw, and the other two are settings, which
+    # `recovery.truth_overrides` supplies as `--set-truth beta_sign_lag=0` and
+    # `--set-truth subject_re=independent`. The second is a transform rather
+    # than a number because the correlations are deterministics read off a
+    # packed Cholesky factor, so there is no correlation to set; setting the
+    # factor to its diagonal zeroes all three and keeps the scales. VG25 needs
+    # no comparator model for these cells -- unlike VG16, it carries both the
+    # lag and the correlated block, so the three cells are settings of one
+    # model.
     "vg25": JOINT_SPEC,
 }
 

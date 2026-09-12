@@ -909,10 +909,36 @@ VARIANTS: dict[tuple[str, str], dict] = {
     #
     # It is NOT a leave-one-study-out check, and is not labelled as one.
     # #297 check 5 asks for those; the joint definitions carry no
-    # `exclude_studies` field (it is a `BivariateModelDefinition` field), and
-    # adding one would be a data-scope field on `JointModelDefinition` that
-    # restales every VG15 and VG24 fit. That is a change to make deliberately,
-    # with the refit it costs, not as a side effect of registering a variant.
+    # `exclude_studies` field (it is a `BivariateModelDefinition` field), so no
+    # such arm can be registered until one exists.
+    #
+    # An earlier version of this comment put that cost at "restales every VG15
+    # and VG24 fit ... with the refit it costs". Both halves overstate it.
+    #
+    # The definition restale is the avoidable kind. `BACKFILL_DEFAULTS` excuses
+    # a field whose *absence* from an older manifest is equivalent to a stated
+    # value, and `lag_same_form_only` (#242) is the same shape: a scope field
+    # added to an already-fitted family, read through one `getattr` default that
+    # reproduces the pre-field behaviour, with the claim checked off the call
+    # site in `tests/test_fit_identity.py` rather than asserted. An
+    # `exclude_studies` entry would claim that every joint fit made before the
+    # field existed filtered no studies, which is what a frame builder with no
+    # filter in it did. `FIELD_ROLES` already classifies the name, so the entry
+    # and its check are the new part. One thing it would have to carry rather
+    # than inherit: the registry is keyed by bare field name, so the entry also
+    # covers the bivariate class's own field. That claim holds there too --
+    # 2697dc8 added the filter in the same commit as the field, so no earlier
+    # bivariate fit could have dropped a study -- but the bivariate engine reads
+    # it as a plain attribute rather than through a default, so that half is
+    # checked by history and has to be stated rather than inherited.
+    #
+    # Nor is the refit this field's cost. The executable-code signature covers
+    # the whole package, so any code change makes an existing fit unverifiable
+    # for `resume`, `sync` and `publish`, and the VG25 registration already did
+    # that to every fit of record. What a definition difference costs that a
+    # code one does not is reach: it is fatal at every purpose, `render` and
+    # reading a trace back included. That is the restale worth avoiding, and the
+    # mechanism for avoiding it exists.
     ("vg25", "sign-lag-uk07-marginal"): {"suffix": "sign-lag-uk07-marginal", "scalar": {
         "include_uk07_cells": False}},
     #
