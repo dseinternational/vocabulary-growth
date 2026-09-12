@@ -83,6 +83,12 @@ EXPECTED = {
     "vg24": (
         {"u": "constant", "q": "constant", "sign": "constant"}, 2.0, None, False,
     ),
+    # VG25 is VG24 plus a cross-lag. The lag is not a child-effect structure --
+    # it is one population coefficient on a covariate -- so the resolver sees
+    # exactly what it sees for VG24, which is the point of checking it.
+    "vg25": (
+        {"u": "constant", "q": "constant", "sign": "constant"}, 2.0, None, False,
+    ),
 }
 
 

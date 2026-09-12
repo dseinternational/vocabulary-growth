@@ -116,7 +116,14 @@ from vocab_growth.models.common import (
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
+from vocab_growth.models.cross_lag import (
+    prev_wave_sign_share_lag_for_frame,
+    report_sign_cross_lag_support,
+    sign_cross_lag_audit_frame,
+    validate_sign_cross_lag,
+)
 from vocab_growth.models.definitions import JointModelDefinition, clamp_targets
+from vocab_growth.models.diagnostics_utils import pair_plot_var_names_fn
 from vocab_growth.models.gp_utils import (
     GPGrid,
     tent_and_gp,
@@ -983,6 +990,44 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     use_subject_re_q = bool(definition.use_subject_re_q)
     use_subject_re_sign = bool(definition.use_subject_re_sign)
     use_subject_codes = use_subject_re_u or use_subject_re_q or use_subject_re_sign
+
+    # Sign -> speech cross-lag (VG25, issue #297): the child's most recent
+    # strictly earlier administration wave carrying a signed share of
+    # comprehension is the lag source, computed over complete (subject, age)
+    # wave groups as VG16's is (issue #242). x = 0 where there is no such wave,
+    # which is most of the frame -- a child's first wave, a child with one wave,
+    # and every nz_01 row. prev_idx/has_sign_lag_f/r_prev_logit are consumed
+    # below when injecting beta_sign_lag * x into the q logit.
+    use_sign_cross_lag = bool(getattr(definition, "use_sign_cross_lag", False))
+    sign_lag_baseline = getattr(definition, "sign_lag_baseline", "within")
+    sign_lag_in_cells = bool(getattr(definition, "sign_lag_in_cells", True))
+    sign_prev_idx = np.zeros(len(df), dtype=int)
+    has_sign_lag_f = np.zeros(len(df), dtype=float)
+    r_prev_logit = np.zeros(len(df), dtype=float)
+    if use_sign_cross_lag:
+        validate_sign_cross_lag(sign_lag_baseline, use_subject_re_sign)
+        sign_prev_idx, has_sign_lag_f, r_prev_logit = (
+            prev_wave_sign_share_lag_for_frame(df, definition)
+        )
+        print(
+            f"Sign cross-lag ({sign_lag_baseline}, in_cells={sign_lag_in_cells}): "
+            f"{int(has_sign_lag_f.sum())} of {len(df)} observations have a "
+            "prior-wave signed-share source."
+        )
+        report_sign_cross_lag_support(
+            context.reporting.output_dir,
+            sign_cross_lag_audit_frame(
+                df,
+                sign_prev_idx,
+                has_sign_lag_f,
+                spoken_indices=spoken_spec.indices,
+                spoken_is_conditional=spoken_spec.is_conditional,
+                cell_indices=idx_cells,
+                prod_indices=idx_prod,
+            ),
+            n_obs=len(df),
+            in_cells=sign_lag_in_cells,
+        )
     if use_subject_codes:
         subject_codes = np.asarray(df["subject_code"], dtype=int)
         n_subjects = int(subject_codes.max()) + 1
@@ -1062,6 +1107,14 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     if use_gp_anchor:
         build_cfg.append(
             ("GP anchor age (months)", f"{anchor_age_months:g} (u={anchor_g_u}, q={anchor_g_q}, sign={anchor_g_sign})")
+        )
+    if use_sign_cross_lag:
+        build_cfg.append(
+            (
+                "Sign cross-lag (baseline, in cells, lagged rows)",
+                f"{sign_lag_baseline} / {sign_lag_in_cells} / "
+                f"{int(has_sign_lag_f.sum())}",
+            )
         )
     key_value_table("Build configuration", build_cfg)
 
@@ -1412,6 +1465,38 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         f_u_obs = f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + subject_shift_u
         h_obs = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q
         g_obs = g_all[i_obs0:i_obs1] + delta_sign[study_obs] + subject_shift_sign
+
+        # Sign -> speech cross-lag (VG25, issue #297). The child's prior-wave
+        # signed share of comprehension, as a residual from the signed-ratio
+        # trajectory at that wave, shifts their current production ratio q.
+        # `beta_sign_lag > 0` means a child who signed a larger share of what
+        # they understood then says a larger share of it now; x is 0 with no
+        # prior wave, which is most rows.
+        #
+        # The baseline is a residual from `g`, not from `f_u`, because the
+        # predictor is a signed RATIO. `within` leaves the child's own
+        # persistent signing standing in the baseline and so subtracts it from
+        # the predictor -- the prospective, net-of-standing quantity, and the one
+        # VG24's `rho_sign_q` does not already carry. `population` removes the
+        # subject shift from the baseline and so retains that standing in the
+        # predictor, which with `rho_sign_q` in the model makes it a second,
+        # noisier reading of the same thing; it is the registered sensitivity for
+        # exactly that reason.
+        if use_sign_cross_lag:
+            beta_sign_lag = pm.Normal(
+                "beta_sign_lag",
+                mu=definition.beta_sign_lag_mu,
+                sigma=definition.beta_sign_lag_sigma,
+            )
+            sign_lag_base = g_obs[sign_prev_idx]
+            if sign_lag_baseline == "population":
+                sign_lag_base = sign_lag_base - subject_shift_sign[sign_prev_idx]
+            x_sign_lag = has_sign_lag_f * (r_prev_logit - sign_lag_base)
+            q_sign_lag_term = beta_sign_lag * x_sign_lag
+            h_obs = h_obs + q_sign_lag_term
+        else:
+            q_sign_lag_term = 0.0
+
         p_u_obs = pm.math.sigmoid(f_u_obs)
         q_obs = pm.math.sigmoid(h_obs)
         r_obs = pm.math.sigmoid(g_obs)
@@ -1438,7 +1523,34 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # here carries within-child dependence — so psi's uncertainty may be
         # understated and children with more visits weigh more. The
         # repeated-child sensitivity is tracked in #238.
-        q_obs_pop = pm.math.sigmoid(h_all[i_obs0:i_obs1] + delta_q[study_obs])
+        #
+        # The sign cross-lag is the one term that does cross this line, when
+        # `sign_lag_in_cells` is set, and the distinction is worth stating rather
+        # than inferring from the code. What is kept out above is a FREE PER-CHILD
+        # quantity, which on these thin rows is co-identified with psi and pulled
+        # it from 1.78 to about 2.8 when it was let in. `beta_sign_lag` is one
+        # scalar multiplying a covariate fixed by the data: it adds a single
+        # dimension, not one per child, and it is what brings uk_07's cross-tab
+        # children into the coefficient's support at all (191 supporting
+        # observations from 129 children against 111 from 80).
+        #
+        # The honest caveat, because it is not nothing. Under the `within`
+        # baseline the predictor itself contains `subject_shift_sign` at the
+        # PRIOR wave, so an estimated per-child quantity does reach the
+        # composition -- through one scalar coefficient, on lagged rows only,
+        # rather than as a free offset per row. The `sign-lag-population` arm is
+        # the one in which no estimated per-child quantity reaches the cells at
+        # all, since that baseline subtracts the shift back out; reading the two
+        # together is what says whether psi moved and why.
+        #
+        # Added under the flag rather than as `+ (term or 0.0)`, so a model
+        # without the lag emits the ops it always did rather than gaining an
+        # addition of zero -- which `tests/test_graph_equivalence.py` would see
+        # for every other joint model.
+        h_obs_pop = h_all[i_obs0:i_obs1] + delta_q[study_obs]
+        if use_sign_cross_lag and sign_lag_in_cells:
+            h_obs_pop = h_obs_pop + q_sign_lag_term
+        q_obs_pop = pm.math.sigmoid(h_obs_pop)
         r_obs_pop = pm.math.sigmoid(g_all[i_obs0:i_obs1] + delta_sign[study_obs])
 
         # --- population-level latents (no study shift), plot + query ---
@@ -1686,7 +1798,7 @@ def prior_predictive_checks(context: JointContext):
 sample = _shared_sample
 
 
-def diagnostics(context: JointContext):
+def diagnostics(context: JointContext, definition: JointModelDefinition):
     """Run diagnostics on the posterior samples.
 
     The shared engine prioritises ``psi`` and ``conc`` in parameter plots.
@@ -1697,24 +1809,24 @@ def diagnostics(context: JointContext):
     The separate administration-level score includes every factor, including
     ``cells_obs`` and ``nz_prod_cells_obs``. It assesses the predictive
     contribution of the composition association as well as the count models.
-    """
-    posterior_vars = set(context.trace.posterior.data_vars)
 
-    def _prioritise_psi_conc(
-        names: list[str],
-        priority: tuple[str, ...] = ("psi", "conc"),
-    ) -> list[str]:
-        seen: set[str] = set()
-        ordered: list[str] = []
-        for name in (*priority, *names):
-            if name in posterior_vars and name not in seen:
-                ordered.append(name)
-                seen.add(name)
-        return ordered
+    ``definition`` is taken for the pair plot's ordering, which is issue #233's
+    problem on this engine: ArviZ caps the grid at ``floor(sqrt(max_subplots))``
+    -- six variables -- and this engine led with ``psi`` and ``conc`` and then
+    took build order, which puts the mean functions first. So VG25's
+    ``beta_sign_lag``, built eighteenth, never rendered, and neither did any of
+    VG24's three child correlations -- while both reports send the reader to the
+    pair plot to inspect exactly those. The ordering now comes from
+    :func:`~vocab_growth.models.diagnostics_utils.pair_plot_priority`, one
+    implementation shared with the bivariate engine.
+    """
+    _prioritise = pair_plot_var_names_fn(
+        definition, set(context.trace.posterior.data_vars)
+    )
 
     _shared_diagnostics(
         context,
-        var_names_fn=_prioritise_psi_conc,
+        var_names_fn=_prioritise,
         round_to=4,
         loo_var_names=(
             ("y_u_obs", "words understood"),
@@ -2442,7 +2554,7 @@ def joint_stages(
         ),
         ("Prior predictive checks", prior_predictive_checks),
         ("Posterior sampling", sample),
-        ("Diagnostics", diagnostics),
+        ("Diagnostics", lambda ctx: diagnostics(ctx, definition)),
         (
             "Posterior predictions",
             lambda ctx: sample_posterior_predictive(ctx, definition),

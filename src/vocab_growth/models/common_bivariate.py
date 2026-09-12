@@ -77,6 +77,7 @@ from vocab_growth.models.common import (
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
 from vocab_growth.models.definitions import BivariateModelDefinition, clamp_targets
+from vocab_growth.models.diagnostics_utils import pair_plot_var_names_fn
 from vocab_growth.models.gp_utils import GPGrid, trend_and_gp
 from vocab_growth.models.likelihood_utils import (
     SPOKEN_FALLBACK_PAIRED_ONLY,
@@ -1061,9 +1062,10 @@ def diagnostics(context: BivariateContext, definition: BivariateModelDefinition)
     **The pair plot is reordered** for any definition carrying a distinguishing
     child structure, so the parameters the model was added for fill the capped
     grid instead of falling off the end of model order (issue #233). The
-    ordering comes from :func:`pair_plot_priority`, which returns an empty tuple
-    for a model without one -- and then the reordering is not installed at all,
-    so those pair plots are unchanged. That is why ``definition`` is required
+    ordering comes from
+    :func:`~vocab_growth.models.diagnostics_utils.pair_plot_priority`, which
+    returns an empty tuple for a model without one -- and then the reordering is
+    not installed at all, so those pair plots are unchanged. That is why ``definition`` is required
     rather than defaulted: a model without a distinguishing structure passes its
     definition and gets the same plots it got from ``None``. This began as VG16's own reordering for
     ``beta_lag`` (#242) and is now general.
@@ -1077,17 +1079,9 @@ def diagnostics(context: BivariateContext, definition: BivariateModelDefinition)
     estimates: prediction of a spoken count conditional on the child's observed
     understood history, not unconditional new-observation prediction.
     """
-    posterior_vars = set(context.trace.posterior.data_vars)
-    priority = pair_plot_priority(definition)
-
-    def _prioritise(names: list[str]) -> list[str]:
-        seen: set[str] = set()
-        ordered: list[str] = []
-        for name in (*priority, *names):
-            if name in posterior_vars and name not in seen:
-                ordered.append(name)
-                seen.add(name)
-        return ordered
+    _prioritise = pair_plot_var_names_fn(
+        definition, set(context.trace.posterior.data_vars)
+    )
 
     if not getattr(definition, "use_cross_lag", False):
         _shared_diagnostics(
@@ -1105,7 +1099,7 @@ def diagnostics(context: BivariateContext, definition: BivariateModelDefinition)
                 LikelihoodFactor("y_u_obs", "obs_u_mask"),
                 LikelihoodFactor("y_s_obs", "obs_s_mask"),
             ),
-            var_names_fn=_prioritise if priority else None,
+            var_names_fn=_prioritise,
         )
         return
 
@@ -1179,57 +1173,6 @@ def _child_slope_offsets(context: BivariateContext, definition):
         (model["X_plot"] - ref) / 12.0,
         (model["X_query"] - ref) / 12.0,
     )
-
-
-def pair_plot_priority(definition) -> tuple[str, ...]:
-    """The variables the pair plot must show for ``definition``, most important first.
-
-    ArviZ caps a pair plot at ``floor(sqrt(plot.max_subplots))`` variables, so a
-    grid built in model order fits about six -- and model order is the build
-    order, which puts the mean-function and GP parameters first. Every parameter
-    a child-effect model was *added for* therefore fell off the end: VG19's
-    slope block, VG20's ``rho_uq``, VG22's factor scales. The captions in those
-    reports tell the reader to inspect exactly those ridges, so the plot
-    contradicted the text it was captioned with (#233).
-
-    Ordering rather than filtering, so nothing is hidden -- the cap simply
-    consumes the list from a different end. An empty tuple means "model order",
-    which is what every model without a distinguishing child structure gets, and
-    those pair plots are byte-identical to before.
-
-    The names are read from the definition rather than the trace so the intent
-    is declared by the model, not inferred from what happened to be sampled.
-    """
-    priority: list[str] = []
-
-    # Exploratory sex-shift variant of VG20 (issue #295): the two coefficients
-    # it exists to estimate, ahead of the correlation it inherits.
-    if getattr(definition, "sex_effect_sigma", None) is not None:
-        priority += ["beta_sex_u", "beta_sex_q"]
-
-    if getattr(definition, "use_cross_lag", False):
-        priority.append("beta_lag")
-
-    # VG20: the single parameter the model exists to estimate.
-    if getattr(definition, "subject_re_correlation_eta", None) is not None:
-        priority.append("rho_uq")
-
-    # VG22: the factor form emits rho_uq as a deterministic and carries a rate
-    # scale per outcome. `subject_factor_corr` is deliberately absent -- a 4x4
-    # matrix is 16 plot items and would consume the whole grid on its own.
-    if getattr(definition, "subject_factor", None) is not None:
-        priority += ["rho_uq", "tau_subj_u_1", "tau_subj_q_1"]
-
-    # VG19: the intercept-and-rate block, whose two correlations are the part a
-    # reader can actually test from an interval.
-    for name in ("tau_subj_u", "tau_subj_q"):
-        spec = getattr(definition, f"{name}_sigma", None)
-        if getattr(spec, "tau1_sigma", None) is not None:
-            priority += [f"{name}_1", f"{name}_rho", f"{name}_0"]
-
-    if priority:
-        priority += ["tau_subj_u", "tau_subj_q", "tau_u", "tau_q"]
-    return tuple(dict.fromkeys(priority))
 
 
 def _child_factor_block(context: BivariateContext):

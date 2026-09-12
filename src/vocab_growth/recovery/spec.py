@@ -143,6 +143,33 @@ def outcome_dependent_predictor(definition) -> OutcomeDependentPredictor | None:
                 "logit of their current production ratio"
             ),
         )
+    if getattr(definition, "use_sign_cross_lag", False):
+        # VG25 (#297), and the case `single_pass_is_sound` was written for. The
+        # source is `signed`, drawn in the joint engine's SECOND stage, and the
+        # consumers are drawn in that same stage -- so one pass would draw each
+        # consumer against a source still holding its real study value, and the
+        # wave loop is selected. Nothing here declares that; the derivation does.
+        #
+        # `signed` names the marginal column, and the cross-tab rows carry their
+        # signed total in `signed_only` + `signed_spoken` instead. Both are drawn
+        # in stage 1 -- `y_sign_obs` and `cells_obs` are in the same tuple -- so
+        # either spelling selects the same behaviour, and the guard compares the
+        # WHOLE predictor against the finished frame however it was assembled.
+        # The consumers are named in full regardless, because
+        # `single_pass_is_sound` fails toward the loop on any it cannot find and
+        # a silently unrecognised name would read as a decision.
+        consumers = ["y_s_obs"]
+        if getattr(definition, "sign_lag_in_cells", True):
+            consumers += ["cells_obs", "nz_prod_cells_obs"]
+        return OutcomeDependentPredictor(
+            name="sign_cross_lag",
+            source_column="signed",
+            consumer_rv_names=tuple(consumers),
+            description=(
+                "each child's earlier-wave signed share of comprehension, "
+                "shifting the logit of their current production ratio"
+            ),
+        )
     return None
 
 
@@ -387,6 +414,31 @@ _TARGETS: dict[str, EngineRecoverySpec] = {
     # subset identifies it is a recovery question, and recovery is how it gets
     # measured instead of assumed.
     "vg24": JOINT_SPEC,
+    # VG25 runs VG24's engine and VG24's data-generating process: the lag shifts
+    # the `q` logit, not which nodes exist or what they are drawn from, so
+    # JOINT_SPEC is correct here unchanged -- the same argument VG16 carries
+    # against BIVARIATE_RE_SPEC.
+    #
+    # What is NOT the same is the simulation order, and this is the model the
+    # wave loop was built for. Its lag reads `signed`, which the joint engine
+    # draws in the SAME stage as the `spoken` it shifts, so a single pass would
+    # draw each consumer against a source still holding its real value.
+    # `single_pass_is_sound` derives that from the stage order and selects the
+    # loop; `simulate._verify_predictor_coherence` then checks, on every run,
+    # that each row was drawn under the predictor the finished frame implies.
+    #
+    # `beta_sign_lag` needs no scoring entry: it is a scalar free RV, so
+    # `recovery/compare.py` picks it up by dimension, exactly as `beta_lag` is.
+    # The three correlations it inherits from VG24 are picked up the same way.
+    #
+    # Registered rather than deferred because gate 4 of #297 is recovery of this
+    # coefficient in three designed cells -- `(beta = 0, rho != 0)`,
+    # `(beta != 0, rho = 0)` and both nonzero -- whose whole purpose is to show
+    # the lag can be told apart from the correlation. Two of those cells still
+    # need a way to SET a parameter in the truth draw rather than take what the
+    # posterior or prior offers, which the harness does not yet have; the third
+    # is runnable today from the prior.
+    "vg25": JOINT_SPEC,
 }
 
 UNSUPPORTED_REASONS: dict[str, str] = {

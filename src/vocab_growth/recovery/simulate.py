@@ -76,7 +76,11 @@ from vocab_growth.models.common import (
     PRIORS_STAGE_NAME,
     ModelFitContext,
 )
-from vocab_growth.models.cross_lag import prev_wave_lag_for_frame, wave_index
+from vocab_growth.models.cross_lag import (
+    prev_wave_lag_for_frame,
+    prev_wave_sign_share_lag_for_frame,
+    wave_index,
+)
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.recovery import compare
 from vocab_growth.recovery.spec import (
@@ -577,11 +581,40 @@ def _cross_lag_state(frame: pd.DataFrame, definition, n_trials: int) -> np.ndarr
     )
 
 
+def _sign_cross_lag_state(frame: pd.DataFrame, definition, n_trials: int) -> np.ndarray:
+    """The sign cross-lag predictor inputs the engine derives from ``frame``.
+
+    :func:`_cross_lag_state`'s counterpart, recomputed for the same reason and
+    compared the same way -- the engine bakes these into the graph as constants,
+    so there is nothing to read back, and what makes recording them useful is
+    the comparison against the same function of the **finished** frame.
+
+    ``n_trials`` is accepted and unused: the predictor is a ratio of two counts
+    from one administration, so the inventory cancels out of it. The parameter
+    stays because :data:`_PREDICTOR_STATE`'s readers share one signature, and a
+    reader that quietly took fewer arguments would fail at the point of use
+    rather than here.
+    """
+    prev_idx, has_lag, r_prev_logit = prev_wave_sign_share_lag_for_frame(
+        frame, definition
+    )
+    return np.vstack(
+        [
+            np.asarray(prev_idx, dtype=float),
+            np.asarray(has_lag, dtype=float),
+            np.asarray(r_prev_logit, dtype=float),
+        ]
+    )
+
+
 #: How to read each declared outcome-dependent predictor's design matrix off a
 #: frame. A predictor added to `spec.outcome_dependent_predictor` adds an entry
 #: here; `_predictor_state` raises rather than skipping the guard if one is
 #: missing, so a half-declared predictor stops the run instead of going unchecked.
-_PREDICTOR_STATE = {"cross_lag": _cross_lag_state}
+_PREDICTOR_STATE = {
+    "cross_lag": _cross_lag_state,
+    "sign_cross_lag": _sign_cross_lag_state,
+}
 
 
 def _predictor_state(predictor, frame: pd.DataFrame, definition, n_trials: int):

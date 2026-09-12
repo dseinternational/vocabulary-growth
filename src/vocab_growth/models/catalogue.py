@@ -442,6 +442,7 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg22": "bivariate_re",
         "vg23": "bivariate_re",
         "vg24": "joint",
+        "vg25": "joint",
     }
     # Sourced from the roles table in ``docs/models/README.md`` and the
     # decision notes it cites -- not inferred. A model whose role that record
@@ -506,6 +507,13 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg19": ModelRole.DEVELOPMENT_STEP,
         "vg22": ModelRole.DEVELOPMENT_STEP,
     }
+    # VG25 (#297) is deliberately absent, and so is its row in the roles table.
+    # Its role is a study-owner decision taken with #190's other scope questions
+    # (#297 check 7), and until it is taken UNCLASSIFIED is the right answer
+    # rather than a placeholder: it keeps full publication strictness and puts
+    # the model in the default refit scope, which is what a model with no fit at
+    # all needs. Classifying it is then one edit here and one row there.
+    #
     # Fails closed: anything the record does not classify keeps full
     # publication strictness rather than silently relaxing.
     role_of.update(

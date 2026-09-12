@@ -91,6 +91,11 @@ class FieldRole(Enum):
 _ASSUMED_GRAPH_PREFIXES = (
     "anchor_g",
     "beta_lag",
+    # VG25's sign -> speech lag (#297). `beta_lag` does not reach
+    # `beta_sign_lag`, and `sign_lag_` is its own family rather than an
+    # extension of `lag_`: both are graph choices, both are narrow, and neither
+    # widens an existing token.
+    "beta_sign_lag",
     "ell_months_range",
     "ell_unit",
     "eta_",
@@ -100,6 +105,7 @@ _ASSUMED_GRAPH_PREFIXES = (
     "log_psi_",
     "p_slope_",
     "sign_anchor_ages",
+    "sign_lag_",
     "sign_peak_prior",
     "slope_anchors",
     "spoken_fallback",

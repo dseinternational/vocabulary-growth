@@ -272,8 +272,11 @@ reparameterising
 rescoped
 rescore
 rescoring
+residualise
 residualised
+residualising
 respecification
+restale
 restaled
 restales
 resumable
