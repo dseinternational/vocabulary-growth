@@ -258,12 +258,148 @@ def test_the_control_differs_in_the_coefficient_and_the_output_directory_only():
     assert control.config_name.endswith(wf.CONTROL_SUFFIX)
 
 
+def test_the_sign_lag_control_removes_the_sign_lag_and_nothing_else():
+    """VG25's coefficient lives on a different field from VG16's.
+
+    Its control is structurally VG24, but it is built by flipping VG25's own
+    boolean rather than by naming VG24: the two definitions differ in more than
+    the coefficient, and a comparison against VG24 would carry those differences
+    into the elpd.
+    """
+    import dataclasses
+
+    definition = MODEL_REGISTRY["vg25"]
+    control = wf.control_definition(definition)
+    changed = {
+        f.name
+        for f in dataclasses.fields(definition)
+        if getattr(definition, f.name) != getattr(control, f.name)
+    }
+    assert changed == {"use_sign_cross_lag", "config_name"}
+    assert control.use_sign_cross_lag is False
+
+
 def test_only_cross_lag_models_can_be_scored():
     """Without a coefficient to remove, the two arms are the same model."""
     assert "vg16" in wf.CROSS_LAG_MODELS
+    assert "vg25" in wf.CROSS_LAG_MODELS
+    # VG24 is VG25 without the lag and VG10 is VG16 without it: both are the
+    # controls, not subjects.
     assert "vg10" not in wf.CROSS_LAG_MODELS
+    assert "vg24" not in wf.CROSS_LAG_MODELS
     for key in wf.CROSS_LAG_MODELS:
-        assert MODEL_REGISTRY[key].use_cross_lag
+        assert wf.lag_field(MODEL_REGISTRY[key]) in wf.LAG_FIELDS
+
+
+def test_a_model_with_no_lag_field_is_refused_by_name():
+    """The message has to say what is missing, not just fail."""
+    with pytest.raises(ValueError, match="cross-lag field"):
+        wf.lag_field(MODEL_REGISTRY["vg24"])
+
+
+def test_every_scorable_model_has_row_scoring_for_its_engine():
+    """Fail-closed: a lag on a new engine needs its likelihood evaluated.
+
+    `CROSS_LAG_MODELS` is derived from the registry, so registering a cross-lag
+    puts a model in the ``--model`` choices whether or not this script can score
+    it. Without this, that model would reach `row_elpds` and raise there, one
+    fold-fit at a time.
+    """
+    from vocab_growth.models.catalogue import engine_for
+
+    for key in wf.CROSS_LAG_MODELS:
+        engine = engine_for(key).name
+        assert engine in wf.OUTCOME_COLUMNS, (
+            f"{key} runs on the {engine!r} engine, which has no entry in "
+            "OUTCOME_COLUMNS and no row scoring."
+        )
+
+
+def test_the_spoken_difference_is_the_headline_on_every_engine():
+    """The driver reports `comparison.iloc[0]`, so the order is the claim."""
+    for columns in wf.OUTCOME_COLUMNS.values():
+        assert columns[0] == "elpd_spoken"
+
+
+def test_the_joint_engine_scores_the_composition_the_lag_enters():
+    """VG25's scope decision put the lag in the cross-tab cells.
+
+    Scoring the marginals alone would score the coefficient on the evidence that
+    decision chose against -- the registration's own measurement was 191
+    supporting observations with the cells against 111 without them.
+    """
+    assert "elpd_cells" in wf.OUTCOME_COLUMNS["joint"]
+    assert "elpd_cells" not in wf.OUTCOME_COLUMNS["bivariate_re"]
+
+
+def test_the_sign_lag_source_uses_the_ratio_rule_not_the_count_rule():
+    """The two lags read different quantities and select sources differently.
+
+    VG16 ranks candidate source waves on the comprehension count; VG25 reads a
+    ratio and passes both of its quantities as selection keys. Taking the wrong
+    rule would silently score a predictor the model never used.
+    """
+    from vocab_growth.models.cross_lag import prev_wave_sign_share_lag_for_frame
+
+    frame = _frame([
+        (1, 12.0, 100, 10),
+        (1, 18.0, 200, 40),
+        (2, 12.0, 80, 5),
+        (2, 20.0, 150, 30),
+    ])
+    frame["signed"] = [20, 30, 10, 25]
+    definition = MODEL_REGISTRY["vg25"]
+
+    lagged, source = wf.lag_source(frame, definition)
+    prev_idx, has_lag_f, _logit = prev_wave_sign_share_lag_for_frame(
+        frame, definition
+    )
+    assert np.array_equal(lagged, np.asarray(has_lag_f, dtype=float) > 0)
+    assert np.array_equal(source, np.asarray(prev_idx, dtype=int))
+
+
+# --- The composition density --------------------------------------------------
+
+
+def test_the_composition_density_matches_pymcs_own():
+    """The Dirichlet-Multinomial is written out here, so it is checked there.
+
+    The engine's likelihood is a `pm.DirichletMultinomial` on exactly these
+    parameters; a hand-written density that disagrees with it would score every
+    held-out composition against a distribution the model does not hold.
+    """
+    import numpy as np
+    import pymc as pm
+
+    counts = np.array([3.0, 5.0, 2.0, 7.0])
+    total = counts.sum()
+    alpha = np.array([0.9, 2.5, 1.4, 3.1])
+
+    expected = float(
+        pm.logp(
+            pm.DirichletMultinomial.dist(n=int(total), a=alpha), counts.astype(int)
+        ).eval()
+    )
+    # One chain, one draw: the log mean over a single draw is that draw's value.
+    got = wf._dirichlet_multinomial_elpd(
+        counts, total, alpha[None, None, :], np.log(1.0)
+    )
+    assert got == pytest.approx(expected, rel=1e-10)
+
+
+def test_the_produced_composition_keeps_its_parameters_unrenormalised():
+    """Dropping the "neither" cell and renormalising would be a different model.
+
+    The engine's comment says so explicitly: the produced-cell concentration
+    sums to `conc * P(produced | understood)` rather than to `conc`.
+    """
+    import numpy as np
+
+    pi = np.array([[[0.4, 0.2, 0.3, 0.1]]])
+    conc = np.array([[10.0]])
+    alpha_prod = conc[:, :, None] * pi[:, :, 1:]
+    assert alpha_prod.sum() == pytest.approx(10.0 * 0.6)
+    assert alpha_prod.sum() != pytest.approx(10.0)
 
 
 # --- The paired difference ----------------------------------------------------
@@ -344,3 +480,226 @@ def test_too_few_rows_reports_nan_rather_than_a_spurious_interval():
     out = wf.paired_difference(wide, "elpd_spoken", restriction="lagged")
     assert out["n_rows"] == 1
     assert np.isnan(out["se"])
+
+
+# --- Which rows the joint scorer scores ---------------------------------------
+
+
+def _joint_frame() -> pd.DataFrame:
+    """Two children, two waves each: one cross-tab study, one marginal study.
+
+    Rows 1 and 3 are the later waves -- the ones a fold scores. Row 1 is a
+    four-cell row and row 3 is not, which is the distinction the scorer has to
+    make.
+    """
+    frame = pd.DataFrame(
+        {
+            "subject_code": [1, 1, 2, 2],
+            "age": [12.0, 18.0, 12.0, 18.0],
+            "understood": [100.0, 200.0, 100.0, 200.0],
+            "spoken": [10.0, 40.0, 10.0, 40.0],
+            "signed": [20.0, 30.0, 20.0, 30.0],
+        }
+    )
+    frame["study_code"] = [0, 0, 1, 1]
+    frame["study"] = ["cells", "cells", "marginal", "marginal"]
+    # Child 1 is a cross-tab child; child 2 is not, so its cells are missing.
+    frame["understood_only"] = [60.0, 140.0, np.nan, np.nan]
+    frame["signed_only"] = [20.0, 20.0, np.nan, np.nan]
+    frame["spoken_only"] = [10.0, 30.0, np.nan, np.nan]
+    frame["signed_spoken"] = [10.0, 10.0, np.nan, np.nan]
+    frame["cell_total"] = [100.0, 200.0, np.nan, np.nan]
+    for column in ("prod_signed_only", "prod_spoken_only", "prod_signed_spoken"):
+        frame[column] = np.nan
+    frame["prod_total"] = np.nan
+    return frame
+
+
+def _joint_trace(n_obs: int) -> object:
+    """One chain, one draw, so a log mean density is that draw's log density."""
+    import types
+
+    def _var(value, extra=()):
+        return types.SimpleNamespace(
+            values=np.full((1, 1, n_obs, *extra), float(value))
+            if extra
+            else np.full((1, 1, n_obs), float(value))
+        )
+
+    posterior = {
+        "p_u_obs": _var(0.5),
+        "q_obs": _var(0.4),
+        "r_obs": _var(0.3),
+        "kappa_u_obs": _var(60.0),
+        "kappa_s_obs": _var(50.0),
+        "kappa_sign_obs": _var(40.0),
+        "conc": types.SimpleNamespace(values=np.full((1, 1), 20.0)),
+    }
+    pi = np.zeros((1, 1, n_obs, 4))
+    pi[..., :] = np.array([0.45, 0.2, 0.25, 0.1])
+    posterior["pi_cells_obs"] = types.SimpleNamespace(values=pi)
+    return types.SimpleNamespace(posterior=posterior)
+
+
+def _score_joint(frame):
+    rows = np.array([1, 3])
+    lagged = np.array([False, True, False, True])
+    clean = lagged.copy()
+    return wf._joint_row_elpds(
+        frame,
+        _joint_trace(len(frame)),
+        rows,
+        MODEL_REGISTRY["vg25"],
+        lagged,
+        clean,
+    ).set_index("row")
+
+
+def test_a_cross_tab_row_is_scored_on_its_composition_not_its_marginals():
+    """The engine gives a four-cell row no spoken or signed marginal at all.
+
+    `marginal_outcome_eligible` excludes it, because its production information
+    is in the composition. Scoring a marginal density there would score a
+    density the model does not hold.
+    """
+    scored = _score_joint(_joint_frame())
+    assert np.isfinite(scored.loc[1, "elpd_cells"])
+    assert np.isnan(scored.loc[1, "elpd_spoken"])
+    assert np.isnan(scored.loc[1, "elpd_signed"])
+    # Comprehension is not excluded: a cross-tab row still carries `y_u_obs`.
+    assert np.isfinite(scored.loc[1, "elpd_understood"])
+
+
+def test_a_marginal_row_is_scored_on_its_marginals_and_has_no_composition():
+    scored = _score_joint(_joint_frame())
+    assert np.isfinite(scored.loc[3, "elpd_spoken"])
+    assert np.isfinite(scored.loc[3, "elpd_signed"])
+    assert np.isfinite(scored.loc[3, "elpd_understood"])
+    assert np.isnan(scored.loc[3, "elpd_cells"])
+
+
+def test_the_composition_is_found_from_the_frame_not_the_training_mask():
+    """The defect the first end-to-end run hit, pinned.
+
+    ``obs_cells_mask`` marks the cross-tab rows **in the likelihood**, and a
+    fold's held-out rows are excluded from it by construction -- so every row
+    this scores is absent from that mask and reading it scored no composition at
+    all. The run got as far as pivoting an all-missing column away and then
+    failed on its absence, several minutes of fold fitting later.
+    """
+    frame = _joint_frame()
+    scored = _score_joint(frame)
+    assert scored["elpd_cells"].notna().sum() == 1
+
+    # And the criterion really is the frame's own column: blank it and the row
+    # becomes a marginal one.
+    without = frame.copy()
+    without.loc[1, "signed_spoken"] = np.nan
+    rescored = _score_joint(without)
+    assert np.isnan(rescored.loc[1, "elpd_cells"])
+    assert np.isfinite(rescored.loc[1, "elpd_spoken"])
+
+
+def test_the_composition_density_is_the_one_the_likelihood_holds():
+    """Against the parameters the engine builds, computed independently here."""
+    import pymc as pm
+
+    scored = _score_joint(_joint_frame())
+    counts = np.array([140.0, 20.0, 30.0, 10.0])
+    alpha = 20.0 * np.array([0.45, 0.2, 0.25, 0.1])
+    expected = float(
+        pm.logp(pm.DirichletMultinomial.dist(n=200, a=alpha), counts.astype(int)).eval()
+    )
+    assert scored.loc[1, "elpd_cells"] == pytest.approx(expected, rel=1e-10)
+
+
+# --- The wide table -----------------------------------------------------------
+
+
+def _long(**outcomes) -> pd.DataFrame:
+    """Two scored rows under two arms, with whichever outcome columns are given."""
+    base = pd.DataFrame(
+        {
+            "fold": [0, 0, 0, 0],
+            "row": [1, 3, 1, 3],
+            "subject_code": [1, 2, 1, 2],
+            "age_months": [18.0, 18.0, 18.0, 18.0],
+            "has_lag": [True, True, True, True],
+            "source_in_training": [True, True, True, True],
+            # Two distinct values, which is what makes the cartesian expansion
+            # visible: 2 rows x 2 subjects x 2 branches is 8.
+            "spoken_branch": ["", "conditional", "", "conditional"],
+            "arm": ["lag", "lag", "control", "control"],
+        }
+    )
+    for name, values in outcomes.items():
+        base[name] = values
+    return base
+
+
+def test_the_wide_table_has_one_row_per_scored_row():
+    """`dropna=False` fabricated six rows out of two, and was tried first.
+
+    A cross-tab row scores a composition and no spoken marginal, so the frame
+    genuinely holds missing values in every run; the fix for a vanished column
+    must not invent rows to keep one.
+    """
+    long = _long(
+        elpd_spoken=[np.nan, -3.0, np.nan, -3.1],
+        elpd_cells=[-9.0, np.nan, -9.1, np.nan],
+        elpd_understood=[-1.0, -2.0, -1.1, -2.1],
+        elpd_signed=[np.nan, -5.0, np.nan, -5.1],
+    )
+    wide = wf.wide_table(long, wf.OUTCOME_COLUMNS["joint"], ("lag", "control"))
+    assert len(wide) == 2
+    assert sorted(wide["row"]) == [1, 3]
+    # The cross-tab row keeps its composition and has no spoken density.
+    cross_tab = wide.set_index("row").loc[1]
+    assert cross_tab["elpd_cells_lag"] == -9.0
+    assert np.isnan(cross_tab["elpd_spoken_lag"])
+
+
+def test_an_outcome_that_scored_nothing_is_an_empty_column_not_an_absent_one():
+    """The first end-to-end run died here, fifteen minutes in.
+
+    `pivot_table` drops a value column that is missing everywhere, and
+    `paired_difference` then raises a `KeyError` on a name the run was told to
+    report. An outcome with nothing to score is a real outcome with no rows.
+    """
+    long = _long(
+        elpd_spoken=[-1.0, -3.0, -1.1, -3.1],
+        elpd_cells=[np.nan] * 4,
+        elpd_understood=[-1.0, -2.0, -1.1, -2.1],
+        elpd_signed=[-4.0, -5.0, -4.1, -5.1],
+    )
+    wide = wf.wide_table(long, wf.OUTCOME_COLUMNS["joint"], ("lag", "control"))
+    assert "elpd_cells_lag" in wide.columns
+    assert wide["elpd_cells_lag"].isna().all()
+
+    summary = wf.paired_difference(wide, "elpd_cells", restriction="lagged")
+    assert summary["n_rows"] == 0
+    assert np.isnan(summary["elpd_diff"])
+
+
+def test_the_marginal_branch_uses_the_product_of_the_two_probabilities():
+    """A row with no usable comprehension count is scored over the inventory.
+
+    The engine's `nested_outcome_alpha_beta` switches to `p_u * q` on
+    `n_trials` trials there, where the conditional branch uses `q` on the
+    child's own understood count. Both branches exist in every joint frame, and
+    only the conditional one is exercised by the frame above.
+    """
+    from scipy.stats import betabinom
+
+    frame = _joint_frame()
+    # Child 2's later wave loses its comprehension count, which is what sends
+    # the outcome to the marginal branch.
+    frame.loc[3, "understood"] = np.nan
+    scored = _score_joint(frame)
+
+    n_trials = MODEL_REGISTRY["vg25"].n_trials
+    p = 0.5 * 0.4  # p_u_obs * q_obs, the fabricated trace's constants
+    k = 50.0  # kappa_s_obs
+    expected = float(betabinom.logpmf(40, n_trials, p * k, (1 - p) * k))
+    assert scored.loc[3, "elpd_spoken"] == pytest.approx(expected, rel=1e-12)
+    assert np.isnan(scored.loc[3, "elpd_understood"])

@@ -2574,6 +2574,12 @@
    "pi_neither_query",
    "p_any_query",
    "p_any_indep_query",
+   "p_u_obs",
+   "q_obs",
+   "r_obs",
+   "kappa_u_obs",
+   "kappa_s_obs",
+   "pi_cells_obs",
    "kappa_sign_obs"
   ],
   "dims": {
@@ -2642,7 +2648,13 @@
    "kappa_min_u": [],
    "kappa_old_s": [],
    "kappa_old_u": [],
+   "kappa_s_obs": [
+    "obs_id"
+   ],
    "kappa_sign_obs": [
+    "obs_id"
+   ],
+   "kappa_u_obs": [
     "obs_id"
    ],
    "kappa_young_s": [],
@@ -2672,6 +2684,9 @@
    "p_slope_low_sign": [],
    "p_slope_low_u": [],
    "p_slope_mid_sign": [],
+   "p_u_obs": [
+    "obs_id"
+   ],
    "p_u_plot": [
     "plot_id"
    ],
@@ -2684,6 +2699,10 @@
    ],
    "pi_both_query": [
     "query_id"
+   ],
+   "pi_cells_obs": [
+    "obs_id",
+    "cell_id"
    ],
    "pi_neither_plot": [
     "plot_id"
@@ -2707,11 +2726,17 @@
    "psi_study": [
     "study_id"
    ],
+   "q_obs": [
+    "obs_id"
+   ],
    "q_plot": [
     "plot_id"
    ],
    "q_query": [
     "query_id"
+   ],
+   "r_obs": [
+    "obs_id"
    ],
    "r_plot": [
     "plot_id"
@@ -2801,7 +2826,7 @@
    "a_kappa_sign",
    "b_kappa_mag_sign"
   ],
-  "logp_at_fixed_point": -7201.386020532208,
+  "logp_at_fixed_point": -7201.386020532212,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs",
@@ -4572,6 +4597,12 @@
    "pi_neither_query",
    "p_any_query",
    "p_any_indep_query",
+   "p_u_obs",
+   "q_obs",
+   "r_obs",
+   "kappa_u_obs",
+   "kappa_s_obs",
+   "pi_cells_obs",
    "kappa_sign_obs"
   ],
   "dims": {
@@ -4640,7 +4671,13 @@
    "kappa_min_u": [],
    "kappa_old_s": [],
    "kappa_old_u": [],
+   "kappa_s_obs": [
+    "obs_id"
+   ],
    "kappa_sign_obs": [
+    "obs_id"
+   ],
+   "kappa_u_obs": [
     "obs_id"
    ],
    "kappa_young_s": [],
@@ -4670,6 +4707,9 @@
    "p_slope_low_sign": [],
    "p_slope_low_u": [],
    "p_slope_mid_sign": [],
+   "p_u_obs": [
+    "obs_id"
+   ],
    "p_u_plot": [
     "plot_id"
    ],
@@ -4682,6 +4722,10 @@
    ],
    "pi_both_query": [
     "query_id"
+   ],
+   "pi_cells_obs": [
+    "obs_id",
+    "cell_id"
    ],
    "pi_neither_plot": [
     "plot_id"
@@ -4705,11 +4749,17 @@
    "psi_study": [
     "study_id"
    ],
+   "q_obs": [
+    "obs_id"
+   ],
    "q_plot": [
     "plot_id"
    ],
    "q_query": [
     "query_id"
+   ],
+   "r_obs": [
+    "obs_id"
    ],
    "r_plot": [
     "plot_id"
@@ -4885,6 +4935,12 @@
    "pi_neither_query",
    "p_any_query",
    "p_any_indep_query",
+   "p_u_obs",
+   "q_obs",
+   "r_obs",
+   "kappa_u_obs",
+   "kappa_s_obs",
+   "pi_cells_obs",
    "kappa_sign_obs"
   ],
   "dims": {
@@ -4954,7 +5010,13 @@
    "kappa_min_u": [],
    "kappa_old_s": [],
    "kappa_old_u": [],
+   "kappa_s_obs": [
+    "obs_id"
+   ],
    "kappa_sign_obs": [
+    "obs_id"
+   ],
+   "kappa_u_obs": [
     "obs_id"
    ],
    "kappa_young_s": [],
@@ -4984,6 +5046,9 @@
    "p_slope_low_sign": [],
    "p_slope_low_u": [],
    "p_slope_mid_sign": [],
+   "p_u_obs": [
+    "obs_id"
+   ],
    "p_u_plot": [
     "plot_id"
    ],
@@ -4996,6 +5061,10 @@
    ],
    "pi_both_query": [
     "query_id"
+   ],
+   "pi_cells_obs": [
+    "obs_id",
+    "cell_id"
    ],
    "pi_neither_plot": [
     "plot_id"
@@ -5019,11 +5088,17 @@
    "psi_study": [
     "study_id"
    ],
+   "q_obs": [
+    "obs_id"
+   ],
    "q_plot": [
     "plot_id"
    ],
    "q_query": [
     "query_id"
+   ],
+   "r_obs": [
+    "obs_id"
    ],
    "r_plot": [
     "plot_id"

@@ -582,6 +582,32 @@ def engine_for(model_key: str) -> EngineAdapter:
     return get(model_key).engine
 
 
+def engine_for_definition(definition) -> EngineAdapter:
+    """The engine that fits ``definition``, found by its model id.
+
+    :func:`engine_for` takes a model key, which a *definition* does not carry: a
+    fold arm, a sensitivity variant and a recovery copy are all
+    ``dataclasses.replace`` of a registered definition with a modified
+    ``config_name``, and the key cannot be recovered from that. ``model_id`` is
+    unchanged by every such copy and is unique across the catalogue, so it is
+    what identifies the engine -- which is a property of the model, not of the
+    arm.
+
+    Raises rather than guessing: a definition whose ``model_id`` is not
+    registered has no engine, and defaulting one would fit it with somebody
+    else's builder.
+    """
+    model_id = getattr(definition, "model_id", None)
+    for key, registered in CATALOGUE.items():
+        if registered.definition.model_id == model_id:
+            return engine_for(key)
+    known = ", ".join(sorted(r.definition.model_id for r in CATALOGUE.values()))
+    raise KeyError(
+        f"No registered model has model_id {model_id!r}, so its engine is "
+        f"unknown. Registered: {known}."
+    )
+
+
 def publication_models() -> list[str]:
     """Registry keys whose role requires a refit-current, publication-valid fit.
 
