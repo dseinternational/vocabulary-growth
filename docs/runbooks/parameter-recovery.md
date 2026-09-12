@@ -111,6 +111,21 @@ The hand-rolled precedent is `scripts/experiments/vg10_under_vg20_truth.py`, whi
 
 `--truth prior` draws each truth from the model's prior instead. It needs no fitted trace, which makes it the option for a model that has not been fitted yet and for smoke-testing the harness. It is **not** a substitute: the priors are deliberately broad, so a prior draw can put a 12-month-old with Down syndrome at several hundred words understood. Recovery at such a truth says something about the sampler over the whole prior mass, not about the estimates in the report. Prior-truth results should be labelled as such wherever they are quoted.
 
+### Setting a parameter in the truth
+
+`--set-truth NAME=VALUE` (repeatable) sets a named free variable in the selected draw instead of taking the value it held. Both truth sources answer a question about a _draw_; some questions are about a **designed** setting. [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) check 4 asks for VG25's `beta_sign_lag` recovered at `(beta = 0, rho != 0)`, `(beta != 0, rho = 0)` and both nonzero — the point of the model being that the prospective lag can be told apart from the persistent correlation beside it — and [#242](https://github.com/dseinternational/vocabulary-growth/issues/242) item 6 asks the same three of VG16. The third cell is a draw; the first two are settings.
+
+```bash
+uv run python scripts/fit_recovery.py vg25 --config test --truth prior --set-truth beta_sign_lag=0
+uv run python scripts/fit_recovery.py vg25 --config test --truth prior --set-truth subject_re=independent
+uv run python scripts/fit_recovery.py vg25 --config test --truth prior
+```
+
+- **Free variables only.** A setting names a variable the model _samples_. The reported estimands — the trajectories, `rho_sign_q`, the child effects — are deterministics, recomputed from the graph after the settings are applied, which is what carries a setting into everything downstream of it. Naming a deterministic is refused, with the free variable to set instead: setting one would be silently undone by that recomputation, leaving the run simulating from an unmodified truth and scoring against a modified one.
+- **A correlation is not a number you can set.** The correlated child blocks sample the packed Cholesky factor of the child covariance (`subject_re`) and read every `rho_*` and every `tau_subj_*` off it. `subject_re=independent` replaces the factor with the diagonal one carrying the same scales, so the correlations come back exactly zero and the scales bit-identical — the `rho = 0` cell of the same model, not a differently scaled one.
+- **The setting names the run.** It goes into the simulation directory, the fit's config name and banner, and the scored label (`recovery_matrix_vg25-set-beta_sign_lag-0.csv`), for the reason `-under-` does: two cells of one gate differ only in their truth, and a name that did not distinguish them would let one overwrite the other. No settings adds no marker, so existing output keeps its names. On Windows the longer paths can push the optional Graphviz model diagram past `MAX_PATH`, which warns and skips.
+- **A setting is checked, not sanity-checked.** The truth is refused if a setting leaves any reported quantity non-finite, which is where a boundary value shows up first. Whether a value is _sensible_ for the variable is yours to decide.
+
 ## Reading the result
 
 Per model, `<output root>/comparisons/recovery/`:
@@ -141,7 +156,7 @@ What a small number of replicates _does_ support:
 
 ## Coverage and known gaps
 
-Supported: VG07–VG13, VG15, VG16 and VG19–VG24 — the study-random-effect bivariate engine and its child-effect derivatives, the univariate random-effect engine, and the joint sign/speech engine. This covers all three headline models. The authoritative list is `recovery.spec.supported_models()`, and the six unsupported models each carry a reason in `recovery.spec.UNSUPPORTED_REASONS`; a test asserts the two partition `MODEL_REGISTRY`, so a newly registered model cannot be silently absent from both.
+Supported: VG07–VG13, VG15, VG16 and VG19–VG25 — the study-random-effect bivariate engine and its child-effect derivatives, the univariate random-effect engine, and the joint sign/speech engine. This covers all three headline models. The authoritative list is `recovery.spec.supported_models()`, and the six unsupported models each carry a reason in `recovery.spec.UNSUPPORTED_REASONS`; a test asserts the two partition `MODEL_REGISTRY`, so a newly registered model cannot be silently absent from both.
 
 Not supported, deliberately:
 
