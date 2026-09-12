@@ -1820,13 +1820,13 @@ def diagnostics(context: JointContext, definition: JointModelDefinition):
     :func:`~vocab_growth.models.diagnostics_utils.pair_plot_priority`, one
     implementation shared with the bivariate engine.
     """
-    _prioritise_psi_conc = pair_plot_var_names_fn(
+    _prioritise = pair_plot_var_names_fn(
         definition, set(context.trace.posterior.data_vars)
     )
 
     _shared_diagnostics(
         context,
-        var_names_fn=_prioritise_psi_conc,
+        var_names_fn=_prioritise,
         round_to=4,
         loo_var_names=(
             ("y_u_obs", "words understood"),
