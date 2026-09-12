@@ -152,6 +152,12 @@ EPSILON = math_constants.EPSILON
 
 # Order of the four mutually-exclusive within-understood cells.
 CELL_NAMES = ["neither", "sign_only", "speak_only", "both"]
+#: The frame columns those four cells are read from, in the same order. Named
+#: here because `scripts/wave_forward_score.py` scores a held-out row's
+#: composition and must read the counts in the order the likelihood stacked the
+#: probabilities; a second copy of the list is how that silently stops being
+#: true.
+CELL_COLUMNS = ["understood_only", "signed_only", "spoken_only", "signed_spoken"]
 # Order of nz_01's three within-produced cells (the four-cell composition
 # conditioned on produced, dropping the unobservable "neither"/understood-only).
 PROD_CELL_NAMES = ["sign_only", "speak_only", "both"]
@@ -940,7 +946,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     # Validate integrality before the int casts: NumPy truncates silently, and
     # a NaN cell would cast to a large negative integer (#238).
     cell_values = np.asarray(
-        df.loc[has_cells_t, ["understood_only", "signed_only", "spoken_only", "signed_spoken"]],
+        df.loc[has_cells_t, CELL_COLUMNS],
         dtype=float,
     )
     require_integral_counts(cell_values.ravel(), "four-cell counts")
@@ -1712,10 +1718,81 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             pm.Deterministic(f"p_any_{grid}", pug * (rg + qg - pi_both), dims=f"{grid}_id")
             pm.Deterministic(f"p_any_indep_{grid}", pug * (1 - (1 - rg) * (1 - qg)), dims=f"{grid}_id")
 
-        # Persist the obs-grid signed kappa in the trace for downstream
-        # inspection. (It is not shown in the diagnostics() trace plot: that
-        # plots only scalar unobserved RVs, and this is an obs_id-length
-        # deterministic.)
+        # ============================================================
+        # Per-row quantities, named so a reader outside the fit can reach them
+        # ============================================================
+        # Every one of these was already computed above as a plain PyTensor
+        # expression and consumed by a likelihood. Naming them changes no draw:
+        # a deterministic is a function of the free variables, so the log
+        # density, and therefore the posterior, is identical --
+        # `tests/test_graph_equivalence.py` records the fixed-point log
+        # probability beside the names and is the check that this stayed true.
+        #
+        # Naming them costs nothing in a stored trace. They carry `obs_id`, so
+        # `fit_artifacts.unsampled_deterministic_names` excludes them from
+        # `pm.sample(var_names=...)` and no fit stores them; they are also
+        # outside the diagnostics summary (scalars only) and outside the
+        # recovery targets (`obs_id` is in neither ELEMENTWISE_DIMS nor
+        # AGGREGATE_DIMS). What changes is that a caller which asks for them --
+        # `fold_fits.fit_holdout_fold`, with `store_observation_deterministics`
+        # -- can now read a held-out row's predictive density off the trace.
+        #
+        # It is not free everywhere, and the one place it is not is why this
+        # list is the shortest it can be. `sample_prior_predictive` takes no
+        # `var_names` in the prior-checks stage, so it evaluates and holds every
+        # deterministic: on the real frame (1,708 rows, 500 draws) each obs-sized
+        # column is 6.8 MB, and the five vectors below plus the composition's
+        # four columns come to about 61 MB on top of that stage's existing 82.
+        # `q_obs_pop`, `r_obs_pop` and `log_psi_obs` were named here too until
+        # that was measured; they are the inputs to `pi_cells_obs` below and
+        # nothing reads them separately, so naming the composition alone carries
+        # the same information for a quarter less. Removing the rest means
+        # giving the prior-predictive stage the `var_names` treatment
+        # `pm.sample` already has, which is a change to three fitted models'
+        # prior-checks behaviour rather than a detail of this one.
+        #
+        # Which is what `scripts/wave_forward_score.py` needs, and could not do
+        # here: the bivariate random-effect engine has named `p_u_obs`, `q_obs`
+        # and the kappas since it was written, and this engine named only
+        # `kappa_sign_obs` and `z_obs`. VG25's understood and signed LOO are
+        # suppressed for leaking across the lag (see `diagnostics`), so the
+        # forward-chaining score is the only generalisation evidence it can
+        # carry, and it cannot be computed from a trace that does not expose
+        # these.
+        #
+        # `pi_cells_obs` below is not a duplicate of these: the cell
+        # compositions are built on the population+study marginals rather than
+        # the subject-shifted ones above, so scoring a held-out row's
+        # composition needs the marginals the composition actually used.
+        pm.Deterministic("p_u_obs", p_u_obs, dims="obs_id")
+        pm.Deterministic("q_obs", q_obs, dims="obs_id")
+        pm.Deterministic("r_obs", r_obs, dims="obs_id")
+        pm.Deterministic("kappa_u_obs", kappa_u_obs, dims="obs_id")
+        pm.Deterministic("kappa_s_obs", kappa_s_obs, dims="obs_id")
+        # The four-cell composition on every row, so a held-out administration's
+        # composition density can be scored without the script reconstructing
+        # which rows are cross-tab rows and in what order -- the reconstruction
+        # that would have to track `include_uk07_cells`, `include_es01_cells`
+        # and the frame's own column rules, and would be a hand copy of them.
+        # On a cell row this is exactly the `pi_stack` the likelihood used: same
+        # clip, same `CELL_NAMES` order, same population+study marginals. On the
+        # rest it is the composition those marginals imply, which nothing reads.
+        # Computing it for every row costs nothing at fit time -- `obs_id` keeps
+        # it out of every stored trace, and nutpie never evaluates a
+        # deterministic it was not asked to store.
+        pm.Deterministic(
+            "pi_cells_obs",
+            _composition_probabilities(
+                pm.math.clip(r_obs_pop, EPSILON, 1 - EPSILON),
+                pm.math.clip(q_obs_pop, EPSILON, 1 - EPSILON),
+                pm.math.exp(log_psi_obs),
+            ),
+            dims=("obs_id", "cell_id"),
+        )
+        # The signed kappa was already persisted for downstream inspection and
+        # keeps its place in the trace; it is listed here with the rest for
+        # what it is. (None of these is shown in the diagnostics() trace plot,
+        # which plots only scalar unobserved RVs.)
         pm.Deterministic("kappa_sign_obs", kappa_sign_obs, dims="obs_id")
 
     pymc_utils.report_model_summary(model_pm)
@@ -1810,6 +1887,21 @@ def diagnostics(context: JointContext, definition: JointModelDefinition):
     ``cells_obs`` and ``nz_prod_cells_obs``. It assesses the predictive
     contribution of the composition association as well as the count models.
 
+    **A sign cross-lag definition (VG25) suppresses the scores that leak.** Its
+    predictor reads an earlier wave's ``signed`` and ``understood`` counts as
+    fixed covariates of every later row it feeds, so leaving one of those
+    likelihood terms out does not remove that count from the model: the
+    "held-out" score still conditions on the held-out outcome, and Pareto-k
+    checks the importance-sampling approximation rather than this leakage, so it
+    cannot flag it. ``y_u_obs`` and ``y_sign_obs`` are therefore not computed,
+    and neither is the administration-level score, which bundles both of them
+    with the two composition terms the lag also enters. What is kept is
+    ``y_s_obs``, labelled for what it estimates: prediction of a spoken count
+    conditional on the child's observed sign history, not unconditional
+    new-observation prediction. This is #242's finding for VG16 on the other
+    engine, and the same remedy -- ``scripts/wave_forward_score.py`` is the
+    forward-chaining score that replaces what is suppressed here.
+
     ``definition`` is taken for the pair plot's ordering, which is issue #233's
     problem on this engine: ArviZ caps the grid at ``floor(sqrt(max_subplots))``
     -- six variables -- and this engine led with ``psi`` and ``conc`` and then
@@ -1824,26 +1916,59 @@ def diagnostics(context: JointContext, definition: JointModelDefinition):
         definition, set(context.trace.posterior.data_vars)
     )
 
+    if not getattr(definition, "use_sign_cross_lag", False):
+        _shared_diagnostics(
+            context,
+            var_names_fn=_prioritise,
+            round_to=4,
+            loo_var_names=(
+                ("y_u_obs", "words understood"),
+                ("y_s_obs", "words spoken"),
+                ("y_sign_obs", "words signed"),
+            ),
+            # Every factor of an administration, the two composition terms
+            # included (issue #266 finding 4). Those terms are what identify
+            # `psi`, this model's headline association, and the per-outcome
+            # scores above omit them entirely -- so before this the LOO never
+            # scored the quantity the model exists to estimate.
+            administration_factors=(
+                LikelihoodFactor("y_u_obs", "obs_u_mask"),
+                LikelihoodFactor("y_s_obs", "obs_s_mask"),
+                LikelihoodFactor("y_sign_obs", "obs_sign_mask"),
+                LikelihoodFactor("cells_obs", "obs_cells_mask"),
+                LikelihoodFactor("nz_prod_cells_obs", "obs_prod_mask"),
+            ),
+        )
+        return
+
+    console.print(
+        "[yellow]Understood and signed LOO are not computed for this model: the "
+        "sign cross-lag predictor embeds an earlier wave's observed signed and "
+        "understood counts, so a pointwise leave-one-out score would still "
+        "condition on the held-out count through the later terms it feeds "
+        "(issue #242). The administration-level score is suppressed for the "
+        "same reason -- it bundles both of those factors with the two "
+        "composition terms the lag also enters. The spoken score below is "
+        "prediction conditional on the child's observed sign history; "
+        "`scripts/wave_forward_score.py` is the forward-chaining "
+        "replacement.[/yellow]"
+    )
+    # No `administration_factors`, for the reason the message gives: with the
+    # lag in the graph no pointwise hold-out of an administration is clean, so
+    # the score would read as leave-one-administration-out while conditioning on
+    # the administration it claims to have left out. Confining the lag to the
+    # spoken marginal (`sign_lag_in_cells=False`) does not change this: the
+    # source wave's counts still reach later rows through the predictor, which
+    # is where the leak is.
     _shared_diagnostics(
         context,
         var_names_fn=_prioritise,
         round_to=4,
         loo_var_names=(
-            ("y_u_obs", "words understood"),
-            ("y_s_obs", "words spoken"),
-            ("y_sign_obs", "words signed"),
-        ),
-        # Every factor of an administration, the two composition terms included
-        # (issue #266 finding 4). Those terms are what identify `psi`, this
-        # model's headline association, and the per-outcome scores above omit
-        # them entirely -- so before this the LOO never scored the quantity the
-        # model exists to estimate.
-        administration_factors=(
-            LikelihoodFactor("y_u_obs", "obs_u_mask"),
-            LikelihoodFactor("y_s_obs", "obs_s_mask"),
-            LikelihoodFactor("y_sign_obs", "obs_sign_mask"),
-            LikelihoodFactor("cells_obs", "obs_cells_mask"),
-            LikelihoodFactor("nz_prod_cells_obs", "obs_prod_mask"),
+            (
+                "y_s_obs",
+                "words spoken (conditional on the child's observed sign history)",
+            ),
         ),
     )
 

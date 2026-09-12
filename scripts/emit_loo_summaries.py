@@ -44,6 +44,7 @@ from vocab_growth.models.common import (  # noqa: E402
     emit_loo_summary,
     loo_dropping_degenerate,
 )
+from vocab_growth.models.definitions import MODEL_REGISTRY  # noqa: E402
 from vocab_growth.reporting import heading  # noqa: E402
 
 # The labels the engines pass as ``loo_var_names``, keyed by the log-likelihood
@@ -71,6 +72,39 @@ SINGLE_OUTCOME = "y_obs"
 # understood" row holds out one of that row's two factors while its composition
 # factor stays in the conditioning set.
 EXCLUDED = {"cells_obs", "nz_prod_cells_obs"}
+
+# A cross-lag model's engine refuses to compute the scores its predictor leaks
+# across, and a backfilled table must refuse the same ones -- otherwise the
+# table this script writes contradicts the table a refit would write, for the
+# same fit, and the leaking number is the one that ends up published.
+#
+# Which terms leak is a property of what the predictor reads: VG16's lag reads
+# an earlier wave's `understood`, and VG25's reads that wave's `signed` as well.
+# Keyed by the definition field so a model without the lag is untouched.
+LEAKING_TERMS = {
+    "use_cross_lag": {"y_u_obs"},
+    "use_sign_cross_lag": {"y_u_obs", "y_sign_obs"},
+}
+
+
+def suppressed_outcomes(model_id: str) -> set[str]:
+    """Log-likelihood terms this model's own engine will not score.
+
+    Empty for every model without a cross-lag, which is every model but two.
+    An unregistered ``model_id`` suppresses nothing rather than guessing: the
+    caller has already refused to write a table for a fit it cannot identify.
+    """
+    definition = next(
+        (d for d in MODEL_REGISTRY.values() if d.model_id == model_id), None
+    )
+    if definition is None:
+        return set()
+    return {
+        term
+        for field, terms in LEAKING_TERMS.items()
+        if getattr(definition, field, False)
+        for term in terms
+    }
 
 
 def model_directories(output_root: str) -> dict[str, str]:
@@ -114,11 +148,19 @@ def emit_for(model_id: str, directory: str, *, allow_stale: bool = False) -> boo
         )
         return False
 
+    suppressed = suppressed_outcomes(model_id)
     available = [
         str(name)
         for name in idata.log_likelihood.data_vars
-        if str(name) not in EXCLUDED
+        if str(name) not in EXCLUDED and str(name) not in suppressed
     ]
+    if suppressed:
+        print(
+            f"  {model_id}: not scoring {', '.join(sorted(suppressed))} — the "
+            "cross-lag predictor embeds those counts in later rows, so a "
+            "pointwise hold-out still conditions on the held-out outcome "
+            "(issue #242). Its engine suppresses them too."
+        )
     loo_by_label: dict = {}
     dropped_by_label: dict[str, int] = {}
 

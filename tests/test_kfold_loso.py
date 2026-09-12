@@ -97,6 +97,11 @@ def test_fit_fold_runs_the_canonical_diagnostics_scan(monkeypatch, tmp_path):
     needed the same fold fit under a different holdout rule, so the stand-ins go
     on that module; ``KFOLD_TMP_DIR`` stays here, because where the fold writes
     is still this script's choice and is passed in.
+
+    The prior and build stages are no longer named on ``fold_fits``: they come
+    from the definition's own engine, so that a joint model's fold is built by
+    the joint builder. The stand-in is therefore an engine rather than two
+    functions.
     """
     from vocab_growth import fold_fits
 
@@ -104,14 +109,21 @@ def test_fit_fold_runs_the_canonical_diagnostics_scan(monkeypatch, tmp_path):
     calls = {}
 
     monkeypatch.setattr(_MODULE, "KFOLD_TMP_DIR", str(tmp_path))
-    monkeypatch.setattr(
-        fold_fits, "configure_bivariate_priors", lambda context, definition: None
-    )
 
     def fake_build(context, definition):
         context.set_model(object(), {})
 
-    monkeypatch.setattr(fold_fits, "build_model_re", fake_build)
+    class _StubEngine:
+        name = "stub"
+
+        def resolve(self, stage):
+            return {"priors": lambda context, definition: None, "build": fake_build}[
+                stage
+            ]
+
+    monkeypatch.setattr(
+        fold_fits, "engine_for_definition", lambda definition: _StubEngine()
+    )
 
     sentinel_trace = object()
 
