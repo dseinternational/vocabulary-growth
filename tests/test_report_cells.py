@@ -747,11 +747,15 @@ def test_plain_child_scale_prior_survives_without_a_partition(tmp_path, capsys):
 # --------------------------------------------------------------------------
 
 
-def _loo_fit(tmp_path, rows, parameters=("eta",)):
+def _loo_fit(tmp_path, rows, parameters=("eta",), model=None):
     pd.DataFrame(rows).to_csv(tmp_path / "loo_summary.csv", index=False)
     pd.DataFrame(index=list(parameters), data={"r_hat": [1.0] * len(parameters)}).to_csv(
         tmp_path / "diagnostics.csv"
     )
+    if model is not None:
+        (tmp_path / report_cells.MANIFEST_FILENAME).write_text(
+            json.dumps({"model": model}), encoding="utf-8"
+        )
     return tmp_path
 
 
@@ -804,7 +808,120 @@ def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
     report_cells.render_loo_section(str(fit))
     out = capsys.readouterr().out
     assert "wrong unit of prediction" in out
-    assert "kfold_loso.py" in out
+    # With no manifest the page cannot say which check covers it, and says so
+    # rather than naming one.
+    assert "cannot be read without the fit manifest" in out
+    assert "scripts/" not in out
+
+
+_UNRELIABLE_ROW = {
+    **_CLEAN_ROW, "pareto_k_good": 1233, "pareto_k_bad": 258, "pareto_k_very_bad": 30,
+}
+
+
+@pytest.mark.parametrize(
+    ("model_id", "named"),
+    [
+        # The typically-developing references: PSIS-LOO unusable on 37% to 59%
+        # of rows, and no held-out check accepts them.
+        ("VG11", set()),
+        ("VG21", set()),
+        # A joint model with a per-child sign scale and no cross-lag.
+        ("VG24", set()),
+        ("VG20", {"scripts/kfold_loso.py"}),
+        ("VG07", {"scripts/kfold_loso.py", "scripts/loso_compare.py"}),
+        ("VG25", {"scripts/wave_forward_score.py"}),
+    ],
+)
+def test_the_wrong_unit_explanation_names_only_checks_that_cover_the_model(
+    tmp_path, capsys, model_id, named
+):
+    """A page must not send its reader to a check that cannot run on it.
+
+    Until 2026-09-13 every page with a per-child scale named ``kfold_loso.py``
+    and ``loso_compare.py`` as checks that "hold out whole studies or whole
+    children" -- on the typically-developing and joint pages, which neither
+    script accepts, and about studies, which neither holds out for any model.
+    """
+    fit = _loo_fit(
+        tmp_path, [_UNRELIABLE_ROW], parameters=("eta_u", "tau_subj_u"),
+        model={"model_id": model_id},
+    )
+    report_cells.render_loo_section(str(fit))
+    out = capsys.readouterr().out
+    scripts = {check.script for check in report_cells.HELD_OUT_CHECKS}
+    assert {script for script in scripts if script in out} == named
+    assert "whole studies" not in out
+    if named:
+        assert "None of the project's held-out checks" not in out
+    else:
+        assert "None of the project's held-out checks covers this model yet" in out
+
+
+def test_a_sensitivity_arm_is_not_credited_with_the_registered_models_check(
+    tmp_path, capsys
+):
+    """Every check fits the registered definition, never an arm of it."""
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    registered = MODEL_REGISTRY["vg20"].config_name
+    (tmp_path / "arm").mkdir()
+    arm = _loo_fit(
+        tmp_path / "arm", [_UNRELIABLE_ROW], parameters=("tau_subj_u",),
+        model={"model_id": "VG20", "config_name": f"{registered}-free-scales"},
+    )
+    report_cells.render_loo_section(str(arm))
+    assert "not this sensitivity arm" in capsys.readouterr().out
+
+    (tmp_path / "record").mkdir()
+    record = _loo_fit(
+        tmp_path / "record", [_UNRELIABLE_ROW], parameters=("tau_subj_u",),
+        model={"model_id": "VG20", "config_name": registered},
+    )
+    report_cells.render_loo_section(str(record))
+    out = capsys.readouterr().out
+    assert "scripts/kfold_loso.py" in out
+    assert "sensitivity arm" not in out
+
+
+def _load_script(name):
+    import importlib.util
+    import sys
+
+    path = Path(__file__).parents[1] / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"{name}_coverage_pin", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # Some scripts declare dataclasses, which resolve their module by name.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_held_out_check_coverage_matches_each_scripts_own_model_list():
+    """The page's claim about a check is pinned to what the script accepts.
+
+    Extending a script to a new model without updating ``HELD_OUT_CHECKS``
+    fails here, rather than leaving that model's page saying no check exists.
+    """
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    accepted = {
+        "scripts/kfold_loso.py": {
+            key.lower() for key in _load_script("kfold_loso").AVAILABLE
+        },
+        "scripts/loso_compare.py": {
+            spec.short.lower() for spec in _load_script("loso_compare").SPECS
+        },
+        "scripts/wave_forward_score.py": set(
+            _load_script("wave_forward_score").CROSS_LAG_MODELS
+        ),
+    }
+    declared = {check.script: set(check.models) for check in report_cells.HELD_OUT_CHECKS}
+    assert declared == accepted
+    for check in report_cells.HELD_OUT_CHECKS:
+        assert (Path(__file__).parents[1] / check.script).is_file()
+        assert check.models <= set(MODEL_REGISTRY)
 
 
 def test_non_hierarchical_fits_do_not_get_that_explanation(tmp_path, capsys):
