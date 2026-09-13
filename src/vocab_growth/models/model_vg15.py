@@ -10,15 +10,15 @@ Estimates the within-understood sign-speech association: a Plackett odds ratio
 cross-tabulation sources — the uk_02, uk_07 and es_01 four-cell
 within-understood cross-tabs plus nz_01's three-cell within-produced cross-tab.
 The population ``psi`` is a shrunk centre over sources that disagree; the
-per-study values are the primary read. Study *and* subject random intercepts
-sit on all three latent trajectories (understood, speak ratio q, sign ratio r),
-each zero-summed over the studies its likelihood actually informs, together
-with VG10's stabilisation package (tighter q-GP amplitude + a per-draw GP
-anchor at the reference age) and an estimated (not fixed) signed-tent peak
-position. The q age anchors remain the shared weakly informative DS-joint
-priors. It replaces VG14's independence-based p_any upper bound with a
-data-identified total expressive vocabulary. See ``common_joint_modality`` for
-the engine.
+per-study values are the primary read. All three latent trajectories
+(understood, speak ratio q, sign ratio r) have study and child offsets. Only
+the study offsets sum to zero over the studies involved in each likelihood.
+The model also uses VG10's tighter q-GP amplitude and per-draw GP anchor at the
+reference age, with an estimated middle knot in the signing mean.
+The q age anchors remain the shared weakly informative DS-joint
+priors. It estimates total expressive vocabulary using the fitted sign-speech
+association; VG14 calculates it assuming independence. See
+``common_joint_modality`` for the engine.
 """
 
 from vocab_growth.models.common_joint_modality import (

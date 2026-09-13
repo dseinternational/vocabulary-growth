@@ -7,7 +7,8 @@ import dse_research_utils.plot.diagnostics_mcmc as shared_plot_diagnostics
 
 from vocab_growth.fit_artifacts import (
     ACCEPTED_EXCEPTION_KEY,
-    hard_tier_failed,
+    HardConvergenceStatus,
+    hard_tier_status,
     read_convergence_caveats,
 )
 
@@ -140,36 +141,12 @@ def pair_plot_var_names_fn(definition, posterior_vars):
 
 
 def render_convergence_caveats(directory: str = ".") -> None:
-    """Print this fit's convergence caveats for a report cell with ``#| output: asis``.
+    """Render a fit's convergence evidence and caveats as Quarto text.
 
-    Every model report used to carry its own copy of this logic, and every copy
-    read only two of the gate's four checks — divergences and the energy BFMI.
-    A fit published under a recorded R-hat exception therefore printed the
-    sentence "this fit cleared the hard convergence tier", which is the opposite
-    of what the exception means, while the exception itself went unmentioned.
-    VG11 is exactly that case, so the defect was live rather than theoretical.
-
-    Delegating to :func:`vocab_growth.fit_artifacts.read_convergence_caveats`
-    puts the reader's page on the same implementation as the fit-time gate,
-    ``validate_fit_output`` and Appendix B, which is the invariant
-    :func:`vocab_growth.fit_artifacts.convergence_caveats` was written to hold:
-    a disclosure that can drift between its producer and its consumer is a
-    disclosure that will.
-
-    Silent when the fit is clean, so a clean report gains nothing from the call
-    and a caveated one cannot lose it.
-
-    **Three framings, not two.** This used to assume the hard tier is
-    fail-closed, so that a fit reaching a report had either cleared it or held a
-    recorded exception, and printed "cleared the hard convergence tier ... The
-    fit remains reportable" for anything without an exception. That assumption
-    holds only at reporting quality. Below it the gate does not stop a fit, so a
-    ``dev`` render of VG25 with R-hat 1.21 and an effective sample size of 10
-    printed that sentence directly above
-    :func:`vocab_growth.report_cells.render_diagnostic_verdict` saying the same
-    fit "does not clear the hard tier" and "must not be published". A hard-tier
-    failure with no exception is now said to be one, whether or not it also
-    carries soft-tier caveats -- which is why that case is no longer silent.
+    Use the shared assessment to distinguish a confirmed pass, a failure and
+    incomplete evidence. A recorded publication exception is disclosed separately.
+    Missing evidence cannot justify a pass. A clean assessed fit adds no callout.
+    See test_report_cells.py for agreement with the diagnostic verdict.
     """
     import json
     import os
@@ -183,12 +160,14 @@ def render_convergence_caveats(directory: str = ".") -> None:
             with open(summary_path, encoding="utf-8") as handle:
                 loaded = json.load(handle)
             summary = loaded if isinstance(loaded, dict) else None
-        except (OSError, ValueError):
+        except OSError, ValueError:
             summary = None
 
     accepted = (summary or {}).get(ACCEPTED_EXCEPTION_KEY)
-    failed = hard_tier_failed(summary) and not accepted
-    if not caveats and not failed:
+    status = hard_tier_status(summary)
+    failed = status is HardConvergenceStatus.FAILED and not accepted
+    unknown = status is HardConvergenceStatus.UNKNOWN and not accepted
+    if not caveats and (summary is None or status is HardConvergenceStatus.PASSED):
         return
 
     if accepted:
@@ -211,6 +190,14 @@ def render_convergence_caveats(directory: str = ".") -> None:
             "fit that has not mixed rather than stopping it."
             + (" It also carries these sampling caveats:" if caveats else "")
         )
+    elif unknown:
+        title = "Convergence evidence is incomplete"
+        opening = (
+            "The hard convergence tier **cannot be assessed** from the recorded "
+            "R-hat and effective sample size. Missing evidence does not establish "
+            "that this fit cleared the tier."
+            + (" The recorded sampling caveats are:" if caveats else "")
+        )
     else:
         title = "Soft-tier convergence caveats"
         opening = (
@@ -229,8 +216,10 @@ def render_convergence_caveats(directory: str = ".") -> None:
     if accepted and accepted.get("reason"):
         print(f"**Why the exception was accepted:** {accepted['reason']}")
         print()
-    if failed:
-        print("These results are provisional and must not be published as a completed fit.")
+    if failed or unknown:
+        print(
+            "These results are provisional and must not be published as a completed fit."
+        )
     else:
         print(
             "The fit remains reportable and is published carrying this mark; see "

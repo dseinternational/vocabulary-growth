@@ -541,73 +541,23 @@ def build_variance_partition(
     subject_scale_name,
     suffix="",
 ):
-    """Split one scatter budget between subject effects and dispersion.
+    """Parameterise child variation and young-age concentration with a shared total.
 
-    The subject random-effect scale and the Beta-Binomial dispersion both describe
-    how far observations at a given age fall from the population trajectory —
-    ``tau_subject`` attributing that scatter to persistent between-child
-    differences, ``kappa`` to within-child noise. Sampled as two free scales they
-    compete for the same variance, and in the typically-developing hierarchical
-    models the resulting ridge is the dominant sampling pathology: VG12 records
-    ``corr(tau_subject, kappa_young) = +0.755`` with both parameters at the top of
-    the marginal-energy correlations (-0.812 and -0.783), which is what its energy
-    BFMI failure is made of. Only children measured more than once carry the
-    within-child replication that identifies the split, and the TD pool averages
-    1.21 observations per child.
+    Return ``(sqrt(share * total), c / ((1 - share) * total))``, where
+    ``c = 1 / (p0 * (1 - p0))`` and ``p0`` is a fixed reference proportion.
+    The first value is the child-offset standard deviation on the logit scale.
+    The second is the concentration excess above ``kappa_min`` at the young anchor.
 
-    This reparameterises the pair into the quantity the data *do* identify and the
-    one they do not:
+    The total and share describe an approximate variance allocation at ``p0``.
+    They are not an exact partition of count variance at every age. The fixed
+    reference keeps their meaning independent of the fitted mean trajectory.
+    Priors on total and share imply different priors on the original scales;
+    this is a modelling choice, not solely a change in how the sampler works.
 
-        v_total  — total logit-scale scatter at the young kappa anchor
-        share    — the fraction of it attributable to persistent child differences
-
-        tau_subject         = sqrt(share * v_total)
-        kappa_excess_young  = c / ((1 - share) * v_total)
-
-    where ``c = 1 / (p0 * (1 - p0))`` converts a Beta-Binomial concentration into
-    an approximate logit-scale variance by the delta method, at a **fixed**
-    reference proportion ``p0``. Fixing ``p0`` rather than reading it off the
-    fitted trajectory is deliberate: it keeps this a pure change of coordinates on
-    the two scale parameters, with no dependence on the mean function, so the
-    priors below mean the same thing regardless of what the trend does.
-
-    The young *excess* is allocated rather than total ``kappa`` so that positivity
-    is automatic — ``kappa_min`` remains a free asymptote and ``kappa_young =
-    kappa_min + excess_young`` is positive by construction.
-
-    Both original parameters are returned to the graph under their usual names, so
-    this changes what the sampler explores and not which quantities the model
-    reports. The prior does move, necessarily and by design — it now sits on the
-    budget and the split, which is where a prior on this pair can actually be
-    reasoned about.
-
-    **It does not follow that the reported values are unaffected, and this
-    docstring used to claim they were.** Parameter recovery on VG12 returns
-    ``tau_subject`` below its truth in three replicates of three, by about 5.8%,
-    with the truth outside the 89% interval every time. ``v_total`` recovers
-    cleanly (z = +1.05, +0.63, −0.10) and ``subject_variance_share`` is biased low
-    (−20.6%, −12.7%, −8.7%), so on VG12 it is the split that is mis-estimated
-    rather than the budget, and ``tau_subject`` inherits the bias amplified
-    because the square root concentrates its posterior.
-
-    **This docstring used to add that VG10, carrying two free scales and no
-    partition, showed no such consistent direction. That is false.** VG10 returns
-    −5.28%, −8.23%, −3.20% and VG20 −7.08%, −4.42%, −5.95%, against VG12's
-    −6.59%, −5.32%, −5.66%: the same size and the same sign in 9 replicates of
-    9, with the partition and without it. So the partition is not the cause — but
-    the two families fail differently. VG12 keeps its budget and mis-splits it,
-    whereas in VG10 and VG20 the dispersion concentration at the young anchor
-    comes back low alongside the subject scale (9 of 9), so there the budget
-    itself is under-recovered rather than merely misallocated.
-
-    Since ``tau_subject`` is the typically-developing side of the DS/TD
-    between-child contrast, a low bias there **overstates** the reported
-    difference — but the Down syndrome side now carries a bias of the same sign
-    and similar size, so the contrast is far less affected than either side
-    alone. See ``notes/202608161700-recovery-baseline-215.md`` and issues #225
-    and #229; treat the contrast as carrying this caveat until one reports.
-
-    See ``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4 and 7.1.
+    Repeated observations help distinguish persistent child differences from
+    observation variation. Recovery checks remain necessary when that distinction
+    is weakly informed. See notes/202608050900-td-hierarchical-geometry.md and
+    notes/202608161700-recovery-baseline-215.md for the fit and recovery evidence.
     """
     if not 0.0 < float(reference_proportion) < 1.0:
         raise ValueError(
@@ -619,9 +569,7 @@ def build_variance_partition(
 
     v_total = total_dist.to_pymc(f"v_total{suffix}")
     share = share_dist.to_pymc(f"subject_variance_share{suffix}")
-    subject_scale = pm.Deterministic(
-        subject_scale_name, pm.math.sqrt(share * v_total)
-    )
+    subject_scale = pm.Deterministic(subject_scale_name, pm.math.sqrt(share * v_total))
     excess_young_value = c / ((1.0 - share) * v_total)
     return subject_scale, excess_young_value
 
@@ -684,61 +632,30 @@ def trend_and_gp(
     n_obs=None,
     clamp_above_hi=False,
 ):
-    """Logit-linear trend + HSGP deviation; return the full-grid latent.
+    """Return a logit-linear mean plus an HSGP deviation on the full age grid.
 
-    ``suffix`` carries its own leading underscore (``""`` for single-outcome
-    engines; ``"_u"`` / ``"_q"`` / ``"_sign"`` otherwise). When
-    ``store_deterministic`` is true the GP value ``g{suffix}`` and the latent
-    ``latent_name`` are stored as named ``Deterministic``\\ s (``dims=("all_id",)``);
-    otherwise a plain tensor is returned (the trace-memory discipline used by the
-    trivariate / joint engines). When ``anchor_idx`` is set the GP is
-    orthogonalised against this mean's identifiable basis (coefficients fitted on
-    the first ``n_obs`` observed rows only) and pinned to zero at the reference-age
-    anchor row — so it carries no linear component over the observed rows and
-    cannot alias with ``slope``. The pinning shift restores a constant component
-    (fixed to zero at the reference age), so the level is identified by the point
-    anchor itself rather than by orthogonality to ``[1]`` — see
-    :func:`_orthogonalise_and_anchor` for exactly what the composition guarantees.
+    The two Beta anchors specify the mean on the logit scale. ``suffix`` includes
+    its leading underscore. ``store_deterministic`` controls whether the full-grid
+    GP and latent are named in the graph.
 
-    ``clamp_above_hi`` levels the mean off above the high anchor instead of
-    extrapolating the line. The Down syndrome GP domain runs to 115 months while
-    the anchors sit at 24 and 84, so a quarter of the domain is extrapolation that
-    no prior constrains, and on the logit scale a line that has to climb several
-    logits between the anchors saturates there: VG10's fitted ``q`` mean alone
-    reaches 0.993 at 115 months (P(mean > 0.99) = 0.90 across the posterior)
-    against a realised 0.842, forcing the GP to spend −3.3 logits hauling it back
-    while it is idle (+0.08) at 48 months where the data are. Levelling off leaves
-    the GP free to carry departures rather than correct the mean's asymptote. It is
-    deliberately **one-sided**: below the low anchor the line extrapolates
-    accurately (VG10 ``q`` at 12 months is 0.019 by extrapolation against a fitted
-    0.022), and clamping there would instead pin young-age values at the 24-month
-    level, which is much worse. See notes/202608042030-q-mean-extrapolation.md.
+    When anchored, the GP is projected away from the mean's basis using observation
+    rows only, then shifted to zero at the reference age. That last shift can
+    restore a constant component; it does not restore a linear trend.
 
-    The transition uses a **soft** minimum,
-    ``sb_z - softplus(beta * (sb_z - z)) / beta``, rather than ``min(z, sb_z)``.
-    A hard minimum is continuous but its derivative jumps at the anchor, and the
-    fitted curve inherits a visible elbow there — in the first VG10 refit it made
-    the spoken trajectory briefly *non-monotone* (428.6 words at 84.3 months
-    dipping to 426.6 at 85.6), which is not defensible in a growth-curve figure.
-    ``beta`` is set from the anchor span so the rounding is scale-free across
-    models; the mean's largest departure from the hard-clamped form is
-    ``slope * log(2) / beta``, at the anchor itself, decaying exponentially away
-    from it in both directions.
-
-    The cost is that ``p_slope_hi`` is no longer *exactly* the mean at the high
-    anchor age — it is short by ``slope * log(2) / beta``, which at
-    ``build_utils.CLAMP_SOFTNESS`` = 50 is 1.4% of the anchor span (about 0.8 months of age
-    for the Down syndrome models). Between the anchors the mean is otherwise
-    untouched, so both anchor priors carry over unchanged.
+    With ``clamp_above_hi``, the mean flattens smoothly beyond the upper anchor.
+    The effective age is ``sb_z - softplus(beta * (sb_z - z)) / beta``. Its maximum
+    difference from a hard clamp is ``log(2) / beta``, at the upper anchor. Thus
+    ``p_slope_hi`` is an anchor parameter, not exactly the clamped mean there.
+    The lower tail still extrapolates. Neither the anchors nor the GP enforce
+    monotonic growth. The design history is in
+    notes/202608042030-q-mean-extrapolation.md.
     """
     p_lo = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_hi = cfg_hi.to_pymc(f"p_slope_hi{suffix}")
     slope = pm.Deterministic(
         f"slope{suffix}", (logit(p_hi) - logit(p_lo)) / (grid.sb_z - grid.sa_z)
     )
-    intercept = pm.Deterministic(
-        f"intercept{suffix}", logit(p_lo) - slope * grid.sa_z
-    )
+    intercept = pm.Deterministic(f"intercept{suffix}", logit(p_lo) - slope * grid.sa_z)
     z = X_all_z_data[:, 0]
     # The GP must be orthogonalised against whatever the mean can actually
     # express, so the basis uses the same coordinate as the mean itself — with the
@@ -782,40 +699,28 @@ def tent_and_gp(
     anchor_idx=None,
     n_obs=None,
 ):
-    """Three-anchor "tent" mean (rise to a peak anchor, then decline) + HSGP.
+    """Return a three-anchor piecewise logit-linear mean plus an HSGP deviation.
 
-    Used for the signed ratio ``r(a) = P(sign | understood)``, whose developmental
-    trajectory is a hump — near zero at young ages, peaking in the preschool years,
-    then receding as words move into speech — rather than the monotone trend of
-    ``U``/``q``. Three Beta anchors give ``r`` at a young, a peak and an old
-    reference age (``z_low < z_mid < z_hi`` on the standardised-age scale); the mean
-    is two logit-linear segments meeting at the peak anchor, **clamped flat beyond
-    the outer anchors** so it does not extrapolate to implausible values. The peak
-    therefore sits at the middle anchor age by construction, and the GP carries
-    smooth departures. When anchored the GP is orthogonalised against this mean's
-    full basis — the three fixed tent hats spanning ``{p_low, p_mid, p_hi}``, a
-    larger space than ``[1, z]`` — so it cannot mimic a *relative* shift of the
-    anchors, then pinned to zero at the reference-age anchor row. The pinning
-    restores a common constant, so orthogonality to the hats holds up to that
-    constant rather than exactly (see :func:`_orthogonalise_and_anchor`).
+    The Beta anchors give probabilities at young, middle and old ages. The mean
+    is linear in logits between anchors and constant beyond the outer anchors.
+    The anchor heights are sampled independently, so the middle value need not
+    be highest. A rise followed by a decline may be favoured by the priors; it
+    is not enforced. GP departures can further change the shape.
+
+    ``cfg_peak`` optionally makes the middle age random between the outer ages.
+    The stored names retain ``peak`` for compatibility, but this age is a knot
+    in the mean, not necessarily the maximum of the complete trajectory.
+
+    When anchored, the GP is projected away from the three tent basis functions
+    using observation rows, then shifted to zero at the reference age. The shift
+    can restore a common constant. See ``_orthogonalise_and_anchor``.
     """
     p_low = cfg_low.to_pymc(f"p_slope_low{suffix}")
     p_mid = cfg_mid.to_pymc(f"p_slope_mid{suffix}")
     p_hi = cfg_hi.to_pymc(f"p_slope_hi{suffix}")
     if cfg_peak is not None:
-        # Estimate WHERE the peak is, instead of asserting it. `peak_unit` places
-        # the middle anchor between the outer two; the ordering z_low < z_mid <
-        # z_hi therefore holds by construction, which a prior directly on the age
-        # could not guarantee. Standardisation is affine, so a unit position in z
-        # is the same unit position in months.
-        #
-        # The fixed anchor is not harmless. With the peak pinned at 36 months,
-        # VG15 under-predicts the signed ratio at every band above it -- mean
-        # residual +0.059 against -0.006 below, worst at 48-54 months where
-        # observed 0.365 against fitted 0.242 -- and the residual sign flips
-        # exactly at the knot, which random-effect marginalisation cannot produce.
-        # The observed ratio is a plateau from roughly 30 to 54 months, not a peak
-        # at 36. See notes/202608060900-three-prior-conflicts.md.
+        # A unit-interval draw keeps the middle knot between the outer ages.
+        # See notes/202608060900-three-prior-conflicts.md for the earlier fit check.
         peak_unit = cfg_peak.to_pymc(f"peak_unit{suffix}")
         z_mid = pm.Deterministic(f"z_peak{suffix}", z_low + peak_unit * (z_hi - z_low))
     slope_up = pm.Deterministic(
@@ -839,7 +744,7 @@ def tent_and_gp(
         ),
     )
     if anchor_idx is not None:
-        # Fixed partition-of-unity tent hats: mean_tent == logit(p_low)*phi_low +
+        # Partition-of-unity tent basis functions: mean_tent == logit(p_low)*phi_low +
         # logit(p_mid)*phi_mid + logit(p_hi)*phi_hi. Projecting the GP out of their
         # span removes exactly the directions that alias with the three anchors
         # (a strictly larger nuisance space than [1, z]).

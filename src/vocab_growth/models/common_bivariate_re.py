@@ -44,6 +44,7 @@ import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
 from vocab_growth.models import subject_effects
+from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -56,8 +57,8 @@ from vocab_growth.models.common import (
     build_kappa_for_config,
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
-    render_model_graph,
     report,
+    report_model_build,
     run_fit_pipeline,
 )
 from vocab_growth.models.common_bivariate import (
@@ -73,7 +74,6 @@ from vocab_growth.models.common_bivariate import (
 from vocab_growth.models.cross_lag import (
     cross_lag_audit_frame,
     prev_wave_lag_for_frame,
-    report_cross_lag_support,
     validate_cross_lag,
 )
 from vocab_growth.models.definitions import (
@@ -82,9 +82,6 @@ from vocab_growth.models.definitions import (
 )
 from vocab_growth.models.gp_utils import (
     GPGrid,
-    build_child_factor,
-    build_child_slope,
-    build_subject_scale_of_z,
     trend_and_gp,
 )
 from vocab_growth.models.likelihood_utils import nested_outcome_alpha_beta
@@ -92,6 +89,8 @@ from vocab_growth.models.observation_arrays import (
     prepare_bivariate_observations,
     sex_contrast_codes,
 )
+from vocab_growth.models.study_effects import zero_sum_study_offsets
+from vocab_growth.models.subject_graphs import build_bivariate_child_effects
 from vocab_growth.reporting import (
     dataframe_table,
     key_value_table,
@@ -430,29 +429,27 @@ def prepare_bivariate_re_data(
 # ============================================================
 
 
-def build_model_re(
+def build_model_re(context: BivariateREContext, definition: BivariateModelDefinition):
+    """Pipeline stage: construct the model, then write its build report."""
+    details = build_model_graph(context, definition)
+    report_model_build(context, details)
+
+
+def build_model_graph(
     context: BivariateREContext,
     definition: BivariateModelDefinition,
-):
+) -> BuildReport:
     """Build the bivariate PyMC model with study-level random intercepts."""
+    build_report = BuildReport()
     config = context.model_config
 
     analysis_df = context.analysis_df
 
-    # Which of the five child-effect structures this definition selects, and
-    # every rejection that goes with them, resolved before the model context is
-    # entered so a refusal fires against a definition rather than part-way
-    # through a half-built graph (issue #273).
+    # Resolve supported child effects before constructing any PyMC variables.
     plan = subject_effects.resolve(definition)
     use_subject_re_u = plan["u"].is_active
-    use_subject_re_q = plan["q"].is_active
     use_subject_codes = plan.any_active
 
-    # Everything the likelihood is assembled from, derived from the frame in one
-    # pure step (`observation_arrays`). Separated for the reasons its module
-    # docstring gives: the spoken likelihood mask, the pre-cast count validation
-    # and the held-out mask each have a specific past failure behind them, and
-    # none could be tested without building a model.
     n_trials = context.model_data.n_trials
     observations = prepare_bivariate_observations(
         analysis_df,
@@ -461,22 +458,7 @@ def build_model_re(
         use_subject_codes=use_subject_codes,
     )
     X_obs = observations.X_obs
-    y_u_observed = observations.y_u_observed
-    idx_u = observations.idx_u
-    y_s_observed = observations.y_s_observed
-    idx_s = observations.idx_s
-    has_u_train = observations.has_u_likelihood
-    has_s_likelihood = observations.has_s_likelihood
-    spoken_spec = observations.spoken_spec
-    spoken_fallback = observations.spoken_fallback
-    n_fallback_dropped = observations.n_fallback_dropped
-    study_codes = observations.study_codes
-    subject_codes = observations.subject_codes
-    n_subjects = observations.n_subjects
     n = observations.n
-    n_u = observations.n_u
-    n_s = observations.n_s
-    n_studies = observations.n_studies
 
     # Cross-lag (VG16, issue #113): the child's most recent strictly earlier
     # administration wave with understood data is the lag source, computed
@@ -493,29 +475,20 @@ def build_model_re(
         prev_idx, has_lag_f, y_u_prev_logit = prev_wave_lag_for_frame(
             analysis_df, n_trials, definition
         )
-        print(
+        build_report.messages.append(
             f"Cross-lag ({definition.lag_baseline}): "
             f"{int(has_lag_f.sum())} of {n} observations have a prior-wave understood source."
         )
-        report_cross_lag_support(
-            context.reporting.output_dir,
-            cross_lag_audit_frame(
-                analysis_df,
-                prev_idx,
-                has_lag_f,
-                spoken_spec.indices,
-                spoken_spec.is_conditional,
-            ),
-            n_obs=n,
+        build_report.understood_lag_audit = cross_lag_audit_frame(
+            analysis_df,
+            prev_idx,
+            has_lag_f,
+            observations.spoken_spec.indices,
+            observations.spoken_spec.is_conditional,
         )
 
-    # Sex shift (exploratory VG20 variant, issue #295): one girl-minus-boy
-    # difference on each logit, constant in age, multiplying a +1/2 (girls) /
-    # -1/2 (boys) contrast so the population curve stays the sex-balanced
-    # average. The field lives on `BivariateSexShiftModelDefinition`, which no
-    # registered model instantiates, and the term is added to the graph only
-    # when it is set -- so every model of record's graph is emitted op for op as
-    # before, rather than gaining a `+ 0.0`.
+    # Centring sex at +/-1/2 makes zero the midpoint on the logit scale.
+    # Its inverse logit is not generally the average of the two probabilities.
     sex_sigma = getattr(definition, "sex_effect_sigma", None)
     use_sex_effect = sex_sigma is not None
     if use_sex_effect:
@@ -526,34 +499,30 @@ def build_model_re(
             )
         x_sex = sex_contrast_codes(analysis_df)
         n_girl_rows = int((x_sex > 0).sum())
-        print(
+        build_report.messages.append(
             f"Sex shift: {n_girl_rows} girl rows (+1/2) and {n - n_girl_rows} boy "
             f"rows (-1/2); beta_sex_u, beta_sex_q ~ Normal(0, {sex_sigma:g})."
         )
 
-    # Range validation happens ONCE, before the integer cast, and not here: the cast
-    # truncates silently, so a post-cast bound cannot catch 810.9 or -0.1, which
-    # truncate into range. `build_utils.require_valid_counts` covers the parent
-    # column and `likelihood_utils.nested_outcome_spec` covers each nested one, both
-    # on the pre-cast floats (#236, #240).
-
-    # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
     build_cfg: list[tuple[str, object]] = [
         ("Total observations", n),
-        ("Understood observed", n_u),
-        ("Spoken observed", n_s),
-        ("Spoken conditional on understood", spoken_spec.n_conditional),
-        ("Spoken marginal fallback", spoken_spec.n_marginal),
-        ("Spoken fallback treatment", spoken_fallback),
-        ("Spoken fallback rows dropped", n_fallback_dropped),
-        ("Spoken > understood violations", spoken_spec.n_parent_violations),
+        ("Understood observed", observations.n_u),
+        ("Spoken observed", observations.n_s),
+        ("Spoken conditional on understood", observations.spoken_spec.n_conditional),
+        ("Spoken marginal fallback", observations.spoken_spec.n_marginal),
+        ("Spoken fallback treatment", observations.spoken_fallback),
+        ("Spoken fallback rows dropped", observations.n_fallback_dropped),
+        (
+            "Spoken > understood violations",
+            observations.spoken_spec.n_parent_violations,
+        ),
         ("n_trials", n_trials),
-        ("n_studies", n_studies),
+        ("n_studies", observations.n_studies),
     ]
     if use_subject_codes:
-        build_cfg.append(("n_subjects", n_subjects))
+        build_cfg.append(("n_subjects", observations.n_subjects))
     build_cfg.extend(
         [
             ("Age mean (months)", X_obs_mean),
@@ -563,7 +532,7 @@ def build_model_re(
             ("Query ages (months)", config.ages_query),
         ]
     )
-    key_value_table("Build configuration", build_cfg)
+    build_report.add_table("Build configuration", build_cfg)
 
     # Plot / query grids (standardised), with the optional reference-age anchor
     # row — see models.build_utils.construct_age_grids.
@@ -591,7 +560,6 @@ def build_model_re(
     i_anchor = grids.i_anchor
     anchor_age_months = grids.anchor_age_months
 
-    # Length-scale bounds
     ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
     ell_low_z = ell_low_months / X_obs_std
     ell_high_z = ell_high_months / X_obs_std
@@ -599,7 +567,6 @@ def build_model_re(
 
     L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
-    # Slope anchors
     slope_age_a_z, slope_age_b_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
     )
@@ -624,25 +591,24 @@ def build_model_re(
                 f"g_q anchored: {anchor_g_q})",
             )
         )
-    key_value_table("Derived quantities", derived_rows)
+    build_report.add_table("Derived quantities", derived_rows)
 
-    # Slice indices
-    i_obs0, i_obs1 = 0, n
-    i_plot0, i_plot1 = i_obs1, i_obs1 + n_plot
-    i_query0, i_query1 = i_plot1, i_plot1 + n_query
+    i_obs0, i_obs1 = grids.i_obs
+    i_plot0, i_plot1 = grids.i_plot
+    i_query0, i_query1 = grids.i_query
 
     coords = {
         "all_id": np.arange(n_all),
         "obs_id": np.arange(n),
-        "obs_u_id": np.arange(n_u),
-        "obs_s_id": np.arange(n_s),
+        "obs_u_id": np.arange(observations.n_u),
+        "obs_s_id": np.arange(observations.n_s),
         "plot_id": np.arange(n_plot),
         "query_id": np.arange(n_query),
-        "study_id": np.arange(n_studies),
+        "study_id": np.arange(observations.n_studies),
         "x_dim": np.arange(1),
     }
     if use_subject_codes:
-        coords["subject_id"] = np.arange(n_subjects)
+        coords["subject_id"] = np.arange(observations.n_subjects)
     # VG19: the two per-child effects (offset at the reference age, and rate).
     # Declared unconditionally -- an unused coord adds no variable to the graph,
     # and a conditional would have to re-derive what the plan already knows.
@@ -659,7 +625,6 @@ def build_model_re(
     coords["factor"] = np.arange(plan.factor.rank if plan.factor else 1)
 
     with pm.Model(coords=coords) as model_pm:
-
         # ---- Data ----
 
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
@@ -675,22 +640,26 @@ def build_model_re(
         # observed_data consumed by extract_model_samples (issues #67, #266).
         # With no holdout column and a non-dropping fallback treatment these
         # equal has_u / has_s, so standard fits are unchanged.
-        _ = pm.Data("obs_u_mask", has_u_train.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_s_mask", has_s_likelihood.astype(int), dims=("obs_id",))
+        _ = pm.Data(
+            "obs_u_mask", observations.has_u_likelihood.astype(int), dims=("obs_id",)
+        )
+        _ = pm.Data(
+            "obs_s_mask", observations.has_s_likelihood.astype(int), dims=("obs_id",)
+        )
         s_likelihood_n = pm.Data(
-            "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
+            "s_likelihood_n", observations.spoken_spec.trials, dims=("obs_s_id",)
         )
         s_is_conditional = pm.Data(
             "s_is_conditional",
-            spoken_spec.is_conditional.astype(int),
+            observations.spoken_spec.is_conditional.astype(int),
             dims=("obs_s_id",),
         )
 
-        study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
+        study_obs = pm.Data("study_obs", observations.study_codes, dims=("obs_id",))
 
         if use_subject_codes:
             subject_obs = pm.Data(
-                "subject_obs", subject_codes, dims=("obs_id",)
+                "subject_obs", observations.subject_codes, dims=("obs_id",)
             )
 
         # Shared trend + HSGP builder (gp_utils); graph byte-identical to the
@@ -708,9 +677,7 @@ def build_model_re(
 
         # One flag, two means: see definitions.clamp_targets. 'q_only' is
         # truthy, so testing the raw value would clamp both.
-        _clamp_u, _clamp_q = clamp_targets(
-            definition.clamp_mean_above_hi_anchor
-        )
+        _clamp_u, _clamp_q = clamp_targets(definition.clamp_mean_above_hi_anchor)
 
         # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
         f_u_all = trend_and_gp(
@@ -748,209 +715,28 @@ def build_model_re(
         # Study-level random intercepts
         # ============================================================
 
-        # Non-centred, sum-to-zero (delta = tau * z, z ~ ZeroSumNormal) for
-        # HMC-friendly geometry with few studies — consistent with the subject REs
-        # below and the rest of the codebase. The tau * raw scaling keeps the
-        # funnel-avoiding non-centring of issue #65; the sum-to-zero constraint on
-        # the unit offsets additionally removes the intercept vs study-RE-mean ridge
-        # (with few studies an unconstrained mean trades off against the global
-        # intercept/slope, an R-hat failure). This is an intentional identifiability
-        # constraint, not a prior-preserving reparameterisation — it removes the
-        # group-mean DOF. We rescale sigma by sqrt(K/(K-1)) so each study effect's
-        # marginal prior variance stays tau^2 (unchanged from independent Normal),
-        # leaving only the mean DOF removed and a -1/(K-1) correlation imposed. Both
-        # outcomes are informed by every retained study here, so a global zero-sum
-        # over study_id is correct (cf. the joint model's per-outcome coordinates).
-        # The public names delta_u/delta_q/tau_u/tau_q are preserved (downstream
-        # scripts extract them by name from the trace).
-        zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
+        # The population reference is the unweighted set of all retained studies,
+        # including studies without direct evidence for one of the outcomes.
+        # Changing to outcome-specific study sets would change this prior.
         tau_u = pm.HalfNormal("tau_u", sigma=definition.tau_u_sigma)
-        delta_u_raw = pm.ZeroSumNormal("delta_u_raw", sigma=zsn_sigma, dims="study_id")
-        delta_u = pm.Deterministic("delta_u", tau_u * delta_u_raw, dims="study_id")
-
+        delta_u = zero_sum_study_offsets(
+            "delta_u", scale=tau_u, n_studies=observations.n_studies
+        )
         tau_q = pm.HalfNormal("tau_q", sigma=definition.tau_q_sigma)
-        delta_q_raw = pm.ZeroSumNormal("delta_q_raw", sigma=zsn_sigma, dims="study_id")
-        delta_q = pm.Deterministic("delta_q", tau_q * delta_q_raw, dims="study_id")
-
-        # ============================================================
-        # Subject-level random intercepts (non-centered)
-        # ============================================================
-
-        # Which of the five child-effect structures this definition selects, and
-        # every rejection that goes with them, was resolved by
-        # `subject_effects.resolve` before this context was entered (issue
-        # #273). What is left here is the graph each resolved kind emits.
-        #
-        # Proposal A1 (registered sensitivity): where a subject-scale field
-        # carries an `AgeVaryingSubjectScale` instead of a scalar, the per-child
-        # deviate is scaled by tau(age) at each observation's own age and the
-        # paired kappa block is held flat. The scalar path below is untouched and
-        # emits exactly the ops it always did, so every model of record keeps its
-        # graph. `tau_*_of_z` is carried forward to emit the plot/query scales
-        # once the standardised grids exist.
-        spec_u = plan["u"].age_varying
-        spec_q = plan["q"].age_varying
-        # VG19: the same overloaded field can instead carry a child slope, which
-        # is a different age function through the seam A1 opened.
-        slope_u = plan["u"].slope
-        slope_q = plan["q"].slope
-        slope_ref_age = plan.slope_ref_age_months
-        corr_eta = plan.correlation_eta
-        # VG22: a low-rank factor over all four child effects. Built once, ahead
-        # of the per-outcome branches, because unlike every other subject
-        # structure here it spans both outcomes -- the whole point of the form is
-        # that one child's comprehension standing and production-ratio rate are
-        # driven by shared latent dimensions. The per-outcome branches below then
-        # consume the shifts it returns rather than building their own.
-        if plan.factor is not None:
-            # The two reference-age scales it also returns are deliberately
-            # discarded: for a factor the between-child geometry lives in the
-            # loading matrix, so there is no scalar scale for a downstream term to
-            # use. `build_child_factor` stores them as named Deterministics, which
-            # is how the summaries reach them.
-            factor_shift_u, factor_shift_q, _, _ = (
-                build_child_factor(
-                    plan.factor,
-                    tau0_u_sigma=definition.tau_subj_u_sigma,
-                    tau0_q_sigma=definition.tau_subj_q_sigma,
-                    age_obs_months=X_obs.flatten(),
-                    subject_obs=subject_obs,
-                )
-            )
-        else:
-            factor_shift_u = factor_shift_q = None
-
-        tau_u_of_z = tau_q_of_z = None
-        # Built here rather than reusing the named `z_obs` Deterministic, which is
-        # created further down: reordering that would change every model's graph.
-        z_obs_raw = (
-            X_all_z_data[i_obs0:i_obs1, 0]
-            if (spec_u is not None or spec_q is not None)
-            else None
+        delta_q = zero_sum_study_offsets(
+            "delta_q", scale=tau_q, n_studies=observations.n_studies
         )
 
-        if use_subject_re_u:
-            # Only the plain-HalfNormal branch below yields a scalar between-child
-            # scale, and only it needs one -- for its own `delta_subj_u`. The factor
-            # branch's geometry is a loading matrix, the slope branch's is a
-            # (tau0, tau1, rho) triple, and the A1 branch's is a function of age.
-            # None of those is bound to a shared name here, so the shape of this
-            # block cannot suggest that a later term may reach for "the" scale.
-            if factor_shift_u is not None:
-                subject_shift_u = factor_shift_u
-            elif slope_u is not None:
-                subject_shift_u, _ = build_child_slope(
-                    slope_u,
-                    age_obs_months=X_obs.flatten(),
-                    subject_obs=subject_obs,
-                    ref_age_months=slope_ref_age,
-                    name="tau_subj_u",
-                )
-            elif spec_u is None:
-                tau_subj_u = pm.HalfNormal(
-                    "tau_subj_u", sigma=definition.tau_subj_u_sigma
-                )
-                delta_subj_u_raw = pm.Normal(
-                    "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
-                )
-                delta_subj_u = pm.Deterministic(
-                    "delta_subj_u", tau_subj_u * delta_subj_u_raw, dims="subject_id"
-                )
-                subject_shift_u = delta_subj_u[subject_obs]
-            else:
-                tau_u_of_z, tau_subj_u_young = build_subject_scale_of_z(
-                    spec_u,
-                    anchor_z=standardize_anchor_ages(
-                        spec_u.anchor_ages,
-                        X_obs_mean=X_obs_mean,
-                        X_obs_std=X_obs_std,
-                    ),
-                    name="tau_subj_u",
-                )
-                delta_subj_u_raw = pm.Normal(
-                    "delta_subj_u_raw", mu=0.0, sigma=1.0, dims="subject_id"
-                )
-                # `delta_subj_u` keeps its name and its per-child meaning, read at
-                # the young anchor; the shift applied to the likelihood is the
-                # age-scaled one.
-                _ = pm.Deterministic(
-                    "delta_subj_u",
-                    tau_subj_u_young * delta_subj_u_raw,
-                    dims="subject_id",
-                )
-                subject_shift_u = tau_u_of_z(z_obs_raw) * delta_subj_u_raw[subject_obs]
-        else:
-            subject_shift_u = 0.0
-
-        if use_subject_re_q:
-            # As for `u` above: only the plain-HalfNormal branch produces a
-            # scalar scale, and only it consumes one.
-            if factor_shift_q is not None:
-                subject_shift_q = factor_shift_q
-            elif slope_q is not None:
-                # `corr_eta` is guaranteed None here: the resolver refuses the
-                # combination, so no branch on it is needed or wanted.
-                subject_shift_q, _ = build_child_slope(
-                    slope_q,
-                    age_obs_months=X_obs.flatten(),
-                    subject_obs=subject_obs,
-                    ref_age_months=slope_ref_age,
-                    name="tau_subj_q",
-                )
-            elif spec_q is None:
-                tau_subj_q = pm.HalfNormal(
-                    "tau_subj_q", sigma=definition.tau_subj_q_sigma
-                )
-                delta_subj_q_raw = pm.Normal(
-                    "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
-                )
-                if corr_eta is None:
-                    delta_subj_q_value = tau_subj_q * delta_subj_q_raw
-                else:
-                    # VG20 (issue #224). A child's two deviations are drawn from a
-                    # joint Normal rather than independently, in Cholesky form so
-                    # the nesting is exact: at rho_uq = 0 this is the expression
-                    # above, op for op.
-                    #
-                    # `delta_subj_u_raw` is reused as the shared first coordinate
-                    # and `delta_subj_q_raw` becomes the whitened second one, so
-                    # both keep their names, their standard-Normal priors and
-                    # their dims. Every downstream reader of `delta_subj_u` and
-                    # `delta_subj_q` — the summaries, the comparison suite, the
-                    # recovery scorer — sees what it always saw.
-                    rho_raw = pm.Beta(
-                        "rho_uq_raw", alpha=corr_eta, beta=corr_eta
-                    )
-                    rho_uq = pm.Deterministic("rho_uq", 2.0 * rho_raw - 1.0)
-                    delta_subj_q_value = tau_subj_q * (
-                        rho_uq * delta_subj_u_raw
-                        + pm.math.sqrt(1.0 - rho_uq**2) * delta_subj_q_raw
-                    )
-                delta_subj_q = pm.Deterministic(
-                    "delta_subj_q", delta_subj_q_value, dims="subject_id"
-                )
-                subject_shift_q = delta_subj_q[subject_obs]
-            else:
-                tau_q_of_z, tau_subj_q_young = build_subject_scale_of_z(
-                    spec_q,
-                    anchor_z=standardize_anchor_ages(
-                        spec_q.anchor_ages,
-                        X_obs_mean=X_obs_mean,
-                        X_obs_std=X_obs_std,
-                    ),
-                    name="tau_subj_q",
-                )
-                delta_subj_q_raw = pm.Normal(
-                    "delta_subj_q_raw", mu=0.0, sigma=1.0, dims="subject_id"
-                )
-                _ = pm.Deterministic(
-                    "delta_subj_q",
-                    tau_subj_q_young * delta_subj_q_raw,
-                    dims="subject_id",
-                )
-                subject_shift_q = tau_q_of_z(z_obs_raw) * delta_subj_q_raw[subject_obs]
-        else:
-            subject_shift_q = 0.0
+        child_effects = build_bivariate_child_effects(
+            definition,
+            plan,
+            age_obs_months=X_obs.flatten(),
+            subject_obs=subject_obs if use_subject_codes else None,
+            X_all_z_data=X_all_z_data,
+            grids=grids,
+            X_obs_mean=X_obs_mean,
+            X_obs_std=X_obs_std,
+        )
 
         # ============================================================
         # Sex shift (exploratory VG20 variant, issue #295)
@@ -970,7 +756,9 @@ def build_model_re(
         # ============================================================
 
         # Understood — obs level includes study shift (and optional subject shift)
-        f_u_obs_re = f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + subject_shift_u
+        f_u_obs_re = (
+            f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + child_effects.understood
+        )
         if use_sex_effect:
             # Before the cross-lag block reads `f_u_obs_re`, so a child's
             # expected prior-wave logit would include their sex shift.
@@ -990,22 +778,27 @@ def build_model_re(
             beta_lag = pm.Normal(
                 "beta_lag", mu=definition.beta_lag_mu, sigma=definition.beta_lag_sigma
             )
-            lag_base = f_u_obs_re[prev_idx]  # child's own expected understood logit at prior wave
+            lag_base = f_u_obs_re[
+                prev_idx
+            ]  # child's own expected understood logit at prior wave
             if definition.lag_baseline == "population":
                 # Use the population+study baseline by removing the subject shift.
-                lag_base = lag_base - subject_shift_u[prev_idx]
+                lag_base = lag_base - child_effects.understood[prev_idx]
             x_lag = has_lag_f * (y_u_prev_logit - lag_base)
             q_lag_term = beta_lag * x_lag
         else:
             q_lag_term = 0.0
 
         # Production ratio — obs level includes study shift (and optional subject shift)
-        h_obs_re = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q + q_lag_term
+        h_obs_re = (
+            h_all[i_obs0:i_obs1]
+            + delta_q[study_obs]
+            + child_effects.spoken_ratio
+            + q_lag_term
+        )
         if use_sex_effect:
             h_obs_re = h_obs_re + beta_sex_q * x_sex_data
-        q_obs = pm.Deterministic(
-            "q_obs", pm.math.sigmoid(h_obs_re), dims=("obs_id",)
-        )
+        q_obs = pm.Deterministic("q_obs", pm.math.sigmoid(h_obs_re), dims=("obs_id",))
         _ = pm.Deterministic("h_obs", h_all[i_obs0:i_obs1], dims=("obs_id",))
 
         # Spoken — derived from obs-level p_U and q (with study effects)
@@ -1028,9 +821,7 @@ def build_model_re(
         )
 
         p_u_all = pm.math.sigmoid(f_u_all)
-        _ = pm.Deterministic(
-            "p_u_plot", p_u_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
+        _ = pm.Deterministic("p_u_plot", p_u_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic(
             "p_u_query", p_u_all[i_query0:i_query1], dims=("query_id",)
         )
@@ -1039,31 +830,22 @@ def build_model_re(
         _ = pm.Deterministic("h_query", h_all[i_query0:i_query1], dims=("query_id",))
 
         q_all = pm.math.sigmoid(h_all)
-        _ = pm.Deterministic(
-            "q_plot", q_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
-        _ = pm.Deterministic(
-            "q_query", q_all[i_query0:i_query1], dims=("query_id",)
-        )
+        _ = pm.Deterministic("q_plot", q_all[i_plot0:i_plot1], dims=("plot_id",))
+        _ = pm.Deterministic("q_query", q_all[i_query0:i_query1], dims=("query_id",))
 
         p_s_all = p_u_all * q_all
-        _ = pm.Deterministic(
-            "p_s_plot", p_s_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
+        _ = pm.Deterministic("p_s_plot", p_s_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic(
             "p_s_query", p_s_all[i_query0:i_query1], dims=("query_id",)
         )
 
         p_s_all_clip = pm.math.clip(p_s_all, EPSILON, 1 - EPSILON)
         f_s_all = pm.math.log(p_s_all_clip) - pm.math.log(1 - p_s_all_clip)
-        _ = pm.Deterministic(
-            "f_s_plot", f_s_all[i_plot0:i_plot1], dims=("plot_id",)
-        )
+        _ = pm.Deterministic("f_s_plot", f_s_all[i_plot0:i_plot1], dims=("plot_id",))
         _ = pm.Deterministic(
             "f_s_query", f_s_all[i_query0:i_query1], dims=("query_id",)
         )
 
-        # Standardised ages
         z_obs = pm.Deterministic(
             "z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims=("obs_id",)
         )
@@ -1077,19 +859,27 @@ def build_model_re(
         # Proposal A1's age-varying subject scale, reported on the same grids as
         # kappa so the two can be read against each other — which is the whole
         # point of the variant.
-        if tau_u_of_z is not None:
+        if child_effects.understood_scale_of_z is not None:
             _ = pm.Deterministic(
-                "tau_subj_u_plot", tau_u_of_z(z_plot), dims="plot_id"
+                "tau_subj_u_plot",
+                child_effects.understood_scale_of_z(z_plot),
+                dims="plot_id",
             )
             _ = pm.Deterministic(
-                "tau_subj_u_query", tau_u_of_z(z_query), dims="query_id"
+                "tau_subj_u_query",
+                child_effects.understood_scale_of_z(z_query),
+                dims="query_id",
             )
-        if tau_q_of_z is not None:
+        if child_effects.spoken_scale_of_z is not None:
             _ = pm.Deterministic(
-                "tau_subj_q_plot", tau_q_of_z(z_plot), dims="plot_id"
+                "tau_subj_q_plot",
+                child_effects.spoken_scale_of_z(z_plot),
+                dims="plot_id",
             )
             _ = pm.Deterministic(
-                "tau_subj_q_query", tau_q_of_z(z_query), dims="query_id"
+                "tau_subj_q_query",
+                child_effects.spoken_scale_of_z(z_query),
+                dims="query_id",
             )
 
         # ============================================================
@@ -1101,7 +891,8 @@ def build_model_re(
             X_obs_mean=X_obs_mean,
             X_obs_std=X_obs_std,
             suffix="_u",
-            hold_constant=spec_u is not None and spec_u.hold_kappa_constant,
+            hold_constant=plan["u"].age_varying is not None
+            and plan["u"].age_varying.hold_kappa_constant,
         )
 
         kappa_u_obs = pm.Deterministic(
@@ -1119,7 +910,8 @@ def build_model_re(
             X_obs_mean=X_obs_mean,
             X_obs_std=X_obs_std,
             suffix="_s",
-            hold_constant=spec_q is not None and spec_q.hold_kappa_constant,
+            hold_constant=plan["q"].age_varying is not None
+            and plan["q"].age_varying.hold_kappa_constant,
         )
 
         kappa_s_obs = pm.Deterministic(
@@ -1138,30 +930,30 @@ def build_model_re(
         # inventory with mean p_U * q.
 
         # Understood likelihood (only where observed)
-        p_u_obs_sel = p_u_obs[idx_u]
+        p_u_obs_sel = p_u_obs[observations.idx_u]
         p_u_obs_clip = pm.math.clip(p_u_obs_sel, EPSILON, 1 - EPSILON)
-        alpha_u = p_u_obs_clip * kappa_u_obs[idx_u]
-        beta_u = (1 - p_u_obs_clip) * kappa_u_obs[idx_u]
+        alpha_u = p_u_obs_clip * kappa_u_obs[observations.idx_u]
+        beta_u = (1 - p_u_obs_clip) * kappa_u_obs[observations.idx_u]
 
         _ = pm.BetaBinomial(
             "y_u_obs",
             n=n_trials,
             alpha=alpha_u,
             beta=beta_u,
-            observed=y_u_observed,
+            observed=observations.y_u_observed,
             dims=("obs_u_id",),
         )
 
         # Spoken likelihood (only where observed). Both bivariate engines route
         # through the one helper so their graphs cannot drift apart.
         alpha_s, beta_s = nested_outcome_alpha_beta(
-            treatment=spoken_fallback,
+            treatment=observations.spoken_fallback,
             is_conditional=s_is_conditional,
-            conditional_p=q_obs[idx_s],
-            marginal_p=p_s_obs[idx_s],
-            parent_p=p_u_obs[idx_s],
-            parent_kappa=kappa_u_obs[idx_s],
-            kappa=kappa_s_obs[idx_s],
+            conditional_p=q_obs[observations.idx_s],
+            marginal_p=p_s_obs[observations.idx_s],
+            parent_p=p_u_obs[observations.idx_s],
+            parent_kappa=kappa_u_obs[observations.idx_s],
+            kappa=kappa_s_obs[observations.idx_s],
             epsilon=EPSILON,
             outcome="s",
             fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
@@ -1172,17 +964,14 @@ def build_model_re(
             n=s_likelihood_n,
             alpha=alpha_s,
             beta=beta_s,
-            observed=y_s_observed,
+            observed=observations.y_s_observed,
             dims=("obs_s_id",),
         )
 
     variables = pymc_utils.get_variables_dict(model_pm)
 
-    pymc_utils.report_model_summary(model_pm)
-
-    render_model_graph(model_pm, context.reporting.output_dir)
-
     context.set_model(model_pm, variables)
+    return build_report
 
 
 # ============================================================

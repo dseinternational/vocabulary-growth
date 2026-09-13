@@ -33,14 +33,14 @@ from vocab_growth.models.definitions import VG07
 
 
 @pytest.fixture
-def vg07_model(tmp_path, monkeypatch):
+def vg07_model(tmp_path):
     if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
         pytest.skip("prepared vocabulary DuckDB not available")
 
     # The model-graph render shells out to graphviz `dot`; not needed here.
-    monkeypatch.setattr(cbr, "render_model_graph", lambda *a, **k: None)
 
     context = ModelFitContext(
+        report_build=False,
         reporting=reporting.ReportingConfiguration(
             model_name=VG07.model_id,
             config_name=VG07.config_name,

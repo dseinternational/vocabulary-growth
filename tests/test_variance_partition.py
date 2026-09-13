@@ -53,9 +53,9 @@ PARTITIONED = dataclasses.replace(
 )
 
 
-def _build(definition, tmp_path, monkeypatch):
-    monkeypatch.setattr(cur, "render_model_graph", lambda *a, **k: None)
+def _build(definition, tmp_path):
     context = ModelFitContext(
+        report_build=False,
         reporting=reporting.ReportingConfiguration(
             model_name=definition.model_id,
             config_name=definition.config_name,
@@ -109,16 +109,16 @@ def test_each_partition_is_calibrated_for_its_own_outcome():
         assert getattr(vg11, field) == getattr(vg12, field), field
 
 
-def test_without_the_partition_the_scales_are_free_rvs(tmp_path, monkeypatch):
-    model = _build(SMALL, tmp_path, monkeypatch)
+def test_without_the_partition_the_scales_are_free_rvs(tmp_path):
+    model = _build(SMALL, tmp_path)
     free = {v.name for v in model.free_RVs}
     assert {"tau_subject", "kappa_excess_young"}.issubset(free)
     assert "v_total" not in free
     assert "subject_variance_share" not in free
 
 
-def test_with_the_partition_the_budget_is_sampled_instead(tmp_path, monkeypatch):
-    model = _build(PARTITIONED, tmp_path, monkeypatch)
+def test_with_the_partition_the_budget_is_sampled_instead(tmp_path):
+    model = _build(PARTITIONED, tmp_path)
     free = {v.name for v in model.free_RVs}
     deterministics = {d.name for d in model.deterministics}
     # The budget and the split are what the sampler now explores...
@@ -130,9 +130,9 @@ def test_with_the_partition_the_budget_is_sampled_instead(tmp_path, monkeypatch)
     assert {"kappa_young", "kappa_old", "a_kappa", "b_kappa"}.issubset(deterministics)
 
 
-def test_the_partition_algebra_round_trips(tmp_path, monkeypatch):
+def test_the_partition_algebra_round_trips(tmp_path):
     """Draws of the budget and share reproduce the two scales they encode."""
-    model = _build(PARTITIONED, tmp_path, monkeypatch)
+    model = _build(PARTITIONED, tmp_path)
     p0 = _TD_UNDERSTOOD_VARIANCE_PARTITION.reference_proportion
     c = 1.0 / (p0 * (1.0 - p0))
     with model:
@@ -152,10 +152,10 @@ def test_the_partition_algebra_round_trips(tmp_path, monkeypatch):
     assert np.all(tau > 0) and np.all(exc > 0)
 
 
-def test_partition_without_subject_re_is_rejected(tmp_path, monkeypatch):
+def test_partition_without_subject_re_is_rejected(tmp_path):
     broken = dataclasses.replace(PARTITIONED, use_subject_re=False)
     with pytest.raises(ValueError, match="use_subject_re is False"):
-        _build(broken, tmp_path, monkeypatch)
+        _build(broken, tmp_path)
 
 
 def test_partition_requires_the_anchored_kappa_form():

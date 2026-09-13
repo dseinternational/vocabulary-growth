@@ -43,6 +43,7 @@ import pymc as pm
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
+from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -61,8 +62,8 @@ from vocab_growth.models.common import (
     kappa_anchor_derived_rows,
     posterior_summary,
     prior_predictive_checks,
-    render_model_graph,
     report,
+    report_model_build,
     run_fit_pipeline,
     run_standard_plots,
     sample,
@@ -76,6 +77,7 @@ from vocab_growth.models.gp_utils import (
     build_variance_partition,
     trend_and_gp,
 )
+from vocab_growth.models.study_effects import zero_sum_study_offsets
 from vocab_growth.models.subject_marginal import (
     partition_subject_rows,
     singleton_first_order,
@@ -280,9 +282,17 @@ def prepare_univariate_re_data(
 
 
 def build_univariate_re_model(
+    context: UnivariateREContext, definition: UnivariateModelDefinition
+):
+    """Pipeline stage: construct the model, then write its build report."""
+    details = build_model_graph(context, definition)
+    report_model_build(context, details)
+
+
+def build_model_graph(
     context: UnivariateREContext,
     definition: UnivariateModelDefinition,
-) -> None:
+) -> BuildReport:
     """Build the univariate PyMC model with study-level random intercepts.
 
     The study intercept ``delta[s]`` shifts the population-level linear
@@ -295,6 +305,7 @@ def build_univariate_re_model(
     per-draw ridge between the global intercept and a constant GP component,
     which is especially important when study intercepts are also present.
     """
+    build_report = BuildReport()
     config = context.model_config
     analysis_df = context.analysis_df
 
@@ -350,16 +361,16 @@ def build_univariate_re_model(
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
     build_rows: list[tuple[str, object]] = [
-            ("Number of observations", n),
-            ("Number of trials (n_trials)", n_trials),
-            ("Number of studies", n_studies),
-            ("Slope anchors (months)", config.slope_anchors),
-            ("Length-scale range (months)", config.ell_months_range),
-            ("Number of plot points", config.n_plot),
-            ("Query ages (months)", config.ages_query),
-            ("Age median (months)", float(np.median(X_obs))),
-            ("Age mean (months)", X_obs_mean),
-            ("Age std (months)", X_obs_std),
+        ("Number of observations", n),
+        ("Number of trials (n_trials)", n_trials),
+        ("Number of studies", n_studies),
+        ("Slope anchors (months)", config.slope_anchors),
+        ("Length-scale range (months)", config.ell_months_range),
+        ("Number of plot points", config.n_plot),
+        ("Query ages (months)", config.ages_query),
+        ("Age median (months)", float(np.median(X_obs))),
+        ("Age mean (months)", X_obs_mean),
+        ("Age std (months)", X_obs_std),
     ]
     if use_subject_re:
         build_rows.extend(
@@ -371,7 +382,7 @@ def build_univariate_re_model(
     if partition is not None:
         build_rows.extend(partition.summary_rows())
         build_rows.append(("Quadrature nodes", marginalisation.n_nodes))
-    key_value_table("Build configuration", build_rows)
+    build_report.add_table("Build configuration", build_rows)
 
     # Plot / query grids (standardised), with the optional reference-age anchor
     # row — see models.build_utils.construct_age_grids.
@@ -415,18 +426,16 @@ def build_univariate_re_model(
         ("HSGP boundary factor (L)", L),
         ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
         ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
-        *kappa_anchor_derived_rows(
-            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
-        ),
+        *kappa_anchor_derived_rows(config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std),
     ]
     if anchor_g:
         derived_rows.append(("GP anchor age (months)", f"{anchor_age_months:g}"))
-    key_value_table("Derived quantities", derived_rows)
+    build_report.add_table("Derived quantities", derived_rows)
 
     # Slice indices
-    i_obs0, i_obs1 = 0, n
-    i_plot0, i_plot1 = i_obs1, i_obs1 + n_plot
-    i_query0, i_query1 = i_plot1, i_plot1 + n_query
+    i_obs0, i_obs1 = grids.i_obs
+    i_plot0, i_plot1 = grids.i_plot
+    i_query0, i_query1 = grids.i_query
 
     coords = {
         "all_id": np.arange(n_all),
@@ -446,7 +455,6 @@ def build_univariate_re_model(
             coords["subject_id"] = np.arange(n_subjects)
 
     with pm.Model(coords=coords) as model_pm:
-
         # ---- Data ----
 
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
@@ -457,9 +465,7 @@ def build_univariate_re_model(
 
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
         if use_subject_re:
-            subject_obs = pm.Data(
-                "subject_obs", subject_codes, dims=("obs_id",)
-            )
+            subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
 
         # ============================================================
         # Mean developmental trajectory + HSGP deviation
@@ -499,32 +505,13 @@ def build_univariate_re_model(
         # Study-level random intercepts (non-centred, sum-to-zero)
         # ============================================================
 
-        # Sum-to-zero on the unit offsets (delta_raw) removes the intercept vs
-        # study-RE-mean ridge: with few studies an unconstrained mean trades off
-        # against the global intercept/slope (R-hat failure at rep-hightune). This is
-        # an intentional identifiability constraint, NOT a prior-preserving
-        # reparameterisation: it removes the group-mean degree of freedom (that is
-        # the ridge) and imposes a -1/(K-1) correlation. ZeroSumNormal(sigma=1) would
-        # also shrink each marginal to Var = tau^2 * (K-1)/K; we rescale sigma by
-        # sqrt(K/(K-1)) so the marginal per-study prior variance stays tau^2 (its
-        # value before this change), leaving only the mean DOF removed. The tau * raw
-        # scaling keeps the funnel-avoiding non-centring of issue #65 -- unless
-        # `centred_study_re` selects the centred branch below.
         tau = pm.HalfNormal("tau", sigma=definition.tau_study_sigma)
-        zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
-        # getattr: VG17 derives its definition from VG01, a plain
-        # UnivariateModelDefinition without the random-effect geometry fields.
-        if getattr(definition, "centred_study_re", False):
-            # Centred: sample `delta` directly with a tau-scaled sigma. Identical in
-            # distribution to the non-centred branch -- scaling a zero-sum Gaussian's
-            # sigma is the same as scaling its variate -- so this is a pure change of
-            # sampling coordinates, not of the prior. Preferred once each study
-            # carries thousands of observations, where the funnel that the
-            # non-centring exists to avoid does not form.
-            delta = pm.ZeroSumNormal("delta", sigma=tau * zsn_sigma, dims="study_id")
-        else:
-            delta_raw = pm.ZeroSumNormal("delta_raw", sigma=zsn_sigma, dims="study_id")
-            delta = pm.Deterministic("delta", tau * delta_raw, dims="study_id")
+        delta = zero_sum_study_offsets(
+            "delta",
+            scale=tau,
+            n_studies=n_studies,
+            centred=getattr(definition, "centred_study_re", False),
+        )
 
         # The variance partition, when enabled, produces the subject scale here and
         # the young dispersion anchor further down, from one shared budget. It is
@@ -590,9 +577,7 @@ def build_univariate_re_model(
         _ = pm.Deterministic("p_query", pm.math.sigmoid(f_query), dims=("query_id",))
 
         # Standardised ages (needed by extract_model_samples)
-        _ = pm.Deterministic(
-            "z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims=("obs_id",)
-        )
+        _ = pm.Deterministic("z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims=("obs_id",))
         _ = pm.Deterministic(
             "z_plot", X_all_z_data[i_plot0:i_plot1, 0], dims=("plot_id",)
         )
@@ -618,7 +603,9 @@ def build_univariate_re_model(
             "kappa_plot", kappa_of_z(X_all_z_data[i_plot0:i_plot1, 0]), dims="plot_id"
         )
         _ = pm.Deterministic(
-            "kappa_query", kappa_of_z(X_all_z_data[i_query0:i_query1, 0]), dims="query_id"
+            "kappa_query",
+            kappa_of_z(X_all_z_data[i_query0:i_query1, 0]),
+            dims="query_id",
         )
 
         # ============================================================
@@ -660,11 +647,8 @@ def build_univariate_re_model(
 
     variables = pymc_utils.get_variables_dict(model_pm)
 
-    pymc_utils.report_model_summary(model_pm)
-
-    render_model_graph(model_pm, context.reporting.output_dir)
-
     context.set_model(model_pm, variables)
+    return build_report
 
 
 # ============================================================

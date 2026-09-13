@@ -1,44 +1,26 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Resolve a definition's child-effect structure into one typed plan.
+"""Resolve a definition's child effects before constructing the model.
 
-Five different structures can occupy the same seam in a definition, and until
-this module they were detected separately, inside the PyMC context, by whichever
-builder needed them:
+The plan records each outcome's structure, its prior settings and any coupling
+between outcomes. Fitting and bivariate prediction use this same decision.
+The resolver rejects unsupported combinations before graph construction.
 
 ===================  ======  ==========================================
-structure            model   how the definition carries it
+structure            example how the definition selects it
 ===================  ======  ==========================================
-constant offset      VG10    ``tau_subj_*_sigma`` holds a float
-variance partition   VG11    ``subject_variance_partition`` is set
-age-varying scale    (A1)    ``tau_subj_*_sigma`` holds an
-                             ``AgeVaryingSubjectScale``
-child slope          VG19    ``tau_subj_*_sigma`` holds a
-                             ``SubjectSlopePriorParams``
-correlated pair      VG20    ``subject_re_correlation_eta`` is set
-low-rank factor      VG22    ``subject_factor`` is set
+constant offset      VG10    a numeric ``tau_subj_*_sigma``
+variance partition   VG11    ``subject_variance_partition``
+age-varying scale    A1      an ``AgeVaryingSubjectScale``
+child slope          VG19    a ``SubjectSlopePriorParams``
+correlated offsets   VG20    ``subject_re_correlation_eta``
+low-rank factor      VG22    ``subject_factor``
 ===================  ======  ==========================================
 
-Three of the seven are a *scalar field holding an object*. That is not an
-accident and is documented where it is done: a fit is validated by comparing
-the serialised definition field for field, so a new field on a shared base class
-invalidates every existing fit of that class, and the overloaded field is what
-let VG19 and Proposal A1 exist without a refit of VG05, VG07-VG10 and VG16. The
-cost is that "what child structure does this model have?" had no single answer
-— ``build_model_re`` called four different selectors, read two more fields
-through ``getattr``, and interleaved five rejection rules with the graph
-construction they guard.
-
-:func:`resolve` gives that question one answer, computed **before** the model
-context is entered. Every rejection happens there, once, on a definition rather
-than part-way through a half-built graph. The builders then branch on a typed
-plan.
-
-Pure and PyMC-free by construction, so the whole resolution — including every
-refusal — is testable without building a graph, and
-``tests/test_subject_effect_plan.py`` exercises it over every registered model
-and every rejected combination.
+The numerical or structured scale fields preserve the existing definition
+schema. Compatibility history is in notes/202609131044-model-review-implementation.md.
+This module has no PyMC dependency; test_subject_effect_plan.py checks its rules.
 """
 
 from __future__ import annotations
@@ -77,6 +59,19 @@ OUTCOME_SUFFIXES = ("u", "q", "sign")
 #: median. Mirrors ``BivariateChildSlopeModelDefinition``'s own default so a
 #: definition that predates the field resolves the same way it always did.
 DEFAULT_SLOPE_REF_AGE_MONTHS = 36.0
+
+
+def slope_reference_age(definition) -> float:
+    """Reference age in months, preserving an explicit zero (birth).
+
+    Only a missing value uses the historical default. Fitting, prediction and
+    prior checks must measure each child's slope from this same age.
+    """
+    value = getattr(definition, "subject_slope_ref_age_months", None)
+    age = float(DEFAULT_SLOPE_REF_AGE_MONTHS if value is None else value)
+    if not math.isfinite(age):
+        raise ValueError("The child-slope reference age must be finite.")
+    return age
 
 
 class SubjectEffectKind(Enum):
@@ -279,10 +274,7 @@ def resolve(definition: ModelDefinition) -> SubjectEffectPlan:
     )
     plan = SubjectEffectPlan(
         effects=effects,
-        slope_ref_age_months=float(
-            getattr(definition, "subject_slope_ref_age_months", None)
-            or DEFAULT_SLOPE_REF_AGE_MONTHS
-        ),
+        slope_ref_age_months=slope_reference_age(definition),
         variance_partition=partition,
     )
 
@@ -317,9 +309,9 @@ def _with_correlation(plan: SubjectEffectPlan, definition) -> SubjectEffectPlan:
     if SubjectEffectKind.AGE_VARYING in plan.kinds:
         raise ValueError(
             "subject_re_correlation_eta cannot be combined with an age-varying "
-            "subject scale (Proposal A1): the age-varying path scales each "
-            "child's deviate per observation, so a single constant correlation "
-            "between the blocks is not well defined."
+            "subject scale (Proposal A1): this implementation does not support "
+            "that combination. Positive age-dependent scaling can preserve a "
+            "constant correlation, but needs a shared correlated draw."
         )
     if SubjectEffectKind.CHILD_SLOPE in plan.kinds:
         raise ValueError(
