@@ -1231,11 +1231,11 @@ class BivariateSexShiftModelDefinition(BivariateCorrelatedSubjectREModelDefiniti
       same rows.
     * ``sex_effect_sigma`` adds ``beta_sex_u`` and ``beta_sex_q``, each
       ``Normal(0, sigma)``, multiplying a girls ``+1/2`` / boys ``-1/2`` contrast
-      on the understood and production-ratio logits. The contrast coding keeps
-      the population curves the sex-balanced average rather than the boys'
-      curve, so the ``*_query`` outputs stay comparable with the control arm's,
-      and each coefficient reads directly as the girl-minus-boy difference in
-      logits. Requires ``sex_known_only``: a coefficient on a covariate two
+      on the understood and production-ratio logits. At contrast zero, the
+      logit is the midpoint of the logits for girls and boys. Transforming this
+      midpoint does not generally give their mean probability.
+      Each coefficient is the girl-minus-boy difference
+      in logits. Requires ``sex_known_only``: a coefficient on a covariate two
       fifths of the rows lack has nothing to multiply.
 
     The effect is **constant in age** by design. The note's age-by-sex
@@ -2255,6 +2255,14 @@ class JointCrossLagModelDefinition(JointCorrelatedSubjectREModelDefinition):
     one: a child who signs every word they understand is a real observation, and
     a clip at ``1 - 1e-4`` puts every such wave at the same +9.21 whatever its
     denominator was. See the constants in ``likelihood_utils``."""
+
+    sign_lag_same_form_only: bool = False
+    """Use a lag only when source and target have the same known inventory size.
+
+    The restriction removes the lag, while retaining the observation. It does
+    not search further back for another source, which would also change the
+    age gap. See the cross-form audit in the September 2026 implementation note.
+    """
 
 
 # ============================================================
@@ -3989,46 +3997,11 @@ VG24 = _as_definition_subclass(
     subject_re_correlation_eta=2.0,
 )
 
-# VG25 (issue #297) is to VG24 what VG16 is to VG10: the same graph plus one
-# lead-lag coefficient. Derived from VG24 rather than from VG15 deliberately --
-# the lag is only interpretable with the correlated block present, because
-# `rho_sign_q` is what takes the *persistent* sign-speech association off it and
-# leaves it measuring the prospective one. Derived from VG24 also means VG24's
-# own fingerprint is untouched and VG25 nests it exactly at beta_sign_lag = 0.
-#
-# WHAT IT ESTIMATES, and why three quantities are needed rather than one. Asked
-# on 2026-09-04: does early signing predict later speech?
-# `notes/202608160930-early-signing-and-later-speech.md` found +0.19 SD per SD
-# among 147 children, 89% ETI [0.03, 0.36], holding earlier speech and
-# comprehension standing fixed -- a two-wave residual regression, not a model.
-# VG24's `rho_sign_q` is the between-child term (+0.198 [0.107, 0.289] read off
-# VG15's fitted intercepts at gate 1). `beta_sign_lag` is the third: prospective,
-# within-child, net of persistent standing. Each names a different thing, and the
-# report's job is to say which is which rather than to pick one.
-#
-# WHICH CHILDREN INFORM IT. Measured on the 2026-09-11 frame: 191 observations
-# from 129 children at a median gap of 6 months (IQR 4-11) -- uk_07 52, ie_02 43,
-# uk_02 41, uk_05 30, uk_04 25. Confining the term to the spoken marginal, as
-# VG15's subject shifts are confined, would leave 111 observations from 80
-# children and drop uk_07 entirely; see `sign_lag_in_cells` for why that is a
-# different decision from the subject-shift one, and the `sign-lag-marginal-only`
-# arm for what measures the difference. es_01 contributes 185 rows carrying a
-# signed share and none of them a lag, because no es_01 child has two waves;
-# nz_01 contributes neither, by the rule on `use_sign_cross_lag` -- which costs
-# 78 observations from 28 children, not nothing.
-#
-# EXPECT A SMALL COEFFICIENT WITH AN INTERVAL NEAR ZERO. The descriptive note's
-# 89% interval only just cleared zero at n = 147, VG16's own recovery run
-# returned `beta_lag` 29% low on its one assessable replicate at `test`, and this
-# lag's support is smaller than VG16's 473. That is a reason to read the interval
-# rather than the sign, and a reason gate 4's recovery cells need a tier above
-# `test`. It is not a reason to expect nothing: the point is the estimate with
-# its uncertainty, in interpretable units.
-#
-# NOT A MODEL OF RECORD, AND NOT YET CLASSIFIED. The role is the study owner's to
-# assign (#297 check 7, with #190's other scope decisions), so VG25 is left
-# UNCLASSIFIED, which fails closed -- full publication strictness and a place in
-# the default refit scope, rather than a relaxation nobody chose.
+# VG25 adds a prior-wave signed-share predictor to VG24's correlated effects.
+# The coefficient is prospective conditional association, not a causal effect.
+# Development history and earlier descriptive estimates are in
+# notes/202609131044-model-review-implementation.md. Publication role remains
+# unclassified, so the existing validation rules retain full strictness.
 VG25 = _as_definition_subclass(
     VG24,
     JointCrossLagModelDefinition,
@@ -4050,37 +4023,8 @@ VG25 = _as_definition_subclass(
     sign_lag_in_cells=True,
     beta_sign_lag_mu=0.0,
     beta_sign_lag_sigma=0.5,
-    # CONTINUITY, not the clip VG16 registers, and this is the one place VG25
-    # departs from its sibling on a measurement rather than an argument.
-    #
-    # A signed share of exactly 0 is common here in a way an understood count of
-    # exactly 0 is not: on the 2026-09-11 frame 26 of the 191 supporting rows
-    # have a source wave where the child signed none of what they understood, and
-    # 2 more where they signed all of it -- 14.7% of the support sitting on a
-    # logit boundary, against 7 of VG16's 477 (1.5%).
-    #
-    # The clip puts all 26 at logit(1e-4) = -9.21 whatever the wave measured, so a
-    # child who understood 2 words and signed none enters identically to one who
-    # understood 406 and signed none. The continuity correction, (k + 0.5) /
-    # (n + 1), derives each from its own wave's denominator instead -- -1.61 for
-    # the 2-word wave, -6.70 for the 406-word one.
-    #
-    # What that is worth, measured on the SOURCE LOGIT -- the predictor's observed
-    # input, before the latent baseline the fitted term subtracts, which is the
-    # part measurable without a fit: SD 3.34 -> 1.79, and the 28 boundary rows'
-    # share of its total sum of squares 76.1% -> 45.8%. Under the clip, 14.7% of
-    # the rows would carry three quarters of the variation `beta_sign_lag` is
-    # estimated from, which is to say a floor constant would fix it.
-    #
-    # Not an artefact of the raw scale: residualising the source logit on the
-    # source wave's age and study, the closest stand-in for that baseline
-    # available before a fit, leaves SD 2.77 against 1.56 and leverage 66.1%
-    # against 42.3%.
-    #
-    # The FIELD keeps `LAG_ZERO_CLIP` as its default so the two lags are
-    # configured the same way and the off-state stays the historical treatment;
-    # what changes is what VG25 registers. `sign-lag-clip` is the arm that
-    # measures the difference on a fit rather than on this arithmetic.
+    # The correction uses the source wave's denominator at both boundaries.
+    # The sign-lag-clip sensitivity measures the alternative on a fitted model.
     sign_lag_zero_handling=LAG_ZERO_CONTINUITY,
 )
 

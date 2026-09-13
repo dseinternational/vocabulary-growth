@@ -225,7 +225,7 @@ def test_produced_cell_observation_extraction_rejects_inconsistent_mask():
 
 def test_build_model_registers_nz01_produced_cell_likelihood(tmp_path, monkeypatch):
     context = _prepare_context(tmp_path, monkeypatch, VG15)
-    monkeypatch.setattr(cjm, "render_model_graph", lambda *args, **kwargs: None)
+    context.report_build = False
 
     cjm.configure_joint_priors(context, VG15)
     cjm.build_model(context, VG15)

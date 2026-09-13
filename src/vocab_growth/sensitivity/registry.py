@@ -897,6 +897,11 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # lag does not drop the row.
     ("vg25", "sign-lag-gap-12"): {"suffix": "sign-lag-gap-12", "scalar": {
         "sign_lag_max_gap_months": 12.0}},
+    # Isolate the seven DSE-to-Oxford lags in the 13 September 2026 frame.
+    ("vg25", "sign-lag-same-form"): {
+        "suffix": "sign-lag-same-form",
+        "scalar": {"sign_lag_same_form_only": True},
+    },
     #
     # uk_07 supplies 52 of the 191 supporting observations, 27% of the evidence,
     # and it is the study the headline scope decision brings in -- so a

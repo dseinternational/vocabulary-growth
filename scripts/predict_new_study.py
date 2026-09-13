@@ -67,7 +67,7 @@ from vocab_growth.fit_consumers import (
 )
 from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import MODEL_REGISTRY
-from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
+from vocab_growth.models.subject_effects import slope_reference_age
 
 EPSILON = 1e-6
 AGE_BANDS = [0, 20, 24, 30, 36, 200]
@@ -139,8 +139,7 @@ def child_ref_age(structure: str, definition) -> float:
     if structure == "factor":
         return float(definition.subject_factor.ref_age_months)
     if structure == "slope":
-        ref = getattr(definition, "subject_slope_ref_age_months", None)
-        return float(DEFAULT_SLOPE_REF_AGE_MONTHS if ref is None else ref)
+        return slope_reference_age(definition)
     return 0.0
 
 

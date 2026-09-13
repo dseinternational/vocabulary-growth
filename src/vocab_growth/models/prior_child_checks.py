@@ -47,7 +47,10 @@ import numpy as np
 from scipy.stats import betabinom
 
 from vocab_growth.models.definitions import subject_factor_spec
-from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
+from vocab_growth.models.subject_effects import (
+    DEFAULT_SLOPE_REF_AGE_MONTHS,
+    slope_reference_age,
+)
 
 N_CHILD_CURVES = 300
 """Unseen children drawn for the trajectory figures.
@@ -149,13 +152,7 @@ def unseen_child_deltas(prior, definition, ages_months, rng):
         delta_q = b[:, 2][:, None] + b[:, 3][:, None] * years[None, :]
         return delta_u, delta_q
 
-    # Every remaining structure that uses a reference age is the child slope's, so
-    # this is the field that declares one. `or` is deliberately not used: an
-    # explicit 0.0 is a legitimate reference age and must not be rewritten to 36.
-    ref = getattr(definition, "subject_slope_ref_age_months", None)
-    years = years_from(
-        DEFAULT_SLOPE_REF_AGE_MONTHS if ref is None else ref
-    )
+    years = years_from(slope_reference_age(definition))
 
     if structure == "slope":
         # VG19: an intercept and a rate per outcome, correlated within outcome.

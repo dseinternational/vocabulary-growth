@@ -21,7 +21,7 @@ format:
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+Drafted by LLM-based AI tools (Claude Code/Opus 5; form-audit update by OpenAI Codex/GPT-6).
 :::
 
 ::: {.callout-important}
@@ -91,6 +91,12 @@ Two consequences follow, and both are registered rather than argued:
 ## The five design decisions {#sec-design}
 
 [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) named four choices that had to be made before this model could be registered, and measurement added a fifth. Each is stated with what decided it, because each moves either the estimand or the evidence.
+
+### Questionnaire changes {#sec-form}
+
+The signed share is a ratio of counts from a questionnaire. A common numerical denominator cancels in that ratio, but a change in the selected words need not. The 13 September source-provenance audit found seven DSE-to-Oxford-CDI transitions among VG25's 191 lagged rows, all in `uk_02`. No source or target inventory in those 191 pairs was unknown. The frame contains no same-child, same-age observations with usable signed shares on different forms, so it cannot directly establish that those shares agree across forms.
+
+The registered `sign-lag-same-form` sensitivity removes those seven lags and retains all 1,708 observation rows. It uses the latest earlier wave and then checks the form; it does not search back for an older matching wave. Unknown form membership also removes the lag. The default model remains unrestricted. These are audit counts, not results of a sensitivity fit, and the effect on the coefficient remains unmeasured. See the [implementation record](../../notes/202609131044-model-review-implementation.md#form-audit-and-a-vg25-sensitivity) and `scripts/audit_sign_lag_forms.py`.
 
 ### Which likelihoods the lag enters {#sec-scope}
 
@@ -613,7 +619,7 @@ Four comparisons are worth making once there are numbers, and none is automatic:
 - **Against VG24**, which is nested at $\beta_{sign\,lag}=0$. The population trajectories and $\psi$ should sit close — the criterion VG16 met against VG10, where the largest movement anywhere was 2.6 words understood and 2.0 words spoken. A material move in $\psi$ is something to explain, not to expect, and @sec-scope says which arm to read next if one appears.
 - **Against $\rho_{sign\,q}$ from the same fit.** VG25 carries both, which is what makes the between-child and prospective quantities separable in one model rather than argued about across two. A large $\beta_{sign\,lag}$ with $\rho_{sign\,q}$ unchanged from VG24 is the clean result; both moving together is the case where the two are competing for the same evidence.
 - **Against the descriptive $+0.19$** of [`notes/202608160930`](../../notes/202608160930-early-signing-and-later-speech.md), with the estimand difference stated (@sec-three-quantities): that regression conditions on earlier *speech*, which this model does not.
-- **Against the sensitivities**, in this order of importance: `sign-lag-clip` (@sec-boundary), `sign-lag-marginal-only` and `sign-lag-population` (@sec-scope), `no-uk07` beside `sign-lag-uk07-marginal` — the first removes `uk_07`'s children, the second keeps them and moves their rows between likelihoods — then `no-ie02`, `sign-lag-gap-12` (@sec-gap), and the two prior scales.
+- **Against the sensitivities**, in this order of importance: `sign-lag-clip` (@sec-boundary), `sign-lag-marginal-only` and `sign-lag-population` (@sec-scope), `no-uk07` beside `sign-lag-uk07-marginal`, then `no-ie02`, `sign-lag-gap-12` (@sec-gap), `sign-lag-same-form` (@sec-form), and the two prior scales. The `no-uk07` arm removes that study's children; `sign-lag-uk07-marginal` keeps them and moves their rows between likelihoods.
 
 ```{python}
 #| echo: false

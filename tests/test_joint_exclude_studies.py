@@ -27,7 +27,9 @@ import pytest
 
 import vocab_growth.environment as env
 from vocab_growth.models import common_joint_modality as cjm
-from vocab_growth.models.definitions import VG15
+from vocab_growth.models.cross_lag import prev_wave_sign_share_lag_for_frame
+from vocab_growth.models.definitions import VG15, VG25
+from vocab_growth.models.observation_arrays import prepare_joint_observations
 
 
 def _write_sources(directory) -> None:
@@ -136,6 +138,54 @@ def test_codes_are_assigned_after_the_rows_go(build):
     assert sorted(reduced["subject_code"].unique()) == list(
         range(reduced["subject_code"].nunique())
     )
+
+
+@pytest.mark.parametrize("excluded", ["uk_07", "ie_02", "uk_02"])
+def test_study_exclusion_and_same_form_lags_preserve_likelihood_rows(
+    build, tmp_path, monkeypatch, excluded
+):
+    """Remove a study, then restrict the remaining lags without dropping outcomes."""
+    merged = _MERGED.assign(survey_vocab_max=810.0)
+    monkeypatch.setattr(
+        cjm.vocab_data_utils,
+        "load_data",
+        lambda **kwargs: merged[kwargs["columns"]].copy(),
+    )
+    source_path = tmp_path / "vocab_data_uk_02.csv"
+    source = pd.read_csv(source_path)
+    source.loc[1, ["subject_id", "form"]] = ["uk_a", "Oxford_CDI"]
+    source.to_csv(source_path, index=False)
+
+    definition = dataclasses.replace(VG25, exclude_studies=(excluded,))
+    restricted = dataclasses.replace(definition, sign_lag_same_form_only=True)
+    frame, _ = build(definition)
+    same_form, info = build(restricted)
+    pd.testing.assert_frame_equal(same_form.drop(columns="survey_vocab_max"), frame)
+    assert excluded not in set(same_form["study"])
+    assert sorted(same_form["study_code"].unique()) == list(
+        range(len(info["unique_studies"]))
+    )
+    assert sorted(same_form["subject_code"].unique()) == list(
+        range(info["n_subjects"])
+    )
+
+    _, original_lags, _ = prev_wave_sign_share_lag_for_frame(frame, definition)
+    _, restricted_lags, _ = prev_wave_sign_share_lag_for_frame(same_form, restricted)
+    dropped = (original_lags > 0) & (restricted_lags == 0)
+    expected = (frame["study"] == "uk_02") & (frame["age"] == 36)
+    np.testing.assert_array_equal(dropped, expected)
+    assert restricted_lags.sum() == 1  # UK04's two waves still use one form.
+
+    original_obs = prepare_joint_observations(
+        frame, definition, n_trials=VG25.n_trials, use_subject_codes=True
+    )
+    restricted_obs = prepare_joint_observations(
+        same_form, restricted, n_trials=VG25.n_trials, use_subject_codes=True
+    )
+    for name in ("idx_u", "idx_s", "idx_sign", "idx_cells", "idx_prod"):
+        np.testing.assert_array_equal(
+            getattr(original_obs, name), getattr(restricted_obs, name)
+        )
 
 
 def test_a_code_that_matches_nothing_is_refused(build):

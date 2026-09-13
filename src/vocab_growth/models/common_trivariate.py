@@ -57,6 +57,7 @@ import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.administration_loo import LikelihoodFactor
 from vocab_growth.fit_artifacts import save_trace
+from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -75,8 +76,8 @@ from vocab_growth.models.common import (
     emit_monthly_summary,
     get_hsgp_hyperparams,
     plot_and_print_dist,
-    render_model_graph,
     report,
+    report_model_build,
     run_fit_pipeline,
     validate_kappa_fields,
 )
@@ -351,7 +352,8 @@ def configure_trivariate_priors(
 ):
     """Configure priors and hyperparameters from a trivariate model definition."""
     # --- Understood (U) trajectory priors ---
-    heading("Understood trajectory priors", style="bold cyan")
+    if context.report_build:
+        heading("Understood trajectory priors", style="bold cyan")
 
     ell_unit_u_dist = pz.Beta(
         alpha=definition.ell_unit_u_alpha, beta=definition.ell_unit_u_beta
@@ -372,7 +374,8 @@ def configure_trivariate_priors(
     plot_and_print_dist(context, p_slope_hi_u_dist, "p_slope_hi_u_dist")
 
     # --- Production ratio (q) priors ---
-    heading("Production ratio priors", style="bold cyan")
+    if context.report_build:
+        heading("Production ratio priors", style="bold cyan")
 
     ell_unit_q_dist = pz.Beta(
         alpha=definition.ell_unit_q_alpha, beta=definition.ell_unit_q_beta
@@ -393,7 +396,8 @@ def configure_trivariate_priors(
     plot_and_print_dist(context, p_slope_hi_q_dist, "p_slope_hi_q_dist")
 
     # --- Signed ratio (r) priors ---
-    heading("Signed ratio priors", style="bold cyan")
+    if context.report_build:
+        heading("Signed ratio priors", style="bold cyan")
 
     ell_unit_sign_dist = pz.Beta(
         alpha=definition.ell_unit_sign_alpha, beta=definition.ell_unit_sign_beta
@@ -421,25 +425,22 @@ def configure_trivariate_priors(
     plot_and_print_dist(context, p_slope_hi_sign_dist, "p_slope_hi_sign_dist")
 
     # --- Kappa priors — understood ---
-    heading("Kappa priors — understood", style="bold cyan")
+    if context.report_build:
+        heading("Kappa priors — understood", style="bold cyan")
 
-    kappa_u_fields = configure_kappa_priors(
-        context, definition.kappa_u, "_u"
-    )
+    kappa_u_fields = configure_kappa_priors(context, definition.kappa_u, "_u")
 
     # --- Kappa priors — spoken ---
-    heading("Kappa priors — spoken", style="bold cyan")
+    if context.report_build:
+        heading("Kappa priors — spoken", style="bold cyan")
 
-    kappa_s_fields = configure_kappa_priors(
-        context, definition.kappa_s, "_s"
-    )
+    kappa_s_fields = configure_kappa_priors(context, definition.kappa_s, "_s")
 
     # --- Kappa priors — signed ---
-    heading("Kappa priors — signed", style="bold cyan")
+    if context.report_build:
+        heading("Kappa priors — signed", style="bold cyan")
 
-    kappa_sign_fields = configure_kappa_priors(
-        context, definition.kappa_sign, "_sign"
-    )
+    kappa_sign_fields = configure_kappa_priors(context, definition.kappa_sign, "_sign")
 
     # --- Configuration object ---
 
@@ -484,11 +485,18 @@ def configure_trivariate_priors(
 # ============================================================
 
 
-def build_model(
+def build_model(context: TrivariateContext, definition: TrivariateModelDefinition):
+    """Pipeline stage: construct the model, then write its build report."""
+    details = build_model_graph(context, definition)
+    report_model_build(context, details)
+
+
+def build_model_graph(
     context: TrivariateContext,
     definition: TrivariateModelDefinition,
-):
+) -> BuildReport:
     """Build the trivariate PyMC model."""
+    build_report = BuildReport()
     config = context.model_config
 
     analysis_df = context.analysis_df
@@ -565,14 +573,9 @@ def build_model(
     has_sign_likelihood = np.zeros(n, dtype=bool)
     has_sign_likelihood[signed_spec.indices] = True
 
-    # Range validation happens ONCE, before the integer cast, and not here: see the
-    # `require_valid_counts` call above for understood, and `nested_outcome_spec`
-    # for spoken and signed.
-
-    # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
-    key_value_table(
+    build_report.add_table(
         "Build configuration",
         [
             ("Total observations", n),
@@ -615,7 +618,6 @@ def build_model(
     n_query = grids.n_query
     n_all = grids.n_all
 
-    # Length-scale bounds
     ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
     ell_low_z = ell_low_months / X_obs_std
     ell_high_z = ell_high_months / X_obs_std
@@ -623,12 +625,11 @@ def build_model(
 
     L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
-    # Slope anchors
     slope_age_a_z, slope_age_b_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
     )
 
-    key_value_table(
+    build_report.add_table(
         "Derived quantities",
         [
             ("HSGP basis size (m)", M),
@@ -638,10 +639,9 @@ def build_model(
         ],
     )
 
-    # Slice indices
-    i_obs0, i_obs1 = 0, n
-    i_plot0, i_plot1 = i_obs1, i_obs1 + n_plot
-    i_query0, i_query1 = i_plot1, i_plot1 + n_query
+    i_obs0, i_obs1 = grids.i_obs
+    i_plot0, i_plot1 = grids.i_plot
+    i_query0, i_query1 = grids.i_query
 
     coords = {
         "all_id": np.arange(n_all),
@@ -655,7 +655,6 @@ def build_model(
     }
 
     with pm.Model(coords=coords) as model_pm:
-
         # ---- Data ----
 
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
@@ -667,9 +666,7 @@ def build_model(
         # Store masks for extraction
         _ = pm.Data("obs_u_mask", has_u.astype(int), dims=("obs_id",))
         _ = pm.Data("obs_s_mask", has_s_likelihood.astype(int), dims=("obs_id",))
-        _ = pm.Data(
-            "obs_sign_mask", has_sign_likelihood.astype(int), dims=("obs_id",)
-        )
+        _ = pm.Data("obs_sign_mask", has_sign_likelihood.astype(int), dims=("obs_id",))
         s_likelihood_n = pm.Data(
             "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
         )
@@ -704,9 +701,7 @@ def build_model(
 
         # One flag, two means: see definitions.clamp_targets. 'q_only' is
         # truthy, so testing the raw value would clamp both.
-        _clamp_u, _clamp_q = clamp_targets(
-            definition.clamp_mean_above_hi_anchor
-        )
+        _clamp_u, _clamp_q = clamp_targets(definition.clamp_mean_above_hi_anchor)
 
         # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
         f_u_all = trend_and_gp(
@@ -835,9 +830,7 @@ def build_model(
         )
 
         # Signed rate
-        _ = pm.Deterministic(
-            "g_sign_obs", g_sign_all[i_obs0:i_obs1], dims=("obs_id",)
-        )
+        _ = pm.Deterministic("g_sign_obs", g_sign_all[i_obs0:i_obs1], dims=("obs_id",))
         _ = pm.Deterministic(
             "g_sign_plot", g_sign_all[i_plot0:i_plot1], dims=("plot_id",)
         )
@@ -860,9 +853,7 @@ def build_model(
             "p_sign_query", p_sign_all[i_query0:i_query1], dims=("query_id",)
         )
 
-        _ = pm.Deterministic(
-            "f_sign_obs", f_sign_all[i_obs0:i_obs1], dims=("obs_id",)
-        )
+        _ = pm.Deterministic("f_sign_obs", f_sign_all[i_obs0:i_obs1], dims=("obs_id",))
         _ = pm.Deterministic(
             "f_sign_plot", f_sign_all[i_plot0:i_plot1], dims=("plot_id",)
         )
@@ -929,9 +920,7 @@ def build_model(
         kappa_sign_obs = pm.Deterministic(
             "kappa_sign_obs", kappa_sign_of_z(z_obs), dims="obs_id"
         )
-        _ = pm.Deterministic(
-            "kappa_sign_plot", kappa_sign_of_z(z_plot), dims="plot_id"
-        )
+        _ = pm.Deterministic("kappa_sign_plot", kappa_sign_of_z(z_plot), dims="plot_id")
         _ = pm.Deterministic(
             "kappa_sign_query", kappa_sign_of_z(z_query), dims="query_id"
         )
@@ -1017,11 +1006,8 @@ def build_model(
 
     variables = pymc_utils.get_variables_dict(model_pm)
 
-    pymc_utils.report_model_summary(model_pm)
-
-    render_model_graph(model_pm, context.reporting.output_dir)
-
     context.set_model(model_pm, variables)
+    return build_report
 
 
 # ============================================================
@@ -1106,8 +1092,6 @@ def extract_model_samples(trace: xr.DataTree) -> TrivariateModelSamples:
     X_obs = np.array(trace.constant_data["X_obs"].values)
     X_plot = np.array(trace.constant_data["X_plot"].values)
     X_query = np.array(trace.constant_data["X_query"].values)
-
-    # Standardised ages
 
     return TrivariateModelSamples(
         X_obs=X_obs,
