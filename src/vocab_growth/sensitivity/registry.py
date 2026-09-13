@@ -908,12 +908,9 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # coefficient does not depend on which likelihood carries uk_07.
     #
     # It is NOT a leave-one-study-out check, and is not labelled as one.
-    # #297 check 5 asks for those. Since 2026-09-13 `JointModelDefinition`
-    # carries `exclude_studies`, so they can be registered here; none is yet,
-    # because which studies to leave out is a design choice rather than a
-    # mechanical one. VG25's supporting observations come from five studies --
-    # uk_07 52, ie_02 43, uk_02 41, uk_05 30, uk_04 25 of 191 -- and excluding
-    # uk_07 on the current frame takes the lag's support to 139, ie_02 to 148.
+    # #297 check 5 asks for those, and since 2026-09-13 `JointModelDefinition`
+    # carries `exclude_studies`, so two are registered just below: `no-uk07` and
+    # `no-ie02`.
     #
     # The field landed without refitting anything, as the paragraphs below
     # argued it could. An earlier version of this comment had put that cost at
@@ -943,6 +940,29 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # mechanism for avoiding it exists.
     ("vg25", "sign-lag-uk07-marginal"): {"suffix": "sign-lag-uk07-marginal", "scalar": {
         "include_uk07_cells": False}},
+    #
+    # The leave-one-study-out pair (#297 check 5), for the two studies the lag's
+    # support rests on most. Five studies supply its 191 supporting observations
+    # -- uk_07 52, ie_02 43, uk_02 41, uk_05 30, uk_04 25 -- and these two carry
+    # half of it between them. On the 2026-09-13 frame `no-uk07` takes the
+    # support to 139 and `no-ie02` to 148, which is exactly their own
+    # contributions; a full sweep over the other three is one registry line each.
+    #
+    # They are not the same kind of check, and should not be read as one.
+    # `no-uk07` removes a **cross-tabulation** source: all 82 of uk_07's rows are
+    # four-cell rows, so the arm takes a quarter of the lag's evidence and one of
+    # the four sources that identify `psi` at once. Read `beta_sign_lag` from it;
+    # a move in `psi` or the trajectories is expected and is not a lag result.
+    # Beside `sign-lag-uk07-marginal`, which keeps uk_07's children and moves
+    # their rows to the marginal likelihood, it separates "the coefficient needs
+    # uk_07's children" from "it needs where their rows enter". `no-ie02` removes
+    # a **merged-view** source with no cross-tabulation, so the composition
+    # likelihood is untouched and a moved coefficient is a statement about ie_02's
+    # children alone.
+    ("vg25", "no-uk07"): {"suffix": "no-uk07", "scalar": {
+        "exclude_studies": ("uk_07",)}},
+    ("vg25", "no-ie02"): {"suffix": "no-ie02", "scalar": {
+        "exclude_studies": ("ie_02",)}},
     #
     # The coefficient-prior pair, matching VG16's `beta-tight` / `beta-wide` and
     # for the same reason: a symmetric prior is not a calibrated one, and
