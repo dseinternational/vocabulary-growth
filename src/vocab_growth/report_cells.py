@@ -35,8 +35,10 @@ from scipy import stats
 
 from vocab_growth.administration_loo import ADMINISTRATION_LABEL
 from vocab_growth.fit_artifacts import (
+    HardConvergenceStatus,
     diagnostics_assessable,
     diagnostics_scan_completed,
+    hard_tier_status,
 )
 from vocab_growth.glossary import render_glossary  # noqa: F401  (re-exported)
 from vocab_growth.models.diagnostics_utils import (  # noqa: F401  (re-exported)
@@ -2124,7 +2126,9 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     # manifest is deliberately *not* read this way -- see `read_manifest`.
     read = read_json(os.path.join(directory, "diagnostics_summary.json"))
     if read.status == "missing":
-        print("_No `diagnostics_summary.json` for this fit, so the gate verdict cannot be shown._")
+        print(
+            "_No `diagnostics_summary.json` for this fit, so the gate verdict cannot be shown._"
+        )
         return
     if read.status == "invalid" or not isinstance(read.value, dict):
         print(
@@ -2172,12 +2176,14 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
                     best_ess_name = str(stacked.stack().idxmin()[0])
                 else:
                     best_ess_name = unlisted
-        except (OSError, ValueError, TypeError, IndexError):
+        except OSError, ValueError, TypeError, IndexError:
             pass
 
     divergences = summary.get("divergences")
     bfmi = summary.get("bfmi_per_chain") or []
-    finite_bfmi = [value for value in bfmi if value is not None and math.isfinite(value)]
+    finite_bfmi = [
+        value for value in bfmi if value is not None and math.isfinite(value)
+    ]
     min_bfmi = min(finite_bfmi) if len(finite_bfmi) == len(bfmi) and bfmi else None
 
     def mark(ok):
@@ -2187,26 +2193,34 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     print("| --- | --- | --- | --- | --- |")
     if max_rhat is not None:
         where = (
-            f" ({worst_rhat_name})" if worst_rhat_name == unlisted
-            else f" (`{worst_rhat_name}`)" if worst_rhat_name else ""
+            f" ({worst_rhat_name})"
+            if worst_rhat_name == unlisted
+            else f" (`{worst_rhat_name}`)"
+            if worst_rhat_name
+            else ""
         )
         print(
             f"| Largest R-hat | {max_rhat:.6f}{where} | ≤ {rhat_max:g} | hard | "
-            f"{mark(checks.get('rhat', max_rhat <= rhat_max))} |"
+            f"{mark(checks.get('rhat', True) and max_rhat <= rhat_max)} |"
         )
     else:
-        print(f"| Largest R-hat | unavailable | ≤ {rhat_max:g} | hard | **fail** |")
+        print(f"| Largest R-hat | unavailable | ≤ {rhat_max:g} | hard | unknown |")
     if min_ess is not None:
         where = (
-            f" ({best_ess_name})" if best_ess_name == unlisted
-            else f" (`{best_ess_name}`)" if best_ess_name else ""
+            f" ({best_ess_name})"
+            if best_ess_name == unlisted
+            else f" (`{best_ess_name}`)"
+            if best_ess_name
+            else ""
         )
         print(
             f"| Smallest effective sample size | {min_ess:,.0f}{where} | ≥ {ess_min:,} | hard | "
-            f"{mark(checks.get('ess', min_ess >= ess_min))} |"
+            f"{mark(checks.get('ess', True) and min_ess >= ess_min)} |"
         )
     else:
-        print(f"| Smallest effective sample size | unavailable | ≥ {ess_min:,} | hard | **fail** |")
+        print(
+            f"| Smallest effective sample size | unavailable | ≥ {ess_min:,} | hard | unknown |"
+        )
     if divergences is not None:
         print(
             f"| Divergent transitions | {divergences:,} | 0 | soft | "
@@ -2218,13 +2232,28 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             f"{mark(checks.get('bfmi', min_bfmi >= bfmi_min))} |"
         )
     else:
-        print(f"| Smallest energy BFMI across chains | unavailable | ≥ {bfmi_min:g} | soft | **fail** |")
+        print(
+            f"| Smallest energy BFMI across chains | unavailable | ≥ {bfmi_min:g} | soft | **fail** |"
+        )
     unassessable = summary.get("unassessable_parameters") or []
     if not diagnostics_scan_completed(summary):
-        print("| R-hat/ESS scan | did not complete | completed | hard | **fail** |")
+        scan = (
+            "did not complete"
+            if summary.get("scan_completed") is False
+            else "unavailable"
+        )
+        result = "**fail**" if summary.get("scan_completed") is False else "unknown"
+        print(f"| R-hat/ESS scan | {scan} | completed | hard | {result} |")
     if not diagnostics_assessable(summary):
         detail = ", ".join(unassessable) if unassessable else "unavailable diagnostics"
-        print(f"| Parameters the gate could not assess | {detail} | none | hard | **fail** |")
+        result = (
+            "**fail**"
+            if unassessable or checks.get("diagnostics_assessable") is False
+            else "unknown"
+        )
+        print(
+            f"| Parameters the gate could not assess | {detail} | none | hard | {result} |"
+        )
     print()
 
     manifest = read_manifest(directory)
@@ -2236,16 +2265,15 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
         effort.append(f"after {params['tune']:,} tuning draws")
     if params.get("target_accept"):
         effort.append(f"at target acceptance {params['target_accept']:g}")
-    hard = (
-        diagnostics_scan_completed(summary)
-        and diagnostics_assessable(summary)
-        and bool(checks.get("rhat", max_rhat is not None and max_rhat <= rhat_max))
-        and bool(checks.get("ess", min_ess is not None and min_ess >= ess_min))
-    )
+    hard_status = hard_tier_status(summary)
+    hard = hard_status is HardConvergenceStatus.PASSED
     soft = (
-        divergences is not None and divergences == 0
-        and min_bfmi is not None and min_bfmi >= bfmi_min
-        and bool(checks.get("divergences", True)) and bool(checks.get("bfmi", True))
+        divergences is not None
+        and divergences == 0
+        and min_bfmi is not None
+        and min_bfmi >= bfmi_min
+        and bool(checks.get("divergences", True))
+        and bool(checks.get("bfmi", True))
     )
     if hard and soft:
         verdict = "This fit clears both tiers of the convergence gate."
@@ -2254,6 +2282,12 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             "This fit clears the **hard** tier (R-hat and effective sample size) but not the "
             "**soft** tier; the caveat block above says what was recorded and the reported "
             "intervals should be read with that in mind."
+        )
+    elif hard_status is HardConvergenceStatus.UNKNOWN:
+        verdict = (
+            "The hard convergence tier **cannot be assessed** from the recorded "
+            "diagnostics. These results are provisional and must not be published "
+            "as a completed fit."
         )
     else:
         verdict = "This fit **does not clear the hard tier**."
@@ -2264,7 +2298,9 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     sentence = verdict
     if effort:
         sentence += " Sampled with " + ", ".join(effort) + "."
-    print(": " + sentence + " Read from `diagnostics_summary.json` and the fit manifest.")
+    print(
+        ": " + sentence + " Read from `diagnostics_summary.json` and the fit manifest."
+    )
 
 
 def render_prior_posterior_contraction(directory: str = ".") -> None:

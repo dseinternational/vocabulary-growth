@@ -233,6 +233,9 @@ BACKFILL_DEFAULTS: dict[str, Any] = {
     "include_same_day_disagreements": False,
     "lag_same_form_only": False,
     "exclude_studies": (),
+    # Earlier VG25 fits imposed no form restriction. The shared reader and
+    # test_fit_identity.py check that absence still resolves to False.
+    "sign_lag_same_form_only": False,
 }
 
 

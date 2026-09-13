@@ -36,9 +36,9 @@ from vocab_growth.models.common import ModelFitContext
 from vocab_growth.models.definitions import VG12
 
 
-def _build(definition, tmp_path, monkeypatch):
-    monkeypatch.setattr(cur, "render_model_graph", lambda *a, **k: None)
+def _build(definition, tmp_path):
     context = ModelFitContext(
+        report_build=False,
         reporting=reporting.ReportingConfiguration(
             model_name=definition.model_id,
             config_name=definition.config_name,
@@ -117,8 +117,8 @@ def test_the_re_models_enable_centring():
     assert VG12.centred_study_re is True
 
 
-def test_non_centred_branch_is_unchanged(_require_data, tmp_path, monkeypatch):
-    model = _build(SMALL, tmp_path, monkeypatch)
+def test_non_centred_branch_is_unchanged(_require_data, tmp_path):
+    model = _build(SMALL, tmp_path)
     free = {v.name for v in model.free_RVs}
     deterministics = {d.name for d in model.deterministics}
     assert "delta_raw" in free
@@ -127,9 +127,9 @@ def test_non_centred_branch_is_unchanged(_require_data, tmp_path, monkeypatch):
     assert "tau" in free
 
 
-def test_centred_branch_samples_delta_directly(_require_data, tmp_path, monkeypatch):
+def test_centred_branch_samples_delta_directly(_require_data, tmp_path):
     centred = dataclasses.replace(SMALL, centred_study_re=True)
-    model = _build(centred, tmp_path, monkeypatch)
+    model = _build(centred, tmp_path)
     free = {v.name for v in model.free_RVs}
     deterministics = {d.name for d in model.deterministics}
     assert "delta" in free
@@ -139,9 +139,9 @@ def test_centred_branch_samples_delta_directly(_require_data, tmp_path, monkeypa
     assert "ZeroSum" in type(model["delta"].owner.op).__name__
 
 
-def test_centred_branch_still_sums_to_zero(_require_data, tmp_path, monkeypatch):
+def test_centred_branch_still_sums_to_zero(_require_data, tmp_path):
     centred = dataclasses.replace(SMALL, centred_study_re=True)
-    model = _build(centred, tmp_path, monkeypatch)
+    model = _build(centred, tmp_path)
     with model:
         draws = pm.draw(model["delta"], draws=64, random_seed=0)
     assert np.allclose(draws.sum(axis=-1), 0.0, atol=1e-6)

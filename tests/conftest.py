@@ -121,11 +121,11 @@ def require_prepared_data():
         pytest.skip("prepared vocabulary DuckDB not available")
 
 
-def build_univariate_re_context(definition, tmp_path_factory, monkeypatch):
+def build_univariate_re_context(definition, tmp_path_factory):
     """Prepare, configure and build one univariate random-effect model."""
-    monkeypatch.setattr(cur, "render_model_graph", lambda *a, **k: None)
     root = str(tmp_path_factory.mktemp(definition.config_name))
     context = ModelFitContext(
+        report_build=False,
         reporting=reporting.ReportingConfiguration(
             model_name=definition.model_id,
             config_name=definition.config_name,
@@ -145,14 +145,10 @@ def build_univariate_re_context(definition, tmp_path_factory, monkeypatch):
 @pytest.fixture(scope="module")
 def subject_explicit_context(require_prepared_data, tmp_path_factory):
     """VG12 at a twentieth of the children, with every child effect explicit."""
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        yield build_univariate_re_context(SMALL, tmp_path_factory, monkeypatch)
+    return build_univariate_re_context(SMALL, tmp_path_factory)
 
 
 @pytest.fixture(scope="module")
 def subject_marginal_context(require_prepared_data, tmp_path_factory):
     """The same model with the singleton child effects integrated out."""
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        yield build_univariate_re_context(
-            SMALL_MARGINAL, tmp_path_factory, monkeypatch
-        )
+    return build_univariate_re_context(SMALL_MARGINAL, tmp_path_factory)

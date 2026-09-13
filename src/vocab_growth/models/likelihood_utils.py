@@ -92,13 +92,14 @@ on the current frame, and they sit at the extreme of the predictor's range,
 where a regression coefficient takes its leverage from."""
 
 LAG_ZERO_CONTINUITY = "continuity"
-"""Apply a ``+0.5 / +1`` continuity correction instead of clipping.
+"""Use ``(u + 0.5) / (n + 1)`` before taking a logit.
 
-``(u + 0.5) / (n + 1)`` is the standard Bayes/Jeffreys-style adjustment for a
-boundary count. It puts a zero source at ``logit(6.17e-4) = -7.39`` rather than
-at -9.21 -- nearly two logit units in, and derived from the inventory size
-rather than from an arbitrary floor. Non-boundary sources move by less than
-0.002 logits, so this is a boundary treatment rather than a rescaling."""
+At zero out of 810 this gives about -7.39 logits, rather than the clip's -9.21.
+It changes every proportion except one-half. The effect can be substantial
+near either boundary: one word out of 810 moves by about 0.40485 logits.
+The adjustment is the posterior mean proportion under a Beta(0.5, 0.5) prior
+and a Binomial likelihood; it is used here as a predictor sensitivity.
+"""
 
 LAG_ZERO_TREATMENTS = (LAG_ZERO_CLIP, LAG_ZERO_CONTINUITY)
 

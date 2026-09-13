@@ -12,7 +12,7 @@ VG15 extends the trivariate VG14 with two things VG14 assumed away:
     cross-tabulation sources: the uk_02, uk_07 and es_01 four-cell
     within-understood cross-tabs (sign-only / sign+speech / speech-only /
     understood-only) and nz_01's three-cell within-produced cross-tab. This
-    replaces VG14's independence-based ``p_any`` upper bound with a
+    replaces VG14's ``p_any`` calculated under independence with a
     *data-identified* total expressive vocabulary. The reported population
     ``psi`` is a shrunk centre over sources that disagree; the per-study values
     are the primary read.
@@ -68,7 +68,6 @@ import numpy as np
 import pandas as pd
 import preliz as pz
 import pymc as pm
-import pytensor.tensor as pt
 from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
@@ -89,10 +88,9 @@ from vocab_growth.cross_tab_sources import (
     load_uk07_four_cell,
 )
 from vocab_growth.fit_artifacts import save_trace
+from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
-    require_integral_counts,
-    require_valid_counts,
     standardize_ages,
     standardize_ages_to_z,
     standardize_anchor_ages,
@@ -109,17 +107,27 @@ from vocab_growth.models.common import (
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
     plot_and_print_dist,
-    render_model_graph,
     report,
+    report_model_build,
     run_fit_pipeline,
     validate_kappa_fields,
 )
 from vocab_growth.models.common import diagnostics as _shared_diagnostics
 from vocab_growth.models.common import sample as _shared_sample
+from vocab_growth.models.composition import (
+    build_composition_likelihood,
+    build_composition_parameters,
+)
+from vocab_growth.models.composition import (
+    composition_probabilities as _composition_probabilities,
+)
+from vocab_growth.models.composition import (
+    plackett_pi_both as _plackett_pi_both,
+)
 from vocab_growth.models.cross_lag import (
     prev_wave_sign_share_lag_for_frame,
-    report_sign_cross_lag_support,
     sign_cross_lag_audit_frame,
+    sign_lag_same_form_only,
     validate_sign_cross_lag,
 )
 from vocab_growth.models.definitions import JointModelDefinition, clamp_targets
@@ -132,8 +140,31 @@ from vocab_growth.models.gp_utils import (
 from vocab_growth.models.likelihood_utils import (
     SPOKEN_FALLBACK_PAIRED_ONLY,
     nested_outcome_alpha_beta,
-    nested_outcome_spec,
-    resolve_fallback_treatment,
+)
+from vocab_growth.models.observation_arrays import (
+    CELL_COLUMNS as CELL_COLUMNS,
+)
+from vocab_growth.models.observation_arrays import (
+    CELL_NAMES as CELL_NAMES,
+)
+from vocab_growth.models.observation_arrays import (
+    PROD_CELL_COLUMNS as PROD_CELL_COLUMNS,
+)
+from vocab_growth.models.observation_arrays import (
+    PROD_CELL_NAMES as PROD_CELL_NAMES,
+)
+from vocab_growth.models.observation_arrays import (
+    prepare_joint_observations,
+)
+from vocab_growth.models.study_effects import informed_studies, zero_sum_study_offsets
+from vocab_growth.models.subject_graphs import (
+    SUBJECT_RE_CORRELATIONS as SUBJECT_RE_CORRELATIONS,
+)
+from vocab_growth.models.subject_graphs import (
+    SUBJECT_RE_OUTCOMES as SUBJECT_RE_OUTCOMES,
+)
+from vocab_growth.models.subject_graphs import (
+    build_joint_child_effects,
 )
 from vocab_growth.plotting import (
     plot_prior_samples,
@@ -150,36 +181,7 @@ from vocab_growth.reporting import (
 EPSILON = math_constants.EPSILON
 
 
-# Order of the four mutually-exclusive within-understood cells.
-CELL_NAMES = ["neither", "sign_only", "speak_only", "both"]
-#: The frame columns those four cells are read from, in the same order. Named
-#: here because `scripts/wave_forward_score.py` scores a held-out row's
-#: composition and must read the counts in the order the likelihood stacked the
-#: probabilities; a second copy of the list is how that silently stops being
-#: true.
-CELL_COLUMNS = ["understood_only", "signed_only", "spoken_only", "signed_spoken"]
-# Order of nz_01's three within-produced cells (the four-cell composition
-# conditioned on produced, dropping the unobservable "neither"/understood-only).
-PROD_CELL_NAMES = ["sign_only", "speak_only", "both"]
-PROD_CELL_COLUMNS = ["prod_signed_only", "prod_spoken_only", "prod_signed_spoken"]
 
-#: The three latent trajectories carrying a subject random intercept, in the
-#: order the correlated block (VG24, #296) stacks them. The suffixes are the ones
-#: already baked into `tau_subj_*`, `z_subj_*` and `delta_subj_*`, so this names
-#: the existing convention rather than introducing a second one.
-SUBJECT_RE_OUTCOMES = ("u", "q", "sign")
-
-#: Off-diagonals of the subject correlation matrix, exposed as named scalars.
-#:
-#: `rho_uq` deliberately matches VG20's and VG23's name for the same quantity, so
-#: the three are read side by side without a translation table. `rho_sign_q` is
-#: the one VG24 exists to estimate. Order is (name, row, column) into the matrix
-#: `SUBJECT_RE_OUTCOMES` indexes.
-SUBJECT_RE_CORRELATIONS = (
-    ("rho_uq", 0, 1),
-    ("rho_u_sign", 0, 2),
-    ("rho_sign_q", 1, 2),
-)
 
 
 # ============================================================
@@ -474,8 +476,12 @@ def build_joint_analysis_frame(
             "study": UK07_STUDY_ID,
             "age": marg07["age"].to_numpy(dtype=float),
             "understood": marg07["understood"].to_numpy(dtype=float),
-            "spoken": (marg07["spoken"] + marg07["spoken_signed"]).to_numpy(dtype=float),
-            "signed": (marg07["signed"] + marg07["spoken_signed"]).to_numpy(dtype=float),
+            "spoken": (marg07["spoken"] + marg07["spoken_signed"]).to_numpy(
+                dtype=float
+            ),
+            "signed": (marg07["signed"] + marg07["spoken_signed"]).to_numpy(
+                dtype=float
+            ),
         }
         if use_subject_codes:
             four07_cols["subject_id"] = four07["subject_id"].to_numpy()
@@ -594,13 +600,20 @@ def build_joint_analysis_frame(
     n_subjects: int | None = None
     if use_subject_codes:
         subj_keys = (
-            analysis_df["study"].astype(str) + "::" + analysis_df["subject_id"].astype(str)
+            analysis_df["study"].astype(str)
+            + "::"
+            + analysis_df["subject_id"].astype(str)
         )
         analysis_df["subject_key"] = subj_keys
         unique_subjects = sorted(subj_keys.unique())
         subject_map = {s: i for i, s in enumerate(unique_subjects)}
         analysis_df["subject_code"] = subj_keys.map(subject_map).astype(int)
         n_subjects = len(unique_subjects)
+
+    if sign_lag_same_form_only(definition):
+        from vocab_growth.sign_lag_forms import joint_inventory_sizes
+
+        analysis_df["survey_vocab_max"] = joint_inventory_sizes(analysis_df, definition)
 
     return analysis_df, {
         "use_subject_codes": use_subject_codes,
@@ -768,39 +781,81 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
         plot_and_print_dist(context, d, name)
         return d
 
-    heading("Understood trajectory priors", style="bold cyan")
-    ell_unit_u_dist = beta(definition.ell_unit_u_alpha, definition.ell_unit_u_beta, "ell_unit_u_dist")
+    if context.report_build:
+        heading("Understood trajectory priors", style="bold cyan")
+    ell_unit_u_dist = beta(
+        definition.ell_unit_u_alpha, definition.ell_unit_u_beta, "ell_unit_u_dist"
+    )
     eta_u_dist = halfnormal(definition.eta_u_sigma, "eta_u_dist")
-    p_slope_low_u_dist = beta(definition.p_slope_low_u_alpha, definition.p_slope_low_u_beta, "p_slope_low_u_dist")
-    p_slope_hi_u_dist = beta(definition.p_slope_hi_u_alpha, definition.p_slope_hi_u_beta, "p_slope_hi_u_dist")
+    p_slope_low_u_dist = beta(
+        definition.p_slope_low_u_alpha,
+        definition.p_slope_low_u_beta,
+        "p_slope_low_u_dist",
+    )
+    p_slope_hi_u_dist = beta(
+        definition.p_slope_hi_u_alpha, definition.p_slope_hi_u_beta, "p_slope_hi_u_dist"
+    )
 
-    heading("Speak-given-understood (q) priors", style="bold cyan")
-    ell_unit_q_dist = beta(definition.ell_unit_q_alpha, definition.ell_unit_q_beta, "ell_unit_q_dist")
+    if context.report_build:
+        heading("Speak-given-understood (q) priors", style="bold cyan")
+    ell_unit_q_dist = beta(
+        definition.ell_unit_q_alpha, definition.ell_unit_q_beta, "ell_unit_q_dist"
+    )
     eta_q_dist = halfnormal(definition.eta_q_sigma, "eta_q_dist")
-    p_slope_low_q_dist = beta(definition.p_slope_low_q_alpha, definition.p_slope_low_q_beta, "p_slope_low_q_dist")
-    p_slope_hi_q_dist = beta(definition.p_slope_hi_q_alpha, definition.p_slope_hi_q_beta, "p_slope_hi_q_dist")
+    p_slope_low_q_dist = beta(
+        definition.p_slope_low_q_alpha,
+        definition.p_slope_low_q_beta,
+        "p_slope_low_q_dist",
+    )
+    p_slope_hi_q_dist = beta(
+        definition.p_slope_hi_q_alpha, definition.p_slope_hi_q_beta, "p_slope_hi_q_dist"
+    )
 
-    heading("Sign-given-understood (r) priors", style="bold cyan")
-    ell_unit_sign_dist = beta(definition.ell_unit_sign_alpha, definition.ell_unit_sign_beta, "ell_unit_sign_dist")
+    if context.report_build:
+        heading("Sign-given-understood (r) priors", style="bold cyan")
+    ell_unit_sign_dist = beta(
+        definition.ell_unit_sign_alpha,
+        definition.ell_unit_sign_beta,
+        "ell_unit_sign_dist",
+    )
     eta_sign_dist = halfnormal(definition.eta_sign_sigma, "eta_sign_dist")
     # Three-anchor hump signed mean (young/peak/old): Beta priors on r at three
     # reference ages, interpolated as a tent meeting at the peak (gp_utils.tent_and_gp).
-    p_slope_low_sign_dist = beta(definition.p_slope_low_sign_alpha, definition.p_slope_low_sign_beta, "p_slope_low_sign_dist")
-    p_slope_mid_sign_dist = beta(definition.p_slope_mid_sign_alpha, definition.p_slope_mid_sign_beta, "p_slope_mid_sign_dist")
-    p_slope_hi_sign_dist = beta(definition.p_slope_hi_sign_alpha, definition.p_slope_hi_sign_beta, "p_slope_hi_sign_dist")
+    p_slope_low_sign_dist = beta(
+        definition.p_slope_low_sign_alpha,
+        definition.p_slope_low_sign_beta,
+        "p_slope_low_sign_dist",
+    )
+    p_slope_mid_sign_dist = beta(
+        definition.p_slope_mid_sign_alpha,
+        definition.p_slope_mid_sign_beta,
+        "p_slope_mid_sign_dist",
+    )
+    p_slope_hi_sign_dist = beta(
+        definition.p_slope_hi_sign_alpha,
+        definition.p_slope_hi_sign_beta,
+        "p_slope_hi_sign_dist",
+    )
 
     def kappa_block(kp, suffix):
-        heading(f"Kappa priors — {suffix}", style="bold cyan")
+        if context.report_build:
+            heading(f"Kappa priors — {suffix}", style="bold cyan")
         return configure_kappa_priors(context, kp, f"_{suffix}")
 
     kappa_u_fields = kappa_block(definition.kappa_u, "u")
     kappa_s_fields = kappa_block(definition.kappa_s, "s")
     kappa_sign_fields = kappa_block(definition.kappa_sign, "sign")
 
-    heading("Association (psi) and Dirichlet-Multinomial concentration", style="bold cyan")
+    if context.report_build:
+        heading(
+            "Association (psi) and Dirichlet-Multinomial concentration",
+            style="bold cyan",
+        )
     log_psi_dist = pz.Normal(mu=definition.log_psi_mu, sigma=definition.log_psi_sigma)
     plot_and_print_dist(context, log_psi_dist, "log_psi_dist")
-    log_conc_dist = pz.Normal(mu=definition.log_conc_mu, sigma=definition.log_conc_sigma)
+    log_conc_dist = pz.Normal(
+        mu=definition.log_conc_mu, sigma=definition.log_conc_sigma
+    )
     plot_and_print_dist(context, log_conc_dist, "log_conc_dist")
 
     config = JointModelConfiguration(
@@ -836,195 +891,41 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
     context.set_model_config(config)
 
 
-# ============================================================
-# Plackett association helper (PyTensor)
-# ============================================================
-
-
-def _plackett_pi_both(r, q, psi):
-    """P(both | understood) under a Plackett copula with odds ratio psi.
-
-    Closed-form root, falling back to independence at psi == 1, then clipped to
-    the Frechet bounds [max(0, r+q-1), min(r, q)].
-    """
-    # Numerically stable, branch-free form of the Plackett root. The textbook
-    # expression ``(S - disc) / (2 (psi - 1))`` needs a ``switch`` fallback to
-    # ``r*q`` at psi == 1 (0/0) and suffers catastrophic cancellation in the
-    # whole psi->1 neighbourhood (S ~ disc ~ 1 while the denominator ~ 0), which
-    # both distorts pi_both and destabilises the NUTS gradient. Rationalising by
-    # ``(S + disc)`` cancels the ``(psi - 1)`` factor exactly:
-    #     (S - disc) / (2 (psi - 1))  ==  2 psi r q / (S + disc),
-    # since ``S^2 - disc^2 = 4 psi (psi - 1) r q``. The right-hand side has no
-    # vanishing denominator (S + disc > 0 across the valid odds-ratio range) and
-    # is continuous at psi == 1, where it returns exactly ``r*q`` — so no switch
-    # is needed.
-    S = 1.0 + (r + q) * (psi - 1.0)
-    disc = pm.math.sqrt(pm.math.maximum(S * S - 4.0 * psi * (psi - 1.0) * r * q, 0.0))
-    pi_both = 2.0 * psi * r * q / pm.math.maximum(S + disc, 1e-12)
-    lo = pm.math.maximum(0.0, r + q - 1.0)
-    hi = pm.math.minimum(r, q)
-    return pm.math.clip(pi_both, lo, hi)
-
-
-# ============================================================
-# Model building
-# ============================================================
-
-
-def _composition_probabilities(r, q, psi):
-    """Four Plackett cell probabilities in neither/sign/speech/both order.
-
-    Floor and normalise once so every marginal and conditional composition
-    uses the same Dirichlet parameters, including near the probability limits.
-    """
-    both = _plackett_pi_both(r, q, psi)
-    cells = pm.math.stack([1 - r - q + both, r - both, q - both, both], axis=1)
-    cells = pm.math.maximum(cells, EPSILON)
-    return cells / cells.sum(axis=1, keepdims=True)
-
-
 def build_model(context: JointContext, definition: JointModelDefinition):
+    """Pipeline stage: construct the model, then write its build report."""
+    details = build_model_graph(context, definition)
+    report_model_build(context, details)
+
+
+def build_model_graph(
+    context: JointContext, definition: JointModelDefinition
+) -> BuildReport:
     """Build the joint sign/speech PyMC model with study + subject random intercepts."""
+    build_report = BuildReport()
     config = context.model_config
     df = context.analysis_df
     n_trials = context.model_data.n_trials
 
-    has_u = df["understood"].notna().values
-    has_cells = df["signed_spoken"].notna().values
-
-    # Optional held-out rows (K-fold LOSO): kept in obs space so their latents are
-    # still computed, but excluded from every likelihood. A held-out subject's RE
-    # offset is then drawn from the population prior. No holdout column => standard
-    # fit (the posterior-predictive plot/query grids are population-level either way).
-    if "holdout" in df.columns:
-        holdout = df["holdout"].fillna(False).astype(bool).values
-    else:
-        holdout = np.zeros(len(df), dtype=bool)
-    has_u_t = has_u & ~holdout
-    has_cells_t = has_cells & ~holdout
-
-    idx_u = np.where(has_u_t)[0]
-    idx_cells = np.where(has_cells_t)[0]
-
-    y_u_values = np.asarray(df.loc[has_u_t, "understood"], dtype=float)
-    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
-    # post-cast bound cannot catch 810.9 or -0.1, which truncate into range. Spoken
-    # and signed get the same finite/integral/range checks from
-    # `nested_outcome_spec`, so all three outcomes are covered pre-cast (#236, #240).
-    require_valid_counts(y_u_values, "understood", n_trials)
-    y_u = y_u_values.astype(int)
-    marginal_outcome_eligible = ~holdout & ~has_cells
-    # Which treatment the child-outcome rows with no usable understood count
-    # take (issue #266 finding 8), resolved before the graph.
-    spoken_fallback = resolve_fallback_treatment(definition)
-    spoken_spec = nested_outcome_spec(
-        df,
-        parent_col="understood",
-        outcome_col="spoken",
-        n_trials=n_trials,
-        eligible_mask=marginal_outcome_eligible,
-    )
-    signed_spec = nested_outcome_spec(
-        df,
-        parent_col="understood",
-        outcome_col="signed",
-        n_trials=n_trials,
-        eligible_mask=marginal_outcome_eligible,
-    )
-
-    # `paired_only` is applied at data preparation, by dropping the rows, not in
-    # the graph -- so it has to happen here as well as in the treatment the
-    # builder receives. Both nested outcomes lose their marginal rows: signing
-    # is nested inside comprehension exactly as speech is (issue #266 finding 8).
-    expected_spoken = marginal_outcome_eligible & df["spoken"].notna().to_numpy()
-    expected_signed = marginal_outcome_eligible & df["signed"].notna().to_numpy()
-    if not np.array_equal(spoken_spec.indices, np.flatnonzero(expected_spoken)):
-        raise ValueError("Spoken likelihood rows do not match the marginal-data mask.")
-    if not np.array_equal(signed_spec.indices, np.flatnonzero(expected_signed)):
-        raise ValueError("Signed likelihood rows do not match the marginal-data mask.")
-    if spoken_fallback == SPOKEN_FALLBACK_PAIRED_ONLY:
-        n_fallback_dropped = spoken_spec.n_marginal + signed_spec.n_marginal
-        spoken_spec = spoken_spec.conditional_only()
-        signed_spec = signed_spec.conditional_only()
-        # Printed rather than silent: dropping rows changes what the fit is
-        # fitted to, and a sensitivity arm that quietly used fewer observations
-        # than the model of record would not be comparable with it.
-        print(
-            f"Marginal fallback treatment {spoken_fallback!r}: dropped "
-            f"{n_fallback_dropped} child-outcome row(s) with no usable "
-            "understood count from the likelihood.",
-            flush=True,
-        )
-
-    # Every one of these derives from the FILTERED spec, so the coords, the
-    # observed data, the trial counts and the stored masks all describe the same
-    # rows. Reading them before the drop -- as this did while the drop was being
-    # added -- leaves the coordinate sized by the unfiltered rows and the trial
-    # counts by the filtered ones, which fails at logp evaluation with a shape
-    # error and no indication of the cause.
-    idx_s = spoken_spec.indices
-    idx_sign = signed_spec.indices
-    y_s = spoken_spec.observed
-    y_sign = signed_spec.observed
-
-    has_s_likelihood = np.zeros(len(df), dtype=bool)
-    has_sign_likelihood = np.zeros(len(df), dtype=bool)
-    has_s_likelihood[idx_s] = True
-    has_sign_likelihood[idx_sign] = True
-
-    # Validate integrality before the int casts: NumPy truncates silently, and
-    # a NaN cell would cast to a large negative integer (#238).
-    cell_values = np.asarray(
-        df.loc[has_cells_t, CELL_COLUMNS],
-        dtype=float,
-    )
-    require_integral_counts(cell_values.ravel(), "four-cell counts")
-    cell_counts = cell_values.astype(int)
-    cell_total_values = np.asarray(df.loc[has_cells_t, "cell_total"], dtype=float)
-    require_integral_counts(cell_total_values, "cell_total")
-    cell_total = cell_total_values.astype(int)
-
-    # The three marginal outcomes are range-checked pre-cast above; what is left
-    # here is the four-cell reconciliation, which has no pre-cast equivalent.
-    if cell_counts.size:
-        if cell_counts.min() < 0:
-            raise ValueError("negative four-cell count.")
-        if not np.array_equal(cell_counts.sum(axis=1), cell_total):
-            raise ValueError("four-cell counts do not sum to cell_total.")
-        if cell_total.max() > n_trials:
-            raise ValueError(f"four-cell total exceeds n_trials ({n_trials}).")
-
-    # nz_01 produced three-cell cross-tab (order matches PROD_CELL_NAMES:
-    # sign_only, speak_only, both). n is the observed produced total, not n_trials.
-    has_prod = (
-        df["prod_signed_spoken"].notna().values
-        if "prod_signed_spoken" in df.columns
-        else np.zeros(len(df), dtype=bool)
-    )
-    has_prod_t = has_prod & ~holdout
-    idx_prod = np.where(has_prod_t)[0]
-    if idx_prod.size:
-        prod_values = np.asarray(df.loc[has_prod_t, PROD_CELL_COLUMNS], dtype=float)
-        require_integral_counts(prod_values.ravel(), "produced-cell counts")
-        prod_counts = prod_values.astype(int)
-        prod_total_values = np.asarray(df.loc[has_prod_t, "prod_total"], dtype=float)
-        require_integral_counts(prod_total_values, "prod_total")
-        prod_total = prod_total_values.astype(int)
-        if prod_counts.min() < 0:
-            raise ValueError("negative produced-cell count.")
-        if not np.array_equal(prod_counts.sum(axis=1), prod_total):
-            raise ValueError("produced-cell counts do not sum to prod_total.")
-    else:
-        prod_counts = np.zeros((0, 3), dtype=int)
-        prod_total = np.zeros(0, dtype=int)
-
-    study_codes = np.asarray(df["study_code"], dtype=int)
-    n_studies = int(study_codes.max()) + 1
-
-    use_subject_re_u = bool(definition.use_subject_re_u)
-    use_subject_re_q = bool(definition.use_subject_re_q)
     use_subject_re_sign = bool(definition.use_subject_re_sign)
-    use_subject_codes = use_subject_re_u or use_subject_re_q or use_subject_re_sign
+    use_subject_codes = any(
+        (
+            definition.use_subject_re_u,
+            definition.use_subject_re_q,
+            use_subject_re_sign,
+        )
+    )
+    observations = prepare_joint_observations(
+        df,
+        definition,
+        n_trials=n_trials,
+        use_subject_codes=use_subject_codes,
+    )
+    if observations.spoken_fallback == SPOKEN_FALLBACK_PAIRED_ONLY:
+        build_report.messages.append(
+            f"Marginal fallback treatment {observations.spoken_fallback!r}: dropped "
+            f"{observations.n_fallback_dropped} child-outcome row(s) with no usable "
+            "understood count from the likelihood."
+        )
 
     # Sign -> speech cross-lag (VG25, issue #297): the child's most recent
     # strictly earlier administration wave carrying a signed share of
@@ -1044,34 +945,23 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         sign_prev_idx, has_sign_lag_f, r_prev_logit = (
             prev_wave_sign_share_lag_for_frame(df, definition)
         )
-        print(
+        build_report.messages.append(
             f"Sign cross-lag ({sign_lag_baseline}, in_cells={sign_lag_in_cells}): "
             f"{int(has_sign_lag_f.sum())} of {len(df)} observations have a "
             "prior-wave signed-share source."
         )
-        report_sign_cross_lag_support(
-            context.reporting.output_dir,
-            sign_cross_lag_audit_frame(
-                df,
-                sign_prev_idx,
-                has_sign_lag_f,
-                spoken_indices=spoken_spec.indices,
-                spoken_is_conditional=spoken_spec.is_conditional,
-                cell_indices=idx_cells,
-                prod_indices=idx_prod,
-            ),
-            n_obs=len(df),
-            in_cells=sign_lag_in_cells,
+        build_report.signed_lag_audit = sign_cross_lag_audit_frame(
+            df,
+            sign_prev_idx,
+            has_sign_lag_f,
+            spoken_indices=observations.spoken_spec.indices,
+            spoken_is_conditional=observations.spoken_spec.is_conditional,
+            cell_indices=observations.idx_cells,
+            prod_indices=observations.idx_prod,
         )
-    if use_subject_codes:
-        subject_codes = np.asarray(df["subject_code"], dtype=int)
-        n_subjects = int(subject_codes.max()) + 1
-    else:
-        subject_codes = None
-        n_subjects = 0
-
-    X_obs = np.asarray(df["age"], dtype=float).reshape(-1, 1)
-    n = len(X_obs)
+        build_report.sign_lag_in_cells = sign_lag_in_cells
+    X_obs = observations.X_obs
+    n = observations.n
     X_mean, X_std, X_obs_z = standardize_ages(X_obs)
 
     # Plot / query grids (standardised), with the optional Option-D reference-age
@@ -1106,9 +996,7 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
     ell_low_z = ell_low_months / X_std
     ell_high_z = ell_high_months / X_std
-    L, M = get_hsgp_hyperparams(
-        grids.X_gp_domain_z, (ell_low_z, ell_high_z)
-    )
+    L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, (ell_low_z, ell_high_z))
 
     sa_z, sb_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_mean, X_obs_std=X_std
@@ -1116,11 +1004,23 @@ def build_model(context: JointContext, definition: JointModelDefinition):
 
     build_cfg: list[tuple[str, object]] = [
         ("Total observations", n),
-        ("Studies", n_studies),
-        ("Understood / spoken / signed / cells", f"{len(idx_u)} / {len(idx_s)} / {len(idx_sign)} / {len(idx_cells)}"),
-        ("Spoken conditional / marginal", f"{spoken_spec.n_conditional} / {spoken_spec.n_marginal}"),
-        ("Signed conditional / marginal", f"{signed_spec.n_conditional} / {signed_spec.n_marginal}"),
-        ("Child > understood violations (spoken/signed)", f"{spoken_spec.n_parent_violations} / {signed_spec.n_parent_violations}"),
+        ("Studies", observations.n_studies),
+        (
+            "Understood / spoken / signed / cells",
+            f"{len(observations.idx_u)} / {len(observations.idx_s)} / {len(observations.idx_sign)} / {len(observations.idx_cells)}",
+        ),
+        (
+            "Spoken conditional / marginal",
+            f"{observations.spoken_spec.n_conditional} / {observations.spoken_spec.n_marginal}",
+        ),
+        (
+            "Signed conditional / marginal",
+            f"{observations.signed_spec.n_conditional} / {observations.signed_spec.n_marginal}",
+        ),
+        (
+            "Child > understood violations (spoken/signed)",
+            f"{observations.spoken_spec.n_parent_violations} / {observations.signed_spec.n_parent_violations}",
+        ),
         ("n_trials", n_trials),
         ("Age mean / std", (round(X_mean, 1), round(X_std, 1))),
         ("HSGP m / L", (M, L)),
@@ -1136,12 +1036,18 @@ def build_model(context: JointContext, definition: JointModelDefinition):
     ]
     if use_subject_codes:
         build_cfg.append(
-            ("Subject REs (u/q/sign)", f"{use_subject_re_u} / {use_subject_re_q} / {use_subject_re_sign}")
+            (
+                "Subject REs (u/q/sign)",
+                f"{definition.use_subject_re_u} / {definition.use_subject_re_q} / {use_subject_re_sign}",
+            )
         )
-        build_cfg.append(("n_subjects", n_subjects))
+        build_cfg.append(("n_subjects", observations.n_subjects))
     if use_gp_anchor:
         build_cfg.append(
-            ("GP anchor age (months)", f"{anchor_age_months:g} (u={anchor_g_u}, q={anchor_g_q}, sign={anchor_g_sign})")
+            (
+                "GP anchor age (months)",
+                f"{anchor_age_months:g} (u={anchor_g_u}, q={anchor_g_q}, sign={anchor_g_sign})",
+            )
         )
     if use_sign_cross_lag:
         build_cfg.append(
@@ -1151,66 +1057,80 @@ def build_model(context: JointContext, definition: JointModelDefinition):
                 f"{int(has_sign_lag_f.sum())}",
             )
         )
-    key_value_table("Build configuration", build_cfg)
+    build_report.add_table("Build configuration", build_cfg)
 
-    i_obs0, i_obs1 = 0, n
-    i_plot0, i_plot1 = n, n + n_plot
-    i_query0, i_query1 = n + n_plot, n + n_plot + n_query
+    i_obs0, i_obs1 = grids.i_obs
+    i_plot0, i_plot1 = grids.i_plot
+    i_query0, i_query1 = grids.i_query
 
     coords = {
         "all_id": np.arange(n_all),
         "obs_id": np.arange(n),
-        "obs_u_id": np.arange(len(idx_u)),
-        "obs_s_id": np.arange(len(idx_s)),
-        "obs_sign_id": np.arange(len(idx_sign)),
-        "obs_cells_id": np.arange(len(idx_cells)),
-        "obs_prod_id": np.arange(len(idx_prod)),
+        "obs_u_id": np.arange(len(observations.idx_u)),
+        "obs_s_id": np.arange(len(observations.idx_s)),
+        "obs_sign_id": np.arange(len(observations.idx_sign)),
+        "obs_cells_id": np.arange(len(observations.idx_cells)),
+        "obs_prod_id": np.arange(len(observations.idx_prod)),
         "plot_id": np.arange(n_plot),
         "query_id": np.arange(n_query),
-        "study_id": np.arange(n_studies),
+        "study_id": np.arange(observations.n_studies),
         "cell_id": CELL_NAMES,
         "prod_cell_id": PROD_CELL_NAMES,
         "x_dim": np.arange(1),
     }
     if use_subject_codes:
-        coords["subject_id"] = np.arange(n_subjects)
+        coords["subject_id"] = np.arange(observations.n_subjects)
 
     with pm.Model(coords=coords) as model_pm:
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
         _ = pm.Data("X_plot", X_plot.flatten(), dims=("plot_id",))
         _ = pm.Data("X_query", X_query.flatten(), dims=("query_id",))
-        study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
+        study_obs = pm.Data("study_obs", observations.study_codes, dims=("obs_id",))
         if use_subject_codes:
-            subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
-        _ = pm.Data("obs_cells_mask", has_cells_t.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_prod_mask", has_prod_t.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_u_mask", has_u_t.astype(int), dims=("obs_id",))
-        _ = pm.Data("obs_s_mask", has_s_likelihood.astype(int), dims=("obs_id",))
+            subject_obs = pm.Data(
+                "subject_obs", observations.subject_codes, dims=("obs_id",)
+            )
         _ = pm.Data(
-            "obs_sign_mask", has_sign_likelihood.astype(int), dims=("obs_id",)
+            "obs_cells_mask",
+            observations.has_cells_likelihood.astype(int),
+            dims=("obs_id",),
+        )
+        _ = pm.Data(
+            "obs_prod_mask",
+            observations.has_prod_likelihood.astype(int),
+            dims=("obs_id",),
+        )
+        _ = pm.Data(
+            "obs_u_mask", observations.has_u_likelihood.astype(int), dims=("obs_id",)
+        )
+        _ = pm.Data(
+            "obs_s_mask", observations.has_s_likelihood.astype(int), dims=("obs_id",)
+        )
+        _ = pm.Data(
+            "obs_sign_mask",
+            observations.has_sign_likelihood.astype(int),
+            dims=("obs_id",),
         )
         s_likelihood_n = pm.Data(
-            "s_likelihood_n", spoken_spec.trials, dims=("obs_s_id",)
+            "s_likelihood_n", observations.spoken_spec.trials, dims=("obs_s_id",)
         )
         s_is_conditional = pm.Data(
             "s_is_conditional",
-            spoken_spec.is_conditional.astype(int),
+            observations.spoken_spec.is_conditional.astype(int),
             dims=("obs_s_id",),
         )
         sign_likelihood_n = pm.Data(
-            "sign_likelihood_n", signed_spec.trials, dims=("obs_sign_id",)
+            "sign_likelihood_n", observations.signed_spec.trials, dims=("obs_sign_id",)
         )
         sign_is_conditional = pm.Data(
             "sign_is_conditional",
-            signed_spec.is_conditional.astype(int),
+            observations.signed_spec.is_conditional.astype(int),
             dims=("obs_sign_id",),
         )
 
         # One flag, two means: see definitions.clamp_targets. 'q_only' is
         # truthy, so testing the raw value would clamp both.
-        _clamp_u, _clamp_q = clamp_targets(
-            definition.clamp_mean_above_hi_anchor
-        )
+        _clamp_u, _clamp_q = clamp_targets(definition.clamp_mean_above_hi_anchor)
 
         # Latent full-grid trajectories (plain tensors), built by the shared
         # gp_utils helpers. Option D anchors each GP (per-draw zero at the
@@ -1277,19 +1197,6 @@ def build_model(context: JointContext, definition: JointModelDefinition):
                 if getattr(definition, "sign_peak_prior", None) is not None
                 else None
             ),
-            # The signed GP's hyperparameters are always sampled. Two alternatives
-            # were considered for their weak identifiability -- holding the
-            # length-scale at its prior median, and dropping the GP so the tent
-            # carries the whole latent -- and were reachable here through a
-            # `sign_gp_mode` getattr probe that NO definition class declared. Since
-            # `JointModelDefinition` is frozen and `sensitivity.make_variant` goes
-            # through `dataclasses.replace`, which raises on an unknown field, there
-            # was no way to select either branch: they were dead, while reading as a
-            # live switch. Exercising them needs a real field, which is a decision
-            # with a price -- on `JointModelDefinition` it invalidates every VG15
-            # fit; on a sibling subclass via `_as_definition_subclass` it invalidates
-            # nothing. The comparison was settled on 2026-08-06 in favour of
-            # sampling, so nothing needs it today.
             cfg_ell=config.ell_unit_sign_dist,
             cfg_eta=config.eta_sign_dist,
             suffix="_sign",
@@ -1300,206 +1207,70 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             n_obs=n,
         )
 
-        # Study random intercepts (non-centred, sum-to-zero), applied at obs level
-        # only. Sum-to-zero on the unit offsets removes the intercept vs
-        # study-RE-mean ridge; the tau * z scaling keeps the non-centring. This is an
-        # intentional identifiability constraint, not a prior-preserving
-        # reparameterisation: it removes the group-mean DOF and imposes a -1/(K-1)
-        # correlation. Each ZeroSumNormal sigma is rescaled by sqrt(K/(K-1)) so the
-        # marginal per-study prior variance stays tau^2 (its value before the
-        # constraint), where K is the number of studies the *outcome* actually
-        # constrains.
-        #
-        # The zero-sum must be taken over only the studies that inform each
-        # latent (P1-D). A study with no likelihood term touching a latent
-        # carries a prior-only offset; putting that offset inside the zero-sum
-        # lets it counterbalance a common shift among the informed studies, so
-        # the constraint need not remove the intercept ridge and it couples the
-        # informed effects through a nuisance coordinate. Every offset is
-        # therefore zero-summed over its informed studies only and fixed to 0
-        # elsewhere.
-        #
-        # Which studies inform which latent is not the same question for the
-        # three: understood is informed by a study's own U rows and by its
-        # marginal-fallback spoken/signed rows (whose likelihood mean is
-        # p_U * q or p_U * r), but NOT by conditional nested rows (mean q or r
-        # alone) and NOT by cross-tab cells — the within-understood composition
-        # is a function of (r, q, psi) only, and nz_01's within-produced
-        # three-cell renormalisation cancels p_U exactly. Until #238 delta_u was
-        # zero-summed globally on the incorrect assertion that every retained
-        # study informs understood; nz_01 (production-only) does not, so its
-        # prior-only coordinate entered the constraint and the population
-        # understood level partly depended on an unobserved component.
+        # This engine centres each latent over studies whose likelihood uses it.
+        # Comprehension is informed by U and marginal fallback outcomes, but not
+        # by conditional speech/sign counts or the within-understood cells.
+        # See study_effects.py for how this reference differs from all-study centring.
         tau_u = pm.HalfNormal("tau_u", sigma=config.tau_u_sigma)
         tau_q = pm.HalfNormal("tau_q", sigma=config.tau_q_sigma)
         tau_sign = pm.HalfNormal("tau_sign", sigma=config.tau_sign_sigma)
 
-        def informed_studies(*index_arrays: np.ndarray) -> np.ndarray:
-            present = [study_codes[idx] for idx in index_arrays if len(idx)]
-            if not present:
-                return np.zeros(0, dtype=int)
-            return np.unique(np.concatenate(present).astype(int))
-
-        def informed_study_zero_sum(suffix: str, tau, informed: np.ndarray):
-            """Sum-to-zero offsets over the informed studies; exactly 0 elsewhere.
-
-            The ZeroSumNormal sigma is rescaled by sqrt(K/(K-1)) so the marginal
-            per-study prior variance stays tau^2 under the constraint, where K
-            counts the informed studies only. With fewer than two informed
-            studies there is no between-study contrast to estimate and a
-            zero-sum is degenerate, so the offsets are all zero.
-            """
-            k = int(informed.size)
-            if k < 2:
-                return pm.Deterministic(
-                    f"delta_{suffix}", pt.zeros(n_studies), dims="study_id"
-                )
-            zsn = float(np.sqrt(k / (k - 1)))
-            z = pm.ZeroSumNormal(f"z_{suffix}", sigma=zsn, shape=k)
-            full = pt.set_subtensor(pt.zeros(n_studies)[informed], tau * z)
-            return pm.Deterministic(f"delta_{suffix}", full, dims="study_id")
-
         u_informed = informed_studies(
-            idx_u,
-            idx_s[~spoken_spec.is_conditional],
-            idx_sign[~signed_spec.is_conditional],
+            observations.study_codes,
+            observations.idx_u,
+            observations.idx_s[~observations.spoken_spec.is_conditional],
+            observations.idx_sign[~observations.signed_spec.is_conditional],
         )
-        q_informed = informed_studies(idx_s, idx_cells, idx_prod)
+        q_informed = informed_studies(
+            observations.study_codes,
+            observations.idx_s,
+            observations.idx_cells,
+            observations.idx_prod,
+        )
         # Sign-informed studies: those contributing a signing marginal (idx_sign) or
         # a within-understood/produced cross-tab (idx_cells / idx_prod).
-        sign_informed = informed_studies(idx_sign, idx_cells, idx_prod)
-
-        delta_u = informed_study_zero_sum("u", tau_u, u_informed)
-        delta_q = informed_study_zero_sum("q", tau_q, q_informed)
-        delta_sign = informed_study_zero_sum("sign", tau_sign, sign_informed)
-
-        # Subject random intercepts (non-centred), applied at obs level only. Each
-        # is gated by its flag so the sign-RE can be dropped via config alone.
-        def subject_shift(flag, tau_sigma, suffix):
-            if not flag:
-                return 0.0
-            tau = pm.HalfNormal(f"tau_subj_{suffix}", sigma=tau_sigma)
-            z = pm.Normal(f"z_subj_{suffix}", 0.0, 1.0, dims="subject_id")
-            delta = pm.Deterministic(f"delta_subj_{suffix}", tau * z, dims="subject_id")
-            return delta[subject_obs]
-
-        subject_re_correlation_eta = getattr(
-            definition, "subject_re_correlation_eta", None
+        sign_informed = informed_studies(
+            observations.study_codes,
+            observations.idx_sign,
+            observations.idx_cells,
+            observations.idx_prod,
         )
-        if subject_re_correlation_eta is None:
-            subject_shift_u = subject_shift(use_subject_re_u, definition.tau_subj_u_sigma, "u")
-            subject_shift_q = subject_shift(use_subject_re_q, definition.tau_subj_q_sigma, "q")
-            subject_shift_sign = subject_shift(use_subject_re_sign, definition.tau_subj_sign_sigma, "sign")
-        else:
-            # VG24 (#296). A child's three deviations are drawn from one joint
-            # Normal rather than independently. Only the CORRELATION is added:
-            # the scales stay the three `tau_subj_*` HalfNormals above, with
-            # their names, their priors and their per-child meaning, so VG15's
-            # and VG24's are directly comparable.
-            #
-            # The nesting is exact, and deliberately so. `z_subj_u/q/sign` keep
-            # their names, their standard-Normal priors and their dims, and
-            # become the whitened coordinates; at the identity correlation the
-            # covariance factor below is diag(tau), so `z @ chol.T` is `tau * z`
-            # op for op, which is what the independent branch above emits.
-            # `delta_subj_*` therefore still means what it always meant, and
-            # every downstream reader -- the summaries, the comparison suite,
-            # the recovery scorer -- sees what it always saw.
-            # `tests/test_joint_correlated_subject_re.py` asserts the equality
-            # numerically rather than trusting this paragraph.
-            #
-            # `definitions.validate_model_definition` has already refused a
-            # partial flag combination, so all three blocks exist here.
-            #
-            # `LKJCholeskyCov` and NOT `LKJCorr`, which is the obvious primitive
-            # and is wrong here. Measured on the locked PyMC 6.3.1: `LKJCorr`
-            # returns the lower-triangular Cholesky FACTOR rather than the
-            # correlation matrix its own docstring example indexes, so reading
-            # `corr[i, j]` off it yields the structural zeros of the upper
-            # triangle -- every correlation exactly 0.000 in every draw. Worse,
-            # once that is corrected its marginals are not exchangeable and its
-            # forward sampler and its density disagree with each other: drawing
-            # gives per-correlation SDs of (0.408, 0.378, 0.378) and NUTS on the
-            # same graph gives (0.450, 0.409, 0.407), against the LKJ(2), n = 3
-            # value of 0.408. Under it `rho_sign_q` -- the quantity this model
-            # exists to estimate -- would carry a different prior from `rho_uq`
-            # purely because of its position in the matrix.
-            #
-            # `LKJCholeskyCov` is exchangeable and correct on the same check
-            # (0.405, 0.410, 0.409), and its `sd_dist` reproduces VG15's three
-            # independent HalfNormal scales exactly (marginal mean 1.18-1.26,
-            # SD 0.90, against HalfNormal(1.5)'s 1.197 and 0.904).
-            #
-            # `tests/test_joint_correlated_subject_re.py` pins the properties
-            # this block RELIES ON -- exchangeable LKJ marginals and the
-            # unchanged scale priors, both sampled from the density -- and
-            # separately pins `LKJCorr`'s shape as the recorded reason for the
-            # choice. An upstream fix to `LKJCorr` therefore fails that second
-            # test rather than passing silently, which is the point: the
-            # decision gets re-read instead of inherited.
-            sd_dist = pm.HalfNormal.dist(
-                sigma=[
-                    definition.tau_subj_u_sigma,
-                    definition.tau_subj_q_sigma,
-                    definition.tau_subj_sign_sigma,
-                ],
-                shape=len(SUBJECT_RE_OUTCOMES),
-            )
-            subject_re_chol, subject_re_corr, subject_re_stds = pm.LKJCholeskyCov(
-                "subject_re",
-                eta=subject_re_correlation_eta,
-                n=len(SUBJECT_RE_OUTCOMES),
-                sd_dist=sd_dist,
-                compute_corr=True,
-                # The scales and correlations are re-exposed below under the
-                # names every reader already uses, so storing PyMC's own
-                # `subject_re_corr` / `subject_re_stds` would put each quantity
-                # in the trace twice under two names.
-                store_in_trace=False,
-            )
 
-            # `tau_subj_*` are Deterministics here and free variables in VG15.
-            # The names, the priors and the per-child meaning are identical --
-            # `_DERIVED_NAMES` in `report_cells` already records that these
-            # three are sampled in some models and derived in others -- and
-            # keeping them lets the summaries, the variation table and the
-            # recovery scorer read VG24 with no special case.
-            for position, suffix in enumerate(SUBJECT_RE_OUTCOMES):
-                _ = pm.Deterministic(f"tau_subj_{suffix}", subject_re_stds[position])
+        delta_u = zero_sum_study_offsets(
+            "delta_u",
+            scale=tau_u,
+            n_studies=observations.n_studies,
+            raw_name="z_u",
+            informed=u_informed,
+        )
+        delta_q = zero_sum_study_offsets(
+            "delta_q",
+            scale=tau_q,
+            n_studies=observations.n_studies,
+            raw_name="z_q",
+            informed=q_informed,
+        )
+        delta_sign = zero_sum_study_offsets(
+            "delta_sign",
+            scale=tau_sign,
+            n_studies=observations.n_studies,
+            raw_name="z_sign",
+            informed=sign_informed,
+        )
 
-            z_subj = [
-                pm.Normal(f"z_subj_{suffix}", 0.0, 1.0, dims="subject_id")
-                for suffix in SUBJECT_RE_OUTCOMES
-            ]
-            # `subject_re_chol` is the Cholesky factor of the COVARIANCE, so it
-            # carries the scales already: at the identity correlation it is
-            # diag(tau) and this is `z * tau`, which is what the independent
-            # branch above emits, op for op.
-            subject_deviations = pt.stack(z_subj, axis=1) @ subject_re_chol.T
-
-            subject_shifts = []
-            for position, suffix in enumerate(SUBJECT_RE_OUTCOMES):
-                delta = pm.Deterministic(
-                    f"delta_subj_{suffix}",
-                    subject_deviations[:, position],
-                    dims="subject_id",
-                )
-                subject_shifts.append(delta[subject_obs])
-            subject_shift_u, subject_shift_q, subject_shift_sign = subject_shifts
-
-            # Named scalars rather than elements of a packed matrix, so the
-            # summary tables, the priors table and the recovery scorer read them
-            # directly. `rho_sign_q` is the quantity this model exists for.
-            for name, row, column in SUBJECT_RE_CORRELATIONS:
-                _ = pm.Deterministic(name, subject_re_corr[row, column])
+        child_effects = build_joint_child_effects(
+            definition, subject_obs if use_subject_codes else None
+        )
 
         # Standardised observed ages (used by the age-varying kappa functions).
         z_obs = pm.Deterministic("z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims="obs_id")
 
         # --- obs-level latents WITH study + subject shifts (marginal likelihoods) ---
-        f_u_obs = f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + subject_shift_u
-        h_obs = h_all[i_obs0:i_obs1] + delta_q[study_obs] + subject_shift_q
-        g_obs = g_all[i_obs0:i_obs1] + delta_sign[study_obs] + subject_shift_sign
+        f_u_obs = f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + child_effects.understood
+        h_obs = h_all[i_obs0:i_obs1] + delta_q[study_obs] + child_effects.spoken_ratio
+        g_obs = (
+            g_all[i_obs0:i_obs1] + delta_sign[study_obs] + child_effects.signed_ratio
+        )
 
         # Sign -> speech cross-lag (VG25, issue #297). The child's prior-wave
         # signed share of comprehension, as a residual from the signed-ratio
@@ -1525,7 +1296,9 @@ def build_model(context: JointContext, definition: JointModelDefinition):
             )
             sign_lag_base = g_obs[sign_prev_idx]
             if sign_lag_baseline == "population":
-                sign_lag_base = sign_lag_base - subject_shift_sign[sign_prev_idx]
+                sign_lag_base = (
+                    sign_lag_base - child_effects.signed_ratio[sign_prev_idx]
+                )
             x_sign_lag = has_sign_lag_f * (r_prev_logit - sign_lag_base)
             q_sign_lag_term = beta_sign_lag * x_sign_lag
             h_obs = h_obs + q_sign_lag_term
@@ -1589,54 +1362,26 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         r_obs_pop = pm.math.sigmoid(g_all[i_obs0:i_obs1] + delta_sign[study_obs])
 
         # --- population-level latents (no study shift), plot + query ---
-        p_u_plot = pm.Deterministic("p_u_plot", pm.math.sigmoid(f_u_all[i_plot0:i_plot1]), dims="plot_id")
-        q_plot = pm.Deterministic("q_plot", pm.math.sigmoid(h_all[i_plot0:i_plot1]), dims="plot_id")
-        r_plot = pm.Deterministic("r_plot", pm.math.sigmoid(g_all[i_plot0:i_plot1]), dims="plot_id")
-        p_u_query = pm.Deterministic("p_u_query", pm.math.sigmoid(f_u_all[i_query0:i_query1]), dims="query_id")
-        q_query = pm.Deterministic("q_query", pm.math.sigmoid(h_all[i_query0:i_query1]), dims="query_id")
-        r_query = pm.Deterministic("r_query", pm.math.sigmoid(g_all[i_query0:i_query1]), dims="query_id")
-
-        # --- association ---
-        log_psi = config.log_psi_dist.to_pymc("log_psi")
-        psi = pm.Deterministic("psi", pm.math.exp(log_psi))
-
-        # Study-level term on the association. Until 2026-08-12 psi was the only
-        # latent here without one -- delta_u, delta_q and delta_sign are all study
-        # random intercepts -- which made the reported association a
-        # precision-weighted average over whichever cross-tab sources happened to be
-        # in the pool. It moved 1.80 -> 2.49 on adding uk_07 alone, and the sources
-        # disagree far more than that: Mantel-Haenszel odds ratios over the same
-        # cells run uk_02 6.09, uk_07 13.90, nz_01 14.63, es_01 0.90.
-        #
-        # Zero-summed over the psi-informed studies only, for the reason given above
-        # for delta_sign: a study with no cross-tab never enters a psi term, so
-        # letting it carry an offset would only counterbalance the informed ones.
-        # Informed = the within-understood four-cell rows (idx_cells) plus nz_01's
-        # within-produced three-cell rows (idx_prod), which also identify psi.
-        psi_informed = np.unique(
-            np.concatenate([
-                study_codes[idx_cells],
-                study_codes[idx_prod],
-            ]).astype(int)
+        p_u_plot = pm.Deterministic(
+            "p_u_plot", pm.math.sigmoid(f_u_all[i_plot0:i_plot1]), dims="plot_id"
         )
-        n_psi_studies = int(psi_informed.size)
-        if n_psi_studies > 1:
-            tau_psi = pm.HalfNormal("tau_psi", sigma=config.tau_psi_sigma)
-            zsn_sigma_psi = float(np.sqrt(n_psi_studies / (n_psi_studies - 1)))
-            z_psi = pm.ZeroSumNormal("z_psi", sigma=zsn_sigma_psi, shape=n_psi_studies)
-            delta_psi_full = pt.set_subtensor(
-                pt.zeros(n_studies)[psi_informed], tau_psi * z_psi
-            )
-        else:
-            # One informed study (or none): there is no between-study contrast to
-            # estimate, and a zero-sum over a single element is degenerate.
-            delta_psi_full = pt.zeros(n_studies)
-        delta_psi = pm.Deterministic("delta_psi", delta_psi_full, dims="study_id")
-        # Per-study association, the quantity the heterogeneity is read from.
-        pm.Deterministic("psi_study", pm.math.exp(log_psi + delta_psi), dims="study_id")
-        log_psi_obs = log_psi + delta_psi[study_codes]
-        log_conc = config.log_conc_dist.to_pymc("log_conc")
-        conc = pm.Deterministic("conc", pm.math.exp(log_conc))
+        q_plot = pm.Deterministic(
+            "q_plot", pm.math.sigmoid(h_all[i_plot0:i_plot1]), dims="plot_id"
+        )
+        r_plot = pm.Deterministic(
+            "r_plot", pm.math.sigmoid(g_all[i_plot0:i_plot1]), dims="plot_id"
+        )
+        p_u_query = pm.Deterministic(
+            "p_u_query", pm.math.sigmoid(f_u_all[i_query0:i_query1]), dims="query_id"
+        )
+        q_query = pm.Deterministic(
+            "q_query", pm.math.sigmoid(h_all[i_query0:i_query1]), dims="query_id"
+        )
+        r_query = pm.Deterministic(
+            "r_query", pm.math.sigmoid(g_all[i_query0:i_query1]), dims="query_id"
+        )
+
+        composition = build_composition_parameters(config, observations)
 
         # --- kappa functions (shared helper — see models.common.build_kappa_for_config) ---
         kappa_u_of_z = build_kappa_for_config(
@@ -1657,10 +1402,16 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # Likelihoods
         # ============================================================
         # Understood (all studies)
-        p_u_sel = pm.math.clip(p_u_obs[idx_u], EPSILON, 1 - EPSILON)
-        k_u = kappa_u_obs[idx_u]
-        pm.BetaBinomial("y_u_obs", n=n_trials, alpha=p_u_sel * k_u, beta=(1 - p_u_sel) * k_u,
-                        observed=y_u, dims="obs_u_id")
+        p_u_sel = pm.math.clip(p_u_obs[observations.idx_u], EPSILON, 1 - EPSILON)
+        k_u = kappa_u_obs[observations.idx_u]
+        pm.BetaBinomial(
+            "y_u_obs",
+            n=n_trials,
+            alpha=p_u_sel * k_u,
+            beta=(1 - p_u_sel) * k_u,
+            observed=observations.y_u,
+            dims="obs_u_id",
+        )
 
         # Spoken: nested where U is usable, otherwise marginal over the
         # inventory. Through the shared builder since issue #266 finding 8, so
@@ -1669,67 +1420,56 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # emits the ops it always did, which `tests/test_graph_equivalence.py`
         # checks.
         alpha_s, beta_s = nested_outcome_alpha_beta(
-            treatment=spoken_fallback,
+            treatment=observations.spoken_fallback,
             is_conditional=s_is_conditional,
-            conditional_p=q_obs[idx_s],
-            marginal_p=(p_u_obs * q_obs)[idx_s],
-            parent_p=p_u_obs[idx_s],
-            parent_kappa=kappa_u_obs[idx_s],
-            kappa=kappa_s_obs[idx_s],
+            conditional_p=q_obs[observations.idx_s],
+            marginal_p=(p_u_obs * q_obs)[observations.idx_s],
+            parent_p=p_u_obs[observations.idx_s],
+            parent_kappa=kappa_u_obs[observations.idx_s],
+            kappa=kappa_s_obs[observations.idx_s],
             epsilon=EPSILON,
             outcome="s",
             fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        pm.BetaBinomial("y_s_obs", n=s_likelihood_n, alpha=alpha_s, beta=beta_s,
-                        observed=y_s, dims="obs_s_id")
+        pm.BetaBinomial(
+            "y_s_obs",
+            n=s_likelihood_n,
+            alpha=alpha_s,
+            beta=beta_s,
+            observed=observations.y_s,
+            dims="obs_s_id",
+        )
 
         # Signed: the same treatment. Signing is nested inside comprehension
         # exactly as speech is, so exposing the choice for one outcome and not
         # the other would leave half the exposure unmeasurable.
         alpha_sign, beta_sign = nested_outcome_alpha_beta(
-            treatment=spoken_fallback,
+            treatment=observations.spoken_fallback,
             is_conditional=sign_is_conditional,
-            conditional_p=r_obs[idx_sign],
-            marginal_p=(p_u_obs * r_obs)[idx_sign],
-            parent_p=p_u_obs[idx_sign],
-            parent_kappa=kappa_u_obs[idx_sign],
-            kappa=kappa_sign_obs[idx_sign],
+            conditional_p=r_obs[observations.idx_sign],
+            marginal_p=(p_u_obs * r_obs)[observations.idx_sign],
+            parent_p=p_u_obs[observations.idx_sign],
+            parent_kappa=kappa_u_obs[observations.idx_sign],
+            kappa=kappa_sign_obs[observations.idx_sign],
             epsilon=EPSILON,
             outcome="sign",
             fallback_kappa_sigma=definition.spoken_fallback_kappa_sigma,
         )
-        pm.BetaBinomial("y_sign_obs", n=sign_likelihood_n, alpha=alpha_sign, beta=beta_sign,
-                        observed=y_sign, dims="obs_sign_id")
-
-        # Four-cell rows (Dirichlet-Multinomial), within-understood composition.
-        # `idx_cells` covers EVERY within-understood cross-tab source, not just
-        # uk_02: uk_02 always, plus uk_07 and es_01 when their include_* flags are
-        # set (see the per-study counts at the top of prepare_joint_data). Mislabelling
-        # this block "uk_02" is the error #238 corrected in the figure layer.
-        # Uses population+study marginals (r_obs_pop/q_obs_pop), so psi stays a
-        # population-conditioned association decoupled from the per-child sign RE.
-        r_c = pm.math.clip(r_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
-        q_c = pm.math.clip(q_obs_pop[idx_cells], EPSILON, 1 - EPSILON)
-        psi_c = pm.math.exp(log_psi_obs[idx_cells])
-        pi_stack = _composition_probabilities(r_c, q_c, psi_c)
-        pm.DirichletMultinomial(
-            "cells_obs", n=cell_total, a=conc * pi_stack, observed=cell_counts,
-            dims=("obs_cells_id", "cell_id"),
+        pm.BetaBinomial(
+            "y_sign_obs",
+            n=sign_likelihood_n,
+            alpha=alpha_sign,
+            beta=beta_sign,
+            observed=observations.y_sign,
+            dims="obs_sign_id",
         )
 
-        # Conditional on the produced total, drop the neither cell but retain
-        # the other Dirichlet parameters. Their concentration sums to
-        # conc * P(produced | understood), rather than conc. Renormalising the
-        # probabilities and restoring conc would define a different model.
-        if idx_prod.size:
-            r_p = pm.math.clip(r_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
-            q_p = pm.math.clip(q_obs_pop[idx_prod], EPSILON, 1 - EPSILON)
-            psi_p = pm.math.exp(log_psi_obs[idx_prod])
-            pi_prod = _composition_probabilities(r_p, q_p, psi_p)[:, 1:]
-            pm.DirichletMultinomial(
-                "nz_prod_cells_obs", n=prod_total, a=conc * pi_prod, observed=prod_counts,
-                dims=("obs_prod_id", "prod_cell_id"),
-            )
+        build_composition_likelihood(
+            observations,
+            composition,
+            signed_ratio=r_obs_pop,
+            spoken_ratio=q_obs_pop,
+        )
 
         # ============================================================
         # Reporting deterministics (population, plot/query): four-cell + p_any
@@ -1737,98 +1477,64 @@ def build_model(context: JointContext, definition: JointModelDefinition):
         # These use the POPULATION psi (no study shift), matching p_u_plot/q_plot/
         # r_plot above: the reported composition and p_any are population quantities.
         # Per-study associations are reported separately from `psi_study`.
-        for grid, rg, qg, pug in [("plot", r_plot, q_plot, p_u_plot), ("query", r_query, q_query, p_u_query)]:
-            pi_both = _plackett_pi_both(rg, qg, psi)
+        for grid, rg, qg, pug in [
+            ("plot", r_plot, q_plot, p_u_plot),
+            ("query", r_query, q_query, p_u_query),
+        ]:
+            pi_both = _plackett_pi_both(rg, qg, composition.association)
             pm.Deterministic(f"pi_both_{grid}", pi_both, dims=f"{grid}_id")
-            pm.Deterministic(f"pi_sign_only_{grid}", pm.math.maximum(rg - pi_both, 0.0), dims=f"{grid}_id")
-            pm.Deterministic(f"pi_speak_only_{grid}", pm.math.maximum(qg - pi_both, 0.0), dims=f"{grid}_id")
-            pm.Deterministic(f"pi_neither_{grid}", pm.math.maximum(1 - rg - qg + pi_both, 0.0), dims=f"{grid}_id")
+            pm.Deterministic(
+                f"pi_sign_only_{grid}",
+                pm.math.maximum(rg - pi_both, 0.0),
+                dims=f"{grid}_id",
+            )
+            pm.Deterministic(
+                f"pi_speak_only_{grid}",
+                pm.math.maximum(qg - pi_both, 0.0),
+                dims=f"{grid}_id",
+            )
+            pm.Deterministic(
+                f"pi_neither_{grid}",
+                pm.math.maximum(1 - rg - qg + pi_both, 0.0),
+                dims=f"{grid}_id",
+            )
             # data-identified union and independence union (out of understood)
-            pm.Deterministic(f"p_any_{grid}", pug * (rg + qg - pi_both), dims=f"{grid}_id")
-            pm.Deterministic(f"p_any_indep_{grid}", pug * (1 - (1 - rg) * (1 - qg)), dims=f"{grid}_id")
+            pm.Deterministic(
+                f"p_any_{grid}", pug * (rg + qg - pi_both), dims=f"{grid}_id"
+            )
+            pm.Deterministic(
+                f"p_any_indep_{grid}",
+                pug * (1 - (1 - rg) * (1 - qg)),
+                dims=f"{grid}_id",
+            )
 
         # ============================================================
         # Per-row quantities, named so a reader outside the fit can reach them
         # ============================================================
-        # Every one of these was already computed above as a plain PyTensor
-        # expression and consumed by a likelihood. Naming them changes no draw:
-        # a deterministic is a function of the free variables, so the log
-        # density, and therefore the posterior, is identical --
-        # `tests/test_graph_equivalence.py` records the fixed-point log
-        # probability beside the names and is the check that this stayed true.
-        #
-        # Naming them costs nothing in a stored trace. They carry `obs_id`, so
-        # `fit_artifacts.unsampled_deterministic_names` excludes them from
-        # `pm.sample(var_names=...)` and no fit stores them; they are also
-        # outside the diagnostics summary (scalars only) and outside the
-        # recovery targets (`obs_id` is in neither ELEMENTWISE_DIMS nor
-        # AGGREGATE_DIMS). What changes is that a caller which asks for them --
-        # `fold_fits.fit_holdout_fold`, with `store_observation_deterministics`
-        # -- can now read a held-out row's predictive density off the trace.
-        #
-        # It is not free everywhere, and the one place it is not is why this
-        # list is the shortest it can be. `sample_prior_predictive` takes no
-        # `var_names` in the prior-checks stage, so it evaluates and holds every
-        # deterministic: on the real frame (1,708 rows, 500 draws) each obs-sized
-        # column is 6.8 MB, and the five vectors below plus the composition's
-        # four columns come to about 61 MB on top of that stage's existing 82.
-        # `q_obs_pop`, `r_obs_pop` and `log_psi_obs` were named here too until
-        # that was measured; they are the inputs to `pi_cells_obs` below and
-        # nothing reads them separately, so naming the composition alone carries
-        # the same information for a quarter less. Removing the rest means
-        # giving the prior-predictive stage the `var_names` treatment
-        # `pm.sample` already has, which is a change to three fitted models'
-        # prior-checks behaviour rather than a detail of this one.
-        #
-        # Which is what `scripts/wave_forward_score.py` needs, and could not do
-        # here: the bivariate random-effect engine has named `p_u_obs`, `q_obs`
-        # and the kappas since it was written, and this engine named only
-        # `kappa_sign_obs` and `z_obs`. VG25's understood and signed LOO are
-        # suppressed for leaking across the lag (see `diagnostics`), so the
-        # forward-chaining score is the only generalisation evidence it can
-        # carry, and it cannot be computed from a trace that does not expose
-        # these.
-        #
-        # `pi_cells_obs` below is not a duplicate of these: the cell
-        # compositions are built on the population+study marginals rather than
-        # the subject-shifted ones above, so scoring a held-out row's
-        # composition needs the marginals the composition actually used.
+        # These per-row outputs support held-out scoring. Sampling excludes them
+        # by default to limit trace size; explicit consumers can request them.
+        # Cells use population + study ratios, without direct child offsets.
         pm.Deterministic("p_u_obs", p_u_obs, dims="obs_id")
         pm.Deterministic("q_obs", q_obs, dims="obs_id")
         pm.Deterministic("r_obs", r_obs, dims="obs_id")
         pm.Deterministic("kappa_u_obs", kappa_u_obs, dims="obs_id")
         pm.Deterministic("kappa_s_obs", kappa_s_obs, dims="obs_id")
-        # The four-cell composition on every row, so a held-out administration's
-        # composition density can be scored without the script reconstructing
-        # which rows are cross-tab rows and in what order -- the reconstruction
-        # that would have to track `include_uk07_cells`, `include_es01_cells`
-        # and the frame's own column rules, and would be a hand copy of them.
-        # On a cell row this is exactly the `pi_stack` the likelihood used: same
-        # clip, same `CELL_NAMES` order, same population+study marginals. On the
-        # rest it is the composition those marginals imply, which nothing reads.
-        # Computing it for every row costs nothing at fit time -- `obs_id` keeps
-        # it out of every stored trace, and nutpie never evaluates a
-        # deterministic it was not asked to store.
+        # Use the same probability calculation for likelihood and held-out rows.
         pm.Deterministic(
             "pi_cells_obs",
             _composition_probabilities(
                 pm.math.clip(r_obs_pop, EPSILON, 1 - EPSILON),
                 pm.math.clip(q_obs_pop, EPSILON, 1 - EPSILON),
-                pm.math.exp(log_psi_obs),
+                pm.math.exp(composition.log_association_obs),
             ),
             dims=("obs_id", "cell_id"),
         )
-        # The signed kappa was already persisted for downstream inspection and
-        # keeps its place in the trace; it is listed here with the rest for
-        # what it is. (None of these is shown in the diagnostics() trace plot,
-        # which plots only scalar unobserved RVs.)
         pm.Deterministic("kappa_sign_obs", kappa_sign_obs, dims="obs_id")
 
-    pymc_utils.report_model_summary(model_pm)
     variables = pymc_utils.get_variables_dict(model_pm)
-    render_model_graph(model_pm, context.reporting.output_dir)
 
     context.set_model(model_pm, variables)
+    return build_report
 
 
 # ============================================================
@@ -2424,7 +2130,7 @@ def run_joint_plots(context: JointContext):
     X_sign = np.asarray(X)[keep_sign]
     X_u = np.asarray(X)[keep_u]
 
-    # 1) Data-identified p_any vs independence upper bound (expected counts)
+    # Expected union counts under the fitted association and under independence.
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     id_med = np.median(s.p_any_plot[keep_sign, :], axis=1) * n_trials
     id_hdi = intervals.bands(
@@ -2433,18 +2139,29 @@ def run_joint_plots(context: JointContext):
     ind_med = np.median(s.p_any_indep_plot[keep_sign, :], axis=1) * n_trials
     ax.fill_between(X_sign, id_hdi[:, 0], id_hdi[:, 1], alpha=0.20, color="C0")
     ax.plot(X_sign, id_med, lw=3, color="C0", label="Data-identified p_any (median)")
-    ax.plot(X_sign, ind_med, lw=2.5, ls="--", color="C3",
-            label="Independence upper bound (p_U·(1-(1-r)(1-q)))")
+    ax.plot(X_sign, ind_med, lw=2.5, ls="--", color="C3", label="Assuming independence")
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("Expected words produced (any modality)")
     ax.set_ylim(0, n_trials + 50)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Total expressive vocabulary: identified vs independence bound")
+    ax.set_title(
+        "Total expressive vocabulary under fitted association and independence"
+    )
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.png"), dpi=300)
     fig.savefig(os.path.join(od, "p_any_identified_vs_bound.svg"))
-    plot_io.save_plot_data(od, "p_any_identified_vs_bound", pd.DataFrame({"age_months": X_sign, "identified_median": id_med,
-                            "identified_ci_lo": id_hdi[:, 0], "identified_ci_hi": id_hdi[:, 1],
-                            "independence_median": ind_med}))
+    plot_io.save_plot_data(
+        od,
+        "p_any_identified_vs_bound",
+        pd.DataFrame(
+            {
+                "age_months": X_sign,
+                "identified_median": id_med,
+                "identified_ci_lo": id_hdi[:, 0],
+                "identified_ci_hi": id_hdi[:, 1],
+                "independence_median": ind_med,
+            }
+        ),
+    )
     context.plots["p_any_identified_vs_bound"] = fig
     plt.close(fig)
 
@@ -2465,7 +2182,11 @@ def run_joint_plots(context: JointContext):
     ax.set_title("Within-understood composition (sign-only → both → speak-only)")
     fig.savefig(os.path.join(od, "four_cell_composition.png"), dpi=300)
     fig.savefig(os.path.join(od, "four_cell_composition.svg"))
-    plot_io.save_plot_data(od, "four_cell_composition", pd.DataFrame({"age_months": X_sign, **{k: v[0] for k, v in comp.items()}}))
+    plot_io.save_plot_data(
+        od,
+        "four_cell_composition",
+        pd.DataFrame({"age_months": X_sign, **{k: v[0] for k, v in comp.items()}}),
+    )
     context.plots["four_cell_composition"] = fig
     plt.close(fig)
 
@@ -2484,25 +2205,33 @@ def run_joint_plots(context: JointContext):
     # cell by 1/p_u -- a factor of about fifty at the youngest modelled ages.
     spoken_w = s.p_u_plot[keep_sign, :] * s.q_plot[keep_sign, :] * n_trials
     any_w = s.p_any_plot[keep_sign, :] * n_trials
-    sign_only_w = s.p_u_plot[keep_sign, :] * s.pi_sign_only_plot[keep_sign, :] * n_trials
+    sign_only_w = (
+        s.p_u_plot[keep_sign, :] * s.pi_sign_only_plot[keep_sign, :] * n_trials
+    )
     both_w = s.p_u_plot[keep_sign, :] * s.pi_both_plot[keep_sign, :] * n_trials
-    speak_only_w = s.p_u_plot[keep_sign, :] * s.pi_speak_only_plot[keep_sign, :] * n_trials
+    speak_only_w = (
+        s.p_u_plot[keep_sign, :] * s.pi_speak_only_plot[keep_sign, :] * n_trials
+    )
 
     eps = 1e-9
     uplift = any_w / np.maximum(spoken_w, eps)
     sign_only_share = sign_only_w / np.maximum(any_w, eps)
 
     def _band(arr):
-        return np.median(arr, axis=1), intervals.bands(arr, ci_prob, ci_kind, sample_axis=1)
+        return np.median(arr, axis=1), intervals.bands(
+            arr, ci_prob, ci_kind, sample_axis=1
+        )
 
     up_med, up_ci = _band(uplift)
     sh_med, sh_ci = _band(sign_only_share)
     so_med, so_ci = _band(sign_only_w)
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    for arr, lab, c in ((speak_only_w, "Speech only", "C1"),
-                        (both_w, "Both sign and speech", "C4"),
-                        (sign_only_w, "Sign only", "C2")):
+    for arr, lab, c in (
+        (speak_only_w, "Speech only", "C1"),
+        (both_w, "Both sign and speech", "C4"),
+        (sign_only_w, "Sign only", "C2"),
+    ):
         med, hdi = _band(arr)
         ax.fill_between(X_sign, hdi[:, 0], hdi[:, 1], alpha=0.18, color=c)
         ax.plot(X_sign, med, lw=2.5, color=c, label=lab)
@@ -2517,8 +2246,13 @@ def run_joint_plots(context: JointContext):
 
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     ax.fill_between(X_sign, up_ci[:, 0], up_ci[:, 1], alpha=0.20, color="C0")
-    ax.plot(X_sign, up_med, lw=3, color="C0",
-            label="Expressive vocabulary as a multiple of spoken")
+    ax.plot(
+        X_sign,
+        up_med,
+        lw=3,
+        color="C0",
+        label="Expressive vocabulary as a multiple of spoken",
+    )
     ax.axhline(1.0, ls=":", color="grey", label="speech alone")
     ax.set_xlabel("Age (months)")
     ax.set_ylabel("p_any / spoken")
@@ -2529,18 +2263,28 @@ def run_joint_plots(context: JointContext):
     context.plots["signing_uplift"] = fig
     plt.close(fig)
 
-    plot_io.save_plot_data(od, "signing_profile", pd.DataFrame({
-        "age_months": X_sign,
-        "spoken_median": np.median(spoken_w, axis=1),
-        "any_median": np.median(any_w, axis=1),
-        "sign_only_median": so_med,
-        "sign_only_ci_lo": so_ci[:, 0], "sign_only_ci_hi": so_ci[:, 1],
-        "both_median": np.median(both_w, axis=1),
-        "speak_only_median": np.median(speak_only_w, axis=1),
-        "uplift_median": up_med, "uplift_ci_lo": up_ci[:, 0], "uplift_ci_hi": up_ci[:, 1],
-        "sign_only_share_median": sh_med,
-        "sign_only_share_ci_lo": sh_ci[:, 0], "sign_only_share_ci_hi": sh_ci[:, 1],
-    }))
+    plot_io.save_plot_data(
+        od,
+        "signing_profile",
+        pd.DataFrame(
+            {
+                "age_months": X_sign,
+                "spoken_median": np.median(spoken_w, axis=1),
+                "any_median": np.median(any_w, axis=1),
+                "sign_only_median": so_med,
+                "sign_only_ci_lo": so_ci[:, 0],
+                "sign_only_ci_hi": so_ci[:, 1],
+                "both_median": np.median(both_w, axis=1),
+                "speak_only_median": np.median(speak_only_w, axis=1),
+                "uplift_median": up_med,
+                "uplift_ci_lo": up_ci[:, 0],
+                "uplift_ci_hi": up_ci[:, 1],
+                "sign_only_share_median": sh_med,
+                "sign_only_share_ci_lo": sh_ci[:, 0],
+                "sign_only_share_ci_hi": sh_ci[:, 1],
+            }
+        ),
+    )
 
     # These two summary TABLES are written from the plot stage, not from
     # `posterior_summary`, and that placement is load-bearing rather than untidy:
@@ -2551,13 +2295,19 @@ def run_joint_plots(context: JointContext):
     # multiple gigabytes. (Recorded until now only in a `KNOWN_STALE` comment inside
     # tests/test_reporting_age_policy.py.)
     _signing_milestones(X_sign, sign_only_w, both_w, speak_only_w, ci_prob).to_csv(
-        os.path.join(od, "signing_milestones.csv"), index=False)
+        os.path.join(od, "signing_milestones.csv"), index=False
+    )
 
     # 3) psi posterior
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_MD)
     ax.hist(s.psi, bins=60, color="C4", alpha=0.8)
     ax.axvline(1.0, ls=":", color="grey", label="independence (psi=1)")
-    ax.axvline(float(np.median(s.psi)), ls="-", color="C0", label=f"median {np.median(s.psi):.2f}")
+    ax.axvline(
+        float(np.median(s.psi)),
+        ls="-",
+        color="C0",
+        label=f"median {np.median(s.psi):.2f}",
+    )
     ax.set_xlabel("psi (sign-speech odds ratio)")
     ax.set_ylabel("posterior draws")
     ax.legend(frameon=True)
@@ -2602,15 +2352,19 @@ def run_joint_plots(context: JointContext):
     interior = peak_ages[np.isfinite(peak_ages)]
     peak_lo, peak_hi = intervals.interval_1d(interior, ci_prob, "hdi")
     local_max = (r_grid[1:-1, :] > r_grid[:-2, :]) & (r_grid[1:-1, :] > r_grid[2:, :])
-    pd.DataFrame({
-        "peak_age_median_months": [float(np.median(interior)) if interior.size else np.nan],
-        "peak_age_ci_lo_months": [float(peak_lo)],
-        "peak_age_ci_hi_months": [float(peak_hi)],
-        "boundary_draw_share": [float(boundary.mean())],
-        "multi_peak_draw_share": [float((local_max.sum(axis=0) > 1).mean())],
-        "support_lo_months": [float(np.asarray(X_sign)[0])],
-        "support_hi_months": [float(np.asarray(X_sign)[-1])],
-    }).to_csv(os.path.join(od, "signed_ratio_peak.csv"), index=False)
+    pd.DataFrame(
+        {
+            "peak_age_median_months": [
+                float(np.median(interior)) if interior.size else np.nan
+            ],
+            "peak_age_ci_lo_months": [float(peak_lo)],
+            "peak_age_ci_hi_months": [float(peak_hi)],
+            "boundary_draw_share": [float(boundary.mean())],
+            "multi_peak_draw_share": [float((local_max.sum(axis=0) > 1).mean())],
+            "support_lo_months": [float(np.asarray(X_sign)[0])],
+            "support_hi_months": [float(np.asarray(X_sign)[-1])],
+        }
+    ).to_csv(os.path.join(od, "signed_ratio_peak.csv"), index=False)
 
     # 5) Four-cell PPC (observed vs predicted cell totals), one panel per
     # source. This was a single figure named and titled uk_02 until #238, while
@@ -2634,8 +2388,14 @@ def run_joint_plots(context: JointContext):
             xpos = np.arange(4)
             panel.bar(xpos - 0.18, obs_tot, width=0.36, color="C0", label="observed")
             panel.bar(
-                xpos + 0.18, pred_med, width=0.36, color="C3", alpha=0.7,
-                label="predicted (median)", yerr=yerr, capsize=4,
+                xpos + 0.18,
+                pred_med,
+                width=0.36,
+                color="C3",
+                alpha=0.7,
+                label="predicted (median)",
+                yerr=yerr,
+                capsize=4,
             )
             panel.set_xticks(xpos)
             panel.set_xticklabels(CELL_NAMES, rotation=30, ha="right")

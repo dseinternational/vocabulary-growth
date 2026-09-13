@@ -20,6 +20,8 @@ That the resolution did not change any model's graph is the separate claim, and
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from vocab_growth.models.definitions import (
@@ -307,3 +309,11 @@ def test_the_child_slope_reference_age_comes_from_the_definition():
     assert resolve(VG19).slope_ref_age_months == VG19.subject_slope_ref_age_months
     # A definition with no such field falls back to the documented default.
     assert resolve(VG13).slope_ref_age_months == 36.0
+
+
+@pytest.mark.parametrize("age", [0.0, 24.0, 36.0])
+def test_an_explicit_slope_reference_age_is_preserved(age):
+    assert (
+        resolve(replace(VG19, subject_slope_ref_age_months=age)).slope_ref_age_months
+        == age
+    )

@@ -296,6 +296,26 @@ def test_backfill_entries_name_real_fields():
     assert not stale, f"BACKFILL_DEFAULTS names fields no model has: {stale}"
 
 
+def test_sign_same_form_backfill_matches_the_historical_unrestricted_path():
+    from types import SimpleNamespace
+
+    from vocab_growth.models.cross_lag import sign_lag_same_form_only
+    from vocab_growth.models.definitions import VG25
+
+    assert (
+        sign_lag_same_form_only(SimpleNamespace())
+        is BACKFILL_DEFAULTS["sign_lag_same_form_only"]
+    )
+    assert sign_lag_same_form_only(VG25) is False
+    recorded = normalise_for_json(VG25)
+    recorded.pop("sign_lag_same_form_only")
+    assert definition_differences(recorded, VG25) == []
+    altered = dataclasses.replace(VG25, sign_lag_same_form_only=True)
+    (difference,) = definition_differences(recorded, altered)
+    assert difference.field == "sign_lag_same_form_only"
+    assert difference.role is FieldRole.GRAPH
+
+
 def test_a_field_the_registry_no_longer_has_is_a_difference():
     """A retired field left in an old record must not pass silently."""
     recorded = normalise_for_json(VG10)

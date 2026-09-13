@@ -467,6 +467,8 @@ def test_soft_tier_only_keeps_the_cleared_framing(tmp_path, capsys):
     gate = {
         "checks": {"rhat": True, "ess": True, "divergences": False, "bfmi": True},
         "divergences": 16,
+        "max_rhat": 1.005,
+        "min_ess": 900,
     }
     render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
     out = capsys.readouterr().out
@@ -475,7 +477,11 @@ def test_soft_tier_only_keeps_the_cleared_framing(tmp_path, capsys):
 
 
 def test_clean_fit_prints_nothing(tmp_path, capsys):
-    gate = {"checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True}}
+    gate = {
+        "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.005,
+        "min_ess": 900,
+    }
     render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
     assert capsys.readouterr().out == ""
 
@@ -528,53 +534,82 @@ def test_a_hard_failure_with_no_sampling_caveat_is_still_disclosed(tmp_path, cap
     assert "must not be published" in out
 
 
-def test_a_payload_that_records_no_hard_check_is_not_called_a_failure(
-    tmp_path, capsys
-):
-    """A report may claim a failure only where the payload records one.
-
-    Payloads written before the hard checks were recorded carry soft-tier
-    fields alone. Reading the missing checks as failures would put "must not be
-    published" on fits that were never assessed as failing -- the mirror image
-    of the defect this corrects.
-    """
+def test_a_payload_that_records_no_hard_check_is_not_called_a_failure(tmp_path, capsys):
+    """Missing evidence establishes neither success nor a measured failure."""
     gate = {"checks": {"divergences": False}, "divergences": 3}
     render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
     out = capsys.readouterr().out
-    assert "cleared the hard convergence tier" in out
+    assert "cannot be assessed" in out
+    assert "cleared the hard convergence tier" not in out
     assert "did not clear" not in out
+    assert "remains reportable" not in out
+    assert "must not be published" in out
 
 
 _VERDICT_PAYLOADS = {
+    "hard evidence missing": {
+        "checks": {"divergences": False},
+        "divergences": 3,
+    },
+    "legacy numerical failure": {
+        "checks": {"divergences": False},
+        "divergences": 3,
+        "max_rhat": 1.21,
+        "min_ess": 10.0,
+    },
+    "legacy numerical success": {
+        "checks": {"divergences": False},
+        "divergences": 3,
+        "max_rhat": 1.004,
+        "min_ess": 900.0,
+    },
     "clean": {
         "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
-        "max_rhat": 1.002, "min_ess": 1800.0, "divergences": 0,
-        "bfmi_per_chain": [0.9, 0.85], "scan_completed": True,
+        "max_rhat": 1.002,
+        "min_ess": 1800.0,
+        "divergences": 0,
+        "bfmi_per_chain": [0.9, 0.85],
+        "scan_completed": True,
     },
     "soft only": {
         "checks": {"rhat": True, "ess": True, "divergences": False, "bfmi": True},
-        "max_rhat": 1.004, "min_ess": 900.0, "divergences": 3,
-        "bfmi_per_chain": [0.7, 0.8], "scan_completed": True,
+        "max_rhat": 1.004,
+        "min_ess": 900.0,
+        "divergences": 3,
+        "bfmi_per_chain": [0.7, 0.8],
+        "scan_completed": True,
     },
     "hard failure": {
         "checks": {"rhat": False, "ess": False, "divergences": True, "bfmi": True},
-        "max_rhat": 1.21, "min_ess": 10.0, "divergences": 0,
-        "bfmi_per_chain": [0.6, 0.58], "scan_completed": True,
+        "max_rhat": 1.21,
+        "min_ess": 10.0,
+        "divergences": 0,
+        "bfmi_per_chain": [0.6, 0.58],
+        "scan_completed": True,
     },
     "hard and soft failure": {
         "checks": {"rhat": False, "ess": False, "divergences": False, "bfmi": True},
-        "max_rhat": 1.21, "min_ess": 10.0, "divergences": 2,
-        "bfmi_per_chain": [0.6, 0.58], "scan_completed": True,
+        "max_rhat": 1.21,
+        "min_ess": 10.0,
+        "divergences": 2,
+        "bfmi_per_chain": [0.6, 0.58],
+        "scan_completed": True,
     },
     "scan did not complete": {
         "checks": {"divergences": True, "bfmi": True},
-        "max_rhat": None, "min_ess": None, "divergences": 0,
-        "bfmi_per_chain": [0.6, 0.6], "scan_completed": False,
+        "max_rhat": None,
+        "min_ess": None,
+        "divergences": 0,
+        "bfmi_per_chain": [0.6, 0.6],
+        "scan_completed": False,
     },
     "accepted exception": {
         "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
-        "max_rhat": 1.0125, "min_ess": 700.0, "divergences": 0,
-        "bfmi_per_chain": [0.7, 0.7], "scan_completed": True,
+        "max_rhat": 1.0125,
+        "min_ess": 700.0,
+        "divergences": 0,
+        "bfmi_per_chain": [0.7, 0.7],
+        "scan_completed": True,
         "accepted_rhat_exception": {
             "parameters": ["g_unit_hsgp_coeffs[4]"],
             "observed_max_rhat": 1.0125,
@@ -605,6 +640,10 @@ def test_the_caveat_box_never_contradicts_the_verdict(tmp_path, capsys, case):
         assert verdict_fails_hard, case
     if verdict_fails_hard:
         assert "did not clear" in box, case
+    assert ("cannot be assessed" in box) == ("cannot be assessed" in verdict), case
+    if "cannot be assessed" in verdict:
+        assert "cleared the hard convergence tier" not in box
+        assert "remains reportable" not in box
 
 
 # --------------------------------------------------------------------------

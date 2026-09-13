@@ -157,7 +157,9 @@ def build_synthetic_model(
     context.set_model_data(
         model_data.BinomialModelData(
             X_obs=frame["age"].to_numpy().reshape(-1, 1),
-            y_obs=frame["understood"].to_numpy().astype(int),
+            # The context needs a complete placeholder array; multi-outcome
+            # likelihoods read missingness from the unchanged frame below.
+            y_obs=frame["understood"].fillna(0).to_numpy().astype(int),
             n_trials=definition.n_trials,
         ),
         frame,
@@ -211,21 +213,13 @@ def graph_fingerprint(model) -> dict:
 
 
 def fixed_point(model) -> dict:
-    """A deterministic, arbitrary point in the model's transformed space.
+    """Choose a valid parameter point to record or use for a local probe.
 
-    **Not** the model's own initial point, and that is the whole design. PyMC
-    initialises a positive parameter at its moment, which for the ``HalfNormal``
-    scales this family is built from *is* the scale; on the log transform the
-    Jacobian then contributes ``+log(sigma)`` while the density contributes
-    ``-log(sigma)``, and the two cancel exactly. A log-probability read at the
-    initial point is therefore **invariant to every prior scale in the model** --
-    a 1% change to ``eta_u_sigma`` moves it by exactly zero. Measured, not
-    reasoned about: that is how this function came to exist.
-
-    Offsetting each coordinate by a fixed amount breaks the cancellation while
-    keeping the point reproducible. The offsets vary along the vector so a
-    permutation within one array is visible too, and every coordinate is on the
-    unconstrained scale, so no offset can leave the support.
+    This starts from the model's initial values, so changing a prior can change
+    the point. Regression comparisons must reuse saved values from the old
+    model rather than call this function independently for both models.
+    Offsets keep the point away from symmetric prior centres; all coordinates
+    are transformed, so the offsets cannot leave the parameter support.
     """
     point = {}
     for index, (name, value) in enumerate(sorted(model.initial_point().items())):
@@ -239,13 +233,12 @@ def fixed_point(model) -> dict:
     return point
 
 
-def fixed_point_logp(model) -> float:
-    """The joint log-probability at :func:`fixed_point`.
+def fixed_point_logp(model, point: dict | None = None) -> float:
+    """Evaluate a saved parameter point, or create one for a local probe.
 
-    One float that depends on every prior, every likelihood term and every
-    constant in the graph, evaluated without sampling. It moves if any
-    expression moves, which is what makes it a refactor guard rather than a
-    structural one -- the fingerprint above would not notice a changed scale or
-    a swapped operand.
+    Always supply the same ``point`` when comparing compatible models. The
+    committed graph regression tests read theirs from graph_reference_points.json.
     """
-    return float(model.compile_logp()(fixed_point(model)))
+    if point is None:
+        point = fixed_point(model)
+    return float(model.compile_logp()(point))

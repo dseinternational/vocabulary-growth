@@ -1,40 +1,22 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The within-child cross-lags: their prior-wave sources and their audits.
+"""Prior-wave sources and audits for comprehension and signed-share lags.
 
-Pure NumPy/pandas, PyMC-free, in the manner of :mod:`observation_arrays` -- the
-whole of what the cross-lag needs before a graph exists, plus the artefact that
-records the coefficient's support. It was a quarter of ``common_bivariate_re.py``,
-which fits eleven other models that carry no lag at all.
+Use ``prev_wave_lag_for_frame`` for the understood-count predictor and
+``prev_wave_sign_share_lag_for_frame`` for the signed/understood predictor.
+These entry points read the definition's gap limit, boundary treatment and
+optional same-form restriction. Sources always come from a strictly earlier
+administration wave of the same child.
 
-Read :func:`prev_wave_lag_for_frame` first: it is the supported entry point, and
-:func:`prev_wave_lag` is the array primitive underneath it. The distinction matters
-because the three settings that change the result -- the gap ceiling, the
-zero-source treatment and the same-form restriction -- live on the definition,
-and a caller reaching past the frame-level function has to pass them itself.
+Inventory size cancels algebraically from signed/understood. Changing the
+selected words can still change that ratio. Neither ratio arithmetic nor a
+study offset establishes comparability across a within-child form change.
+The source-form audit and opt-in sensitivity are recorded in
+notes/202609131044-model-review-implementation.md.
 
-The one thing here that is *not* a definition-level concern is
-:func:`validate_cross_lag`, which is checked against the resolved child-effect plan;
-its docstring says why that check cannot move into
-``definitions.validate_model_definition`` with the others.
-
-Two lags live here, and they share everything except what they read. VG16's
-understood -> ``q`` lag reads a **count** against the fixed 810-item inventory
-(:func:`prev_wave_lag`); VG25's sign -> speech lag reads a **ratio**, the signed
-share of the same wave's comprehension (:func:`prev_wave_sign_share_lag`). The
-wave walk, the source-selection rule, the gap ceiling and the zero treatment are
-one implementation between them -- :func:`_assign_prev_wave_sources` and
-:func:`_apply_gap_ceiling` -- so a correction to either lands on both.
-
-One thing deliberately does *not* carry over. ``same_form_only`` exists for the
-count lag because ``understood / 810`` is deflated by a shorter source form, and
-a study intercept cannot absorb a within-study form transition. The ratio lag
-divides one count by another **scored on the same form in the same
-administration**, so the truncation is very largely common to numerator and
-denominator and cancels. That is a property of the predictor, not an assumption
-about the pool, so VG25 carries no same-form field rather than carrying one that
-would always be inert.
+The array calculations use NumPy and pandas. Separate reporting functions
+write their audit tables; no PyMC model is needed.
 """
 
 import os
@@ -443,6 +425,8 @@ def prev_wave_sign_share_lag(
     *,
     max_gap_months: float | None = None,
     zero_handling: str = LAG_ZERO_CLIP,
+    same_form_only: bool = False,
+    form_ceiling=None,
 ):
     """Per-observation prior-wave signed-share lag source for the VG25 cross-lag.
 
@@ -457,13 +441,11 @@ def prev_wave_sign_share_lag(
     NaN-aligned: a row is usable as a source exactly where both are present and
     the denominator is positive.
 
-    Where a source wave carries several usable measurements, the one with the
-    **largest comprehension denominator** is selected. That is the same
-    least-truncated-measurement rule :func:`prev_wave_lag` applies to the count,
-    said of a ratio: a shorter form right-truncates both counts, and the wave's
-    largest denominator is its least-truncated view of the child. The ratio is
-    also the reason no same-form restriction is offered -- see the module
-    docstring.
+    Multiple usable sources at one wave are ranked by understood count, then
+    signed count. This favours the measurement with more recorded words; it
+    does not establish that signed shares are comparable across checklists.
+    ``same_form_only`` drops a lag when either inventory size is unknown or the
+    two sizes differ. It retains the row and never searches an older wave.
 
     Returns ``(prev_idx, has_lag_f, r_prev_logit)`` as per-observation arrays,
     with the same meanings :func:`prev_wave_lag` documents. ``r_prev_logit`` is
@@ -474,25 +456,39 @@ def prev_wave_sign_share_lag(
     signed = np.asarray(signed, dtype=float)
     understood = np.asarray(understood, dtype=float)
     usable = ~np.isnan(signed) & ~np.isnan(understood) & (understood > 0)
-    # The denominator ranks first, for the least-truncated reason VG16's count
-    # lag gives. The numerator is the tie-break, and is here because this lag
-    # reads *two* quantities off the selected row: two same-age forms agreeing
-    # on the comprehension total but disagreeing on how many of those words the
-    # child signs are a genuine conflict, and resolving it by the frame's row
-    # order would make the predictor depend on a sort. Preferring the larger
-    # signed count is the same least-truncated principle applied to the
-    # numerator -- a form that recorded more signs saw more of the child's
-    # signing.
+    ceiling = None
+    if same_form_only:
+        if form_ceiling is None:
+            raise ValueError(
+                "same_form_only needs form_ceiling for the signed-share lag."
+            )
+        ceiling = np.asarray(form_ceiling, dtype=float)
+        if ceiling.shape != age.shape:
+            raise ValueError("form_ceiling must have one value per observation.")
+    rank_keys = (
+        np.where(usable, understood, -np.inf),
+        np.where(usable, signed, -np.inf),
+    )
+    if ceiling is not None:
+        # Form size breaks count ties because the restriction reads that size.
+        rank_keys += (np.where(np.isfinite(ceiling), ceiling, -np.inf),)
     prev_idx, has_lag_f = _assign_prev_wave_sources(
         subject,
         age,
         usable,
-        (
-            np.where(usable, understood, -np.inf),
-            np.where(usable, signed, -np.inf),
-        ),
+        rank_keys,
     )
     prev_idx, has_lag_f = _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months)
+    if ceiling is not None:
+        source_ceiling = ceiling[prev_idx]
+        same = (
+            np.isfinite(ceiling)
+            & np.isfinite(source_ceiling)
+            & (ceiling == source_ceiling)
+        )
+        crossed = (has_lag_f > 0) & ~same
+        has_lag_f = np.where(crossed, 0.0, has_lag_f)
+        prev_idx = np.where(crossed, 0, prev_idx)
 
     # A neutral 0.5 / 1.0 placeholder where there is no source: both treatments
     # map it to logit(0.5) = 0, which `has_lag_f` then zeroes anyway. Written so
@@ -528,6 +524,11 @@ def prev_wave_sign_share_lag(
     return prev_idx, has_lag_f, r_prev_logit
 
 
+def sign_lag_same_form_only(definition) -> bool:
+    """The optional form restriction, defaulting to historical unrestricted lags."""
+    return bool(getattr(definition, "sign_lag_same_form_only", False))
+
+
 def prev_wave_sign_share_lag_for_frame(analysis_df, definition):
     """The supported entry point: :func:`prev_wave_sign_share_lag` over a frame.
 
@@ -536,10 +537,14 @@ def prev_wave_sign_share_lag_for_frame(analysis_df, definition):
     the result live on the definition, and a caller reaching past this function
     has to pass them itself.
 
-    ``n_trials`` is absent by construction. The predictor is a ratio of two
-    counts from one administration, so the inventory size cancels out of it --
-    which is also why this lag has no same-form restriction to configure.
+    Inventory size cancels from the ratio's arithmetic. Checklist item selection
+    can still change the ratio, so the optional form restriction is separate.
     """
+    same_form_only = sign_lag_same_form_only(definition)
+    if same_form_only and "survey_vocab_max" not in analysis_df:
+        raise ValueError(
+            "sign_lag_same_form_only needs survey_vocab_max in the prepared frame."
+        )
     signed, understood = sign_share_counts(analysis_df)
     return prev_wave_sign_share_lag(
         np.asarray(analysis_df["subject_code"], dtype=int),
@@ -547,6 +552,10 @@ def prev_wave_sign_share_lag_for_frame(analysis_df, definition):
         signed,
         understood,
         max_gap_months=getattr(definition, "sign_lag_max_gap_months", None),
+        same_form_only=same_form_only,
+        form_ceiling=analysis_df["survey_vocab_max"].to_numpy()
+        if same_form_only
+        else None,
         zero_handling=getattr(definition, "sign_lag_zero_handling", LAG_ZERO_CLIP),
     )
 

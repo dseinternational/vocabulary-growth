@@ -501,7 +501,7 @@ def test_es01_real_cells_reconcile_and_sit_near_independence():
     )
 
 
-def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02():
+def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02(tmp_path):
     """The DSE-native sensitivity on the real sources, through the real engine.
 
     Three things have to hold together, and only the third is obvious from the
@@ -516,7 +516,7 @@ def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02():
         reporting=reporting.ReportingConfiguration(
             model_name="TEST_VG15_NATIVE",
             config_name="test",
-            output_root_dir=str(env.OUTPUT_DIR),
+            output_root_dir=str(tmp_path),
             ci_prob=0.90,
             interval_kind="hdi",
         ),

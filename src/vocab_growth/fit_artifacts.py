@@ -525,34 +525,27 @@ def diagnostics_assessable(summary: dict) -> bool:
     )
 
 
-def hard_tier_failed(summary: dict | None) -> bool:
-    """Whether a gate payload records a hard-tier failure, on positive evidence.
+class HardConvergenceStatus(StrEnum):
+    """What the recorded diagnostics establish about R-hat and sample size."""
 
-    The hard tier is the R-hat/ESS scan. It is fail-closed in
-    :func:`vocab_growth.models.common.enforce_convergence_gate` -- but only at
-    reporting quality: below it the gate returns at once, so a ``dev`` or
-    ``test`` fit that has not mixed completes, renders and reaches a report page.
-    A reader of that page has to be told, and a cell that assumes every rendered
-    fit cleared the hard tier tells them the opposite.
+    PASSED = "passed"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
 
-    **Positive evidence only**, which is what separates this from
-    :func:`diagnostics_assessable`. That function also requires finite
-    ``max_rhat`` and ``min_ess`` values, which is right for a gate deciding
-    whether a fit may proceed and wrong for a report deciding what to *claim*:
-    a payload written before those fields existed would read as a failure it
-    never recorded. So this is ``True`` only where the payload says so -- a
-    failing R-hat or ESS check or list, a scan that did not complete, or
-    parameters the scan could not assess -- and ``False`` for an absent or
-    silent payload, which the lifecycle checks report separately.
 
-    An accepted R-hat exception still reads as a failure here, because it is
-    one: it is published anyway, on the record, and the caller frames it as
-    such.
+def hard_tier_status(summary: dict | None) -> HardConvergenceStatus:
+    """Assess recorded failures, numerical results and missing evidence.
+
+    A failure flag or failing numerical result takes precedence over a pass.
+    Older summaries need not contain Boolean checks: their finite extrema can
+    establish the result using the recorded thresholds, or the usual defaults.
+    Missing results cannot establish success. An accepted exception does not
+    change the assessment; report callers disclose that decision separately.
     """
     if not summary:
-        return False
+        return HardConvergenceStatus.UNKNOWN
     checks = summary.get("checks") or {}
-    return bool(
+    if (
         checks.get("rhat") is False
         or checks.get("ess") is False
         or summary.get("rhat_failing")
@@ -560,7 +553,34 @@ def hard_tier_failed(summary: dict | None) -> bool:
         or summary.get("scan_completed") is False
         or checks.get("diagnostics_assessable") is False
         or summary.get("unassessable_parameters")
+    ):
+        return HardConvergenceStatus.FAILED
+
+    thresholds = summary.get("thresholds") or {}
+    assessed = 0
+    for field, threshold, default, upper_bound in (
+        ("max_rhat", "rhat_max", 1.01, True),
+        ("min_ess", "ess_threshold", 400, False),
+    ):
+        try:
+            value = float(summary[field])
+            limit = float(thresholds.get(threshold, default))
+        except KeyError, TypeError, ValueError:
+            continue
+        if not math.isfinite(value) or not math.isfinite(limit):
+            continue
+        within_limit = value <= limit if upper_bound else value >= limit
+        if not within_limit:
+            return HardConvergenceStatus.FAILED
+        assessed += 1
+    return (
+        HardConvergenceStatus.PASSED if assessed == 2 else HardConvergenceStatus.UNKNOWN
     )
+
+
+def hard_tier_failed(summary: dict | None) -> bool:
+    """Whether the recorded evidence establishes a hard-tier failure."""
+    return hard_tier_status(summary) is HardConvergenceStatus.FAILED
 
 
 def accepted_rhat_exception(

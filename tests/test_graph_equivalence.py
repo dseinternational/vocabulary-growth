@@ -1,36 +1,21 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""A refactor must not move any registered model's graph.
+"""Compare registered graphs with the recorded structure and two saved points.
 
-Issue #273's structural work -- resolving the subject-effect variants into one
-typed plan, splitting the 772-line bivariate random-effect builder, freezing the
-definitions -- touches the code that writes the PyMC graph. Its own constraints
-say what must survive: free random-variable names **and order**, deterministic
-names required by consumers, dimensions, coordinates, likelihood factorisation,
-and a fixed-point log probability to numerical tolerance. This module is that
-check, standing rather than ad hoc.
+Each model uses a deterministic synthetic frame. The checks preserve variable
+names and order, likelihood factors, dimensions, complete coordinate values,
+and log probabilities evaluated at the same transformed parameter values.
+They do not prove equivalence everywhere in parameter space. Separate tests
+exercise non-default settings and the quantities returned by extracted helpers.
 
-Every registered model is built on one small deterministic synthetic frame
-(``tests/support/synthetic_graphs``) and compared against a committed baseline.
-Synthetic on purpose: the recorded fingerprint is then a function of the **code
-alone**, so a legitimate data change does not present as a refactor failure and
-a real refactor failure cannot hide inside one. Data changes are already
-guarded, exactly, by ``data.analysis_frame_hash``.
-
-**A deliberate statistical change is expected to fail this and then update the
-baseline.** That is the point: the baseline diff is the change's own statement
-of what moved in the graph, reviewable line by line beside the reasoning. What
-it prevents is a refactor moving something silently.
-
-Marked ``slow``: twenty graph builds plus twenty log-probability compilations is
-about a hundred seconds of real numerical work. CI runs the slow job on every
-pull request, so the guard is on every change; it is out of the fast local loop
-only.
-
-Regenerate the baseline with::
+The baseline must stay fixed during refactoring. An intentional statistical
+change needs its own explanation and review of any baseline update. Only then
+regenerate it with::
 
     uv run python tests/support/regenerate_graph_baseline.py
+
+The tests are slow because they build graphs and compile log probabilities.
 """
 
 from __future__ import annotations
@@ -39,6 +24,7 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
+import numpy as np
 import pytest
 from support.synthetic_graphs import (
     build_registered_model,
@@ -48,17 +34,12 @@ from support.synthetic_graphs import (
 
 from vocab_growth.models.catalogue import CATALOGUE
 
-#: `xdist_group` keeps this module on one worker under `--dist loadgroup`, which
-#: the slow job uses so that the modules whose tests share nothing can spread
-#: across workers. This one must not: the `built` fixture below caches each
-#: registered model's graph, and every test here reads one, so a per-test
-#: distribution would build each model once per worker that draws one of its
-#: five tests -- up to four copies of all twenty-one on CI's four workers. That
-#: is total CPU the slow job is now bounded by, traded for a wall clock this
-#: module is not the critical path of (#331).
+# Keep this module on one worker: its fixture caches each graph across tests.
+# Other slow modules can distribute independent builds across workers.
 pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("graph-equivalence")]
 
 BASELINE_PATH = Path(__file__).parent / "support" / "graph_baseline.json"
+REFERENCE_PATH = BASELINE_PATH.with_name("graph_reference_points.json")
 
 #: Tolerance on the recorded log probability. PyTensor's rewrites can reassociate
 #: a sum without changing the model -- the same effect measured at 4.4e-16
@@ -81,18 +62,13 @@ def baseline() -> dict:
     return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
 
-class _LazyBuilds(Mapping):
-    """Every registered model's graph, built on first use and then shared.
+@pytest.fixture(scope="session")
+def reference_points() -> dict:
+    return json.loads(REFERENCE_PATH.read_text(encoding="utf-8"))
 
-    Eager construction cost every selection the whole registry: running one
-    model's five tests, or the two-build stability check below, built all
-    twenty-one. It also fixed the grouping trade-off recorded in #331 -- grouped
-    onto one worker this module took 40.5 s, ungrouped across four it took
-    21.2 s because the builds then ran in parallel, but ungrouped each worker
-    rebuilt all twenty-one. Building on demand removes the choice: a worker
-    builds only the models its own tests ask for, whichever way the tests are
-    distributed.
-    """
+
+class _LazyBuilds(Mapping):
+    """Each registered graph, built on first use and cached for the module's tests."""
 
     def __init__(self, output_dir, monkeypatch):
         self._output_dir = output_dir
@@ -126,8 +102,9 @@ def built(tmp_path_factory):
         patcher.undo()
 
 
-def test_the_baseline_covers_exactly_the_registered_models(baseline):
+def test_the_baseline_covers_exactly_the_registered_models(baseline, reference_points):
     """A model registered without a baseline entry would be unguarded."""
+    assert sorted(reference_points) == _MODEL_KEYS
     assert sorted(baseline) == _MODEL_KEYS, (
         f"baseline entries without a registered model: "
         f"{sorted(set(baseline) - set(_MODEL_KEYS))}; registered models with no "
@@ -162,7 +139,9 @@ def test_the_likelihood_factorisation_is_unchanged(model_key, built, baseline):
 
 
 @pytest.mark.parametrize("model_key", _MODEL_KEYS)
-def test_dimensions_and_coordinates_are_unchanged(model_key, built, baseline):
+def test_dimensions_and_coordinates_are_unchanged(
+    model_key, built, baseline, reference_points
+):
     """A variable that keeps its name and loses its dims changes what readers get.
 
     Every consumer of a stored trace indexes by dimension -- the extractors, the
@@ -172,27 +151,34 @@ def test_dimensions_and_coordinates_are_unchanged(model_key, built, baseline):
     fingerprint = graph_fingerprint(built[model_key].model)
     assert fingerprint["dims"] == baseline[model_key]["dims"]
     assert fingerprint["coords"] == baseline[model_key]["coords"]
+    actual = {
+        name: None if values is None else np.asarray(values).tolist()
+        for name, values in built[model_key].model.coords.items()
+    }
+    assert actual == reference_points[model_key]["coordinates"]
 
 
 @pytest.mark.parametrize("model_key", _MODEL_KEYS)
-def test_the_log_probability_at_a_fixed_point_is_unchanged(model_key, built, baseline):
-    """One float that moves if any expression in the graph moves.
-
-    The structural checks above would not notice a changed prior scale, a
-    swapped operand or a dropped term: the names, order and dims would all still
-    match. This would.
-    """
-    actual = fixed_point_logp(built[model_key].model)
-    expected = baseline[model_key]["logp_at_fixed_point"]
-    assert actual == pytest.approx(expected, rel=LOGP_RTOL), (
-        f"{model_key}'s log probability at the fixed point moved: "
-        f"{expected!r} -> {actual!r}. If this is a deliberate statistical "
-        "change, regenerate the baseline and say in the commit what moved and "
-        "why. If it is not, the refactor changed the model."
+def test_the_log_probability_at_saved_points_is_unchanged(
+    model_key, built, baseline, reference_points
+):
+    """Compare at the old parameter values, even when the new prior moves."""
+    reference = reference_points[model_key]
+    assert reference["logps"][0] == pytest.approx(
+        baseline[model_key]["logp_at_fixed_point"], rel=LOGP_RTOL
     )
+    evaluate = built[model_key].model.compile_logp()
+    for point, expected in zip(reference["points"], reference["logps"], strict=True):
+        actual = float(
+            evaluate({name: np.asarray(value) for name, value in point.items()})
+        )
+        assert actual == pytest.approx(expected, rel=LOGP_RTOL), (
+            f"{model_key}'s log probability at a saved point moved: {expected!r} -> {actual!r}. "
+            "Inspect the statistical change before updating either reference file."
+        )
 
 
-def test_the_fingerprint_is_stable_across_two_builds(built):
+def test_the_fingerprint_is_stable_across_two_builds(built, reference_points):
     """A fingerprint that moved between two builds could never guard anything."""
     import tempfile
 
@@ -207,8 +193,27 @@ def test_the_fingerprint_is_stable_across_two_builds(built):
                 assert graph_fingerprint(rebuilt.model) == graph_fingerprint(
                     built[model_key].model
                 )
-                assert fixed_point_logp(rebuilt.model) == fixed_point_logp(
-                    built[model_key].model
+                point = {
+                    name: np.asarray(value)
+                    for name, value in reference_points[model_key]["points"][0].items()
+                }
+                assert fixed_point_logp(rebuilt.model, point) == fixed_point_logp(
+                    built[model_key].model, point
                 )
     finally:
         patcher.undo()
+
+
+def test_saved_point_detects_a_changed_prior_scale():
+    """Recomputing the point from each prior used to hide this change."""
+    import pymc as pm
+    from support.synthetic_graphs import fixed_point
+
+    with pm.Model() as original:
+        pm.HalfNormal("x", sigma=np.float64(1))
+    point = fixed_point(original)
+    with pm.Model() as changed:
+        pm.HalfNormal("x", sigma=np.float64(2))
+    assert fixed_point_logp(original, point) != pytest.approx(
+        fixed_point_logp(changed, point)
+    )

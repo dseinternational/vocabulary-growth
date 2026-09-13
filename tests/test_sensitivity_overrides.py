@@ -255,14 +255,15 @@ def test_registry_counts_and_models():
     # the headline scope decision moved `psi`. The rest are checks:
     # `sign-lag-population` (VG16's baseline, which here doubles as the arm in
     # which no estimated per-child quantity reaches the cells),
-    # `sign-lag-uk07-marginal`, `sign-lag-gap-12` and the prior-scale pair.
+    # `sign-lag-uk07-marginal`, `sign-lag-gap-12`, the same-form restriction,
+    # and the prior-scale pair.
     #
     # +2 on 2026-09-13 (#297 check 5): `no-uk07` and `no-ie02`, VG25's
     # leave-one-study-out pair, once `JointModelDefinition` gained the
     # `exclude_studies` field they need. The two studies the lag's support rests
     # on most: 52 and 43 of its 191 supporting observations.
-    assert len(VARIANTS) == 94
-    assert len(variants_for("vg25")) == 9
+    assert len(VARIANTS) == 95
+    assert len(variants_for("vg25")) == 10
     assert len(variants_for("vg14")) == 3
     assert len(variants_for("vg16")) == 8
     assert len(variants_for("vg21")) == 1
