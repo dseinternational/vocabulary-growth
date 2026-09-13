@@ -908,29 +908,31 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # coefficient does not depend on which likelihood carries uk_07.
     #
     # It is NOT a leave-one-study-out check, and is not labelled as one.
-    # #297 check 5 asks for those; the joint definitions carry no
-    # `exclude_studies` field (it is a `BivariateModelDefinition` field), so no
-    # such arm can be registered until one exists.
+    # #297 check 5 asks for those. Since 2026-09-13 `JointModelDefinition`
+    # carries `exclude_studies`, so they can be registered here; none is yet,
+    # because which studies to leave out is a design choice rather than a
+    # mechanical one. VG25's supporting observations come from five studies --
+    # uk_07 52, ie_02 43, uk_02 41, uk_05 30, uk_04 25 of 191 -- and excluding
+    # uk_07 on the current frame takes the lag's support to 139, ie_02 to 148.
     #
-    # An earlier version of this comment put that cost at "restales every VG15
-    # and VG24 fit ... with the refit it costs". Both halves overstate it.
+    # The field landed without refitting anything, as the paragraphs below
+    # argued it could. An earlier version of this comment had put that cost at
+    # "restales every VG15 and VG24 fit ... with the refit it costs", and both
+    # halves overstated it.
     #
     # The definition restale is the avoidable kind. `BACKFILL_DEFAULTS` excuses
     # a field whose *absence* from an older manifest is equivalent to a stated
     # value, and `lag_same_form_only` (#242) is the same shape: a scope field
     # added to an already-fitted family, read through one `getattr` default that
     # reproduces the pre-field behaviour, with the claim checked off the call
-    # site in `tests/test_fit_identity.py` rather than asserted. An
-    # `exclude_studies` entry would claim that every joint fit made before the
-    # field existed filtered no studies, which is what a frame builder with no
-    # filter in it did. `FIELD_ROLES` already classifies the name, so the entry
-    # and its check are the new part. One thing it would have to carry rather
-    # than inherit: the registry is keyed by bare field name, so the entry also
-    # covers the bivariate class's own field. That claim holds there too --
-    # 2697dc8 added the filter in the same commit as the field, so no earlier
-    # bivariate fit could have dropped a study -- but the bivariate engine reads
-    # it as a plain attribute rather than through a default, so that half is
-    # checked by history and has to be stated rather than inherited.
+    # site in `tests/test_fit_identity.py` rather than asserted. The
+    # `exclude_studies` entry claims that every joint fit made before the field
+    # existed filtered no studies, which is what a frame builder with no filter
+    # in it did -- and it held when measured: the VG15 and VG24 fits of record
+    # validate with the entry and fail without it, and the shared joint frame
+    # hash did not move. The entry is keyed by bare field name and so also
+    # covers the bivariate class's own field, which is stated in
+    # `fit_identity.py` rather than inherited.
     #
     # Nor is the refit this field's cost. The executable-code signature covers
     # the whole package, so any code change makes an existing fit unverifiable
