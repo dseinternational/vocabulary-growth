@@ -29,6 +29,7 @@ import json
 import math
 import os
 from collections.abc import Mapping
+from typing import NamedTuple
 
 from dse_research_utils.report.readers import FileRead, nearest_row, read_csv, read_json
 from scipy import stats
@@ -1544,6 +1545,110 @@ def render_variation_table(directory: str = ".") -> None:
     )
 
 
+class HeldOutCheck(NamedTuple):
+    """One of the project's held-out checks, and the registered models it scores."""
+
+    script: str
+    models: frozenset[str]
+    description: str
+
+
+#: The project's held-out checks, and the registered models each can score. The
+#: leave-one-out section names only the ones that cover the model on its page.
+#:
+#: Until 2026-09-13 that section named ``kfold_loso.py`` and ``loso_compare.py``
+#: on every page whose fit samples a per-child scale, as checks "which hold out
+#: whole studies or whole children". Neither accepted a typically-developing or a
+#: joint model, and neither holds out a study for any model -- LOSO in both means
+#: leave-one-*subject*-out -- so VG11, VG12, VG21 and VG23, whose PSIS-LOO is
+#: unusable on 37% to 59% of rows, sent their readers to checks that could not run
+#: on them (``notes/202609131214-held-out-validation-for-the-td-models.md``).
+#:
+#: Each entry is pinned against the script's own model list in
+#: ``tests/test_report_cells.py``, so extending a script without updating this
+#: fails a test rather than leaving a page silent about the check.
+HELD_OUT_CHECKS: tuple[HeldOutCheck, ...] = (
+    HeldOutCheck(
+        "scripts/kfold_loso.py",
+        frozenset({"vg07", "vg08", "vg09", "vg10", "vg19", "vg20", "vg22"}),
+        "refits the model with each fold's children removed from the likelihood, "
+        "so that their effects are drawn from the prior, and scores their counts",
+    ),
+    HeldOutCheck(
+        "scripts/loso_compare.py",
+        frozenset({"vg07", "vg08", "vg09"}),
+        "approximates leave-one-child-out from the fitted model's draws by "
+        "importance sampling, without refitting, and so carries Pareto "
+        "diagnostics of its own",
+    ),
+    HeldOutCheck(
+        "scripts/wave_forward_score.py",
+        frozenset({"vg16", "vg25"}),
+        "refits the model with each fold's children's later waves held out and "
+        "scores them, against the same model with its cross-lag removed "
+        "(`--holdout-unit child` holds out the whole child instead)",
+    ),
+)
+
+
+_NUMBER_WORDS = {2: "two", 3: "three"}
+
+
+def held_out_checks_for(model_id: str) -> tuple[HeldOutCheck, ...]:
+    """The held-out checks that can score registered model ``model_id``."""
+    key = model_id.lower()
+    return tuple(check for check in HELD_OUT_CHECKS if key in check.models)
+
+
+def _held_out_check_sentence(manifest: dict) -> str:
+    """Which held-out checks cover the fit on this page, read from its manifest.
+
+    Every check scores a *registered* model, so a sensitivity arm -- the same
+    ``model_id`` under a different ``config_name`` -- is told that rather than
+    being credited with a check that never fits it.
+    """
+    recorded = manifest.get("model") or {}
+    model_id = str(recorded.get("model_id") or "").lower()
+    if not model_id:
+        return (
+            "Which of the project's held-out checks covers this model cannot be "
+            "read without the fit manifest."
+        )
+    checks = held_out_checks_for(model_id)
+    if not checks:
+        return (
+            "**None of the project's held-out checks covers this model yet**, so "
+            "nothing in the project scores how well it predicts a child it has "
+            "not seen."
+        )
+    described = [f"`{check.script}`, which {check.description}" for check in checks]
+    if len(described) == 1:
+        sentence = f"For this model that check is {described[0]}."
+    else:
+        sentence = (
+            f"For this model there are {_NUMBER_WORDS.get(len(described), len(described))}: "
+            + "; ".join(described[:-1])
+            + f"; and {described[-1]}."
+        )
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    registered = MODEL_REGISTRY.get(model_id)
+    config_name = recorded.get("config_name")
+    if registered is not None and config_name and config_name != registered.config_name:
+        sentence += (
+            " They score the registered model, not this sensitivity arm, so their "
+            "results do not describe this fit."
+            if len(described) > 1
+            else " It scores the registered model, not this sensitivity arm, so its "
+            "results do not describe this fit."
+        )
+    return (
+        sentence
+        + " Results, where a check has been run, are written to the comparisons "
+        "output rather than to this page."
+    )
+
+
 def render_loo_section(directory: str = ".") -> None:
     """Print the leave-one-out cross-validation result for a report cell.
 
@@ -1754,11 +1859,11 @@ def render_loo_section(directory: str = ".") -> None:
                 "the posterior substantially, which is precisely the situation "
                 "importance sampling approximates poorly. Leave-one-observation-out "
                 "is the wrong unit of prediction for a model with per-child "
-                "parameters. The question it half-answers — how well does this "
-                "generalise beyond the data it saw — is better put to the "
-                "project's leave-one-study-out and k-fold checks "
-                "(`scripts/kfold_loso.py`, `scripts/loso_compare.py`), which hold "
-                "out whole studies or whole children rather than single rows."
+                "parameters. The question it half-answers — how well this "
+                "generalises beyond the data it saw — is better put to a grouped "
+                "check, which holds a child's rows out together rather than one "
+                "row at a time. "
+                + _held_out_check_sentence(read_manifest(directory))
             )
 
     dropped = int(
